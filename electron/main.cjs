@@ -211,8 +211,49 @@ app.on('before-quit', () => {
   globalShortcut.unregisterAll();
 });
 
+const { exec } = require('child_process');
+let lastRunningAppId = 0;
+let activeSteamGame = null;
+
+// Checks the local Windows Registry for Steam's active game ID every 3 seconds
+if (process.platform === 'win32') {
+  setInterval(() => {
+    exec('reg query HKCU\\Software\\Valve\\Steam /v RunningAppId', (error, stdout) => {
+      if (error) return;
+      
+      const match = stdout.match(/0x([0-9a-fA-F]+)/);
+      if (match) {
+        const currentAppId = parseInt(match[1], 16);
+        
+        if (currentAppId !== lastRunningAppId) {
+          lastRunningAppId = currentAppId;
+          
+          if (currentAppId === 0) {
+            activeSteamGame = null;
+            if (mainWindow && mainWindow.webContents) {
+              mainWindow.webContents.send('active-game-detected', null);
+            }
+          } else {
+            // A game launched! Look up its name from Steam API
+            fetch(`https://store.steampowered.com/api/appdetails?appids=${currentAppId}`)
+              .then(res => res.json())
+              .then(data => {
+                if (data[currentAppId] && data[currentAppId].success) {
+                  activeSteamGame = { name: data[currentAppId].data.name, appId: currentAppId };
+                  if (mainWindow && mainWindow.webContents) {
+                    mainWindow.webContents.send('active-game-detected', activeSteamGame);
+                  }
+                }
+              }).catch(() => {});
+          }
+        }
+      }
+    });
+  }, 3000);
+}
+
 ipcMain.handle('get-active-game', async () => {
-  return null;
+  return activeSteamGame;
 });
 
 // Trigger external browser for login

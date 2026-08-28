@@ -126,11 +126,25 @@ I stand ready to guide your journey.
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
   const [examinedImageUrl, setExaminedImageUrl] = useState<string | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
+  const [globalActiveGame, setGlobalActiveGame] = useState<{name: string, appId: number} | null>(null);
 
   const { user, subscriptionStatus, isInitializing } = useCloudSync(settings, tabs, setSettings, setTabs);
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || null;
-  const activeGame = activeTab?.activeSteamGame || null;
+  const activeGame = globalActiveGame || activeTab?.activeSteamGame || null;
+
+  // Listen for local Steam game detection from Electron
+  useEffect(() => {
+    if ((window as any).electronAPI?.onActiveGameDetected) {
+      (window as any).electronAPI.onActiveGameDetected((gameData: any) => {
+        setGlobalActiveGame(gameData);
+      });
+      // Also fetch the initial state in case the game was already running
+      (window as any).electronAPI.getActiveGame().then((gameData: any) => {
+        setGlobalActiveGame(gameData);
+      });
+    }
+  }, []);
 
   // Apply Theme CSS Variables
   useEffect(() => {
