@@ -428,9 +428,9 @@ I stand ready to guide your journey.
   };
 
   return (
-    <div className="w-screen h-screen bg-[#070709] flex items-center justify-center p-0 sm:p-2 overflow-hidden select-none font-sans">
+    <div className="w-screen h-screen bg-transparent flex items-center justify-center p-0 sm:p-2 overflow-hidden select-none font-sans">
       {/* Background CRT scan line ambient glow */}
-      <div className="absolute inset-0 bg-radial from-purple-900/10 via-transparent to-black pointer-events-none" />
+      <div className="absolute inset-0 bg-radial from-purple-900/10 via-transparent to-transparent pointer-events-none" />
 
       {/* Main App Window Frame */}
       <div 
