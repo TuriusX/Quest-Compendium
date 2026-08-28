@@ -48,7 +48,13 @@ const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: str
   silver: { color: '#c0c0c0', dim: 'rgba(192, 192, 192, 0.15)', border: 'rgba(192, 192, 192, 0.3)', glow: 'rgba(192, 192, 192, 0.4)' },
 };
 
+import { DesktopLogin } from './components/DesktopLogin';
+
 export default function App() {
+  if (window.location.pathname === '/desktop-login') {
+    return <DesktopLogin />;
+  }
+
   // --- Persistent State ---
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {

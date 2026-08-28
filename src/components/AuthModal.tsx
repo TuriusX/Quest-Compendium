@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Sparkles, Gamepad2 } from 'lucide-react';
-import { signInWithGoogle } from '../lib/firebase';
+import { signInWithGoogle, auth } from '../lib/firebase';
+import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 
 interface AuthModalProps {
   onSignInSuccess: () => void;
@@ -9,14 +10,35 @@ interface AuthModalProps {
 export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
   const [loading, setLoading] = React.useState(false);
 
+  useEffect(() => {
+    // Listen for external auth success if running in Electron
+    if ((window as any).electronAPI?.onDesktopAuthSuccess) {
+      (window as any).electronAPI.onDesktopAuthSuccess(async (idToken: string) => {
+        try {
+          const credential = GoogleAuthProvider.credential(idToken);
+          await signInWithCredential(auth, credential);
+          onSignInSuccess();
+        } catch (error) {
+          console.error('Failed to sign in with external token:', error);
+          setLoading(false);
+        }
+      });
+    }
+  }, [onSignInSuccess]);
+
   const handleSignIn = async () => {
     try {
       setLoading(true);
-      await signInWithGoogle();
-      onSignInSuccess();
+      if ((window as any).electronAPI?.startDesktopLogin) {
+        // We are in Electron, open system browser for OAuth
+        (window as any).electronAPI.startDesktopLogin();
+      } else {
+        // Standard web flow
+        await signInWithGoogle();
+        onSignInSuccess();
+      }
     } catch (error) {
       console.error('Sign in failed:', error);
-    } finally {
       setLoading(false);
     }
   };

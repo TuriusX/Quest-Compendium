@@ -1,11 +1,57 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 
 const isDev = !app.isPackaged;
 let serverProcess = null;
+let mainWindow = null;
 
-// Disable features that break Firebase Auth popups
+// Register custom protocol for auth redirect
+const PROTOCOL = 'questcompendium';
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])])
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL)
+}
+
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window.
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+    // commandLine has the url on Windows/Linux
+    const url = commandLine.find(arg => arg.startsWith(`${PROTOCOL}://`));
+    if (url) {
+      handleAuthUrl(url);
+    }
+  })
+}
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleAuthUrl(url);
+});
+
+function handleAuthUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    const idToken = urlObj.searchParams.get('idToken');
+    if (idToken && mainWindow) {
+      mainWindow.webContents.send('desktop-auth-success', idToken);
+    }
+  } catch (error) {
+    console.error('Failed to parse auth URL', error);
+  }
+}
+
+// Disable features that break Firebase Auth popups (legacy)
 app.commandLine.appendSwitch('disable-site-isolation-trials');
 app.commandLine.appendSwitch('disable-features', 'CrossOriginOpenerPolicy');
 
@@ -13,7 +59,7 @@ app.commandLine.appendSwitch('disable-features', 'CrossOriginOpenerPolicy');
 app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     titleBarStyle: 'hiddenInset',
@@ -25,7 +71,7 @@ function createWindow() {
   });
 
   // Allow Firebase Auth popups to function normally
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return {
       action: 'allow',
       overrideBrowserWindowOptions: {
@@ -37,7 +83,7 @@ function createWindow() {
     };
   });
 
-  win.loadURL('http://localhost:3000');
+  mainWindow.loadURL('http://localhost:3000');
 }
 
 app.whenReady().then(() => {
@@ -98,4 +144,9 @@ app.on('before-quit', () => {
 ipcMain.handle('get-active-game', async () => {
   // Logic to read local processes using ffi-napi or similar would go here
   return null;
+});
+
+// Trigger external browser for login
+ipcMain.on('start-desktop-login', () => {
+  shell.openExternal('http://localhost:3000/desktop-login');
 });
