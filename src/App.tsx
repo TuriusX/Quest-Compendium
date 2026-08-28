@@ -468,6 +468,7 @@ I stand ready to guide your journey.
         <HeaderBar
           activeTab={activeTab}
           activeGame={activeGame}
+          isGameRunningLocally={globalActiveGame !== null}
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           isAchDrawerOpen={isAchDrawerOpen}
