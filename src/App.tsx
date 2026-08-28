@@ -135,10 +135,12 @@ I stand ready to guide your journey.
   let activeGame = activeTab?.activeSteamGame || null;
   if (globalActiveGame) {
     if (activeGame?.appId === globalActiveGame.appId) {
-      activeGame = { ...activeGame, name: globalActiveGame.name, appId: globalActiveGame.appId };
+      activeGame = { ...activeGame, name: globalActiveGame.name, appId: globalActiveGame.appId, isAutoDetected: true };
     } else {
-      activeGame = globalActiveGame as SteamGameData;
+      activeGame = { ...globalActiveGame, isAutoDetected: true } as SteamGameData;
     }
+  } else if (activeGame?.isAutoDetected) {
+    activeGame = null;
   }
 
   // Listen for local Steam game detection from Electron
@@ -239,6 +241,7 @@ I stand ready to guide your journey.
                       name: activeGame.name,
                       appId: activeGame.appId
                     }),
+                    ...(activeGame.isAutoDetected !== undefined ? { isAutoDetected: activeGame.isAutoDetected } : {}),
                     achievements: data.achievements
                   }
                 };
@@ -427,12 +430,13 @@ I stand ready to guide your journey.
 
   // Game Switcher Selection
   const handleSelectGame = (game: SteamGameData) => {
+    const gameWithFlag = { ...game, isAutoDetected: false };
     if (activeTab) {
       setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, name: game.name, activeSteamGame: game } : t
+        t.id === activeTab.id ? { ...t, name: gameWithFlag.name, activeSteamGame: gameWithFlag } : t
       ));
     } else {
-      handleCreateTab(game.name, game);
+      handleCreateTab(gameWithFlag.name, gameWithFlag);
     }
   };
 

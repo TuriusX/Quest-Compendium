@@ -27,6 +27,7 @@ export interface SteamGameData {
   achievements?: Achievement[];
   totalAchievements?: number;
   unlockedAchievements?: number;
+  isAutoDetected?: boolean;
 }
 
 export interface ChatMessage {
