@@ -123,8 +123,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               </span>
             </div>
             <span className="flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase overflow-hidden whitespace-nowrap text-ellipsis max-w-[180px]">
-              <span className={`w-1.5 h-1.5 flex-shrink-0 rounded-full ${isGameRunningLocally ? 'bg-emerald-400 animate-pulse' : (activeGame ? 'bg-zinc-500' : 'bg-red-500')}`} />
-              <span className="truncate">{isGameRunningLocally ? `ACTIVE: ${activeGame?.name}` : (activeGame ? `SAVED: ${activeGame.name}` : 'NO ACTIVE STEAM GAME')}</span>
+              <span className={`w-1.5 h-1.5 flex-shrink-0 rounded-full ${isGameRunningLocally ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+              <span className="truncate">{isGameRunningLocally ? `ACTIVE: ${activeGame?.name}` : 'NO ACTIVE STEAM GAME'}</span>
             </span>
           </div>
         </button>
