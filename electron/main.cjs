@@ -5,6 +5,10 @@ const { spawn } = require('child_process');
 const isDev = !app.isPackaged;
 let serverProcess = null;
 
+// Disable features that break Firebase Auth popups
+app.commandLine.appendSwitch('disable-site-isolation-trials');
+app.commandLine.appendSwitch('disable-features', 'CrossOriginOpenerPolicy');
+
 // Fix for Google Sign-In in Electron
 app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -37,6 +41,19 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  const { session } = require('electron');
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = Object.assign({}, details.responseHeaders);
+    Object.keys(responseHeaders).forEach((key) => {
+      if (key.toLowerCase() === 'cross-origin-opener-policy' || key.toLowerCase() === 'cross-origin-embedder-policy') {
+        delete responseHeaders[key];
+      }
+    });
+    responseHeaders['Cross-Origin-Opener-Policy'] = ['unsafe-none'];
+    responseHeaders['Cross-Origin-Embedder-Policy'] = ['unsafe-none'];
+    callback({ responseHeaders });
+  });
+
   if (!isDev) {
     // In production, spawn the bundled Express server
     const serverPath = path.join(__dirname, '../dist/server.cjs');
