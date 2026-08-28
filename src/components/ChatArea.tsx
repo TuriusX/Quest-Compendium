@@ -39,6 +39,7 @@ interface ChatAreaProps {
   onAppendToNotes: (text: string) => void;
   onOpenScreenModal: (imageUrl: string) => void;
   ttsVoice: string;
+  customApiKey?: string;
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
@@ -51,6 +52,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onAppendToNotes,
   onOpenScreenModal,
   ttsVoice,
+  customApiKey,
 }) => {
   const [inputQuestion, setInputQuestion] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
@@ -252,18 +254,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice: ttsVoice || 'Kore' }),
+        body: JSON.stringify({ text, voice: ttsVoice || 'Kore', customApiKey }),
       });
 
       if (res.ok) {
-        const data = await res.json();
-        if (data.audioBase64) {
-          const audio = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
-          currentAudioRef.current = audio;
-          audio.onended = () => setPlayingAudioId(null);
-          audio.onerror = () => setPlayingAudioId(null);
-          await audio.play();
-          return;
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data.audioBase64) {
+            const audio = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
+            currentAudioRef.current = audio;
+            audio.onended = () => setPlayingAudioId(null);
+            audio.onerror = () => setPlayingAudioId(null);
+            await audio.play();
+            return;
+          }
         }
       }
 
@@ -404,7 +409,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       </div>
                       <span className="font-fantasy font-bold text-zinc-200">QUEST COMPENDIUM</span>
                       <span className="px-1.5 py-0.2 rounded bg-white/10 text-[9.5px] text-zinc-400">
-                        {msg.modelUsed || 'GEMINI 3.7'}
+                        {msg.modelUsed || 'GEMINI 3.1 PRO'}
                       </span>
                       <span>•</span>
                       <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>

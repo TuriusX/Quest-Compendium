@@ -12,10 +12,12 @@ import {
   Search,
   ChevronDown,
   Activity,
-  Cpu
+  Cpu,
+  LogOut
 } from 'lucide-react';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
+import { logOut } from '../lib/firebase';
 
 interface HeaderBarProps {
   activeTab: GameTab | null;
@@ -118,45 +120,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 AI HUD
               </span>
             </div>
-            <span className="hidden sm:flex items-center gap-1 text-[10px] text-zinc-400 font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              VISION • ORACLE AI
+            <span className="hidden sm:flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase">
+              <span className={`w-1.5 h-1.5 rounded-full ${activeGame || activeTab ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+              {activeGame ? activeGame.name : (activeTab ? activeTab.name : 'GAME NOT DETECTED')}
             </span>
           </div>
-        </button>
-
-        {/* Vertical Divider */}
-        <div className="h-5 w-[1px] bg-white/10 hidden sm:block" />
-
-        {/* Active Game Selector Card */}
-        <button
-          onClick={() => {
-            playBlipSound(soundEnabled);
-            onOpenGameSearch();
-          }}
-          className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-[var(--accent-border)] text-xs text-zinc-300 hover:text-white transition-all cursor-pointer group shadow-sm"
-          title="Switch Active Game or Search Steam"
-        >
-          {activeGame?.headerImage ? (
-            <img 
-              src={activeGame.headerImage} 
-              alt={activeGame.name} 
-              className="w-5 h-5 rounded object-cover border border-white/20 flex-shrink-0"
-            />
-          ) : (
-            <Gamepad2 className="w-4 h-4 text-[var(--accent-color)] group-hover:scale-110 transition-transform flex-shrink-0" />
-          )}
-
-          <div className="flex flex-col text-left">
-            <span className="max-w-[110px] sm:max-w-[160px] md:max-w-[220px] truncate font-semibold text-white group-hover:text-[var(--accent-color)] transition-colors leading-tight">
-              {activeGame ? activeGame.name : (activeTab ? activeTab.name : 'Select Game')}
-            </span>
-            <span className="text-[9.5px] text-zinc-400 font-sans hidden sm:inline truncate max-w-[140px]">
-              {activeGame?.genre || 'Click to switch game'}
-            </span>
-          </div>
-
-          <ChevronDown className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300 transition-colors flex-shrink-0 ml-0.5" />
         </button>
       </div>
 
@@ -168,7 +136,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             playPageTurnSound(soundEnabled);
             onToggleAchDrawer();
           }}
-          title="Game Achievements & Trophy Medals"
+          title="Game Achievements"
           className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
             isAchDrawerOpen 
               ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
@@ -176,46 +144,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           }`}
         >
           <Trophy className="w-4 h-4 text-amber-400" />
-          <span className="hidden md:inline font-sans">Medals</span>
           {totalCount > 0 && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.08] text-zinc-300 font-mono font-bold">
               {unlockedCount}/{totalCount}
             </span>
           )}
-        </button>
-
-        {/* Playthrough Notes Toggle */}
-        <button
-          onClick={() => {
-            playBlipSound(soundEnabled);
-            onToggleNotes();
-          }}
-          title="Playthrough Notes & Quest Log"
-          className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
-            isNotesOpen 
-              ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
-              : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] border border-transparent'
-          }`}
-        >
-          <FileText className="w-4 h-4 text-purple-400" />
-          <span className="hidden md:inline font-sans">Notes</span>
-        </button>
-
-        {/* Guides Web Browser Toggle */}
-        <button
-          onClick={() => {
-            playBlipSound(soundEnabled);
-            onToggleBrowserMode();
-          }}
-          title={isBrowserMode ? "Return to Compendium Chat" : "Open In-App Guides Browser (GameFAQs & Steam)"}
-          className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
-            isBrowserMode 
-              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-[0_0_14px_rgba(59,130,246,0.35)]' 
-              : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] border border-transparent'
-          }`}
-        >
-          <Globe className="w-4 h-4 text-blue-400" />
-          <span className="hidden md:inline font-sans">Guides</span>
         </button>
 
         {/* Vertical Divider */}

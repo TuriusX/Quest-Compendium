@@ -1,6 +1,6 @@
 export type AiMode = 'standard' | 'roleplay' | 'minmax';
 
-export type ColorTheme = 'purple' | 'crimson' | 'cyan' | 'amber' | 'emerald';
+export type ColorTheme = 'purple' | 'red' | 'cyan' | 'blue' | 'amber' | 'luigi' | 'masterchief' | 'gold' | 'pink' | 'silver';
 
 export type DockPosition = 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left' | 'undocked';
 
@@ -74,4 +74,5 @@ export interface AppSettings {
   windowOpacity: number;
   steamId: string;
   ttsVoice: 'Kore' | 'Puck' | 'Fenrir' | 'Zephyr' | 'Charon';
+  customApiKey?: string;
 }

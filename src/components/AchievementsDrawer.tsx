@@ -110,7 +110,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
           </div>
           <div className="flex flex-col">
             <span className="font-fantasy font-bold text-xs tracking-wider text-white">
-              TROPHY CABINET
+              ACHIEVEMENTS
             </span>
             <span className="text-[10px] text-zinc-400 font-mono">
               {gameData?.name || 'Active Game'}

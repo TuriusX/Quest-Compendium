@@ -17,6 +17,9 @@ import { GameGuidesBrowser } from './components/GameGuidesBrowser';
 import { SettingsModal } from './components/SettingsModal';
 import { QuickGameSearchModal } from './components/QuickGameSearchModal';
 import { GameScreenModal } from './components/GameScreenModal';
+import { AuthModal } from './components/AuthModal';
+import { PaywallModal } from './components/PaywallModal';
+import { useCloudSync } from './hooks/useCloudSync';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -29,14 +32,20 @@ const DEFAULT_SETTINGS: AppSettings = {
   windowOpacity: 96,
   steamId: '',
   ttsVoice: 'Kore',
+  customApiKey: '',
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
   purple: { color: '#a87ffb', dim: 'rgba(168, 127, 251, 0.15)', border: 'rgba(168, 127, 251, 0.3)', glow: 'rgba(168, 127, 251, 0.4)' },
-  crimson: { color: '#ff4d4d', dim: 'rgba(255, 77, 77, 0.15)', border: 'rgba(255, 77, 77, 0.3)', glow: 'rgba(255, 77, 77, 0.4)' },
+  red: { color: '#E52521', dim: 'rgba(229, 37, 33, 0.15)', border: 'rgba(229, 37, 33, 0.3)', glow: 'rgba(229, 37, 33, 0.4)' },
   cyan: { color: '#00f0ff', dim: 'rgba(0, 240, 255, 0.15)', border: 'rgba(0, 240, 255, 0.3)', glow: 'rgba(0, 240, 255, 0.4)' },
+  blue: { color: '#1E63F8', dim: 'rgba(30, 99, 248, 0.15)', border: 'rgba(30, 99, 248, 0.3)', glow: 'rgba(30, 99, 248, 0.4)' },
   amber: { color: '#ffb84d', dim: 'rgba(255, 184, 77, 0.15)', border: 'rgba(255, 184, 77, 0.3)', glow: 'rgba(255, 184, 77, 0.4)' },
-  emerald: { color: '#00e676', dim: 'rgba(0, 230, 118, 0.15)', border: 'rgba(0, 230, 118, 0.3)', glow: 'rgba(0, 230, 118, 0.4)' },
+  luigi: { color: '#55D731', dim: 'rgba(85, 215, 49, 0.15)', border: 'rgba(85, 215, 49, 0.3)', glow: 'rgba(85, 215, 49, 0.4)' },
+  masterchief: { color: '#6A7D51', dim: 'rgba(106, 125, 81, 0.15)', border: 'rgba(106, 125, 81, 0.3)', glow: 'rgba(106, 125, 81, 0.4)' },
+  gold: { color: '#ffd700', dim: 'rgba(255, 215, 0, 0.15)', border: 'rgba(255, 215, 0, 0.3)', glow: 'rgba(255, 215, 0, 0.4)' },
+  pink: { color: '#ff69b4', dim: 'rgba(255, 105, 180, 0.15)', border: 'rgba(255, 105, 180, 0.3)', glow: 'rgba(255, 105, 180, 0.4)' },
+  silver: { color: '#c0c0c0', dim: 'rgba(192, 192, 192, 0.15)', border: 'rgba(192, 192, 192, 0.3)', glow: 'rgba(192, 192, 192, 0.4)' },
 };
 
 export default function App() {
@@ -60,29 +69,29 @@ export default function App() {
     } catch {}
 
     // Default starter tab: Elden Ring
-    const initialGame = POPULAR_STEAM_GAMES[0];
+    const initialGame = null;
     return [
       {
-        id: 'tab-elden-ring',
-        name: 'Elden Ring',
+        id: 'tab-default',
+        name: 'New Session',
         activeSteamGame: initialGame,
         messages: [
           {
             id: 'msg-welcome',
             role: 'assistant',
-            text: `### ⚔️ Welcome, Tarnished, to the Quest Compendium!
+            text: `### ⚔️ Welcome to the Quest Compendium!
 
-I stand ready to guide your journey through the **Lands Between**. 
+I stand ready to guide your journey. 
 
 **Here is what I can do for you:**
 * **Screen & Vision Analysis**: Snap or paste your game screen (<kbd>Ctrl+V</kbd>) anytime for immediate puzzle solutions, inventory optimization, or boss attack breakdowns.
-* **Trophy & Medals Tracker**: Check the **Medals (🏆)** drawer on the right to track rare achievements and 100% Platinum progress.
+* **Achievement Tracker**: Check the **Achievements (🏆)** drawer on the right to track rare achievements and 100% completion progress.
 * **Playthrough Scratchpad**: Jot down NPC quest steps, dungeon codes, and map notes in the **Notes (📝)** overlay.
 * **Guides & FAQs**: Open the built-in **Guides (🌐)** browser to view interactive maps and GameFAQs.
 
 *What challenge or question lies before you?*`,
             timestamp: Date.now(),
-            modelUsed: 'Gemini 3.7 Flash'
+            modelUsed: 'Gemini 3.1 Pro Preview'
           }
         ],
         notes: `<h3>Elden Ring Quest Notes</h3>
@@ -112,6 +121,8 @@ I stand ready to guide your journey through the **Lands Between**.
   const [examinedImageUrl, setExaminedImageUrl] = useState<string | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
 
+  const { user, subscriptionStatus, isInitializing } = useCloudSync(settings, tabs, setSettings, setTabs);
+
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || null;
   const activeGame = activeTab?.activeSteamGame || null;
 
@@ -127,6 +138,45 @@ I stand ready to guide your journey through the **Lands Between**.
     root.setProperty('--tab-font-size', `${settings.tabFontSize}px`);
   }, [settings.theme, settings.windowOpacity, settings.tabFontSize]);
 
+  // Handle Steam Auth Return
+  useEffect(() => {
+    // Check URL parameters for fallback/direct-link auth
+    const params = new URLSearchParams(window.location.search);
+    const authSteamId = params.get('steamId');
+    if (authSteamId) {
+      setSettings(prev => ({ ...prev, steamId: authSteamId }));
+      // Clean URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // Listen for popup auth messages and storage events
+    const handleMessage = (event: MessageEvent) => {
+      // Allow localhost and .run.app origins
+      if (!event.origin.includes('localhost') && !event.origin.endsWith('.run.app')) {
+        return;
+      }
+      if (event.data?.type === 'STEAM_AUTH_SUCCESS' && event.data.steamId) {
+        setSettings(prev => ({ ...prev, steamId: event.data.steamId }));
+      } else if (event.data?.type === 'STEAM_AUTH_ERROR') {
+        console.error('Steam login failed in popup');
+      }
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'steam_auth_id' && event.newValue) {
+        setSettings(prev => ({ ...prev, steamId: event.newValue }));
+        localStorage.removeItem('steam_auth_id'); // cleanup
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
   // Persist State
   useEffect(() => {
     try {
@@ -139,6 +189,41 @@ I stand ready to guide your journey through the **Lands Between**.
       localStorage.setItem('quest_compendium_tabs', JSON.stringify(tabs));
     } catch {}
   }, [tabs]);
+
+  // Fetch real Steam achievements if steamId is set
+  useEffect(() => {
+    if (!settings.steamId || !activeGame || !activeTab) return;
+
+    let isMounted = true;
+    const fetchAchievements = async () => {
+      try {
+        const res = await fetch(`/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.achievements && data.achievements.length > 0 && isMounted) {
+            setTabs(prev => prev.map(t => {
+              if (t.id === activeTab.id && t.activeSteamGame) {
+                // Keep existing patch notes and mock stuff, but overwrite achievements
+                return {
+                  ...t,
+                  activeSteamGame: {
+                    ...t.activeSteamGame,
+                    achievements: data.achievements
+                  }
+                };
+              }
+              return t;
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to sync Steam achievements:', err);
+      }
+    };
+
+    fetchAchievements();
+    return () => { isMounted = false; };
+  }, [activeGame?.appId, settings.steamId]); // Use these deps, do not put activeTab.id in deps to avoid infinite loop when achievements update
 
   // Handle Sending Message to Server Gemini API
   const handleSendMessage = async (text: string, imageBase64?: string) => {
@@ -167,6 +252,7 @@ I stand ready to guide your journey through the **Lands Between**.
           history: updatedMessages,
           imageBase64,
           aiMode: settings.aiMode,
+          customApiKey: settings.customApiKey,
           activeGame: activeGame ? {
             name: activeGame.name,
             appId: activeGame.appId,
@@ -179,7 +265,19 @@ I stand ready to guide your journey through the **Lands Between**.
       });
 
       if (!res.ok) {
-        throw new Error(`Server returned HTTP ${res.status}`);
+        let errorText = `HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          errorText = errData.error || errorText;
+        } catch (e) {
+          errorText = `HTTP ${res.status} (Non-JSON response)`;
+        }
+        throw new Error(`Server error: ${errorText}`);
+      }
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
       }
 
       const data = await res.json();
@@ -188,7 +286,7 @@ I stand ready to guide your journey through the **Lands Between**.
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
         text: data.text || 'No response generated from the Compendium.',
-        modelUsed: data.modelUsed || 'Gemini 3.7 Flash',
+        modelUsed: data.modelUsed || 'Gemini 3.1 Pro Preview',
         timestamp: Date.now()
       };
 
@@ -231,7 +329,7 @@ I stand ready to guide your journey through the **Lands Between**.
           role: 'assistant',
           text: `Welcome to **${name}**! The Compendium is ready to analyze your screen, track achievements, and guide your quest.`,
           timestamp: Date.now(),
-          modelUsed: 'Gemini 3.7 Flash'
+          modelUsed: 'Gemini 3.1 Pro Preview'
         }
       ],
       notes: `<h3>${name} Notes</h3>\n<p>Start recording playthrough tips here...</p>`,
@@ -441,6 +539,7 @@ I stand ready to guide your journey through the **Lands Between**.
                 onAppendToNotes={handleAppendToNotes}
                 onOpenScreenModal={(url) => setExaminedImageUrl(url)}
                 ttsVoice={settings.ttsVoice}
+                customApiKey={settings.customApiKey}
               />
             )}
 
@@ -473,6 +572,14 @@ I stand ready to guide your journey through the **Lands Between**.
         onUpdateSettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
         soundEnabled={settings.soundEnabled}
       />
+
+      {/* Auth & Paywall Overlays */}
+      {!isInitializing && !user && (
+        <AuthModal onSignInSuccess={() => {}} />
+      )}
+      {!isInitializing && user && subscriptionStatus !== 'active' && (
+        <PaywallModal userId={user.uid} />
+      )}
 
       {/* Quick Game Search & Switcher Modal */}
       <QuickGameSearchModal

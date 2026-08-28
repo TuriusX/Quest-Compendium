@@ -13,10 +13,13 @@ import {
   SlidersHorizontal,
   VolumeX,
   Radio,
-  SlidersVertical
+  SlidersVertical,
+  Key,
+  LogOut
 } from 'lucide-react';
 import { AppSettings, AiMode, ColorTheme, DockPosition } from '../types';
 import { playBlipSound } from '../utils/audio';
+import { logOut } from '../lib/firebase';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -36,11 +39,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   const themes: { id: ColorTheme; name: string; color: string; desc: string }[] = [
-    { id: 'purple', name: 'Amethyst Lore (Default)', color: '#a87ffb', desc: 'Mystical violet aura' },
-    { id: 'crimson', name: 'Dark Urge Crimson', color: '#ff4d4d', desc: 'Fiery arcane intensity' },
-    { id: 'cyan', name: 'Cyberpunk Neon', color: '#00f0ff', desc: 'High-tech HUD glow' },
-    { id: 'amber', name: 'Solar Amber / CRT', color: '#ffb84d', desc: 'Warm retro terminal' },
-    { id: 'emerald', name: 'Emerald Sylph', color: '#00e676', desc: 'Lush woodland aura' },
+    { id: 'purple', name: 'Illithid Violet', color: '#a87ffb', desc: 'Psionic illithid aura' },
+    { id: 'red', name: 'Mario Red', color: '#E52521', desc: 'Classic plumber intensity' },
+    { id: 'cyan', name: 'Megaman Cyan', color: '#00f0ff', desc: 'Retro plasma cannon glow' },
+    { id: 'blue', name: 'Sonic Blue', color: '#1E63F8', desc: 'High-speed hedgehog blur' },
+    { id: 'amber', name: 'Estus Amber', color: '#ffb84d', desc: 'Warm bonfire healing' },
+    { id: 'luigi', name: 'Luigi Green', color: '#55D731', desc: 'Player 2 ghost-hunting green' },
+    { id: 'masterchief', name: 'Masterchief Green', color: '#6A7D51', desc: 'Spartan armor tactical glow' },
+    { id: 'gold', name: 'Triforce Gold', color: '#ffd700', desc: 'Courage, wisdom, and power' },
+    { id: 'pink', name: 'Chun-Li Pink', color: '#ff69b4', desc: 'Fierce Player 2 energy' },
+    { id: 'silver', name: 'Witcher Silver', color: '#c0c0c0', desc: 'Monster-slaying shine' },
   ];
 
   const aiModes: { id: AiMode; label: string; desc: string; icon: string }[] = [
@@ -104,6 +112,88 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Settings Body */}
         <div className="p-5 space-y-6 overflow-y-auto font-sans">
+          {/* Custom API Key */}
+          <div className="space-y-2.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+              <Key className="w-4 h-4 text-[var(--accent-color)]" />
+              <span>Bring Your Own Gemini API Key (Required)</span>
+            </label>
+            <input
+              type="password"
+              placeholder="AIzaSy..."
+              value={settings.customApiKey || ''}
+              onChange={(e) => {
+                onUpdateSettings({ customApiKey: e.target.value });
+              }}
+              className="w-full bg-black/60 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[var(--accent-border)] font-mono"
+            />
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              This API key is required to use the Compendium. Your key is stored locally in your browser and sent securely to the server during queries.
+            </p>
+          </div>
+
+          {/* Account */}
+          <div className="space-y-2.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+              <LogOut className="w-4 h-4 text-[var(--accent-color)]" />
+              <span>Account</span>
+            </label>
+            <button
+              onClick={() => {
+                playBlipSound(soundEnabled);
+                logOut();
+                onClose();
+              }}
+              className="w-full flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Sign out of Compendium
+            </button>
+          </div>
+
+          {/* Steam Sign-in */}
+          <div className="space-y-2.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+              <Gamepad2 className="w-4 h-4 text-[var(--accent-color)]" />
+              <span>Steam Connection</span>
+            </label>
+            
+            {settings.steamId ? (
+              <div className="flex items-center justify-between p-3 rounded-xl bg-black/60 border border-white/15">
+                <div className="flex flex-col">
+                  <span className="text-xs text-white font-semibold">Connected</span>
+                  <span className="text-[11px] text-zinc-400 font-mono">{settings.steamId}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    playBlipSound(soundEnabled);
+                    onUpdateSettings({ steamId: '' });
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg transition-colors cursor-pointer"
+                >
+                  Disconnect
+                </button>
+              </div>
+            ) : (
+              <div>
+                <button 
+                  onClick={() => {
+                    playBlipSound(soundEnabled);
+                    const popup = window.open('/api/auth/steam', 'steam_login', 'width=800,height=600');
+                    if (!popup) {
+                      alert('Please allow popups to sign in with Steam.');
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-[#171a21] hover:bg-[#2a475e] text-white border border-[#2a475e] rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Sign in through Steam
+                </button>
+                <p className="text-[11px] text-zinc-400 leading-relaxed mt-2.5">
+                  Sign in securely via Steam to automatically sync your game achievements instead of using the local mock data.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* AI Companion Mode */}
           <div className="space-y-2.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
@@ -166,7 +256,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="space-y-2.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
               <Palette className="w-4 h-4 text-[var(--accent-color)]" />
-              <span>HUD Color Aura</span>
+              <span>Themes</span>
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {themes.map((t) => {
