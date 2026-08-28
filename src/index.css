@@ -12,7 +12,8 @@
 }
 
 body {
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-family: var(--chat-font-family, 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif);
+  font-size: var(--chat-font-size, 15px);
   letter-spacing: -0.01em;
 }
 

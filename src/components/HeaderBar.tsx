@@ -13,7 +13,9 @@ import {
   ChevronDown,
   Activity,
   Cpu,
-  LogOut
+  LogOut,
+  ArrowRightToLine,
+  Square
 } from 'lucide-react';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
@@ -110,7 +112,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               <rect x="14" y="14" width="4" height="4" fill="var(--accent-glow)" />
               <rect x="15" y="15" width="2" height="2" fill="#ffffff" />
             </svg>
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 absolute -top-0.5 -right-0.5 animate-ping opacity-75" />
           </div>
           
           <div className="flex flex-col text-left">
@@ -172,18 +173,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <Type className="w-4 h-4" />
         </button>
 
-        {/* Dock / Free-floating Window Mode */}
-        <button
-          onClick={() => {
-            playBlipSound(soundEnabled);
-            onToggleDock();
-          }}
-          title={isDocked ? "Undock / Fullscreen View" : "Dock HUD Frame"}
-          className="p-2 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-all cursor-pointer"
-        >
-          {isDocked ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-        </button>
-
         {/* Settings Dialog */}
         <button
           onClick={() => {
@@ -194,6 +183,18 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           className="p-2 rounded-xl text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/[0.06] transition-all cursor-pointer"
         >
           <SettingsIcon className="w-4 h-4" />
+        </button>
+
+        {/* Dock / Free-floating Window Mode */}
+        <button
+          onClick={() => {
+            playBlipSound(soundEnabled);
+            onToggleDock();
+          }}
+          title={isDocked ? "Undock / Fullscreen View" : "Dock HUD Frame"}
+          className="p-2 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-all cursor-pointer"
+        >
+          {isDocked ? <Square className="w-4 h-4" /> : <ArrowRightToLine className="w-4 h-4" />}
         </button>
       </div>
     </header>

@@ -156,6 +156,14 @@ I stand ready to guide your journey.
     }
   }, []);
 
+  useEffect(() => {
+    if ((window as any).electronAPI?.resizeWindow) {
+      const baseWidth = 450;
+      const sidebarWidth = 288; // w-72
+      (window as any).electronAPI.resizeWindow(isSidebarOpen ? baseWidth + sidebarWidth : baseWidth);
+    }
+  }, [isSidebarOpen]);
+
   // Apply Theme CSS Variables
   useEffect(() => {
     const t = THEME_STYLES[settings.theme] || THEME_STYLES.purple;
@@ -166,7 +174,17 @@ I stand ready to guide your journey.
     root.setProperty('--accent-glow', t.glow);
     root.setProperty('--bg-opacity', (settings.windowOpacity / 100).toFixed(2));
     root.setProperty('--tab-font-size', `${settings.tabFontSize}px`);
-  }, [settings.theme, settings.windowOpacity, settings.tabFontSize]);
+    root.setProperty('--chat-font-size', `${settings.chatFontSize}px`);
+    
+    // Apply Font Family
+    const fonts: Record<string, string> = {
+      'segoe': "'Segoe UI', system-ui, sans-serif",
+      'pixel': "'VT323', monospace",
+      'lore': "'Literata', serif",
+      'code': "'JetBrains Mono', monospace"
+    };
+    root.setProperty('--chat-font-family', fonts[settings.chatFont] || fonts.segoe);
+  }, [settings.theme, settings.windowOpacity, settings.tabFontSize, settings.chatFontSize, settings.chatFont]);
 
   // Handle Steam Auth Return
   useEffect(() => {
@@ -493,47 +511,50 @@ I stand ready to guide your journey.
 
         {/* Font Quick Switcher Menu Popup */}
         {fontMenuOpen && (
-          <div className="absolute top-14 right-12 z-50 bg-[#161620] border border-white/15 rounded-xl shadow-2xl p-3 w-48 space-y-2 select-none animate-in fade-in zoom-in-95">
+          <div className="absolute top-14 right-12 z-50 bg-[#161620] border border-white/15 rounded-xl shadow-2xl p-3 w-56 space-y-3 select-none animate-in fade-in zoom-in-95">
             <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block border-b border-white/10 pb-1">
               Typography Style
             </span>
             <div className="space-y-1 text-xs">
               <button
-                onClick={() => {
-                  setSettings(s => ({ ...s, chatFont: 'segoe' }));
-                  document.documentElement.style.setProperty('--chat-font-family', "'Segoe UI', system-ui, sans-serif");
-                }}
+                onClick={() => setSettings(s => ({ ...s, chatFont: 'segoe' }))}
                 className={`w-full text-left p-1.5 rounded hover:bg-white/10 transition-colors ${settings.chatFont === 'segoe' ? 'text-[var(--accent-color)] font-bold' : 'text-zinc-300'}`}
               >
                 Standard (Segoe UI)
               </button>
               <button
-                onClick={() => {
-                  setSettings(s => ({ ...s, chatFont: 'pixel' }));
-                  document.documentElement.style.setProperty('--chat-font-family', "'VT323', monospace");
-                }}
+                onClick={() => setSettings(s => ({ ...s, chatFont: 'pixel' }))}
                 className={`w-full text-left p-1.5 rounded hover:bg-white/10 transition-colors font-pixel text-base ${settings.chatFont === 'pixel' ? 'text-[var(--accent-color)] font-bold' : 'text-zinc-300'}`}
               >
                 Retro Pixel (VT323)
               </button>
               <button
-                onClick={() => {
-                  setSettings(s => ({ ...s, chatFont: 'lore' }));
-                  document.documentElement.style.setProperty('--chat-font-family', "'Literata', serif");
-                }}
+                onClick={() => setSettings(s => ({ ...s, chatFont: 'lore' }))}
                 className={`w-full text-left p-1.5 rounded hover:bg-white/10 transition-colors font-lore ${settings.chatFont === 'lore' ? 'text-[var(--accent-color)] font-bold' : 'text-zinc-300'}`}
               >
                 Tome Lore (Literata)
               </button>
               <button
-                onClick={() => {
-                  setSettings(s => ({ ...s, chatFont: 'code' }));
-                  document.documentElement.style.setProperty('--chat-font-family', "'JetBrains Mono', monospace");
-                }}
+                onClick={() => setSettings(s => ({ ...s, chatFont: 'code' }))}
                 className={`w-full text-left p-1.5 rounded hover:bg-white/10 transition-colors font-code ${settings.chatFont === 'code' ? 'text-[var(--accent-color)] font-bold' : 'text-zinc-300'}`}
               >
                 Cyber Code (JetBrains)
               </button>
+            </div>
+            
+            <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block border-b border-white/10 pb-1 mt-2 pt-2">
+              Chat Size
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="12"
+                max="24"
+                value={settings.chatFontSize}
+                onChange={(e) => setSettings(s => ({ ...s, chatFontSize: Number(e.target.value) }))}
+                className="flex-1 accent-[var(--accent-color)] cursor-pointer h-1.5 bg-white/20 rounded"
+              />
+              <span className="font-mono text-zinc-300 w-6 text-right font-bold text-xs">{settings.chatFontSize}px</span>
             </div>
           </div>
         )}

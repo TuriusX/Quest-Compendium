@@ -213,7 +213,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                           {tab.name}
                         </span>
                         <span className="text-[10px] text-zinc-400 truncate">
-                          {game?.genre || 'Custom Game Tome'}
+                          {game?.genre || 'Custom Compendium'}
                         </span>
                       </div>
                     </div>
@@ -270,7 +270,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           <form onSubmit={handleCreateSubmit} className="p-3 rounded-xl bg-black/60 border border-[var(--accent-border)] space-y-2.5 shadow-lg">
             <div className="flex items-center gap-1.5 text-xs text-zinc-300 font-semibold">
               <Sparkles className="w-3.5 h-3.5 text-[var(--accent-color)]" />
-              <span>Create New Game Tome</span>
+              <span>Create New Compendium</span>
             </div>
             <input
               type="text"
@@ -305,7 +305,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
             className="w-full py-2.5 px-3 rounded-xl border border-dashed border-white/15 text-zinc-400 hover:text-[var(--accent-color)] hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-all flex items-center justify-center gap-2 text-xs font-semibold cursor-pointer group"
           >
             <Plus className="w-3.5 h-3.5 group-hover:scale-125 transition-transform" />
-            <span>+ Add New Game Tome</span>
+            <span>+ Add New Compendium</span>
           </button>
         )}
       </div>

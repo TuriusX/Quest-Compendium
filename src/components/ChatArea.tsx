@@ -444,7 +444,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   )}
 
                   {/* Message Body with Markdown */}
-                  <div className="text-[14.5px] font-sans leading-relaxed break-words space-y-2.5 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_strong]:text-white [&_strong]:font-semibold [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[var(--accent-color)] [&_h1]:border-b [&_h1]:border-white/10 [&_h1]:pb-1 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-[var(--accent-color)] [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-white [&_code]:bg-black/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-purple-300 [&_code]:font-code [&_code]:text-xs [&_pre]:bg-black/80 [&_pre]:border [&_pre]:border-white/10 [&_pre]:p-3.5 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_th]:border [&_th]:border-white/15 [&_th]:p-2 [&_th]:bg-white/[0.06] [&_th]:font-semibold [&_th]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:p-2 [&_td]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--accent-color)] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-zinc-400">
+                  <div className="leading-relaxed break-words space-y-2.5 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_strong]:text-white [&_strong]:font-semibold [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[var(--accent-color)] [&_h1]:border-b [&_h1]:border-white/10 [&_h1]:pb-1 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-[var(--accent-color)] [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-white [&_code]:bg-black/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-purple-300 [&_code]:font-code [&_code]:text-xs [&_pre]:bg-black/80 [&_pre]:border [&_pre]:border-white/10 [&_pre]:p-3.5 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_th]:border [&_th]:border-white/15 [&_th]:p-2 [&_th]:bg-white/[0.06] [&_th]:font-semibold [&_th]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:p-2 [&_td]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--accent-color)] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-zinc-400">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {msg.text}
                     </ReactMarkdown>
@@ -454,7 +454,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {!isUser && (
                     <div className="mt-3.5 pt-2.5 border-t border-white/[0.08] flex items-center justify-between text-xs text-zinc-400">
                       <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-500">
-                        <span>✦ ORACLE INSIGHT</span>
                       </div>
 
                       <div className="flex items-center gap-1.5">
@@ -599,38 +598,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   : `Ask about ${activeGame?.name || activeTab?.name || 'your game'} (Shift+Enter for new line)...`
             }
             rows={1}
-            className="flex-1 max-h-32 min-h-[46px] py-3.5 pl-4 pr-32 bg-transparent text-white text-sm outline-none resize-none font-sans"
+            className="flex-1 max-h-32 min-h-[46px] py-3.5 pl-4 pr-32 bg-transparent text-white outline-none resize-none"
           />
 
           {/* Action Buttons inside Input Bar */}
           <div className="absolute right-2.5 flex items-center gap-1.5">
-            {/* Live Game Screen Grab (1-Click Window Capture) */}
-            <button
-              type="button"
-              onClick={captureGameScreen}
-              disabled={isCapturingScreen}
-              title="Capture Live Game Window (1-Click Screen Grab)"
-              className="p-2 rounded-xl text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer"
-            >
-              <Camera className={`w-4 h-4 ${isCapturingScreen ? 'animate-spin text-purple-400' : ''}`} />
-            </button>
-
-            {/* File Upload Trigger */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              title="Upload Screenshot / Map Image"
-              className="p-2 rounded-xl text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer"
-            >
-              <Upload className="w-4 h-4" />
-            </button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              accept="image/*"
-              className="hidden"
-            />
 
             {/* Push to Talk / Voice Dictation */}
             <button

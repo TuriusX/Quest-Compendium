@@ -260,3 +260,18 @@ ipcMain.handle('get-active-game', async () => {
 ipcMain.on('start-desktop-login', () => {
   shell.openExternal(`https://ais-dev-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app/desktop-login?port=${localAuthPort}`);
 });
+
+ipcMain.on('resize-window', (event, width) => {
+  if (mainWindow) {
+    const bounds = mainWindow.getBounds();
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const screenWidth = primaryDisplay.workAreaSize.width;
+    const x = screenWidth - width;
+    mainWindow.setBounds({
+      x: x,
+      y: bounds.y,
+      width: width,
+      height: bounds.height
+    });
+  }
+});
