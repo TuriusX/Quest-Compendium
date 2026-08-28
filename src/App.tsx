@@ -131,7 +131,15 @@ I stand ready to guide your journey.
   const { user, subscriptionStatus, isInitializing } = useCloudSync(settings, tabs, setSettings, setTabs);
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || null;
-  const activeGame = globalActiveGame || activeTab?.activeSteamGame || null;
+  
+  let activeGame = activeTab?.activeSteamGame || null;
+  if (globalActiveGame) {
+    if (activeGame?.appId === globalActiveGame.appId) {
+      activeGame = { ...activeGame, name: globalActiveGame.name, appId: globalActiveGame.appId };
+    } else {
+      activeGame = globalActiveGame as SteamGameData;
+    }
+  }
 
   // Listen for local Steam game detection from Electron
   useEffect(() => {
@@ -220,14 +228,17 @@ I stand ready to guide your journey.
         const res = await fetch(`/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`);
         if (res.ok) {
           const data = await res.json();
-          if (data.achievements && data.achievements.length > 0 && isMounted) {
+          if (data.achievements && isMounted) {
             setTabs(prev => prev.map(t => {
-              if (t.id === activeTab.id && t.activeSteamGame) {
-                // Keep existing patch notes and mock stuff, but overwrite achievements
+              if (t.id === activeTab.id) {
+                // Keep existing data if it's the same game, otherwise reset it
                 return {
                   ...t,
                   activeSteamGame: {
-                    ...t.activeSteamGame,
+                    ...(t.activeSteamGame?.appId === activeGame.appId ? t.activeSteamGame : {
+                      name: activeGame.name,
+                      appId: activeGame.appId
+                    }),
                     achievements: data.achievements
                   }
                 };

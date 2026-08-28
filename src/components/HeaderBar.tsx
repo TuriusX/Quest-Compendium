@@ -121,8 +121,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               </span>
             </div>
             <span className="hidden sm:flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase">
-              <span className={`w-1.5 h-1.5 rounded-full ${activeGame || activeTab ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
-              {activeGame ? activeGame.name : (activeTab ? activeTab.name : 'GAME NOT DETECTED')}
+              <span className={`w-1.5 h-1.5 rounded-full ${activeGame ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+              {activeGame ? `ACTIVE: ${activeGame.name}` : 'NO ACTIVE STEAM GAME'}
             </span>
           </div>
         </button>
