@@ -120,9 +120,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 AI HUD
               </span>
             </div>
-            <span className="hidden sm:flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase">
-              <span className={`w-1.5 h-1.5 rounded-full ${activeGame ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
-              {activeGame ? `ACTIVE: ${activeGame.name}` : 'NO ACTIVE STEAM GAME'}
+            <span className="flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase overflow-hidden whitespace-nowrap text-ellipsis max-w-[180px]">
+              <span className={`w-1.5 h-1.5 flex-shrink-0 rounded-full ${activeGame ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+              <span className="truncate">{activeGame ? `ACTIVE: ${activeGame.name}` : 'NO ACTIVE STEAM GAME'}</span>
             </span>
           </div>
         </button>
