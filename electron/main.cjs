@@ -148,5 +148,5 @@ ipcMain.handle('get-active-game', async () => {
 
 // Trigger external browser for login
 ipcMain.on('start-desktop-login', () => {
-  shell.openExternal('http://localhost:3000/desktop-login');
+  shell.openExternal('https://ais-dev-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app/desktop-login');
 });
