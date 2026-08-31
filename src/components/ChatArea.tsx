@@ -595,7 +595,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 ? "Listening to your inquiry..." 
                 : attachedImage 
                   ? "Ask about this screenshot (e.g., puzzle answer, optimal route, stat comparison)..." 
-                  : `Ask about ${activeGame?.name || activeTab?.name || 'your game'} (Shift+Enter for new line)...`
+                  : "Ask the Compendium (Shift+Enter for new line)..."
             }
             rows={1}
             className="flex-1 max-h-48 min-h-[72px] py-4 pl-4 pr-32 bg-transparent text-white outline-none resize-none"

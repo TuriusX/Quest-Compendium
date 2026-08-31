@@ -77,10 +77,21 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
 
   return (
     <aside 
-      className={`h-full bg-[#0a0b10]/95 backdrop-blur-2xl border-r border-white/[0.08] flex flex-col transition-all duration-300 ease-out z-20 flex-shrink-0 relative ${
-        isOpen ? 'w-72 sm:w-80' : 'w-0 overflow-hidden border-none'
+      className={`h-full z-20 flex-shrink-0 relative transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${
+        isOpen ? 'w-72 sm:w-80' : 'w-0 border-none'
       }`}
+      style={{ perspective: '2000px' }}
     >
+      <div 
+        className="w-72 sm:w-80 h-full bg-[#0a0b10]/95 backdrop-blur-2xl border-r border-white/[0.08] flex flex-col overflow-hidden"
+        style={{
+          transformOrigin: 'left center',
+          transform: isOpen ? 'rotateY(0deg)' : 'rotateY(-90deg)',
+          opacity: isOpen ? 1 : 0,
+          transition: 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease',
+          pointerEvents: isOpen ? 'auto' : 'none',
+        }}
+      >
       {/* Sidebar Header */}
       <div className="p-3.5 border-b border-white/[0.08] flex items-center justify-between bg-black/30">
         <div className="flex items-center gap-2">
@@ -339,6 +350,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           </span>
           <span className="text-[9.5px] font-bold text-blue-300 px-1.5 py-0.5 rounded bg-blue-400/20">WEB</span>
         </button>
+      </div>
       </div>
     </aside>
   );

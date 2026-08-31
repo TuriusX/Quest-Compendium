@@ -98,10 +98,21 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
 
   return (
     <aside
-      className={`h-full bg-[#0a0b10]/95 backdrop-blur-2xl border-l border-white/[0.08] flex flex-col transition-all duration-300 ease-out z-20 flex-shrink-0 relative ${
-        isOpen ? 'w-80 sm:w-96' : 'w-0 overflow-hidden border-none'
+      className={`h-full z-20 flex-shrink-0 relative transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${
+        isOpen ? 'w-80 sm:w-96' : 'w-0 border-none'
       }`}
+      style={{ perspective: '2000px' }}
     >
+      <div 
+        className="w-80 sm:w-96 h-full bg-[#0a0b10]/95 backdrop-blur-2xl border-l border-white/[0.08] flex flex-col overflow-hidden"
+        style={{
+          transformOrigin: 'right center',
+          transform: isOpen ? 'rotateY(0deg)' : 'rotateY(90deg)',
+          opacity: isOpen ? 1 : 0,
+          transition: 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease',
+          pointerEvents: isOpen ? 'auto' : 'none',
+        }}
+      >
       {/* Header */}
       <div className="p-3.5 border-b border-white/[0.08] flex items-center justify-between flex-shrink-0 bg-black/30">
         <div className="flex items-center gap-2">
@@ -324,6 +335,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
           ))}
         </div>
       )}
+      </div>
     </aside>
   );
 };

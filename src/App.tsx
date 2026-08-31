@@ -492,8 +492,9 @@ I stand ready to guide your journey.
 
       {/* Main App Window Frame */}
       <div 
-        className={`flex flex-col overflow-hidden bg-[#0e0e12]/95 backdrop-blur-2xl relative transition-all ${getDockClasses(settings.dockPosition)}`}
+        className={`flex flex-col overflow-hidden backdrop-blur-2xl relative transition-all ${getDockClasses(settings.dockPosition)}`}
         style={{
+          backgroundColor: `rgba(14, 14, 18, ${settings.windowOpacity / 100})`,
           boxShadow: '0 0 35px var(--accent-glow)'
         }}
       >
