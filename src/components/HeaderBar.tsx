@@ -68,10 +68,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const totalCount = achievements.length;
 
   return (
-    <header className="h-14 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between px-3 sm:px-4 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
+    <header className="h-14 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between px-3 sm:px-4 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
       {/* Left side: Brand Logo + Game Library Toggle */}
       <div className="flex items-center gap-2.5 sm:gap-3">
         <button
+          style={{ WebkitAppRegion: "no-drag" } as any}
           onClick={() => {
             playPageTurnSound(soundEnabled);
             onToggleSidebar();
@@ -135,6 +136,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       <div className="flex items-center gap-1 sm:gap-1.5">
         {/* Achievements / Medals Drawer Toggle */}
         <button
+          style={{ WebkitAppRegion: "no-drag" } as any}
           onClick={() => {
             playPageTurnSound(soundEnabled);
             onToggleAchDrawer();
@@ -159,6 +161,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
         {/* Font Quick Switcher */}
         <button
+          style={{ WebkitAppRegion: "no-drag" } as any}
           onClick={() => {
             playBlipSound(soundEnabled);
             onToggleFontMenu();
@@ -175,6 +178,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
         {/* Settings Dialog */}
         <button
+          style={{ WebkitAppRegion: "no-drag" } as any}
           onClick={() => {
             playBlipSound(soundEnabled);
             onOpenSettings();
@@ -187,6 +191,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
         {/* Dock / Free-floating Window Mode */}
         <button
+          style={{ WebkitAppRegion: "no-drag" } as any}
           onClick={() => {
             playBlipSound(soundEnabled);
             onToggleDock();

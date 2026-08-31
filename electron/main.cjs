@@ -51,6 +51,7 @@ app.commandLine.appendSwitch('disable-features', 'CrossOriginOpenerPolicy');
 app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 let isAppVisible = true;
+let currentDockPosition = "top-right";
 let animationInterval = null;
 
 function getDockCoords(isHidden = false) {
@@ -60,9 +61,22 @@ function getDockCoords(isHidden = false) {
   const sHeight = primaryDisplay.workAreaSize.height;
   const bounds = mainWindow.getBounds();
   
-  const targetX = isHidden ? sWidth - 8 : sWidth - bounds.width;
-  const targetY = 0; // Dock top right
-
+  let targetX = bounds.x;
+  let targetY = bounds.y;
+  
+  if (currentDockPosition === 'top-right') {
+    targetX = isHidden ? sWidth - 8 : sWidth - bounds.width;
+    targetY = 0;
+  } else if (currentDockPosition === 'bottom-right') {
+    targetX = isHidden ? sWidth - 8 : sWidth - bounds.width;
+    targetY = sHeight - bounds.height;
+  } else if (currentDockPosition === 'top-left') {
+    targetX = isHidden ? 8 - bounds.width : 0;
+    targetY = 0;
+  } else if (currentDockPosition === 'bottom-left') {
+    targetX = isHidden ? 8 - bounds.width : 0;
+    targetY = sHeight - bounds.height;
+  }
   return { x: targetX, y: targetY };
 }
 
@@ -108,15 +122,21 @@ function slideIn() {
   isAppVisible = true;
   mainWindow.show();
   mainWindow.focus();
-  const coords = getDockCoords(false);
-  animateWindow(coords.x, coords.y, 200);
+  if (currentDockPosition !== 'undocked') {
+    const coords = getDockCoords(false);
+    animateWindow(coords.x, coords.y, 200);
+  }
 }
 
 function slideOut() {
   if (!mainWindow) return;
   isAppVisible = false;
-  const coords = getDockCoords(true);
-  animateWindow(coords.x, coords.y, 150);
+  if (currentDockPosition !== 'undocked') {
+    const coords = getDockCoords(true);
+    animateWindow(coords.x, coords.y, 150);
+  } else {
+    mainWindow.hide(); // if undocked, just hide it
+  }
 }
 
 function createWindow() {
@@ -266,12 +286,34 @@ ipcMain.on('resize-window', (event, width) => {
     const bounds = mainWindow.getBounds();
     const primaryDisplay = screen.getPrimaryDisplay();
     const screenWidth = primaryDisplay.workAreaSize.width;
-    const x = screenWidth - width;
+    
+    let newX = bounds.x;
+    // Keep edge anchored
+    if (currentDockPosition === 'top-right' || currentDockPosition === 'bottom-right') {
+      newX = screenWidth - width;
+    } else if (currentDockPosition === 'top-left' || currentDockPosition === 'bottom-left') {
+      newX = 0;
+    }
+    // if undocked, maybe we just expand to the right. Or keep x the same.
+    
     mainWindow.setBounds({
-      x: x,
+      x: newX,
       y: bounds.y,
       width: width,
       height: bounds.height
     });
+  }
+});
+
+ipcMain.on('set-dock-position', (event, pos) => {
+  currentDockPosition = pos;
+  if (mainWindow) {
+    if (pos === 'undocked') {
+      // allow dragging
+      mainWindow.setIgnoreMouseEvents(false);
+    } else {
+      const coords = getDockCoords(!isAppVisible);
+      animateWindow(coords.x, coords.y, 150);
+    }
   }
 });

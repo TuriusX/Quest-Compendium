@@ -15,7 +15,8 @@ import {
   Radio,
   SlidersVertical,
   Key,
-  LogOut
+  LogOut,
+  Monitor
 } from 'lucide-react';
 import { AppSettings, AiMode, ColorTheme, DockPosition } from '../types';
 import { playBlipSound } from '../utils/audio';
@@ -250,6 +251,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Docking Location */}
+          <div className="space-y-2.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+              <Monitor className="w-4 h-4 text-[var(--accent-color)]" />
+              <span>Dock Position</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: 'top-right', label: 'Top Right' },
+                { id: 'top-left', label: 'Top Left' },
+                { id: 'bottom-right', label: 'Bottom Right' },
+                { id: 'bottom-left', label: 'Bottom Left' },
+                { id: 'undocked', label: 'Undocked (Free Floating)' }
+              ].map(dock => (
+                <button
+                  key={dock.id}
+                  onClick={() => {
+                    playBlipSound(soundEnabled);
+                    onUpdateSettings({ dockPosition: dock.id as any });
+                  }}
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                    settings.dockPosition === dock.id
+                      ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white shadow-sm'
+                      : 'bg-black/30 border-white/[0.08] text-zinc-400 hover:border-white/20'
+                  } ${dock.id === 'undocked' ? 'col-span-2 text-center justify-center' : ''}`}
+                >
+                  <span className="font-semibold text-xs">{dock.label}</span>
+                  {settings.dockPosition === dock.id && dock.id !== 'undocked' && (
+                    <Check className="w-4 h-4 text-[var(--accent-color)]" />
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Color Themes */}

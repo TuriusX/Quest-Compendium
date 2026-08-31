@@ -160,9 +160,22 @@ I stand ready to guide your journey.
     if ((window as any).electronAPI?.resizeWindow) {
       const baseWidth = 450;
       const sidebarWidth = 288; // w-72
-      (window as any).electronAPI.resizeWindow(isSidebarOpen ? baseWidth + sidebarWidth : baseWidth);
+      const achDrawerWidth = 384; // sm:w-96
+
+      let totalWidth = baseWidth;
+      if (isSidebarOpen) totalWidth += sidebarWidth;
+      if (isAchDrawerOpen) totalWidth += achDrawerWidth;
+
+      (window as any).electronAPI.resizeWindow(totalWidth);
     }
-  }, [isSidebarOpen]);
+  }, [isSidebarOpen, isAchDrawerOpen]);
+
+  // Sync Dock Position to Electron
+  useEffect(() => {
+    if ((window as any).electronAPI?.setDockPosition) {
+      (window as any).electronAPI.setDockPosition(settings.dockPosition);
+    }
+  }, [settings.dockPosition]);
 
   // Apply Theme CSS Variables
   useEffect(() => {
@@ -505,7 +518,13 @@ I stand ready to guide your journey.
           onToggleFontMenu={() => setFontMenuOpen(!fontMenuOpen)}
           soundEnabled={settings.soundEnabled}
           isDocked={settings.dockPosition !== 'undocked'}
-          onToggleDock={() => setSettings(s => ({ ...s, dockPosition: s.dockPosition === 'undocked' ? 'top-right' : 'undocked' }))}
+          onToggleDock={() => {
+            const newPos = settings.dockPosition === 'undocked' ? 'top-right' : 'undocked';
+            setSettings(s => ({ ...s, dockPosition: newPos }));
+            if ((window as any).electronAPI?.setDockPosition) {
+              (window as any).electronAPI.setDockPosition(newPos);
+            }
+          }}
           theme={settings.theme}
         />
 

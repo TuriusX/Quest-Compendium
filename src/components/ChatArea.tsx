@@ -598,11 +598,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   : `Ask about ${activeGame?.name || activeTab?.name || 'your game'} (Shift+Enter for new line)...`
             }
             rows={1}
-            className="flex-1 max-h-32 min-h-[46px] py-3.5 pl-4 pr-32 bg-transparent text-white outline-none resize-none"
+            className="flex-1 max-h-48 min-h-[72px] py-4 pl-4 pr-32 bg-transparent text-white outline-none resize-none"
           />
 
           {/* Action Buttons inside Input Bar */}
-          <div className="absolute right-2.5 flex items-center gap-1.5">
+          <div className="absolute right-2.5 bottom-2.5 flex items-center gap-1.5">
 
             {/* Push to Talk / Voice Dictation */}
             <button

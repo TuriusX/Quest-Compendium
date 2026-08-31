@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
-import { AppSettings, Tab } from '../types';
+import { AppSettings, GameTab } from '../types';
 
 export function useCloudSync(
   localSettings: AppSettings,
-  localTabs: Tab[],
+  localGameTabs: GameTab[],
   setLocalSettings: (s: AppSettings) => void,
-  setLocalTabs: (t: Tab[]) => void
+  setLocalGameTabs: (t: GameTab[]) => void
 ) {
   const [user, setUser] = useState<User | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'inactive' | 'loading'>('loading');
@@ -40,7 +40,7 @@ export function useCloudSync(
           email: user.email,
           subscriptionStatus: 'inactive',
           settings: localSettings,
-          tabs: localTabs,
+          tabs: localGameTabs,
           updatedAt: Date.now()
         });
       }
@@ -82,13 +82,13 @@ export function useCloudSync(
       const userRef = doc(db, 'users', user.uid);
       setDoc(userRef, {
         settings: localSettings,
-        tabs: localTabs,
+        tabs: localGameTabs,
         updatedAt: Date.now()
       }, { merge: true }).catch(err => console.error("Sync error", err));
     }, 1500); // Debounce syncs by 1.5 seconds
 
     return () => clearTimeout(syncTimeout);
-  }, [localSettings, localTabs, user, subscriptionStatus, isInitializing]);
+  }, [localSettings, localGameTabs, user, subscriptionStatus, isInitializing]);
 
   return { user, subscriptionStatus, isInitializing };
 }
