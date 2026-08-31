@@ -78,4 +78,5 @@ export interface AppSettings {
   steamAvatar?: string;
   ttsVoice: 'Kore' | 'Puck' | 'Fenrir' | 'Zephyr' | 'Charon';
   customApiKey?: string;
+  openAiApiKey?: string;
 }

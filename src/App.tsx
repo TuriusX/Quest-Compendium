@@ -527,7 +527,7 @@ I stand ready to guide your journey.
           style={{ WebkitAppRegion: 'no-drag' } as any}
           title="Toggle Dock Visibility"
         >
-          <div className="w-1 h-8 rounded-full bg-black/40" />
+          
         </button>
       )}
 
@@ -658,6 +658,7 @@ I stand ready to guide your journey.
                 onOpenScreenModal={(url) => setExaminedImageUrl(url)}
                 ttsVoice={settings.ttsVoice}
                 customApiKey={settings.customApiKey}
+                openAiApiKey={settings.openAiApiKey}
               />
             )}
 

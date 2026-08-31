@@ -465,7 +465,7 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
   // --- API: Text-to-Speech (TTS) using Gemini Voice ---
   app.post('/api/tts', async (req, res) => {
     try {
-      const { text, voice = 'Kore', customApiKey } = req.body;
+      const { text, voice = 'Kore', openAiApiKey } = req.body;
       if (!text) {
         return res.status(400).json({ error: 'Text is required for speech' });
       }
@@ -479,7 +479,7 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
         .trim()
         .slice(0, 1000); // Reasonable single utterance limit
 
-      const apiKey = process.env.OPENAI_API_KEY;
+      const apiKey = openAiApiKey || process.env.OPENAI_API_KEY;
       if (!apiKey) {
         return res.status(500).json({ error: 'OPENAI_API_KEY environment variable is missing.' });
       }

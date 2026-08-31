@@ -40,6 +40,7 @@ interface ChatAreaProps {
   onOpenScreenModal: (imageUrl: string) => void;
   ttsVoice: string;
   customApiKey?: string;
+  openAiApiKey?: string;
   steamName?: string;
   steamAvatar?: string;
 }
@@ -55,6 +56,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onOpenScreenModal,
   ttsVoice,
   customApiKey,
+  openAiApiKey,
   steamName,
   steamAvatar,
 }) => {
@@ -258,7 +260,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice: ttsVoice || 'Kore', customApiKey }),
+        body: JSON.stringify({ text, voice: ttsVoice || 'Kore', customApiKey, openAiApiKey }),
       });
 
       if (res.ok) {
