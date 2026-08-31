@@ -260,7 +260,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice: ttsVoice || 'Kore', customApiKey, openAiApiKey }),
+        body: JSON.stringify({ text, voice: ttsVoice || 'nova', customApiKey, openAiApiKey }),
       });
 
       if (res.ok) {

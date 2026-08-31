@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   dockPosition: 'top-right',
   windowOpacity: 96,
   steamId: '',
-  ttsVoice: 'Kore',
+  ttsVoice: 'nova',
   customApiKey: '',
 };
 

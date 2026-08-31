@@ -465,7 +465,7 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
   // --- API: Text-to-Speech (TTS) using Gemini Voice ---
   app.post('/api/tts', async (req, res) => {
     try {
-      const { text, voice = 'Kore', openAiApiKey } = req.body;
+      const { text, voice = 'nova', openAiApiKey } = req.body;
       if (!text) {
         return res.status(400).json({ error: 'Text is required for speech' });
       }
@@ -484,15 +484,8 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
         return res.status(500).json({ error: 'OPENAI_API_KEY environment variable is missing.' });
       }
 
-      const voiceMap: Record<string, string> = {
-        'Kore': 'nova',
-        'Puck': 'shimmer',
-        'Fenrir': 'onyx',
-        'Zephyr': 'alloy',
-        'Charon': 'echo'
-      };
-      
-      const openaiVoice = voiceMap[voice] || 'nova';
+      // voice is now passed directly as the OpenAI voice name (e.g., 'fable', 'onyx')
+      const openaiVoice = voice || 'nova';
 
       const response = await fetch('https://api.openai.com/v1/audio/speech', {
         method: 'POST',

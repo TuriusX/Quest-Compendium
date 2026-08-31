@@ -76,7 +76,7 @@ export interface AppSettings {
   steamId: string;
   steamName?: string;
   steamAvatar?: string;
-  ttsVoice: 'Kore' | 'Puck' | 'Fenrir' | 'Zephyr' | 'Charon';
+  ttsVoice: 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer';
   customApiKey?: string;
   openAiApiKey?: string;
 }

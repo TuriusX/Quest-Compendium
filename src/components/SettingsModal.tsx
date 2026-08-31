@@ -74,11 +74,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ];
 
   const voices = [
-    { id: 'Kore', name: 'Kore (Warm / Epic Storyteller)' },
-    { id: 'Puck', name: 'Puck (Playful / Witty Companion)' },
-    { id: 'Fenrir', name: 'Fenrir (Deep / Heroic Warrior)' },
-    { id: 'Zephyr', name: 'Zephyr (Smooth / Navigator AI)' },
-    { id: 'Charon', name: 'Charon (Mystic / Cryptic Oracle)' },
+    { id: 'fable', name: 'Fable (The British Storyteller)' },
+    { id: 'onyx', name: 'Onyx (The Dark Overlord)' },
+    { id: 'nova', name: 'Nova (The Energetic Guide)' },
+    { id: 'echo', name: 'Echo (The Wise Mentor)' },
+    { id: 'shimmer', name: 'Shimmer (The Ethereal Spirit)' },
+    { id: 'sage', name: 'Sage (The Mystical Oracle)' },
+    { id: 'ash', name: 'Ash (The Bold Adventurer)' },
+    { id: 'coral', name: 'Coral (The Cheerful Sidekick)' },
+    { id: 'alloy', name: 'Alloy (The Neutral Construct)' }
   ];
 
   return (
