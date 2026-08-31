@@ -78,16 +78,18 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             onToggleSidebar();
           }}
           title={isSidebarOpen ? "Collapse Games Library" : "Expand Games Library"}
-          className="group flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-white/[0.06] border border-transparent hover:border-white/10 transition-all cursor-pointer"
+          className="group relative flex items-center justify-center p-2 rounded-xl hover:bg-white/[0.06] border border-transparent hover:border-white/10 transition-all cursor-pointer"
         >
-          {/* Ornate pixel/vector magical tome icon */}
-          <div className="relative flex-shrink-0">
-            <svg 
-              width="28" 
-              height="28" 
-              viewBox="0 0 32 32" 
-              fill="none" 
-              className="drop-shadow-[0_0_10px_var(--accent-glow)] group-hover:scale-105 transition-transform"
+          {/* Magical Aura */}
+          <div className="absolute inset-0 rounded-xl bg-[var(--accent-glow)] blur-md opacity-40 group-hover:opacity-80 animate-pulse transition-opacity" />
+          
+          <div className="relative flex-shrink-0 z-10">
+            <svg
+               width="28"
+               height="28"
+               viewBox="0 0 32 32"
+               fill="none"
+               className="drop-shadow-[0_0_10px_var(--accent-glow)] group-hover:scale-105 transition-transform"
             >
               <rect x="5" y="28" width="24" height="2" fill="#050508" opacity="0.7"/>
               <rect x="24" y="6" width="4" height="20" fill="#d9cdb4" />
@@ -114,24 +116,23 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               <rect x="15" y="15" width="2" height="2" fill="#ffffff" />
             </svg>
           </div>
-          
-          <div className="flex flex-col text-left">
-            <div className="flex items-center gap-1.5">
-              <span className="font-fantasy font-bold text-sm tracking-wider text-white group-hover:text-[var(--accent-color)] transition-colors">
-                QUEST COMPENDIUM
-              </span>
-              <span className="hidden xl:inline-block px-1.5 py-0.2 rounded text-[10px] font-pixel bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)]">
-                AI HUD
-              </span>
-            </div>
-            <span className="flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase overflow-hidden whitespace-nowrap text-ellipsis max-w-[180px]">
-              <span className={`w-1.5 h-1.5 flex-shrink-0 rounded-full ${isGameRunningLocally ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
-              <span className="truncate">{isGameRunningLocally ? `ACTIVE: ${activeGame?.name}` : 'NO ACTIVE STEAM GAME'}</span>
+        </button>
+        
+        <div className="flex flex-col text-left py-1">
+          <div className="flex items-center gap-1.5">
+            <span className="font-fantasy font-bold text-sm tracking-wider text-white">
+              QUEST COMPENDIUM
+            </span>
+            <span className="hidden xl:inline-block px-1.5 py-0.2 rounded text-[10px] font-pixel bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)]">
+              AI HUD
             </span>
           </div>
-        </button>
+          <span className="flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase overflow-hidden whitespace-nowrap text-ellipsis max-w-[180px]">
+            <span className={`w-1.5 h-1.5 flex-shrink-0 rounded-full ${isGameRunningLocally ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+            <span className="truncate">{isGameRunningLocally ? `ACTIVE: ${activeGame?.name}` : 'NO ACTIVE STEAM GAME'}</span>
+          </span>
+        </div>
       </div>
-
       {/* Right Controls Toolbar */}
       <div className="flex items-center gap-1 sm:gap-1.5">
         {/* Achievements / Medals Drawer Toggle */}

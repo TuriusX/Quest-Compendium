@@ -474,21 +474,19 @@ I stand ready to guide your journey.
   // Docking Layout Container classes
   const getDockClasses = (dock: DockPosition) => {
     switch (dock) {
-      case 'top-right':
-        return 'max-w-6xl w-full h-[95vh] rounded-2xl border border-[var(--accent-border)] shadow-[0_0_40px_rgba(0,0,0,0.8)]';
-      case 'bottom-right':
-        return 'max-w-6xl w-full h-[95vh] rounded-2xl border border-[var(--accent-border)] shadow-[0_0_40px_rgba(0,0,0,0.8)]';
-      case 'top-left':
-      case 'bottom-left':
-        return 'max-w-6xl w-full h-[95vh] rounded-2xl border border-[var(--accent-border)] shadow-[0_0_40px_rgba(0,0,0,0.8)]';
       case 'undocked':
+        // When floating freely, make it look like a nice app window with borders and rounded corners.
+        // We use h-[98%] and w-[98%] so the shadow doesn't get hard-clipped by the Electron window bounds,
+        // and we rely on the flex container to center it.
+        return 'w-[98%] h-[98%] rounded-xl border border-[var(--accent-border)] shadow-[0_0_40px_rgba(0,0,0,0.8)] mx-auto my-auto';
       default:
-        return 'w-full h-full rounded-none border-none';
+        // Snug fit for all docked corners (no rounded corners, no space)
+        return 'w-full h-full rounded-none border-none shadow-[0_0_40px_rgba(0,0,0,0.8)]';
     }
   };
 
   return (
-    <div className="w-screen h-screen bg-transparent flex items-center justify-center p-0 sm:p-2 overflow-hidden select-none font-sans">
+    <div className="w-screen h-screen bg-transparent flex overflow-hidden select-none font-sans">
       {/* Background CRT scan line ambient glow */}
       <div className="absolute inset-0 bg-radial from-purple-900/10 via-transparent to-transparent pointer-events-none" />
 
