@@ -180,7 +180,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                       if (e.key === 'Escape') setEditingTabId(null);
                     }}
                     autoFocus
-                    className="w-full bg-black/90 border border-[var(--accent-color)] rounded-lg px-2.5 py-1 text-white text-xs outline-none font-sans"
+                    className="w-full bg-black/90 border border-[var(--accent-color)] rounded-lg px-2.5 py-1 text-white text-xs outline-none font-sans select-text"
+                    style={{ WebkitAppRegion: 'no-drag' } as any}
                   />
                   <button
                     onClick={() => handleSaveRename(tab.id)}
@@ -289,7 +290,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
               value={newGameName}
               onChange={(e) => setNewGameName(e.target.value)}
               autoFocus
-              className="w-full bg-black/90 border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-[var(--accent-color)] font-sans"
+              className="w-full bg-black/90 border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-[var(--accent-color)] font-sans select-text"
+              style={{ WebkitAppRegion: 'no-drag' } as any}
             />
             <div className="flex items-center justify-end gap-1.5">
               <button

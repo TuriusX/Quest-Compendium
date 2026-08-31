@@ -530,16 +530,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         )}
 
         {/* Animated 3D Levitating Tome Loader */}
-        {isLoading && (
-          <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-[#11121a]/95 border border-[var(--accent-border)] w-fit select-none shadow-[0_8px_30px_rgba(0,0,0,0.5),0_0_20px_var(--accent-glow)]">
-            <div className="animate-magical-flip">
-              <svg 
-                width="32" 
-                height="32" 
-                viewBox="0 0 32 32" 
-                fill="none" 
-                className="drop-shadow-[0_0_12px_var(--accent-glow)]"
-              >
+                {isLoading && (
+          <div className="flex items-center gap-3 px-4 py-3 ml-4 mb-4 rounded-2xl bg-[#11121a]/95 border border-[var(--accent-border)] w-fit shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+            <div className="w-5 h-5 shrink-0 flex items-center justify-center animate-magical-flip">
+              <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 4C6 2.89543 6.89543 2 8 2H22C23.1046 2 24 2.89543 24 4V28C24 29.1046 23.1046 30 22 30H8C6.89543 30 6 29.1046 6 28V4Z" fill="#140d24" />
+                <path d="M6 4C6 2.89543 6.89543 2 8 2H10V30H8C6.89543 30 6 29.1046 6 28V4Z" fill="#d9cdb4" />
                 <rect x="5" y="28" width="24" height="2" fill="#050508" opacity="0.7"/>
                 <rect x="24" y="6" width="4" height="20" fill="#d9cdb4" />
                 <rect x="8" y="4" width="16" height="24" fill="#140d24" />
@@ -548,14 +544,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <rect x="14" y="14" width="4" height="4" fill="var(--accent-glow)" />
               </svg>
             </div>
-            <div className="flex flex-col">
-              <span className="font-fantasy font-bold text-sm text-[var(--accent-color)] tracking-wide animate-pulse">
-                Consulting the Quest Compendium...
-              </span>
-              <span className="text-[11px] text-zinc-400 font-sans">
-                Synthesizing game vision frames, stat scaling & insightful guidance
-              </span>
-            </div>
+            <span className="font-fantasy font-bold text-xs text-[var(--accent-color)] tracking-wide animate-pulse mt-1">
+              Consulting the Quest Compendium...
+            </span>
           </div>
         )}
       </div>

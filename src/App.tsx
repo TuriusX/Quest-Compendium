@@ -507,7 +507,7 @@ I stand ready to guide your journey.
   };
 
   return (
-    <div className="w-screen h-screen bg-transparent flex overflow-hidden select-none font-sans">
+    <div className="w-screen h-screen bg-transparent flex overflow-hidden font-sans">
       {/* Background CRT scan line ambient glow */}
       <div className="absolute inset-0 bg-radial from-purple-900/10 via-transparent to-transparent pointer-events-none" />
 
@@ -550,7 +550,7 @@ I stand ready to guide your journey.
 
         {/* Font Quick Switcher Menu Popup */}
         {fontMenuOpen && (
-          <div className="absolute top-14 right-12 z-50 bg-[#161620] border border-white/15 rounded-xl shadow-2xl p-3 w-56 space-y-3 select-none animate-in fade-in zoom-in-95">
+          <div className="absolute top-14 right-12 z-50 bg-[#161620] border border-white/15 rounded-xl shadow-2xl p-3 w-56 space-y-3 animate-in fade-in zoom-in-95">
             <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block border-b border-white/10 pb-1">
               Typography Style
             </span>
