@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startDesktopLogin: () => ipcRenderer.send('start-desktop-login'),
   resizeWindow: (width) => ipcRenderer.send('resize-window', width),
   setDockPosition: (pos) => ipcRenderer.send('set-dock-position', pos),
+  toggleSlide: () => ipcRenderer.send('toggle-slide'),
   onDesktopAuthSuccess: (callback) => ipcRenderer.on('desktop-auth-success', (event, token) => callback(token)),
   onActiveGameDetected: (callback) => ipcRenderer.on('active-game-detected', (event, gameData) => callback(gameData))
 });

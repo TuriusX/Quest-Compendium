@@ -3,50 +3,75 @@ import re
 with open('server.ts', 'r') as f:
     code = f.read()
 
-profile_endpoint = """  // --- API: Steam Profile (XML) ---
-  app.get('/api/steam/profile', async (req, res) => {
-    const { steamId } = req.query;
-    if (!steamId || typeof steamId !== 'string') {
-      return res.status(400).json({ error: 'steamId query parameter is required' });
-    }
-    
-    let url = '';
-    if (/^\d{17}$/.test(steamId)) {
-      url = `https://steamcommunity.com/profiles/${steamId}/?xml=1`;
-    } else {
-      url = `https://steamcommunity.com/id/${steamId}/?xml=1`;
-    }
-    
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        return res.status(404).json({ error: 'Steam profile not found' });
-      }
-      
-      const xmlData = await response.text();
-      const result = await parseStringPromise(xmlData, { explicitArray: false });
-      
-      const profile = result.profile;
-      if (!profile) {
-        return res.status(404).json({ error: 'Invalid profile data' });
-      }
-      
-      return res.json({
-        steamName: profile.steamID,
-        avatarFull: profile.avatarFull,
-        avatarMedium: profile.avatarMedium,
-        avatarIcon: profile.avatarIcon
+old_tts = """      const ai = getGeminiClient(customApiKey);
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-tts-preview',
+        contents: [{ parts: [{ text: cleanText }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: voice as any || 'Kore' },
+            },
+          },
+        },
       });
-    } catch (err) {
-      console.error('Failed to fetch Steam profile:', err);
-      return res.status(500).json({ error: 'Failed to parse Steam profile' });
-    }
-  });
 
-  // --- API: Steam Achievements (Public XML) ---"""
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
-code = code.replace("  // --- API: Steam Achievements (Public XML) ---", profile_endpoint)
+      if (!base64Audio) {
+        return res.status(500).json({ error: 'Audio data not generated' });
+      }
 
+      res.json({
+        audioBase64: base64Audio,
+        mimeType: 'audio/mp3'
+      });"""
+
+new_tts = """      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: 'OPENAI_API_KEY environment variable is missing.' });
+      }
+
+      const voiceMap: Record<string, string> = {
+        'Kore': 'nova',
+        'Puck': 'shimmer',
+        'Fenrir': 'onyx',
+        'Zephyr': 'alloy',
+        'Charon': 'echo'
+      };
+      
+      const openaiVoice = voiceMap[voice] || 'nova';
+
+      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'tts-1',
+          input: cleanText,
+          voice: openaiVoice,
+          response_format: 'mp3'
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return res.status(response.status).json({ error: `OpenAI TTS error: ${errorText}` });
+      }
+
+      const audioBuffer = await response.arrayBuffer();
+      const base64Audio = Buffer.from(audioBuffer).toString('base64');
+
+      res.json({
+        audioBase64: base64Audio,
+        mimeType: 'audio/mp3'
+      });"""
+
+code = code.replace(old_tts, new_tts)
 with open('server.ts', 'w') as f:
     f.write(code)
 

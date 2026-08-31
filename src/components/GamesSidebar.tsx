@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Plus, 
   Trash2, 
@@ -50,6 +50,14 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   const [editName, setEditName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [newGameName, setNewGameName] = useState('');
+  
+  const createInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (isCreating && createInputRef.current) {
+      createInputRef.current.focus();
+    }
+  }, [isCreating]);
+
   const [showFontControl, setShowFontControl] = useState(false);
 
   const handleStartRename = (tab: GameTab, e: React.MouseEvent) => {
@@ -100,7 +108,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           </div>
           <div className="flex flex-col">
             <span className="font-fantasy font-bold text-xs tracking-wider text-white">
-              SAVED GAME TOMES
+              SAVED GAMES
             </span>
             <span className="text-[10px] text-zinc-400 font-mono">
               {tabs.length} Active Sessions
@@ -224,9 +232,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                         >
                           {tab.name}
                         </span>
-                        <span className="text-[10px] text-zinc-400 truncate">
-                          {game?.genre || 'Custom Compendium'}
-                        </span>
+
                       </div>
                     </div>
 
@@ -285,6 +291,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
               <span>Create New Compendium</span>
             </div>
             <input
+              ref={createInputRef}
               type="text"
               placeholder="e.g. Elden Ring, Skyrim, Hades..."
               value={newGameName}
