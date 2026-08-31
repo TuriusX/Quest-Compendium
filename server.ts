@@ -477,7 +477,7 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
         .replace(/https?:\/\/\S+/g, '')
         .replace(/\n\s*-\s*/g, '. ')
         .trim()
-        .slice(0, 1000); // Reasonable single utterance limit
+        .slice(0, 4000); // OpenAI limit is 4096
 
       const apiKey = openAiApiKey || process.env.OPENAI_API_KEY;
       if (!apiKey) {
