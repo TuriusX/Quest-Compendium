@@ -117,7 +117,7 @@ export function playBlipSound(enabled = true) {
 export function playPageTurnSound(enabled = true) {
   if (!enabled) return;
   try {
-    const audio = new Audio('/page-turn.mp3');
+    const audio = new Audio('./page-turn.mp3');
     audio.volume = 0.6;
     audio.play().catch(() => {
       const ctx = getAudioContext();

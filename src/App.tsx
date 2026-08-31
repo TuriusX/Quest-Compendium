@@ -251,6 +251,31 @@ I stand ready to guide your journey.
     } catch {}
   }, [tabs]);
 
+  // Fetch Steam Profile
+  useEffect(() => {
+    if (!settings.steamId) {
+      setSettings(prev => ({ ...prev, steamName: undefined, steamAvatar: undefined }));
+      return;
+    }
+    
+    async function fetchProfile() {
+      try {
+        const res = await fetch(`/api/steam/profile?steamId=${encodeURIComponent(settings.steamId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSettings(prev => ({ 
+            ...prev, 
+            steamName: data.steamName, 
+            steamAvatar: data.avatarMedium || data.avatarIcon || data.avatarFull 
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to fetch Steam profile', err);
+      }
+    }
+    fetchProfile();
+  }, [settings.steamId]);
+
   // Fetch real Steam achievements if steamId is set
   useEffect(() => {
     if (!settings.steamId || !activeGame || !activeTab) return;
@@ -412,13 +437,9 @@ I stand ready to guide your journey.
 
   const handleDeleteTab = (tabId: string) => {
     const remaining = tabs.filter(t => t.id !== tabId);
-    if (remaining.length === 0) {
-      handleCreateTab('New Game');
-      return;
-    }
     setTabs(remaining);
     if (activeTabId === tabId) {
-      setActiveTabId(remaining[0].id);
+      setActiveTabId(remaining.length > 0 ? remaining[0].id : '');
     }
   };
 
@@ -606,6 +627,8 @@ I stand ready to guide your journey.
             ) : (
               <ChatArea
                 activeTab={activeTab}
+                steamName={settings.steamName}
+                steamAvatar={settings.steamAvatar}
                 onSendMessage={handleSendMessage}
                 isLoading={isLoadingAi}
                 aiMode={settings.aiMode}

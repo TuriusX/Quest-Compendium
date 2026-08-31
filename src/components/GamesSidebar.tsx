@@ -238,7 +238,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
-                      {tabs.length > 1 && (
+                      {true && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

@@ -74,6 +74,8 @@ export interface AppSettings {
   dockPosition: DockPosition;
   windowOpacity: number;
   steamId: string;
+  steamName?: string;
+  steamAvatar?: string;
   ttsVoice: 'Kore' | 'Puck' | 'Fenrir' | 'Zephyr' | 'Charon';
   customApiKey?: string;
 }

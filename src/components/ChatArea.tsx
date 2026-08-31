@@ -40,6 +40,8 @@ interface ChatAreaProps {
   onOpenScreenModal: (imageUrl: string) => void;
   ttsVoice: string;
   customApiKey?: string;
+  steamName?: string;
+  steamAvatar?: string;
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
@@ -397,10 +399,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {isUser ? (
                     <>
                       <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      <span className="font-semibold text-zinc-300">PLAYER</span>
-                      <div className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-zinc-300">
-                        <User className="w-3 h-3" />
-                      </div>
+                      <span className="font-semibold text-zinc-300 uppercase">{steamName || 'PLAYER'}</span>
+                      {steamAvatar ? (
+                        <img src={steamAvatar} alt="Avatar" className="w-5 h-5 rounded-full border border-white/20" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-zinc-300">
+                          <User className="w-3 h-3" />
+                        </div>
+                      )}
                     </>
                   ) : (
                     <>
