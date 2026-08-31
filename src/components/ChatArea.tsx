@@ -55,6 +55,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onOpenScreenModal,
   ttsVoice,
   customApiKey,
+  steamName,
+  steamAvatar,
 }) => {
   const [inputQuestion, setInputQuestion] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
