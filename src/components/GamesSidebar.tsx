@@ -56,14 +56,21 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   
   useEffect(() => {
     if (isCreating && createInputRef.current) {
-      createInputRef.current.focus();
+      createInputRef.current.blur();
+      setTimeout(() => {
+        createInputRef.current?.focus();
+        createInputRef.current?.select();
+      }, 100);
     }
   }, [isCreating]);
 
   useEffect(() => {
     if (editingTabId && renameInputRef.current) {
-      // Need a tiny timeout to ensure it focuses correctly if the browser steals focus
-      setTimeout(() => renameInputRef.current?.focus(), 10);
+      renameInputRef.current.blur();
+      setTimeout(() => {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      }, 100);
     }
   }, [editingTabId]);
 

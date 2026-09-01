@@ -56,11 +56,7 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, url: finalUrl, name: finalUrl.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] } : t));
     setInputUrl(finalUrl);
     
-    // Force webview navigation directly to bypass any React wrapper quirks
-    setTimeout(() => {
-      const wv = document.getElementById(`browser-frame-${activeTabId}`) as any;
-      if (wv) wv.src = finalUrl;
-    }, 10);
+// (Removed redundant wv.src setter that was causing ERR_ABORTED double-load warnings)
   };
 
   const handleAddTab = () => {
