@@ -50,6 +50,11 @@ export const RenameModal: React.FC<RenameModalProps> = ({ isOpen, initialValue, 
           className="bg-black border border-[var(--accent-color)] text-white px-2.5 py-2 rounded font-sans outline-none w-full"
           style={{ WebkitAppRegion: 'no-drag' } as any}
           autoFocus
+          onFocus={() => {
+            if ((window as any).electronAPI) {
+              (window as any).electronAPI.forceFocus?.();
+            }
+          }}
         />
         <div className="flex justify-end gap-2.5 mt-2">
           <button 
