@@ -180,6 +180,15 @@ function createWindow() {
 
 app.whenReady().then(() => {
   const { session } = require('electron');
+  // Initialize AdBlocker for the webview partition
+  const { ElectronBlocker } = require('@ghostery/adblocker-electron');
+  const fetch = require('cross-fetch');
+  ElectronBlocker.fromPrebuiltAdsAndTracking(fetch).then((blocker) => {
+    blocker.enableBlockingInSession(session.defaultSession);
+    blocker.enableBlockingInSession(session.fromPartition('persist:browser_session'));
+    console.log("Adblocker enabled for browser sessions");
+  }).catch((err) => console.error("Adblocker failed:", err));
+
   
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = Object.assign({}, details.responseHeaders);

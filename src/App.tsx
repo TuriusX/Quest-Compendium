@@ -138,6 +138,28 @@ I stand ready to guide your journey.
     activeGame = null;
   }
 
+  
+
+  // Global focus fix for Electron webview stealing focus
+  useEffect(() => {
+    const handleAppInteraction = (e: Event) => {
+      // Don't steal focus if they are actually interacting with the webview
+      if (e.target && (e.target as HTMLElement).tagName === 'WEBVIEW') return;
+      
+      document.querySelectorAll('webview').forEach(wv => {
+        (wv as HTMLElement).blur();
+      });
+      window.focus();
+    };
+
+    // Capture phase so we intercept before input gets focus
+    window.addEventListener('mousedown', handleAppInteraction, true);
+    
+    return () => {
+      window.removeEventListener('mousedown', handleAppInteraction, true);
+    };
+  }, []);
+
   // Listen for local Steam game detection from Electron
   useEffect(() => {
     if ((window as any).electronAPI?.onActiveGameDetected) {

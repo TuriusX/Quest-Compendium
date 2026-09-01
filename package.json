@@ -14,10 +14,12 @@
     "desktop:build": "npm run build && electron-builder"
   },
   "dependencies": {
+    "@ghostery/adblocker-electron": "^2.18.2",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "canvas-confetti": "^1.9.4",
+    "cross-fetch": "^4.1.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "firebase": "^12.18.0",

@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <input type="text" id="myinput" />
+  <script>
+    document.addEventListener('focusin', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+         console.log("Input focused, blurring webviews");
+      }
+    });
+  </script>
+</body>
+</html>
