@@ -22,12 +22,18 @@ export const RenameModal: React.FC<RenameModalProps> = ({ isOpen, initialValue, 
       // Forces Electron to clear its confused focus state
       if (inputRef.current) inputRef.current.blur();
       
+      // MUST blur webviews programmatically, otherwise they silently eat keystrokes
+      // (except Backspace) even when the input looks focused!
+      document.querySelectorAll('webview').forEach(wv => {
+        (wv as HTMLElement).blur();
+      });
+      
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
           inputRef.current.select();
         }
-      }, 100);
+      }, 150);
     }
   }, [isOpen, initialValue]);
 
