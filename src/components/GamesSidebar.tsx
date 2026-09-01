@@ -13,7 +13,7 @@ import {
   Sparkles,
   Save
 } from 'lucide-react';
-import { GameTab } from '../types';
+import { GameTab, SteamGameData } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 
 interface GamesSidebarProps {
@@ -30,12 +30,14 @@ interface GamesSidebarProps {
   soundEnabled: boolean;
   onOpenNotes: () => void;
   onOpenGuides: () => void;
+  globalActiveGame?: SteamGameData | null;
 }
 
 export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   isOpen,
   tabs,
   activeTabId,
+  globalActiveGame,
   onSelectTab,
   onStartCreateTab,
   onStartRenameTab,
@@ -116,7 +118,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
-          const game = tab.activeSteamGame;
+          const game = (isActive && globalActiveGame) ? globalActiveGame : tab.activeSteamGame;
           const achievements = game?.achievements || [];
           const unlockedCount = achievements.filter(a => a.unlocked).length;
           const totalCount = achievements.length;

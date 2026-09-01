@@ -103,10 +103,11 @@ export default function App() {
   
   let activeGame = activeTab?.activeSteamGame || null;
   if (globalActiveGame) {
+    const autoHeaderImage = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${globalActiveGame.appId}/header.jpg`;
     if (activeGame?.appId === globalActiveGame.appId) {
-      activeGame = { ...activeGame, name: globalActiveGame.name, appId: globalActiveGame.appId, isAutoDetected: true };
+      activeGame = { ...activeGame, name: globalActiveGame.name, appId: globalActiveGame.appId, isAutoDetected: true, headerImage: activeGame.headerImage || autoHeaderImage };
     } else {
-      activeGame = { ...globalActiveGame, isAutoDetected: true } as SteamGameData;
+      activeGame = { ...globalActiveGame, isAutoDetected: true, headerImage: autoHeaderImage } as SteamGameData;
     }
   } else if (activeGame?.isAutoDetected) {
     activeGame = null;
@@ -643,6 +644,7 @@ export default function App() {
             onClose={() => setIsSidebarOpen(false)}
             tabs={tabs}
             activeTabId={activeTabId}
+            globalActiveGame={activeGame}
             onSelectTab={handleSelectTab}
             onStartCreateTab={handleStartCreateTab}
             onStartRenameTab={handleStartRenameTab}
