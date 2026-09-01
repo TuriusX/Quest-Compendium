@@ -349,14 +349,26 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
               });
             }
           }
-          contentsPayload.push({ role: 'user', parts });
+          // Avoid consecutive user roles
+          if (contentsPayload.length > 0 && contentsPayload[contentsPayload.length - 1].role === 'user') {
+            contentsPayload[contentsPayload.length - 1].parts.push(...parts);
+          } else {
+            contentsPayload.push({ role: 'user', parts });
+          }
         } else if (msg.role === 'assistant') {
-          contentsPayload.push({
-            role: 'model',
-            parts: [{ text: msg.text }]
-          });
+          if (contentsPayload.length > 0 && contentsPayload[contentsPayload.length - 1].role === 'model') {
+            contentsPayload[contentsPayload.length - 1].parts.push({ text: msg.text });
+          } else {
+            contentsPayload.push({
+              role: 'model',
+              parts: [{ text: msg.text }]
+            });
+          }
         }
       }
+      
+      // Ensure we don't have consecutive user roles with the current message
+      const currentRole = 'user';
 
       // Current User Turn
       const currentParts: any[] = [];
@@ -385,7 +397,11 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
         : question || 'Analyze this game screenshot in detail and provide insightful guidance.';
 
       currentParts.push({ text: promptText });
-      contentsPayload.push({ role: 'user', parts: currentParts });
+      if (contentsPayload.length > 0 && contentsPayload[contentsPayload.length - 1].role === 'user') {
+          contentsPayload[contentsPayload.length - 1].parts.push(...currentParts);
+      } else {
+          contentsPayload.push({ role: 'user', parts: currentParts });
+      }
 
       // Query Gemini API
       let responseText = '';

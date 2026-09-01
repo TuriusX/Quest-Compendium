@@ -172,13 +172,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       const video = document.createElement('video');
       video.srcObject = stream;
-      await video.play();
-
+      video.play();
+      await new Promise((resolve) => {
+        video.onloadedmetadata = () => resolve(null);
+      });
+      await new Promise(r => setTimeout(r, 500));
+      
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
       const ctx = canvas.getContext('2d');
-      if (ctx) {
+      if (ctx && video.videoWidth > 0) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setAttachedImage(dataUrl);
@@ -225,17 +229,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         });
         const video = document.createElement('video');
         video.srcObject = stream;
+        video.play();
         await new Promise((resolve) => {
           video.onloadedmetadata = () => resolve(null);
         });
-        await video.play();
+        await new Promise(r => setTimeout(r, 500));
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 720;
         const ctx = canvas.getContext('2d');
-        if (ctx) {
+        if (ctx && video.videoWidth > 0) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           image = canvas.toDataURL('image/jpeg', 0.85);
+        } else {
+          image = undefined;
         }
         stream.getTracks().forEach(track => track.stop());
         setIsCapturingScreen(false);

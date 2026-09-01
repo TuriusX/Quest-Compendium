@@ -339,7 +339,7 @@ I stand ready to guide your journey.
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: text,
-          history: updatedMessages,
+          history: activeTab.messages,
           imageBase64,
           aiMode: settings.aiMode,
           customApiKey: settings.customApiKey,
