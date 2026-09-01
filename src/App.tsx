@@ -277,24 +277,27 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           if (data.achievements && isMounted) {
-            setTabs(prev => prev.map(t => {
-              if (t.id === activeTab.id) {
-                // Keep existing data if it's the same game, otherwise reset it
-                return {
-                  ...t,
-                  activeSteamGame: {
-                    ...(t.activeSteamGame?.appId === activeGame.appId ? t.activeSteamGame : {
-                      name: activeGame.name,
-                      appId: activeGame.appId
-                    }),
-                    ...(activeGame.headerImage ? { headerImage: activeGame.headerImage } : {}),
-                    ...(activeGame.isAutoDetected !== undefined ? { isAutoDetected: activeGame.isAutoDetected } : {}),
-                    achievements: data.achievements
-                  }
-                };
-              }
-              return t;
-            }));
+            if (activeGame.isAutoDetected) {
+              setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? { ...prev, achievements: data.achievements } as SteamGameData : prev);
+            } else {
+              setTabs(prev => prev.map(t => {
+                if (t.id === activeTab.id) {
+                  // Keep existing data if it's the same game, otherwise reset it
+                  return {
+                    ...t,
+                    activeSteamGame: {
+                      ...(t.activeSteamGame?.appId === activeGame.appId ? t.activeSteamGame : {
+                        name: activeGame.name,
+                        appId: activeGame.appId
+                      }),
+                      ...(activeGame.headerImage ? { headerImage: activeGame.headerImage } : {}),
+                      achievements: data.achievements
+                    }
+                  };
+                }
+                return t;
+              }));
+            }
           }
         }
       } catch (err) {
@@ -476,9 +479,13 @@ export default function App() {
 
     const updatedGame = { ...activeGame, achievements: updatedAchievements };
 
-    setTabs(prev => prev.map(t => 
-      t.id === activeTab.id ? { ...t, activeSteamGame: updatedGame } : t
-    ));
+    if (activeGame.isAutoDetected) {
+      setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? updatedGame as SteamGameData : prev);
+    } else {
+      setTabs(prev => prev.map(t => 
+        t.id === activeTab.id ? { ...t, activeSteamGame: updatedGame } : t
+      ));
+    }
   };
 
   // Playthrough Notes Handlers

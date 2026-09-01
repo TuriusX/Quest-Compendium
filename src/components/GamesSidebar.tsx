@@ -118,7 +118,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
-          const game = (isActive && globalActiveGame) ? globalActiveGame : tab.activeSteamGame;
+          const savedGame = tab.activeSteamGame?.isAutoDetected ? null : tab.activeSteamGame;
+          const game = (isActive && globalActiveGame) ? globalActiveGame : savedGame;
           const achievements = game?.achievements || [];
           const unlockedCount = achievements.filter(a => a.unlocked).length;
           const totalCount = achievements.length;
