@@ -41,6 +41,13 @@ export interface ChatMessage {
   isStreaming?: boolean;
 }
 
+export interface PersonalQuest {
+  id: string;
+  title: string;
+  completed: boolean;
+  createdAt: number;
+}
+
 export interface GameTab {
   id: string;
   name: string;
@@ -48,6 +55,7 @@ export interface GameTab {
   activeSteamGame?: SteamGameData | null;
   messages: ChatMessage[];
   notes: string;
+  personalQuests?: PersonalQuest[];
   createdAt: number;
   lastActive: number;
 }

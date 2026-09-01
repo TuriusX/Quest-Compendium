@@ -28,12 +28,15 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
   activeGame,
   soundEnabled,
 }) => {
+  const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent.toLowerCase());
+  const FrameComponent = isElectron ? 'webview' : 'iframe';
+
   const [tabs, setTabs] = useState<BrowserTab[]>([
-    { id: 'btab-1', name: 'GameFAQs Guides', url: 'https://gamefaqs.gamespot.com' },
+    { id: 'btab-1', name: 'Web Browser', url: 'https://duckduckgo.com' },
     { id: 'btab-2', name: 'Steam Community Guides', url: activeGame ? `https://steamcommunity.com/app/${activeGame.appId}/guides/` : 'https://steamcommunity.com' },
   ]);
   const [activeTabId, setActiveTabId] = useState<string>('btab-1');
-  const [inputUrl, setInputUrl] = useState('https://gamefaqs.gamespot.com');
+  const [inputUrl, setInputUrl] = useState('https://duckduckgo.com');
   const [bookmarks, setBookmarks] = useState<FavoriteBookmark[]>(DEFAULT_BOOKMARKS);
   const [showBookmarksMenu, setShowBookmarksMenu] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(100);
@@ -49,14 +52,24 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
         finalUrl = `https://${finalUrl}`;
       } else {
         // Search query
-        finalUrl = `https://www.google.com/search?q=${encodeURIComponent(finalUrl)}`;
+        finalUrl = `https://duckduckgo.com/?q=${encodeURIComponent(finalUrl)}`;
       }
     }
 
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, url: finalUrl, name: finalUrl.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] } : t));
     setInputUrl(finalUrl);
     
-// (Removed redundant wv.src setter that was causing ERR_ABORTED double-load warnings)
+    // Force navigation on the actual element
+    setTimeout(() => {
+      const frame = document.getElementById(`browser-frame-${activeTabId}`) as any;
+      if (frame) {
+        if (typeof frame.loadURL === 'function') {
+          frame.loadURL(finalUrl);
+        } else if (frame.tagName.toLowerCase() === 'iframe') {
+          frame.src = finalUrl;
+        }
+      }
+    }, 10);
   };
 
   const handleAddTab = () => {
@@ -64,7 +77,7 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
     const newId = `btab-${Date.now()}`;
     const defaultUrl = activeGame 
       ? `https://steamcommunity.com/app/${activeGame.appId}/guides/` 
-      : 'https://gamefaqs.gamespot.com';
+      : 'https://duckduckgo.com';
 
     const newTab: BrowserTab = {
       id: newId,
@@ -228,12 +241,16 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
 
       {/* Web Frame View */}
       <div className="flex-1 relative bg-black overflow-hidden">
-        {React.createElement('webview', {
+        {React.createElement(FrameComponent as any, {
           id: `browser-frame-${activeTabId}`,
           src: activeTab.url,
           title: activeTab.name,
-          useragent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          partition: "persist:browser_session",
+          ...(isElectron ? {
+            useragent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            partition: "persist:browser_session",
+          } : {
+            sandbox: "allow-same-origin allow-scripts allow-popups allow-forms",
+          }),
           style: {
             transform: `scale(${zoomLevel / 100})`,
             transformOrigin: 'top left',
@@ -241,7 +258,7 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
             height: `${100 / (zoomLevel / 100)}%`,
           },
           className: "border-none w-full h-full bg-[#111218]"
-        } as any)}
+        })}
       </div>
     </div>
   );

@@ -7,11 +7,13 @@ import {
   Sliders, 
   BookOpen, 
   FileText, 
+  Target,
   X,
   Check,
   Trophy,
   Sparkles,
-  Save
+  Save,
+  Globe
 } from 'lucide-react';
 import { GameTab, SteamGameData } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
@@ -30,6 +32,7 @@ interface GamesSidebarProps {
   soundEnabled: boolean;
   onOpenNotes: () => void;
   onOpenGuides: () => void;
+  onOpenQuests: () => void;
   globalActiveGame?: SteamGameData | null;
 }
 
@@ -47,9 +50,11 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   soundEnabled,
   onOpenNotes,
   onOpenGuides,
+  onOpenQuests,
 }) => {
   const [showFontControl, setShowFontControl] = useState(false);
   const [tabToDelete, setTabToDelete] = useState<{id: string, name: string} | null>(null);
+  const [contextMenu, setContextMenu] = useState<{tabId: string, x: number, y: number} | null>(null);
 
   return (
     <aside 
@@ -132,6 +137,10 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                   playBlipSound(soundEnabled);
                   onSelectTab(tab.id);
               }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setContextMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
+              }}
               className={`group relative rounded-xl border transition-all p-2.5 flex flex-col gap-2 cursor-pointer select-none ${
                 isActive
                   ? 'bg-gradient-to-r from-[var(--accent-dim)] to-transparent border-[var(--accent-border)] shadow-[0_4px_20px_rgba(0,0,0,0.6),0_0_15px_var(--accent-glow)]'
@@ -171,29 +180,6 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
 
                       </div>
                     </div>
-
-                    {/* Action buttons on hover */}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onStartRenameTab(tab.id, tab.name); }}
-                        className="p-1 rounded-md hover:bg-white/20 text-zinc-400 hover:text-white cursor-pointer"
-                        title="Rename Game"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      {true && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setTabToDelete({ id: tab.id, name: tab.name });
-                          }}
-                          className="p-1 rounded-md hover:bg-red-500/20 text-zinc-400 hover:text-red-400 cursor-pointer"
-                          title="Delete Game Session"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
                   </div>
 
                   {/* Micro Progress Bar for Achievements */}
@@ -229,37 +215,96 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
         </button>
       </div>
 
-      {/* Quick Launch footer */}
-      <div className="p-3 border-t border-white/[0.08] bg-black/40 space-y-2">
-        <button
-          onClick={() => {
-            playBlipSound(soundEnabled);
-            onOpenNotes();
-          }}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-white/10 text-xs text-zinc-300 hover:text-white transition-all cursor-pointer shadow-sm"
-        >
-          <span className="flex items-center gap-2">
-            <FileText className="w-3.5 h-3.5 text-purple-400" />
-            <span className="font-medium">Playthrough Notes</span>
-          </span>
-          <span className="font-mono text-[9.5px] px-1.5 py-0.5 rounded bg-white/10 text-zinc-400">📝 ACTIVE</span>
-        </button>
-
+      {/* Global Tools footer */}
+      <div className="p-3 border-t border-white/[0.08] bg-black/40 flex items-center justify-start">
         <button
           onClick={() => {
             playBlipSound(soundEnabled);
             onOpenGuides();
           }}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/40 text-xs text-blue-200 transition-all cursor-pointer shadow-sm"
+          className="p-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 transition-all cursor-pointer shadow-sm"
+          title="Web Browser"
         >
-          <span className="flex items-center gap-2">
-            <BookOpen className="w-3.5 h-3.5 text-blue-400" />
-            <span className="font-medium">GameFAQs & Steam Guides</span>
-          </span>
-          <span className="text-[9.5px] font-bold text-blue-300 px-1.5 py-0.5 rounded bg-blue-400/20">WEB</span>
+          <Globe className="w-5 h-5" />
         </button>
       </div>
+
       </div>
+
+      {/* Context Menu Overlay */}
+      {contextMenu && (() => {
+        const targetTab = tabs.find(t => t.id === contextMenu.tabId);
+        if (!targetTab) return null;
+        
+        return (
+          <div 
+            className="fixed inset-0 z-50" 
+            onClick={() => setContextMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+          >
+            <div 
+              className="absolute bg-[#1a1b26] border border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] overflow-hidden py-1.5 min-w-[200px] flex flex-col z-[51]"
+              style={{ top: Math.min(contextMenu.y, window.innerHeight - 200), left: contextMenu.x }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-3 py-1.5 border-b border-white/[0.04] mb-1">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider truncate block">
+                  {targetTab.name}
+                </span>
+              </div>
+              
+              <button 
+                className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:text-white hover:bg-white/10 flex items-center gap-2 transition-colors cursor-pointer"
+                onClick={() => {
+                  if (activeTabId !== targetTab.id) onSelectTab(targetTab.id);
+                  onOpenNotes();
+                  setContextMenu(null);
+                  playBlipSound(soundEnabled);
+                }}
+              >
+                <FileText className="w-4 h-4 text-purple-400" />
+                Playthrough Notes
+              </button>
+
+              <button 
+                className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:text-white hover:bg-white/10 flex items-center gap-2 transition-colors cursor-pointer"
+                onClick={() => {
+                  if (activeTabId !== targetTab.id) onSelectTab(targetTab.id);
+                  onOpenQuests();
+                  setContextMenu(null);
+                  playBlipSound(soundEnabled);
+                }}
+              >
+                <Target className="w-4 h-4 text-amber-400" />
+                Personal Quests
+              </button>
+
+              <button 
+                className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:text-white hover:bg-white/10 flex items-center gap-2 transition-colors cursor-pointer"
+                onClick={() => {
+                  onStartRenameTab(targetTab.id, targetTab.name);
+                  setContextMenu(null);
+                }}
+              >
+                <Edit3 className="w-4 h-4 text-zinc-400" />
+                Rename Tab
+              </button>
+              
+              <button 
+                className="w-full text-left px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 flex items-center gap-2 transition-colors cursor-pointer"
+                onClick={() => {
+                  setTabToDelete({ id: targetTab.id, name: targetTab.name });
+                  setContextMenu(null);
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete Tab
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Delete Confirmation Modal */}
       {tabToDelete && (
         <div 

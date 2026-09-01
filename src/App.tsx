@@ -13,6 +13,7 @@ import { GamesSidebar } from './components/GamesSidebar';
 import { ChatArea } from './components/ChatArea';
 import { AchievementsDrawer } from './components/AchievementsDrawer';
 import { PlaythroughNotepad } from './components/PlaythroughNotepad';
+import { PersonalQuestsModal } from './components/PersonalQuestsModal';
 import { GameGuidesBrowser } from './components/GameGuidesBrowser';
 import { SettingsModal } from './components/SettingsModal';
 import { QuickGameSearchModal } from './components/QuickGameSearchModal';
@@ -85,6 +86,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAchDrawerOpen, setIsAchDrawerOpen] = useState(false);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
+  const [isQuestsOpen, setIsQuestsOpen] = useState(false);
   const [isBrowserMode, setIsBrowserMode] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGameSearchOpen, setIsGameSearchOpen] = useState(false);
@@ -503,6 +505,11 @@ export default function App() {
     setIsNotesOpen(true);
   };
 
+  const handleUpdateQuests = (quests: any[]) => {
+    if (!activeTab) return;
+    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, personalQuests: quests } : t));
+  };
+
   // Game Switcher Selection
   const handleSelectGame = (game: SteamGameData) => {
     const gameWithFlag = { ...game, isAutoDetected: false };
@@ -662,6 +669,7 @@ export default function App() {
             soundEnabled={settings.soundEnabled}
             onOpenNotes={() => setIsNotesOpen(true)}
             onOpenGuides={() => setIsBrowserMode(true)}
+            onOpenQuests={() => setIsQuestsOpen(true)}
           />
 
           {/* Central Workspace: Chat OR Browser */}
@@ -702,6 +710,15 @@ export default function App() {
               onClose={() => setIsNotesOpen(false)}
               activeTab={activeTab}
               onUpdateNotes={handleUpdateNotes}
+              soundEnabled={settings.soundEnabled}
+            />
+
+            {/* Personal Quests Overlay */}
+            <PersonalQuestsModal
+              isOpen={isQuestsOpen}
+              onClose={() => setIsQuestsOpen(false)}
+              activeTab={activeTab}
+              onUpdateQuests={handleUpdateQuests}
               soundEnabled={settings.soundEnabled}
             />
           </main>
