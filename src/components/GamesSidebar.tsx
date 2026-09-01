@@ -139,38 +139,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                 <div className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-[var(--accent-color)] shadow-[0_0_8px_var(--accent-glow)]" />
               )}
 
-              {isEditing ? (
-                <div className="flex items-center gap-1.5 w-full" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    ref={isEditing ? renameInputRef : null}
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveRename(tab.id);
-                      if (e.key === 'Escape') setEditingTabId(null);
-                    }}
-                    
-                    className="w-full bg-black/90 border border-[var(--accent-color)] rounded-lg px-2.5 py-1 text-white text-xs outline-none font-sans select-text"
-                    style={{ WebkitAppRegion: 'no-drag' } as any}
-                  />
-                  <button
-                    onClick={() => handleSaveRename(tab.id)}
-                    className="p-1 rounded-md bg-[var(--accent-color)] text-black hover:opacity-90 cursor-pointer"
-                    title="Save"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setEditingTabId(null)}
-                    className="p-1 rounded-md bg-white/10 text-zinc-400 hover:text-white cursor-pointer"
-                    title="Cancel"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <>
+              <>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0">
                       {/* Game Banner Thumbnail */}
@@ -202,7 +171,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                     {/* Action buttons on hover */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                       <button
-                        onClick={(e) => handleStartRename(tab, e)}
+                        onClick={(e) => { e.stopPropagation(); onStartRenameTab(tab.id, tab.name); }}
                         className="p-1 rounded-md hover:bg-white/20 text-zinc-400 hover:text-white cursor-pointer"
                         title="Rename Game"
                       >
@@ -241,56 +210,21 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                     </div>
                   )}
                 </>
-              )}
             </div>
           );
         })}
 
         {/* Add New Game Form / Button */}
-        {isCreating ? (
-          <form onSubmit={handleCreateSubmit} className="p-3 rounded-xl bg-black/60 border border-[var(--accent-border)] space-y-2.5 shadow-lg">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-300 font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-[var(--accent-color)]" />
-              <span>Create New Compendium</span>
-            </div>
-            <input
-              ref={createInputRef}
-              type="text"
-              placeholder="e.g. Elden Ring, Skyrim, Hades..."
-              value={newGameName}
-              onChange={(e) => setNewGameName(e.target.value)}
-              
-              className="w-full bg-black/90 border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-[var(--accent-color)] font-sans select-text"
-              style={{ WebkitAppRegion: 'no-drag' } as any}
-            />
-            <div className="flex items-center justify-end gap-1.5">
-              <button
-                type="button"
-                onClick={() => setIsCreating(false)}
-                className="px-2.5 py-1 rounded-lg text-xs text-zinc-400 hover:text-white hover:bg-white/10 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-3.5 py-1 rounded-lg bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 cursor-pointer shadow-sm"
-              >
-                Add Game
-              </button>
-            </div>
-          </form>
-        ) : (
-          <button
-            onClick={() => {
-              playBlipSound(soundEnabled);
-              setIsCreating(true);
-            }}
-            className="w-full py-2.5 px-3 rounded-xl border border-dashed border-white/15 text-zinc-400 hover:text-[var(--accent-color)] hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-all flex items-center justify-center gap-2 text-xs font-semibold cursor-pointer group"
-          >
-            <Plus className="w-3.5 h-3.5 group-hover:scale-125 transition-transform" />
-            <span>+ Add New Compendium</span>
-          </button>
-        )}
+        <button
+          onClick={() => {
+            playBlipSound(soundEnabled);
+            onStartCreateTab();
+          }}
+          className="w-full py-2.5 px-3 rounded-xl border border-dashed border-white/15 text-zinc-400 hover:text-[var(--accent-color)] hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-all flex items-center justify-center gap-2 text-xs font-semibold cursor-pointer group"
+        >
+          <Plus className="w-3.5 h-3.5 group-hover:scale-125 transition-transform" />
+          <span>+ Add New Compendium</span>
+        </button>
       </div>
 
       {/* Quick Launch footer */}

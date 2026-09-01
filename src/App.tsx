@@ -431,6 +431,31 @@ I stand ready to guide your journey.
     if (isBrowserMode) setIsBrowserMode(false);
   };
 
+
+  const handleStartCreateTab = () => {
+    setRenameModalMode('create');
+    setRenameModalInitialValue('New Compendium');
+    setIsRenameModalOpen(true);
+  };
+
+  const handleStartRenameTab = (tabId: string, currentName: string) => {
+    setRenameModalMode('rename');
+    setRenameModalTabId(tabId);
+    setRenameModalInitialValue(currentName);
+    setIsRenameModalOpen(true);
+  };
+
+  const handleRenameModalSave = (newName: string) => {
+    if (newName.trim()) {
+      if (renameModalMode === 'create') {
+        handleCreateTab(newName.trim());
+      } else if (renameModalMode === 'rename' && renameModalTabId) {
+        handleRenameTab(renameModalTabId, newName.trim());
+      }
+    }
+    setIsRenameModalOpen(false);
+  };
+
   const handleCreateTab = (name: string, steamGame?: SteamGameData) => {
     const newId = `tab-${Date.now()}`;
     const newTab: GameTab = {
