@@ -143,30 +143,6 @@ I stand ready to guide your journey.
     activeGame = null;
   }
 
-  
-
-  // Global focus fix for Electron webview stealing focus
-  useEffect(() => {
-    const handleAppInteraction = (e: Event) => {
-      // Don't steal focus if they are actually interacting with the webview
-      if (e.target && (e.target as HTMLElement).tagName === 'WEBVIEW') return;
-      
-      // If we are clicking an input or textarea, let the native focus happen naturally.
-      // We just need to make sure webviews are blurred so they don't trap focus.
-      document.querySelectorAll('webview').forEach(wv => {
-        (wv as HTMLElement).blur();
-      });
-      // Removed window.focus() because it steals focus from the input the user just clicked!
-    };
-
-    // Capture phase so we intercept before input gets focus
-    window.addEventListener('mousedown', handleAppInteraction, true);
-    
-    return () => {
-      window.removeEventListener('mousedown', handleAppInteraction, true);
-    };
-  }, []);
-
   // Listen for local Steam game detection from Electron
   useEffect(() => {
     if ((window as any).electronAPI?.onActiveGameDetected) {

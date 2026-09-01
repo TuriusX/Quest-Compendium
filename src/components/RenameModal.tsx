@@ -15,25 +15,12 @@ export const RenameModal: React.FC<RenameModalProps> = ({ isOpen, initialValue, 
   useEffect(() => {
     setValue(initialValue);
     if (isOpen) {
-      if ((window as any).electronAPI) {
-        (window as any).electronAPI.forceFocus?.();
-      }
-      
-      // Forces Electron to clear its confused focus state
-      if (inputRef.current) inputRef.current.blur();
-      
-      // MUST blur webviews programmatically, otherwise they silently eat keystrokes
-      // (except Backspace) even when the input looks focused!
-      document.querySelectorAll('webview').forEach(wv => {
-        (wv as HTMLElement).blur();
-      });
-      
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
           inputRef.current.select();
         }
-      }, 150);
+      }, 10);
     }
   }, [isOpen, initialValue]);
 
@@ -56,10 +43,13 @@ export const RenameModal: React.FC<RenameModalProps> = ({ isOpen, initialValue, 
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
+            e.stopPropagation();
             if (e.key === 'Enter') onSave(value);
             if (e.key === 'Escape') onCancel();
           }}
           className="bg-black border border-[var(--accent-color)] text-white px-2.5 py-2 rounded font-sans outline-none w-full"
+          style={{ WebkitAppRegion: 'no-drag' } as any}
+          autoFocus
         />
         <div className="flex justify-end gap-2.5 mt-2">
           <button 
