@@ -160,13 +160,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Live Screen Capture from Game Window (WebRTC DisplayMedia)
   const captureGameScreen = async () => {
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        setIsCapturingScreen(false);
+        alert("Screen capture is not supported in this desktop container. Please take a screenshot and paste it here using Ctrl+V.");
+        return;
+      }
+
       setIsCapturingScreen(true);
       playSnapSound(soundEnabled);
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          displaySurface: 'window',
-        },
+        video: true,
         audio: false,
       });
 
@@ -228,10 +232,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     // Automatic screen capture in Immersive mode if no image is attached manually
     if (!image) {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        alert("Screen capture is not supported in this desktop environment. Please attach an image or paste a screenshot with Ctrl+V.");
+        return;
+      }
       try {
         setIsCapturingScreen(true);
         const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { displaySurface: 'window' },
+          video: true,
           audio: false,
         });
         const video = document.createElement('video');
