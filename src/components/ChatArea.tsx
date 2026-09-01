@@ -171,12 +171,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       });
 
       const video = document.createElement('video');
+      video.style.position = 'fixed';
+      video.style.top = '-9999px';
+      video.style.opacity = '0';
+      document.body.appendChild(video);
       video.srcObject = stream;
+      video.autoplay = true;
+      video.muted = true;
       video.play();
       await new Promise((resolve) => {
-        video.onloadedmetadata = () => resolve(null);
+        video.onloadeddata = () => resolve(null);
       });
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 300));
       
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth || 1280;
@@ -191,6 +197,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       // Stop all video tracks
       stream.getTracks().forEach(track => track.stop());
+      if (video.parentNode) video.parentNode.removeChild(video);
       setIsCapturingScreen(false);
     } catch (err) {
       console.error('Screen capture cancelled or failed:', err);
@@ -228,12 +235,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           audio: false,
         });
         const video = document.createElement('video');
+        video.style.position = 'fixed';
+        video.style.top = '-9999px';
+        video.style.opacity = '0';
+        document.body.appendChild(video);
         video.srcObject = stream;
+        video.autoplay = true;
+        video.muted = true;
         video.play();
         await new Promise((resolve) => {
-          video.onloadedmetadata = () => resolve(null);
+          video.onloadeddata = () => resolve(null);
         });
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 300));
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth || 1280;
         canvas.height = video.videoHeight || 720;
@@ -245,6 +258,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           image = undefined;
         }
         stream.getTracks().forEach(track => track.stop());
+        if (video.parentNode) video.parentNode.removeChild(video);
         setIsCapturingScreen(false);
       } catch (err) {
         console.error('Auto screen capture cancelled or failed:', err);
