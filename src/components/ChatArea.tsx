@@ -225,6 +225,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         });
         const video = document.createElement('video');
         video.srcObject = stream;
+        await new Promise((resolve) => {
+          video.onloadedmetadata = () => resolve(null);
+        });
         await video.play();
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
