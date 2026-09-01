@@ -100,12 +100,7 @@ I stand ready to guide your journey.
             modelUsed: 'Gemini 3.1 Pro Preview'
           }
         ],
-        notes: `<h3>Elden Ring Quest Notes</h3>
-<ul>
-  <li>Ranni the Witch: Meet at Three Sisters tower after Caria Manor.</li>
-  <li>Alexander Iron Fist: Stuck in cliffside near Saintsbridge.</li>
-  <li>Margit Shackle: Purchase from Patches in Murkwater Cave.</li>
-</ul>`,
+        notes: '',
         createdAt: Date.now(),
         lastActive: Date.now()
       }
@@ -422,7 +417,7 @@ I stand ready to guide your journey.
           modelUsed: 'Gemini 3.1 Pro Preview'
         }
       ],
-      notes: `<h3>${name} Notes</h3>\n<p>Start recording playthrough tips here...</p>`,
+      notes: '',
       createdAt: Date.now(),
       lastActive: Date.now()
     };

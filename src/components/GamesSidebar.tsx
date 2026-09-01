@@ -135,7 +135,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
             title="Tab Scale Slider"
             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
-            <Sliders className="w-3.5 h-3.5" />
+            <span className="font-bold font-serif text-[15px] leading-none px-0.5">Aa</span>
           </button>
         </div>
       </div>

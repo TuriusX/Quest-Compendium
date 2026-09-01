@@ -157,6 +157,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
+      webviewTag: true,
     },
   });
 
@@ -363,3 +364,5 @@ ipcMain.handle('take-screenshot', async () => {
   }
   return base64Image;
 });
+
+ipcMain.on('close-app', () => { app.quit(); });
