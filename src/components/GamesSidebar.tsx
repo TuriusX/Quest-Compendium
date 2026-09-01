@@ -52,16 +52,26 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   const [newGameName, setNewGameName] = useState('');
   
   const createInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  
   useEffect(() => {
     if (isCreating && createInputRef.current) {
       createInputRef.current.focus();
     }
   }, [isCreating]);
 
+  useEffect(() => {
+    if (editingTabId && renameInputRef.current) {
+      // Need a tiny timeout to ensure it focuses correctly if the browser steals focus
+      setTimeout(() => renameInputRef.current?.focus(), 10);
+    }
+  }, [editingTabId]);
+
   const [showFontControl, setShowFontControl] = useState(false);
 
   const handleStartRename = (tab: GameTab, e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
     setEditingTabId(tab.id);
     setEditName(tab.name);
   };
@@ -180,6 +190,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
               {isEditing ? (
                 <div className="flex items-center gap-1.5 w-full" onClick={(e) => e.stopPropagation()}>
                   <input
+                    ref={isEditing ? renameInputRef : null}
                     type="text"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}

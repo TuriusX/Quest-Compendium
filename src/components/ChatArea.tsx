@@ -213,7 +213,35 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     if ((!inputQuestion.trim() && !attachedImage) || isLoading) return;
 
     const question = inputQuestion.trim();
-    const image = attachedImage || undefined;
+    let image = attachedImage || undefined;
+
+    // Automatic screen capture in Immersive mode if no image is attached manually
+    if (!image) {
+      try {
+        setIsCapturingScreen(true);
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: 'window' },
+          audio: false,
+        });
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        await video.play();
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          image = canvas.toDataURL('image/jpeg', 0.85);
+        }
+        stream.getTracks().forEach(track => track.stop());
+        setIsCapturingScreen(false);
+      } catch (err) {
+        console.error('Auto screen capture cancelled or failed:', err);
+        setIsCapturingScreen(false);
+        // Continue sending without image if capture was cancelled
+      }
+    }
 
     setInputQuestion('');
     setAttachedImage(null);
@@ -604,6 +632,43 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
           {/* Action Buttons inside Input Bar */}
           <div className="absolute right-2.5 bottom-2.5 flex items-center gap-1.5">
+
+            {/* Hidden file input for manual upload */}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+            />
+
+            {/* Manual Image Upload */}
+            <button
+              type="button"
+              onClick={() => {
+                playBlipSound(soundEnabled);
+                fileInputRef.current?.click();
+              }}
+              title="Upload Screenshot"
+              className="p-2 rounded-xl text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer"
+            >
+              <Upload className="w-4 h-4" />
+            </button>
+
+            {/* Live Screen Capture */}
+            <button
+              type="button"
+              onClick={captureGameScreen}
+              disabled={isCapturingScreen}
+              title="Live Capture Game Window"
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                isCapturingScreen 
+                  ? 'bg-blue-500/20 text-blue-300 animate-pulse' 
+                  : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
+              }`}
+            >
+              <Camera className="w-4 h-4" />
+            </button>
 
             {/* Push to Talk / Voice Dictation */}
             <button
