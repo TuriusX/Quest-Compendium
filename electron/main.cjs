@@ -1,3 +1,4 @@
+process.noDeprecation = true;
 const { app, BrowserWindow, ipcMain, shell, globalShortcut, screen, desktopCapturer, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -181,7 +182,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   // Setup System Tray
-  const iconPath = path.join(__dirname, isDev ? '../public/book.bmp' : '../dist/book.bmp');
+  const iconPath = path.join(__dirname, isDev ? '../public/book.png' : '../dist/book.png');
   tray = new Tray(nativeImage.createFromPath(iconPath));
   tray.setToolTip('Quest Compendium');
   

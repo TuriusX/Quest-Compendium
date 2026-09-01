@@ -45,10 +45,8 @@ export const MagicalBookIcon: React.FC<{ className?: string }> = ({ className = 
       <rect x="14" y="13" width="3" height="5" fill="#ab77fa" />
       <rect x="13" y="14" width="5" height="3" fill="#ab77fa" />
 
-      {/* Center Gem Inner (White/Glow) */}
-      <rect x="15" y="14" width="1" height="3" fill="#ffffff" />
-      <rect x="14" y="15" width="3" height="1" fill="#ffffff" />
-
+      {/* Center Gem Inner (White/Glow) - single dot to avoid cross */}
+      <rect x="15" y="15" width="1" height="1" fill="#ffffff" />
     </svg>
   );
 };
