@@ -71,45 +71,14 @@ export default function App() {
       const saved = localStorage.getItem('quest_compendium_tabs');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-
-    // Default starter tab: Elden Ring
-    const initialGame = null;
-    return [
-      {
-        id: 'tab-default',
-        name: 'New Session',
-        activeSteamGame: initialGame,
-        messages: [
-          {
-            id: 'msg-welcome',
-            role: 'assistant',
-            text: `### ⚔️ Welcome to the Quest Compendium!
-
-I stand ready to guide your journey. 
-
-**Here is what I can do for you:**
-* **Screen & Vision Analysis**: Snap or paste your game screen (<kbd>Ctrl+V</kbd>) anytime for immediate puzzle solutions, inventory optimization, or boss attack breakdowns.
-* **Achievement Tracker**: Check the **Achievements (🏆)** drawer on the right to track rare achievements and 100% completion progress.
-* **Playthrough Scratchpad**: Jot down NPC quest steps, dungeon codes, and map notes in the **Notes (📝)** overlay.
-* **Guides & FAQs**: Open the built-in **Guides (🌐)** browser to view interactive maps and GameFAQs.
-
-*What challenge or question lies before you?*`,
-            timestamp: Date.now(),
-            modelUsed: 'Gemini 3.1 Pro Preview'
-          }
-        ],
-        notes: '',
-        createdAt: Date.now(),
-        lastActive: Date.now()
-      }
-    ];
+    return [];
   });
 
   const [activeTabId, setActiveTabId] = useState<string>(() => {
-    return tabs[0]?.id || 'tab-1';
+    return tabs[0]?.id || '';
   });
 
   // --- UI Drawer & Modal States ---
@@ -692,6 +661,13 @@ I stand ready to guide your journey.
                 activeGame={activeGame}
                 soundEnabled={settings.soundEnabled}
               />
+            ) : tabs.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center bg-[#07070b] crt-grid">
+                 <div className="text-zinc-500 text-center space-y-4 p-6 bg-black/40 border border-white/5 rounded-2xl shadow-xl backdrop-blur-sm max-w-md">
+                   <p className="text-2xl font-fantasy text-[var(--accent-color)]">No Compendium Active</p>
+                   <p className="text-sm">Click "+ Add New Compendium" in the sidebar to start a new session.</p>
+                 </div>
+              </div>
             ) : (
               <ChatArea
                 activeTab={activeTab}
