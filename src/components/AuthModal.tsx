@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { Sparkles, Gamepad2 } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
+import { MagicalBookIcon } from './MagicalBookIcon';
 import { signInWithGoogle, auth } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 
@@ -46,9 +47,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-[#0c0d14] border border-white/15 rounded-2xl shadow-[0_0_40px_var(--accent-glow)] overflow-hidden flex flex-col items-center p-8 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-[var(--accent-dim)] border border-[var(--accent-border)] flex items-center justify-center mb-6">
-          <Gamepad2 className="w-8 h-8 text-[var(--accent-color)]" />
-        </div>
+        <MagicalBookIcon className="w-16 h-16 mb-6 shadow-[0_0_30px_rgba(171,119,250,0.3)] rounded-2xl" />
         <h2 className="font-fantasy font-bold text-2xl text-white mb-2 tracking-wide">
           QUEST COMPENDIUM
         </h2>

@@ -1,0 +1,54 @@
+import React from 'react';
+
+export const MagicalBookIcon: React.FC<{ className?: string }> = ({ className = "w-16 h-16" }) => {
+  return (
+    <svg 
+      className={className} 
+      viewBox="0 0 32 32" 
+      fill="none" 
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ imageRendering: 'pixelated' }}
+    >
+      {/* App Icon Background */}
+      <rect width="32" height="32" rx="8" fill="#2d2a45" />
+      
+      {/* Shadow */}
+      <rect x="9" y="8" width="16" height="18" fill="#0f0c1b" />
+
+      {/* Pages */}
+      <rect x="22" y="7" width="2" height="18" fill="#d6cda4" />
+      <rect x="24" y="8" width="1" height="16" fill="#a49a71" />
+
+      {/* Book Cover */}
+      <rect x="9" y="7" width="13" height="18" fill="#16112c" />
+      
+      {/* Spine Accent */}
+      <rect x="10" y="7" width="2" height="18" fill="#1c1635" />
+
+      {/* Top Left Corner */}
+      <rect x="8" y="8" width="4" height="1" fill="#f4c535" />
+      <rect x="11" y="9" width="1" height="1" fill="#f4c535" />
+      
+      {/* Bottom Left Corner */}
+      <rect x="8" y="23" width="4" height="1" fill="#f4c535" />
+      <rect x="11" y="22" width="1" height="1" fill="#f4c535" />
+
+      {/* Top Right Corner */}
+      <rect x="20" y="7" width="2" height="1" fill="#f4c535" />
+      <rect x="21" y="8" width="1" height="2" fill="#f4c535" />
+
+      {/* Bottom Right Corner */}
+      <rect x="20" y="24" width="2" height="1" fill="#f4c535" />
+      <rect x="21" y="22" width="1" height="2" fill="#f4c535" />
+
+      {/* Center Gem Outer (Purple) */}
+      <rect x="14" y="13" width="3" height="5" fill="#ab77fa" />
+      <rect x="13" y="14" width="5" height="3" fill="#ab77fa" />
+
+      {/* Center Gem Inner (White/Glow) */}
+      <rect x="15" y="14" width="1" height="3" fill="#ffffff" />
+      <rect x="14" y="15" width="3" height="1" fill="#ffffff" />
+
+    </svg>
+  );
+};

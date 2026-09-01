@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
-import { Gamepad2, LogIn } from 'lucide-react';
+import { LogIn } from 'lucide-react';
+import { MagicalBookIcon } from './MagicalBookIcon';
 
 export const DesktopLogin: React.FC = () => {
   const [status, setStatus] = useState('Ready to login');
@@ -60,9 +61,7 @@ export const DesktopLogin: React.FC = () => {
 
   return (
     <div className="w-screen h-screen bg-[#070709] flex flex-col items-center justify-center p-4 text-white font-sans">
-      <div className="w-16 h-16 rounded-2xl bg-[#a87ffb]/15 border border-[#a87ffb]/30 flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(168,127,251,0.4)]">
-        <Gamepad2 className="w-8 h-8 text-[#a87ffb]" />
-      </div>
+      <MagicalBookIcon className="w-16 h-16 mb-6 shadow-[0_0_40px_rgba(168,127,251,0.4)] rounded-2xl" />
       <h1 className="text-2xl font-bold mb-2">Quest Compendium</h1>
       <p className="text-zinc-400 mb-8 text-center max-w-sm">
         Please sign in securely with your Google account to connect your desktop app.

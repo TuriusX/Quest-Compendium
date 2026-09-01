@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, globalShortcut, screen, desktopCapturer } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, globalShortcut, screen, desktopCapturer, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
@@ -6,6 +6,7 @@ const http = require('http');
 const isDev = !app.isPackaged;
 let serverProcess = null;
 let mainWindow = null;
+let tray = null;
 
 let localAuthPort = null;
 
@@ -179,6 +180,25 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Setup System Tray
+  const iconPath = path.join(__dirname, isDev ? '../public/book.bmp' : '../dist/book.bmp');
+  tray = new Tray(nativeImage.createFromPath(iconPath));
+  tray.setToolTip('Quest Compendium');
+  
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Show App', click: () => { slideIn(); } },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { app.isQuiting = true; app.quit(); } }
+  ]);
+  tray.setContextMenu(contextMenu);
+  
+  tray.on('click', () => {
+    if (isAppVisible) {
+      slideOut();
+    } else {
+      slideIn();
+    }
+  });
   const { session } = require('electron');
   // Initialize AdBlocker for the webview partition
   const { ElectronBlocker } = require('@ghostery/adblocker-electron');
