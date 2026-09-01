@@ -67,16 +67,16 @@ function getDockCoords(isHidden = false) {
   let targetY = bounds.y;
   
   if (currentDockPosition === 'top-right') {
-    targetX = isHidden ? sWidth - 28 : sWidth - bounds.width;
+    targetX = isHidden ? sWidth - 8 : sWidth - bounds.width;
     targetY = 0;
   } else if (currentDockPosition === 'bottom-right') {
-    targetX = isHidden ? sWidth - 28 : sWidth - bounds.width;
+    targetX = isHidden ? sWidth - 8 : sWidth - bounds.width;
     targetY = sHeight - bounds.height;
   } else if (currentDockPosition === 'top-left') {
-    targetX = isHidden ? 28 - bounds.width : 0;
+    targetX = isHidden ? 8 - bounds.width : 0;
     targetY = 0;
   } else if (currentDockPosition === 'bottom-left') {
-    targetX = isHidden ? 28 - bounds.width : 0;
+    targetX = isHidden ? 8 - bounds.width : 0;
     targetY = sHeight - bounds.height;
   }
   return { x: targetX, y: targetY };

@@ -11,7 +11,7 @@ import {
   Check,
   Trophy,
   Sparkles,
-  Layers
+  Save
 } from 'lucide-react';
 import { GameTab } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
@@ -70,7 +70,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
       <div className="p-3.5 border-b border-white/[0.08] flex items-center justify-between bg-black/30">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-[var(--accent-dim)] border border-[var(--accent-border)] flex items-center justify-center">
-            <Layers className="w-4 h-4 text-[var(--accent-color)]" />
+            <Save className="w-4 h-4 text-[var(--accent-color)]" />
           </div>
           <div className="flex flex-col">
             <span className="font-fantasy font-bold text-xs tracking-wider text-white">

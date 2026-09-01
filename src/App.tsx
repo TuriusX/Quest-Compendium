@@ -533,7 +533,7 @@ export default function App() {
               (window as any).electronAPI.toggleSlide();
             }
           }}
-          className={`absolute top-1/2 -translate-y-1/2 w-4 h-24 bg-[var(--accent-color)]/70 hover:bg-[var(--accent-color)] cursor-pointer flex items-center justify-center z-50 backdrop-blur-md shadow-lg border border-white/20 transition-all ${
+          className={`absolute top-1/2 -translate-y-1/2 w-2 h-24 bg-[var(--accent-color)]/70 hover:bg-[var(--accent-color)] cursor-pointer flex items-center justify-center z-50 backdrop-blur-md shadow-lg border border-white/20 transition-all ${
             settings.dockPosition.includes('right') 
               ? 'left-0 rounded-r-lg border-l-0' 
               : 'right-0 rounded-l-lg border-r-0'
