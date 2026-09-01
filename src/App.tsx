@@ -287,6 +287,7 @@ export default function App() {
                       name: activeGame.name,
                       appId: activeGame.appId
                     }),
+                    ...(activeGame.headerImage ? { headerImage: activeGame.headerImage } : {}),
                     ...(activeGame.isAutoDetected !== undefined ? { isAutoDetected: activeGame.isAutoDetected } : {}),
                     achievements: data.achievements
                   }
@@ -303,7 +304,7 @@ export default function App() {
 
     fetchAchievements();
     return () => { isMounted = false; };
-  }, [activeGame?.appId, settings.steamId]); // Use these deps, do not put activeTab.id in deps to avoid infinite loop when achievements update
+  }, [activeGame?.appId, settings.steamId, activeTabId]);
 
   // Handle Sending Message to Server Gemini API
   const handleSendMessage = async (text: string, imageBase64?: string) => {
