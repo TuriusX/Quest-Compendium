@@ -375,3 +375,5 @@ ipcMain.handle('take-screenshot', async () => {
 });
 
 ipcMain.on('close-app', () => { app.quit(); });
+
+ipcMain.on('force-focus', () => { if (mainWindow) { mainWindow.focus(); mainWindow.webContents.focus(); } });

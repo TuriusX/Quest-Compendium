@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleSlide: () => ipcRenderer.send('toggle-slide'),
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   closeApp: () => ipcRenderer.send('close-app'),
+  forceFocus: () => ipcRenderer.send('force-focus'),
   onDesktopAuthSuccess: (callback) => ipcRenderer.on('desktop-auth-success', (event, token) => callback(token)),
   onActiveGameDetected: (callback) => ipcRenderer.on('active-game-detected', (event, gameData) => callback(gameData))
 });

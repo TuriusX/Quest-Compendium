@@ -56,21 +56,25 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   
   useEffect(() => {
     if (isCreating && createInputRef.current) {
-      createInputRef.current.blur();
+      if ((window as any).electronAPI) {
+        (window as any).electronAPI.forceFocus?.();
+      }
       setTimeout(() => {
         createInputRef.current?.focus();
         createInputRef.current?.select();
-      }, 100);
+      }, 50);
     }
   }, [isCreating]);
 
   useEffect(() => {
     if (editingTabId && renameInputRef.current) {
-      renameInputRef.current.blur();
+      if ((window as any).electronAPI) {
+        (window as any).electronAPI.forceFocus?.();
+      }
       setTimeout(() => {
         renameInputRef.current?.focus();
         renameInputRef.current?.select();
-      }, 100);
+      }, 50);
     }
   }, [editingTabId]);
 
