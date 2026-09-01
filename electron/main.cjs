@@ -184,7 +184,7 @@ app.whenReady().then(() => {
   const { ElectronBlocker } = require('@ghostery/adblocker-electron');
   const fetch = require('cross-fetch');
   ElectronBlocker.fromPrebuiltAdsAndTracking(fetch).then((blocker) => {
-    blocker.enableBlockingInSession(session.defaultSession);
+    // blocker.enableBlockingInSession(session.defaultSession); // Removed to prevent double IPC registration crash
     blocker.enableBlockingInSession(session.fromPartition('persist:browser_session'));
     console.log("Adblocker enabled for browser sessions");
   }).catch((err) => console.error("Adblocker failed:", err));

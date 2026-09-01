@@ -146,10 +146,12 @@ I stand ready to guide your journey.
       // Don't steal focus if they are actually interacting with the webview
       if (e.target && (e.target as HTMLElement).tagName === 'WEBVIEW') return;
       
+      // If we are clicking an input or textarea, let the native focus happen naturally.
+      // We just need to make sure webviews are blurred so they don't trap focus.
       document.querySelectorAll('webview').forEach(wv => {
         (wv as HTMLElement).blur();
       });
-      window.focus();
+      // Removed window.focus() because it steals focus from the input the user just clicked!
     };
 
     // Capture phase so we intercept before input gets focus
