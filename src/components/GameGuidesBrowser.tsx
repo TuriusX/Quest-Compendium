@@ -52,7 +52,7 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
         finalUrl = `https://${finalUrl}`;
       } else {
         // Search query
-        finalUrl = `https://duckduckgo.com/?q=${encodeURIComponent(finalUrl)}`;
+        finalUrl = `https://www.google.com/search?q=${encodeURIComponent(finalUrl)}`;
       }
     }
 
@@ -77,7 +77,7 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
     const newId = `btab-${Date.now()}`;
     const defaultUrl = activeGame 
       ? `https://steamcommunity.com/app/${activeGame.appId}/guides/` 
-      : 'https://duckduckgo.com';
+      : 'https://www.google.com';
 
     const newTab: BrowserTab = {
       id: newId,
@@ -241,23 +241,24 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
 
       {/* Web Frame View */}
       <div className="flex-1 relative bg-black overflow-hidden">
-        {React.createElement(FrameComponent as any, {
-          id: `browser-frame-${activeTabId}`,
-          src: activeTab.url,
-          title: activeTab.name,
-          ...(isElectron ? {
+        {tabs.map(tab => {
+          const isActive = tab.id === activeTabId;
+          return React.createElement('webview' as any, {
+            key: tab.id,
+            id: `browser-frame-${tab.id}`,
+            src: tab.url,
+            title: tab.name,
             useragent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             partition: "persist:browser_session",
-          } : {
-            sandbox: "allow-same-origin allow-scripts allow-popups allow-forms",
-          }),
-          style: {
-            transform: `scale(${zoomLevel / 100})`,
-            transformOrigin: 'top left',
-            width: `${100 / (zoomLevel / 100)}%`,
-            height: `${100 / (zoomLevel / 100)}%`,
-          },
-          className: "border-none w-full h-full bg-[#111218]"
+            style: {
+              display: isActive ? 'block' : 'none',
+              transform: `scale(${zoomLevel / 100})`,
+              transformOrigin: 'top left',
+              width: `${100 / (zoomLevel / 100)}%`,
+              height: `${100 / (zoomLevel / 100)}%`,
+            },
+            className: "border-none absolute inset-0 bg-[#111218]"
+          });
         })}
       </div>
     </div>
