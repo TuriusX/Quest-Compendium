@@ -676,34 +676,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               onChange={handleFileUpload}
             />
 
-            {/* Manual Image Upload */}
-            <button
-              type="button"
-              onClick={() => {
-                playBlipSound(soundEnabled);
-                fileInputRef.current?.click();
-              }}
-              title="Upload Screenshot"
-              className="p-2 rounded-xl text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer"
-            >
-              <Upload className="w-4 h-4" />
-            </button>
-
-            {/* Live Screen Capture */}
-            <button
-              type="button"
-              onClick={captureGameScreen}
-              disabled={isCapturingScreen}
-              title="Live Capture Game Window"
-              className={`p-2 rounded-xl transition-all cursor-pointer ${
-                isCapturingScreen 
-                  ? 'bg-blue-500/20 text-blue-300 animate-pulse' 
-                  : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
-              }`}
-            >
-              <Camera className="w-4 h-4" />
-            </button>
-
             {/* Push to Talk / Voice Dictation */}
             <button
               type="button"
