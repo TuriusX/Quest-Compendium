@@ -22,8 +22,8 @@ interface GamesSidebarProps {
   tabs: GameTab[];
   activeTabId: string | null;
   onSelectTab: (tabId: string) => void;
-  onCreateTab: (name: string) => void;
-  onRenameTab: (tabId: string, newName: string) => void;
+  onStartCreateTab: () => void;
+  onStartRenameTab: (tabId: string, currentName: string) => void;
   onDeleteTab: (tabId: string) => void;
   tabFontSize: number;
   onChangeTabFontSize: (size: number) => void;
@@ -37,8 +37,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   tabs,
   activeTabId,
   onSelectTab,
-  onCreateTab,
-  onRenameTab,
+  onStartCreateTab,
+  onStartRenameTab,
   onDeleteTab,
   tabFontSize,
   onChangeTabFontSize,
@@ -46,63 +46,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   onOpenNotes,
   onOpenGuides,
 }) => {
-  const [editingTabId, setEditingTabId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [newGameName, setNewGameName] = useState('');
-  
-  const createInputRef = useRef<HTMLInputElement>(null);
-  const renameInputRef = useRef<HTMLInputElement>(null);
-  
-  useEffect(() => {
-    if (isCreating && createInputRef.current) {
-      if ((window as any).electronAPI) {
-        (window as any).electronAPI.forceFocus?.();
-      }
-      setTimeout(() => {
-        createInputRef.current?.focus();
-        createInputRef.current?.select();
-      }, 50);
-    }
-  }, [isCreating]);
-
-  useEffect(() => {
-    if (editingTabId && renameInputRef.current) {
-      if ((window as any).electronAPI) {
-        (window as any).electronAPI.forceFocus?.();
-      }
-      setTimeout(() => {
-        renameInputRef.current?.focus();
-        renameInputRef.current?.select();
-      }, 50);
-    }
-  }, [editingTabId]);
-
   const [showFontControl, setShowFontControl] = useState(false);
-
-  const handleStartRename = (tab: GameTab, e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setEditingTabId(tab.id);
-    setEditName(tab.name);
-  };
-
-  const handleSaveRename = (tabId: string) => {
-    if (editName.trim()) {
-      onRenameTab(tabId, editName.trim());
-    }
-    setEditingTabId(null);
-  };
-
-  const handleCreateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newGameName.trim()) {
-      onCreateTab(newGameName.trim());
-      setNewGameName('');
-      setIsCreating(false);
-      playPageTurnSound(soundEnabled);
-    }
-  };
 
   return (
     <aside 
@@ -171,7 +115,6 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
-          const isEditing = tab.id === editingTabId;
           const game = tab.activeSteamGame;
           const achievements = game?.achievements || [];
           const unlockedCount = achievements.filter(a => a.unlocked).length;
@@ -182,10 +125,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
             <div
               key={tab.id}
               onClick={() => {
-                if (!isEditing) {
                   playBlipSound(soundEnabled);
                   onSelectTab(tab.id);
-                }
               }}
               className={`group relative rounded-xl border transition-all p-2.5 flex flex-col gap-2 cursor-pointer select-none ${
                 isActive
@@ -209,7 +150,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                       if (e.key === 'Enter') handleSaveRename(tab.id);
                       if (e.key === 'Escape') setEditingTabId(null);
                     }}
-                    autoFocus
+                    
                     className="w-full bg-black/90 border border-[var(--accent-color)] rounded-lg px-2.5 py-1 text-white text-xs outline-none font-sans select-text"
                     style={{ WebkitAppRegion: 'no-drag' } as any}
                   />
@@ -318,7 +259,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
               placeholder="e.g. Elden Ring, Skyrim, Hades..."
               value={newGameName}
               onChange={(e) => setNewGameName(e.target.value)}
-              autoFocus
+              
               className="w-full bg-black/90 border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-[var(--accent-color)] font-sans select-text"
               style={{ WebkitAppRegion: 'no-drag' } as any}
             />

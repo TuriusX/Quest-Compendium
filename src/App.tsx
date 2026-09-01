@@ -19,6 +19,7 @@ import { QuickGameSearchModal } from './components/QuickGameSearchModal';
 import { GameScreenModal } from './components/GameScreenModal';
 import { AuthModal } from './components/AuthModal';
 import { PaywallModal } from './components/PaywallModal';
+import { RenameModal } from './components/RenameModal';
 import { useCloudSync } from './hooks/useCloudSync';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -118,6 +119,10 @@ I stand ready to guide your journey.
   const [isBrowserMode, setIsBrowserMode] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGameSearchOpen, setIsGameSearchOpen] = useState(false);
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+  const [renameModalMode, setRenameModalMode] = useState<'create' | 'rename'>('create');
+  const [renameModalTabId, setRenameModalTabId] = useState<string | null>(null);
+  const [renameModalInitialValue, setRenameModalInitialValue] = useState('');
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
   const [examinedImageUrl, setExaminedImageUrl] = useState<string | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
@@ -649,8 +654,8 @@ I stand ready to guide your journey.
             tabs={tabs}
             activeTabId={activeTabId}
             onSelectTab={handleSelectTab}
-            onCreateTab={(name) => handleCreateTab(name)}
-            onRenameTab={handleRenameTab}
+            onStartCreateTab={handleStartCreateTab}
+            onStartRenameTab={handleStartRenameTab}
             onDeleteTab={handleDeleteTab}
             tabFontSize={settings.tabFontSize}
             onChangeTabFontSize={(size) => setSettings(s => ({ ...s, tabFontSize: size }))}
@@ -712,6 +717,15 @@ I stand ready to guide your journey.
         settings={settings}
         onUpdateSettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
         soundEnabled={settings.soundEnabled}
+      />
+
+      {/* Rename/Create Modal */}
+      <RenameModal
+        isOpen={isRenameModalOpen}
+        initialValue={renameModalInitialValue}
+        title={renameModalMode === 'create' ? 'Create New Compendium' : 'Rename Compendium'}
+        onSave={handleRenameModalSave}
+        onCancel={() => setIsRenameModalOpen(false)}
       />
 
       {/* Auth & Paywall Overlays */}
