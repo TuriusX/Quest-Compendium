@@ -515,23 +515,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       : 'bg-[#11121a]/95 border border-white/[0.08] text-zinc-200 shadow-[0_6px_25px_rgba(0,0,0,0.5)]'
                   }`}
                 >
-                  {/* Screenshot Attachment Preview with Analysis Frame */}
-                  {msg.imageUrl && (
-                    <div className="mb-2.5 flex items-center gap-2">
-                      <button
-                        onClick={() => onOpenScreenModal(msg.imageUrl!)}
-                        title="View Screen Capture"
-                        className="px-2.5 py-1.5 rounded-lg bg-black/40 hover:bg-black/80 border border-white/10 hover:border-[var(--accent-border)] flex items-center gap-2 text-xs font-mono text-zinc-300 hover:text-[var(--accent-color)] transition-all cursor-pointer shadow-sm group"
-                      >
-                        <Camera className="w-3.5 h-3.5 opacity-70 group-hover:opacity-100" />
-                        <span>Screen Capture Attached</span>
-                        <Eye className="w-3 h-3 ml-1 opacity-50 group-hover:opacity-100" />
-                      </button>
-                    </div>
-                  )}
-
                   {/* Message Body with Markdown */}
-                  <div className="leading-relaxed break-words space-y-2.5 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_strong]:text-white [&_strong]:font-semibold [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[var(--accent-color)] [&_h1]:border-b [&_h1]:border-white/10 [&_h1]:pb-1 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-[var(--accent-color)] [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-white [&_code]:bg-black/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-purple-300 [&_code]:font-code [&_code]:text-xs [&_pre]:bg-black/80 [&_pre]:border [&_pre]:border-white/10 [&_pre]:p-3.5 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_th]:border [&_th]:border-white/15 [&_th]:p-2 [&_th]:bg-white/[0.06] [&_th]:font-semibold [&_th]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:p-2 [&_td]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--accent-color)] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-zinc-400">
+                  <div style={{ fontFamily: 'var(--chat-font-family)' }} className="leading-relaxed break-words space-y-2.5 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_strong]:text-white [&_strong]:font-semibold [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[var(--accent-color)] [&_h1]:border-b [&_h1]:border-white/10 [&_h1]:pb-1 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-[var(--accent-color)] [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-white [&_code]:bg-black/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-purple-300 [&_code]:font-code [&_code]:text-xs [&_pre]:bg-black/80 [&_pre]:border [&_pre]:border-white/10 [&_pre]:p-3.5 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_th]:border [&_th]:border-white/15 [&_th]:p-2 [&_th]:bg-white/[0.06] [&_th]:font-semibold [&_th]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:p-2 [&_td]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--accent-color)] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-zinc-400">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {msg.text}
                     </ReactMarkdown>
@@ -609,8 +594,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         )}
 
         {/* Animated 3D Levitating Tome Loader */}
-                {isLoading && (
-          <div className="flex items-center gap-3 px-4 py-3 ml-4 mb-4 rounded-2xl bg-[#11121a]/95 border border-[var(--accent-border)] w-fit shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+        {isLoading && (
+          <div className="flex items-center gap-3 ml-4 mb-4 w-fit">
             <div className="w-5 h-5 shrink-0 flex items-center justify-center animate-magical-flip">
               <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M6 4C6 2.89543 6.89543 2 8 2H22C23.1046 2 24 2.89543 24 4V28C24 29.1046 23.1046 30 22 30H8C6.89543 30 6 29.1046 6 28V4Z" fill="#140d24" />

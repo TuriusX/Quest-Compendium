@@ -502,7 +502,7 @@ I stand ready to guide your journey.
   };
 
   return (
-    <div className="w-screen h-screen bg-transparent flex overflow-hidden font-sans">
+    <div className="w-screen h-screen bg-transparent flex overflow-hidden">
       {/* Background CRT scan line ambient glow */}
       <div className="absolute inset-0 bg-radial from-purple-900/10 via-transparent to-transparent pointer-events-none" />
 
@@ -565,8 +565,10 @@ I stand ready to guide your journey.
 
         {/* Font Quick Switcher Menu Popup */}
         {fontMenuOpen && (
-          <div className="absolute top-14 right-12 z-50 bg-[#161620] border border-white/15 rounded-xl shadow-2xl p-3 w-56 space-y-3 animate-in fade-in zoom-in-95">
-            <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block border-b border-white/10 pb-1">
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setFontMenuOpen(false)} />
+            <div className="absolute top-14 right-12 z-50 bg-[#161620] border border-white/15 rounded-xl shadow-2xl p-3 w-56 space-y-3 animate-in fade-in zoom-in-95">
+              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block border-b border-white/10 pb-1">
               Typography Style
             </span>
             <div className="space-y-1 text-xs">
@@ -611,6 +613,7 @@ I stand ready to guide your journey.
               <span className="font-mono text-zinc-300 w-6 text-right font-bold text-xs">{settings.chatFontSize}px</span>
             </div>
           </div>
+          </>
         )}
 
         {/* Main Body: Left Sidebar + Central Chat/Browser + Right Achievements Drawer */}
