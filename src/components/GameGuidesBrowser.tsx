@@ -6,6 +6,7 @@ import {
   Bookmark, 
   Plus, 
   X, 
+  Trash2,
   ExternalLink, 
   ZoomIn, 
   ZoomOut, 
@@ -32,16 +33,16 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
   const FrameComponent = isElectron ? 'webview' : 'iframe';
 
   const [tabs, setTabs] = useState<BrowserTab[]>([
-    { id: 'btab-1', name: 'Web Browser', url: 'https://duckduckgo.com' },
+    { id: 'btab-1', name: 'Web Browser', url: 'https://www.google.com' },
     { id: 'btab-2', name: 'Steam Community Guides', url: activeGame ? `https://steamcommunity.com/app/${activeGame.appId}/guides/` : 'https://steamcommunity.com' },
   ]);
-  const [activeTabId, setActiveTabId] = useState<string>('btab-1');
-  const [inputUrl, setInputUrl] = useState('https://duckduckgo.com');
+  const [activeTabId, setActiveTabId] = useState<string | null>('btab-1');
+  const [inputUrl, setInputUrl] = useState('https://www.google.com');
   const [bookmarks, setBookmarks] = useState<FavoriteBookmark[]>(DEFAULT_BOOKMARKS);
   const [showBookmarksMenu, setShowBookmarksMenu] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(100);
 
-  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
+  const activeTab = tabs.find(t => t.id === activeTabId);
 
   const handleNavigate = (targetUrl: string) => {
     let finalUrl = targetUrl.trim();
@@ -61,6 +62,7 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
     
     // Force navigation on the actual element
     setTimeout(() => {
+      if (!activeTabId) return;
       const frame = document.getElementById(`browser-frame-${activeTabId}`) as any;
       if (frame) {
         if (typeof frame.loadURL === 'function') {
@@ -92,14 +94,20 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
 
   const handleCloseTab = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (tabs.length === 1) return;
     playBlipSound(soundEnabled);
 
+    const tabIndex = tabs.findIndex(t => t.id === id);
     const remaining = tabs.filter(t => t.id !== id);
     setTabs(remaining);
     if (activeTabId === id) {
-      setActiveTabId(remaining[0].id);
-      setInputUrl(remaining[0].url);
+      if (remaining.length > 0) {
+        const nextIndex = Math.max(0, Math.min(tabIndex, remaining.length - 1));
+        setActiveTabId(remaining[nextIndex].id);
+        setInputUrl(remaining[nextIndex].url);
+      } else {
+        setActiveTabId(null);
+        setInputUrl('');
+      }
     }
   };
 
@@ -125,7 +133,7 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
             >
               <Globe className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
               <span className="truncate flex-1 text-[11px] font-sans">{tab.name}</span>
-              {tabs.length > 1 && (
+              {tabs.length > 0 && (
                 <button
                   onClick={(e) => handleCloseTab(tab.id, e)}
                   className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/20 text-zinc-400 hover:text-white transition-opacity"
@@ -150,36 +158,42 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
       <div className="p-2.5 bg-black/40 border-b border-white/[0.08] flex items-center gap-2 relative">
         <button
           onClick={() => {
+            if (!activeTab) return;
             playBlipSound(soundEnabled);
             const wv = document.getElementById(`browser-frame-${activeTabId}`) as any;
             if (wv && wv.canGoBack && wv.canGoBack()) wv.goBack();
           }}
-          className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          className={`p-1.5 rounded-lg transition-colors ${!activeTab ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white hover:bg-white/10 cursor-pointer'}`}
           title="Back"
+          disabled={!activeTab}
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
 
         <button
           onClick={() => {
+            if (!activeTab) return;
             playBlipSound(soundEnabled);
             const wv = document.getElementById(`browser-frame-${activeTabId}`) as any;
             if (wv && wv.canGoForward && wv.canGoForward()) wv.goForward();
           }}
-          className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          className={`p-1.5 rounded-lg transition-colors ${!activeTab ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white hover:bg-white/10 cursor-pointer'}`}
           title="Forward"
+          disabled={!activeTab}
         >
           <ArrowRight className="w-4 h-4" />
         </button>
 
         <button
           onClick={() => {
+            if (!activeTab) return;
             playBlipSound(soundEnabled);
             const wv = document.getElementById(`browser-frame-${activeTabId}`) as any;
             if (wv && wv.reload) wv.reload();
           }}
-          className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          className={`p-1.5 rounded-lg transition-colors ${!activeTab ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white hover:bg-white/10 cursor-pointer'}`}
           title="Reload"
+          disabled={!activeTab}
         >
           <RotateCw className="w-4 h-4" />
         </button>
@@ -194,13 +208,15 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleNavigate(inputUrl);
             }}
-            placeholder="Enter URL or search game guides..."
-            className="w-full bg-[#13141d] border border-white/15 rounded-xl pl-9 pr-8 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500 font-mono"
+            placeholder={activeTab ? "Enter URL or search game guides..." : "Open a new tab to browse..."}
+            disabled={!activeTab}
+            className="w-full bg-[#13141d] border border-white/15 rounded-xl pl-9 pr-8 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500 font-mono disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <button
             onClick={() => handleNavigate(inputUrl)}
-            className="absolute right-2 text-zinc-400 hover:text-white p-1"
+            className={`absolute right-2 p-1 ${!activeTab ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-400 hover:text-white cursor-pointer'}`}
             title="Go"
+            disabled={!activeTab}
           >
             <Search className="w-3.5 h-3.5" />
           </button>
@@ -227,10 +243,10 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
 
         {/* Open in New Window */}
         <a
-          href={activeTab.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+          href={activeTab?.url || '#'}
+          target={activeTab ? "_blank" : undefined}
+          rel={activeTab ? "noopener noreferrer" : undefined}
+          className={`p-2 rounded-xl transition-colors ${!activeTab ? 'text-zinc-600 pointer-events-none' : 'text-zinc-400 hover:text-white hover:bg-white/10'}`}
           title="Open in Native Browser Tab"
         >
           <ExternalLink className="w-4 h-4" />
@@ -240,7 +256,13 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
 
 
       {/* Web Frame View */}
-      <div className="flex-1 relative bg-black overflow-hidden">
+      <div className="flex-1 relative bg-black overflow-hidden flex items-center justify-center">
+        {!activeTab && (
+          <div className="flex flex-col items-center gap-4 text-zinc-600">
+            <Globe className="w-12 h-12 opacity-20" />
+            <p className="text-sm">No tabs open. Click the + to open a new tab.</p>
+          </div>
+        )}
         {tabs.map(tab => {
           const isActive = tab.id === activeTabId;
           return React.createElement('webview' as any, {
@@ -251,7 +273,7 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
             useragent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             partition: "persist:browser_session",
             style: {
-              display: isActive ? 'block' : 'none',
+              display: isActive ? 'flex' : 'none',
               transform: `scale(${zoomLevel / 100})`,
               transformOrigin: 'top left',
               width: `${100 / (zoomLevel / 100)}%`,
