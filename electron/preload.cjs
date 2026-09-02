@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleSlide: () => ipcRenderer.send('toggle-slide'),
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   closeApp: () => ipcRenderer.send('close-app'),
+  openSettingsWindow: () => ipcRenderer.send('open-settings-window'),
+  closeSettingsWindow: () => ipcRenderer.send('close-settings-window'),
   forceFocus: () => ipcRenderer.send('force-focus'),
   updateShortcuts: (shortcuts) => ipcRenderer.send('update-shortcuts', shortcuts),
   onDesktopAuthSuccess: (callback) => ipcRenderer.on('desktop-auth-success', (event, token) => callback(token)),

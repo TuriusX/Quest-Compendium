@@ -54,7 +54,58 @@ const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: str
 
 import { DesktopLogin } from './components/DesktopLogin';
 
+function SettingsStandalone() {
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    try {
+      const saved = localStorage.getItem('quest_compendium_settings');
+      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
+  });
+
+  const updateSettings = (updated: Partial<AppSettings>) => {
+    const newSettings = { ...settings, ...updated };
+    setSettings(newSettings);
+    localStorage.setItem('quest_compendium_settings', JSON.stringify(newSettings));
+  };
+
+  const closeWindow = () => {
+    if ((window as any).electronAPI?.closeSettingsWindow) {
+      (window as any).electronAPI.closeSettingsWindow();
+    } else {
+      window.close();
+    }
+  };
+
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'quest_compendium_settings' && e.newValue) {
+        setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(e.newValue) });
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  return (
+    <div className="w-screen h-screen bg-[#0c0d14] text-zinc-100 overflow-auto">
+      <SettingsModal 
+        isOpen={true} 
+        onClose={closeWindow}
+        settings={settings}
+        onUpdateSettings={updateSettings}
+        soundEnabled={settings.soundEnabled}
+      />
+    </div>
+  );
+}
+
 export default function App() {
+  if (window.location.hash === '#settings') {
+    return <SettingsStandalone />;
+  }
+
   if (window.location.pathname === '/desktop-login') {
     return <DesktopLogin />;
   }
@@ -202,13 +253,9 @@ export default function App() {
       if (isSidebarOpen) totalWidth += sidebarWidth;
       if (isAchDrawerOpen) totalWidth += achDrawerWidth;
 
-      if (isSettingsOpen) {
-        totalWidth = Math.max(totalWidth, 850);
-      }
-
       (window as any).electronAPI.resizeWindow(totalWidth);
     }
-  }, [isSidebarOpen, isAchDrawerOpen, sidebarWidth, achDrawerWidth, isSettingsOpen]);
+  }, [isSidebarOpen, isAchDrawerOpen, sidebarWidth, achDrawerWidth]);
 
   // Sync Dock Position to Electron
   useEffect(() => {
@@ -304,6 +351,9 @@ export default function App() {
       if (event.key === 'steam_auth_id' && event.newValue) {
         setSettings(prev => ({ ...prev, steamId: event.newValue }));
         localStorage.removeItem('steam_auth_id'); // cleanup
+      }
+      if (event.key === 'quest_compendium_settings' && event.newValue) {
+        setSettings(prev => ({ ...prev, ...JSON.parse(event.newValue!) }));
       }
     };
     
@@ -669,7 +719,13 @@ export default function App() {
           onToggleNotes={() => setIsNotesOpen(!isNotesOpen)}
           isBrowserMode={isBrowserMode}
           onToggleBrowserMode={() => setIsBrowserMode(!isBrowserMode)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => {
+            if ((window as any).electronAPI?.openSettingsWindow) {
+              (window as any).electronAPI.openSettingsWindow();
+            } else {
+              setIsSettingsOpen(true);
+            }
+          }}
           onOpenGameSearch={() => setIsGameSearchOpen(true)}
           fontMenuOpen={fontMenuOpen}
           onToggleFontMenu={() => setFontMenuOpen(!fontMenuOpen)}

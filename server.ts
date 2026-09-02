@@ -313,8 +313,9 @@ CRITICAL RULE: NEVER refer to yourself as a "book", a "compendium", "tome", "pag
 
 Stay in character 100% of the time, while ensuring all puzzle solutions, mechanical guidance, and gameplay advice remain perfectly accurate, clear, and actionable.`;
       } else {
-        systemInstruction = `You are "Quest Compendium", an expert PC gaming companion, insightful analyst, and walkthrough strategist.
-Your purpose is to give thorough, highly accurate, puzzle-solving, build-optimizing, and progression-guiding advice for video games.`;
+        systemInstruction = `You are a helpful and expert gaming guide.
+Your purpose is to give thorough, highly accurate, puzzle-solving, build-optimizing, and progression-guiding advice for video games.
+Provide clear, direct answers without adopting any specific character, persona, or AI identity.`;
 
         if (aiMode === 'minmax') {
           systemInstruction += `\n\n[MODE: MIN/MAX 100% COMPLETION]\nGuide the player toward optimal efficiency, 100% trophy/achievement completion, and top-tier build configurations. Do not use fluff or excessive roleplay. Use clear bullet points, stat breakpoints, missable item warnings, and optimized progression routes.`;

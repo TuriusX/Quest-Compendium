@@ -447,6 +447,43 @@ ipcMain.handle('take-screenshot', async () => {
   return base64Image;
 });
 
+let settingsWindow = null;
+
+ipcMain.on('open-settings-window', () => {
+  if (settingsWindow) {
+    settingsWindow.focus();
+    return;
+  }
+  
+  settingsWindow = new BrowserWindow({
+    width: 850,
+    height: 700,
+    backgroundColor: '#0c0d14',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      nodeIntegration: false,
+      contextIsolation: true
+    },
+    autoHideMenuBar: true
+  });
+
+  if (app.isPackaged) {
+    settingsWindow.loadFile(path.join(__dirname, '../dist/index.html'), { hash: 'settings' });
+  } else {
+    settingsWindow.loadURL('http://localhost:3000/#settings');
+  }
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+});
+
+ipcMain.on('close-settings-window', () => {
+  if (settingsWindow) {
+    settingsWindow.close();
+  }
+});
+
 ipcMain.on('close-app', () => { app.quit(); });
 
 ipcMain.on('force-focus', () => { if (mainWindow) { mainWindow.focus(); mainWindow.webContents.focus(); } });
