@@ -18,19 +18,20 @@ export function useGamepadShortcuts(
 
     let animationFrameId: number;
 
-    const checkCombo = (comboStr: string, currentButtons: boolean[], previousButtons: boolean[]) => {
-      if (!comboStr || comboStr === 'disabled' || !comboStr.includes('+')) return false;
+    const checkComboState = (comboStr: string, currentButtons: boolean[], previousButtons: boolean[]) => {
+      if (!comboStr || comboStr === 'disabled' || !comboStr.includes('+')) return 'none';
       const parts = comboStr.split('+').map(p => parseInt(p, 10));
-      if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) return false;
+      if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) return 'none';
       
       const b1 = parts[0];
       const b2 = parts[1];
       
-      // True if both are currently pressed, and at least one wasn't pressed last frame
       const bothPressedNow = currentButtons[b1] && currentButtons[b2];
       const bothPressedBefore = previousButtons[b1] && previousButtons[b2];
       
-      return bothPressedNow && !bothPressedBefore;
+      if (bothPressedNow && !bothPressedBefore) return 'pressed';
+      if (!bothPressedNow && bothPressedBefore) return 'released';
+      return 'none';
     };
 
     const pollGamepads = () => {
@@ -47,12 +48,15 @@ export function useGamepadShortcuts(
         const currentButtons = gp.buttons.map(b => b.pressed);
 
         // Check voice shortcut
-        if (checkCombo(voiceShortcutCombo, currentButtons, previousButtons)) {
-          onVoiceTrigger();
+        const voiceState = checkComboState(voiceShortcutCombo, currentButtons, previousButtons);
+        if (voiceState === 'pressed') {
+          onVoiceStart();
+        } else if (voiceState === 'released') {
+          onVoiceStop();
         }
 
         // Check hide app shortcut
-        if (checkCombo(hideAppShortcutCombo, currentButtons, previousButtons)) {
+        if (checkComboState(hideAppShortcutCombo, currentButtons, previousButtons) === 'pressed') {
           onHideAppTrigger();
         }
 

@@ -125,10 +125,14 @@ function slideIn() {
   if (!mainWindow) return;
   isAppVisible = true;
   mainWindow.show();
+  mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.focus();
+  // Force focus for games
+  app.focus({ steal: true });
+  
   if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(false);
-    animateWindow(coords.x, coords.y, 200);
+    animateWindow(coords.x, coords.y, 150);
   }
 }
 
@@ -187,11 +191,11 @@ let xinput = null;
 if (process.platform === 'win32') {
   try {
     const koffi = require('koffi');
-    koffi.alias('WORD', 'uint16');
-    koffi.alias('DWORD', 'uint32');
-    koffi.alias('BYTE', 'uint8');
-    koffi.alias('SHORT', 'int16');
-    koffi.alias('WCHAR', 'char16_t');
+    try { koffi.alias('WORD', 'uint16'); } catch(e){}
+    try { koffi.alias('DWORD', 'uint32'); } catch(e){}
+    try { koffi.alias('BYTE', 'uint8'); } catch(e){}
+    try { koffi.alias('SHORT', 'int16'); } catch(e){}
+    try { koffi.alias('WCHAR', 'char16_t'); } catch(e){}
     xinput = require('xinput-ffi');
   } catch(e) { console.error("xinput-ffi load error", e); }
 }
@@ -359,30 +363,35 @@ app.whenReady().then(() => {
     currentHideAppShortcut = shortcuts.controllerHideAppShortcut;
     globalShortcut.unregisterAll();
     
-    if (shortcuts.hideAppShortcut) {
+    // Always ensure a fallback shortcut exists
+    const hideAppCmd = shortcuts.hideAppShortcut || 'CommandOrControl+Space';
+    
+    try {
+      globalShortcut.register(hideAppCmd, () => {
+        if (isAppVisible) {
+          slideOut();
+        } else {
+          slideIn();
+        }
+      });
+    } catch (err) {
+      console.error("Failed to register hideAppShortcut", err);
       try {
-        globalShortcut.register(shortcuts.hideAppShortcut, () => {
-          if (isAppVisible) {
-            slideOut();
-          } else {
-            slideIn();
-          }
+        globalShortcut.register('CommandOrControl+Space', () => {
+          if (isAppVisible) slideOut(); else slideIn();
         });
-      } catch (err) {
-        console.error("Failed to register hideAppShortcut", err);
-      }
+      } catch(e) {}
     }
     
-    if (shortcuts.voiceInputShortcut) {
-      try {
-        globalShortcut.register(shortcuts.voiceInputShortcut, () => {
-          if (mainWindow) {
-            mainWindow.webContents.send('trigger-voice-input');
-          }
-        });
-      } catch (err) {
-        console.error("Failed to register voiceInputShortcut", err);
-      }
+    const voiceCmd = shortcuts.voiceInputShortcut || 'CommandOrControl+Shift+V';
+    try {
+      globalShortcut.register(voiceCmd, () => {
+        if (mainWindow) {
+          mainWindow.webContents.send('trigger-voice-input');
+        }
+      });
+    } catch (err) {
+      console.error("Failed to register voiceInputShortcut", err);
     }
   });
 
