@@ -37,10 +37,10 @@ export function useCloudSync(
       const docSnap = await getDoc(userRef);
       if (!docSnap.exists()) {
         await setDoc(userRef, {
-          email: user.email,
+          email: user.email || null,
           subscriptionStatus: 'inactive',
-          settings: localSettings,
-          tabs: localGameTabs,
+          settings: JSON.parse(JSON.stringify(localSettings)),
+          tabs: JSON.parse(JSON.stringify(localGameTabs)),
           updatedAt: Date.now()
         });
       }
@@ -81,8 +81,8 @@ export function useCloudSync(
     const syncTimeout = setTimeout(() => {
       const userRef = doc(db, 'users', user.uid);
       setDoc(userRef, {
-        settings: localSettings,
-        tabs: localGameTabs,
+        settings: JSON.parse(JSON.stringify(localSettings)),
+        tabs: JSON.parse(JSON.stringify(localGameTabs)),
         updatedAt: Date.now()
       }, { merge: true }).catch(err => console.error("Sync error", err));
     }, 1500); // Debounce syncs by 1.5 seconds

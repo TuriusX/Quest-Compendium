@@ -8,9 +8,11 @@ dotenv.config();
 
 // Lazy Gemini AI client initialization with telemetry User-Agent header
 function getGeminiClient(customApiKey?: string): GoogleGenAI {
-  if (customApiKey && customApiKey.trim() !== '') {
+  const apiKey = (customApiKey && customApiKey.trim() !== '') ? customApiKey.trim() : process.env.GEMINI_API_KEY;
+  
+  if (apiKey) {
     return new GoogleGenAI({
-      apiKey: customApiKey.trim(),
+      apiKey: apiKey,
       httpOptions: {
         headers: {
           'User-Agent': 'aistudio-build',
