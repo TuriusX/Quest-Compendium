@@ -31,7 +31,7 @@ import { playSnapSound, playChimeSound, playBlipSound } from '../utils/audio';
 
 interface ChatAreaProps {
   activeTab: GameTab | null;
-  onSendMessage: (text: string, imageBase64?: string) => Promise<void>;
+  onSendMessage: (text: string, imageBase64?: string, audioBase64?: string) => Promise<void>;
   isLoading: boolean;
   aiMode: AiMode;
   activeGame: SteamGameData | null;
@@ -71,7 +71,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
-  const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -107,55 +108,67 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     return () => window.removeEventListener('paste', handlePaste);
   }, [soundEnabled]);
 
-  // Web Speech Recognition for Voice Input
+  // Cleanup media recorder on unmount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-
-        recognition.onresult = (event: any) => {
-          const transcript = Array.from(event.results)
-            .map((res: any) => res[0].transcript)
-            .join('');
-          setInputQuestion(transcript);
-        };
-
-        recognition.onerror = () => {
-          setIsRecording(false);
-        };
-
-        recognition.onend = () => {
-          setIsRecording(false);
-        };
-
-        recognitionRef.current = recognition;
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
       }
-    }
+    };
   }, []);
 
-  const toggleVoiceRecording = () => {
+  const toggleVoiceRecording = async () => {
     playBlipSound(soundEnabled);
-    if (!recognitionRef.current) {
-      alert('Voice speech recognition is not supported in this browser. Please type your inquiry.');
-      return;
-    }
 
-    if (isRecording) {
-      recognitionRef.current.stop();
+    if (isRecording && mediaRecorderRef.current) {
+      // Stop recording
+      mediaRecorderRef.current.stop();
       setIsRecording(false);
     } else {
+      // Start recording
       try {
-        recognitionRef.current.start();
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = () => {
+            const base64Audio = reader.result as string;
+            // Automatically send the voice note
+            onSendMessage("Voice Message", attachedImage || undefined, base64Audio);
+            setAttachedImage(null);
+            setInputQuestion('');
+          };
+          // Stop all tracks to release microphone
+          stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
         setIsRecording(true);
       } catch (err) {
-        console.error('Speech recognition error:', err);
+        console.error('Microphone error:', err);
+        alert('Could not access the microphone. Please check your permissions.');
       }
     }
   };
+
+  useEffect(() => {
+    const handleTrigger = () => {
+      toggleVoiceRecording();
+    };
+    window.addEventListener('trigger-voice-record', handleTrigger);
+    return () => window.removeEventListener('trigger-voice-record', handleTrigger);
+  }, [isRecording, soundEnabled, attachedImage, onSendMessage]);
 
   // Live Screen Capture from Game Window (WebRTC DisplayMedia)
   const captureGameScreen = async () => {
@@ -515,6 +528,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       : 'bg-[#11121a]/95 border border-white/[0.08] text-zinc-200 shadow-[0_6px_25px_rgba(0,0,0,0.5)]'
                   }`}
                 >
+                  {msg.imageUrl && (
+                    <div className="mb-3 rounded-lg overflow-hidden border border-white/[0.06] shadow-md group relative">
+                      <img src={msg.imageUrl} alt="Attached" className="max-w-full h-auto rounded-lg max-h-60 object-contain" />
+                    </div>
+                  )}
+                  {msg.audioBase64 && (
+                    <div className="mb-3">
+                      <audio controls src={msg.audioBase64} className="h-8 max-w-full w-[250px] outline-none" />
+                    </div>
+                  )}
+
                   {/* Message Body with Markdown */}
                   <div style={{ fontFamily: 'var(--chat-font-family)' }} className="leading-relaxed break-words space-y-2.5 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_strong]:text-white [&_strong]:font-semibold [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[var(--accent-color)] [&_h1]:border-b [&_h1]:border-white/10 [&_h1]:pb-1 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-[var(--accent-color)] [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-white [&_code]:bg-black/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-purple-300 [&_code]:font-code [&_code]:text-xs [&_pre]:bg-black/80 [&_pre]:border [&_pre]:border-white/10 [&_pre]:p-3.5 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_th]:border [&_th]:border-white/15 [&_th]:p-2 [&_th]:bg-white/[0.06] [&_th]:font-semibold [&_th]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:p-2 [&_td]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--accent-color)] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-zinc-400">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>

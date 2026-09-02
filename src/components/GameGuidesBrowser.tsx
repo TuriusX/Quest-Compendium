@@ -270,8 +270,12 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
             id: `browser-frame-${tab.id}`,
             src: tab.url,
             title: tab.name,
-            useragent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            partition: "persist:browser_session",
+            ref: (el: HTMLElement | null) => {
+              if (el) {
+                el.setAttribute('useragent', "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                el.setAttribute('partition', "persist:browser_session");
+              }
+            },
             style: {
               display: isActive ? 'flex' : 'none',
               transform: `scale(${zoomLevel / 100})`,

@@ -392,9 +392,29 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
         }
       }
 
+      if (req.body.audioBase64) {
+        const audioBase64 = req.body.audioBase64;
+        const mimeTypeMatch = audioBase64.match(/^data:(audio\/[a-zA-Z0-9+-]+);base64,(.+)$/);
+        if (mimeTypeMatch) {
+          currentParts.push({
+            inlineData: {
+              mimeType: mimeTypeMatch[1],
+              data: mimeTypeMatch[2]
+            }
+          });
+        } else {
+          currentParts.push({
+            inlineData: {
+              mimeType: 'audio/webm',
+              data: audioBase64.replace(/^data:audio\/[a-zA-Z0-9+-]+;base64,/, '') // fallback
+            }
+          });
+        }
+      }
+
       const promptText = situationalContext
-        ? `${situationalContext}\nUser Question / Observation: ${question || 'Analyze this game screenshot in detail and tell me what I should do next or what secrets/strategies apply.'}`
-        : question || 'Analyze this game screenshot in detail and provide insightful guidance.';
+        ? `${situationalContext}\nUser Question / Observation: ${question || 'Analyze this game screenshot or voice message in detail and tell me what I should do next or what secrets/strategies apply.'}`
+        : question || 'Analyze this message in detail and provide insightful guidance.';
 
       currentParts.push({ text: promptText });
       if (contentsPayload.length > 0 && contentsPayload[contentsPayload.length - 1].role === 'user') {

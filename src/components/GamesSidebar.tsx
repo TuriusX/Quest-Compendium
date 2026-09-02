@@ -19,6 +19,8 @@ import { GameTab, SteamGameData } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 
 interface GamesSidebarProps {
+  width: number;
+  isDragging: boolean;
   isOpen: boolean;
   onClose: () => void;
   tabs: GameTab[];
@@ -37,6 +39,8 @@ interface GamesSidebarProps {
 }
 
 export const GamesSidebar: React.FC<GamesSidebarProps> = ({
+  width,
+  isDragging,
   isOpen,
   tabs,
   activeTabId,
@@ -58,18 +62,19 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
 
   return (
     <aside 
-      className={`h-full z-20 flex-shrink-0 relative transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${
-        isOpen ? 'w-72 sm:w-80' : 'w-0 border-none'
+      className={`h-full z-20 flex-shrink-0 relative ${!isDragging ? 'transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)]' : ''} ${
+        !isOpen ? 'border-none' : ''
       }`}
-      style={{ perspective: '2000px' }}
+      style={{ perspective: '2000px', width: isOpen ? `${width}px` : '0px' }}
     >
       <div 
-        className="w-72 sm:w-80 h-full bg-[#0a0b10]/95 backdrop-blur-2xl border-r border-white/[0.08] flex flex-col overflow-hidden"
+        className="h-full bg-[#0a0b10]/95 backdrop-blur-2xl border-r border-white/[0.08] flex flex-col overflow-hidden"
         style={{
+          width: `${width}px`,
           transformOrigin: 'left center',
           transform: isOpen ? 'rotateY(0deg)' : 'rotateY(-90deg)',
           opacity: isOpen ? 1 : 0,
-          transition: 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease',
+          transition: isDragging ? 'none' : 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease',
           pointerEvents: isOpen ? 'auto' : 'none',
         }}
       >

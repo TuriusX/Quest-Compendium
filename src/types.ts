@@ -87,4 +87,8 @@ export interface AppSettings {
   ttsVoice: 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer';
   customApiKey?: string;
   openAiApiKey?: string;
+  hideAppShortcut: string;
+  voiceInputShortcut: string;
+  controllerVoiceShortcut: string;
+  controllerHideAppShortcut: string;
 }

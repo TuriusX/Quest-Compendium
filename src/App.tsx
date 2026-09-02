@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   GameTab, 
   SteamGameData, 
@@ -22,6 +22,7 @@ import { AuthModal } from './components/AuthModal';
 import { PaywallModal } from './components/PaywallModal';
 import { RenameModal } from './components/RenameModal';
 import { useCloudSync } from './hooks/useCloudSync';
+import { useGamepadShortcuts } from './hooks/useGamepadShortcuts';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -35,6 +36,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   steamId: '',
   ttsVoice: 'nova',
   customApiKey: '',
+  hideAppShortcut: 'CmdOrCtrl+Shift+H',
+  voiceInputShortcut: 'CmdOrCtrl+Shift+V',
+  controllerVoiceShortcut: '8', // 8 is usually Select/Share/Back
+  controllerHideAppShortcut: '9', // 9 is usually Start/Options
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
@@ -99,6 +104,67 @@ export default function App() {
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [globalActiveGame, setGlobalActiveGame] = useState<{name: string, appId: number} | null>(null);
 
+  // --- Resizing States ---
+  const [sidebarWidth, setSidebarWidth] = useState(288);
+  const [achDrawerWidth, setAchDrawerWidth] = useState(384);
+  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
+  const [isDraggingAch, setIsDraggingAch] = useState(false);
+  const dragStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  useGamepadShortcuts(
+    settings.controllerVoiceShortcut,
+    settings.controllerHideAppShortcut,
+    () => {
+      // Trigger Voice
+      setIsBrowserMode(false);
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('trigger-voice-record'));
+      }, 100);
+    },
+    () => {
+      // Hide/Show App
+      if ((window as any).electronAPI?.toggleSlide) {
+        (window as any).electronAPI.toggleSlide();
+      }
+    }
+  );
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragStartRef.current) return;
+      const { startX, startWidth } = dragStartRef.current;
+      
+      if (isDraggingSidebar) {
+        const delta = e.clientX - startX;
+        setSidebarWidth(Math.max(200, Math.min(800, startWidth + delta)));
+      } else if (isDraggingAch) {
+        const delta = startX - e.clientX;
+        setAchDrawerWidth(Math.max(250, Math.min(800, startWidth + delta)));
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingSidebar(false);
+      setIsDraggingAch(false);
+      dragStartRef.current = null;
+    };
+
+    if (isDraggingSidebar || isDraggingAch) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingSidebar, isDraggingAch]);
+
   const { user, subscriptionStatus, isInitializing } = useCloudSync(settings, tabs, setSettings, setTabs);
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || null;
@@ -151,16 +217,14 @@ export default function App() {
   useEffect(() => {
     if ((window as any).electronAPI?.resizeWindow) {
       const baseWidth = 450;
-      const sidebarWidth = 288; // w-72
-      const achDrawerWidth = 384; // sm:w-96
-
+      
       let totalWidth = baseWidth;
       if (isSidebarOpen) totalWidth += sidebarWidth;
       if (isAchDrawerOpen) totalWidth += achDrawerWidth;
 
       (window as any).electronAPI.resizeWindow(totalWidth);
     }
-  }, [isSidebarOpen, isAchDrawerOpen]);
+  }, [isSidebarOpen, isAchDrawerOpen, sidebarWidth, achDrawerWidth]);
 
   // Sync Dock Position to Electron
   useEffect(() => {
@@ -168,6 +232,27 @@ export default function App() {
       (window as any).electronAPI.setDockPosition(settings.dockPosition);
     }
   }, [settings.dockPosition]);
+
+  // Sync Shortcuts to Electron and Listen for triggers
+  useEffect(() => {
+    if ((window as any).electronAPI?.updateShortcuts) {
+      (window as any).electronAPI.updateShortcuts({
+        hideAppShortcut: settings.hideAppShortcut,
+        voiceInputShortcut: settings.voiceInputShortcut
+      });
+    }
+  }, [settings.hideAppShortcut, settings.voiceInputShortcut]);
+
+  useEffect(() => {
+    if ((window as any).electronAPI?.onTriggerVoiceInput) {
+      (window as any).electronAPI.onTriggerVoiceInput(() => {
+        setIsBrowserMode(false);
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('trigger-voice-record'));
+        }, 100);
+      });
+    }
+  }, []);
 
   // Apply Theme CSS Variables
   useEffect(() => {
@@ -312,7 +397,7 @@ export default function App() {
   }, [activeGame?.appId, settings.steamId, activeTabId]);
 
   // Handle Sending Message to Server Gemini API
-  const handleSendMessage = async (text: string, imageBase64?: string) => {
+  const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string) => {
     if (!activeTab) return;
 
     const userMessage: ChatMessage = {
@@ -320,6 +405,7 @@ export default function App() {
       role: 'user',
       text,
       imageUrl: imageBase64,
+      audioBase64,
       timestamp: Date.now()
     };
 
@@ -337,6 +423,7 @@ export default function App() {
           question: text,
           history: activeTab.messages,
           imageBase64,
+          audioBase64,
           aiMode: settings.aiMode,
           customApiKey: settings.customApiKey,
           activeGame: activeGame ? {
@@ -655,6 +742,8 @@ export default function App() {
         <div className="flex-1 flex overflow-hidden relative">
           {/* Games Sidebar */}
           <GamesSidebar
+            width={sidebarWidth}
+            isDragging={isDraggingSidebar}
             isOpen={isSidebarOpen}
             onClose={() => setIsSidebarOpen(false)}
             tabs={tabs}
@@ -671,6 +760,17 @@ export default function App() {
             onOpenGuides={() => setIsBrowserMode(true)}
             onOpenQuests={() => setIsQuestsOpen(true)}
           />
+
+          {/* Sidebar Drag Handle */}
+          {isSidebarOpen && (
+            <div 
+              className="w-1.5 cursor-col-resize hover:bg-[var(--accent-color)]/50 active:bg-[var(--accent-color)] transition-colors z-30 flex-shrink-0"
+              onMouseDown={(e) => {
+                setIsDraggingSidebar(true);
+                dragStartRef.current = { startX: e.clientX, startWidth: sidebarWidth };
+              }}
+            />
+          )}
 
           {/* Central Workspace: Chat OR Browser */}
           <main className="flex-1 flex flex-col overflow-hidden relative">
@@ -723,8 +823,21 @@ export default function App() {
             />
           </main>
 
+          {/* Achievements Drag Handle */}
+          {isAchDrawerOpen && (
+            <div 
+              className="w-1.5 cursor-col-resize hover:bg-amber-500/50 active:bg-amber-500 transition-colors z-30 flex-shrink-0"
+              onMouseDown={(e) => {
+                setIsDraggingAch(true);
+                dragStartRef.current = { startX: e.clientX, startWidth: achDrawerWidth };
+              }}
+            />
+          )}
+
           {/* Right Achievements Drawer */}
           <AchievementsDrawer
+            width={achDrawerWidth}
+            isDragging={isDraggingAch}
             isOpen={isAchDrawerOpen}
             onClose={() => setIsAchDrawerOpen(false)}
             gameData={activeGame}

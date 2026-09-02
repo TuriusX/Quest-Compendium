@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   closeApp: () => ipcRenderer.send('close-app'),
   forceFocus: () => ipcRenderer.send('force-focus'),
+  updateShortcuts: (shortcuts) => ipcRenderer.send('update-shortcuts', shortcuts),
   onDesktopAuthSuccess: (callback) => ipcRenderer.on('desktop-auth-success', (event, token) => callback(token)),
-  onActiveGameDetected: (callback) => ipcRenderer.on('active-game-detected', (event, gameData) => callback(gameData))
+  onActiveGameDetected: (callback) => ipcRenderer.on('active-game-detected', (event, gameData) => callback(gameData)),
+  onTriggerVoiceInput: (callback) => ipcRenderer.on('trigger-voice-input', () => callback())
 });

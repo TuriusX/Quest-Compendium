@@ -235,12 +235,42 @@ app.whenReady().then(() => {
     createWindow();
   }
 
-  // Register hotkey
+  // Register default hotkey
   globalShortcut.register('CommandOrControl+Space', () => {
     if (isAppVisible) {
       slideOut();
     } else {
       slideIn();
+    }
+  });
+
+  ipcMain.on('update-shortcuts', (event, shortcuts) => {
+    globalShortcut.unregisterAll();
+    
+    if (shortcuts.hideAppShortcut) {
+      try {
+        globalShortcut.register(shortcuts.hideAppShortcut, () => {
+          if (isAppVisible) {
+            slideOut();
+          } else {
+            slideIn();
+          }
+        });
+      } catch (err) {
+        console.error("Failed to register hideAppShortcut", err);
+      }
+    }
+    
+    if (shortcuts.voiceInputShortcut) {
+      try {
+        globalShortcut.register(shortcuts.voiceInputShortcut, () => {
+          if (mainWindow) {
+            mainWindow.webContents.send('trigger-voice-input');
+          }
+        });
+      } catch (err) {
+        console.error("Failed to register voiceInputShortcut", err);
+      }
     }
   });
 
