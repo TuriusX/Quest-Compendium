@@ -111,24 +111,6 @@ export default function App() {
   const [isDraggingAch, setIsDraggingAch] = useState(false);
   const dragStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
-  useGamepadShortcuts(
-    settings.controllerVoiceShortcut,
-    settings.controllerHideAppShortcut,
-    () => {
-      // Trigger Voice
-      setIsBrowserMode(false);
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('trigger-voice-record'));
-      }, 100);
-    },
-    () => {
-      // Hide/Show App
-      if ((window as any).electronAPI?.toggleSlide) {
-        (window as any).electronAPI.toggleSlide();
-      }
-    }
-  );
-
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!dragStartRef.current) return;
@@ -238,12 +220,32 @@ export default function App() {
     if ((window as any).electronAPI?.updateShortcuts) {
       (window as any).electronAPI.updateShortcuts({
         hideAppShortcut: settings.hideAppShortcut,
-        voiceInputShortcut: settings.voiceInputShortcut
+        voiceInputShortcut: settings.voiceInputShortcut,
+        controllerVoiceShortcut: settings.controllerVoiceShortcut,
+        controllerHideAppShortcut: settings.controllerHideAppShortcut
       });
     }
-  }, [settings.hideAppShortcut, settings.voiceInputShortcut]);
+  }, [
+    settings.hideAppShortcut, 
+    settings.voiceInputShortcut, 
+    settings.controllerVoiceShortcut, 
+    settings.controllerHideAppShortcut
+  ]);
 
   useEffect(() => {
+    if ((window as any).electronAPI?.onTriggerVoiceInputStart) {
+      (window as any).electronAPI.onTriggerVoiceInputStart(() => {
+        setIsBrowserMode(false);
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('trigger-voice-start'));
+        }, 100);
+      });
+    }
+    if ((window as any).electronAPI?.onTriggerVoiceInputStop) {
+      (window as any).electronAPI.onTriggerVoiceInputStop(() => {
+        window.dispatchEvent(new CustomEvent('trigger-voice-stop'));
+      });
+    }
     if ((window as any).electronAPI?.onTriggerVoiceInput) {
       (window as any).electronAPI.onTriggerVoiceInput(() => {
         setIsBrowserMode(false);

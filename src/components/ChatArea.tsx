@@ -62,6 +62,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 }) => {
   const [inputQuestion, setInputQuestion] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const attachedImageRef = useRef<string | null>(null);
+  const pendingScreenshotRef = useRef<Promise<string | null> | null>(null);
+
+  useEffect(() => {
+    attachedImageRef.current = attachedImage;
+  }, [attachedImage]);
   const [isRecording, setIsRecording] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [savedNoteMessageId, setSavedNoteMessageId] = useState<string | null>(null);
@@ -117,61 +123,84 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     };
   }, []);
 
-  const toggleVoiceRecording = async () => {
+  const startVoiceRecording = async () => {
+    if (isRecording) return;
+    
+    // Automatically capture screen if none is attached
+    if (!attachedImageRef.current) {
+      pendingScreenshotRef.current = captureGameScreen();
+    }
+
     playBlipSound(soundEnabled);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
 
-    if (isRecording && mediaRecorderRef.current) {
-      // Stop recording
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    } else {
-      // Start recording
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
-        mediaRecorderRef.current = mediaRecorder;
-        audioChunksRef.current = [];
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
 
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        
+        let finalImage = attachedImageRef.current;
+        if (pendingScreenshotRef.current) {
+          const result = await pendingScreenshotRef.current;
+          if (result) finalImage = result;
+          pendingScreenshotRef.current = null;
+        }
+
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          const base64Audio = reader.result as string;
+          // Automatically send the voice note
+          onSendMessage("Voice Message", finalImage || undefined, base64Audio);
+          setAttachedImage(null);
+          setInputQuestion('');
         };
+        // Stop all tracks to release microphone
+        stream.getTracks().forEach(track => track.stop());
+      };
 
-        mediaRecorder.onstop = () => {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          const reader = new FileReader();
-          reader.readAsDataURL(audioBlob);
-          reader.onloadend = () => {
-            const base64Audio = reader.result as string;
-            // Automatically send the voice note
-            onSendMessage("Voice Message", attachedImage || undefined, base64Audio);
-            setAttachedImage(null);
-            setInputQuestion('');
-          };
-          // Stop all tracks to release microphone
-          stream.getTracks().forEach(track => track.stop());
-        };
-
-        mediaRecorder.start();
-        setIsRecording(true);
-      } catch (err) {
-        console.error('Microphone error:', err);
-        alert('Could not access the microphone. Please check your permissions.');
-      }
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err: any) {
+      console.error('Microphone error:', err);
+      alert(`Mic Error: ${err.name} - ${err.message}. If this says NotAllowedError, you must open Windows Settings -> Privacy -> Microphone -> 'Allow desktop apps to access your microphone'.`);
     }
   };
 
+  const stopVoiceRecording = () => {
+    if (isRecording && mediaRecorderRef.current) {
+      playBlipSound(soundEnabled);
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const toggleVoiceRecording = () => {
+    if (isRecording) stopVoiceRecording();
+    else startVoiceRecording();
+  };
+
   useEffect(() => {
-    const handleTrigger = () => {
-      toggleVoiceRecording();
+    window.addEventListener('trigger-voice-start', startVoiceRecording);
+    window.addEventListener('trigger-voice-stop', stopVoiceRecording);
+    window.addEventListener('trigger-voice-record', toggleVoiceRecording);
+    return () => {
+      window.removeEventListener('trigger-voice-start', startVoiceRecording);
+      window.removeEventListener('trigger-voice-stop', stopVoiceRecording);
+      window.removeEventListener('trigger-voice-record', toggleVoiceRecording);
     };
-    window.addEventListener('trigger-voice-record', handleTrigger);
-    return () => window.removeEventListener('trigger-voice-record', handleTrigger);
   }, [isRecording, soundEnabled, attachedImage, onSendMessage]);
 
   // Live Screen Capture from Game Window (WebRTC DisplayMedia)
-  const captureGameScreen = async () => {
+  const captureGameScreen = async (): Promise<string | null> => {
     try {
       setIsCapturingScreen(true);
       playSnapSound(soundEnabled);
@@ -183,13 +212,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           playChimeSound(soundEnabled);
         }
         setIsCapturingScreen(false);
-        return;
+        return dataUrl || null;
       }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
         setIsCapturingScreen(false);
         alert("Screen capture is not supported in this desktop container. Please take a screenshot and paste it here using Ctrl+V.");
-        return;
+        return null;
       }
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -211,13 +240,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       });
       await new Promise(r => setTimeout(r, 300));
       
+      let dataUrl = null;
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth || 1280;
       canvas.height = video.videoHeight || 720;
       const ctx = canvas.getContext('2d');
       if (ctx && video.videoWidth > 0) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setAttachedImage(dataUrl);
         playChimeSound(soundEnabled);
       }
@@ -225,9 +255,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       stream.getTracks().forEach(track => track.stop());
       if (video.parentNode) video.parentNode.removeChild(video);
       setIsCapturingScreen(false);
+      return dataUrl;
     } catch (err) {
       console.error('Screen capture cancelled or failed:', err);
       setIsCapturingScreen(false);
+      return null;
     }
   };
 

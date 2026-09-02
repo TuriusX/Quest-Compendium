@@ -50,6 +50,8 @@ authServer.listen(0, '127.0.0.1', () => {
 // Disable features that break Firebase Auth popups (legacy)
 app.commandLine.appendSwitch('disable-site-isolation-trials');
 app.commandLine.appendSwitch('disable-features', 'CrossOriginOpenerPolicy');
+app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+
 app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 let isAppVisible = true;
@@ -180,6 +182,106 @@ function createWindow() {
   mainWindow.loadURL('http://localhost:3000');
 }
 
+
+let xinput = null;
+if (process.platform === 'win32') {
+  try {
+    const koffi = require('koffi');
+    koffi.alias('WORD', 'uint16');
+    koffi.alias('DWORD', 'uint32');
+    koffi.alias('BYTE', 'uint8');
+    koffi.alias('SHORT', 'int16');
+    koffi.alias('WCHAR', 'char16_t');
+    xinput = require('xinput-ffi');
+  } catch(e) { console.error("xinput-ffi load error", e); }
+}
+
+let currentVoiceShortcut = null;
+let currentHideAppShortcut = null;
+
+const XINPUT_MAP = {
+  '4': { type: 'button', name: 'XINPUT_GAMEPAD_LEFT_SHOULDER' },
+  '5': { type: 'button', name: 'XINPUT_GAMEPAD_RIGHT_SHOULDER' },
+  '6': { type: 'trigger', name: 'bLeftTrigger' },
+  '7': { type: 'trigger', name: 'bRightTrigger' },
+  '8': { type: 'button', name: 'XINPUT_GAMEPAD_BACK' },
+  '9': { type: 'button', name: 'XINPUT_GAMEPAD_START' },
+  '10': { type: 'button', name: 'XINPUT_GAMEPAD_LEFT_THUMB' },
+  '11': { type: 'button', name: 'XINPUT_GAMEPAD_RIGHT_THUMB' },
+  '12': { type: 'button', name: 'XINPUT_GAMEPAD_DPAD_UP' },
+  '13': { type: 'button', name: 'XINPUT_GAMEPAD_DPAD_DOWN' },
+  '14': { type: 'button', name: 'XINPUT_GAMEPAD_DPAD_LEFT' },
+  '15': { type: 'button', name: 'XINPUT_GAMEPAD_DPAD_RIGHT' }
+};
+
+function isXinputComboPressed(comboStr, gamepad) {
+  if (!comboStr || comboStr === 'disabled' || !comboStr.includes('+')) return false;
+  try {
+    const parts = comboStr.split('+');
+    for (const part of parts) {
+      const map = XINPUT_MAP[part];
+      if (!map) return false;
+      if (map.type === 'button') {
+        const buttons = Array.isArray(gamepad.wButtons) ? gamepad.wButtons : [];
+        if (!buttons.includes(map.name)) return false;
+      } else if (map.type === 'trigger') {
+        if ((gamepad[map.name] || 0) < 30) return false;
+      }
+    }
+    return true;
+  } catch(e) {
+    console.error("isXinputComboPressed error", e);
+    return false;
+  }
+}
+
+let wasVoicePressed = false;
+let wasHidePressed = false;
+
+async function pollGamepad() {
+  if (!xinput) {
+    setTimeout(pollGamepad, 50);
+    return;
+  }
+  
+  try {
+    let anyVoicePressed = false;
+    let anyHidePressed = false;
+    
+    for (let i = 0; i < 4; i++) {
+      try {
+        const state = await xinput.getState(i);
+        const gamepad = state.gamepad;
+        
+        if (isXinputComboPressed(currentVoiceShortcut, gamepad)) anyVoicePressed = true;
+        if (isXinputComboPressed(currentHideAppShortcut, gamepad)) anyHidePressed = true;
+      } catch(e) {
+        // Controller not connected at this index
+      }
+    }
+
+    if (anyVoicePressed && !wasVoicePressed) {
+      if (mainWindow) mainWindow.webContents.send('trigger-voice-input-start');
+    } else if (!anyVoicePressed && wasVoicePressed) {
+      if (mainWindow) mainWindow.webContents.send('trigger-voice-input-stop');
+    }
+    wasVoicePressed = anyVoicePressed;
+
+    if (anyHidePressed && !wasHidePressed) {
+      if (isAppVisible) slideOut(); else slideIn();
+    }
+    wasHidePressed = anyHidePressed;
+  } catch (err) {
+    console.error("pollGamepad fatal error:", err);
+  }
+
+  setTimeout(pollGamepad, 50);
+}
+
+if (process.platform === 'win32') {
+  setTimeout(pollGamepad, 50);
+}
+
 app.whenReady().then(() => {
   // Setup System Tray
   const iconPath = path.join(__dirname, isDev ? '../public/book.png' : '../dist/book.png');
@@ -253,6 +355,8 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('update-shortcuts', (event, shortcuts) => {
+    currentVoiceShortcut = shortcuts.controllerVoiceShortcut;
+    currentHideAppShortcut = shortcuts.controllerHideAppShortcut;
     globalShortcut.unregisterAll();
     
     if (shortcuts.hideAppShortcut) {
@@ -416,7 +520,9 @@ ipcMain.handle('take-screenshot', async () => {
     });
     const primaryScreen = sources[0]; 
     if (primaryScreen) {
-      base64Image = primaryScreen.thumbnail.toDataURL();
+      // Use JPEG with 80% quality to drastically reduce payload size for the AI
+      const buffer = primaryScreen.thumbnail.toJPEG(80);
+      base64Image = 'data:image/jpeg;base64,' + buffer.toString('base64');
     }
   } catch (error) {
     console.error('Screenshot failed:', error);
