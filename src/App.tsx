@@ -22,7 +22,6 @@ import { AuthModal } from './components/AuthModal';
 import { PaywallModal } from './components/PaywallModal';
 import { RenameModal } from './components/RenameModal';
 import { useCloudSync } from './hooks/useCloudSync';
-import { useGamepadShortcuts } from './hooks/useGamepadShortcuts';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -38,8 +37,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   customApiKey: '',
   hideAppShortcut: 'CmdOrCtrl+Shift+H',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
-  controllerVoiceShortcut: '4+8', // LB + Select
-  controllerHideAppShortcut: '5+9', // RB + Start
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
@@ -164,21 +161,6 @@ export default function App() {
   }
 
 
-  useGamepadShortcuts(
-    settings.controllerVoiceShortcut,
-    settings.controllerHideAppShortcut,
-    () => {
-      window.dispatchEvent(new CustomEvent('trigger-voice-start'));
-    },
-    () => {
-      window.dispatchEvent(new CustomEvent('trigger-voice-stop'));
-    },
-    () => {
-      if ((window as any).electronAPI?.toggleSlide) {
-        (window as any).electronAPI.toggleSlide();
-      }
-    }
-  );
   // Global focus fix for Electron webview stealing focus
   useEffect(() => {
     const handleAppInteraction = (e: Event) => {
@@ -237,15 +219,11 @@ export default function App() {
       (window as any).electronAPI.updateShortcuts({
         hideAppShortcut: settings.hideAppShortcut,
         voiceInputShortcut: settings.voiceInputShortcut,
-        controllerVoiceShortcut: settings.controllerVoiceShortcut,
-        controllerHideAppShortcut: settings.controllerHideAppShortcut
       });
     }
   }, [
     settings.hideAppShortcut, 
     settings.voiceInputShortcut, 
-    settings.controllerVoiceShortcut, 
-    settings.controllerHideAppShortcut
   ]);
 
   useEffect(() => {

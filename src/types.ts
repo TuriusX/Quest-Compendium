@@ -89,6 +89,4 @@ export interface AppSettings {
   openAiApiKey?: string;
   hideAppShortcut: string;
   voiceInputShortcut: string;
-  controllerVoiceShortcut: string;
-  controllerHideAppShortcut: string;
 }

@@ -187,105 +187,6 @@ function createWindow() {
 }
 
 
-let xinput = null;
-if (process.platform === 'win32') {
-  try {
-    const koffi = require('koffi');
-    try { koffi.alias('WORD', 'uint16'); } catch(e){}
-    try { koffi.alias('DWORD', 'uint32'); } catch(e){}
-    try { koffi.alias('BYTE', 'uint8'); } catch(e){}
-    try { koffi.alias('SHORT', 'int16'); } catch(e){}
-    try { koffi.alias('WCHAR', 'char16_t'); } catch(e){}
-    xinput = require('xinput-ffi');
-  } catch(e) { console.error("xinput-ffi load error", e); }
-}
-
-let currentVoiceShortcut = null;
-let currentHideAppShortcut = null;
-
-const XINPUT_MAP = {
-  '4': { type: 'button', name: 'XINPUT_GAMEPAD_LEFT_SHOULDER' },
-  '5': { type: 'button', name: 'XINPUT_GAMEPAD_RIGHT_SHOULDER' },
-  '6': { type: 'trigger', name: 'bLeftTrigger' },
-  '7': { type: 'trigger', name: 'bRightTrigger' },
-  '8': { type: 'button', name: 'XINPUT_GAMEPAD_BACK' },
-  '9': { type: 'button', name: 'XINPUT_GAMEPAD_START' },
-  '10': { type: 'button', name: 'XINPUT_GAMEPAD_LEFT_THUMB' },
-  '11': { type: 'button', name: 'XINPUT_GAMEPAD_RIGHT_THUMB' },
-  '12': { type: 'button', name: 'XINPUT_GAMEPAD_DPAD_UP' },
-  '13': { type: 'button', name: 'XINPUT_GAMEPAD_DPAD_DOWN' },
-  '14': { type: 'button', name: 'XINPUT_GAMEPAD_DPAD_LEFT' },
-  '15': { type: 'button', name: 'XINPUT_GAMEPAD_DPAD_RIGHT' }
-};
-
-function isXinputComboPressed(comboStr, gamepad) {
-  if (!comboStr || comboStr === 'disabled' || !comboStr.includes('+')) return false;
-  try {
-    const parts = comboStr.split('+');
-    for (const part of parts) {
-      const map = XINPUT_MAP[part];
-      if (!map) return false;
-      if (map.type === 'button') {
-        const buttons = Array.isArray(gamepad.wButtons) ? gamepad.wButtons : [];
-        if (!buttons.includes(map.name)) return false;
-      } else if (map.type === 'trigger') {
-        if ((gamepad[map.name] || 0) < 30) return false;
-      }
-    }
-    return true;
-  } catch(e) {
-    console.error("isXinputComboPressed error", e);
-    return false;
-  }
-}
-
-let wasVoicePressed = false;
-let wasHidePressed = false;
-
-async function pollGamepad() {
-  if (!xinput) {
-    setTimeout(pollGamepad, 50);
-    return;
-  }
-  
-  try {
-    let anyVoicePressed = false;
-    let anyHidePressed = false;
-    
-    for (let i = 0; i < 4; i++) {
-      try {
-        const state = await xinput.getState(i);
-        const gamepad = state.gamepad;
-        
-        if (isXinputComboPressed(currentVoiceShortcut, gamepad)) anyVoicePressed = true;
-        if (isXinputComboPressed(currentHideAppShortcut, gamepad)) anyHidePressed = true;
-      } catch(e) {
-        // Controller not connected at this index
-      }
-    }
-
-    if (anyVoicePressed && !wasVoicePressed) {
-      if (mainWindow) mainWindow.webContents.send('trigger-voice-input-start');
-    } else if (!anyVoicePressed && wasVoicePressed) {
-      if (mainWindow) mainWindow.webContents.send('trigger-voice-input-stop');
-    }
-    wasVoicePressed = anyVoicePressed;
-
-    if (anyHidePressed && !wasHidePressed) {
-      if (isAppVisible) slideOut(); else slideIn();
-    }
-    wasHidePressed = anyHidePressed;
-  } catch (err) {
-    console.error("pollGamepad fatal error:", err);
-  }
-
-  setTimeout(pollGamepad, 50);
-}
-
-if (process.platform === 'win32') {
-  setTimeout(pollGamepad, 50);
-}
-
 app.whenReady().then(() => {
   // Setup System Tray
   const iconPath = path.join(__dirname, isDev ? '../public/book.png' : '../dist/book.png');
@@ -359,8 +260,6 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('update-shortcuts', (event, shortcuts) => {
-    currentVoiceShortcut = shortcuts.controllerVoiceShortcut;
-    currentHideAppShortcut = shortcuts.controllerHideAppShortcut;
     globalShortcut.unregisterAll();
     
     // Always ensure a fallback shortcut exists

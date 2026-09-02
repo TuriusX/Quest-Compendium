@@ -23,15 +23,13 @@
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "firebase": "^12.18.0",
-    "koffi": "^2.16.3",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "vite": "^6.2.3",
-    "xinput-ffi": "^4.0.2",
+    
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
@@ -48,6 +46,7 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
+    
     "wait-on": "^9.1.0"
   },
   "main": "electron/main.cjs",

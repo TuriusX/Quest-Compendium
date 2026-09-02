@@ -383,45 +383,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
-                    <Gamepad className="w-4 h-4 text-[var(--accent-color)]" />
-                    <span>Controller Shortcuts</span>
-                  </label>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] text-zinc-400 mb-1">Slide App In/Out</label>
-                      <select
-                        value={settings.controllerHideAppShortcut || 'disabled'}
-                        onChange={(e) => onUpdateSettings({ controllerHideAppShortcut: e.target.value })}
-                        className="w-full bg-black/60 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-[var(--accent-border)] cursor-pointer font-mono"
-                      >
-                        {controllerButtons.map(btn => (
-                          <option key={btn.id} value={btn.id} className="bg-zinc-900 text-white">
-                            {btn.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-zinc-400 mb-1">Trigger Voice Input</label>
-                      <select
-                        value={settings.controllerVoiceShortcut || 'disabled'}
-                        onChange={(e) => onUpdateSettings({ controllerVoiceShortcut: e.target.value })}
-                        className="w-full bg-black/60 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-[var(--accent-border)] cursor-pointer font-mono"
-                      >
-                        {controllerButtons.map(btn => (
-                          <option key={btn.id} value={btn.id} className="bg-zinc-900 text-white">
-                            {btn.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <p className="text-[11px] text-zinc-400 leading-relaxed">
-                      Map these to unused controller buttons (like Select or Start). Triggers instantly when pressed.
-                    </p>
-                  </div>
-                </div>
+                
               </div>
             )}
 
