@@ -303,15 +303,24 @@ async function startServer() {
       const ai = getGeminiClient(customApiKey);
 
       // Persona & Mode System Instructions
-      let systemInstruction = `You are the magical, omniscient gaming tome "Quest Compendium", an expert PC gaming companion, insightful analyst, and walkthrough strategist.
-Your purpose is to give thorough, highly accurate, puzzle-solving, build-optimizing, and progression-guiding advice for video games.
-When analyzing images (screenshots, game captures, inventory screens, maps, boss fights, skill trees), examine UI numbers, health bars, inventory slots, minimap markers, and environmental clues precisely.`;
+      let systemInstruction = '';
 
-      if (aiMode === 'minmax') {
-        systemInstruction += `\n\n[MODE: MIN/MAX 100% COMPLETION]\nGuide the player toward optimal efficiency, 100% trophy/achievement completion, and top-tier build configurations. Do not use fluff or excessive roleplay. Use clear bullet points, stat breakpoints, missable item warnings, and optimized progression routes.`;
-      } else if (aiMode === 'roleplay') {
-        systemInstruction += `\n\n[MODE: IMMERSIVE ROLEPLAY]\nAdopt an authentic in-universe companion persona matching the active game genre (e.g. wise ancient Archmage for fantasy RPGs, witty onboard navigational construct for sci-fi/cyberpunk, cunning rogue for stealth games, or cryptic Dungeon Master). Stay in character while keeping all puzzle solutions, mechanical guidance, and advice 100% accurate and actionable.`;
+      if (aiMode === 'roleplay') {
+        systemInstruction = `You are a dynamic, in-universe gaming companion. Your persona must seamlessly adapt to match the genre and world of the active game (e.g., a wise ancient Archmage for fantasy RPGs, a witty AI navigational construct for sci-fi/cyberpunk, a tactical handler for military shooters, or a cryptic Dungeon Master).
+
+CRITICAL RULE: NEVER refer to yourself as a "book", a "compendium", "tome", "pages", or an "AI assistant". You are a living entity, character, or construct within the game's universe. Fully commit to the roleplay.
+
+Stay in character 100% of the time, while ensuring all puzzle solutions, mechanical guidance, and gameplay advice remain perfectly accurate, clear, and actionable.`;
+      } else {
+        systemInstruction = `You are "Quest Compendium", an expert PC gaming companion, insightful analyst, and walkthrough strategist.
+Your purpose is to give thorough, highly accurate, puzzle-solving, build-optimizing, and progression-guiding advice for video games.`;
+
+        if (aiMode === 'minmax') {
+          systemInstruction += `\n\n[MODE: MIN/MAX 100% COMPLETION]\nGuide the player toward optimal efficiency, 100% trophy/achievement completion, and top-tier build configurations. Do not use fluff or excessive roleplay. Use clear bullet points, stat breakpoints, missable item warnings, and optimized progression routes.`;
+        }
       }
+
+      systemInstruction += `\n\nWhen analyzing images (screenshots, game captures, inventory screens, maps, boss fights, skill trees), examine UI numbers, health bars, inventory slots, minimap markers, and environmental clues precisely.`;
 
       // Situational Game Context
       let situationalContext = '';
@@ -449,7 +458,7 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
 
         const response = await Promise.race([primaryCall, timeoutPromise]) as any;
 
-        responseText = response.text || 'The Compendium pondered the riddle, but no runes formed. Please try asking again.';
+        responseText = response.text || 'No response received. Please try asking again.';
       } catch (primaryErr: any) {
         console.log('Gemini 3.1 Pro Preview query issue or timeout, attempting fallback. Reason:', primaryErr?.message);
         
@@ -459,10 +468,10 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
             model: 'gemini-3.7-flash',
             contents: [{ parts: currentParts }],
             config: {
-              systemInstruction: "You are the Quest Compendium game guide assistant.",
+              systemInstruction,
             }
           });
-          responseText = retryResponse.text || 'Quest Compendium provided insights.';
+          responseText = retryResponse.text || 'No response received.';
           modelUsed = 'Gemini 3.7 Flash (Fallback)';
         } catch (fallbackErr: any) {
           console.log('Gemini 3.7 Flash fallback failed, attempting emergency fallback to 3.6 Flash. Reason:', fallbackErr?.message);
@@ -472,15 +481,15 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
               model: 'gemini-3.6-flash',
               contents: [{ parts: currentParts }],
               config: {
-                systemInstruction: "You are the Quest Compendium game guide assistant.",
+                systemInstruction,
               }
             });
-            responseText = emergencyResponse.text || 'Quest Compendium provided insights.';
+            responseText = emergencyResponse.text || 'No response received.';
             modelUsed = 'Gemini 3.6 Flash (Emergency Fallback)';
           } catch (emergencyErr: any) {
             console.log('Emergency fallback to 3.6 Flash also failed. Service is currently unavailable.');
-            responseText = 'The Compendium is currently overwhelmed by magical interference (high demand). Please try again in a moment.';
-            modelUsed = 'Compendium Offline';
+            responseText = 'Connection error or high demand. Please try again in a moment.';
+            modelUsed = 'Offline / Unavailable';
           }
         }
       }
@@ -493,7 +502,7 @@ When analyzing images (screenshots, game captures, inventory screens, maps, boss
     } catch (err: any) {
       console.error('API /api/chat error:', err);
       return res.status(500).json({
-        error: err?.message || 'Failed to consult the Quest Compendium.'
+        error: err?.message || 'Failed to generate response.'
       });
     }
   });

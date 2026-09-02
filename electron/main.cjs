@@ -150,7 +150,7 @@ function slideOut() {
 function createWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
   const screenWidth = primaryDisplay.workAreaSize.width;
-  const windowWidth = 450;
+  const windowWidth = 550;
   
   mainWindow = new BrowserWindow({
     width: windowWidth,
