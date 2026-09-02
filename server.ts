@@ -304,8 +304,9 @@ async function startServer() {
 
       // Persona & Mode System Instructions
       let systemInstruction = '';
+      const isGameDetected = !!activeGame;
 
-      if (aiMode === 'roleplay') {
+      if (aiMode === 'roleplay' && isGameDetected) {
         systemInstruction = `You are a dynamic, in-universe gaming companion. Your persona must seamlessly adapt to match the genre and world of the active game (e.g., a wise ancient Archmage for fantasy RPGs, a witty AI navigational construct for sci-fi/cyberpunk, a tactical handler for military shooters, or a cryptic Dungeon Master).
 
 CRITICAL RULE: NEVER refer to yourself as a "book", a "compendium", "tome", "pages", or an "AI assistant". You are a living entity, character, or construct within the game's universe. Fully commit to the roleplay.

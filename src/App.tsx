@@ -196,15 +196,19 @@ export default function App() {
 
   useEffect(() => {
     if ((window as any).electronAPI?.resizeWindow) {
-      const baseWidth = 450;
+      const baseWidth = 550;
       
       let totalWidth = baseWidth;
       if (isSidebarOpen) totalWidth += sidebarWidth;
       if (isAchDrawerOpen) totalWidth += achDrawerWidth;
 
+      if (isSettingsOpen) {
+        totalWidth = Math.max(totalWidth, 850);
+      }
+
       (window as any).electronAPI.resizeWindow(totalWidth);
     }
-  }, [isSidebarOpen, isAchDrawerOpen, sidebarWidth, achDrawerWidth]);
+  }, [isSidebarOpen, isAchDrawerOpen, sidebarWidth, achDrawerWidth, isSettingsOpen]);
 
   // Sync Dock Position to Electron
   useEffect(() => {
