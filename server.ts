@@ -1,6 +1,5 @@
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from '@google/genai';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
@@ -591,6 +590,7 @@ Provide clear, direct answers without adopting any specific character, persona, 
 
   // --- Vite Middleware for Development / Static in Production ---
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
