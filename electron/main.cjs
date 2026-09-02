@@ -241,7 +241,7 @@ app.whenReady().then(() => {
   if (!isDev) {
     const serverPath = path.join(__dirname, '../dist/server.cjs');
     serverProcess = spawn(process.execPath, [serverPath], {
-      env: { ...process.env, NODE_ENV: 'production', PORT: 3000 }
+      env: { ...process.env, NODE_ENV: 'production', PORT: 3000, ELECTRON_RUN_AS_NODE: '1' }
     });
     serverProcess.stdout.on('data', (data) => console.log(`Server: ${data}`));
     serverProcess.stderr.on('data', (data) => console.error(`Server Error: ${data}`));
