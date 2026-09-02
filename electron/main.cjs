@@ -465,11 +465,7 @@ ipcMain.on('open-settings-window', () => {
     autoHideMenuBar: true
   });
 
-  if (app.isPackaged) {
-    settingsWindow.loadFile(path.join(__dirname, '../dist/index.html'), { hash: 'settings' });
-  } else {
-    settingsWindow.loadURL('http://localhost:3000/#settings');
-  }
+  settingsWindow.loadURL('http://localhost:3000/#settings');
 
   settingsWindow.on('closed', () => {
     settingsWindow = null;
