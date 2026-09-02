@@ -88,22 +88,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const controllerButtons = [
     { id: 'disabled', name: 'Disabled' },
-    { id: '0', name: 'A / Cross' },
-    { id: '1', name: 'B / Circle' },
-    { id: '2', name: 'X / Square' },
-    { id: '3', name: 'Y / Triangle' },
-    { id: '4', name: 'LB / L1' },
-    { id: '5', name: 'RB / R1' },
-    { id: '6', name: 'LT / L2' },
-    { id: '7', name: 'RT / R2' },
-    { id: '8', name: 'Select / Share / Back' },
-    { id: '9', name: 'Start / Options' },
-    { id: '10', name: 'L3 (Left Stick Click)' },
-    { id: '11', name: 'R3 (Right Stick Click)' },
-    { id: '12', name: 'D-Pad Up' },
-    { id: '13', name: 'D-Pad Down' },
-    { id: '14', name: 'D-Pad Left' },
-    { id: '15', name: 'D-Pad Right' },
+    { id: '4+8', name: 'LB + Select (Back/Share)' },
+    { id: '5+9', name: 'RB + Start (Options)' },
+    { id: '4+5', name: 'LB + RB (L1 + R1)' },
+    { id: '6+7', name: 'LT + RT (L2 + R2)' },
+    { id: '8+9', name: 'Select + Start (Back + Options)' },
+    { id: '10+11', name: 'L3 + R3 (Click Both Sticks)' },
+    { id: '4+12', name: 'LB + D-Pad Up' },
+    { id: '4+13', name: 'LB + D-Pad Down' },
+    { id: '4+14', name: 'LB + D-Pad Left' },
+    { id: '4+15', name: 'LB + D-Pad Right' },
   ];
 
   const tabs: { id: TabId; label: string; icon: React.FC<any> }[] = [

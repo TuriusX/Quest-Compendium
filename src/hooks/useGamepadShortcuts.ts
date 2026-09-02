@@ -1,15 +1,37 @@
 import { useEffect, useRef } from 'react';
 
 export function useGamepadShortcuts(
-  voiceShortcutIndex: string,
-  hideAppShortcutIndex: string,
+  voiceShortcutCombo: string, // e.g. "4+5" or "8+9"
+  hideAppShortcutCombo: string,
   onVoiceTrigger: () => void,
   onHideAppTrigger: () => void
 ) {
   const previousButtonsRef = useRef<boolean[][]>([]);
+  const hasConnectedRef = useRef(false);
 
   useEffect(() => {
+    const handleConnect = (e: GamepadEvent) => {
+      console.log('Gamepad connected:', e.gamepad.id);
+      hasConnectedRef.current = true;
+    };
+    window.addEventListener('gamepadconnected', handleConnect);
+
     let animationFrameId: number;
+
+    const checkCombo = (comboStr: string, currentButtons: boolean[], previousButtons: boolean[]) => {
+      if (!comboStr || comboStr === 'disabled' || !comboStr.includes('+')) return false;
+      const parts = comboStr.split('+').map(p => parseInt(p, 10));
+      if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) return false;
+      
+      const b1 = parts[0];
+      const b2 = parts[1];
+      
+      // True if both are currently pressed, and at least one wasn't pressed last frame
+      const bothPressedNow = currentButtons[b1] && currentButtons[b2];
+      const bothPressedBefore = previousButtons[b1] && previousButtons[b2];
+      
+      return bothPressedNow && !bothPressedBefore;
+    };
 
     const pollGamepads = () => {
       const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -17,24 +39,21 @@ export function useGamepadShortcuts(
       for (let i = 0; i < gamepads.length; i++) {
         const gp = gamepads[i];
         if (!gp) continue;
+        if (!hasConnectedRef.current) {
+           hasConnectedRef.current = true; // Mark as connected if we found one
+        }
 
         const previousButtons = previousButtonsRef.current[i] || [];
         const currentButtons = gp.buttons.map(b => b.pressed);
 
         // Check voice shortcut
-        if (voiceShortcutIndex !== '' && voiceShortcutIndex !== 'disabled') {
-          const vIndex = parseInt(voiceShortcutIndex, 10);
-          if (!isNaN(vIndex) && currentButtons[vIndex] && !previousButtons[vIndex]) {
-            onVoiceTrigger();
-          }
+        if (checkCombo(voiceShortcutCombo, currentButtons, previousButtons)) {
+          onVoiceTrigger();
         }
 
         // Check hide app shortcut
-        if (hideAppShortcutIndex !== '' && hideAppShortcutIndex !== 'disabled') {
-          const hIndex = parseInt(hideAppShortcutIndex, 10);
-          if (!isNaN(hIndex) && currentButtons[hIndex] && !previousButtons[hIndex]) {
-            onHideAppTrigger();
-          }
+        if (checkCombo(hideAppShortcutCombo, currentButtons, previousButtons)) {
+          onHideAppTrigger();
         }
 
         previousButtonsRef.current[i] = currentButtons;
@@ -46,7 +65,8 @@ export function useGamepadShortcuts(
     animationFrameId = requestAnimationFrame(pollGamepads);
 
     return () => {
+      window.removeEventListener('gamepadconnected', handleConnect);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [voiceShortcutIndex, hideAppShortcutIndex, onVoiceTrigger, onHideAppTrigger]);
+  }, [voiceShortcutCombo, hideAppShortcutCombo, onVoiceTrigger, onHideAppTrigger]);
 }

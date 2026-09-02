@@ -38,8 +38,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   customApiKey: '',
   hideAppShortcut: 'CmdOrCtrl+Shift+H',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
-  controllerVoiceShortcut: '8', // 8 is usually Select/Share/Back
-  controllerHideAppShortcut: '9', // 9 is usually Start/Options
+  controllerVoiceShortcut: '4+8', // LB + Select
+  controllerHideAppShortcut: '5+9', // RB + Start
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {

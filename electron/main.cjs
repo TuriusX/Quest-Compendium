@@ -201,6 +201,14 @@ app.whenReady().then(() => {
     }
   });
   const { session } = require('electron');
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(true);
+  });
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    return true;
+  });
+
   // Initialize AdBlocker for the webview partition
   const { ElectronBlocker } = require('@ghostery/adblocker-electron');
   const fetch = require('cross-fetch');
