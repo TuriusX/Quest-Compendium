@@ -163,6 +163,22 @@ export default function App() {
     activeGame = null;
   }
 
+
+  useGamepadShortcuts(
+    settings.controllerVoiceShortcut,
+    settings.controllerHideAppShortcut,
+    () => {
+      window.dispatchEvent(new CustomEvent('trigger-voice-start'));
+    },
+    () => {
+      window.dispatchEvent(new CustomEvent('trigger-voice-stop'));
+    },
+    () => {
+      if ((window as any).electronAPI?.toggleSlide) {
+        (window as any).electronAPI.toggleSlide();
+      }
+    }
+  );
   // Global focus fix for Electron webview stealing focus
   useEffect(() => {
     const handleAppInteraction = (e: Event) => {

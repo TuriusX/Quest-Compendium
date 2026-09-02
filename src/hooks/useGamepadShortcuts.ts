@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
 
 export function useGamepadShortcuts(
-  voiceShortcutCombo: string, // e.g. "4+5" or "8+9"
+  voiceShortcutCombo: string,
   hideAppShortcutCombo: string,
-  onVoiceTrigger: () => void,
+  onVoiceStart: () => void,
+  onVoiceStop: () => void,
   onHideAppTrigger: () => void
 ) {
   const previousButtonsRef = useRef<boolean[][]>([]);
@@ -72,5 +73,5 @@ export function useGamepadShortcuts(
       window.removeEventListener('gamepadconnected', handleConnect);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [voiceShortcutCombo, hideAppShortcutCombo, onVoiceTrigger, onHideAppTrigger]);
+  }, [voiceShortcutCombo, hideAppShortcutCombo, onVoiceStart, onVoiceStop, onHideAppTrigger]);
 }
