@@ -239,12 +239,10 @@ app.whenReady().then(() => {
   });
 
   if (!isDev) {
+    process.env.NODE_ENV = 'production';
+    process.env.PORT = '3000';
     const serverPath = path.join(__dirname, '../dist/server.cjs');
-    serverProcess = spawn(process.execPath, [serverPath], {
-      env: { ...process.env, NODE_ENV: 'production', PORT: 3000, ELECTRON_RUN_AS_NODE: '1' }
-    });
-    serverProcess.stdout.on('data', (data) => console.log(`Server: ${data}`));
-    serverProcess.stderr.on('data', (data) => console.error(`Server Error: ${data}`));
+    require(serverPath);
     setTimeout(createWindow, 1000);
   } else {
     createWindow();
