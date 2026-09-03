@@ -81,6 +81,7 @@ export interface AppSettings {
   soundEnabled: boolean;
   dockPosition: DockPosition;
   windowOpacity: number;
+  uiScale?: number;
   steamId: string;
   steamName?: string;
   steamAvatar?: string;

@@ -11,6 +11,10 @@ let tray = null;
 
 let localAuthPort = null;
 
+let currentUiScale = 1.0;
+let baseLogicalWidth = 550;
+let baseLogicalHeight = 800;
+
 // Auth Server
 const authServer = http.createServer((req, res) => {
   // CORS Preflight
@@ -360,26 +364,63 @@ ipcMain.on('start-desktop-login', () => {
   shell.openExternal(`https://ais-dev-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app/desktop-login?port=${localAuthPort}`);
 });
 
+ipcMain.on('set-ui-scale', (event, scale) => {
+  currentUiScale = scale;
+  if (mainWindow) {
+    mainWindow.webContents.setZoomFactor(scale);
+    const bounds = mainWindow.getBounds();
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const screenWidth = primaryDisplay.workAreaSize.width;
+    const sHeight = primaryDisplay.workAreaSize.height;
+
+    const newWidth = Math.round(baseLogicalWidth * scale);
+    const newHeight = Math.round(baseLogicalHeight * scale);
+
+    let newX = bounds.x;
+    let newY = bounds.y;
+
+    if (currentDockPosition === 'top-right' || currentDockPosition === 'bottom-right') {
+      newX = screenWidth - newWidth;
+    } else if (currentDockPosition === 'top-left' || currentDockPosition === 'bottom-left') {
+      newX = 0;
+    }
+
+    if (currentDockPosition === 'top-right' || currentDockPosition === 'top-left') {
+      newY = 0;
+    } else if (currentDockPosition === 'bottom-right' || currentDockPosition === 'bottom-left') {
+      newY = sHeight - newHeight;
+    }
+
+    mainWindow.setBounds({
+      x: newX,
+      y: newY,
+      width: newWidth,
+      height: newHeight
+    });
+  }
+});
+
 ipcMain.on('resize-window', (event, width) => {
+  baseLogicalWidth = width;
   if (mainWindow) {
     const bounds = mainWindow.getBounds();
     const primaryDisplay = screen.getPrimaryDisplay();
     const screenWidth = primaryDisplay.workAreaSize.width;
+    const scaledWidth = Math.round(width * currentUiScale);
+    const scaledHeight = Math.round(baseLogicalHeight * currentUiScale);
     
     let newX = bounds.x;
-    // Keep edge anchored
     if (currentDockPosition === 'top-right' || currentDockPosition === 'bottom-right') {
-      newX = screenWidth - width;
+      newX = screenWidth - scaledWidth;
     } else if (currentDockPosition === 'top-left' || currentDockPosition === 'bottom-left') {
       newX = 0;
     }
-    // if undocked, maybe we just expand to the right. Or keep x the same.
     
     mainWindow.setBounds({
       x: newX,
       y: bounds.y,
-      width: width,
-      height: bounds.height
+      width: scaledWidth,
+      height: scaledHeight
     });
   }
 });

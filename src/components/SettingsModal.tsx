@@ -262,6 +262,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
+                {/* UI Scale */}
+                <div className="space-y-2.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+                    <Monitor className="w-4 h-4 text-[var(--accent-color)]" />
+                    <span>App UI Scale (4K / Display Size)</span>
+                  </label>
+                  <div className="flex items-center gap-3 bg-black/30 border border-white/[0.08] p-3 rounded-xl">
+                    <input 
+                      type="range"
+                      min="50"
+                      max="200"
+                      step="5"
+                      value={(settings.uiScale || 1.0) * 100}
+                      onChange={(e) => {
+                        onUpdateSettings({ uiScale: Number(e.target.value) / 100 });
+                      }}
+                      onMouseUp={() => playBlipSound(soundEnabled)}
+                      className="flex-1 accent-[var(--accent-color)] cursor-pointer h-1.5 bg-white/20 rounded"
+                    />
+                    <span className="font-mono text-zinc-300 w-10 text-right font-bold text-xs">{Math.round((settings.uiScale || 1.0) * 100)}%</span>
+                  </div>
+                </div>
+
                 {/* Sound FX Toggle */}
                 <div className="flex items-center justify-between p-3 rounded-xl bg-black/40 border border-white/[0.08]">
                   <div className="flex items-center gap-2.5">

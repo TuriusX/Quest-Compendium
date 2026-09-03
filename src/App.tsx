@@ -267,6 +267,13 @@ export default function App() {
     }
   }, [settings.dockPosition]);
 
+  // Sync UI Scale to Electron
+  useEffect(() => {
+    if ((window as any).electronAPI?.setUiScale) {
+      (window as any).electronAPI.setUiScale(settings.uiScale || 1.0);
+    }
+  }, [settings.uiScale]);
+
   // Sync Shortcuts to Electron and Listen for triggers
   useEffect(() => {
     if ((window as any).electronAPI?.updateShortcuts) {

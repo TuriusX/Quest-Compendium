@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   getActiveGame: () => ipcRenderer.invoke('get-active-game'),
   startDesktopLogin: () => ipcRenderer.send('start-desktop-login'),
+  setUiScale: (scale) => ipcRenderer.send('set-ui-scale', scale),
   resizeWindow: (width) => ipcRenderer.send('resize-window', width),
   setDockPosition: (pos) => ipcRenderer.send('set-dock-position', pos),
   toggleSlide: () => ipcRenderer.send('toggle-slide'),
