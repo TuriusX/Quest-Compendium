@@ -8,5 +8,8 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+    match /feedback/{feedbackId} {
+      allow create: if request.auth != null;
+    }
   }
 }

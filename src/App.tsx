@@ -22,6 +22,7 @@ import { AuthModal } from './components/AuthModal';
 import { PaywallModal } from './components/PaywallModal';
 import { RenameModal } from './components/RenameModal';
 import { UpdateRequiredModal } from './components/UpdateRequiredModal';
+import { BetaFeedbackModal } from './components/BetaFeedbackModal';
 import { useCloudSync } from './hooks/useCloudSync';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -144,6 +145,7 @@ export default function App() {
   const [isBrowserMode, setIsBrowserMode] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGameSearchOpen, setIsGameSearchOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [renameModalMode, setRenameModalMode] = useState<'create' | 'rename'>('create');
   const [renameModalTabId, setRenameModalTabId] = useState<string | null>(null);
@@ -728,6 +730,7 @@ export default function App() {
             }
           }}
           onOpenGameSearch={() => setIsGameSearchOpen(true)}
+          onOpenFeedback={() => setIsFeedbackOpen(true)}
           fontMenuOpen={fontMenuOpen}
           onToggleFontMenu={() => setFontMenuOpen(!fontMenuOpen)}
           soundEnabled={settings.soundEnabled}
@@ -940,6 +943,8 @@ export default function App() {
         onSelectGame={handleSelectGame}
         soundEnabled={settings.soundEnabled}
       />
+
+      <BetaFeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} user={user} />
 
       {/* Fullscreen Screenshot Examination Modal */}
       <GameScreenModal

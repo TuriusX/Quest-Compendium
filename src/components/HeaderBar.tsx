@@ -35,6 +35,7 @@ interface HeaderBarProps {
   onToggleBrowserMode: () => void;
   onOpenSettings: () => void;
   onOpenGameSearch: () => void;
+  onOpenFeedback: () => void;
   fontMenuOpen: boolean;
   onToggleFontMenu: () => void;
   soundEnabled: boolean;
@@ -57,6 +58,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onToggleBrowserMode,
   onOpenSettings,
   onOpenGameSearch,
+  onOpenFeedback,
   fontMenuOpen,
   onToggleFontMenu,
   soundEnabled,
@@ -188,6 +190,21 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           className="p-2 rounded-xl text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/[0.06] transition-all cursor-pointer"
         >
           <SettingsIcon className="w-4 h-4" />
+        </button>
+
+        {/* Beta Feedback */}
+        <button
+          style={{ WebkitAppRegion: "no-drag" } as any}
+          onClick={() => {
+            playBlipSound(soundEnabled);
+            onOpenFeedback();
+          }}
+          title="Submit Beta Feedback"
+          className="p-2 rounded-xl text-amber-400 hover:text-amber-300 hover:bg-white/[0.06] transition-all cursor-pointer hidden sm:block"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
         </button>
         
         {/* Close Button */}
