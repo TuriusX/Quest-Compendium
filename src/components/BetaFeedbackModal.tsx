@@ -26,7 +26,7 @@ export const BetaFeedbackModal: React.FC<BetaFeedbackModalProps> = ({ isOpen, on
     try {
       await addDoc(collection(db, 'feedback'), {
         userId: user.uid,
-        email: user.email,
+        email: user.email || null,
         type,
         message: message.trim(),
         timestamp: Date.now(),
@@ -39,9 +39,9 @@ export const BetaFeedbackModal: React.FC<BetaFeedbackModalProps> = ({ isOpen, on
         setMessage('');
         setType('general');
       }, 2000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to submit feedback:', error);
-      alert('Failed to submit feedback. Please try again.');
+      alert(`Failed to submit feedback: ${error.message || 'Please try again.'}`);
     } finally {
       setIsSubmitting(false);
     }

@@ -200,11 +200,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             onOpenFeedback();
           }}
           title="Submit Beta Feedback"
-          className="p-2 rounded-xl text-amber-400 hover:text-amber-300 hover:bg-white/[0.06] transition-all cursor-pointer hidden sm:block"
+          className="px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/20 transition-all cursor-pointer hidden sm:flex items-center gap-1.5 text-xs font-bold mr-1"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
+          Beta Feedback
         </button>
         
         {/* Close Button */}
