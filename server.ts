@@ -3,12 +3,17 @@ import path from 'path';
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from '@google/genai';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
+import admin from 'firebase-admin';
 
 dotenv.config();
 
+admin.initializeApp({
+  projectId: "gen-lang-client-0366642934",
+});
+
 // Lazy Gemini AI client initialization with telemetry User-Agent header
-function getGeminiClient(customApiKey?: string): GoogleGenAI {
-  const apiKey = (customApiKey && customApiKey.trim() !== '') ? customApiKey.trim() : process.env.GEMINI_API_KEY;
+function getGeminiClient(): GoogleGenAI {
+  const apiKey = process.env.GEMINI_API_KEY;
   
   if (apiKey) {
     return new GoogleGenAI({
@@ -31,13 +36,30 @@ async function startServer() {
   app.use(express.json({ limit: '25mb' }));
   app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
+  // --- Auth Middleware ---
+  const requireAuth = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+    }
+    const token = authHeader.split('Bearer ')[1];
+    try {
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      (req as any).user = decodedToken;
+      next();
+    } catch (error) {
+      console.error('Error verifying auth token:', error);
+      res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    }
+  };
+
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', hasGeminiKey: Boolean(process.env.GEMINI_API_KEY) });
   });
 
   // --- API: Steam Games Search / Store Lookup ---
-  app.get('/api/steam/search', async (req, res) => {
+  app.get('/api/steam/search', requireAuth, async (req, res) => {
     const query = (req.query.q as string || '').trim();
     if (!query) {
       return res.json({ games: [] });
@@ -284,7 +306,7 @@ async function startServer() {
   });
 
   // --- API: Chat with Quest Compendium & Multimodal Game Vision ---
-  app.post('/api/chat', async (req, res) => {
+  app.post('/api/chat', requireAuth, async (req, res) => {
     try {
       const {
         question,
@@ -294,14 +316,13 @@ async function startServer() {
         activeGame,
         achievements,
         news,
-        customApiKey,
       } = req.body;
 
       if (!question && !imageBase64) {
         return res.status(400).json({ error: 'Question or image is required' });
       }
 
-      const ai = getGeminiClient(customApiKey);
+      const ai = getGeminiClient();
 
       // Persona & Mode System Instructions
       let systemInstruction = '';
@@ -511,9 +532,9 @@ Provide clear, direct answers without adopting any specific character, persona, 
   });
 
   // --- API: Text-to-Speech (TTS) using Gemini Voice ---
-  app.post('/api/tts', async (req, res) => {
+  app.post('/api/tts', requireAuth, async (req, res) => {
     try {
-      const { text, voice = 'nova', openAiApiKey } = req.body;
+      const { text, voice = 'nova' } = req.body;
       if (!text) {
         return res.status(400).json({ error: 'Text is required for speech' });
       }
@@ -526,7 +547,7 @@ Provide clear, direct answers without adopting any specific character, persona, 
         .replace(/\n\s*-\s*/g, '. ')
         .trim();
 
-      const apiKey = openAiApiKey || process.env.OPENAI_API_KEY;
+      const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
         return res.status(500).json({ error: 'OPENAI_API_KEY environment variable is missing.' });
       }

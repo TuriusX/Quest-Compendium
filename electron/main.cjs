@@ -187,7 +187,7 @@ function createWindow() {
     };
   });
 
-  mainWindow.loadURL('http://localhost:3000');
+  mainWindow.loadURL('https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app');
 }
 
 
@@ -243,10 +243,6 @@ app.whenReady().then(() => {
   });
 
   if (!isDev) {
-    process.env.NODE_ENV = 'production';
-    process.env.PORT = '3000';
-    const serverPath = path.join(__dirname, '../dist/server.cjs');
-    require(serverPath);
     setTimeout(createWindow, 1000);
   } else {
     createWindow();
@@ -506,7 +502,7 @@ ipcMain.on('open-settings-window', () => {
     autoHideMenuBar: true
   });
 
-  settingsWindow.loadURL('http://localhost:3000/#settings');
+  settingsWindow.loadURL('https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app/#settings');
 
   settingsWindow.on('closed', () => {
     settingsWindow = null;

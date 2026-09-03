@@ -475,17 +475,21 @@ export default function App() {
     setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, messages: updatedMessages } : t));
     setIsLoadingAi(true);
 
+    const token = user ? await user.getIdToken() : null;
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           question: text,
           history: activeTab.messages,
           imageBase64,
           audioBase64,
           aiMode: settings.aiMode,
-          customApiKey: settings.customApiKey,
           activeGame: activeGame ? {
             name: activeGame.name,
             appId: activeGame.appId,

@@ -27,6 +27,7 @@ import {
   Info
 } from 'lucide-react';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
+import { auth } from '../lib/firebase';
 import { playSnapSound, playChimeSound, playBlipSound } from '../utils/audio';
 
 interface ChatAreaProps {
@@ -380,12 +381,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     try {
       setPlayingAudioId(msgId);
+      
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
 
       // Call server TTS endpoint
       const res = await fetch('/api/tts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice: ttsVoice || 'nova', customApiKey, openAiApiKey }),
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ text, voice: ttsVoice || 'nova' }),
       });
 
       if (res.ok) {
