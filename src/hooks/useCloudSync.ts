@@ -4,6 +4,8 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { AppSettings, GameTab } from '../types';
 
+const APP_VERSION = 1;
+
 export function useCloudSync(
   localSettings: AppSettings,
   localGameTabs: GameTab[],
@@ -11,8 +13,25 @@ export function useCloudSync(
   setLocalGameTabs: (t: GameTab[]) => void
 ) {
   const [user, setUser] = useState<User | null>(null);
-  const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'inactive' | 'loading'>('loading');
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'inactive' | 'beta' | 'loading'>('loading');
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isOutdated, setIsOutdated] = useState(false);
+
+  // App Version Check
+  useEffect(() => {
+    const configRef = doc(db, 'config', 'desktop_client');
+    const unsub = onSnapshot(configRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.minVersion && data.minVersion > APP_VERSION) {
+          setIsOutdated(true);
+        } else {
+          setIsOutdated(false);
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Auth Listener
   useEffect(() => {
@@ -29,7 +48,6 @@ export function useCloudSync(
   // Listen to User Profile (Subscription & Settings Sync)
   useEffect(() => {
     if (!user) return;
-
     const userRef = doc(db, 'users', user.uid);
     
     // First, ensure the document exists, then subscribe
@@ -38,7 +56,7 @@ export function useCloudSync(
       if (!docSnap.exists()) {
         await setDoc(userRef, {
           email: user.email || null,
-          subscriptionStatus: 'inactive',
+          subscriptionStatus: 'beta',
           settings: JSON.parse(JSON.stringify(localSettings)),
           tabs: JSON.parse(JSON.stringify(localGameTabs)),
           updatedAt: Date.now()
@@ -56,7 +74,6 @@ export function useCloudSync(
           const data = docSnap.data();
           setSubscriptionStatus(data.subscriptionStatus || 'inactive');
           setIsInitializing(false);
-
           // Sync cloud down to local state on initial load or remote change
           // For a robust app, we'd use timestamps to resolve conflicts.
           // Keeping it simple here.
@@ -71,12 +88,11 @@ export function useCloudSync(
       isCancelled = true;
       unsubscribe();
     };
-
   }, [user]);
 
   // Sync Local to Cloud whenever settings or tabs change
   useEffect(() => {
-    if (!user || subscriptionStatus !== 'active' || isInitializing) return;
+    if (!user || (subscriptionStatus !== 'active' && subscriptionStatus !== 'beta') || isInitializing) return;
 
     const syncTimeout = setTimeout(() => {
       const userRef = doc(db, 'users', user.uid);
@@ -90,5 +106,5 @@ export function useCloudSync(
     return () => clearTimeout(syncTimeout);
   }, [localSettings, localGameTabs, user, subscriptionStatus, isInitializing]);
 
-  return { user, subscriptionStatus, isInitializing };
+  return { user, subscriptionStatus, isInitializing, isOutdated };
 }

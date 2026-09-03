@@ -21,6 +21,7 @@ import { GameScreenModal } from './components/GameScreenModal';
 import { AuthModal } from './components/AuthModal';
 import { PaywallModal } from './components/PaywallModal';
 import { RenameModal } from './components/RenameModal';
+import { UpdateRequiredModal } from './components/UpdateRequiredModal';
 import { useCloudSync } from './hooks/useCloudSync';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -195,7 +196,7 @@ export default function App() {
     };
   }, [isDraggingSidebar, isDraggingAch]);
 
-  const { user, subscriptionStatus, isInitializing } = useCloudSync(settings, tabs, setSettings, setTabs);
+  const { user, subscriptionStatus, isInitializing, isOutdated } = useCloudSync(settings, tabs, setSettings, setTabs);
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || null;
   
@@ -925,7 +926,10 @@ export default function App() {
       {!isInitializing && !user && (
         <AuthModal onSignInSuccess={() => {}} />
       )}
-      {!isInitializing && user && subscriptionStatus !== 'active' && (
+      {!isInitializing && user && isOutdated && (
+        <UpdateRequiredModal />
+      )}
+      {!isInitializing && user && !isOutdated && subscriptionStatus !== 'active' && subscriptionStatus !== 'beta' && (
         <PaywallModal userId={user.uid} />
       )}
 
