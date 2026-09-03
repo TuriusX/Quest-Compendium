@@ -3,6 +3,8 @@ import { Search, Gamepad2, Plus, Sparkles, X, Trophy, ExternalLink, ChevronRight
 import { SteamGameData } from '../types';
 import { POPULAR_STEAM_GAMES } from '../data/mockGames';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
+import { getApiBaseUrl } from '../utils/api';
+import { auth } from '../lib/firebase';
 
 interface QuickGameSearchModalProps {
   isOpen: boolean;
@@ -41,7 +43,12 @@ export const QuickGameSearchModal: React.FC<QuickGameSearchModalProps> = ({
     if (term.length >= 2) {
       try {
         setIsSearchingOnline(true);
-        const res = await fetch(`/api/steam/search?q=${encodeURIComponent(term)}`);
+        const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+        const res = await fetch(`${getApiBaseUrl()}/api/steam/search?q=${encodeURIComponent(term)}`, {
+          headers: {
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          }
+        });
         if (res.ok) {
           const data = await res.json();
           if (data.games && data.games.length > 0) {

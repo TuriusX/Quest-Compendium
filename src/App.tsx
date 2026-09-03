@@ -23,6 +23,7 @@ import { PaywallModal } from './components/PaywallModal';
 import { RenameModal } from './components/RenameModal';
 import { UpdateRequiredModal } from './components/UpdateRequiredModal';
 import { BetaFeedbackModal } from './components/BetaFeedbackModal';
+import { getApiBaseUrl } from './utils/api';
 import { useCloudSync } from './hooks/useCloudSync';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -397,7 +398,7 @@ export default function App() {
     
     async function fetchProfile() {
       try {
-        const res = await fetch(`/api/steam/profile?steamId=${encodeURIComponent(settings.steamId)}`);
+        const res = await fetch(`${getApiBaseUrl()}/api/steam/profile?steamId=${encodeURIComponent(settings.steamId)}`);
         if (res.ok) {
           const data = await res.json();
           setSettings(prev => ({ 
@@ -420,7 +421,7 @@ export default function App() {
     let isMounted = true;
     const fetchAchievements = async () => {
       try {
-        const res = await fetch(`/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`);
+        const res = await fetch(`${getApiBaseUrl()}/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`);
         if (res.ok) {
           const data = await res.json();
           if (data.achievements && isMounted) {
@@ -478,7 +479,7 @@ export default function App() {
     const token = user ? await user.getIdToken() : null;
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(`${getApiBaseUrl()}/api/chat`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

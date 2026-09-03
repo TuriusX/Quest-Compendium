@@ -187,7 +187,11 @@ function createWindow() {
     };
   });
 
-  mainWindow.loadURL('https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app');
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:3000');
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
 }
 
 
@@ -502,7 +506,11 @@ ipcMain.on('open-settings-window', () => {
     autoHideMenuBar: true
   });
 
-  settingsWindow.loadURL('https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app/#settings');
+  if (isDev) {
+    settingsWindow.loadURL('http://localhost:3000/#settings');
+  } else {
+    settingsWindow.loadFile(path.join(__dirname, '../dist/index.html'), { hash: 'settings' });
+  }
 
   settingsWindow.on('closed', () => {
     settingsWindow = null;

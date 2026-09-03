@@ -4,6 +4,7 @@ import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from '@google
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
 import admin from 'firebase-admin';
+import cors from 'cors';
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.use(cors());
   app.use(express.json({ limit: '25mb' }));
   app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
