@@ -3,12 +3,13 @@ import path from 'path';
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from '@google/genai';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
-import admin from 'firebase-admin';
+import { initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import cors from 'cors';
 
 dotenv.config();
 
-admin.initializeApp({
+initializeApp({
   projectId: "gen-lang-client-0366642934",
 });
 
@@ -46,7 +47,7 @@ async function startServer() {
     }
     const token = authHeader.split('Bearer ')[1];
     try {
-      const decodedToken = await admin.auth().verifyIdToken(token);
+      const decodedToken = await getAuth().verifyIdToken(token);
       (req as any).user = decodedToken;
       next();
     } catch (error) {
