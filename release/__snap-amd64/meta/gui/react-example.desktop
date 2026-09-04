@@ -1,8 +1,0 @@
-[Desktop Entry]
-Name=Quest Compendium
-Exec=react-example %U
-Terminal=false
-Type=Application
-Icon=${SNAP}/meta/gui/icon.png
-StartupWMClass=Quest Compendium
-Categories=Utility;
