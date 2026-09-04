@@ -309,7 +309,7 @@ async function startServer() {
   });
 
   // --- API: Chat with Quest Compendium & Multimodal Game Vision ---
-  app.post('/api/chat', requireAuth, async (req, res) => {
+  app.post('/api/chat', async (req, res) => {
     try {
       const {
         question,
@@ -492,30 +492,35 @@ Provide clear, direct answers without adopting any specific character, persona, 
         try {
           // Fallback retry
           const retryResponse = await ai.models.generateContent({
-            model: 'gemini-3.7-flash',
+            model: 'gemini-3.8-flash',
             contents: [{ parts: currentParts }],
             config: {
               systemInstruction,
             }
           });
           responseText = retryResponse.text || 'No response received.';
-          modelUsed = 'Gemini 3.7 Flash (Fallback)';
+          modelUsed = 'Gemini 3.8 Flash (Fallback)';
         } catch (fallbackErr: any) {
-          console.log('Gemini 3.7 Flash fallback failed, attempting emergency fallback to 3.6 Flash. Reason:', fallbackErr?.message);
+          console.log('Gemini 3.8 Flash fallback failed, attempting emergency fallback to 3.1 Flash Lite. Reason:', fallbackErr?.message);
           
           try {
             const emergencyResponse = await ai.models.generateContent({
-              model: 'gemini-3.6-flash',
+              model: 'gemini-3.1-flash-lite',
               contents: [{ parts: currentParts }],
               config: {
                 systemInstruction,
               }
             });
             responseText = emergencyResponse.text || 'No response received.';
-            modelUsed = 'Gemini 3.6 Flash (Emergency Fallback)';
+            modelUsed = 'Gemini 3.1 Flash Lite (Emergency Fallback)';
           } catch (emergencyErr: any) {
-            console.log('Emergency fallback to 3.6 Flash also failed. Service is currently unavailable.');
-            responseText = 'Connection error or high demand. Please try again in a moment.';
+            console.log('Emergency fallback to 3.1 Flash Lite also failed:', emergencyErr?.message);
+            
+            if (primaryErr?.message?.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || primaryErr?.message?.includes('API_KEY_INVALID') || primaryErr?.message?.includes('UNAUTHENTICATED')) {
+              responseText = 'Error: Invalid Gemini API Key or the Generative Language API is not enabled in your Google Cloud Project. Please verify your API Key in the settings.';
+            } else {
+              responseText = 'Connection error or high demand. Please try again in a moment.';
+            }
             modelUsed = 'Offline / Unavailable';
           }
         }
