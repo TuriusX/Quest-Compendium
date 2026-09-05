@@ -58,8 +58,14 @@
     "directories": {
       "output": "release"
     },
-    "win": {
+    "mac": {
       "icon": "public/app-icon.png"
+    },
+    "linux": {
+      "icon": "public/app-icon.png"
+    },
+    "win": {
+      "icon": "public/app-icon.ico"
     },
     "files": [
       "dist/**/*",
