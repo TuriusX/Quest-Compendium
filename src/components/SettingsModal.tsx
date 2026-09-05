@@ -18,6 +18,7 @@ import {
 import { AppSettings, AiMode, ColorTheme, DockPosition } from '../types';
 import { playBlipSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
+import { getApiBaseUrl } from '../utils/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -439,7 +440,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <button 
                         onClick={() => {
                           playBlipSound(soundEnabled);
-                          const popup = window.open('/api/auth/steam', 'steam_login', 'width=800,height=600');
+                          const popup = window.open(`${getApiBaseUrl()}/api/auth/steam`, 'steam_login', 'width=800,height=600');
                           if (!popup) {
                             alert('Please allow popups to sign in with Steam.');
                           }

@@ -3,7 +3,7 @@ export const getApiBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
     // ----------------------------------------------------------------------------------
     // PRODUCTION CLOUD URL
-    return 'https://quest-compendium-557969397549.us-east1.run.app';
+    return 'https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app';
     // ----------------------------------------------------------------------------------
   }
   // If running in development (localhost:3000) or as a web app on the cloud, use relative paths

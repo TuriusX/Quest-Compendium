@@ -508,6 +508,18 @@ ipcMain.on('open-settings-window', () => {
     icon: path.join(__dirname, '../app-icon.ico')
   });
 
+  settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+        }
+      }
+    };
+  });
+
   if (isDev) {
     settingsWindow.loadURL('http://localhost:3000/#settings');
   } else {
