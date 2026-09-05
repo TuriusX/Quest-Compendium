@@ -793,11 +793,7 @@ export default function App() {
           isBrowserMode={isBrowserMode}
           onToggleBrowserMode={() => setIsBrowserMode(!isBrowserMode)}
           onOpenSettings={() => {
-            if ((window as any).electronAPI?.openSettingsWindow) {
-              (window as any).electronAPI.openSettingsWindow();
-            } else {
-              setIsSettingsOpen(true);
-            }
+            setIsSettingsOpen(true);
           }}
           onOpenGameSearch={() => setIsGameSearchOpen(true)}
           onOpenFeedback={() => setIsFeedbackOpen(true)}
