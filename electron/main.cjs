@@ -163,7 +163,7 @@ function createWindow() {
     y: 0,
     transparent: true,
     frame: false,
-    icon: path.join(__dirname, isDev ? '../public/app-icon.png' : '../dist/app-icon.png'),
+    icon: path.join(__dirname, isDev ? '../build/icon.png' : '../build/icon.png'),
     alwaysOnTop: true,
     skipTaskbar: true,
     webPreferences: {
@@ -198,7 +198,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   // Setup System Tray
-  const iconPath = path.join(__dirname, isDev ? '../public/app-icon.png' : '../dist/app-icon.png');
+  const iconPath = path.join(__dirname, isDev ? '../build/icon.png' : '../build/icon.png');
   tray = new Tray(nativeImage.createFromPath(iconPath));
   tray.setToolTip('Quest Compendium');
   
@@ -505,7 +505,7 @@ ipcMain.on('open-settings-window', () => {
       contextIsolation: true
     },
     autoHideMenuBar: true,
-    icon: path.join(__dirname, isDev ? '../public/app-icon.png' : '../dist/app-icon.png')
+    icon: path.join(__dirname, isDev ? '../build/icon.png' : '../build/icon.png')
   });
 
   if (isDev) {

@@ -27,10 +27,12 @@
     "firebase-admin": "^14.3.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "png-to-ico": "^3.0.2",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "sharp": "^0.35.4",
     "stripe": "^22.6.1",
     "xml2js": "^0.6.2"
   },
@@ -56,17 +58,12 @@
     "appId": "com.questcompendium.app",
     "productName": "Quest Compendium",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
-    "mac": {
-      "icon": "build/icon.png"
-    },
-    "linux": {
-      "icon": "build/icon.png"
-    },
-    "win": {
-      "icon": "build/icon.ico"
-    },
+    "mac": {},
+    "linux": {},
+    "win": {},
     "files": [
       "dist/**/*",
       "!dist/server.cjs",
