@@ -134,18 +134,12 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
           </div>
         </div>
 
-        {isPlatinum ? (
-          <span className="px-2.5 py-1 rounded-full bg-cyan-500/20 border border-cyan-400/50 text-cyan-300 font-mono text-[11px] font-bold flex items-center gap-1 shadow-[0_0_12px_rgba(34,211,238,0.5)] animate-pulse">
-            <Award className="w-3.5 h-3.5 text-cyan-300" /> 100% PLATINUM
-          </span>
-        ) : (
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
+        <button
+          onClick={onClose}
+          className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Sub Tabs: Medals vs Patch Notes */}
@@ -177,27 +171,50 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
       {activeView === 'medals' ? (
         <>
           {/* Progress & Medal Tallies Card */}
-          <div className="p-3 bg-black/40 border-b border-white/[0.08] space-y-2.5 flex-shrink-0">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-400">
-                Completion: <strong className="text-white font-mono">{unlockedCount} / {totalCount}</strong>
-              </span>
-              <span className="font-mono text-sm font-bold text-[var(--accent-color)]">
-                {percent}%
-              </span>
-            </div>
+          <div className="px-4 py-3 bg-[#1e2029] border-b border-white/[0.08] space-y-2 flex-shrink-0 relative overflow-hidden">
+            {isPlatinum ? (
+              <div className="flex flex-col gap-1.5 z-10 relative">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-[0_0_8px_rgba(56,189,248,0.5)] flex-shrink-0">
+                      <path d="M6 14L4.5 22L9.5 19L12 20.5L14.5 19L19.5 22L18 14" fill="#38bdf8"/>
+                      <path d="M12 2 L14.5 4.5 L18 4 L19 7.5 L22.5 9 L20.5 12 L22.5 15 L19 16.5 L18 20 L14.5 19.5 L12 22 L9.5 19.5 L6 20 L5 16.5 L1.5 15 L3.5 12 L1.5 9 L5 7.5 L6 4 L9.5 4.5 Z" fill="#38bdf8"/>
+                      <circle cx="12" cy="12" r="5" fill="#fde047"/>
+                    </svg>
+                    <span className="text-white font-black text-[11px] tracking-wide uppercase drop-shadow-md">
+                      You've unlocked all achievements! {unlockedCount}/{totalCount}
+                    </span>
+                  </div>
+                  <span className="text-white font-black text-[11px] tracking-wide drop-shadow-md">(100%)</span>
+                </div>
+                {/* 100% Progress Bar line */}
+                <div className="w-full h-[3px] rounded-full bg-cyan-900/30 overflow-hidden shadow-inner mt-1">
+                  <div className="h-full bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(34,211,238,0.6)]" style={{ width: '100%' }} />
+                </div>
+                
+                {/* Optional glow effect behind */}
+                <div className="absolute top-0 left-0 w-full h-full bg-cyan-500/10 pointer-events-none -z-10 blur-xl"></div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between text-[11px] tracking-wide">
+                  <span className="text-zinc-400 font-bold uppercase">
+                    Completion: <strong className="text-white font-mono">{unlockedCount}/{totalCount}</strong>
+                  </span>
+                  <span className="font-mono text-sm font-bold text-[var(--accent-color)]">
+                    {percent}%
+                  </span>
+                </div>
 
-            {/* Progress Bar */}
-            <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden p-0.5 shadow-inner">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  isPlatinum 
-                    ? 'bg-gradient-to-r from-cyan-400 to-sky-300 shadow-[0_0_12px_rgba(56,189,248,0.8)]' 
-                    : 'bg-gradient-to-r from-[var(--accent-color)] to-amber-400 shadow-[0_0_8px_var(--accent-glow)]'
-                }`}
-                style={{ width: `${percent}%` }}
-              />
-            </div>
+                {/* Progress Bar */}
+                <div className="w-full h-[4px] rounded-full bg-white/10 overflow-hidden shadow-inner">
+                  <div
+                    className="h-full rounded-full bg-[var(--accent-color)] transition-all duration-500 shadow-[0_0_8px_var(--accent-glow)]"
+                    style={{ width: `${percent}%` }}
+                  />
+                </div>
+              </>
+            )}
 
             {/* Medal Badges */}
             <div className="flex items-center justify-around pt-2 border-t border-white/[0.06] text-xs">
