@@ -140,20 +140,27 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <div className="relative group" style={{ WebkitAppRegion: "no-drag" } as any}>
             {/* Desktop Badge */}
             <div 
-              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 mr-2 cursor-default ${userData.isPremium ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400' : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)] group-hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'}`} 
+              className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 mr-2 cursor-default ${userData.isPremium ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400' : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)] group-hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'}`} 
             >
               <Cpu className="w-3.5 h-3.5" />
-              <span>
-                {userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 3) - (userData.proQueriesToday || 0))} Pro
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold">
+                  {userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 3) - (userData.proQueriesToday || 0))} Pro
+                </span>
+                <span className="opacity-50">|</span>
+                <span className="font-bold">
+                  {userData.isPremium ? 'Unlimited Std' : `${userData.flashQueriesAvailable ?? Math.max(0, 3 - (userData.flashQueriesToday || 0))} Std`}
+                </span>
+              </div>
               {!userData.isPremium && <Sparkles className="w-3.5 h-3.5 ml-1 text-amber-400 animate-pulse" />}
             </div>
 
             {/* Mobile Icon */}
             <div 
-              className={`flex sm:hidden items-center justify-center w-8 h-8 rounded-xl transition-all duration-300 mr-1 cursor-default ${userData.isPremium ? 'bg-indigo-500/10 text-indigo-400' : 'bg-amber-500/10 text-amber-400'}`} 
+              className={`flex sm:hidden items-center justify-center px-2 py-1 h-8 rounded-xl transition-all duration-300 mr-1 cursor-default text-xs font-bold gap-1 ${userData.isPremium ? 'bg-indigo-500/10 text-indigo-400' : 'bg-amber-500/10 text-amber-400'}`} 
             >
-              <Cpu className="w-4 h-4" />
+              <Cpu className="w-3.5 h-3.5" />
+              <span>{userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 3) - (userData.proQueriesToday || 0))}</span>
             </div>
             
             {/* Elegant Hover Tooltip */}
@@ -235,22 +242,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         {/* Vertical Divider */}
         <div className="h-4 w-[1px] bg-white/10 mx-0.5 hidden sm:block" />
 
-        {/* Beta Feedback */}
-        <button
-          style={{ WebkitAppRegion: "no-drag" } as any}
-          onClick={() => {
-            playBlipSound(soundEnabled);
-            onOpenFeedback();
-          }}
-          title="Submit Beta Feedback"
-          className="px-2 sm:px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 text-xs font-bold mr-1"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
-          <span className="hidden sm:inline">Beta Feedback</span>
-        </button>
-        
         {/* Close Button */}
         <button
           style={{ WebkitAppRegion: "no-drag" } as any}

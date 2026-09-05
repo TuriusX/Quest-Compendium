@@ -36,6 +36,7 @@ interface GamesSidebarProps {
   onOpenGuides: () => void;
   onOpenQuests: () => void;
   onOpenSettings: () => void;
+  onOpenFeedback: () => void;
   globalActiveGame?: SteamGameData | null;
 }
 
@@ -57,6 +58,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   onOpenGuides,
   onOpenQuests,
   onOpenSettings,
+  onOpenFeedback,
 }) => {
   const [showFontControl, setShowFontControl] = useState(false);
   const [tabToDelete, setTabToDelete] = useState<{id: string, name: string} | null>(null);
@@ -243,6 +245,19 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           title="Compendium Settings"
         >
           <Settings className="w-5 h-5" />
+        </button>
+        <div className="flex-1" />
+        <button
+          onClick={() => {
+            playBlipSound(soundEnabled);
+            onOpenFeedback();
+          }}
+          className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 hover:border-amber-500/40 text-amber-400 transition-all cursor-pointer shadow-sm"
+          title="Submit Beta Feedback"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
         </button>
       </div>
 

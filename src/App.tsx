@@ -882,6 +882,7 @@ export default function App() {
             onOpenGuides={() => setIsBrowserMode(true)}
             onOpenQuests={() => setIsQuestsOpen(true)}
             onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenFeedback={() => setIsFeedbackOpen(true)}
           />
 
           {/* Sidebar Drag Handle */}
