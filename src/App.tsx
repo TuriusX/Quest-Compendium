@@ -480,31 +480,36 @@ export default function App() {
     let isMounted = true;
     const fetchAchievements = async () => {
       try {
-        const res = await fetch(`${getApiBaseUrl()}/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.achievements && isMounted) {
-            if (activeGame.isAutoDetected) {
-              setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? { ...prev, achievements: data.achievements } as SteamGameData : prev);
-            } else {
-              setTabs(prev => prev.map(t => {
-                if (t.id === activeTab.id) {
-                  // Keep existing data if it's the same game, otherwise reset it
-                  return {
-                    ...t,
-                    activeSteamGame: {
-                      ...(t.activeSteamGame?.appId === activeGame.appId ? t.activeSteamGame : {
-                        name: activeGame.name,
-                        appId: activeGame.appId
-                      }),
-                      ...(activeGame.headerImage ? { headerImage: activeGame.headerImage } : {}),
-                      achievements: data.achievements
-                    }
-                  };
-                }
-                return t;
-              }));
-            }
+        const [achRes, newsRes] = await Promise.all([
+          fetch(`${getApiBaseUrl()}/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`),
+          fetch(`${getApiBaseUrl()}/api/steam/news/${activeGame.appId}`)
+        ]);
+        if (isMounted) {
+          const data = achRes.ok ? await achRes.json() : { achievements: [] };
+          const newsData = newsRes.ok ? await newsRes.json() : { news: [] };
+          const patchNotes = newsData.news?.map((n: any) => n.contents) || [];
+          
+          if (activeGame.isAutoDetected) {
+            setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? { ...prev, achievements: data.achievements, patchNotes } as SteamGameData : prev);
+          } else {
+            setTabs(prev => prev.map(t => {
+              if (t.id === activeTab.id) {
+                // Keep existing data if it's the same game, otherwise reset it
+                return {
+                  ...t,
+                  activeSteamGame: {
+                    ...(t.activeSteamGame?.appId === activeGame.appId ? t.activeSteamGame : {
+                      name: activeGame.name,
+                      appId: activeGame.appId
+                    }),
+                    ...(activeGame.headerImage ? { headerImage: activeGame.headerImage } : {}),
+                    achievements: data.achievements,
+                    patchNotes
+                  }
+                };
+              }
+              return t;
+            }));
           }
         }
       } catch (err) {

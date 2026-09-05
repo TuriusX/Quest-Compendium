@@ -387,7 +387,7 @@ async function startServer() {
       xmlData = xmlData.replace(/&(?!(?:apos|quot|amp|lt|gt|#\d+);)/g, '&amp;');
       xmlData = xmlData.replace(/<(?![a-zA-Z/!?])/g, '&lt;');
       xmlData = xmlData.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-      const result = await new xml2js.Parser({ explicitArray: false, strict: false }).parseStringPromise(xmlData);
+      const result = await new xml2js.Parser({ explicitArray: false }).parseStringPromise(xmlData);
       
       const profile = result.profile;
       if (!profile) {
@@ -434,7 +434,7 @@ async function startServer() {
       xmlData = xmlData.replace(/<(?![a-zA-Z/!?])/g, '&lt;');
       xmlData = xmlData.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
       
-      const parser = new xml2js.Parser({ explicitArray: false, strict: false });
+      const parser = new xml2js.Parser({ explicitArray: false });
       const result = await parser.parseStringPromise(xmlData);
 
       if (result?.playerstats?.error) {
