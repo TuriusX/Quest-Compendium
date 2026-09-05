@@ -60,11 +60,11 @@
     "directories": {
       "output": "release"
     },
-    "icon": "app-icon.ico",
+    "icon": "public/app-icon.ico",
     "mac": {},
     "linux": {},
     "win": {
-      "icon": "app-icon.ico"
+      "icon": "public/app-icon.ico"
     },
     "files": [
       "dist/**/*",
