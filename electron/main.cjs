@@ -163,7 +163,7 @@ function createWindow() {
     y: 0,
     transparent: true,
     frame: false,
-    icon: path.join(__dirname, isDev ? '../build/icon.png' : '../build/icon.png'),
+    icon: path.join(__dirname, '../app-icon.ico'),
     alwaysOnTop: true,
     skipTaskbar: true,
     webPreferences: {
@@ -505,7 +505,7 @@ ipcMain.on('open-settings-window', () => {
       contextIsolation: true
     },
     autoHideMenuBar: true,
-    icon: path.join(__dirname, isDev ? '../build/icon.png' : '../build/icon.png')
+    icon: path.join(__dirname, '../app-icon.ico')
   });
 
   if (isDev) {

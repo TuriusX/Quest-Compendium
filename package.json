@@ -58,9 +58,9 @@
     "appId": "com.questcompendium.app",
     "productName": "Quest Compendium",
     "directories": {
-      "output": "release",
-      "buildResources": "build"
+      "output": "release"
     },
+    "icon": "app-icon.ico",
     "mac": {},
     "linux": {},
     "win": {
