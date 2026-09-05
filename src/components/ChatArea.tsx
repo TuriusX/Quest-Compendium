@@ -539,14 +539,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {isUser ? (
                     <>
                       <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      <span className="font-semibold text-zinc-300 uppercase">{steamName || 'PLAYER'}</span>
-                      {steamAvatar ? (
-                        <img src={steamAvatar} alt="Avatar" className="w-5 h-5 rounded-full border border-white/20" />
-                      ) : (
-                        <div className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-zinc-300">
-                          <User className="w-3 h-3" />
-                        </div>
-                      )}
+                      <span className="font-semibold text-zinc-300 uppercase">PLAYER</span>
+                      <div className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-zinc-300">
+                        <User className="w-3 h-3" />
+                      </div>
                     </>
                   ) : (
                     <>
@@ -555,10 +551,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       </div>
                       <span className="font-fantasy font-bold text-zinc-200">QUEST COMPENDIUM</span>
                       <span className="px-1.5 py-0.2 rounded bg-white/10 text-[9.5px] text-zinc-400">
-                        {msg.modelUsed || 'GEMINI 3.1 PRO'}
+                        {msg.modelUsed || 'GEMINI'}
                       </span>
-                      <span>•</span>
-                      <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </>
                   )}
                 </div>

@@ -488,32 +488,45 @@ export default function App() {
     let isMounted = true;
     const fetchData = async () => {
       try {
-        const fetchPromises = [];
-        let achIndex = -1;
-        let newsIndex = -1;
-        
-        if (settings.steamId) {
-          achIndex = fetchPromises.length;
-          fetchPromises.push(fetch(`${getApiBaseUrl()}/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`));
-        }
-        
-        newsIndex = fetchPromises.length;
-        fetchPromises.push(fetch(`${getApiBaseUrl()}/api/steam/news/${activeGame.appId}`));
-        
-        const results = await Promise.all(fetchPromises);
-        
-        if (isMounted) {
-          let achievements = activeGame.achievements || [];
+        let achievements = activeGame.achievements || [];
+        let patchNotes = activeGame.patchNotes || [];
+
+        if ((window as any).electronAPI && (window as any).electronAPI.fetchAchievementsLocally) {
+          // Desktop App Local Fetch
+          if (settings.steamId) {
+            const localAch = await (window as any).electronAPI.fetchAchievementsLocally(activeGame.appId, settings.steamId);
+            if (localAch) achievements = localAch;
+          }
+          const localNews = await (window as any).electronAPI.fetchNewsLocally(activeGame.appId);
+          if (localNews && localNews.length > 0) patchNotes = localNews.map((n: any) => n.contents);
+        } else {
+          // Web Preview Fetch
+          const fetchPromises = [];
+          let achIndex = -1;
+          let newsIndex = -1;
+          
+          if (settings.steamId) {
+            achIndex = fetchPromises.length;
+            fetchPromises.push(fetch(`${getApiBaseUrl()}/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`));
+          }
+          
+          newsIndex = fetchPromises.length;
+          fetchPromises.push(fetch(`${getApiBaseUrl()}/api/steam/news/${activeGame.appId}`));
+          
+          const results = await Promise.all(fetchPromises);
+          
           if (achIndex !== -1 && results[achIndex].ok) {
             const data = await results[achIndex].json();
             achievements = data.achievements || [];
           }
           
-          let patchNotes = activeGame.patchNotes || [];
           if (newsIndex !== -1 && results[newsIndex].ok) {
             const newsData = await results[newsIndex].json();
             patchNotes = newsData.news?.map((n: any) => n.contents) || [];
           }
+        }
+
+        if (isMounted) {
           
           if (activeGame.isAutoDetected) {
             setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? { ...prev, achievements, patchNotes } as SteamGameData : prev);

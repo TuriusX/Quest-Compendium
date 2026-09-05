@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getActiveGame: () => ipcRenderer.invoke('get-active-game'),
+  fetchAchievementsLocally: (appId, steamId) => ipcRenderer.invoke('fetch-achievements-locally', appId, steamId),
+  fetchNewsLocally: (appId) => ipcRenderer.invoke('fetch-news-locally', appId),
   startDesktopLogin: () => ipcRenderer.send('start-desktop-login'),
   startSteamLogin: () => ipcRenderer.send('start-steam-login'),
   setUiScale: (scale) => ipcRenderer.send('set-ui-scale', scale),
