@@ -461,6 +461,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <LogOut className="w-4 h-4 text-red-400" />
                     <span className="text-red-400">Account Management</span>
                   </label>
+                  
+                  <button
+                    onClick={() => {
+                      playBlipSound(soundEnabled);
+                      // Sandbox downgrade trigger
+                      window.location.href = window.location.pathname + '?downgrade=true';
+                    }}
+                    className="w-full flex items-center justify-center gap-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer mb-2"
+                  >
+                    Reset Premium Status (Dev Tool)
+                  </button>
+
                   <button
                     onClick={() => {
                       playBlipSound(soundEnabled);

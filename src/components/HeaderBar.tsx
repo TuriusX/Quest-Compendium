@@ -22,6 +22,7 @@ import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
 
 interface HeaderBarProps {
+  userData?: any;
   activeTab: GameTab | null;
   activeGame: SteamGameData | null;
   isGameRunningLocally: boolean;
@@ -36,6 +37,7 @@ interface HeaderBarProps {
   onOpenSettings: () => void;
   onOpenGameSearch: () => void;
   onOpenFeedback: () => void;
+  onOpenPaywall?: () => void;
   fontMenuOpen: boolean;
   onToggleFontMenu: () => void;
   soundEnabled: boolean;
@@ -45,6 +47,7 @@ interface HeaderBarProps {
 }
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
+  userData,
   activeTab,
   activeGame,
   isGameRunningLocally,
@@ -59,6 +62,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onOpenSettings,
   onOpenGameSearch,
   onOpenFeedback,
+  onOpenPaywall,
   fontMenuOpen,
   onToggleFontMenu,
   soundEnabled,
@@ -137,6 +141,73 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </div>
       {/* Right Controls Toolbar */}
       <div className="flex items-center gap-1 sm:gap-1.5">
+        {/* AI Queries Badge */}
+        {userData && (
+          <div className="relative group" style={{ WebkitAppRegion: "no-drag" } as any}>
+            <div 
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 mr-2 cursor-default ${userData.isPremium ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400' : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)] group-hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'}`} 
+            >
+              <Cpu className="w-3.5 h-3.5" />
+              <span>
+                {userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 3) - (userData.proQueriesToday || 0))} Pro
+              </span>
+              {!userData.isPremium && <Sparkles className="w-3.5 h-3.5 ml-1 text-amber-400 animate-pulse" />}
+            </div>
+            
+            {/* Elegant Hover Tooltip */}
+            <div className="absolute top-full right-2 pt-2 w-64 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+              <div className="p-4 rounded-xl bg-zinc-900 border border-white/10 shadow-2xl flex flex-col gap-3">
+                
+                {/* Pro Queries Progress */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-zinc-300 font-medium">Gemini Pro</span>
+                    <span className="text-zinc-400 font-mono text-[10px]">
+                      {userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 3) - (userData.proQueriesToday || 0))} / {userData.isPremium ? 100 : 3}
+                    </span>
+                  </div>
+                  <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${userData.isPremium ? 'bg-indigo-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`} 
+                      style={{ width: `${((userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 3) - (userData.proQueriesToday || 0))) / (userData.isPremium ? 100 : 3)) * 100}%` }} 
+                    />
+                  </div>
+                </div>
+                
+                {/* Flash Queries Progress */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-zinc-300 font-medium">Flash Lite Fallback</span>
+                    <span className="text-zinc-400 font-mono text-[10px]">
+                      {userData.isPremium ? 'Unlimited' : `${userData.flashQueriesAvailable ?? Math.max(0, 3 - (userData.flashQueriesToday || 0))} / 3`}
+                    </span>
+                  </div>
+                  {!userData.isPremium && (
+                    <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-zinc-500 h-full rounded-full transition-all duration-500" 
+                        style={{ width: `${((userData.flashQueriesAvailable ?? Math.max(0, 3 - (userData.flashQueriesToday || 0))) / 3) * 100}%` }} 
+                      />
+                    </div>
+                  )}
+                </div>
+                
+                {!userData.isPremium && (
+                  <button 
+                    onClick={() => {
+                      if (onOpenPaywall) onOpenPaywall();
+                    }}
+                    className="mt-1 pt-3 border-t border-white/5 text-xs text-amber-400 font-medium flex items-center justify-center gap-1.5 hover:text-amber-300 transition-colors w-full cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Click to upgrade to Premium
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Achievements / Medals Drawer Toggle */}
         <button
           style={{ WebkitAppRegion: "no-drag" } as any}

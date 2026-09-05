@@ -6,6 +6,32 @@ import { AppSettings, GameTab } from '../types';
 
 const APP_VERSION = 1;
 
+function sanitizeTabsForCloud(tabs: GameTab[]): GameTab[] {
+  return tabs.map(tab => {
+    const sanitizedTab = { ...tab };
+    
+    // Strip large message data (base64 audio/images)
+    if (sanitizedTab.messages) {
+      sanitizedTab.messages = sanitizedTab.messages.map(msg => {
+        const newMsg = { ...msg };
+        if (newMsg.audioBase64) delete newMsg.audioBase64;
+        if (newMsg.imageUrl && newMsg.imageUrl.length > 2000) delete newMsg.imageUrl;
+        return newMsg;
+      });
+    }
+    
+    // Strip heavy active game data (achievements/patch notes)
+    if (sanitizedTab.activeSteamGame) {
+       const safeGame = { ...sanitizedTab.activeSteamGame };
+       if (safeGame.achievements) delete safeGame.achievements;
+       if (safeGame.patchNotes) delete safeGame.patchNotes;
+       sanitizedTab.activeSteamGame = safeGame;
+    }
+
+    return sanitizedTab;
+  });
+}
+
 export function useCloudSync(
   localSettings: AppSettings,
   localGameTabs: GameTab[],
@@ -14,6 +40,7 @@ export function useCloudSync(
 ) {
   const [user, setUser] = useState<User | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'inactive' | 'beta' | 'loading'>('loading');
+  const [userData, setUserData] = useState<any>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isOutdated, setIsOutdated] = useState(false);
 
@@ -58,7 +85,7 @@ export function useCloudSync(
           email: user.email || null,
           subscriptionStatus: 'beta',
           settings: JSON.parse(JSON.stringify(localSettings)),
-          tabs: JSON.parse(JSON.stringify(localGameTabs)),
+          tabs: JSON.parse(JSON.stringify(sanitizeTabsForCloud(localGameTabs))),
           updatedAt: Date.now()
         });
       }
@@ -72,6 +99,7 @@ export function useCloudSync(
       unsubscribe = onSnapshot(userRef, (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
+          setUserData(data);
           setSubscriptionStatus(data.subscriptionStatus || 'inactive');
           setIsInitializing(false);
           // Sync cloud down to local state on initial load or remote change
@@ -98,7 +126,7 @@ export function useCloudSync(
       const userRef = doc(db, 'users', user.uid);
       setDoc(userRef, {
         settings: JSON.parse(JSON.stringify(localSettings)),
-        tabs: JSON.parse(JSON.stringify(localGameTabs)),
+        tabs: JSON.parse(JSON.stringify(sanitizeTabsForCloud(localGameTabs))),
         updatedAt: Date.now()
       }, { merge: true }).catch(err => console.error("Sync error", err));
     }, 1500); // Debounce syncs by 1.5 seconds
@@ -106,5 +134,5 @@ export function useCloudSync(
     return () => clearTimeout(syncTimeout);
   }, [localSettings, localGameTabs, user, subscriptionStatus, isInitializing]);
 
-  return { user, subscriptionStatus, isInitializing, isOutdated };
+  return { user, subscriptionStatus, userData, isInitializing, isOutdated };
 }

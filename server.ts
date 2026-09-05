@@ -3,11 +3,66 @@ import path from 'path';
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from '@google/genai';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
-import { initializeApp } from 'firebase-admin/app';
+import { initializeApp, getApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import cors from 'cors';
+async function getFirestoreDocREST(idToken: string, uid: string) {
+  const projectId = 'gen-lang-client-0366642934';
+  const databaseId = 'ai-studio-questcompendium-ee181122-cc9e-4693-a7fd-7ac2ba55dd5f';
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${uid}`;
+  const response = await fetch(url, { headers: { 'Authorization': `Bearer ${idToken}` } });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Firestore read error: ${await response.text()}`);
+  const data = await response.json();
+  const parsed: any = {};
+  if (data.fields) {
+    for (const [k, v] of Object.entries(data.fields)) {
+      parsed[k] = (v as any).stringValue ?? (v as any).booleanValue ?? (v as any).integerValue;
+      if (parsed[k] !== undefined && (v as any).integerValue !== undefined) {
+         parsed[k] = parseInt((v as any).integerValue, 10);
+      }
+    }
+  }
+  return parsed;
+}
+
+async function updateFirestoreDocREST(idToken: string, uid: string, fields: Record<string, any>) {
+  const projectId = 'gen-lang-client-0366642934';
+  const databaseId = 'ai-studio-questcompendium-ee181122-cc9e-4693-a7fd-7ac2ba55dd5f';
+  const mask = Object.keys(fields).map(k => `updateMask.fieldPaths=${k}`).join('&');
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${uid}?${mask}`;
+  
+  const firestoreFields: any = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (typeof v === 'boolean') firestoreFields[k] = { booleanValue: v };
+    else if (typeof v === 'number') firestoreFields[k] = { integerValue: v };
+    else if (typeof v === 'string') firestoreFields[k] = { stringValue: v };
+  }
+
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: firestoreFields })
+  });
+  if (!response.ok) throw new Error(`Firestore write error: ${await response.text()}`);
+}
+import Stripe from 'stripe';
 
 dotenv.config();
+
+// Lazy Stripe initialization
+let stripeClient: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!stripeClient) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) {
+      throw new Error('STRIPE_SECRET_KEY environment variable is required for checkout.');
+    }
+    // @ts-ignore
+    stripeClient = new Stripe(key, { apiVersion: '2025-03-31.basil' });
+  }
+  return stripeClient;
+}
 
 initializeApp({
   projectId: "gen-lang-client-0366642934",
@@ -36,6 +91,43 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(cors());
+
+  // --- STRIPE WEBHOOK (Must be before express.json so it can read raw body) ---
+  app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!endpointSecret) {
+      return res.status(400).send('Webhook secret not configured.');
+    }
+
+    let event;
+    try {
+      const stripe = getStripe();
+      event = stripe.webhooks.constructEvent(req.body, sig as string, endpointSecret);
+    } catch (err: any) {
+      console.error('Webhook signature verification failed.', err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as any;
+      const userId = session.client_reference_id;
+      if (userId) {
+        try {
+          console.log("Stripe webhook received checkout for", userId);
+          // Skipping server-side Firestore admin write due to AI Studio IAM sandbox restrictions.
+          // The client will perform the update upon redirect.
+          console.log(`Successfully upgraded user ${userId} to Premium!`);
+        } catch (dbErr) {
+          console.error('Failed to update user in Firestore:', dbErr);
+        }
+      }
+    }
+
+    res.json({received: true});
+  });
+
   app.use(express.json({ limit: '25mb' }));
   app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
@@ -59,6 +151,91 @@ async function startServer() {
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', hasGeminiKey: Boolean(process.env.GEMINI_API_KEY) });
+  });
+
+  function syncUserLimits(userData: any, today: string) {
+    const isPremium = userData.isPremium === true;
+    if (userData.lastResetDate !== today) {
+      if (isPremium) {
+        let currentAvailable = userData.proQueriesAvailable !== undefined 
+            ? userData.proQueriesAvailable 
+            : Math.max(0, 40 - (userData.proQueriesToday || 0));
+        userData.proQueriesAvailable = Math.min(100, currentAvailable + 40);
+        userData.flashQueriesAvailable = 1000;
+      } else {
+        userData.proQueriesAvailable = 3;
+        userData.flashQueriesAvailable = 3;
+      }
+      userData.lastResetDate = today;
+      userData.proQueriesToday = 0;
+      userData.flashQueriesToday = 0;
+    } else {
+      if (userData.proQueriesAvailable === undefined) {
+        userData.proQueriesAvailable = Math.max(0, (isPremium ? 40 : 3) - (userData.proQueriesToday || 0));
+      }
+      if (userData.flashQueriesAvailable === undefined) {
+        userData.flashQueriesAvailable = Math.max(0, (isPremium ? 1000 : 3) - (userData.flashQueriesToday || 0));
+      }
+      
+      if (isPremium && userData.proQueriesAvailable < 40 && (userData.proQueriesToday || 0) < 40 && !userData._upgradedToday) {
+         userData.proQueriesAvailable = Math.max(userData.proQueriesAvailable, 40 - (userData.proQueriesToday || 0));
+         userData.flashQueriesAvailable = 1000;
+         userData._upgradedToday = true;
+      }
+    }
+    return userData;
+  }
+
+  // --- API: User Status ---
+  app.get('/api/user/status', requireAuth, async (req, res) => {
+    try {
+      const idToken = req.headers.authorization!.split('Bearer ')[1];
+      const userId = (req as any).user.uid;
+      let userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
+
+      const today = new Date().toISOString().split('T')[0];
+      userData = syncUserLimits(userData, today);
+
+      res.json(userData);
+    } catch (err) {
+      console.error('Status fetch error:', err);
+      res.status(500).json({ error: 'Failed to fetch user status' });
+    }
+  });
+
+  // --- API: Stripe Checkout ---
+  app.post('/api/checkout', requireAuth, async (req, res) => {
+    try {
+      const stripe = getStripe();
+      const userId = (req as any).user.uid;
+      const priceId = process.env.STRIPE_PRICE_ID;
+      
+      if (!priceId) {
+        return res.status(500).json({ error: 'STRIPE_PRICE_ID environment variable is missing.' });
+      }
+
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const baseUrl = `${protocol}://${host}`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        client_reference_id: userId,
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+        success_url: `${baseUrl}/?upgrade=success`,
+        cancel_url: `${baseUrl}/?upgrade=canceled`,
+      });
+
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error('Stripe checkout error:', err);
+      res.status(500).json({ error: err.message || 'Failed to create checkout session' });
+    }
   });
 
   // --- API: Steam Games Search / Store Lookup ---
@@ -205,8 +382,12 @@ async function startServer() {
         return res.status(404).json({ error: 'Steam profile not found' });
       }
       
-      const xmlData = await response.text();
-      const result = await new xml2js.Parser({ explicitArray: false }).parseStringPromise(xmlData);
+      let xmlData = await response.text();
+      // Sanitize unescaped ampersands and malformed tags often found in Steam descriptions
+      xmlData = xmlData.replace(/&(?!(?:apos|quot|amp|lt|gt|#\d+);)/g, '&amp;');
+      xmlData = xmlData.replace(/<(?![a-zA-Z/!?])/g, '&lt;');
+      xmlData = xmlData.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+      const result = await new xml2js.Parser({ explicitArray: false, strict: false }).parseStringPromise(xmlData);
       
       const profile = result.profile;
       if (!profile) {
@@ -247,9 +428,13 @@ async function startServer() {
       if (!response.ok) {
         return res.status(500).json({ error: 'Failed to fetch Steam profile XML' });
       }
-      const xmlData = await response.text();
+      let xmlData = await response.text();
+      // Sanitize unescaped ampersands and malformed tags often found in Steam descriptions
+      xmlData = xmlData.replace(/&(?!(?:apos|quot|amp|lt|gt|#\d+);)/g, '&amp;');
+      xmlData = xmlData.replace(/<(?![a-zA-Z/!?])/g, '&lt;');
+      xmlData = xmlData.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
       
-      const parser = new xml2js.Parser({ explicitArray: false });
+      const parser = new xml2js.Parser({ explicitArray: false, strict: false });
       const result = await parser.parseStringPromise(xmlData);
 
       if (result?.playerstats?.error) {
@@ -309,8 +494,30 @@ async function startServer() {
   });
 
   // --- API: Chat with Quest Compendium & Multimodal Game Vision ---
-  app.post('/api/chat', async (req, res) => {
+  app.post('/api/chat', requireAuth, async (req, res) => {
     try {
+      const idToken = req.headers.authorization!.split('Bearer ')[1];
+      const userId = (req as any).user.uid;
+      let userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
+
+      const today = new Date().toISOString().split('T')[0];
+      userData = syncUserLimits(userData, today);
+
+      const isPremium = userData.isPremium === true;
+      let targetModel = 'gemini-3.1-pro-preview';
+      let skipPrimary = false;
+
+      if (userData.proQueriesAvailable <= 0) {
+        if (userData.flashQueriesAvailable <= 0) {
+          return res.status(429).json({
+            text: isPremium ? 'Daily limit reached. Please try again tomorrow.' : 'Daily limit reached. Upgrade to Premium for 40 Pro queries & unlimited Flash queries per day!',
+            modelUsed: 'Limit Reached'
+          });
+        }
+        targetModel = 'gemini-3.8-flash';
+        skipPrimary = true;
+      }
+
       const {
         question,
         history = [],
@@ -461,33 +668,57 @@ Provide clear, direct answers without adopting any specific character, persona, 
 
       // Query Gemini API
       let responseText = '';
-      let modelUsed = 'Gemini 3.1 Pro Preview';
+      let modelUsed = targetModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro Preview' : 'Gemini 3.8 Flash (Fallback)';
 
       try {
-        const primaryCall = ai.models.generateContent({
-          model: 'gemini-3.1-pro-preview',
-          contents: contentsPayload,
-          config: {
-            systemInstruction,
-            temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
-            safetySettings: [
-              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            ]
-          }
-        });
-
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('30s timeout exceeded')), 30000);
-        });
-
-        const response = await Promise.race([primaryCall, timeoutPromise]) as any;
-
-        responseText = response.text || 'No response received. Please try asking again.';
+        if (!skipPrimary) {
+          const primaryCall = ai.models.generateContent({
+            model: targetModel,
+            contents: contentsPayload,
+            config: {
+              systemInstruction,
+              temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
+              safetySettings: [
+                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+              ]
+            }
+          });
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('30s timeout exceeded')), 30000);
+          });
+          const response = await Promise.race([primaryCall, timeoutPromise]) as any;
+          responseText = response.text || 'No response received. Please try asking again.';
+          
+          userData.proQueriesAvailable = Math.max(0, userData.proQueriesAvailable - 1);
+          userData.proQueriesToday = (userData.proQueriesToday || 0) + 1; // legacy
+        } else {
+          const fallbackCall = ai.models.generateContent({
+            model: targetModel,
+            contents: contentsPayload,
+            config: {
+              systemInstruction,
+              temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
+            }
+          });
+          const response = await fallbackCall;
+          responseText = response.text || 'No response received. Please try asking again.';
+          
+          userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
+          userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1; // legacy
+        }
+        await updateFirestoreDocREST(idToken, userId, {
+        lastResetDate: userData.lastResetDate,
+        proQueriesAvailable: userData.proQueriesAvailable,
+        flashQueriesAvailable: userData.flashQueriesAvailable,
+        proQueriesToday: userData.proQueriesToday,
+        flashQueriesToday: userData.flashQueriesToday,
+        _upgradedToday: userData._upgradedToday ?? false
+      });
       } catch (primaryErr: any) {
-        console.log('Gemini 3.1 Pro Preview query issue or timeout, attempting fallback. Reason:', primaryErr?.message);
+        console.log('Primary query issue or timeout, attempting fallback. Reason:', primaryErr?.message);
         
         try {
           // Fallback retry
@@ -500,8 +731,19 @@ Provide clear, direct answers without adopting any specific character, persona, 
           });
           responseText = retryResponse.text || 'No response received.';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
+          
+          userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
+          userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1;
+          await updateFirestoreDocREST(idToken, userId, {
+        lastResetDate: userData.lastResetDate,
+        proQueriesAvailable: userData.proQueriesAvailable,
+        flashQueriesAvailable: userData.flashQueriesAvailable,
+        proQueriesToday: userData.proQueriesToday,
+        flashQueriesToday: userData.flashQueriesToday,
+        _upgradedToday: userData._upgradedToday ?? false
+      });
         } catch (fallbackErr: any) {
-          console.log('Gemini 3.8 Flash fallback failed, attempting emergency fallback to 3.1 Flash Lite. Reason:', fallbackErr?.message);
+          console.log('Gemini 3.8 Flash fallback failed, attempting emergency fallback to Flash Lite. Reason:', fallbackErr?.message);
           
           try {
             const emergencyResponse = await ai.models.generateContent({
@@ -513,13 +755,24 @@ Provide clear, direct answers without adopting any specific character, persona, 
             });
             responseText = emergencyResponse.text || 'No response received.';
             modelUsed = 'Gemini 3.1 Flash Lite (Emergency Fallback)';
+            
+            userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
+            userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1;
+            await updateFirestoreDocREST(idToken, userId, {
+        lastResetDate: userData.lastResetDate,
+        proQueriesAvailable: userData.proQueriesAvailable,
+        flashQueriesAvailable: userData.flashQueriesAvailable,
+        proQueriesToday: userData.proQueriesToday,
+        flashQueriesToday: userData.flashQueriesToday,
+        _upgradedToday: userData._upgradedToday ?? false
+      });
           } catch (emergencyErr: any) {
-            console.log('Emergency fallback to 3.1 Flash Lite also failed:', emergencyErr?.message);
+            console.log('Emergency fallback to Flash Lite also failed:', emergencyErr?.message);
             
             if (primaryErr?.message?.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || primaryErr?.message?.includes('API_KEY_INVALID') || primaryErr?.message?.includes('UNAUTHENTICATED')) {
               responseText = 'Error: Invalid Gemini API Key or the Generative Language API is not enabled in your Google Cloud Project. Please verify your API Key in the settings.';
             } else {
-              responseText = 'Connection error or high demand. Please try again in a moment.';
+              responseText = 'The Compendium is currently overwhelmed by magical interference (high demand). Please try again in a moment.';
             }
             modelUsed = 'Offline / Unavailable';
           }

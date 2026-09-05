@@ -23,6 +23,8 @@ import { PaywallModal } from './components/PaywallModal';
 import { RenameModal } from './components/RenameModal';
 import { UpdateRequiredModal } from './components/UpdateRequiredModal';
 import { BetaFeedbackModal } from './components/BetaFeedbackModal';
+import { db } from './lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import { getApiBaseUrl } from './utils/api';
 import { useCloudSync } from './hooks/useCloudSync';
 
@@ -147,6 +149,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGameSearchOpen, setIsGameSearchOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [isPaywallOpen, setIsPaywallOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [renameModalMode, setRenameModalMode] = useState<'create' | 'rename'>('create');
   const [renameModalTabId, setRenameModalTabId] = useState<string | null>(null);
@@ -199,7 +202,47 @@ export default function App() {
     };
   }, [isDraggingSidebar, isDraggingAch]);
 
-  const { user, subscriptionStatus, isInitializing, isOutdated } = useCloudSync(settings, tabs, setSettings, setTabs);
+  const { user, subscriptionStatus, userData, isInitializing, isOutdated } = useCloudSync(settings, tabs, setSettings, setTabs);
+
+  // Subscription Success Handling
+  useEffect(() => {
+    if (user && !isInitializing) {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('upgrade') === 'success') {
+        const upgradeUser = async () => {
+          try {
+            await setDoc(doc(db, 'users', user.uid), {
+              isPremium: true,
+              subscriptionStatus: 'active'
+            }, { merge: true });
+            console.log('Successfully upgraded user to Premium locally!');
+            // Remove the param from URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } catch (e) {
+            console.error('Failed to update premium status:', e);
+          }
+        };
+        upgradeUser();
+      }
+
+      if (urlParams.get('downgrade') === 'true') {
+        const downgradeUser = async () => {
+          try {
+            await setDoc(doc(db, 'users', user.uid), {
+              isPremium: false,
+              subscriptionStatus: 'inactive'
+            }, { merge: true });
+            console.log('Successfully downgraded user to Free locally!');
+            // Remove the param from URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } catch (e) {
+            console.error('Failed to update premium status:', e);
+          }
+        };
+        downgradeUser();
+      }
+    }
+  }, [user, isInitializing]);
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || null;
   
@@ -496,7 +539,7 @@ export default function App() {
             appId: activeGame.appId,
             genre: activeGame.genre,
             developer: activeGame.developer
-          } : { name: activeTab.name },
+          } : null,
           achievements: activeGame?.achievements || [],
           news: activeGame?.patchNotes || []
         }),
@@ -504,13 +547,22 @@ export default function App() {
 
       if (!res.ok) {
         let errorText = `HTTP ${res.status}`;
+        let shouldOpenPaywall = false;
         try {
           const errData = await res.json();
-          errorText = errData.error || errorText;
+          errorText = errData.error || errData.text || errorText;
+          if ((res.status === 403 || res.status === 429) && errData.modelUsed === 'Limit Reached') {
+            shouldOpenPaywall = true;
+          }
         } catch (e) {
           errorText = `HTTP ${res.status} (Non-JSON response)`;
         }
-        throw new Error(`Server error: ${errorText}`);
+        
+        if (shouldOpenPaywall) {
+           setIsPaywallOpen(true);
+        }
+        
+        throw new Error(errorText);
       }
 
       const contentType = res.headers.get('content-type');
@@ -533,12 +585,17 @@ export default function App() {
       ));
     } catch (err: any) {
       console.error('Chat error:', err);
+      let errorMsg = err?.message || 'Network error';
+      let isLimitReached = errorMsg.includes('Daily limit reached') || errorMsg.includes('Upgrade to Premium');
+
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
-        text: `⚠️ **Compendium Inquiry Error:** Unable to reach Google Gemini server.\n\n*Details: ${err?.message || 'Network error'}*`,
+        text: isLimitReached 
+          ? `⚠️ **Inquiry Limit Reached:**\n\n${errorMsg}`
+          : `⚠️ **Compendium Inquiry Error:** Unable to reach Google Gemini server.\n\n*Details: ${errorMsg}*`,
         timestamp: Date.now(),
-        modelUsed: 'Offline Fallback'
+        modelUsed: isLimitReached ? 'Limit Reached' : 'Offline Fallback'
       };
 
       setTabs(prev => prev.map(t => 
@@ -723,6 +780,7 @@ export default function App() {
       >
         {/* Header Bar */}
         <HeaderBar
+          userData={userData}
           activeTab={activeTab}
           activeGame={activeGame}
           isGameRunningLocally={globalActiveGame !== null}
@@ -743,6 +801,7 @@ export default function App() {
           }}
           onOpenGameSearch={() => setIsGameSearchOpen(true)}
           onOpenFeedback={() => setIsFeedbackOpen(true)}
+          onOpenPaywall={() => setIsPaywallOpen(true)}
           fontMenuOpen={fontMenuOpen}
           onToggleFontMenu={() => setFontMenuOpen(!fontMenuOpen)}
           soundEnabled={settings.soundEnabled}
@@ -944,8 +1003,12 @@ export default function App() {
       {!isInitializing && user && isOutdated && (
         <UpdateRequiredModal />
       )}
-      {!isInitializing && user && !isOutdated && subscriptionStatus !== 'active' && subscriptionStatus !== 'beta' && (
-        <PaywallModal userId={user.uid} />
+      {/* Upgrade / Paywall Modal */}
+      {!isInitializing && user && !isOutdated && isPaywallOpen && (
+        <PaywallModal 
+          userId={user.uid} 
+          onClose={() => setIsPaywallOpen(false)} 
+        />
       )}
 
       {/* Quick Game Search & Switcher Modal */}
