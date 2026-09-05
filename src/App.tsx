@@ -792,14 +792,9 @@ export default function App() {
           onToggleNotes={() => setIsNotesOpen(!isNotesOpen)}
           isBrowserMode={isBrowserMode}
           onToggleBrowserMode={() => setIsBrowserMode(!isBrowserMode)}
-          onOpenSettings={() => {
-            setIsSettingsOpen(true);
-          }}
           onOpenGameSearch={() => setIsGameSearchOpen(true)}
           onOpenFeedback={() => setIsFeedbackOpen(true)}
           onOpenPaywall={() => setIsPaywallOpen(true)}
-          fontMenuOpen={fontMenuOpen}
-          onToggleFontMenu={() => setFontMenuOpen(!fontMenuOpen)}
           soundEnabled={settings.soundEnabled}
           isDocked={settings.dockPosition !== 'undocked'}
           onToggleDock={() => {
@@ -886,6 +881,7 @@ export default function App() {
             onOpenNotes={() => setIsNotesOpen(true)}
             onOpenGuides={() => setIsBrowserMode(true)}
             onOpenQuests={() => setIsQuestsOpen(true)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
           />
 
           {/* Sidebar Drag Handle */}
@@ -928,6 +924,8 @@ export default function App() {
                 ttsVoice={settings.ttsVoice}
                 customApiKey={settings.customApiKey}
                 openAiApiKey={settings.openAiApiKey}
+                fontMenuOpen={fontMenuOpen}
+                onToggleFontMenu={() => setFontMenuOpen(!fontMenuOpen)}
               />
             )}
 

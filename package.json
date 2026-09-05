@@ -58,6 +58,9 @@
     "directories": {
       "output": "release"
     },
+    "win": {
+      "icon": "public/app-icon.png"
+    },
     "files": [
       "dist/**/*",
       "!dist/server.cjs",

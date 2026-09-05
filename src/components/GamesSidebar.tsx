@@ -4,7 +4,7 @@ import {
   Trash2, 
   Edit3, 
   Gamepad2, 
-  Sliders, 
+  Settings, 
   BookOpen, 
   FileText, 
   Target,
@@ -35,6 +35,7 @@ interface GamesSidebarProps {
   onOpenNotes: () => void;
   onOpenGuides: () => void;
   onOpenQuests: () => void;
+  onOpenSettings: () => void;
   globalActiveGame?: SteamGameData | null;
 }
 
@@ -55,6 +56,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   onOpenNotes,
   onOpenGuides,
   onOpenQuests,
+  onOpenSettings,
 }) => {
   const [showFontControl, setShowFontControl] = useState(false);
   const [tabToDelete, setTabToDelete] = useState<{id: string, name: string} | null>(null);
@@ -221,7 +223,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
       </div>
 
       {/* Global Tools footer */}
-      <div className="p-3 border-t border-white/[0.08] bg-black/40 flex items-center justify-start">
+      <div className="p-3 border-t border-white/[0.08] bg-black/40 flex items-center justify-start gap-2">
         <button
           onClick={() => {
             playBlipSound(soundEnabled);
@@ -231,6 +233,16 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           title="Web Browser"
         >
           <Globe className="w-5 h-5" />
+        </button>
+        <button
+          onClick={() => {
+            playBlipSound(soundEnabled);
+            onOpenSettings();
+          }}
+          className="p-2 rounded-xl bg-zinc-500/10 hover:bg-white/[0.06] border border-white/5 hover:border-white/10 text-zinc-400 hover:text-[var(--accent-color)] transition-all cursor-pointer shadow-sm"
+          title="Compendium Settings"
+        >
+          <Settings className="w-5 h-5" />
         </button>
       </div>
 

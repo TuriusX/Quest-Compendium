@@ -34,12 +34,9 @@ interface HeaderBarProps {
   onToggleNotes: () => void;
   isBrowserMode: boolean;
   onToggleBrowserMode: () => void;
-  onOpenSettings: () => void;
   onOpenGameSearch: () => void;
   onOpenFeedback: () => void;
   onOpenPaywall?: () => void;
-  fontMenuOpen: boolean;
-  onToggleFontMenu: () => void;
   soundEnabled: boolean;
   isDocked: boolean;
   onToggleDock: () => void;
@@ -59,12 +56,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onToggleNotes,
   isBrowserMode,
   onToggleBrowserMode,
-  onOpenSettings,
   onOpenGameSearch,
   onOpenFeedback,
   onOpenPaywall,
-  fontMenuOpen,
-  onToggleFontMenu,
   soundEnabled,
   isDocked,
   onToggleDock,
@@ -216,60 +210,30 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </div>
         )}
         
-        {/* Achievements / Medals Drawer Toggle */}
-        <button
-          style={{ WebkitAppRegion: "no-drag" } as any}
-          onClick={() => {
-            playPageTurnSound(soundEnabled);
-            onToggleAchDrawer();
-          }}
-          title="Game Achievements"
-          className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
-            isAchDrawerOpen 
-              ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
-              : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] border border-transparent'
-          }`}
-        >
-          <Trophy className="w-4 h-4 text-amber-400" />
-          {totalCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.08] text-zinc-300 font-mono font-bold">
-              {unlockedCount}/{totalCount}
-            </span>
-          )}
-        </button>
-
+        {activeGame && (
+          <button
+            style={{ WebkitAppRegion: "no-drag" } as any}
+            onClick={() => {
+              playPageTurnSound(soundEnabled);
+              onToggleAchDrawer();
+            }}
+            title="Game Achievements"
+            className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
+              isAchDrawerOpen 
+                ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
+                : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] border border-transparent'
+            }`}
+          >
+            <Trophy className="w-4 h-4 text-amber-400" />
+            {totalCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.08] text-zinc-300 font-mono font-bold">
+                {unlockedCount}/{totalCount}
+              </span>
+            )}
+          </button>
+        )}
         {/* Vertical Divider */}
         <div className="h-4 w-[1px] bg-white/10 mx-0.5 hidden sm:block" />
-
-        {/* Font Quick Switcher */}
-        <button
-          style={{ WebkitAppRegion: "no-drag" } as any}
-          onClick={() => {
-            playBlipSound(soundEnabled);
-            onToggleFontMenu();
-          }}
-          title="Font & Typography Settings"
-          className={`p-2 rounded-xl transition-all cursor-pointer ${
-            fontMenuOpen 
-              ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)]' 
-              : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06]'
-          }`}
-        >
-          <span className="font-bold font-serif text-[15px] leading-none px-0.5">Aa</span>
-        </button>
-
-        {/* Settings Dialog */}
-        <button
-          style={{ WebkitAppRegion: "no-drag" } as any}
-          onClick={() => {
-            playBlipSound(soundEnabled);
-            onOpenSettings();
-          }}
-          title="Compendium Settings (AI Persona, Gemini Voice, Theme)"
-          className="p-2 rounded-xl text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/[0.06] transition-all cursor-pointer"
-        >
-          <SettingsIcon className="w-4 h-4" />
-        </button>
 
         {/* Beta Feedback */}
         <button

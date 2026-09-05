@@ -45,6 +45,8 @@ interface ChatAreaProps {
   openAiApiKey?: string;
   steamName?: string;
   steamAvatar?: string;
+  fontMenuOpen?: boolean;
+  onToggleFontMenu?: () => void;
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
@@ -61,6 +63,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   openAiApiKey,
   steamName,
   steamAvatar,
+  fontMenuOpen,
+  onToggleFontMenu,
 }) => {
   const [inputQuestion, setInputQuestion] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
@@ -752,6 +756,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             >
               {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
+
+            {/* Font Quick Switcher */}
+            {onToggleFontMenu && (
+              <button
+                type="button"
+                onClick={() => {
+                  playBlipSound(soundEnabled);
+                  onToggleFontMenu();
+                }}
+                title="Font & Typography Settings"
+                className={`p-2 rounded-xl transition-all cursor-pointer ${
+                  fontMenuOpen 
+                    ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
+                    : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
+                }`}
+              >
+                <span className="font-bold font-serif text-[15px] leading-none px-0.5">Aa</span>
+              </button>
+            )}
 
             {/* Submit Send Button */}
             <button
