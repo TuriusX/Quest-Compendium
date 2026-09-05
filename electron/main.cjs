@@ -43,10 +43,34 @@ const authServer = http.createServer((req, res) => {
         res.writeHead(500); res.end();
       }
     });
+  } else if (req.url.startsWith('/steam-return')) {
+    const urlObj = new URL(req.url, `http://127.0.0.1:${localAuthPort}`);
+    const claimedId = urlObj.searchParams.get('openid.claimed_id');
+    let steamId = null;
+    if (claimedId) {
+      const match = claimedId.match(/\/id\/(\d+)/);
+      if (match) steamId = match[1];
+    }
+    
+    if (settingsWindow) {
+      settingsWindow.webContents.send('desktop-steam-success', steamId);
+    } else if (mainWindow) {
+      mainWindow.webContents.send('desktop-steam-success', steamId);
+    }
+    
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<html><body><script>window.close();</script>Authentication successful. You may close this window.</body></html>');
+    
+    if (steamAuthWindow) {
+      steamAuthWindow.close();
+    }
+    return;
   } else {
     res.writeHead(404); res.end();
   }
 });
+
+let steamAuthWindow = null;
 authServer.listen(0, '127.0.0.1', () => {
   localAuthPort = authServer.address().port;
 });
@@ -363,6 +387,42 @@ ipcMain.handle('get-active-game', async () => {
 // Trigger external browser for login
 ipcMain.on('start-desktop-login', () => {
   shell.openExternal(`https://ais-dev-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app/desktop-login?port=${localAuthPort}`);
+});
+
+ipcMain.on('start-steam-login', (event) => {
+  if (steamAuthWindow) {
+    steamAuthWindow.focus();
+    return;
+  }
+  
+  const returnUrl = `http://127.0.0.1:${localAuthPort}/steam-return`;
+  const params = new URLSearchParams({
+    'openid.ns': 'http://specs.openid.net/auth/2.0',
+    'openid.mode': 'checkid_setup',
+    'openid.return_to': returnUrl,
+    'openid.realm': `http://127.0.0.1:${localAuthPort}`,
+    'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
+    'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select'
+  });
+  
+  const steamLoginUrl = `https://steamcommunity.com/openid/login?${params.toString()}`;
+  
+  steamAuthWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
+    title: 'Steam Login',
+    autoHideMenuBar: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+  
+  steamAuthWindow.loadURL(steamLoginUrl);
+  
+  steamAuthWindow.on('closed', () => {
+    steamAuthWindow = null;
+  });
 });
 
 ipcMain.on('set-ui-scale', (event, scale) => {

@@ -440,9 +440,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <button 
                         onClick={() => {
                           playBlipSound(soundEnabled);
-                          const popup = window.open(`${getApiBaseUrl()}/api/auth/steam`, 'steam_login', 'width=800,height=600');
-                          if (!popup) {
-                            alert('Please allow popups to sign in with Steam.');
+                          if (window.electronAPI) {
+                            window.electronAPI.startSteamLogin();
+                          } else {
+                            const popup = window.open(`${getApiBaseUrl()}/api/auth/steam`, 'steam_login', 'width=800,height=600');
+                            if (!popup) {
+                              alert('Please allow popups to sign in with Steam.');
+                            }
                           }
                         }}
                         className="w-full flex items-center justify-center gap-2 bg-[#171a21] hover:bg-[#2a475e] text-white border border-[#2a475e] rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer"

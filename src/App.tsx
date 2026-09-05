@@ -396,6 +396,14 @@ export default function App() {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
+    if (window.electronAPI && window.electronAPI.onDesktopSteamSuccess) {
+      window.electronAPI.onDesktopSteamSuccess((steamId: string) => {
+        if (steamId) {
+          setSettings(prev => ({ ...prev, steamId }));
+        }
+      });
+    }
+
     // Listen for popup auth messages and storage events
     const handleMessage = (event: MessageEvent) => {
       // Allow localhost and .run.app origins
