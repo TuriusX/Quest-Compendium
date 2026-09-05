@@ -440,8 +440,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <button 
                         onClick={() => {
                           playBlipSound(soundEnabled);
-                          if (window.electronAPI) {
-                            window.electronAPI.startSteamLogin();
+                          if ((window as any).electronAPI) {
+                            (window as any).electronAPI.startSteamLogin();
                           } else {
                             const popup = window.open(`${getApiBaseUrl()}/api/auth/steam`, 'steam_login', 'width=800,height=600');
                             if (!popup) {

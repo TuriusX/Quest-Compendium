@@ -90,6 +90,15 @@ function SettingsStandalone() {
       }
     };
     window.addEventListener('storage', handleStorage);
+    
+    if ((window as any).electronAPI && (window as any).electronAPI.onDesktopSteamSuccess) {
+      (window as any).electronAPI.onDesktopSteamSuccess((steamId: string) => {
+        if (steamId) {
+          updateSettings({ steamId });
+        }
+      });
+    }
+
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
@@ -396,8 +405,8 @@ export default function App() {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
-    if (window.electronAPI && window.electronAPI.onDesktopSteamSuccess) {
-      window.electronAPI.onDesktopSteamSuccess((steamId: string) => {
+    if ((window as any).electronAPI && (window as any).electronAPI.onDesktopSteamSuccess) {
+      (window as any).electronAPI.onDesktopSteamSuccess((steamId: string) => {
         if (steamId) {
           setSettings(prev => ({ ...prev, steamId }));
         }
@@ -473,28 +482,44 @@ export default function App() {
     fetchProfile();
   }, [settings.steamId]);
 
-  // Fetch real Steam achievements if steamId is set
+    // Fetch Steam achievements and patch notes
   useEffect(() => {
-    if (!settings.steamId || !activeGame || !activeTab) return;
-
+    if (!activeGame || !activeTab) return;
     let isMounted = true;
-    const fetchAchievements = async () => {
+    const fetchData = async () => {
       try {
-        const [achRes, newsRes] = await Promise.all([
-          fetch(`${getApiBaseUrl()}/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`),
-          fetch(`${getApiBaseUrl()}/api/steam/news/${activeGame.appId}`)
-        ]);
+        const fetchPromises = [];
+        let achIndex = -1;
+        let newsIndex = -1;
+        
+        if (settings.steamId) {
+          achIndex = fetchPromises.length;
+          fetchPromises.push(fetch(`${getApiBaseUrl()}/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`));
+        }
+        
+        newsIndex = fetchPromises.length;
+        fetchPromises.push(fetch(`${getApiBaseUrl()}/api/steam/news/${activeGame.appId}`));
+        
+        const results = await Promise.all(fetchPromises);
+        
         if (isMounted) {
-          const data = achRes.ok ? await achRes.json() : { achievements: [] };
-          const newsData = newsRes.ok ? await newsRes.json() : { news: [] };
-          const patchNotes = newsData.news?.map((n: any) => n.contents) || [];
+          let achievements = activeGame.achievements || [];
+          if (achIndex !== -1 && results[achIndex].ok) {
+            const data = await results[achIndex].json();
+            achievements = data.achievements || [];
+          }
+          
+          let patchNotes = activeGame.patchNotes || [];
+          if (newsIndex !== -1 && results[newsIndex].ok) {
+            const newsData = await results[newsIndex].json();
+            patchNotes = newsData.news?.map((n: any) => n.contents) || [];
+          }
           
           if (activeGame.isAutoDetected) {
-            setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? { ...prev, achievements: data.achievements, patchNotes } as SteamGameData : prev);
+            setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? { ...prev, achievements, patchNotes } as SteamGameData : prev);
           } else {
             setTabs(prev => prev.map(t => {
               if (t.id === activeTab.id) {
-                // Keep existing data if it's the same game, otherwise reset it
                 return {
                   ...t,
                   activeSteamGame: {
@@ -503,7 +528,7 @@ export default function App() {
                       appId: activeGame.appId
                     }),
                     ...(activeGame.headerImage ? { headerImage: activeGame.headerImage } : {}),
-                    achievements: data.achievements,
+                    achievements,
                     patchNotes
                   }
                 };
@@ -513,13 +538,12 @@ export default function App() {
           }
         }
       } catch (err) {
-        console.error('Failed to sync Steam achievements:', err);
+        console.error('Failed to fetch Steam data:', err);
       }
     };
-
-    fetchAchievements();
+    fetchData();
     return () => { isMounted = false; };
-  }, [activeGame?.appId, settings.steamId, activeTabId]);
+  }, [activeGame?.appId, settings.steamId, activeTab?.id]);
 
   // Handle Sending Message to Server Gemini API
   const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string) => {
