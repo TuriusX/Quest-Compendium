@@ -63,7 +63,9 @@
     },
     "mac": {},
     "linux": {},
-    "win": {},
+    "win": {
+      "icon": "app-icon.ico"
+    },
     "files": [
       "dist/**/*",
       "!dist/server.cjs",
