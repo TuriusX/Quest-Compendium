@@ -250,7 +250,15 @@ export default function App() {
   if (globalActiveGame) {
     const autoHeaderImage = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${globalActiveGame.appId}/header.jpg`;
     if (activeGame?.appId === globalActiveGame.appId) {
-      activeGame = { ...activeGame, name: globalActiveGame.name, appId: globalActiveGame.appId, isAutoDetected: true, headerImage: activeGame.headerImage || autoHeaderImage };
+      activeGame = { 
+        ...activeGame, 
+        name: globalActiveGame.name, 
+        appId: globalActiveGame.appId, 
+        isAutoDetected: true, 
+        headerImage: activeGame.headerImage || autoHeaderImage,
+        achievements: (globalActiveGame as any).achievements || activeGame.achievements,
+        patchNotes: (globalActiveGame as any).patchNotes || activeGame.patchNotes
+      };
     } else {
       activeGame = { ...globalActiveGame, isAutoDetected: true, headerImage: autoHeaderImage } as SteamGameData;
     }
