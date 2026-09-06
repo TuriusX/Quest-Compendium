@@ -633,7 +633,11 @@ export default function App() {
             shouldOpenPaywall = true;
           }
         } catch (e) {
-          errorText = `HTTP ${res.status} (Non-JSON response)`;
+          if (res.status === 404 && typeof window !== 'undefined' && window.location.protocol === 'file:') {
+             errorText = `Cloud Backend 404: Please click the "Share" button in AI Studio to deploy your latest server code.`;
+          } else {
+             errorText = `HTTP ${res.status} (Non-JSON response)`;
+          }
         }
         
         if (shouldOpenPaywall) {
