@@ -310,13 +310,15 @@ function createWindow() {
 
 
 app.whenReady().then(() => {
-  // Spawn local backend server if running in production
+  // Run local backend server if running in production
   if (!isDev) {
-    const serverPath = path.join(__dirname, '../dist/server.cjs');
-    serverProcess = spawn(process.execPath, [serverPath], {
-      stdio: 'inherit',
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', NODE_ENV: 'production', PORT: '3000' }
-    });
+    try {
+      process.env.NODE_ENV = 'production';
+      require('../dist/server.cjs');
+      console.log('Local backend server started successfully inside main process.');
+    } catch (err) {
+      console.error('Failed to start local backend server:', err);
+    }
   }
 
   // Setup System Tray

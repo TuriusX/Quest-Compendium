@@ -11,7 +11,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "desktop:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron electron/main.cjs\"",
-    "desktop:build": "npm run build && electron-builder"
+    "desktop:build": "npm run build && electron-builder && node -e \"try { require('fs').rmSync('release/win-unpacked/electron.exe', {force: true}); } catch(e) {}\""
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",
@@ -67,8 +67,6 @@
     },
     "files": [
       "dist/**/*",
-      "!dist/server.cjs",
-      "!dist/server.cjs.map",
       "electron/**/*"
     ]
   }
