@@ -1,4 +1,4 @@
-export const DEFAULT_PREVIEW_URL = 'https://quest-compendium-1.ai.studio';
+export const DEFAULT_PREVIEW_URL = 'https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app';
 
 export const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
@@ -8,9 +8,9 @@ export const getApiBaseUrl = (): string => {
     }
   }
 
-  // If running from file:// (Electron packaged), default to local server running on port 3000
+  // If running from file:// (Electron packaged), we need an absolute URL to the backend.
   if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
-    return 'http://localhost:3000';
+    return DEFAULT_PREVIEW_URL;
   }
   // If running in development (localhost:3000) or as a web app on the cloud, use relative paths
   return '';

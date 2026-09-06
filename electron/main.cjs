@@ -624,6 +624,7 @@ ipcMain.on('toggle-slide', () => {
 
 ipcMain.handle('take-screenshot', async () => {
   const wasVisible = isAppVisible;
+  
   if (wasVisible) {
     if (currentDockPosition !== 'undocked') {
       const coords = getDockCoords(true);
@@ -643,13 +644,16 @@ ipcMain.handle('take-screenshot', async () => {
     });
     
     // Pick the display where the cursor is currently located (the active monitor)
-    const displays = screen.getAllDisplays();
     const cursorPoint = screen.getCursorScreenPoint();
     const activeDisplay = screen.getDisplayNearestPoint(cursorPoint);
-    const activeIndex = displays.findIndex(d => d.id === activeDisplay.id);
-    const targetSource = activeIndex >= 0 && activeIndex < sources.length ? sources[activeIndex] : sources[0];
+    
+    // Match by display_id if available, otherwise fallback to the first screen
+    let targetSource = sources.find(s => s.display_id === activeDisplay.id.toString());
+    if (!targetSource) {
+      targetSource = sources[0];
+    }
 
-    if (targetSource) {
+    if (targetSource && targetSource.thumbnail) {
       // Use JPEG with 80% quality to drastically reduce payload size for the AI
       const buffer = targetSource.thumbnail.toJPEG(80);
       base64Image = 'data:image/jpeg;base64,' + buffer.toString('base64');
