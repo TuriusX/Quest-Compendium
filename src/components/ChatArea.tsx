@@ -314,17 +314,40 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if ((!inputQuestion.trim() && !attachedImage) || isLoading) return;
+    if (isLoading) return;
+
+    // In electron, we auto-capture if no image is attached
+    const isElectron = !!(typeof window !== 'undefined' && (window as any).electronAPI);
+    let finalImage = attachedImage;
+    
+    // We only block submission if it's empty AND we can't auto-capture
+    if (!inputQuestion.trim() && !finalImage && !isElectron) return;
+
+    if (isElectron && !finalImage) {
+      setIsCapturingScreen(true);
+      playSnapSound(soundEnabled);
+      try {
+        const dataUrl = await (window as any).electronAPI.takeScreenshot();
+        if (dataUrl) {
+          finalImage = dataUrl;
+        }
+      } catch (err) {
+        console.error("Auto-screenshot failed", err);
+      } finally {
+        setIsCapturingScreen(false);
+      }
+    } else if (!finalImage) {
+       playSnapSound(soundEnabled);
+    } else {
+       playSnapSound(soundEnabled); // Play snap even if they pasted
+    }
 
     const question = inputQuestion.trim();
-    const image = attachedImage || undefined;
-
     setInputQuestion('');
     setAttachedImage(null);
     attachedImageRef.current = null;
 
-    playSnapSound(soundEnabled);
-    await onSendMessage(question, image);
+    await onSendMessage(question, finalImage || undefined);
     playChimeSound(soundEnabled);
   };
 
@@ -644,7 +667,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-400 font-mono">
               <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11px]">
                 <Camera className="w-3 h-3 text-[var(--accent-color)]" />
-                <span>Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded font-bold text-white">Ctrl + V</kbd> to paste game screenshots directly</span>
+                {typeof window !== 'undefined' && (window as any).electronAPI ? (
+                  <span>Your screen is captured automatically when you ask a question.</span>
+                ) : (
+                  <span>Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded font-bold text-white">Ctrl + V</kbd> to paste game screenshots directly</span>
+                )}
               </span>
             </div>
           </div>
@@ -890,23 +917,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             />
 
             {/* Attach Screenshot / Game Screen */}
-            <button
-              type="button"
-              onClick={() => {
-                playBlipSound(soundEnabled);
-                captureGameScreen();
-              }}
-              title="Attach Game Screenshot (or paste with Ctrl+V)"
-              className={`p-2 rounded-xl transition-all cursor-pointer ${
-                isCapturingScreen
-                  ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] animate-pulse shadow-[0_0_12px_var(--accent-glow)]'
-                  : attachedImage
-                    ? 'text-[var(--accent-color)] bg-[var(--accent-dim)]'
-                    : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
-              }`}
-            >
-              <Camera className="w-4 h-4" />
-            </button>
+            {!(typeof window !== 'undefined' && (window as any).electronAPI) && (
+              <button
+                type="button"
+                onClick={() => {
+                  playBlipSound(soundEnabled);
+                  captureGameScreen();
+                }}
+                title="Attach Game Screenshot (or paste with Ctrl+V)"
+                className={`p-2 rounded-xl transition-all cursor-pointer ${
+                  isCapturingScreen
+                    ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] animate-pulse shadow-[0_0_12px_var(--accent-glow)]'
+                    : attachedImage
+                      ? 'text-[var(--accent-color)] bg-[var(--accent-dim)]'
+                      : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
+                }`}
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Push to Talk / Voice Dictation */}
             <button
