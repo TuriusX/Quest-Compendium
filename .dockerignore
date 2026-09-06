@@ -1,0 +1,7 @@
+.git
+node_modules
+release
+dist
+npm-debug.log
+bun.lock
+screenshot.png

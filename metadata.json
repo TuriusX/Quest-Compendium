@@ -3,8 +3,7 @@
   "description": "An AI companion for PC games featuring multimodal game screen analysis, walkthroughs, achievement tracking, playthrough notes, built-in guides, and adaptive roleplay & min-max modes.",
   "requestFramePermissions": [
     "camera",
-    "microphone",
-    "display-capture"
+    "microphone"
   ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
