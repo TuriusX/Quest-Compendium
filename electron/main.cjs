@@ -694,6 +694,38 @@ ipcMain.handle('fetch-achievements-locally', async (event, appId, steamId) => {
   return await fetchFullAchievementDetails(appId, steamId);
 });
 
+ipcMain.handle('fetch-steam-profile-locally', async (event, steamId) => {
+  if (!steamId) return null;
+  try {
+    const fetch = require('cross-fetch');
+    let url = '';
+    if (/^\d{17}$/.test(steamId)) {
+      url = `https://steamcommunity.com/profiles/${steamId}/?xml=1`;
+    } else {
+      url = `https://steamcommunity.com/id/${steamId}/?xml=1`;
+    }
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    });
+    if (!res.ok) return null;
+    let xml = await res.text();
+    
+    const steamIDMatch = xml.match(/<steamID><!\[CDATA\[(.*?)\]\]><\/steamID>/) || xml.match(/<steamID>(.*?)<\/steamID>/);
+    const avatarIconMatch = xml.match(/<avatarIcon><!\[CDATA\[(.*?)\]\]><\/avatarIcon>/) || xml.match(/<avatarIcon>(.*?)<\/avatarIcon>/);
+    const avatarMediumMatch = xml.match(/<avatarMedium><!\[CDATA\[(.*?)\]\]><\/avatarMedium>/) || xml.match(/<avatarMedium>(.*?)<\/avatarMedium>/);
+    const avatarFullMatch = xml.match(/<avatarFull><!\[CDATA\[(.*?)\]\]><\/avatarFull>/) || xml.match(/<avatarFull>(.*?)<\/avatarFull>/);
+    
+    return {
+      steamName: steamIDMatch ? steamIDMatch[1] : undefined,
+      avatarIcon: avatarIconMatch ? avatarIconMatch[1] : undefined,
+      avatarMedium: avatarMediumMatch ? avatarMediumMatch[1] : undefined,
+      avatarFull: avatarFullMatch ? avatarFullMatch[1] : undefined
+    };
+  } catch (e) {
+    return null;
+  }
+});
+
 ipcMain.handle('fetch-news-locally', async (event, appId) => {
   try {
     const fetch = require('cross-fetch');

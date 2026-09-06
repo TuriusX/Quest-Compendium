@@ -474,6 +474,18 @@ export default function App() {
     
     async function fetchProfile() {
       try {
+        if ((window as any).electronAPI?.fetchSteamProfileLocally) {
+          const profile = await (window as any).electronAPI.fetchSteamProfileLocally(settings.steamId);
+          if (profile) {
+            setSettings(prev => ({ 
+              ...prev, 
+              steamName: profile.steamName, 
+              steamAvatar: profile.avatarMedium || profile.avatarIcon || profile.avatarFull 
+            }));
+          }
+          return;
+        }
+
         const res = await fetch(`${getApiBaseUrl()}/api/steam/profile?steamId=${encodeURIComponent(settings.steamId)}`);
         if (res.ok) {
           const data = await res.json();
