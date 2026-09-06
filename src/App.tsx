@@ -811,8 +811,10 @@ export default function App() {
     }
   };
 
+  const isDesktop = typeof window !== 'undefined' && window.location.protocol === 'file:';
+
   return (
-    <div className="w-screen h-screen bg-transparent flex overflow-hidden">
+    <div className={`w-screen h-screen flex overflow-hidden ${isDesktop ? 'bg-transparent' : 'bg-[#0c0d14]'}`}>
       {/* Background CRT scan line ambient glow */}
       <div className="absolute inset-0 bg-radial from-purple-900/10 via-transparent to-transparent pointer-events-none" />
 
