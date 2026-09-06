@@ -829,7 +829,7 @@ export default function App() {
     }
   };
 
-  const isDesktop = typeof window !== 'undefined' && window.navigator.userAgent.toLowerCase().includes('electron');
+  const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
 
   return (
     <Suspense fallback={<div className="w-screen h-screen bg-[#0c0d14]" />}>

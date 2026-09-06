@@ -275,6 +275,7 @@ function createWindow() {
     x: screenWidth - windowWidth,
     y: 0,
     transparent: true,
+    backgroundColor: '#00000000',
     frame: false,
     icon: path.join(__dirname, isDev ? '../public/app-icon.ico' : '../dist/app-icon.ico'),
     alwaysOnTop: true,
