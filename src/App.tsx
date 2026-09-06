@@ -63,7 +63,13 @@ function SettingsStandalone() {
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {
       const saved = localStorage.getItem('quest_compendium_settings');
-      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+      let parsed = saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+      const validVoices = ['puck', 'charon', 'fenrir', 'kore', 'aoede'];
+      if (!validVoices.includes(parsed.ttsVoice)) {
+        parsed = { ...parsed, ttsVoice: 'puck' };
+        localStorage.setItem('quest_compendium_settings', JSON.stringify(parsed));
+      }
+      return parsed;
     } catch {
       return DEFAULT_SETTINGS;
     }
@@ -136,7 +142,13 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {
       const saved = localStorage.getItem('quest_compendium_settings');
-      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+      let parsed = saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+      const validVoices = ['puck', 'charon', 'fenrir', 'kore', 'aoede'];
+      if (!validVoices.includes(parsed.ttsVoice)) {
+        parsed = { ...parsed, ttsVoice: 'puck' };
+        localStorage.setItem('quest_compendium_settings', JSON.stringify(parsed));
+      }
+      return parsed;
     } catch {
       return DEFAULT_SETTINGS;
     }

@@ -511,6 +511,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       playNextAudioChunk(msgId, audioSrc);
                     } else {
                       audioQueueRef.current.push(audioSrc);
+                      if (!currentAudioRef.current) {
+                        const nextSrc = audioQueueRef.current.shift()!;
+                        setPlayingAudioId(msgId);
+                        playNextAudioChunk(msgId, nextSrc);
+                      }
                     }
                   }
                 } catch (e) {
