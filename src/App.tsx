@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   dockPosition: 'top-right',
   windowOpacity: 96,
   steamId: '',
-  ttsVoice: 'nova',
+  ttsVoice: 'zephyr',
   customApiKey: '',
   hideAppShortcut: 'CmdOrCtrl+Shift+H',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',

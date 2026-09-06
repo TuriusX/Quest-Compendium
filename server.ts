@@ -148,6 +148,21 @@ async function startServer() {
     }
   };
 
+  // Optional auth middleware for endpoints that can serve both signed-in and guest users
+  const optionalAuth = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split('Bearer ')[1];
+      try {
+        const decodedToken = await getAuth().verifyIdToken(token);
+        (req as any).user = decodedToken;
+      } catch (error) {
+        // Continue as guest
+      }
+    }
+    next();
+  };
+
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', hasGeminiKey: Boolean(process.env.GEMINI_API_KEY) });
@@ -792,80 +807,273 @@ Provide clear, direct answers without adopting any specific character, persona, 
     }
   });
 
-  // --- API: Text-to-Speech (TTS) using Gemini Voice ---
-  app.post('/api/tts', requireAuth, async (req, res) => {
+  // Helper to convert 16-bit linear PCM audio buffer to standard WAV format
+  function pcmToWav(pcmBuffer: Buffer, sampleRate: number = 24000, numChannels: number = 1): Buffer {
+    const header = Buffer.alloc(44);
+    const dataSize = pcmBuffer.length;
+    const fileSize = dataSize + 36;
+    const byteRate = sampleRate * numChannels * 2;
+    const blockAlign = numChannels * 2;
+
+    header.write('RIFF', 0);
+    header.writeUInt32LE(fileSize, 4);
+    header.write('WAVE', 8);
+
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20); // 1 = PCM
+    header.writeUInt16LE(numChannels, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(byteRate, 28);
+    header.writeUInt16LE(blockAlign, 32);
+    header.writeUInt16LE(16, 34); // 16 bits per sample
+
+    header.write('data', 36);
+    header.writeUInt32LE(dataSize, 40);
+
+    return Buffer.concat([header, pcmBuffer]);
+  }
+
+  const TTS_VOICE_MAP: Record<string, string> = {
+    'zephyr': 'Zephyr',
+    'charon': 'Charon',
+    'aoede': 'Aoede',
+    'achernar': 'Achernar',
+    'orus': 'Orus',
+    'autonoe': 'Autonoe',
+    'leda': 'Leda',
+    // Persona presets & OpenAI backward compatibility mapping
+    'nova': 'Zephyr',
+    'onyx': 'Charon',
+    'fable': 'Aoede',
+    'echo': 'Orus',
+    'shimmer': 'Autonoe',
+    'sage': 'Leda',
+    'ash': 'Achernar',
+    'coral': 'Aoede',
+    'alloy': 'Zephyr',
+  };
+
+  // In-memory audio cache to provide instant (0ms) playback for repeated voice calls
+  const ttsServerCache = new Map<string, { audioBase64: string; mimeType: string; voice: string }>();
+
+  // --- API: Text-to-Speech (TTS) using Gemini Neural Voice Studio ---
+  app.post('/api/tts', optionalAuth, async (req, res) => {
     try {
-      const { text, voice = 'nova' } = req.body;
+      const { text, voice = 'Zephyr', stream = true } = req.body;
       if (!text) {
         return res.status(400).json({ error: 'Text is required for speech' });
       }
 
-      // Clean markdown citations and hashtags for crisp spoken narration
-      const cleanText = text
+      // Clean markdown formatting, tables, citations, URLs, and code blocks for crisp speech
+      let cleanText = text
         .replace(/\[\^?\d+\]/g, '')
-        .replace(/[*_#`~>]/g, '')
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`([^`]+)`/g, '$1')
         .replace(/https?:\/\/\S+/g, '')
-        .replace(/\n\s*-\s*/g, '. ')
+        // Clean markdown table formatting into spoken natural sentences
+        .replace(/\|([^\n|]+)\|([^\n|]+)\|([^\n|]*)\|?/g, (match: string, c1: string, c2: string, c3: string) => {
+          const col1 = c1.trim();
+          const col2 = c2.trim();
+          const col3 = c3 ? c3.trim() : '';
+          if (col1.includes('---') || col2.includes('---')) return '';
+          return `${col1}: ${col2}${col3 ? ` (${col3})` : ''}. `;
+        })
+        .replace(/\|/g, ' ')
+        .replace(/#{1,6}\s*([^\n]+)/g, '$1. ')
+        .replace(/\n\s*[-*•]\s*/g, '. ')
+        .replace(/[*_~>]/g, '')
+        .replace(/\s+/g, ' ')
         .trim();
 
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ error: 'OPENAI_API_KEY environment variable is missing.' });
-      }
+      const normalizedVoiceKey = (voice || 'zephyr').toLowerCase();
+      const targetVoice = TTS_VOICE_MAP[normalizedVoiceKey] || 'Zephyr';
+      const cacheKey = `${targetVoice}::${cleanText.slice(0, 1000)}`;
 
-      // voice is now passed directly as the OpenAI voice name (e.g., 'fable', 'onyx')
-      const openaiVoice = voice || 'nova';
-
-      // OpenAI TTS limit is 4096. We'll chunk text and combine MP3 buffers.
-      const chunks: string[] = [];
-      let remainingText = cleanText;
-      while (remainingText.length > 0) {
-        if (remainingText.length <= 4000) {
-          chunks.push(remainingText);
-          break;
+      // Instant cache hit
+      if (ttsServerCache.has(cacheKey)) {
+        const cached = ttsServerCache.get(cacheKey)!;
+        if (stream) {
+          res.setHeader('Content-Type', 'application/x-ndjson');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.write(JSON.stringify({
+            chunkIndex: 0,
+            totalChunks: 1,
+            audioBase64: cached.audioBase64,
+            mimeType: cached.mimeType,
+            voice: cached.voice,
+            cached: true
+          }) + '\n');
+          return res.end();
         }
-        
-        let splitIndex = remainingText.lastIndexOf('.', 4000);
-        if (splitIndex === -1) splitIndex = remainingText.lastIndexOf(' ', 4000);
-        if (splitIndex === -1) splitIndex = 4000;
-        
-        chunks.push(remainingText.slice(0, splitIndex + 1).trim());
-        remainingText = remainingText.slice(splitIndex + 1).trim();
+        return res.json({ ...cached, cached: true });
       }
 
-      const audioPromises = chunks.map(async (chunkText, index) => {
+      // 1. Primary Engine: Gemini 3.1 Flash TTS Studio Model (Included with Gemini API Key)
+      try {
+        const ai = getGeminiClient();
+
+        // Progressive chunking:
+        // Chunk 0 is compact (~180-240 chars) to return fast audio in ~3-4s.
+        // Subsequent chunks are ~380-450 chars.
+        const chunks: string[] = [];
+        if (cleanText.length <= 320) {
+          chunks.push(cleanText);
+        } else {
+          const sentences = cleanText.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) || [cleanText];
+          let currentChunk = '';
+          let targetLen = 220; // Fast first chunk
+
+          for (const sentence of sentences) {
+            const s = sentence.trim();
+            if (!s) continue;
+            if ((currentChunk + ' ' + s).trim().length <= targetLen || !currentChunk) {
+              currentChunk = currentChunk ? `${currentChunk} ${s}` : s;
+            } else {
+              chunks.push(currentChunk);
+              currentChunk = s;
+              targetLen = 420; // Normal length for remaining chunks
+            }
+          }
+          if (currentChunk) chunks.push(currentChunk);
+        }
+
+        const synthesizeChunk = async (chunkText: string): Promise<Buffer | null> => {
+          if (!chunkText.trim()) return null;
+          try {
+            const ttsResult = await ai.models.generateContent({
+              model: 'gemini-3.1-flash-tts-preview',
+              contents: chunkText,
+              config: {
+                responseModalities: ['AUDIO'],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: targetVoice }
+                  }
+                }
+              }
+            });
+            const inlinePart = ttsResult.candidates?.[0]?.content?.parts?.[0];
+            const b64Data = inlinePart?.inlineData?.data;
+            return b64Data ? Buffer.from(b64Data, 'base64') : null;
+          } catch (err: any) {
+            console.warn('Chunk TTS generation error:', err?.message);
+            return null;
+          }
+        };
+
+        if (stream && chunks.length > 0) {
+          // Streaming mode: send Chunk 0 immediately so browser plays within seconds
+          res.setHeader('Content-Type', 'application/x-ndjson');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Connection', 'keep-alive');
+
+          const allPcmBuffers: Buffer[] = [];
+
+          // Synthesize Chunk 0 first
+          const firstPcm = await synthesizeChunk(chunks[0]);
+          if (firstPcm) {
+            allPcmBuffers.push(firstPcm);
+            const firstWav = pcmToWav(firstPcm, 24000, 1);
+            res.write(JSON.stringify({
+              chunkIndex: 0,
+              totalChunks: chunks.length,
+              audioBase64: firstWav.toString('base64'),
+              mimeType: 'audio/wav',
+              voice: targetVoice
+            }) + '\n');
+          }
+
+          // If more chunks exist, synthesize them in parallel!
+          if (chunks.length > 1) {
+            const remainingPromises = chunks.slice(1).map(async (chunk, idx) => {
+              const pcm = await synthesizeChunk(chunk);
+              return { index: idx + 1, pcm };
+            });
+
+            const remainingResults = await Promise.all(remainingPromises);
+            for (const item of remainingResults) {
+              if (item.pcm) {
+                allPcmBuffers.push(item.pcm);
+                const wavBuf = pcmToWav(item.pcm, 24000, 1);
+                res.write(JSON.stringify({
+                  chunkIndex: item.index,
+                  totalChunks: chunks.length,
+                  audioBase64: wavBuf.toString('base64'),
+                  mimeType: 'audio/wav',
+                  voice: targetVoice
+                }) + '\n');
+              }
+            }
+          }
+
+          // Cache combined audio for instant re-play
+          if (allPcmBuffers.length > 0) {
+            const combined = Buffer.concat(allPcmBuffers);
+            const fullWav = pcmToWav(combined, 24000, 1);
+            if (ttsServerCache.size > 100) ttsServerCache.clear();
+            ttsServerCache.set(cacheKey, {
+              audioBase64: fullWav.toString('base64'),
+              mimeType: 'audio/wav',
+              voice: targetVoice
+            });
+          }
+
+          return res.end();
+        }
+
+        // Non-streaming fallback: execute all chunks in parallel
+        const pcmResults = await Promise.all(chunks.map(chunk => synthesizeChunk(chunk)));
+        const validPcms = pcmResults.filter((b): b is Buffer => b !== null);
+
+        if (validPcms.length > 0) {
+          const combinedPcm = Buffer.concat(validPcms);
+          const wavBuffer = pcmToWav(combinedPcm, 24000, 1);
+          const resultPayload = {
+            audioBase64: wavBuffer.toString('base64'),
+            mimeType: 'audio/wav',
+            voice: targetVoice,
+            engine: 'gemini-3.1-flash-tts-preview'
+          };
+          if (ttsServerCache.size > 100) ttsServerCache.clear();
+          ttsServerCache.set(cacheKey, resultPayload);
+          return res.json(resultPayload);
+        }
+      } catch (geminiTtsErr: any) {
+        console.warn('Gemini Studio TTS encounter:', geminiTtsErr?.message);
+      }
+
+      // 2. Secondary Engine: OpenAI TTS (if optional OPENAI_API_KEY is configured in env)
+      const openAiKey = process.env.OPENAI_API_KEY;
+      if (openAiKey) {
+        const openaiVoice = voice || 'nova';
         const response = await fetch('https://api.openai.com/v1/audio/speech', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
+            'Authorization': `Bearer ${openAiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             model: 'tts-1',
-            input: chunkText,
+            input: cleanText.slice(0, 4000),
             voice: openaiVoice,
             response_format: 'mp3'
           }),
         });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`OpenAI TTS error: ${errorText}`);
+        if (response.ok) {
+          const arrayBuffer = await response.arrayBuffer();
+          const base64Audio = Buffer.from(arrayBuffer).toString('base64');
+          return res.json({
+            audioBase64: base64Audio,
+            mimeType: 'audio/mp3',
+            voice: openaiVoice,
+            engine: 'openai'
+          });
         }
-        return await response.arrayBuffer();
-      });
+      }
 
-      // Fetch all chunks in parallel to reduce wait time
-      const audioBuffers = await Promise.all(audioPromises);
-      
-      // Concatenate all MP3 buffers sequentially
-      const combinedBuffer = Buffer.concat(audioBuffers.map(b => Buffer.from(b)));
-      const base64Audio = combinedBuffer.toString('base64');
-
-      res.json({
-        audioBase64: base64Audio,
-        mimeType: 'audio/mp3'
-      });
+      return res.status(500).json({ error: 'TTS audio synthesis is unavailable at this time.' });
     } catch (err: any) {
       console.error('API /api/tts error:', err);
       res.status(500).json({ error: err?.message || 'TTS generation error' });

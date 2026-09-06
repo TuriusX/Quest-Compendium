@@ -66,7 +66,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: 'silver', name: 'Witcher Silver', color: '#c0c0c0', desc: 'Monster-slaying shine' },
   ];
 
-  const aiModes: { id: AiMode; label: string; desc: string; icon: string }[] = [
+  const aiModes: { id: AiMode; label: string; desc: string; icon: string; experimental?: boolean }[] = [
     { 
       id: 'standard', 
       label: 'Standard Compendium', 
@@ -77,26 +77,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       id: 'roleplay', 
       label: 'Immersive In-Universe Roleplay', 
       desc: 'Adopts an authentic in-universe companion persona (Archmage, Navigational Construct, Dungeon Master).',
-      icon: '🎭'
+      icon: '🎭',
+      experimental: true,
     },
     { 
       id: 'minmax', 
       label: 'Min/Max (100% Completionist)', 
       desc: 'Laser-focused on optimal builds, missable collectibles, zero filler, and speedrun routes.',
-      icon: '⚡'
+      icon: '⚡',
+      experimental: true,
     },
   ];
 
   const voices = [
-    { id: 'fable', name: 'Fable (The British Storyteller)' },
-    { id: 'onyx', name: 'Onyx (The Dark Overlord)' },
-    { id: 'nova', name: 'Nova (The Energetic Guide)' },
-    { id: 'echo', name: 'Echo (The Wise Mentor)' },
-    { id: 'shimmer', name: 'Shimmer (The Ethereal Spirit)' },
-    { id: 'sage', name: 'Sage (The Mystical Oracle)' },
-    { id: 'ash', name: 'Ash (The Bold Adventurer)' },
-    { id: 'coral', name: 'Coral (The Cheerful Sidekick)' },
-    { id: 'alloy', name: 'Alloy (The Neutral Construct)' }
+    { id: 'zephyr', name: 'Zephyr (Warm & Energetic Guide - Recommended)' },
+    { id: 'charon', name: 'Charon (Deep & Resonant Narrator)' },
+    { id: 'aoede', name: 'Aoede (Expressive British Storyteller)' },
+    { id: 'achernar', name: 'Achernar (Bold & Crisp Adventurer)' },
+    { id: 'orus', name: 'Orus (Wise & Commanding Mentor)' },
+    { id: 'autonoe', name: 'Autonoe (Gentle & Melodic Spirit)' },
+    { id: 'leda', name: 'Leda (Clear & Calm Mystic)' },
+    { id: 'nova', name: 'Nova (Legacy Guide)' },
+    { id: 'onyx', name: 'Onyx (Legacy Overlord)' },
+    { id: 'fable', name: 'Fable (Legacy Storyteller)' },
   ];
 
   const controllerButtons = [
@@ -352,7 +355,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <span className="text-lg mt-0.5">{mode.icon}</span>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between font-semibold text-xs text-white mb-0.5">
-                              <span>{mode.label}</span>
+                              <div className="flex items-center gap-2">
+                                <span>{mode.label}</span>
+                                {mode.experimental && (
+                                  <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                    Experimental
+                                  </span>
+                                )}
+                              </div>
                               {isSelected && <Check className="w-4 h-4 text-[var(--accent-color)]" />}
                             </div>
                             <p className="text-[11px] text-zinc-400 leading-relaxed">{mode.desc}</p>

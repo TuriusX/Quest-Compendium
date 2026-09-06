@@ -85,7 +85,7 @@ export interface AppSettings {
   steamId: string;
   steamName?: string;
   steamAvatar?: string;
-  ttsVoice: 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer';
+  ttsVoice: string;
   customApiKey?: string;
   openAiApiKey?: string;
   hideAppShortcut: string;

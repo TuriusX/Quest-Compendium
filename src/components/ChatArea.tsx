@@ -9,6 +9,7 @@ import {
   MicOff, 
   Volume2, 
   Square, 
+  Loader2,
   X, 
   Sparkles, 
   BookmarkPlus, 
@@ -69,7 +70,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [inputQuestion, setInputQuestion] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const attachedImageRef = useRef<string | null>(null);
-  const pendingScreenshotRef = useRef<Promise<string | null> | null>(null);
 
   useEffect(() => {
     attachedImageRef.current = attachedImage;
@@ -78,11 +78,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [savedNoteMessageId, setSavedNoteMessageId] = useState<string | null>(null);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [audioLoadingId, setAudioLoadingId] = useState<string | null>(null);
   const [isCapturingScreen, setIsCapturingScreen] = useState(false);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioQueueRef = useRef<string[]>([]);
+  const ttsCacheRef = useRef<Map<string, string[]>>(new Map());
+  const ttsAbortControllerRef = useRef<AbortController | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
 
@@ -120,22 +124,30 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     return () => window.removeEventListener('paste', handlePaste);
   }, [soundEnabled]);
 
-  // Cleanup media recorder on unmount
+  // Cleanup media recorder & audio on unmount
   useEffect(() => {
     return () => {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
+      }
+      if (ttsAbortControllerRef.current) {
+        ttsAbortControllerRef.current.abort();
+        ttsAbortControllerRef.current = null;
+      }
+      audioQueueRef.current = [];
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+        currentAudioRef.current = null;
+      }
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
       }
     };
   }, []);
 
   const startVoiceRecording = async () => {
     if (isRecording) return;
-    
-    // Automatically capture screen if none is attached
-    if (!attachedImageRef.current) {
-      pendingScreenshotRef.current = captureGameScreen();
-    }
 
     playBlipSound(soundEnabled);
     try {
@@ -154,12 +166,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const reader = new FileReader();
         
-        let finalImage = attachedImageRef.current;
-        if (pendingScreenshotRef.current) {
-          const result = await pendingScreenshotRef.current;
-          if (result) finalImage = result;
-          pendingScreenshotRef.current = null;
-        }
+        const finalImage = attachedImageRef.current;
 
         reader.readAsDataURL(audioBlob);
         reader.onloadend = () => {
@@ -176,8 +183,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       mediaRecorder.start();
       setIsRecording(true);
     } catch (err: any) {
-      console.error('Microphone error:', err);
-      alert(`Mic Error: ${err.name} - ${err.message}. If this says NotAllowedError, you must open Windows Settings -> Privacy -> Microphone -> 'Allow desktop apps to access your microphone'.`);
+      console.warn('Microphone access warning:', err?.message || err);
+      setIsRecording(false);
     }
   };
 
@@ -205,7 +212,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     };
   }, [isRecording, soundEnabled, attachedImage, onSendMessage]);
 
-  // Live Screen Capture from Game Window (WebRTC DisplayMedia)
+  // Live Screen Capture from Game Window (WebRTC DisplayMedia or File Upload Fallback)
   const captureGameScreen = async (): Promise<string | null> => {
     try {
       setIsCapturingScreen(true);
@@ -221,9 +228,23 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         return dataUrl || null;
       }
 
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      // Check whether display-capture feature policy is permitted in current frame
+      let isPolicyAllowed = true;
+      try {
+        if (typeof document !== 'undefined') {
+          if ('permissionsPolicy' in document && (document as any).permissionsPolicy?.allowsFeature) {
+            isPolicyAllowed = (document as any).permissionsPolicy.allowsFeature('display-capture');
+          } else if ('featurePolicy' in document && (document as any).featurePolicy?.allowsFeature) {
+            isPolicyAllowed = (document as any).featurePolicy.allowsFeature('display-capture');
+          }
+        }
+      } catch {
+        isPolicyAllowed = true;
+      }
+
+      if (!isPolicyAllowed || !navigator?.mediaDevices?.getDisplayMedia) {
         setIsCapturingScreen(false);
-        alert("Screen capture is not supported in this desktop container. Please take a screenshot and paste it here using Ctrl+V.");
+        fileInputRef.current?.click();
         return null;
       }
 
@@ -262,9 +283,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       if (video.parentNode) video.parentNode.removeChild(video);
       setIsCapturingScreen(false);
       return dataUrl;
-    } catch (err) {
-      console.error('Screen capture cancelled or failed:', err);
+    } catch (err: any) {
       setIsCapturingScreen(false);
+      if (err?.name === 'NotAllowedError' && (err?.message?.includes('permissions policy') || err?.message?.includes('disallowed'))) {
+        // Fallback smoothly to file picker when display-capture permissions policy blocks getDisplayMedia
+        fileInputRef.current?.click();
+      } else {
+        console.warn('Screen capture not completed or cancelled:', err?.message || err);
+      }
       return null;
     }
   };
@@ -288,61 +314,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     if ((!inputQuestion.trim() && !attachedImage) || isLoading) return;
 
     const question = inputQuestion.trim();
-    let image = attachedImage || undefined;
-
-    // Automatic screen capture in Immersive mode if no image is attached manually
-    if (!image) {
-      try {
-        setIsCapturingScreen(true);
-        if ((window as any).electronAPI?.takeScreenshot) {
-          const dataUrl = await (window as any).electronAPI.takeScreenshot();
-          if (dataUrl) {
-            image = dataUrl;
-          } else {
-            setIsCapturingScreen(false);
-          }
-        } else {
-          if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-            setIsCapturingScreen(false);
-          } else {
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-              video: true,
-              audio: false,
-            });
-            const video = document.createElement('video');
-            video.style.position = 'fixed';
-            video.style.top = '-9999px';
-            video.style.opacity = '0';
-            document.body.appendChild(video);
-            video.srcObject = stream;
-            video.autoplay = true;
-            video.muted = true;
-            video.play();
-            await new Promise((resolve) => {
-              video.onloadeddata = () => resolve(null);
-            });
-            await new Promise(r => setTimeout(r, 300));
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth || 1280;
-            canvas.height = video.videoHeight || 720;
-            const ctx = canvas.getContext('2d');
-            if (ctx && video.videoWidth > 0) {
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              image = canvas.toDataURL('image/jpeg', 0.85);
-            } else {
-              image = undefined;
-            }
-            stream.getTracks().forEach(track => track.stop());
-            if (video.parentNode) video.parentNode.removeChild(video);
-          }
-        }
-        setIsCapturingScreen(false);
-      } catch (err) {
-        console.error('Auto screen capture cancelled or failed:', err);
-        setIsCapturingScreen(false);
-        // Continue sending without image if capture was cancelled
-      }
-    }
+    const image = attachedImage || undefined;
 
     setInputQuestion('');
     setAttachedImage(null);
@@ -366,63 +338,207 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setTimeout(() => setSavedNoteMessageId(null), 2000);
   };
 
+  const stopAllAudio = () => {
+    // 1. Abort any in-flight TTS generation network request
+    if (ttsAbortControllerRef.current) {
+      ttsAbortControllerRef.current.abort();
+      ttsAbortControllerRef.current = null;
+    }
+    // 2. Clear remaining queued audio chunks
+    audioQueueRef.current = [];
+    // 3. Pause and reset any active HTML5 audio element
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+      currentAudioRef.current = null;
+    }
+    // 4. Cancel any native browser speech synthesis queue
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setPlayingAudioId(null);
+    setAudioLoadingId(null);
+  };
+
+  const playNextAudioChunk = (msgId: string, src: string) => {
+    if (ttsAbortControllerRef.current?.signal.aborted) return;
+    const audio = new Audio(src);
+    currentAudioRef.current = audio;
+
+    audio.onended = () => {
+      if (currentAudioRef.current === audio) {
+        if (audioQueueRef.current.length > 0) {
+          const nextSrc = audioQueueRef.current.shift()!;
+          playNextAudioChunk(msgId, nextSrc);
+        } else {
+          currentAudioRef.current = null;
+          setPlayingAudioId(null);
+          setAudioLoadingId(null);
+        }
+      }
+    };
+
+    audio.onerror = () => {
+      if (currentAudioRef.current === audio) {
+        if (audioQueueRef.current.length > 0) {
+          const nextSrc = audioQueueRef.current.shift()!;
+          playNextAudioChunk(msgId, nextSrc);
+        } else {
+          currentAudioRef.current = null;
+          setPlayingAudioId(null);
+          setAudioLoadingId(null);
+        }
+      }
+    };
+
+    audio.play().catch((err) => {
+      console.warn('Audio playback start was prevented or interrupted:', err);
+    });
+  };
+
   const handlePlayTTS = async (msgId: string, text: string) => {
     playBlipSound(soundEnabled);
 
-    // Stop current audio if playing
-    if (playingAudioId === msgId && currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
-      setPlayingAudioId(null);
+    // If currently playing or loading this exact message, immediately STOP
+    if (playingAudioId === msgId) {
+      stopAllAudio();
       return;
     }
 
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
+    // Stop any existing audio before starting new playback
+    stopAllAudio();
+
+    const cacheKey = `${ttsVoice || 'Zephyr'}::${text}`;
+    if (ttsCacheRef.current.has(cacheKey)) {
+      const cached = [...ttsCacheRef.current.get(cacheKey)!];
+      if (cached.length > 0) {
+        setPlayingAudioId(msgId);
+        setAudioLoadingId(null);
+        const first = cached.shift()!;
+        audioQueueRef.current = cached;
+        playNextAudioChunk(msgId, first);
+        return;
+      }
     }
+
+    const abortController = new AbortController();
+    ttsAbortControllerRef.current = abortController;
 
     try {
       setPlayingAudioId(msgId);
+      setAudioLoadingId(msgId);
       
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
 
-      // Call server TTS endpoint
+      // Call server TTS endpoint with stream: true for fast first-chunk playback
       const res = await fetch(`${getApiBaseUrl()}/api/tts`, {
         method: 'POST',
+        signal: abortController.signal,
         headers: { 
           'Content-Type': 'application/json',
+          'Accept': 'application/x-ndjson, application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ text, voice: ttsVoice || 'nova' }),
+        body: JSON.stringify({ text, voice: ttsVoice || 'Zephyr', stream: true }),
       });
 
+      if (abortController.signal.aborted) return;
+
       if (res.ok) {
-        const contentType = res.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
+        const contentType = res.headers.get('content-type') || '';
+
+        // If streaming NDJSON (progressive chunks)
+        if (contentType.includes('application/x-ndjson') && res.body) {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          const collectedChunks: string[] = [];
+          let firstChunkPlayed = false;
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (abortController.signal.aborted) break;
+
+            if (value) {
+              buffer += decoder.decode(value, { stream: !done });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                try {
+                  const chunkData = JSON.parse(trimmed);
+                  if (chunkData.audioBase64) {
+                    const mime = chunkData.mimeType || 'audio/wav';
+                    const audioSrc = `data:${mime};base64,${chunkData.audioBase64}`;
+                    collectedChunks.push(audioSrc);
+
+                    if (!firstChunkPlayed) {
+                      firstChunkPlayed = true;
+                      setAudioLoadingId(null);
+                      playNextAudioChunk(msgId, audioSrc);
+                    } else {
+                      audioQueueRef.current.push(audioSrc);
+                    }
+                  }
+                } catch (e) {
+                  // Ignore JSON parse errors for incomplete chunks
+                }
+              }
+            }
+
+            if (done) break;
+          }
+
+          if (collectedChunks.length > 0) {
+            ttsCacheRef.current.set(cacheKey, collectedChunks);
+          }
+          if (firstChunkPlayed) return;
+        } else if (contentType.includes('application/json')) {
+          // Standard JSON payload fallback
           const data = await res.json();
+          if (abortController.signal.aborted) return;
+
           if (data.audioBase64) {
-            const audio = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
-            currentAudioRef.current = audio;
-            audio.onended = () => setPlayingAudioId(null);
-            audio.onerror = () => setPlayingAudioId(null);
-            await audio.play();
+            setAudioLoadingId(null);
+            const mime = data.mimeType || 'audio/wav';
+            const audioSrc = `data:${mime};base64,${data.audioBase64}`;
+            ttsCacheRef.current.set(cacheKey, [audioSrc]);
+            playNextAudioChunk(msgId, audioSrc);
             return;
           }
         }
       }
 
-      // Browser Web Speech fallback
+      if (abortController.signal.aborted) return;
+      setAudioLoadingId(null);
+
+      // Browser Web Speech fallback (only if server failed and request wasn't stopped)
       if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text.slice(0, 400));
-        utterance.rate = 1.05;
-        utterance.onend = () => setPlayingAudioId(null);
-        utterance.onerror = () => setPlayingAudioId(null);
+        utterance.rate = 1.0;
+        utterance.onend = () => {
+          setPlayingAudioId(null);
+          setAudioLoadingId(null);
+        };
+        utterance.onerror = () => {
+          setPlayingAudioId(null);
+          setAudioLoadingId(null);
+        };
         window.speechSynthesis.speak(utterance);
+      } else {
+        setPlayingAudioId(null);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        // User deliberately stopped playback
+        return;
+      }
       console.error('TTS playback failed:', err);
       setPlayingAudioId(null);
+      setAudioLoadingId(null);
     }
   };
 
@@ -592,27 +708,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        {/* Audio TTS button with animated wave indicator */}
+                        {/* Audio TTS button with animated wave indicator / stop control */}
                         <button
                           onClick={() => handlePlayTTS(msg.id, msg.text)}
-                          title={isAudioPlaying ? "Stop Audio Narration" : "Read Aloud (Gemini Voice)"}
+                          title={isAudioPlaying ? "Click to Stop Narration" : "Read Aloud (Gemini Studio Voice)"}
                           className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-xs font-medium ${
                             isAudioPlaying 
-                              ? 'text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.3)]' 
+                              ? 'text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.3)] hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40' 
                               : 'text-zinc-400 hover:text-white hover:bg-white/10'
                           }`}
                         >
                           {isAudioPlaying ? (
-                            <>
-                              <Square className="w-3 h-3 fill-current text-emerald-400" />
-                              <div className="flex items-center gap-0.5 h-3">
-                                <span className="w-0.5 bg-emerald-400 rounded-full animate-soundwave-1" />
-                                <span className="w-0.5 bg-emerald-400 rounded-full animate-soundwave-2" />
-                                <span className="w-0.5 bg-emerald-400 rounded-full animate-soundwave-3" />
-                                <span className="w-0.5 bg-emerald-400 rounded-full animate-soundwave-4" />
-                              </div>
-                              <span className="text-[10px] font-mono">Narrating</span>
-                            </>
+                            audioLoadingId === msg.id ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                                <span className="text-[10px] font-mono">Generating...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Square className="w-3 h-3 fill-current text-emerald-400 group-hover:text-rose-400" />
+                                <div className="flex items-center gap-0.5 h-3">
+                                  <span className="w-0.5 bg-emerald-400 rounded-full animate-soundwave-1" />
+                                  <span className="w-0.5 bg-emerald-400 rounded-full animate-soundwave-2" />
+                                  <span className="w-0.5 bg-emerald-400 rounded-full animate-soundwave-3" />
+                                  <span className="w-0.5 bg-emerald-400 rounded-full animate-soundwave-4" />
+                                </div>
+                                <span className="text-[10px] font-mono">Stop</span>
+                              </>
+                            )
                           ) : (
                             <>
                               <Volume2 className="w-3.5 h-3.5" />
@@ -738,6 +861,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               ref={fileInputRef}
               onChange={handleFileUpload}
             />
+
+            {/* Attach Screenshot / Game Screen */}
+            <button
+              type="button"
+              onClick={() => {
+                playBlipSound(soundEnabled);
+                captureGameScreen();
+              }}
+              title="Attach Game Screenshot (or paste with Ctrl+V)"
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                isCapturingScreen
+                  ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] animate-pulse shadow-[0_0_12px_var(--accent-glow)]'
+                  : attachedImage
+                    ? 'text-[var(--accent-color)] bg-[var(--accent-dim)]'
+                    : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
+              }`}
+            >
+              <Camera className="w-4 h-4" />
+            </button>
 
             {/* Push to Talk / Voice Dictation */}
             <button
