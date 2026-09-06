@@ -147,10 +147,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 <span className="font-bold">
                   {userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 3) - (userData.proQueriesToday || 0))} Pro
                 </span>
-                <span className="opacity-50">|</span>
-                <span className="font-bold">
-                  {userData.isPremium ? 'Unlimited Std' : `${userData.flashQueriesAvailable ?? Math.max(0, 3 - (userData.flashQueriesToday || 0))} Std`}
-                </span>
               </div>
               {!userData.isPremium && <Sparkles className="w-3.5 h-3.5 ml-1 text-amber-400 animate-pulse" />}
             </div>
@@ -186,7 +182,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 {/* Flash Queries Progress */}
                 <div className="flex flex-col gap-1.5">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-zinc-300 font-medium">Flash Lite Fallback</span>
+                    <span className="text-zinc-300 font-medium">Flash Fallback</span>
                     <span className="text-zinc-400 font-mono text-[10px]">
                       {userData.isPremium ? 'Unlimited' : `${userData.flashQueriesAvailable ?? Math.max(0, 3 - (userData.flashQueriesToday || 0))} / 3`}
                     </span>
