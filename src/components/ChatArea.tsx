@@ -531,6 +531,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             ttsCacheRef.current.set(cacheKey, collectedChunks);
           }
           if (firstChunkPlayed) return;
+          throw new Error('TTS Rate limit exceeded (100 requests/day for gemini-3.1-flash-tts) or generation failed. Try again later.');
         } else if (contentType.includes('application/json')) {
           // Standard JSON payload fallback
           const data = await res.json();
