@@ -310,17 +310,6 @@ function createWindow() {
 
 
 app.whenReady().then(() => {
-  // Run local backend server if running in production
-  if (!isDev) {
-    try {
-      process.env.NODE_ENV = 'production';
-      require('../dist/server.cjs');
-      console.log('Local backend server started successfully inside main process.');
-    } catch (err) {
-      console.error('Failed to start local backend server:', err);
-    }
-  }
-
   // Setup System Tray
   const iconPath = path.join(__dirname, isDev ? '../public/app-icon.png' : '../dist/app-icon.png');
   tray = new Tray(nativeImage.createFromPath(iconPath));

@@ -641,7 +641,7 @@ export default function App() {
           }
         } catch (e) {
           if (res.status === 404) {
-             errorText = `Backend 404 at ${backendUrl}: The server endpoint was not found. If running as a desktop app, ensure the backend process started correctly.`;
+             errorText = `Cloud Backend 404 at ${backendUrl}: The server endpoint was not found. Please ensure your AI Studio app is published.`;
           } else {
              errorText = `HTTP ${res.status} (Non-JSON response)`;
           }

@@ -1,4 +1,4 @@
-export const DEFAULT_PREVIEW_URL = 'https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app';
+export const DEFAULT_PREVIEW_URL = 'https://quest-compendium-1.ai.studio';
 
 export const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
@@ -8,9 +8,10 @@ export const getApiBaseUrl = (): string => {
     }
   }
 
-  // If running in Electron (electronAPI is present), ALWAYS use local server on port 3000
+  // If running in Electron (electronAPI is present), use the published cloud backend
+  // so the desktop app can utilize the securely stored Gemini API key without prompting the user.
   if (typeof window !== 'undefined' && (window as any).electronAPI) {
-    return 'http://localhost:3000';
+    return DEFAULT_PREVIEW_URL;
   }
 
   // If running from file:// (edge case), we need an absolute URL to the backend.
