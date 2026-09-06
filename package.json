@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "desktop:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "desktop:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron electron/main.cjs\"",
     "desktop:build": "npm run build && electron-builder"
   },
   "dependencies": {
@@ -50,10 +50,12 @@
     "vite": "^6.2.3",
     "wait-on": "^9.1.0"
   },
-  "main": "electron/main.cjs",
   "build": {
     "appId": "com.questcompendium.app",
     "productName": "Quest Compendium",
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
     "directories": {
       "output": "release"
     },
