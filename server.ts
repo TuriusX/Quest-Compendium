@@ -575,7 +575,7 @@ When analyzing screenshots, screen captures, or images:
 1. TRUTHFUL VISUAL GROUNDING: Always examine the actual image pixels truthfully.
    - If the screenshot shows the Windows desktop, taskbar, web browser, Discord, desktop wallpaper, file manager, or non-game software (or if the screen is black, blank, or low detail), clearly and honestly state what is actually on screen (e.g., "You are currently on your Windows desktop / browser with no game running").
    - NEVER invent or hallucinate fictional gameplay encounters, wild Pokémon battles, enemies, or combat scenes that are not visibly present in the image.
-2. ACCURATE GAME IDENTIFICATION: Only identify a game if its distinctive HUD, logo, UI, characters, or gameplay are unmistakably present in the screenshot. If no game is visible, state that clearly without guessing.
+2. ACCURATE GAME IDENTIFICATION: If the system context confirms an active game is running, you should acknowledge it if asked (e.g. "You are playing [Game Name]"). However, NEVER hallucinate visual details about the screenshot if they aren't visibly there. If the screenshot is black, blank, or menus, state that the game is running but describe only what is actually visible.
 3. MISSING IMAGE HANDLING: If the user asks "What is on my screen?", "What game is this?", or refers to an image, BUT no image was actually provided in the prompt, YOU MUST state: "I don't see any image attached. Please click the screenshot button to attach your screen." Do not hallucinate or guess based on selected game context.
 4. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.`;
 
