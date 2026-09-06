@@ -25,7 +25,8 @@ import {
   User,
   ExternalLink,
   Flame,
-  Info
+  Info,
+  AlertTriangle
 } from 'lucide-react';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
 import { getApiBaseUrl } from '../utils/api';
@@ -80,6 +81,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [audioLoadingId, setAudioLoadingId] = useState<string | null>(null);
   const [isCapturingScreen, setIsCapturingScreen] = useState(false);
+  const [ttsStatusError, setTtsStatusError] = useState<{ msgId: string; error: string } | null>(null);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -430,8 +432,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
 
+      const targetBaseUrl = getApiBaseUrl();
+      console.log(`[TTS] Requesting voice "${ttsVoice || 'Zephyr'}" from endpoint: ${targetBaseUrl || '(relative)'}/api/tts`);
+
       // Call server TTS endpoint with stream: true for fast first-chunk playback
-      const res = await fetch(`${getApiBaseUrl()}/api/tts`, {
+      const res = await fetch(`${targetBaseUrl}/api/tts`, {
         method: 'POST',
         signal: abortController.signal,
         headers: { 
@@ -477,6 +482,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     if (!firstChunkPlayed) {
                       firstChunkPlayed = true;
                       setAudioLoadingId(null);
+                      setTtsStatusError(null);
                       playNextAudioChunk(msgId, audioSrc);
                     } else {
                       audioQueueRef.current.push(audioSrc);
@@ -502,6 +508,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
           if (data.audioBase64) {
             setAudioLoadingId(null);
+            setTtsStatusError(null);
             const mime = data.mimeType || 'audio/wav';
             const audioSrc = `data:${mime};base64,${data.audioBase64}`;
             ttsCacheRef.current.set(cacheKey, [audioSrc]);
@@ -511,32 +518,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         }
       }
 
-      if (abortController.signal.aborted) return;
+      // If server returned non-200 OK
+      let errMsg = `Server HTTP ${res.status}`;
+      try {
+        const errJson = await res.json();
+        errMsg = errJson.error || errMsg;
+      } catch (e) {
+        // non-JSON
+      }
+
+      const helpfulError = res.status === 404
+        ? `Backend not found at ${targetBaseUrl || window.location.origin}. In Settings ⚙️ > Server Connection, select "Localhost:3000" (if running local dev) or your Published Cloud URL.`
+        : res.status === 401
+        ? `Authentication required for Gemini Voice. Please sign in or reconnect to your cloud server.`
+        : `Gemini Voice generation error: ${errMsg}`;
+
+      console.error('[TTS] Server audio failed:', helpfulError);
+      setTtsStatusError({ msgId, error: helpfulError });
+      setPlayingAudioId(null);
       setAudioLoadingId(null);
 
-      // Browser Web Speech fallback (only if server failed and request wasn't stopped)
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text.slice(0, 400));
-        utterance.rate = 1.0;
-        utterance.onend = () => {
-          setPlayingAudioId(null);
-          setAudioLoadingId(null);
-        };
-        utterance.onerror = () => {
-          setPlayingAudioId(null);
-          setAudioLoadingId(null);
-        };
-        window.speechSynthesis.speak(utterance);
-      } else {
-        setPlayingAudioId(null);
-      }
     } catch (err: any) {
       if (err?.name === 'AbortError') {
         // User deliberately stopped playback
         return;
       }
-      console.error('TTS playback failed:', err);
+      console.error('[TTS] Network error requesting TTS:', err);
+      const networkHelp = `Cannot connect to server at ${getApiBaseUrl() || window.location.origin}. Please open Settings ⚙️ > Server Connection to verify your endpoint.`;
+      setTtsStatusError({ msgId, error: networkHelp });
       setPlayingAudioId(null);
       setAudioLoadingId(null);
     }
@@ -771,6 +780,22 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           )}
                         </button>
                       </div>
+                    </div>
+                  )}
+
+                  {/* TTS Error / Connection diagnostic notification if speech failed */}
+                  {ttsStatusError && ttsStatusError.msgId === msg.id && (
+                    <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/25 flex items-start gap-2 text-xs text-red-300 animate-fadeIn">
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 text-[11px] leading-relaxed">
+                        {ttsStatusError.error}
+                      </div>
+                      <button 
+                        onClick={() => setTtsStatusError(null)}
+                        className="text-zinc-400 hover:text-white p-0.5 text-[10px] cursor-pointer"
+                      >
+                        ✕
+                      </button>
                     </div>
                   )}
                 </div>
