@@ -176,7 +176,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
               <div className="flex flex-col gap-1.5 z-10 relative">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <img src="/ribbon.png" alt="Platinum Ribbon" className="w-[20px] h-[20px] drop-shadow-[0_0_8px_rgba(56,189,248,0.5)] flex-shrink-0" />
+                    <img src="./ribbon.png" alt="Platinum Ribbon" className="w-[20px] h-[20px] drop-shadow-[0_0_8px_rgba(56,189,248,0.5)] flex-shrink-0" />
                     <span className="text-white font-black text-[11px] tracking-wide uppercase drop-shadow-md">
                       You've unlocked all achievements! {unlockedCount}/{totalCount}
                     </span>
