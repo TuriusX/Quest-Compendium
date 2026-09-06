@@ -852,23 +852,26 @@ When analyzing screenshots, screen captures, or images:
   }
 
   const TTS_VOICE_MAP: Record<string, string> = {
-    'zephyr': 'Zephyr',
+    'puck': 'Puck',
     'charon': 'Charon',
+    'fenrir': 'Fenrir',
+    'kore': 'Kore',
     'aoede': 'Aoede',
-    'achernar': 'Achernar',
-    'orus': 'Orus',
-    'autonoe': 'Autonoe',
-    'leda': 'Leda',
-    // Persona presets & OpenAI backward compatibility mapping
-    'nova': 'Zephyr',
+    // Fallbacks for legacy/old keys
+    'zephyr': 'Puck',
+    'achernar': 'Charon',
+    'orus': 'Fenrir',
+    'autonoe': 'Kore',
+    'leda': 'Aoede',
+    'nova': 'Puck',
     'onyx': 'Charon',
     'fable': 'Aoede',
-    'echo': 'Orus',
-    'shimmer': 'Autonoe',
-    'sage': 'Leda',
-    'ash': 'Achernar',
+    'echo': 'Fenrir',
+    'shimmer': 'Kore',
+    'sage': 'Kore',
+    'ash': 'Charon',
     'coral': 'Aoede',
-    'alloy': 'Zephyr',
+    'alloy': 'Puck',
   };
 
   // In-memory audio cache to provide instant (0ms) playback for repeated voice calls
@@ -877,7 +880,7 @@ When analyzing screenshots, screen captures, or images:
   // --- API: Text-to-Speech (TTS) using Gemini Neural Voice Studio ---
   app.post('/api/tts', optionalAuth, async (req, res) => {
     try {
-      const { text, voice = 'Zephyr', stream = true } = req.body;
+      const { text, voice = 'Puck', stream = true } = req.body;
       if (!text) {
         return res.status(400).json({ error: 'Text is required for speech' });
       }
@@ -903,8 +906,8 @@ When analyzing screenshots, screen captures, or images:
         .replace(/\s+/g, ' ')
         .trim();
 
-      const normalizedVoiceKey = (voice || 'zephyr').toLowerCase();
-      const targetVoice = TTS_VOICE_MAP[normalizedVoiceKey] || 'Zephyr';
+      const normalizedVoiceKey = (voice || 'puck').toLowerCase();
+      const targetVoice = TTS_VOICE_MAP[normalizedVoiceKey] || 'Puck';
       const cacheKey = `${targetVoice}::${cleanText.slice(0, 1000)}`;
 
       // Instant cache hit

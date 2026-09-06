@@ -90,16 +90,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ];
 
   const voices = [
-    { id: 'zephyr', name: 'Zephyr (Warm & Energetic Guide - Recommended)' },
-    { id: 'charon', name: 'Charon (Deep & Resonant Narrator)' },
-    { id: 'aoede', name: 'Aoede (Expressive British Storyteller)' },
-    { id: 'achernar', name: 'Achernar (Bold & Crisp Adventurer)' },
-    { id: 'orus', name: 'Orus (Wise & Commanding Mentor)' },
-    { id: 'autonoe', name: 'Autonoe (Gentle & Melodic Spirit)' },
-    { id: 'leda', name: 'Leda (Clear & Calm Mystic)' },
-    { id: 'nova', name: 'Nova (Legacy Guide)' },
-    { id: 'onyx', name: 'Onyx (Legacy Overlord)' },
-    { id: 'fable', name: 'Fable (Legacy Storyteller)' },
+    { id: 'puck', name: 'Puck (Warm & Energetic Male - Recommended)' },
+    { id: 'charon', name: 'Charon (Deep & Resonant Male)' },
+    { id: 'fenrir', name: 'Fenrir (Wise & Commanding Male)' },
+    { id: 'kore', name: 'Kore (Clear & Calm Female)' },
+    { id: 'aoede', name: 'Aoede (Expressive & Melodic Female)' },
   ];
 
   const controllerButtons = [

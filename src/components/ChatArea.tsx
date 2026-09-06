@@ -435,7 +435,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     // Stop any existing audio before starting new playback
     stopAllAudio();
 
-    const cacheKey = `${ttsVoice || 'Zephyr'}::${text}`;
+    const cacheKey = `${ttsVoice || 'puck'}::${text}`;
     if (ttsCacheRef.current.has(cacheKey)) {
       const cached = [...ttsCacheRef.current.get(cacheKey)!];
       if (cached.length > 0) {
@@ -458,7 +458,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
 
       const targetBaseUrl = getApiBaseUrl();
-      console.log(`[TTS] Requesting voice "${ttsVoice || 'Zephyr'}" from endpoint: ${targetBaseUrl || '(relative)'}/api/tts`);
+      console.log(`[TTS] Requesting voice "${ttsVoice || 'puck'}" from endpoint: ${targetBaseUrl || '(relative)'}/api/tts`);
 
       // Call server TTS endpoint with stream: true for fast first-chunk playback
       const res = await fetch(`${targetBaseUrl}/api/tts`, {
@@ -469,7 +469,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           'Accept': 'application/x-ndjson, application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ text, voice: ttsVoice || 'Zephyr', stream: true }),
+        body: JSON.stringify({ text, voice: ttsVoice || 'puck', stream: true }),
       });
 
       if (abortController.signal.aborted) return;
