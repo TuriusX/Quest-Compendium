@@ -310,6 +310,15 @@ function createWindow() {
 
 
 app.whenReady().then(() => {
+  // Spawn local backend server if running in production
+  if (!isDev) {
+    const serverPath = path.join(__dirname, '../dist/server.cjs');
+    serverProcess = spawn(process.execPath, [serverPath], {
+      stdio: 'inherit',
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', NODE_ENV: 'production', PORT: '3000' }
+    });
+  }
+
   // Setup System Tray
   const iconPath = path.join(__dirname, isDev ? '../public/app-icon.png' : '../dist/app-icon.png');
   tray = new Tray(nativeImage.createFromPath(iconPath));

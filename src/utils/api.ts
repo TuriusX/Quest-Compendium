@@ -8,7 +8,12 @@ export const getApiBaseUrl = (): string => {
     }
   }
 
-  // If running from file:// (Electron packaged), we need an absolute URL to the backend.
+  // If running in Electron (electronAPI is present), ALWAYS use local server on port 3000
+  if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    return 'http://localhost:3000';
+  }
+
+  // If running from file:// (edge case), we need an absolute URL to the backend.
   if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
     return DEFAULT_PREVIEW_URL;
   }
