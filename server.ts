@@ -576,7 +576,8 @@ When analyzing screenshots, screen captures, or images:
    - If the screenshot shows the Windows desktop, taskbar, web browser, Discord, desktop wallpaper, file manager, or non-game software (or if the screen is black, blank, or low detail), clearly and honestly state what is actually on screen (e.g., "You are currently on your Windows desktop / browser with no game running").
    - NEVER invent or hallucinate fictional gameplay encounters, wild Pokémon battles, enemies, or combat scenes that are not visibly present in the image.
 2. ACCURATE GAME IDENTIFICATION: Only identify a game if its distinctive HUD, logo, UI, characters, or gameplay are unmistakably present in the screenshot. If no game is visible, state that clearly without guessing.
-3. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.`;
+3. MISSING IMAGE HANDLING: If the user asks "What is on my screen?", "What game is this?", or refers to an image, BUT no image was actually provided in the prompt, YOU MUST state: "I don't see any image attached. Please click the screenshot button to attach your screen." Do not hallucinate or guess based on selected game context.
+4. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.`;
 
       // Situational Game Context
       let situationalContext = '';

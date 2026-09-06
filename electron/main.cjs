@@ -632,7 +632,7 @@ ipcMain.handle('take-screenshot', async () => {
       mainWindow.hide();
     }
     // Give window time to hide and OS to redraw the desktop / game screen
-    await new Promise(resolve => setTimeout(resolve, 250));
+    await new Promise(resolve => setTimeout(resolve, 400));
   }
 
   let base64Image = null;
@@ -643,9 +643,11 @@ ipcMain.handle('take-screenshot', async () => {
     });
     
     // Pick the display where the cursor is currently located (the active monitor)
+    const displays = screen.getAllDisplays();
     const cursorPoint = screen.getCursorScreenPoint();
     const activeDisplay = screen.getDisplayNearestPoint(cursorPoint);
-    const targetSource = sources.find(s => s.display_id === activeDisplay.id.toString()) || sources[0];
+    const activeIndex = displays.findIndex(d => d.id === activeDisplay.id);
+    const targetSource = activeIndex >= 0 && activeIndex < sources.length ? sources[activeIndex] : sources[0];
 
     if (targetSource) {
       // Use JPEG with 80% quality to drastically reduce payload size for the AI

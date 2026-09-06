@@ -530,7 +530,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       }
 
       const helpfulError = res.status === 404
-        ? `Backend not found at ${targetBaseUrl || window.location.origin}. In Settings ⚙️ > Server Connection, select "Localhost:3000" (if running local dev) or your Published Cloud URL.`
+        ? `Backend not found at ${targetBaseUrl || window.location.origin}. Please ensure the backend server is running.`
         : res.status === 401
         ? `Authentication required for Gemini Voice. Please sign in or reconnect to your cloud server.`
         : `Gemini Voice generation error: ${errMsg}`;

@@ -8,9 +8,9 @@ export const getApiBaseUrl = (): string => {
     }
   }
 
-  // If running from file:// (Electron packaged), we need an absolute URL to the backend.
+  // If running from file:// (Electron packaged), default to local server running on port 3000
   if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
-    return DEFAULT_PREVIEW_URL;
+    return 'http://localhost:3000';
   }
   // If running in development (localhost:3000) or as a web app on the cloud, use relative paths
   return '';
