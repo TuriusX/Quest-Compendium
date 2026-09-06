@@ -436,7 +436,17 @@ let activeSteamGame = null;
 if (process.platform === 'win32') {
   setInterval(() => {
     exec('reg query HKCU\\Software\\Valve\\Steam /v RunningAppId', (error, stdout) => {
-      if (error) return;
+      if (error) {
+        // Steam closed or registry key missing -> reset active game immediately
+        if (lastRunningAppId !== 0 || activeSteamGame !== null) {
+          lastRunningAppId = 0;
+          activeSteamGame = null;
+          if (mainWindow && mainWindow.webContents) {
+            mainWindow.webContents.send('active-game-detected', null);
+          }
+        }
+        return;
+      }
       
       const match = stdout.match(/0x([0-9a-fA-F]+)/);
       if (match) {
@@ -460,8 +470,23 @@ if (process.platform === 'win32') {
                   if (mainWindow && mainWindow.webContents) {
                     mainWindow.webContents.send('active-game-detected', activeSteamGame);
                   }
+                } else {
+                  // Fallback for non-Steam shortcuts or games missing store entries
+                  activeSteamGame = { name: `Steam Game (${currentAppId})`, appId: currentAppId };
+                  if (mainWindow && mainWindow.webContents) {
+                    mainWindow.webContents.send('active-game-detected', activeSteamGame);
+                  }
                 }
               }).catch(() => {});
+          }
+        }
+      } else {
+        // No match found -> clear active game
+        if (lastRunningAppId !== 0 || activeSteamGame !== null) {
+          lastRunningAppId = 0;
+          activeSteamGame = null;
+          if (mainWindow && mainWindow.webContents) {
+            mainWindow.webContents.send('active-game-detected', null);
           }
         }
       }
@@ -606,7 +631,8 @@ ipcMain.handle('take-screenshot', async () => {
     } else {
       mainWindow.hide();
     }
-    await new Promise(resolve => setTimeout(resolve, 150));
+    // Give window time to hide and OS to redraw the desktop / game screen
+    await new Promise(resolve => setTimeout(resolve, 250));
   }
 
   let base64Image = null;
@@ -615,10 +641,15 @@ ipcMain.handle('take-screenshot', async () => {
       types: ['screen'], 
       thumbnailSize: { width: 1920, height: 1080 } 
     });
-    const primaryScreen = sources[0]; 
-    if (primaryScreen) {
+    
+    // Pick the display where the cursor is currently located (the active monitor)
+    const cursorPoint = screen.getCursorScreenPoint();
+    const activeDisplay = screen.getDisplayNearestPoint(cursorPoint);
+    const targetSource = sources.find(s => s.display_id === activeDisplay.id.toString()) || sources[0];
+
+    if (targetSource) {
       // Use JPEG with 80% quality to drastically reduce payload size for the AI
-      const buffer = primaryScreen.thumbnail.toJPEG(80);
+      const buffer = targetSource.thumbnail.toJPEG(80);
       base64Image = 'data:image/jpeg;base64,' + buffer.toString('base64');
     }
   } catch (error) {

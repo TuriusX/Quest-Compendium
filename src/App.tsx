@@ -617,6 +617,7 @@ export default function App() {
           imageBase64,
           audioBase64,
           aiMode: settings.aiMode,
+          isGameRunningLocally: globalActiveGame !== null,
           activeGame: activeGame ? {
             name: activeGame.name,
             appId: activeGame.appId,

@@ -538,6 +538,7 @@ async function startServer() {
         history = [],
         imageBase64,
         aiMode = 'standard',
+        isGameRunningLocally = false,
         activeGame,
         achievements,
         news,
@@ -551,10 +552,10 @@ async function startServer() {
 
       // Persona & Mode System Instructions
       let systemInstruction = '';
-      const isGameDetected = !!activeGame;
+      const isGameDetected = isGameRunningLocally && !!activeGame;
 
       if (aiMode === 'roleplay' && isGameDetected) {
-        systemInstruction = `You are a dynamic, in-universe gaming companion. Your persona must seamlessly adapt to match the genre and world of the active game (e.g., a wise ancient Archmage for fantasy RPGs, a witty AI navigational construct for sci-fi/cyberpunk, a tactical handler for military shooters, or a cryptic Dungeon Master).
+        systemInstruction = `You are a dynamic, in-universe gaming companion. Your persona must seamlessly adapt to match the genre and world of the active game (${activeGame.name}).
 
 CRITICAL RULE: NEVER refer to yourself as a "book", a "compendium", "tome", "pages", or an "AI assistant". You are a living entity, character, or construct within the game's universe. Fully commit to the roleplay.
 
@@ -569,14 +570,24 @@ Provide clear, direct answers without adopting any specific character, persona, 
         }
       }
 
-      systemInstruction += `\n\nWhen analyzing images (screenshots, game captures, inventory screens, maps, boss fights, skill trees), examine UI numbers, health bars, inventory slots, minimap markers, and environmental clues precisely.`;
+      systemInstruction += `\n\nCRITICAL TRUTHFUL VISION GROUNDING:
+When analyzing screenshots, screen captures, or images:
+1. TRUTHFUL VISUAL GROUNDING: Always examine the actual image pixels truthfully.
+   - If the screenshot shows the Windows desktop, taskbar, web browser, Discord, desktop wallpaper, file manager, or non-game software (or if the screen is black, blank, or low detail), clearly and honestly state what is actually on screen (e.g., "You are currently on your Windows desktop / browser with no game running").
+   - NEVER invent or hallucinate fictional gameplay encounters, wild Pokémon battles, enemies, or combat scenes that are not visibly present in the image.
+2. ACCURATE GAME IDENTIFICATION: Only identify a game if its distinctive HUD, logo, UI, characters, or gameplay are unmistakably present in the screenshot. If no game is visible, state that clearly without guessing.
+3. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.`;
 
       // Situational Game Context
       let situationalContext = '';
-      if (activeGame) {
-        situationalContext += `\n[CONFIRMED ACTIVE GAME: ${activeGame.name} (AppID: ${activeGame.appId || 'Custom'})]\n`;
+      if (activeGame && isGameRunningLocally) {
+        situationalContext += `\n[CONFIRMED ACTIVE GAME RUNNING LOCALLY: ${activeGame.name} (AppID: ${activeGame.appId || 'Custom'})]\n`;
         if (activeGame.genre) situationalContext += `[Genre: ${activeGame.genre}]\n`;
         if (activeGame.developer) situationalContext += `[Developer: ${activeGame.developer}]\n`;
+      } else if (activeGame) {
+        situationalContext += `\n[Selected Compendium Reference: ${activeGame.name} (Note: No game is currently running locally on the user's PC)]\n`;
+      } else {
+        situationalContext += `\n[System Status: No active video game is running locally on the player's system]\n`;
       }
 
       if (achievements && achievements.length > 0) {
@@ -670,9 +681,15 @@ Provide clear, direct answers without adopting any specific character, persona, 
         }
       }
 
+      const defaultPrompt = imageBase64
+        ? (isGameRunningLocally && activeGame
+            ? `Analyze this screen capture of ${activeGame.name} in detail and tell me what I should do next or what strategies apply.`
+            : `Analyze this screen capture: accurately identify what is currently displayed on screen (whether a game, desktop, browser, or application) and provide truthful observations or next steps.`)
+        : 'Analyze this observation and provide insightful gaming guidance.';
+
       const promptText = situationalContext
-        ? `${situationalContext}\nUser Question / Observation: ${question || 'Analyze this game screenshot or voice message in detail and tell me what I should do next or what secrets/strategies apply.'}`
-        : question || 'Analyze this message in detail and provide insightful guidance.';
+        ? `${situationalContext}\nUser Question / Observation: ${question || defaultPrompt}`
+        : question || defaultPrompt;
 
       currentParts.push({ text: promptText });
       if (contentsPayload.length > 0 && contentsPayload[contentsPayload.length - 1].role === 'user') {

@@ -176,6 +176,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           // Automatically send the voice note
           onSendMessage("Voice Message", finalImage || undefined, base64Audio);
           setAttachedImage(null);
+          attachedImageRef.current = null;
           setInputQuestion('');
         };
         // Stop all tracks to release microphone
@@ -320,6 +321,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     setInputQuestion('');
     setAttachedImage(null);
+    attachedImageRef.current = null;
 
     playSnapSound(soundEnabled);
     await onSendMessage(question, image);
