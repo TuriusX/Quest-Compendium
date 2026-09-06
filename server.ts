@@ -579,7 +579,6 @@ When analyzing screenshots, screen captures, or images:
 3. MISSING IMAGE HANDLING: If the user asks "What is on my screen?", "What game is this?", or refers to an image, BUT no image was actually provided in the prompt, YOU MUST state: "I don't see any image attached. Please click the screenshot button to attach your screen." Do not hallucinate or guess based on selected game context.
 4. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.`;
 
-      // Situational Game Context
       let situationalContext = '';
       if (activeGame && isGameRunningLocally) {
         situationalContext += `\n[CONFIRMED ACTIVE GAME RUNNING LOCALLY: ${activeGame.name} (AppID: ${activeGame.appId || 'Custom'})]\n`;
@@ -600,6 +599,8 @@ When analyzing screenshots, screen captures, or images:
       if (news && news.length > 0) {
         situationalContext += `\n[Recent Game Patch Notes / News: ${news.slice(0, 3).map((n: any) => n.title || n).join('; ')}]\n`;
       }
+      
+      systemInstruction += `\n\n${situationalContext}`;
 
       // Build Multi-turn Contents
       const contentsPayload: any[] = [];
@@ -688,9 +689,7 @@ When analyzing screenshots, screen captures, or images:
             : `Analyze this screen capture: accurately identify what is currently displayed on screen (whether a game, desktop, browser, or application) and provide truthful observations or next steps.`)
         : 'Analyze this observation and provide insightful gaming guidance.';
 
-      const promptText = situationalContext
-        ? `${situationalContext}\nUser Question / Observation: ${question || defaultPrompt}`
-        : question || defaultPrompt;
+      const promptText = question || defaultPrompt;
 
       currentParts.push({ text: promptText });
       if (contentsPayload.length > 0 && contentsPayload[contentsPayload.length - 1].role === 'user') {
