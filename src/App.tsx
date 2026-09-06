@@ -811,7 +811,7 @@ export default function App() {
     }
   };
 
-  const isDesktop = typeof window !== 'undefined' && window.location.protocol === 'file:';
+  const isDesktop = typeof window !== 'undefined' && window.navigator.userAgent.toLowerCase().includes('electron');
 
   return (
     <div className={`w-screen h-screen flex overflow-hidden ${isDesktop ? 'bg-transparent' : 'bg-[#0c0d14]'}`}>
