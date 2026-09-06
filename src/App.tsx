@@ -599,9 +599,14 @@ export default function App() {
 
     const token = user ? await user.getIdToken() : null;
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 40000);
+    const backendUrl = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
+
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/chat`, {
         method: 'POST',
+        signal: controller.signal,
         headers: { 
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -622,6 +627,7 @@ export default function App() {
           news: activeGame?.patchNotes || []
         }),
       });
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         let errorText = `HTTP ${res.status}`;
@@ -633,8 +639,8 @@ export default function App() {
             shouldOpenPaywall = true;
           }
         } catch (e) {
-          if (res.status === 404 && typeof window !== 'undefined' && window.location.protocol === 'file:') {
-             errorText = `Cloud Backend 404: Please click the "Share" button in AI Studio to deploy your latest server code.`;
+          if (res.status === 404) {
+             errorText = `Cloud Backend 404 at ${backendUrl}: The server endpoint was not found. If you published your app, open Settings ⚙️ > Server Connection to enter your Published URL, or click "Share" in AI Studio to deploy the preview.`;
           } else {
              errorText = `HTTP ${res.status} (Non-JSON response)`;
           }
