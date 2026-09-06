@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { 
   GameTab, 
   SteamGameData, 
@@ -12,17 +12,17 @@ import { HeaderBar } from './components/HeaderBar';
 import { GamesSidebar } from './components/GamesSidebar';
 import { ChatArea } from './components/ChatArea';
 import { AchievementsDrawer } from './components/AchievementsDrawer';
-import { PlaythroughNotepad } from './components/PlaythroughNotepad';
-import { PersonalQuestsModal } from './components/PersonalQuestsModal';
-import { GameGuidesBrowser } from './components/GameGuidesBrowser';
-import { SettingsModal } from './components/SettingsModal';
-import { QuickGameSearchModal } from './components/QuickGameSearchModal';
-import { GameScreenModal } from './components/GameScreenModal';
-import { AuthModal } from './components/AuthModal';
-import { PaywallModal } from './components/PaywallModal';
-import { RenameModal } from './components/RenameModal';
-import { UpdateRequiredModal } from './components/UpdateRequiredModal';
-import { BetaFeedbackModal } from './components/BetaFeedbackModal';
+const PlaythroughNotepad = React.lazy(() => import('./components/PlaythroughNotepad').then(module => ({ default: module.PlaythroughNotepad })));
+const PersonalQuestsModal = React.lazy(() => import('./components/PersonalQuestsModal').then(module => ({ default: module.PersonalQuestsModal })));
+const GameGuidesBrowser = React.lazy(() => import('./components/GameGuidesBrowser').then(module => ({ default: module.GameGuidesBrowser })));
+const SettingsModal = React.lazy(() => import('./components/SettingsModal').then(module => ({ default: module.SettingsModal })));
+const QuickGameSearchModal = React.lazy(() => import('./components/QuickGameSearchModal').then(module => ({ default: module.QuickGameSearchModal })));
+const GameScreenModal = React.lazy(() => import('./components/GameScreenModal').then(module => ({ default: module.GameScreenModal })));
+const AuthModal = React.lazy(() => import('./components/AuthModal').then(module => ({ default: module.AuthModal })));
+const PaywallModal = React.lazy(() => import('./components/PaywallModal').then(module => ({ default: module.PaywallModal })));
+const RenameModal = React.lazy(() => import('./components/RenameModal').then(module => ({ default: module.RenameModal })));
+const UpdateRequiredModal = React.lazy(() => import('./components/UpdateRequiredModal').then(module => ({ default: module.UpdateRequiredModal })));
+const BetaFeedbackModal = React.lazy(() => import('./components/BetaFeedbackModal').then(module => ({ default: module.BetaFeedbackModal })));
 import { db } from './lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { getApiBaseUrl } from './utils/api';
@@ -57,7 +57,7 @@ const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: str
   silver: { color: '#c0c0c0', dim: 'rgba(192, 192, 192, 0.15)', border: 'rgba(192, 192, 192, 0.3)', glow: 'rgba(192, 192, 192, 0.4)' },
 };
 
-import { DesktopLogin } from './components/DesktopLogin';
+const DesktopLogin = React.lazy(() => import('./components/DesktopLogin').then(module => ({ default: module.DesktopLogin })));
 
 function SettingsStandalone() {
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -125,11 +125,11 @@ function SettingsStandalone() {
 
 export default function App() {
   if (window.location.hash === '#settings') {
-    return <SettingsStandalone />;
+    return <Suspense fallback={<div className="w-screen h-screen bg-[#0c0d14]" />}><SettingsStandalone /></Suspense>;
   }
 
   if (window.location.pathname === '/desktop-login') {
-    return <DesktopLogin />;
+    return <Suspense fallback={<div className="w-screen h-screen bg-[#0c0d14]" />}><DesktopLogin /></Suspense>;
   }
 
   // --- Persistent State ---
@@ -814,6 +814,7 @@ export default function App() {
   const isDesktop = typeof window !== 'undefined' && window.navigator.userAgent.toLowerCase().includes('electron');
 
   return (
+    <Suspense fallback={<div className="w-screen h-screen bg-[#0c0d14]" />}>
     <div className={`w-screen h-screen flex overflow-hidden ${isDesktop ? 'bg-transparent' : 'bg-[#0c0d14]'}`}>
       {/* Background CRT scan line ambient glow */}
       <div className="absolute inset-0 bg-radial from-purple-900/10 via-transparent to-transparent pointer-events-none" />
@@ -1091,5 +1092,6 @@ export default function App() {
         soundEnabled={settings.soundEnabled}
       />
     </div>
+    </Suspense>
   );
 }
