@@ -176,11 +176,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
               <div className="flex flex-col gap-1.5 z-10 relative">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-[0_0_8px_rgba(56,189,248,0.5)] flex-shrink-0">
-                      <path d="M6 14L4.5 22L9.5 19L12 20.5L14.5 19L19.5 22L18 14" fill="#38bdf8"/>
-                      <path d="M12 2 L14.5 4.5 L18 4 L19 7.5 L22.5 9 L20.5 12 L22.5 15 L19 16.5 L18 20 L14.5 19.5 L12 22 L9.5 19.5 L6 20 L5 16.5 L1.5 15 L3.5 12 L1.5 9 L5 7.5 L6 4 L9.5 4.5 Z" fill="#38bdf8"/>
-                      <circle cx="12" cy="12" r="5" fill="#fde047"/>
-                    </svg>
+                    <img src="/ribbon.png" alt="Platinum Ribbon" className="w-[20px] h-[20px] drop-shadow-[0_0_8px_rgba(56,189,248,0.5)] flex-shrink-0" />
                     <span className="text-white font-black text-[11px] tracking-wide uppercase drop-shadow-md">
                       You've unlocked all achievements! {unlockedCount}/{totalCount}
                     </span>

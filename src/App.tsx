@@ -84,6 +84,14 @@ function SettingsStandalone() {
   };
 
   useEffect(() => {
+    // If running from file:// (Electron packaged), add transparent background
+    if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
+      document.body.classList.remove('bg-[#0c0d14]');
+      document.body.classList.add('bg-transparent');
+    }
+  }, []);
+
+  useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'quest_compendium_settings' && e.newValue) {
         setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(e.newValue) });
