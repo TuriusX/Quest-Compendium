@@ -3,18 +3,19 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  projectId: "gen-lang-client-0366642934",
-  appId: "1:525238388984:web:714689b601aa7da3d9530d",
-  apiKey: "AIzaSyBDbpAln2PG74U25fjURREzCMK7FrES0YE",
-  authDomain: "gen-lang-client-0366642934.firebaseapp.com",
-  storageBucket: "gen-lang-client-0366642934.firebasestorage.app",
-  messagingSenderId: "525238388984"
+  apiKey: "AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY",
+  authDomain: "quest-compendium-1bccf.firebaseapp.com",
+  projectId: "quest-compendium-1bccf",
+  storageBucket: "quest-compendium-1bccf.firebasestorage.app",
+  messagingSenderId: "890629309063",
+  appId: "1:890629309063:web:87293cf13f922fd3edee22",
+  measurementId: "G-XX6RW18GHY"
 };
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 // Use the specific firestore database ID provided in the config
-export const db = getFirestore(app, "ai-studio-questcompendium-ee181122-cc9e-4693-a7fd-7ac2ba55dd5f");
+export const db = getFirestore(app);
 
 export const googleProvider = new GoogleAuthProvider();
 
