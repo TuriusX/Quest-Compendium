@@ -235,7 +235,7 @@ async function startServer() {
       const userId = (req as any).user.uid;
       let userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
       
-      const userEmail = req.user?.email || (req as any).user?.email;
+      const userEmail = (req as any).user?.email;
       let isStripePremium = false;
       if (userEmail) {
         try {
@@ -558,7 +558,7 @@ async function startServer() {
       const userId = (req as any).user.uid;
             let userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
       
-      const userEmail = req.user?.email || (req as any).user?.email;
+      const userEmail = (req as any).user?.email;
       let isStripePremium = false;
       if (userEmail) {
         try {
