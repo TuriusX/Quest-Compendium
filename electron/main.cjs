@@ -340,13 +340,15 @@ app.whenReady().then(() => {
   });
 
   // Initialize AdBlocker for the webview partition
-  const { ElectronBlocker } = require('@ghostery/adblocker-electron');
+  try {
+    const { ElectronBlocker } = require('@ghostery/adblocker-electron');
   const fetch = require('cross-fetch');
   ElectronBlocker.fromPrebuiltAdsAndTracking(fetch).then((blocker) => {
     // blocker.enableBlockingInSession(session.defaultSession); // Removed to prevent double IPC registration crash
     blocker.enableBlockingInSession(session.fromPartition('persist:browser_session'));
     console.log("Adblocker enabled for browser sessions");
   }).catch((err) => console.error("Adblocker failed:", err));
+  } catch(e) { console.error("Adblocker module missing, skipping adblocker initialization."); }
 
   
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
