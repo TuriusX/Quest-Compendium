@@ -643,7 +643,7 @@ ipcMain.handle('take-screenshot', async () => {
   try {
     const sources = await desktopCapturer.getSources({ 
       types: ['screen'], 
-      thumbnailSize: { width: 1920, height: 1080 } 
+      thumbnailSize: { width: 1280, height: 720 } 
     });
     
     // Pick the display where the cursor is currently located (the active monitor)

@@ -596,7 +596,7 @@ export default function App() {
     const token = user ? await user.getIdToken() : null;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 40000);
+    const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 120 seconds.")), 120000);
     const backendUrl = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
 
     try {

@@ -784,7 +784,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             }
           });
           const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('30s timeout exceeded')), 30000);
+            setTimeout(() => reject(new Error('90s timeout exceeded')), 90000);
           });
           const response = await Promise.race([primaryCall, timeoutPromise]) as any;
           responseText = response.text || 'No response received. Please try asking again.';
