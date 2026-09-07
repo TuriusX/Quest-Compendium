@@ -8,11 +8,8 @@ import { initializeApp, getApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import cors from 'cors';
 async function getFirestoreDocREST(idToken: string, uid: string) {
-  
-  // In Cloud Run, K_SERVICE is set.
+  const isCloudRun = !!process.env.K_SERVICE;
   const projectId = 'quest-compendium-1bccf';
-
-  
   const databaseId = '(default)';
 
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${uid}`;
@@ -33,11 +30,8 @@ async function getFirestoreDocREST(idToken: string, uid: string) {
 }
 
 async function updateFirestoreDocREST(idToken: string, uid: string, fields: Record<string, any>) {
-  
-  // In Cloud Run, K_SERVICE is set.
+  const isCloudRun = !!process.env.K_SERVICE;
   const projectId = 'quest-compendium-1bccf';
-
-  
   const databaseId = '(default)';
 
   const mask = Object.keys(fields).map(k => `updateMask.fieldPaths=${k}`).join('&');
@@ -76,9 +70,14 @@ function getStripe(): Stripe {
 }
 
 
+
+  
+// ALWAYS initialize with the user's project ID, otherwise token verification fails!
 initializeApp({
   projectId: "quest-compendium-1bccf",
 });
+
+
 
 
 // Lazy Gemini AI client initialization with telemetry User-Agent header
@@ -256,6 +255,10 @@ async function startServer() {
           if (customers.data.length > 0) {
             const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: 'active', limit: 1 });
             isStripePremium = subs.data.length > 0;
+            // Persist the premium status to Firestore if it changed
+            if (isStripePremium && userData.isPremium !== true) {
+              await updateFirestoreDocREST(idToken, userId, { isPremium: true });
+            }
           }
         } catch (e) {}
       }
@@ -579,6 +582,10 @@ async function startServer() {
           if (customers.data.length > 0) {
             const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: 'active', limit: 1 });
             isStripePremium = subs.data.length > 0;
+            // Persist the premium status to Firestore if it changed
+            if (isStripePremium && userData.isPremium !== true) {
+              await updateFirestoreDocREST(idToken, userId, { isPremium: true });
+            }
           }
         } catch (e) {
            isStripePremium = userData.isPremium === true;

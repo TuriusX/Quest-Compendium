@@ -4,7 +4,7 @@ import {
   Sparkles, 
   Palette, 
   Volume2, 
-  Gamepad2, 
+  Gamepad2, Server, 
   Check,
   Bot,
   Key,
@@ -455,6 +455,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {activeTab === 'account' && (
               <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
+                
+                {/* Custom Backend URL */}
+                <div className="space-y-2.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+                    <Server className="w-4 h-4 text-[var(--accent-color)]" />
+                    <span>Backend Server URL</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={backendUrl}
+                      onChange={(e) => {
+                        setBackendUrl(e.target.value);
+                        setApiBaseUrl(e.target.value);
+                      }}
+                      placeholder={DEFAULT_PREVIEW_URL}
+                      className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder-white/30 focus:outline-none focus:border-indigo-500/50 transition-colors"
+                    />
+                  </div>
+                  <p className="text-[11px] text-zinc-400 mt-1">If the app says 'Cloud Backend Unreachable', ensure the AI Studio app is published and this URL is correct. (Reload the app after changing).</p>
+                </div>
+
                 {/* Steam Sign-in */}
                 <div className="space-y-2.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
