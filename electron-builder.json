@@ -1,0 +1,20 @@
+{
+  "appId": "com.questcompendium.app",
+  "productName": "Quest Compendium",
+  "extraMetadata": {
+    "main": "electron/main.cjs"
+  },
+  "directories": {
+    "output": "release"
+  },
+  "icon": "public/app-icon.png",
+  "mac": {},
+  "linux": {},
+  "win": {
+    "icon": "public/app-icon.ico"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*"
+  ]
+}

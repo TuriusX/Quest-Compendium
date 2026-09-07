@@ -10,8 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "desktop:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && npx electron electron/main.cjs\"",
-    "desktop:build": "npm run build && npx electron-builder && node -e \"try { require('fs').rmSync('release/win-unpacked/electron.exe', {force: true}); } catch(e) {}\""
+    "desktop:dev": "npx -y concurrently \"npm run dev\" \"npx -y wait-on http://localhost:3000 && npx -y electron@30.0.0 electron/main.cjs\"",
+    "desktop:build": "npm run build && npx -y --package electron-builder --package electron@30.0.0 electron-builder -c electron-builder.json -c.electronVersion=30.0.0 && node -e \"try { require('fs').rmSync('release/win-unpacked/electron.exe', {force: true}); } catch(e) {}\""
   },
   "dependencies": {
     "@google/genai": "^2.21.0",
@@ -39,41 +39,10 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
-    "concurrently": "^10.0.5",
-    "electron": "^44.2.0",
-    "electron-builder": "^26.15.3",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3",
-    "wait-on": "^9.1.0"
-  },
-  "allowScripts": {
-    "@firebase/util": true,
-    "@google/genai": true,
-    "electron-winstaller": true,
-    "esbuild": true,
-    "protobufjs": true
-  },
-  "build": {
-    "appId": "com.questcompendium.app",
-    "productName": "Quest Compendium",
-    "extraMetadata": {
-      "main": "electron/main.cjs"
-    },
-    "directories": {
-      "output": "release"
-    },
-    "icon": "public/app-icon.png",
-    "mac": {},
-    "linux": {},
-    "win": {
-      "icon": "public/app-icon.ico"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/**/*"
-    ]
+    "vite": "^6.2.3"
   }
 }
