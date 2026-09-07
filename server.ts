@@ -933,16 +933,16 @@ When analyzing screenshots, screen captures, or images:
       try {
         const ai = getGeminiClient();
 
-        // Progressive chunking:
-        // Chunk 0 is compact (~180-240 chars) to return fast audio in ~3-4s.
-        // Subsequent chunks are ~380-450 chars.
+        // Optimized chunking:
+        // We've increased the chunk size massively to preserve Gemini API quota.
+        // One message = One request (unless it's extremely long).
         const chunks: string[] = [];
-        if (cleanText.length <= 320) {
+        if (cleanText.length <= 4000) {
           chunks.push(cleanText);
         } else {
-          const sentences = cleanText.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) || [cleanText];
+          const sentences = cleanText.match(/[^.!?\n]+[.!?\n]+(\s|$)|[^.!?\n]+$/g) || [cleanText];
           let currentChunk = '';
-          let targetLen = 220; // Fast first chunk
+          let targetLen = 3500; // Much larger limit to save requests
 
           for (const sentence of sentences) {
             const s = sentence.trim();
@@ -952,7 +952,6 @@ When analyzing screenshots, screen captures, or images:
             } else {
               chunks.push(currentChunk);
               currentChunk = s;
-              targetLen = 420; // Normal length for remaining chunks
             }
           }
           if (currentChunk) chunks.push(currentChunk);
