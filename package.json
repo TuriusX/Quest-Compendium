@@ -49,6 +49,13 @@
     "vite": "^6.2.3",
     "wait-on": "^9.1.0"
   },
+  "allowScripts": {
+    "@firebase/util": true,
+    "@google/genai": true,
+    "electron-winstaller": true,
+    "esbuild": true,
+    "protobufjs": true
+  },
   "build": {
     "appId": "com.questcompendium.app",
     "productName": "Quest Compendium",
