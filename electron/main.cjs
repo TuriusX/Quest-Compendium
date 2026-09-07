@@ -503,7 +503,7 @@ ipcMain.handle('get-active-game', async () => {
 
 // Trigger external browser for login
 ipcMain.on('start-desktop-login', () => {
-  shell.openExternal(`https://quest-compendium-1.ai.studio/desktop-login?port=${localAuthPort}`);
+  shell.openExternal(`https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app/desktop-login?port=${localAuthPort}`);
 });
 
 ipcMain.on('start-steam-login', (event) => {
