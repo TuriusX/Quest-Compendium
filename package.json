@@ -10,8 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "desktop:dev": "npm install electron --no-save && concurrently \"npm run dev\" \"wait-on http://localhost:3000 && npx electron electron/main.cjs\"",
-    "desktop:build": "npm install electron electron-builder --no-save && npm run build && npx electron-builder && node -e \"try { require('fs').rmSync('release/win-unpacked/electron.exe', {force: true}); } catch(e) {}\""
+    "desktop:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && npx electron electron/main.cjs\"",
+    "desktop:build": "npm run build && npx electron-builder && node -e \"try { require('fs').rmSync('release/win-unpacked/electron.exe', {force: true}); } catch(e) {}\""
   },
   "dependencies": {
     "@google/genai": "^2.21.0",
@@ -40,6 +40,8 @@
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "concurrently": "^10.0.5",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",

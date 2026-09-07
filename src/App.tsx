@@ -600,7 +600,13 @@ export default function App() {
     const backendUrl = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
 
     try {
-      const res = await fetch(`${getApiBaseUrl()}/api/chat`, {
+      // Fast-fail if the backend is completely unreachable or unpublished
+      const healthCheck = await fetch(`${backendUrl}/api/health`, { method: 'GET', signal: AbortSignal.timeout(5000) }).catch(() => null);
+      if (!healthCheck || !healthCheck.ok) {
+        throw new Error(`Cloud Backend Unreachable at ${backendUrl}. Please ensure your AI Studio app is successfully published.`);
+      }
+
+      const res = await fetch(`${backendUrl}/api/chat`, {
         method: 'POST',
         signal: controller.signal,
         headers: { 
