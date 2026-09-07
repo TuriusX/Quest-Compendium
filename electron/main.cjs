@@ -167,7 +167,7 @@ const authServer = http.createServer((req, res) => {
               const credential = GoogleAuthProvider.credentialFromResult(result);
               if (credential && credential.idToken) {
                 document.getElementById('status').innerText = 'Login successful! Syncing...';
-                await fetch('http://127.0.0.1:${localAuthPort}/auth-callback', {
+                await fetch('http://localhost:${localAuthPort}/auth-callback', {
                   method: 'POST',
                   body: JSON.stringify({ idToken: credential.idToken })
                 });
@@ -212,7 +212,7 @@ const authServer = http.createServer((req, res) => {
       }
     });
   } else if (req.url.startsWith('/steam-return')) {
-    const urlObj = new URL(req.url, `http://127.0.0.1:${localAuthPort}`);
+    const urlObj = new URL(req.url, `http://localhost:${localAuthPort}`);
     const claimedId = urlObj.searchParams.get('openid.claimed_id');
     let steamId = null;
     if (claimedId) {
@@ -582,7 +582,7 @@ ipcMain.handle('get-active-game', async () => {
 
 // Trigger external browser for login
 ipcMain.on('start-desktop-login', () => {
-  shell.openExternal(`http://127.0.0.1:${localAuthPort}/desktop-login`);
+  shell.openExternal(`http://localhost:${localAuthPort}/desktop-login`);
 });
 
 ipcMain.on('start-steam-login', (event) => {
@@ -591,12 +591,12 @@ ipcMain.on('start-steam-login', (event) => {
     return;
   }
   
-  const returnUrl = `http://127.0.0.1:${localAuthPort}/steam-return`;
+  const returnUrl = `http://localhost:${localAuthPort}/steam-return`;
   const params = new URLSearchParams({
     'openid.ns': 'http://specs.openid.net/auth/2.0',
     'openid.mode': 'checkid_setup',
     'openid.return_to': returnUrl,
-    'openid.realm': `http://127.0.0.1:${localAuthPort}`,
+    'openid.realm': `http://localhost:${localAuthPort}`,
     'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
     'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select'
   });
