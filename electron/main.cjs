@@ -129,7 +129,7 @@ const authServer = http.createServer((req, res) => {
           .spinner { width: 40px; height: 40px; border: 3px solid #a87ffb; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; display: none; }
           @keyframes spin { to { transform: rotate(360deg); } }
           h1 { margin-bottom: 10px; }
-          p { color: #a1a1aa; margin-bottom: 24px; text-align: center; }
+          p { color: #a1a1aa; margin-bottom: 24px; text-align: center; max-width: 400px; }
           button { background: white; color: black; border: none; padding: 12px 24px; border-radius: 24px; font-weight: bold; font-size: 16px; cursor: pointer; transition: background 0.2s; }
           button:hover { background: #e4e4e7; }
         </style>
@@ -142,7 +142,7 @@ const authServer = http.createServer((req, res) => {
         
         <script type="module">
           import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-          import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+          import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
           
           const firebaseConfig = {
             projectId: "gen-lang-client-0366642934",
@@ -155,44 +155,70 @@ const authServer = http.createServer((req, res) => {
           const auth = getAuth(app);
           const provider = new GoogleAuthProvider();
           
-          document.getElementById('loginBtn').addEventListener('click', async () => {
-            document.getElementById('loginBtn').style.display = 'none';
-            document.getElementById('desc').style.display = 'none';
-            document.getElementById('spinner').style.display = 'block';
-            document.getElementById('status').innerText = 'Opening Google Login...';
-            document.getElementById('status').style.color = 'white';
-            
-            try {
-              const result = await signInWithPopup(auth, provider);
+          // Check if we just came back from a redirect
+          document.getElementById('spinner').style.display = 'block';
+          document.getElementById('loginBtn').style.display = 'none';
+          document.getElementById('desc').style.display = 'none';
+          document.getElementById('status').innerText = 'Checking login status...';
+          
+          try {
+            const result = await getRedirectResult(auth);
+            if (result) {
               const credential = GoogleAuthProvider.credentialFromResult(result);
               if (credential && credential.idToken) {
                 document.getElementById('status').innerText = 'Login successful! Syncing...';
-                await fetch('http://localhost:${localAuthPort}/auth-callback', {
+                await fetch(`http://localhost:${localAuthPort}/auth-callback`, {
                   method: 'POST',
                   body: JSON.stringify({ idToken: credential.idToken })
                 });
                 document.getElementById('status').innerText = 'Done! You can close this window.';
                 document.getElementById('spinner').style.display = 'none';
                 setTimeout(() => window.close(), 1500);
+                // Stop execution here so we don't show the login button again
+                throw new Error("DONE");
               }
-            } catch(err) {
+            } else {
+              // No redirect result, show the login button
+              document.getElementById('spinner').style.display = 'none';
+              document.getElementById('loginBtn').style.display = 'block';
+              document.getElementById('desc').style.display = 'block';
+              document.getElementById('status').innerText = 'Quest Compendium Auth';
+            }
+          } catch(err) {
+            if (err.message !== "DONE") {
               console.error(err);
               document.getElementById('spinner').style.display = 'none';
               document.getElementById('loginBtn').style.display = 'block';
               document.getElementById('desc').style.display = 'block';
               document.getElementById('status').innerText = 'Login Failed';
               document.getElementById('status').style.color = '#ef4444';
-              if (err.code === 'auth/popup-blocked') {
-                 document.getElementById('desc').innerText = 'Popup was blocked by your browser. Please try again.';
-              } else {
-                 document.getElementById('desc').innerText = 'Please complete the sign-in popup.';
-              }
+              document.getElementById('desc').innerText = err.message || 'An error occurred. Please try again.';
+            }
+          }
+          
+          document.getElementById('loginBtn').addEventListener('click', async () => {
+            document.getElementById('loginBtn').style.display = 'none';
+            document.getElementById('desc').style.display = 'none';
+            document.getElementById('spinner').style.display = 'block';
+            document.getElementById('status').innerText = 'Redirecting to Google...';
+            document.getElementById('status').style.color = 'white';
+            
+            try {
+              await signInWithRedirect(auth, provider);
+            } catch(err) {
+              console.error(err);
+              document.getElementById('spinner').style.display = 'none';
+              document.getElementById('loginBtn').style.display = 'block';
+              document.getElementById('desc').style.display = 'block';
+              document.getElementById('status').innerText = 'Redirect Failed';
+              document.getElementById('status').style.color = '#ef4444';
+              document.getElementById('desc').innerText = err.message || 'Please try again.';
             }
           });
         </script>
       </body>
       </html>
-    `);
+`);
     return;
   }
   
