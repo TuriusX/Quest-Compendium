@@ -8,8 +8,13 @@ import { initializeApp, getApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import cors from 'cors';
 async function getFirestoreDocREST(idToken: string, uid: string) {
-  const projectId = 'gen-lang-client-0366642934';
-  const databaseId = 'ai-studio-questcompendium-ee181122-cc9e-4693-a7fd-7ac2ba55dd5f';
+  
+  // In Cloud Run, K_SERVICE is set.
+  const projectId = 'quest-compendium-1bccf';
+
+  
+  const databaseId = '(default)';
+
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${uid}`;
   const response = await fetch(url, { headers: { 'Authorization': `Bearer ${idToken}` } });
   if (response.status === 404) return null;
@@ -28,8 +33,13 @@ async function getFirestoreDocREST(idToken: string, uid: string) {
 }
 
 async function updateFirestoreDocREST(idToken: string, uid: string, fields: Record<string, any>) {
-  const projectId = 'gen-lang-client-0366642934';
-  const databaseId = 'ai-studio-questcompendium-ee181122-cc9e-4693-a7fd-7ac2ba55dd5f';
+  
+  // In Cloud Run, K_SERVICE is set.
+  const projectId = 'quest-compendium-1bccf';
+
+  
+  const databaseId = '(default)';
+
   const mask = Object.keys(fields).map(k => `updateMask.fieldPaths=${k}`).join('&');
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${uid}?${mask}`;
   
@@ -65,9 +75,11 @@ function getStripe(): Stripe {
   return stripeClient;
 }
 
+
 initializeApp({
-  projectId: "gen-lang-client-0366642934",
+  projectId: "quest-compendium-1bccf",
 });
+
 
 // Lazy Gemini AI client initialization with telemetry User-Agent header
 function getGeminiClient(): GoogleGenAI {
@@ -240,7 +252,7 @@ async function startServer() {
       if (userEmail) {
         try {
           const stripe = getStripe();
-          const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+          const customers = await stripe.customers.list({ email: userEmail.toLowerCase(), limit: 1 });
           if (customers.data.length > 0) {
             const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: 'active', limit: 1 });
             isStripePremium = subs.data.length > 0;
@@ -563,7 +575,7 @@ async function startServer() {
       if (userEmail) {
         try {
           const stripe = getStripe();
-          const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+          const customers = await stripe.customers.list({ email: userEmail.toLowerCase(), limit: 1 });
           if (customers.data.length > 0) {
             const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: 'active', limit: 1 });
             isStripePremium = subs.data.length > 0;
