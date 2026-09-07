@@ -117,6 +117,67 @@ const authServer = http.createServer((req, res) => {
     return;
   }
 
+  if (req.url === '/desktop-login') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Quest Compendium - Desktop Login</title>
+        <style>
+          body { background: #070709; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+          .spinner { width: 40px; height: 40px; border: 3px solid #a87ffb; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+          @keyframes spin { to { transform: rotate(360deg); } }
+          h1 { margin-bottom: 10px; }
+          p { color: #a1a1aa; }
+        </style>
+      </head>
+      <body>
+        <div class="spinner" id="spinner"></div>
+        <h1 id="status">Opening Google Login...</h1>
+        <p>Please complete the sign-in popup.</p>
+        
+        <script type="module">
+          import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+          import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+          
+          const firebaseConfig = {
+            projectId: "gen-lang-client-0366642934",
+            appId: "1:525238388984:web:714689b601aa7da3d9530d",
+            apiKey: "AIzaSyBDbpAln2PG74U25fjURREzCMK7FrES0YE",
+            authDomain: "gen-lang-client-0366642934.firebaseapp.com"
+          };
+          
+          const app = initializeApp(firebaseConfig);
+          const auth = getAuth(app);
+          const provider = new GoogleAuthProvider();
+          
+          try {
+            const result = await signInWithPopup(auth, provider);
+            const credential = GoogleAuthProvider.credentialFromResult(result);
+            if (credential && credential.idToken) {
+              document.getElementById('status').innerText = 'Login successful! Syncing...';
+              await fetch('http://127.0.0.1:${localAuthPort}/auth-callback', {
+                method: 'POST',
+                body: JSON.stringify({ idToken: credential.idToken })
+              });
+              document.getElementById('status').innerText = 'Done! You can close this window.';
+              document.getElementById('spinner').style.display = 'none';
+              setTimeout(() => window.close(), 1500);
+            }
+          } catch(err) {
+            console.error(err);
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('status').innerText = 'Login Failed';
+            document.getElementById('status').style.color = '#ef4444';
+          }
+        </script>
+      </body>
+      </html>
+    `);
+    return;
+  }
+  
   if (req.url === '/auth-callback' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -503,7 +564,7 @@ ipcMain.handle('get-active-game', async () => {
 
 // Trigger external browser for login
 ipcMain.on('start-desktop-login', () => {
-  shell.openExternal(`https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app/desktop-login?port=${localAuthPort}`);
+  shell.openExternal(`http://127.0.0.1:${localAuthPort}/desktop-login`);
 });
 
 ipcMain.on('start-steam-login', (event) => {
