@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import express from 'express';
 import path from 'path';
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from '@google/genai';
@@ -168,8 +169,34 @@ async function startServer() {
     res.json({ status: 'ok', hasGeminiKey: Boolean(process.env.GEMINI_API_KEY) });
   });
 
-  function syncUserLimits(userData: any, today: string) {
-    const isPremium = userData.isPremium === true;
+
+
+  function verifySeal(userData: any) {
+    if (!userData.securitySeal) return false;
+    const secret = process.env.STRIPE_WEBHOOK_SECRET || 'default_secret';
+    const payload = `${userData.proQueriesAvailable}-${userData.flashQueriesAvailable}-${userData.lastResetDate}`;
+    const expectedSeal = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+    return userData.securitySeal === expectedSeal;
+  }
+
+  function generateSeal(userData: any) {
+    const secret = process.env.STRIPE_WEBHOOK_SECRET || 'default_secret';
+    const payload = `${userData.proQueriesAvailable}-${userData.flashQueriesAvailable}-${userData.lastResetDate}`;
+    return crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  }
+
+  function syncUserLimits(userData: any, today: string, isStripePremium: boolean) {
+    const isPremium = isStripePremium;
+
+    // Security Verification: If tampering is detected, reset to 0
+    if (userData.lastResetDate === today && userData.securitySeal && !verifySeal(userData)) {
+       console.warn('SECURITY ALERT: Tampering detected for user. Resetting quotas.');
+       userData.proQueriesAvailable = 0;
+       userData.flashQueriesAvailable = 0;
+       userData.securitySeal = generateSeal(userData);
+       return userData;
+    }
+
     if (userData.lastResetDate !== today) {
       if (isPremium) {
         let currentAvailable = userData.proQueriesAvailable !== undefined 
@@ -207,9 +234,25 @@ async function startServer() {
       const idToken = req.headers.authorization!.split('Bearer ')[1];
       const userId = (req as any).user.uid;
       let userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
-
+      
+      const userEmail = req.user?.email || (req as any).user?.email;
+      let isStripePremium = false;
+      if (userEmail) {
+        try {
+          const stripe = getStripe();
+          const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+          if (customers.data.length > 0) {
+            const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: 'active', limit: 1 });
+            isStripePremium = subs.data.length > 0;
+          }
+        } catch (e) {}
+      }
+      
       const today = new Date().toISOString().split('T')[0];
-      userData = syncUserLimits(userData, today);
+      userData = syncUserLimits(userData, today, isStripePremium);
+      // update the frontend object
+      userData.isPremium = isStripePremium;
+
 
       res.json(userData);
     } catch (err) {
@@ -513,12 +556,28 @@ async function startServer() {
     try {
       const idToken = req.headers.authorization!.split('Bearer ')[1];
       const userId = (req as any).user.uid;
-      let userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
-
+            let userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
+      
+      const userEmail = req.user?.email || (req as any).user?.email;
+      let isStripePremium = false;
+      if (userEmail) {
+        try {
+          const stripe = getStripe();
+          const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+          if (customers.data.length > 0) {
+            const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: 'active', limit: 1 });
+            isStripePremium = subs.data.length > 0;
+          }
+        } catch (e) {
+           isStripePremium = userData.isPremium === true;
+        }
+      } else {
+        isStripePremium = userData.isPremium === true;
+      }
+      
       const today = new Date().toISOString().split('T')[0];
-      userData = syncUserLimits(userData, today);
-
-      const isPremium = userData.isPremium === true;
+      userData = syncUserLimits(userData, today, isStripePremium);
+      const isPremium = isStripePremium;
       let targetModel = 'gemini-3.1-pro-preview';
       let skipPrimary = false;
 

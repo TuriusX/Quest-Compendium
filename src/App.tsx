@@ -239,20 +239,8 @@ export default function App() {
     if (user && !isInitializing) {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('upgrade') === 'success') {
-        const upgradeUser = async () => {
-          try {
-            await setDoc(doc(db, 'users', user.uid), {
-              isPremium: true,
-              subscriptionStatus: 'active'
-            }, { merge: true });
-            console.log('Successfully upgraded user to Premium locally!');
-            // Remove the param from URL
-            window.history.replaceState({}, document.title, window.location.pathname);
-          } catch (e) {
-            console.error('Failed to update premium status:', e);
-          }
-        };
-        upgradeUser();
+        console.log('Subscription completed. Server will verify via Stripe.');
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
 
       if (urlParams.get('downgrade') === 'true') {
