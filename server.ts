@@ -958,8 +958,8 @@ When analyzing screenshots, screen captures, or images:
           if (currentChunk) chunks.push(currentChunk);
         }
 
-        const synthesizeChunk = async (chunkText: string): Promise<Buffer | null> => {
-          if (!chunkText.trim()) return null;
+        const synthesizeChunk = async (chunkText: string): Promise<{pcm: Buffer | null, error?: string}> => {
+          if (!chunkText.trim()) return { pcm: null };
           try {
             const ttsResult = await ai.models.generateContent({
               model: 'gemini-3.1-flash-tts-preview',
@@ -975,26 +975,34 @@ When analyzing screenshots, screen captures, or images:
             });
             const inlinePart = ttsResult.candidates?.[0]?.content?.parts?.[0];
             const b64Data = inlinePart?.inlineData?.data;
-            return b64Data ? Buffer.from(b64Data, 'base64') : null;
+            return { pcm: b64Data ? Buffer.from(b64Data, 'base64') : null };
           } catch (err: any) {
+            if (err?.message?.includes('429') || err?.message?.includes('RESOURCE_EXHAUSTED') || err?.message?.includes('quota')) {
+                return { pcm: null, error: 'QUOTA_EXCEEDED' };
+            }
             console.warn('Chunk TTS generation error:', err?.message);
-            return null;
+            return { pcm: null };
           }
+        
         };
 
         if (stream && chunks.length > 0) {
+          const allPcmBuffers: Buffer[] = [];
+
+          // Synthesize Chunk 0 first
+          const firstResult = await synthesizeChunk(chunks[0]);
+          if (firstResult.error === 'QUOTA_EXCEEDED') {
+             return res.status(429).json({ error: 'TTS Rate limit exceeded (100 requests/day). Using local fallback.' });
+          }
+
           // Streaming mode: send Chunk 0 immediately so browser plays within seconds
           res.setHeader('Content-Type', 'application/x-ndjson');
           res.setHeader('Cache-Control', 'no-cache');
           res.setHeader('Connection', 'keep-alive');
 
-          const allPcmBuffers: Buffer[] = [];
-
-          // Synthesize Chunk 0 first
-          const firstPcm = await synthesizeChunk(chunks[0]);
-          if (firstPcm) {
-            allPcmBuffers.push(firstPcm);
-            const firstWav = pcmToWav(firstPcm, 24000, 1);
+          if (firstResult.pcm) {
+            allPcmBuffers.push(firstResult.pcm);
+            const firstWav = pcmToWav(firstResult.pcm, 24000, 1);
             res.write(JSON.stringify({
               chunkIndex: 0,
               totalChunks: chunks.length,
@@ -1007,8 +1015,8 @@ When analyzing screenshots, screen captures, or images:
           // If more chunks exist, synthesize them in parallel!
           if (chunks.length > 1) {
             const remainingPromises = chunks.slice(1).map(async (chunk, idx) => {
-              const pcm = await synthesizeChunk(chunk);
-              return { index: idx + 1, pcm };
+              const res = await synthesizeChunk(chunk);
+              return { index: idx + 1, pcm: res.pcm };
             });
 
             const remainingResults = await Promise.all(remainingPromises);
@@ -1044,7 +1052,10 @@ When analyzing screenshots, screen captures, or images:
 
         // Non-streaming fallback: execute all chunks in parallel
         const pcmResults = await Promise.all(chunks.map(chunk => synthesizeChunk(chunk)));
-        const validPcms = pcmResults.filter((b): b is Buffer => b !== null);
+        if (pcmResults.some(r => r.error === 'QUOTA_EXCEEDED')) {
+           return res.status(429).json({ error: 'TTS Rate limit exceeded (100 requests/day). Using local fallback.' });
+        }
+        const validPcms = pcmResults.map(r => r.pcm).filter((b): b is Buffer => b !== null);
 
         if (validPcms.length > 0) {
           const combinedPcm = Buffer.concat(validPcms);

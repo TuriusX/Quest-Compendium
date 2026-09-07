@@ -448,6 +448,33 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       }
     }
 
+    
+    const fallbackToBrowserTTS = (reason: string) => {
+      console.warn('[TTS] Falling back to browser native TTS:', reason);
+      if (!('speechSynthesis' in window)) {
+        setTtsStatusError({ msgId, error: reason });
+        setPlayingAudioId(null);
+        setAudioLoadingId(null);
+        return;
+      }
+      setTtsStatusError(null);
+      setAudioLoadingId(null);
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voiceKey = (ttsVoice || 'puck').toLowerCase();
+      if (['puck', 'charon', 'fenrir'].includes(voiceKey)) {
+        utterance.pitch = 0.8;
+      } else {
+        utterance.pitch = 1.2;
+      }
+      
+      utterance.onend = () => setPlayingAudioId(null);
+      utterance.onerror = () => setPlayingAudioId(null);
+      
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    };
+
     const abortController = new AbortController();
     ttsAbortControllerRef.current = abortController;
 
@@ -531,7 +558,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             ttsCacheRef.current.set(cacheKey, collectedChunks);
           }
           if (firstChunkPlayed) return;
-          throw new Error('TTS Rate limit exceeded (100 requests/day for gemini-3.1-flash-tts) or generation failed. Try again later.');
+          fallbackToBrowserTTS('TTS Rate limit exceeded (100 requests/day for gemini-3.1-flash-tts). Using local fallback.'); return;
         } else if (contentType.includes('application/json')) {
           // Standard JSON payload fallback
           const data = await res.json();
@@ -564,21 +591,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         ? `Authentication required for Gemini Voice. Please sign in or reconnect to your cloud server.`
         : `Gemini Voice generation error: ${errMsg}`;
 
-      console.error('[TTS] Server audio failed:', helpfulError);
-      setTtsStatusError({ msgId, error: helpfulError });
-      setPlayingAudioId(null);
-      setAudioLoadingId(null);
+      fallbackToBrowserTTS(helpfulError);
 
     } catch (err: any) {
       if (err?.name === 'AbortError') {
         // User deliberately stopped playback
         return;
       }
-      console.error('[TTS] Network error requesting TTS:', err);
-      const networkHelp = `Cannot connect to server at ${getApiBaseUrl() || window.location.origin}. Please open Settings ⚙️ > Server Connection to verify your endpoint.`;
-      setTtsStatusError({ msgId, error: networkHelp });
-      setPlayingAudioId(null);
-      setAudioLoadingId(null);
+      const networkHelp = `Cannot connect to server at ${getApiBaseUrl() || window.location.origin}.`;
+      fallbackToBrowserTTS(networkHelp);
     }
   };
 
