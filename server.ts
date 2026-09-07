@@ -1192,7 +1192,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Quest Compendium Server running on http://localhost:${PORT}`);
+    console.log(`[DEPLOYMENT] Quest Compendium Server v1.1.0 running on http://localhost:${PORT}`);
   });
 }
 
