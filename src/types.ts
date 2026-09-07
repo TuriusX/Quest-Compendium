@@ -73,6 +73,7 @@ export interface FavoriteBookmark {
 }
 
 export interface AppSettings {
+  language?: string;
   aiMode: AiMode;
   theme: ColorTheme;
   chatFont: ChatFont;

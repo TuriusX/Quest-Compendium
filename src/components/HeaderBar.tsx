@@ -145,7 +145,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               <Cpu className="w-3.5 h-3.5" />
               <div className="flex items-center gap-1.5">
                 <span className="font-bold">
-                  {userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 3) - (userData.proQueriesToday || 0))} Pro
+                  {userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 5) - (userData.proQueriesToday || 0))} Pro
                 </span>
               </div>
               {!userData.isPremium && <Sparkles className="w-3.5 h-3.5 ml-1 text-amber-400 animate-pulse" />}
@@ -156,7 +156,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               className={`flex sm:hidden items-center justify-center px-2 py-1 h-8 rounded-xl transition-all duration-300 mr-1 cursor-default text-xs font-bold gap-1 ${userData.isPremium ? 'bg-indigo-500/10 text-indigo-400' : 'bg-amber-500/10 text-amber-400'}`} 
             >
               <Cpu className="w-3.5 h-3.5" />
-              <span>{userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 3) - (userData.proQueriesToday || 0))}</span>
+              <span>{userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 5) - (userData.proQueriesToday || 0))}</span>
             </div>
             
             {/* Elegant Hover Tooltip */}
@@ -168,13 +168,13 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-zinc-300 font-medium">Gemini Pro</span>
                     <span className="text-zinc-400 font-mono text-[10px]">
-                      {userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 3) - (userData.proQueriesToday || 0))} / {userData.isPremium ? 100 : 3}
+                      {userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 5) - (userData.proQueriesToday || 0))} / {userData.isPremium ? 100 : 5}
                     </span>
                   </div>
                   <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden">
                     <div 
                       className={`h-full rounded-full transition-all duration-500 ${userData.isPremium ? 'bg-indigo-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`} 
-                      style={{ width: `${((userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 3) - (userData.proQueriesToday || 0))) / (userData.isPremium ? 100 : 3)) * 100}%` }} 
+                      style={{ width: `${((userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 5) - (userData.proQueriesToday || 0))) / (userData.isPremium ? 100 : 5)) * 100}%` }} 
                     />
                   </div>
                 </div>
@@ -184,14 +184,14 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-zinc-300 font-medium">Flash Fallback</span>
                     <span className="text-zinc-400 font-mono text-[10px]">
-                      {userData.isPremium ? 'Unlimited' : `${userData.flashQueriesAvailable ?? Math.max(0, 3 - (userData.flashQueriesToday || 0))} / 3`}
+                      {userData.isPremium ? 'Unlimited' : `${userData.flashQueriesAvailable ?? Math.max(0, 5 - (userData.flashQueriesToday || 0))} / 5`}
                     </span>
                   </div>
                   {!userData.isPremium && (
                     <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden">
                       <div 
                         className="bg-zinc-500 h-full rounded-full transition-all duration-500" 
-                        style={{ width: `${((userData.flashQueriesAvailable ?? Math.max(0, 3 - (userData.flashQueriesToday || 0))) / 3) * 100}%` }} 
+                        style={{ width: `${((userData.flashQueriesAvailable ?? Math.max(0, 5 - (userData.flashQueriesToday || 0))) / 5) * 100}%` }} 
                       />
                     </div>
                   )}

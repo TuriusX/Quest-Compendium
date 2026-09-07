@@ -178,18 +178,18 @@ async function startServer() {
         userData.proQueriesAvailable = Math.min(100, currentAvailable + 40);
         userData.flashQueriesAvailable = 1000;
       } else {
-        userData.proQueriesAvailable = 3;
-        userData.flashQueriesAvailable = 3;
+        userData.proQueriesAvailable = 5;
+        userData.flashQueriesAvailable = 5;
       }
       userData.lastResetDate = today;
       userData.proQueriesToday = 0;
       userData.flashQueriesToday = 0;
     } else {
       if (userData.proQueriesAvailable === undefined) {
-        userData.proQueriesAvailable = Math.max(0, (isPremium ? 40 : 3) - (userData.proQueriesToday || 0));
+        userData.proQueriesAvailable = Math.max(0, (isPremium ? 40 : 5) - (userData.proQueriesToday || 0));
       }
       if (userData.flashQueriesAvailable === undefined) {
-        userData.flashQueriesAvailable = Math.max(0, (isPremium ? 1000 : 3) - (userData.flashQueriesToday || 0));
+        userData.flashQueriesAvailable = Math.max(0, (isPremium ? 1000 : 5) - (userData.flashQueriesToday || 0));
       }
       
       if (isPremium && userData.proQueriesAvailable < 40 && (userData.proQueriesToday || 0) < 40 && !userData._upgradedToday) {
@@ -542,6 +542,7 @@ async function startServer() {
         activeGame,
         achievements,
         news,
+        language = 'English'
       } = req.body;
 
       if (!question && !imageBase64) {
@@ -578,6 +579,11 @@ When analyzing screenshots, screen captures, or images:
 2. ACCURATE GAME IDENTIFICATION: If the system context confirms an active game is running, you should acknowledge it if asked (e.g. "You are playing [Game Name]"). However, NEVER hallucinate visual details about the screenshot if they aren't visibly there. If the screenshot is black, blank, or menus, state that the game is running but describe only what is actually visible.
 3. MISSING IMAGE HANDLING: If the user asks "What is on my screen?", "What game is this?", or refers to an image, BUT no image was actually provided in the prompt, YOU MUST state: "I don't see any image attached. Please click the screenshot button to attach your screen." Do not hallucinate or guess based on selected game context.
 4. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.`;
+
+      systemInstruction += `
+
+[USER LANGUAGE PREFERENCE]
+You must respond entirely in ${language}. Do not use English unless the user's language preference is English or they specifically request it.`;
 
       let situationalContext = '';
       if (activeGame && isGameRunningLocally) {

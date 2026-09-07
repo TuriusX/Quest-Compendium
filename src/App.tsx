@@ -29,6 +29,7 @@ import { getApiBaseUrl } from './utils/api';
 import { useCloudSync } from './hooks/useCloudSync';
 
 const DEFAULT_SETTINGS: AppSettings = {
+  language: 'English',
   aiMode: 'standard',
   theme: 'purple',
   chatFont: 'segoe',
@@ -624,6 +625,7 @@ export default function App() {
           imageBase64,
           audioBase64,
           aiMode: settings.aiMode,
+          language: settings.language,
           isGameRunningLocally: globalActiveGame !== null,
           activeGame: activeGame ? {
             name: activeGame.name,
