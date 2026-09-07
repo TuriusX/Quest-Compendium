@@ -31,8 +31,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "stripe": "^22.6.1",
-    "xml2js": "^0.6.2",
-    "@ghostery/adblocker-electron": "^2.18.2"
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",
