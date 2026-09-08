@@ -785,32 +785,6 @@ export default function App() {
     }
   };
 
-  // Achievement Toggling
-  const handleToggleAchievement = (apiname: string) => {
-    if (!activeTab || !activeGame?.achievements) return;
-
-    const updatedAchievements = activeGame.achievements.map(a => {
-      if (a.apiname === apiname) {
-        return {
-          ...a,
-          unlocked: !a.unlocked,
-          unlockDate: !a.unlocked ? new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null
-        };
-      }
-      return a;
-    });
-
-    const updatedGame = { ...activeGame, achievements: updatedAchievements };
-
-    if (activeGame.isAutoDetected) {
-      setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? updatedGame as SteamGameData : prev);
-    } else {
-      setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, activeSteamGame: updatedGame } : t
-      ));
-    }
-  };
-
   // Playthrough Notes Handlers
   const handleUpdateNotes = (notes: string) => {
     if (!activeTab) return;
@@ -1082,7 +1056,6 @@ export default function App() {
             isOpen={isAchDrawerOpen}
             onClose={() => setIsAchDrawerOpen(false)}
             gameData={activeGame}
-            onToggleAchievement={handleToggleAchievement}
             soundEnabled={settings.soundEnabled}
           />
         </div>

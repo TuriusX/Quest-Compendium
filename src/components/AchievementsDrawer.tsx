@@ -22,7 +22,6 @@ interface AchievementsDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   gameData: SteamGameData | null;
-  onToggleAchievement: (apiname: string) => void;
   soundEnabled: boolean;
 }
 
@@ -32,7 +31,6 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
   isOpen,
   onClose,
   gameData,
-  onToggleAchievement,
   soundEnabled,
 }) => {
   const [activeView, setActiveView] = useState<'medals' | 'patches'>('medals');
@@ -276,13 +274,12 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
                 return (
                   <div
                     key={ach.apiname}
-                    onClick={() => handleToggle(ach.apiname, ach.unlocked)}
-                    className={`group rounded-xl border p-3 flex items-start gap-3 transition-all cursor-pointer select-none ${
+                    className={`group rounded-xl border p-3 flex items-start gap-3 transition-all ${
                       ach.unlocked
                         ? isRare 
                           ? 'rare-achievement-glow text-white shadow-lg'
-                          : 'bg-[#151722]/95 border-amber-500/30 text-zinc-200 hover:border-amber-500/50'
-                        : 'bg-black/40 border-white/[0.06] text-zinc-500 hover:border-white/20 hover:bg-white/[0.02]'
+                          : 'bg-[#151722]/95 border-amber-500/30 text-zinc-200'
+                        : 'bg-black/40 border-white/[0.06] text-zinc-500 hover:border-white/20'
                     }`}
                   >
                     {/* Checkbox / Medal Icon */}
