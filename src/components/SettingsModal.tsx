@@ -4,7 +4,7 @@ import {
   Sparkles, 
   Palette, 
   Volume2, 
-  Gamepad2, Server, 
+  Gamepad2, 
   Check,
   Bot,
   Key,
@@ -465,9 +465,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={backendUrl}
+                      value={customBackendUrl || DEFAULT_PREVIEW_URL}
                       onChange={(e) => {
-                        setBackendUrl(e.target.value);
+                        setCustomBackendUrl(e.target.value);
                         setApiBaseUrl(e.target.value);
                       }}
                       placeholder={DEFAULT_PREVIEW_URL}
