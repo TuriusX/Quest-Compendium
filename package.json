@@ -11,7 +11,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "desktop:dev": "npx -y concurrently \"npm run dev\" \"npx -y wait-on http://localhost:3000 && npx -y electron@30.0.0 electron/main.cjs\"",
-    "desktop:build": "npm run build && npx -y --package electron-builder --package electron@30.0.0 electron-builder -c electron-builder.json -c.electronVersion=30.0.0 --win && node -e \"try { require('fs').rmSync('release/win-unpacked/electron.exe', {force: true}); } catch(e) {}\"",
+    "desktop:build": "npm run build && npx -y --package electron-builder --package electron@30.0.0 electron-builder -c electron-builder.json -c.electronVersion=30.0.0 --win --linux && node -e \"try { require('fs').rmSync('release/win-unpacked/electron.exe', {force: true}); } catch(e) {}\"",
     "desktop:build:linux": "npm run build && npx -y --package electron-builder --package electron@30.0.0 electron-builder -c electron-builder.json -c.electronVersion=30.0.0 --linux"
   },
   "dependencies": {
