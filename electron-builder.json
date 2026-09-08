@@ -13,7 +13,7 @@
   "linux": {},
   "win": {
     "icon": "public/icon.ico",
-    "target": ["nsis", "portable"]
+    "target": ["nsis"]
   },
   "files": [
     "dist/**/*",

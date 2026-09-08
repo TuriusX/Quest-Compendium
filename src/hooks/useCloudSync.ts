@@ -70,6 +70,9 @@ export function useCloudSync(
       if (!currentUser) {
         setSubscriptionStatus('loading');
         setIsInitializing(false);
+      } else {
+        // We are logging in, hold initialization true until cloud fetch finishes
+        setIsInitializing(true);
       }
     });
     return () => unsubscribe();
@@ -80,7 +83,12 @@ export function useCloudSync(
     if (!user) return;
     const userRef = doc(db, 'users', user.uid);
     
-    // First, ensure the document exists, then subscribe
+    let unsubscribe = () => {};
+    let isCancelled = false;
+
+    // Use a ref to guarantee we know when the first load happened
+    let hasDoneInitialCloudLoad = false;
+
     const initializeUserDoc = async () => {
       const docSnap = await getDoc(userRef);
       if (!docSnap.exists()) {
@@ -99,9 +107,6 @@ export function useCloudSync(
       }
     };
 
-    let unsubscribe = () => {};
-    let isCancelled = false;
-
     initializeUserDoc().then(() => {
       if (isCancelled) return;
       unsubscribe = onSnapshot(userRef, (docSnap) => {
@@ -109,19 +114,37 @@ export function useCloudSync(
           const data = docSnap.data();
           setUserData(data);
           setSubscriptionStatus(data.subscriptionStatus || 'inactive');
-          setIsInitializing(false);
           
-          // Sync cloud down to local state on initial load or remote change
-          // We ignore pending writes to prevent applying our own echo
-          if (!docSnap.metadata.hasPendingWrites) {
-            const cloudSettingsStr = JSON.stringify(data.settings);
-            const cloudTabsStr = JSON.stringify(data.tabs);
-            
-            lastSyncedData.current = { settings: cloudSettingsStr, tabs: cloudTabsStr };
+          const cloudSettingsStr = JSON.stringify(data.settings || {});
+          const cloudTabsStr = JSON.stringify(data.tabs || []);
+          const localSettingsStr = JSON.stringify(localSettings);
+          const localTabsStr = JSON.stringify(sanitizeTabsForCloud(localGameTabs));
 
-            if (data.settings) setLocalSettings(data.settings);
-            if (data.tabs && Array.isArray(data.tabs)) setLocalGameTabs(data.tabs);
+          // Robust check: ONLY update local state if the cloud has genuinely different data
+          // This entirely prevents the echo loop without relying on hasPendingWrites
+          let stateUpdated = false;
+          
+          // If this is the VERY first load, or the cloud has genuinely different data
+          if (!hasDoneInitialCloudLoad || cloudSettingsStr !== localSettingsStr) {
+            if (data.settings) {
+               setLocalSettings(data.settings);
+               stateUpdated = true;
+            }
           }
+
+          if (!hasDoneInitialCloudLoad || cloudTabsStr !== localTabsStr) {
+            if (data.tabs && Array.isArray(data.tabs)) {
+               setLocalGameTabs(data.tabs);
+               stateUpdated = true;
+            }
+          }
+
+          if (stateUpdated || !hasDoneInitialCloudLoad) {
+            lastSyncedData.current = { settings: cloudSettingsStr, tabs: cloudTabsStr };
+          }
+
+          hasDoneInitialCloudLoad = true;
+          setIsInitializing(false); // Only allow local->cloud writes after this completes
         }
       });
     });
@@ -130,6 +153,7 @@ export function useCloudSync(
       isCancelled = true;
       unsubscribe();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Sync Local to Cloud whenever settings or tabs change
