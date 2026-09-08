@@ -50,6 +50,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   });
   const [testingHealth, setTestingHealth] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; status?: number; error?: string; hasGeminiKey?: boolean } | null>(null);
+  const [localUiScale, setLocalUiScale] = useState(settings.uiScale || 1.0);
+
+  React.useEffect(() => {
+    setLocalUiScale(settings.uiScale || 1.0);
+  }, [settings.uiScale]);
 
   if (!isOpen) return null;
 
@@ -284,14 +289,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       min="50"
                       max="200"
                       step="5"
-                      value={(settings.uiScale || 1.0) * 100}
+                      value={localUiScale * 100}
                       onChange={(e) => {
-                        onUpdateSettings({ uiScale: Number(e.target.value) / 100 });
+                        setLocalUiScale(Number(e.target.value) / 100);
                       }}
-                      onMouseUp={() => playBlipSound(soundEnabled)}
+                      onMouseUp={() => {
+                        onUpdateSettings({ uiScale: localUiScale });
+                        playBlipSound(soundEnabled);
+                      }}
+                      onTouchEnd={() => {
+                        onUpdateSettings({ uiScale: localUiScale });
+                        playBlipSound(soundEnabled);
+                      }}
                       className="flex-1 accent-[var(--accent-color)] cursor-pointer h-1.5 bg-white/20 rounded"
                     />
-                    <span className="font-mono text-zinc-300 w-10 text-right font-bold text-xs">{Math.round((settings.uiScale || 1.0) * 100)}%</span>
+                    <span className="font-mono text-zinc-300 w-10 text-right font-bold text-xs">{Math.round(localUiScale * 100)}%</span>
                   </div>
                 </div>
 

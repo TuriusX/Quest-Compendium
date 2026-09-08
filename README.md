@@ -1,4 +1,3 @@
-[QC Read Me.txt](https://github.com/user-attachments/files/31932750/QC.Read.Me.txt)
 # Quest Compendium 🗡️
 
 An intelligent, AI-powered desktop companion designed to overlay seamlessly on top of your favorite games. Quest Compendium provides real-time game guides, an interactive playthrough notepad, and a responsive AI assistant that understands what you're playing.
