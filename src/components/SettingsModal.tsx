@@ -429,7 +429,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         className="w-full bg-black/60 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[var(--accent-border)] font-mono"
                       />
                     </div>
-                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    <div>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Auto Screenshot & Ask</label>
+                      <input
+                        type="text"
+                        value={settings.autoScreenshotShortcut || 'CmdOrCtrl+Shift+S'}
+                        onChange={(e) => onUpdateSettings({ autoScreenshotShortcut: e.target.value })}
+                        className="w-full bg-black/60 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[var(--accent-border)] font-mono"
+                      />
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed col-span-2">
                       Format: <code>CmdOrCtrl+Shift+H</code> etc. Note: Requires restart to apply if changing the slide toggle.
                     </p>
                   </div>

@@ -204,16 +204,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     else startVoiceRecording();
   };
 
+  const handleAutoScreenshotSubmit = async () => {
+    if (isLoading) return;
+    // Overriding the question to prompt the AI to examine the picture
+    // And leaving the image undefined will trigger the auto-screenshot flow in handleSubmit
+    await handleSubmit(undefined, "Please reference this picture", undefined);
+  };
+
   useEffect(() => {
     window.addEventListener('trigger-voice-start', startVoiceRecording);
     window.addEventListener('trigger-voice-stop', stopVoiceRecording);
     window.addEventListener('trigger-voice-record', toggleVoiceRecording);
+    window.addEventListener('trigger-auto-screenshot-submit', handleAutoScreenshotSubmit);
     return () => {
       window.removeEventListener('trigger-voice-start', startVoiceRecording);
       window.removeEventListener('trigger-voice-stop', stopVoiceRecording);
       window.removeEventListener('trigger-voice-record', toggleVoiceRecording);
+      window.removeEventListener('trigger-auto-screenshot-submit', handleAutoScreenshotSubmit);
     };
-  }, [isRecording, soundEnabled, attachedImage, onSendMessage]);
+  }, [isRecording, soundEnabled, attachedImage, onSendMessage, inputQuestion, isLoading]);
 
   // Live Screen Capture from Game Window (WebRTC DisplayMedia or File Upload Fallback)
   const captureGameScreen = async (): Promise<string | null> => {
@@ -312,16 +321,43 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
-  const handleSubmit = async (e?: React.FormEvent) => {
+  const handleTextareaPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    let handled = false;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        handled = true;
+        const file = items[i].getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            if (event.target?.result) {
+              setAttachedImage(event.target.result as string);
+              playSnapSound(soundEnabled);
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    }
+    if (handled) {
+      e.preventDefault();
+    }
+  };
+
+  const handleSubmit = async (e?: React.FormEvent, overrideText?: string, overrideImage?: string) => {
     if (e) e.preventDefault();
     if (isLoading) return;
 
     // In electron, we auto-capture if no image is attached
     const isElectron = !!(typeof window !== 'undefined' && (window as any).electronAPI);
-    let finalImage = attachedImage;
+    let finalImage = overrideImage !== undefined ? overrideImage : attachedImage;
+    let finalQuestion = overrideText !== undefined ? overrideText : inputQuestion.trim();
     
     // We only block submission if it's empty AND we can't auto-capture
-    if (!inputQuestion.trim() && !finalImage && !isElectron) return;
+    if (!finalQuestion && !finalImage && !isElectron) return;
 
     if (isElectron && !finalImage) {
       setIsCapturingScreen(true);
@@ -342,12 +378,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
        playSnapSound(soundEnabled); // Play snap even if they pasted
     }
 
-    const question = inputQuestion.trim();
+    // Default question if they submitted an image without any text
+    if (!finalQuestion && finalImage) {
+      finalQuestion = "Please analyze this image.";
+    }
+
     setInputQuestion('');
     setAttachedImage(null);
     attachedImageRef.current = null;
 
-    await onSendMessage(question, finalImage || undefined);
+    await onSendMessage(finalQuestion, finalImage || undefined);
     playChimeSound(soundEnabled);
   };
 
@@ -974,6 +1014,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <textarea
             value={inputQuestion}
             onChange={(e) => setInputQuestion(e.target.value)}
+            onPaste={handleTextareaPaste}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();

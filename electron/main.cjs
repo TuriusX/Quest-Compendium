@@ -489,6 +489,17 @@ app.whenReady().then(() => {
     } catch (err) {
       console.error("Failed to register voiceInputShortcut", err);
     }
+
+    const autoScreenshotCmd = shortcuts.autoScreenshotShortcut || 'CommandOrControl+Shift+S';
+    try {
+      globalShortcut.register(autoScreenshotCmd, () => {
+        if (mainWindow) {
+          mainWindow.webContents.send('trigger-auto-screenshot');
+        }
+      });
+    } catch (err) {
+      console.error("Failed to register autoScreenshotShortcut", err);
+    }
   });
 
   app.on('activate', () => {

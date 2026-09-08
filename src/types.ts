@@ -90,4 +90,5 @@ export interface AppSettings {
   openAiApiKey?: string;
   hideAppShortcut: string;
   voiceInputShortcut: string;
+  autoScreenshotShortcut: string;
 }

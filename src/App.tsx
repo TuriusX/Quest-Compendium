@@ -42,6 +42,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   customApiKey: '',
   hideAppShortcut: 'CmdOrCtrl+Shift+H',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
+  autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
@@ -355,11 +356,13 @@ export default function App() {
       (window as any).electronAPI.updateShortcuts({
         hideAppShortcut: settings.hideAppShortcut,
         voiceInputShortcut: settings.voiceInputShortcut,
+        autoScreenshotShortcut: settings.autoScreenshotShortcut,
       });
     }
   }, [
     settings.hideAppShortcut, 
-    settings.voiceInputShortcut, 
+    settings.voiceInputShortcut,
+    settings.autoScreenshotShortcut
   ]);
 
   useEffect(() => {
@@ -381,6 +384,14 @@ export default function App() {
         setIsBrowserMode(false);
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('trigger-voice-record'));
+        }, 100);
+      });
+    }
+    if ((window as any).electronAPI?.onTriggerAutoScreenshot) {
+      (window as any).electronAPI.onTriggerAutoScreenshot(() => {
+        setIsBrowserMode(false);
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('trigger-auto-screenshot-submit'));
         }, 100);
       });
     }
