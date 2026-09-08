@@ -450,27 +450,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {activeTab === 'account' && (
               <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
-                
-                {/* Custom Backend URL */}
-                <div className="space-y-2.5">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
-                    <Server className="w-4 h-4 text-[var(--accent-color)]" />
-                    <span>Backend Server URL</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={customBackendUrl || DEFAULT_PREVIEW_URL}
-                      onChange={(e) => {
-                        setCustomBackendUrl(e.target.value);
-                        setApiBaseUrl(e.target.value);
-                      }}
-                      placeholder={DEFAULT_PREVIEW_URL}
-                      className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/90 placeholder-white/30 focus:outline-none focus:border-indigo-500/50 transition-colors"
-                    />
-                  </div>
-                  <p className="text-[11px] text-zinc-400 mt-1">If the app says 'Cloud Backend Unreachable', ensure the AI Studio app is published and this URL is correct. (Reload the app after changing).</p>
-                </div>
 
                 {/* Steam Sign-in */}
                 <div className="space-y-2.5">
@@ -527,17 +506,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span className="text-red-400">Account Management</span>
                   </label>
                   
-                  <button
-                    onClick={() => {
-                      playBlipSound(soundEnabled);
-                      // Sandbox downgrade trigger
-                      window.location.href = window.location.pathname + '?downgrade=true';
-                    }}
-                    className="w-full flex items-center justify-center gap-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer mb-2"
-                  >
-                    Reset Premium Status (Dev Tool)
-                  </button>
-
                   <button
                     onClick={() => {
                       playBlipSound(soundEnabled);

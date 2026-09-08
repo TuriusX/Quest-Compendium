@@ -754,14 +754,8 @@ ipcMain.handle('take-screenshot', async () => {
     console.error('Screenshot failed:', error);
   }
 
-  if (wasVisible) {
-    if (currentDockPosition !== 'undocked') {
-      const coords = getDockCoords(false);
-      await animateWindow(coords.x, coords.y, 200);
-    } else {
-      mainWindow.show();
-    }
-  }
+  slideIn();
+
   return base64Image;
 });
 
