@@ -46,6 +46,12 @@ export function useCloudSync(
 
   // Track last synced data to prevent infinite loops
   const lastSyncedData = useRef({ settings: '', tabs: '' });
+  
+  // Use a ref to guarantee we have the absolute latest local data in closures
+  const localDataRef = useRef({ settings: localSettings, tabs: localGameTabs });
+  useEffect(() => {
+    localDataRef.current = { settings: localSettings, tabs: localGameTabs };
+  }, [localSettings, localGameTabs]);
 
   // App Version Check
   useEffect(() => {
@@ -92,8 +98,8 @@ export function useCloudSync(
     const initializeUserDoc = async () => {
       const docSnap = await getDoc(userRef);
       if (!docSnap.exists()) {
-        const initialSettingsStr = JSON.stringify(localSettings);
-        const initialTabsStr = JSON.stringify(sanitizeTabsForCloud(localGameTabs));
+        const initialSettingsStr = JSON.stringify(localDataRef.current.settings);
+        const initialTabsStr = JSON.stringify(sanitizeTabsForCloud(localDataRef.current.tabs));
         
         lastSyncedData.current = { settings: initialSettingsStr, tabs: initialTabsStr };
 
@@ -113,26 +119,25 @@ export function useCloudSync(
         if (docSnap.exists()) {
           const data = docSnap.data();
           setUserData(data);
-          setSubscriptionStatus(data.subscriptionStatus || 'inactive');
+          
+          // CRITICAL FIX: If subscriptionStatus is missing, assume 'beta' so they can upload.
+          setSubscriptionStatus(data.subscriptionStatus || 'beta');
           
           const cloudSettingsStr = JSON.stringify(data.settings || {});
           const cloudTabsStr = JSON.stringify(data.tabs || []);
-          const localSettingsStr = JSON.stringify(localSettings);
-          const localTabsStr = JSON.stringify(sanitizeTabsForCloud(localGameTabs));
 
           // Robust check: ONLY update local state if the cloud has genuinely different data
-          // This entirely prevents the echo loop without relying on hasPendingWrites
+          // By checking against lastSyncedData, we don't get trapped by React closures.
           let stateUpdated = false;
           
-          // If this is the VERY first load, or the cloud has genuinely different data
-          if (!hasDoneInitialCloudLoad || cloudSettingsStr !== localSettingsStr) {
+          if (!hasDoneInitialCloudLoad || cloudSettingsStr !== lastSyncedData.current.settings) {
             if (data.settings) {
                setLocalSettings(data.settings);
                stateUpdated = true;
             }
           }
 
-          if (!hasDoneInitialCloudLoad || cloudTabsStr !== localTabsStr) {
+          if (!hasDoneInitialCloudLoad || cloudTabsStr !== lastSyncedData.current.tabs) {
             if (data.tabs && Array.isArray(data.tabs)) {
                setLocalGameTabs(data.tabs);
                stateUpdated = true;
