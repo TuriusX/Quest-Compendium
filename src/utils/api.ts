@@ -1,4 +1,4 @@
-export const DEFAULT_PREVIEW_URL = 'https://quest-compendium-890629309063.us-east1.run.app';
+export const DEFAULT_PREVIEW_URL = 'https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app';
 
 export const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
