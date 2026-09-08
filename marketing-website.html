@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quest Compendium - AI Gaming Companion</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Tailwind Config -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            fantasy: ['Cinzel', 'serif'],
+          },
+          colors: {
+            accent: '#a87ffb',
+            accentDim: 'rgba(168, 127, 251, 0.15)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <style>
+    body {
+      background-color: #07070a;
+      color: #e4e4e7;
+    }
+  </style>
+</head>
+<body class="selection:bg-purple-500/30 overflow-x-hidden">
+
+  <!-- Navigation -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-[#07070a]/80 backdrop-blur-lg border-b border-white/5">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <!-- SVG Book Icon -->
+        <svg class="w-8 h-8 text-accent drop-shadow-[0_0_15px_rgba(168,127,251,0.5)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
+        </svg>
+        <span class="font-fantasy font-bold text-xl tracking-wide text-white">Quest Compendium</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <a href="https://app.questcompendium.com" class="text-sm font-medium text-zinc-400 hover:text-white transition-colors hidden sm:block">
+          Web App
+        </a>
+        <button class="bg-accent text-black px-4 py-2 rounded-full text-sm font-bold hover:bg-white transition-colors flex items-center gap-2 shadow-[0_0_20px_var(--accentDim)]">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Download Beta</span>
+          <span class="sm:hidden">Beta</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="relative pt-32 pb-20 px-4 sm:px-6 lg:pt-48 lg:pb-32 overflow-hidden">
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-accent opacity-[0.07] blur-[120px] rounded-full pointer-events-none"></div>
+    
+    <div class="max-w-4xl mx-auto text-center relative z-10">
+      <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-accent mb-8">
+        <i data-lucide="sparkles" class="w-4 h-4"></i>
+        <span>Now in Open Beta for Windows</span>
+      </div>
+      
+      <h1 class="text-5xl sm:text-6xl lg:text-7xl font-bold text-white tracking-tight mb-8 leading-[1.1]">
+        Your Ultimate AI <br class="hidden sm:block" />
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-accent to-purple-400">
+          Gaming Companion
+        </span>
+      </h1>
+      
+      <p class="text-lg sm:text-xl text-zinc-400 mb-10 max-w-2xl mx-auto leading-relaxed">
+        Never alt-tab to a wiki again. An intelligent overlay that reads your screen, tracks your quests, and provides lore-accurate guides instantly.
+      </p>
+      
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <button class="w-full sm:w-auto bg-white text-black px-8 py-4 rounded-full font-bold text-lg hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2 shadow-xl">
+          <i data-lucide="monitor" class="w-5 h-5"></i>
+          Download for Windows
+        </button>
+        <a href="https://app.questcompendium.com" class="w-full sm:w-auto bg-white/5 text-white border border-white/10 px-8 py-4 rounded-full font-bold text-lg hover:bg-white/10 transition-colors flex items-center justify-center gap-2">
+          Try Web Version
+          <i data-lucide="chevron-right" class="w-5 h-5"></i>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Grid -->
+  <section class="py-20 px-4 sm:px-6">
+    <div class="max-w-6xl mx-auto">
+      <div class="grid sm:grid-cols-3 gap-6">
+        <!-- Feature 1 -->
+        <div class="bg-white/5 border border-white/10 rounded-3xl p-8 hover:bg-white/[0.07] transition-colors">
+          <div class="w-12 h-12 bg-purple-500/10 rounded-2xl flex items-center justify-center mb-6 border border-purple-500/20">
+            <i data-lucide="brain-circuit" class="w-6 h-6 text-purple-400"></i>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-3">Vision AI</h3>
+          <p class="text-zinc-400 leading-relaxed text-sm">
+            Press a shortcut to capture your screen. The AI analyzes puzzles, stats, and maps to give you perfect context-aware advice.
+          </p>
+        </div>
+        <!-- Feature 2 -->
+        <div class="bg-white/5 border border-white/10 rounded-3xl p-8 hover:bg-white/[0.07] transition-colors">
+          <div class="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center mb-6 border border-blue-500/20">
+            <i data-lucide="bot" class="w-6 h-6 text-blue-400"></i>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-3">Roleplay Modes</h3>
+          <p class="text-zinc-400 leading-relaxed text-sm">
+            Choose how you want to be helped. Go Min-Max for raw stats, or Roleplay for lore-friendly hints that won't spoil the story.
+          </p>
+        </div>
+        <!-- Feature 3 -->
+        <div class="bg-white/5 border border-white/10 rounded-3xl p-8 hover:bg-white/[0.07] transition-colors">
+          <div class="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center mb-6 border border-amber-500/20">
+            <i data-lucide="zap" class="w-6 h-6 text-amber-400"></i>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-3">Sync Everywhere</h3>
+          <p class="text-zinc-400 leading-relaxed text-sm">
+            Your playthrough notes, unlocked Steam achievements, and active tabs sync seamlessly across your desktop and the web.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing / Footer -->
+  <footer class="pt-20 pb-10 px-4 sm:px-6 border-t border-white/5 text-center">
+    <div class="max-w-2xl mx-auto">
+      <div class="bg-gradient-to-b from-white/[0.08] to-transparent border border-white/10 rounded-3xl p-8 mb-16">
+        <h3 class="text-2xl font-bold text-white mb-2">Upgrade to Pro</h3>
+        <p class="text-zinc-400 mb-6 text-sm max-w-md mx-auto">
+          Get 40 advanced vision queries a day, unlimited standard queries, and priority sync.
+        </p>
+        <div class="flex items-center justify-center gap-2 mb-6">
+          <span class="text-3xl font-bold text-white">$4.99</span>
+          <span class="text-zinc-500">/ month</span>
+        </div>
+        <button class="bg-white text-black px-8 py-3 rounded-xl font-bold hover:bg-zinc-200 transition-colors w-full sm:w-auto">
+          Subscribe Now
+        </button>
+      </div>
+      
+      <div class="flex items-center justify-center gap-3 mb-6">
+        <svg class="w-6 h-6 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
+        </svg>
+        <span class="font-fantasy font-bold text-zinc-500">Quest Compendium</span>
+      </div>
+      <p class="text-zinc-600 text-xs">
+        &copy; 2024 Quest Compendium. Built by gamers, for gamers. Not affiliated with Steam or Valve.
+      </p>
+    </div>
+  </footer>
+
+  <!-- Initialize Lucide Icons -->
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>
