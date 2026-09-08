@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
@@ -44,6 +44,9 @@ export function useCloudSync(
   const [isInitializing, setIsInitializing] = useState(true);
   const [isOutdated, setIsOutdated] = useState(false);
 
+  // Track last synced data to prevent infinite loops
+  const lastSyncedData = useRef({ settings: '', tabs: '' });
+
   // App Version Check
   useEffect(() => {
     const configRef = doc(db, 'config', 'desktop_client');
@@ -81,11 +84,16 @@ export function useCloudSync(
     const initializeUserDoc = async () => {
       const docSnap = await getDoc(userRef);
       if (!docSnap.exists()) {
+        const initialSettingsStr = JSON.stringify(localSettings);
+        const initialTabsStr = JSON.stringify(sanitizeTabsForCloud(localGameTabs));
+        
+        lastSyncedData.current = { settings: initialSettingsStr, tabs: initialTabsStr };
+
         await setDoc(userRef, {
           email: user.email || null,
           subscriptionStatus: 'beta',
-          settings: JSON.parse(JSON.stringify(localSettings)),
-          tabs: JSON.parse(JSON.stringify(sanitizeTabsForCloud(localGameTabs))),
+          settings: JSON.parse(initialSettingsStr),
+          tabs: JSON.parse(initialTabsStr),
           updatedAt: Date.now()
         });
       }
@@ -102,11 +110,17 @@ export function useCloudSync(
           setUserData(data);
           setSubscriptionStatus(data.subscriptionStatus || 'inactive');
           setIsInitializing(false);
+          
           // Sync cloud down to local state on initial load or remote change
-          // For a robust app, we'd use timestamps to resolve conflicts.
-          // Keeping it simple here.
-          if (data.settings && JSON.stringify(data.settings) !== JSON.stringify(localSettings)) {
-            // setLocalSettings(data.settings); // In a fully synced app, uncomment this. But it might cause loops if not careful.
+          // We ignore pending writes to prevent applying our own echo
+          if (!docSnap.metadata.hasPendingWrites) {
+            const cloudSettingsStr = JSON.stringify(data.settings);
+            const cloudTabsStr = JSON.stringify(data.tabs);
+            
+            lastSyncedData.current = { settings: cloudSettingsStr, tabs: cloudTabsStr };
+
+            if (data.settings) setLocalSettings(data.settings);
+            if (data.tabs && Array.isArray(data.tabs)) setLocalGameTabs(data.tabs);
           }
         }
       });
@@ -122,11 +136,21 @@ export function useCloudSync(
   useEffect(() => {
     if (!user || (subscriptionStatus !== 'active' && subscriptionStatus !== 'beta') || isInitializing) return;
 
+    const currentSettingsStr = JSON.stringify(localSettings);
+    const currentTabsStr = JSON.stringify(sanitizeTabsForCloud(localGameTabs));
+
+    // Prevent loop: Only upload if the local data has actually changed compared to the last sync
+    if (currentSettingsStr === lastSyncedData.current.settings && 
+        currentTabsStr === lastSyncedData.current.tabs) {
+      return;
+    }
+
     const syncTimeout = setTimeout(() => {
+      lastSyncedData.current = { settings: currentSettingsStr, tabs: currentTabsStr };
       const userRef = doc(db, 'users', user.uid);
       setDoc(userRef, {
-        settings: JSON.parse(JSON.stringify(localSettings)),
-        tabs: JSON.parse(JSON.stringify(sanitizeTabsForCloud(localGameTabs))),
+        settings: JSON.parse(currentSettingsStr),
+        tabs: JSON.parse(currentTabsStr),
         updatedAt: Date.now()
       }, { merge: true }).catch(err => console.error("Sync error", err));
     }, 1500); // Debounce syncs by 1.5 seconds
