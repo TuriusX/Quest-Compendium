@@ -5,13 +5,15 @@
     "main": "electron/main.cjs"
   },
   "directories": {
-    "output": "release"
+    "output": "release",
+    "buildResources": "public"
   },
-  "icon": "public/app-icon.png",
+  "icon": "public/icon.png",
   "mac": {},
   "linux": {},
   "win": {
-    "icon": "public/app-icon.ico"
+    "icon": "public/icon.ico",
+    "target": ["nsis", "portable"]
   },
   "files": [
     "dist/**/*",
