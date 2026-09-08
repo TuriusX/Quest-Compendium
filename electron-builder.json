@@ -11,7 +11,7 @@
   "icon": "public/icon.png",
   "mac": {},
   "linux": {
-    "target": ["AppImage"],
+    "target": ["tar.gz"],
     "icon": "public/icon.png",
     "category": "Game"
   },
