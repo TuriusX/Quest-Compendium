@@ -10,7 +10,11 @@
   },
   "icon": "public/icon.png",
   "mac": {},
-  "linux": {},
+  "linux": {
+    "target": ["AppImage"],
+    "icon": "public/icon.png",
+    "category": "Game"
+  },
   "win": {
     "icon": "public/icon.ico",
     "target": ["nsis"]

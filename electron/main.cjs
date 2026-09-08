@@ -521,70 +521,77 @@ app.on('before-quit', () => {
 });
 
 const { exec } = require('child_process');
+const fs = require('fs');
+const os = require('os');
 let lastRunningAppId = 0;
 let activeSteamGame = null;
 
-// Checks the local Windows Registry for Steam's active game ID every 3 seconds
-if (process.platform === 'win32') {
-  setInterval(() => {
+function processNewAppId(currentAppId) {
+  if (currentAppId !== lastRunningAppId) {
+    lastRunningAppId = currentAppId;
+    
+    if (currentAppId === 0) {
+      activeSteamGame = null;
+      if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send('active-game-detected', null);
+      }
+    } else {
+      // A game launched! Look up its name from Steam API
+      fetch(`https://store.steampowered.com/api/appdetails?appids=${currentAppId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data[currentAppId] && data[currentAppId].success) {
+            activeSteamGame = { name: data[currentAppId].data.name, appId: currentAppId };
+          } else {
+            // Fallback for non-Steam shortcuts or games missing store entries
+            activeSteamGame = { name: `Steam Game (${currentAppId})`, appId: currentAppId };
+          }
+          if (mainWindow && mainWindow.webContents) {
+            mainWindow.webContents.send('active-game-detected', activeSteamGame);
+          }
+        }).catch(() => {});
+    }
+  }
+}
+
+// Checks the local Windows Registry or Linux VDF for Steam's active game ID every 3 seconds
+setInterval(() => {
+  if (process.platform === 'win32') {
     exec('reg query HKCU\\Software\\Valve\\Steam /v RunningAppId', (error, stdout) => {
       if (error) {
-        // Steam closed or registry key missing -> reset active game immediately
-        if (lastRunningAppId !== 0 || activeSteamGame !== null) {
-          lastRunningAppId = 0;
-          activeSteamGame = null;
-          if (mainWindow && mainWindow.webContents) {
-            mainWindow.webContents.send('active-game-detected', null);
-          }
-        }
+        processNewAppId(0);
         return;
       }
-      
       const match = stdout.match(/0x([0-9a-fA-F]+)/);
       if (match) {
-        const currentAppId = parseInt(match[1], 16);
-        
-        if (currentAppId !== lastRunningAppId) {
-          lastRunningAppId = currentAppId;
-          
-          if (currentAppId === 0) {
-            activeSteamGame = null;
-            if (mainWindow && mainWindow.webContents) {
-              mainWindow.webContents.send('active-game-detected', null);
-            }
-          } else {
-            // A game launched! Look up its name from Steam API
-            fetch(`https://store.steampowered.com/api/appdetails?appids=${currentAppId}`)
-              .then(res => res.json())
-              .then(data => {
-                if (data[currentAppId] && data[currentAppId].success) {
-                  activeSteamGame = { name: data[currentAppId].data.name, appId: currentAppId };
-                  if (mainWindow && mainWindow.webContents) {
-                    mainWindow.webContents.send('active-game-detected', activeSteamGame);
-                  }
-                } else {
-                  // Fallback for non-Steam shortcuts or games missing store entries
-                  activeSteamGame = { name: `Steam Game (${currentAppId})`, appId: currentAppId };
-                  if (mainWindow && mainWindow.webContents) {
-                    mainWindow.webContents.send('active-game-detected', activeSteamGame);
-                  }
-                }
-              }).catch(() => {});
-          }
-        }
+        processNewAppId(parseInt(match[1], 16));
       } else {
-        // No match found -> clear active game
-        if (lastRunningAppId !== 0 || activeSteamGame !== null) {
-          lastRunningAppId = 0;
-          activeSteamGame = null;
-          if (mainWindow && mainWindow.webContents) {
-            mainWindow.webContents.send('active-game-detected', null);
-          }
-        }
+        processNewAppId(0);
       }
     });
-  }, 3000);
-}
+  } else if (process.platform === 'linux') {
+    const registryPaths = [
+      path.join(os.homedir(), '.steam', 'registry.vdf'),
+      path.join(os.homedir(), '.local', 'share', 'Steam', 'registry.vdf'),
+      path.join(os.homedir(), '.steam', 'steam', 'registry.vdf')
+    ];
+    let currentAppId = 0;
+    for (const p of registryPaths) {
+      if (fs.existsSync(p)) {
+        try {
+          const data = fs.readFileSync(p, 'utf8');
+          // Match "RunningAppID" "12345" or "RunningAppID"		"12345"
+          const match = data.match(/"RunningAppID"\s+"?(\d+)"?/i);
+          if (match) {
+            currentAppId = parseInt(match[1], 10);
+            break;
+          }
+        } catch(e) {}
+      }
+    }
+    processNewAppId(currentAppId);
+  }
+}, 3000);
 
 ipcMain.handle('get-active-game', async () => {
   return activeSteamGame;
