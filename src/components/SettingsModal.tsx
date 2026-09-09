@@ -37,6 +37,72 @@ interface SettingsModalProps {
 
 type TabId = 'appearance' | 'persona' | 'shortcuts' | 'connection' | 'account';
 
+const ShortcutInput: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+}> = ({ value, onChange, label }) => {
+  const [isRecording, setIsRecording] = useState(false);
+
+  React.useEffect(() => {
+    if (!isRecording) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const key = e.key;
+      
+      // Cancel on Escape
+      if (key === 'Escape') {
+        setIsRecording(false);
+        return;
+      }
+
+      // Ignore if it's just a modifier key being pressed alone
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(key)) {
+        return;
+      }
+
+      const parts = [];
+      if (e.ctrlKey || e.metaKey) parts.push('CmdOrCtrl');
+      if (e.altKey) parts.push('Alt');
+      if (e.shiftKey) parts.push('Shift');
+
+      let normalizedKey = key.toUpperCase();
+      if (key === ' ') normalizedKey = 'Space';
+      if (key === '+') normalizedKey = 'Plus'; 
+      
+      parts.push(normalizedKey);
+      
+      onChange(parts.join('+'));
+      setIsRecording(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    };
+  }, [isRecording, onChange]);
+
+  return (
+    <div>
+      <label className="block text-[11px] text-zinc-400 mb-1">{label}</label>
+      <button
+        type="button"
+        onClick={() => setIsRecording(true)}
+        className={`w-full text-left bg-black/60 border rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none transition-all cursor-pointer ${
+          isRecording 
+            ? 'border-indigo-500/50 text-indigo-400 bg-indigo-500/5 shadow-[0_0_10px_rgba(99,102,241,0.2)]' 
+            : 'border-white/15 text-white hover:border-white/30 hover:bg-white/[0.02]'
+        }`}
+      >
+        {isRecording ? 'Listening for shortcut... (Press Esc to cancel)' : (value || 'None')}
+      </button>
+    </div>
+  );
+};
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
@@ -411,35 +477,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span>Keyboard Shortcuts</span>
                   </label>
                   <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] text-zinc-400 mb-1">Slide App In/Out</label>
-                      <input
-                        type="text"
-                        value={settings.hideAppShortcut}
-                        onChange={(e) => onUpdateSettings({ hideAppShortcut: e.target.value })}
-                        className="w-full bg-black/60 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[var(--accent-border)] font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-zinc-400 mb-1">Trigger Voice Input</label>
-                      <input
-                        type="text"
-                        value={settings.voiceInputShortcut}
-                        onChange={(e) => onUpdateSettings({ voiceInputShortcut: e.target.value })}
-                        className="w-full bg-black/60 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[var(--accent-border)] font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-zinc-400 mb-1">Auto Screenshot & Ask</label>
-                      <input
-                        type="text"
-                        value={settings.autoScreenshotShortcut || 'CmdOrCtrl+Shift+S'}
-                        onChange={(e) => onUpdateSettings({ autoScreenshotShortcut: e.target.value })}
-                        className="w-full bg-black/60 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[var(--accent-border)] font-mono"
-                      />
-                    </div>
+                    <ShortcutInput
+                      label="Slide App In/Out"
+                      value={settings.hideAppShortcut}
+                      onChange={(val) => onUpdateSettings({ hideAppShortcut: val })}
+                    />
+                    <ShortcutInput
+                      label="Trigger Voice Input"
+                      value={settings.voiceInputShortcut}
+                      onChange={(val) => onUpdateSettings({ voiceInputShortcut: val })}
+                    />
+                    <ShortcutInput
+                      label="Auto Screenshot & Ask"
+                      value={settings.autoScreenshotShortcut || 'CmdOrCtrl+Shift+S'}
+                      onChange={(val) => onUpdateSettings({ autoScreenshotShortcut: val })}
+                    />
                     <p className="text-[11px] text-zinc-400 leading-relaxed col-span-2">
-                      Format: <code>CmdOrCtrl+Shift+H</code> etc. Note: Requires restart to apply if changing the slide toggle.
+                      Note: Changing the slide toggle shortcut requires an app restart to take full effect.
                     </p>
                   </div>
                 </div>
