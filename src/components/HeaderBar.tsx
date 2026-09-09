@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Trophy, 
   FileText, 
@@ -66,6 +66,28 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const achievements = activeGame?.achievements || [];
   const unlockedCount = achievements.filter(a => a.unlocked).length;
   const totalCount = achievements.length;
+
+  const [timeUntilReset, setTimeUntilReset] = useState<string>('');
+
+  useEffect(() => {
+    if (!userData) return;
+
+    const updateCountdown = () => {
+      const now = new Date();
+      const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+      const diff = Math.max(0, tomorrow.getTime() - now.getTime());
+      
+      const h = Math.floor(diff / (1000 * 60 * 60));
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const s = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      setTimeUntilReset(`${h.toString().padStart(2, '0')}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`);
+    };
+    
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [userData]);
 
   return (
     <header className="h-14 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between px-3 sm:px-4 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
@@ -195,6 +217,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                       />
                     </div>
                   )}
+                </div>
+                
+                {/* Reset Timer */}
+                <div className="pt-2 mt-1 border-t border-white/5 flex justify-between items-center text-[11px]">
+                  <span className="text-zinc-500 font-medium">Allotment Resets In:</span>
+                  <span className="text-zinc-400 font-mono tracking-wider">{timeUntilReset}</span>
                 </div>
                 
                 {!userData.isPremium && (
