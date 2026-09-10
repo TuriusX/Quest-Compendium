@@ -527,26 +527,26 @@ export default function App() {
     // Extracted separate function just for polling achievements without fetching news again
     const pollAchievements = async () => {
       try {
-        let achievements = activeGame.achievements || [];
+        let newAchievements: any = null;
         
         if ((window as any).electronAPI && (window as any).electronAPI.fetchAchievementsLocally) {
           if (settings.steamId) {
             const localAch = await (window as any).electronAPI.fetchAchievementsLocally(activeGame.appId, settings.steamId);
-            if (localAch) achievements = localAch;
+            if (localAch) newAchievements = localAch;
           }
         } else {
           if (settings.steamId) {
             const res = await fetch(`${getApiBaseUrl()}/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`);
             if (res.ok) {
               const data = await res.json();
-              achievements = data.achievements || [];
+              newAchievements = data.achievements || [];
             }
           }
         }
 
-        if (isMounted) {
+        if (isMounted && newAchievements !== null) {
           if (activeGame.isAutoDetected) {
-            setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? { ...prev, achievements } as SteamGameData : prev);
+            setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? { ...prev, achievements: newAchievements } as SteamGameData : prev);
           } else {
             setTabs(prev => prev.map(t => {
               if (t.id === activeTab.id) {
@@ -558,7 +558,7 @@ export default function App() {
                       appId: activeGame.appId
                     }),
                     ...(activeGame.headerImage ? { headerImage: activeGame.headerImage } : {}),
-                    achievements,
+                    achievements: newAchievements,
                     patchNotes: t.activeSteamGame?.patchNotes || activeGame.patchNotes
                   }
                 };
