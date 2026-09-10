@@ -545,11 +545,29 @@ export default function App() {
         }
 
         if (isMounted && newAchievements !== null) {
+          // Merge to fix Steam CDN cache desyncs: never revert an unlocked achievement to locked
+          const mergeAchievements = (oldAchs: any[], newAchs: any[]) => {
+            if (!oldAchs || oldAchs.length === 0) return newAchs;
+            return newAchs.map(newAch => {
+              const oldAch = oldAchs.find(a => a.name === newAch.name || a.apiname === newAch.apiname);
+              if (oldAch && oldAch.isUnlocked && !newAch.isUnlocked) {
+                return oldAch; 
+              }
+              return newAch;
+            });
+          };
+
           if (activeGame.isAutoDetected) {
-            setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? { ...prev, achievements: newAchievements } as SteamGameData : prev);
+            setGlobalActiveGame(prev => {
+              if (prev && prev.appId === activeGame.appId) {
+                return { ...prev, achievements: mergeAchievements(prev.achievements || [], newAchievements) } as SteamGameData;
+              }
+              return prev;
+            });
           } else {
             setTabs(prev => prev.map(t => {
               if (t.id === activeTab.id) {
+                const currentAchs = t.activeSteamGame?.achievements || [];
                 return {
                   ...t,
                   activeSteamGame: {
@@ -558,7 +576,7 @@ export default function App() {
                       appId: activeGame.appId
                     }),
                     ...(activeGame.headerImage ? { headerImage: activeGame.headerImage } : {}),
-                    achievements: newAchievements,
+                    achievements: mergeAchievements(currentAchs, newAchievements),
                     patchNotes: t.activeSteamGame?.patchNotes || activeGame.patchNotes
                   }
                 };
