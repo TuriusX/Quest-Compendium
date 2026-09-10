@@ -31,6 +31,7 @@
     "react-dom": "^19.0.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "sharp": "^0.35.4",
     "stripe": "^22.6.1",
     "xml2js": "^0.6.2"
   },

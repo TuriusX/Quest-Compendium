@@ -368,6 +368,13 @@ function createWindow() {
 
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
 
+  mainWindow.on('resize', () => {
+    if (mainWindow) {
+      const bounds = mainWindow.getBounds();
+      baseLogicalHeight = bounds.height / currentUiScale;
+    }
+  });
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return {
       action: 'allow',
@@ -681,7 +688,6 @@ ipcMain.on('resize-window', (event, width) => {
     const primaryDisplay = screen.getPrimaryDisplay();
     const screenWidth = primaryDisplay.workAreaSize.width;
     const scaledWidth = Math.round(width * currentUiScale);
-    const scaledHeight = Math.round(baseLogicalHeight * currentUiScale);
     
     let newX = bounds.x;
     if (currentDockPosition === 'top-right' || currentDockPosition === 'bottom-right') {
@@ -694,7 +700,7 @@ ipcMain.on('resize-window', (event, width) => {
       x: newX,
       y: bounds.y,
       width: scaledWidth,
-      height: scaledHeight
+      height: bounds.height
     });
   }
 });
