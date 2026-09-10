@@ -523,6 +523,55 @@ export default function App() {
   useEffect(() => {
     if (!activeGame || !activeTab) return;
     let isMounted = true;
+    
+    // Extracted separate function just for polling achievements without fetching news again
+    const pollAchievements = async () => {
+      try {
+        let achievements = activeGame.achievements || [];
+        
+        if ((window as any).electronAPI && (window as any).electronAPI.fetchAchievementsLocally) {
+          if (settings.steamId) {
+            const localAch = await (window as any).electronAPI.fetchAchievementsLocally(activeGame.appId, settings.steamId);
+            if (localAch) achievements = localAch;
+          }
+        } else {
+          if (settings.steamId) {
+            const res = await fetch(`${getApiBaseUrl()}/api/steam/achievements/${activeGame.appId}?steamId=${encodeURIComponent(settings.steamId)}`);
+            if (res.ok) {
+              const data = await res.json();
+              achievements = data.achievements || [];
+            }
+          }
+        }
+
+        if (isMounted) {
+          if (activeGame.isAutoDetected) {
+            setGlobalActiveGame(prev => prev && prev.appId === activeGame.appId ? { ...prev, achievements } as SteamGameData : prev);
+          } else {
+            setTabs(prev => prev.map(t => {
+              if (t.id === activeTab.id) {
+                return {
+                  ...t,
+                  activeSteamGame: {
+                    ...(t.activeSteamGame?.appId === activeGame.appId ? t.activeSteamGame : {
+                      name: activeGame.name,
+                      appId: activeGame.appId
+                    }),
+                    ...(activeGame.headerImage ? { headerImage: activeGame.headerImage } : {}),
+                    achievements,
+                    patchNotes: t.activeSteamGame?.patchNotes || activeGame.patchNotes
+                  }
+                };
+              }
+              return t;
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to poll Steam achievements:', err);
+      }
+    };
+
     const fetchData = async () => {
       try {
         let achievements = activeGame.achievements || [];
@@ -591,8 +640,18 @@ export default function App() {
         console.error('Failed to fetch Steam data:', err);
       }
     };
+
     fetchData();
-    return () => { isMounted = false; };
+    
+    // Dynamically poll for achievements in the background every 15 seconds
+    const intervalId = setInterval(() => {
+      pollAchievements();
+    }, 15000);
+
+    return () => { 
+      isMounted = false; 
+      clearInterval(intervalId);
+    };
   }, [activeGame?.appId, settings.steamId, activeTab?.id]);
 
   // Handle Sending Message to Server Gemini API
