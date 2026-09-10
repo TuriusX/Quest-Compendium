@@ -25,10 +25,11 @@ async function fetchFullAchievementDetails(appId, steamId) {
     
     // Check if it's a numeric 64-bit ID or a vanity URL
     let url = '';
+    const cacheBuster = `_t=${Date.now()}`;
     if (/^\d{17}$/.test(steamId)) {
-      url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1`;
+      url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1&${cacheBuster}`;
     } else {
-      url = `https://steamcommunity.com/id/${steamId}/stats/${appId}/?xml=1`;
+      url = `https://steamcommunity.com/id/${steamId}/stats/${appId}/?xml=1&${cacheBuster}`;
     }
 
     const profileRes = await fetch(url, {
