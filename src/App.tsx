@@ -550,7 +550,7 @@ export default function App() {
             if (!oldAchs || oldAchs.length === 0) return newAchs;
             return newAchs.map(newAch => {
               const oldAch = oldAchs.find(a => a.name === newAch.name || a.apiname === newAch.apiname);
-              if (oldAch && oldAch.isUnlocked && !newAch.isUnlocked) {
+              if (oldAch && oldAch.unlocked && !newAch.unlocked) {
                 return oldAch; 
               }
               return newAch;
@@ -698,12 +698,6 @@ export default function App() {
     const backendUrl = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
 
     try {
-      // Fast-fail if the backend is completely unreachable or unpublished
-      const healthCheck = await fetch(`${backendUrl}/api/health`, { method: 'GET', signal: AbortSignal.timeout(5000) }).catch(() => null);
-      if (!healthCheck || !healthCheck.ok) {
-        throw new Error(`Cloud Backend Unreachable at ${backendUrl}. Please ensure your AI Studio app is successfully published.`);
-      }
-
       const res = await fetch(`${backendUrl}/api/chat`, {
         method: 'POST',
         signal: controller.signal,

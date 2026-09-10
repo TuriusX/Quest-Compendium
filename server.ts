@@ -896,7 +896,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       }
 
       return res.json({
-        text: responseText,
+        text: responseText.trim() || 'The Compendium could not decipher that. Please try rephrasing your inquiry.',
         modelUsed
       });
 
