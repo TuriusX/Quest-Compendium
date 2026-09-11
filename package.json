@@ -1,6 +1,8 @@
 {
-  "name": "react-example",
+  "name": "quest-compendium",
   "private": true,
+  "description": "An intelligent gaming companion and reference tool.",
+  "author": "Noah Minton",
   "version": "0.1.0",
   "type": "module",
   "scripts": {

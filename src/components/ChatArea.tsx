@@ -168,7 +168,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const reader = new FileReader();
         
-        const finalImage = attachedImageRef.current;
+        // Auto-capture screenshot if one isn't already attached
+        let finalImage = attachedImageRef.current;
+        if (!finalImage) {
+          finalImage = await captureGameScreen();
+        }
 
         reader.readAsDataURL(audioBlob);
         reader.onloadend = () => {
