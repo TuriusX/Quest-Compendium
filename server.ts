@@ -803,7 +803,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             }
           });
           const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('90s timeout exceeded')), 90000);
+            setTimeout(() => reject(new Error('45s timeout exceeded')), 45000);
           });
           const response = await Promise.race([primaryCall, timeoutPromise]) as any;
           responseText = response.text || 'No response received. Please try asking again.';
@@ -1017,29 +1017,30 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       try {
         const ai = getGeminiClient();
 
-        // Optimized chunking:
-        // We've increased the chunk size massively to preserve Gemini API quota.
-        // One message = One request (unless it's extremely long).
+        // Optimized chunking for TTFA (Time To First Audio):
+        // First chunk is kept very small (~200 chars) so the audio starts playing instantly.
+        // Subsequent chunks are large (~3500 chars) to preserve Gemini API quota.
         const chunks: string[] = [];
-        if (cleanText.length <= 4000) {
-          chunks.push(cleanText);
-        } else {
-          const sentences = cleanText.match(/[^.!?\n]+[.!?\n]+(\s|$)|[^.!?\n]+$/g) || [cleanText];
-          let currentChunk = '';
-          let targetLen = 3500; // Much larger limit to save requests
+        const sentences = cleanText.match(/[^.!?\n]+[.!?\n]+(\s|$)|[^.!?\n]+$/g) || [cleanText];
+        
+        let isFirstChunk = true;
+        let currentChunk = '';
 
-          for (const sentence of sentences) {
-            const s = sentence.trim();
-            if (!s) continue;
-            if ((currentChunk + ' ' + s).trim().length <= targetLen || !currentChunk) {
-              currentChunk = currentChunk ? `${currentChunk} ${s}` : s;
-            } else {
-              chunks.push(currentChunk);
-              currentChunk = s;
-            }
+        for (const sentence of sentences) {
+          const s = sentence.trim();
+          if (!s) continue;
+          
+          const targetLen = isFirstChunk ? 250 : 3500;
+          
+          if ((currentChunk + ' ' + s).trim().length <= targetLen || !currentChunk) {
+            currentChunk = currentChunk ? `${currentChunk} ${s}` : s;
+          } else {
+            chunks.push(currentChunk);
+            isFirstChunk = false;
+            currentChunk = s;
           }
-          if (currentChunk) chunks.push(currentChunk);
         }
+        if (currentChunk) chunks.push(currentChunk);
 
         const synthesizeChunk = async (chunkText: string): Promise<{pcm: Buffer | null, error?: string}> => {
           if (!chunkText.trim()) return { pcm: null };
