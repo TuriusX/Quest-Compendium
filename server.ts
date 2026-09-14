@@ -568,6 +568,11 @@ async function startServer() {
 
   // --- API: Chat with Quest Compendium & Multimodal Game Vision ---
   app.post('/api/chat', requireAuth, async (req, res) => {
+    let clientDisconnected = false;
+    req.on('close', () => {
+      clientDisconnected = true;
+    });
+
     try {
       const idToken = req.headers.authorization!.split('Bearer ')[1];
       const userId = (req as any).user.uid;
@@ -814,6 +819,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           const response = await Promise.race([primaryCall, timeoutPromise]) as any;
           responseText = response.text || 'No response received. Please try asking again.';
           
+          if (clientDisconnected) {
+            console.log('Client disconnected during Pro query. Aborting before deducting credit.');
+            return;
+          }
+          
           userData.proQueriesAvailable = Math.max(0, userData.proQueriesAvailable - 1);
           userData.proQueriesToday = (userData.proQueriesToday || 0) + 1; // legacy
         } else {
@@ -828,6 +838,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           const response = await fallbackCall;
           responseText = response.text || 'No response received. Please try asking again.';
           
+          if (clientDisconnected) {
+            console.log('Client disconnected during Flash query. Aborting before deducting credit.');
+            return;
+          }
+
           userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
           userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1; // legacy
         }
@@ -853,6 +868,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           });
           responseText = retryResponse.text || 'No response received.';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
+          
+          if (clientDisconnected) {
+            console.log('Client disconnected during Fallback Flash query. Aborting.');
+            return;
+          }
           
           userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
           userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1;

@@ -765,7 +765,7 @@ export default function App() {
       };
 
       setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, messages: [...updatedMessages, aiMessage] } : t
+        t.id === activeTab.id ? { ...t, messages: [...t.messages, aiMessage] } : t
       ));
     } catch (err: any) {
       console.error('Chat error:', err);
@@ -783,7 +783,7 @@ export default function App() {
       };
 
       setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, messages: [...updatedMessages, errorMessage] } : t
+        t.id === activeTab.id ? { ...t, messages: [...t.messages, errorMessage] } : t
       ));
     } finally {
       setIsLoadingAi(false);
