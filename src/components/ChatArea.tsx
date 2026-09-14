@@ -35,7 +35,7 @@ import { playSnapSound, playChimeSound, playBlipSound } from '../utils/audio';
 
 interface ChatAreaProps {
   activeTab: GameTab | null;
-  onSendMessage: (text: string, imageBase64?: string, audioBase64?: string) => Promise<void>;
+  onSendMessage: (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash') => Promise<void>;
   isLoading: boolean;
   aiMode: AiMode;
   activeGame: SteamGameData | null;
@@ -70,6 +70,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 }) => {
   const [inputQuestion, setInputQuestion] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [preferredModel, setPreferredModel] = useState<'pro' | 'flash'>('pro');
   const attachedImageRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -391,7 +392,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setAttachedImage(null);
     attachedImageRef.current = null;
 
-    await onSendMessage(finalQuestion, finalImage || undefined);
+    await onSendMessage(finalQuestion, finalImage || undefined, undefined, preferredModel);
     playChimeSound(soundEnabled);
   };
 
@@ -1101,6 +1102,26 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <span className="font-bold font-serif text-[15px] leading-none px-0.5">Aa</span>
               </button>
             )}
+
+            {/* Model Quick Switcher */}
+            <button
+              type="button"
+              onClick={() => {
+                playBlipSound(soundEnabled);
+                setPreferredModel(prev => prev === 'pro' ? 'flash' : 'pro');
+              }}
+              title={preferredModel === 'pro' ? 'Using Gemini 3.1 Pro (Default)' : 'Using Gemini 3.8 Flash (Faster)'}
+              className={`flex items-center gap-1 p-2 rounded-xl transition-all cursor-pointer ${
+                preferredModel === 'flash' 
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
+                  : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
+              }`}
+            >
+              <Bot className="w-4 h-4" />
+              <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline-block">
+                {preferredModel}
+              </span>
+            </button>
 
             {/* Submit Send Button */}
             <button

@@ -597,10 +597,23 @@ async function startServer() {
       const today = new Date().toISOString().split('T')[0];
       userData = syncUserLimits(userData, today, isStripePremium);
       const isPremium = isStripePremium;
-      let targetModel = 'gemini-3.1-pro-preview';
-      let skipPrimary = false;
+      const {
+        question,
+        history = [],
+        imageBase64,
+        aiMode = 'standard',
+        preferredModel = 'pro',
+        isGameRunningLocally = false,
+        activeGame,
+        achievements,
+        news,
+        language = 'English'
+      } = req.body;
 
-      if (userData.proQueriesAvailable <= 0) {
+      let targetModel = preferredModel === 'flash' ? 'gemini-3.8-flash' : 'gemini-3.1-pro-preview';
+      let skipPrimary = targetModel === 'gemini-3.8-flash';
+
+      if (targetModel === 'gemini-3.1-pro-preview' && userData.proQueriesAvailable <= 0) {
         if (userData.flashQueriesAvailable <= 0) {
           return res.status(429).json({
             text: isPremium ? 'Daily limit reached. Please try again tomorrow.' : 'Daily limit reached. Upgrade to Premium for 40 Pro queries & unlimited Flash queries per day!',
@@ -609,19 +622,12 @@ async function startServer() {
         }
         targetModel = 'gemini-3.8-flash';
         skipPrimary = true;
+      } else if (targetModel === 'gemini-3.8-flash' && userData.flashQueriesAvailable <= 0) {
+          return res.status(429).json({
+            text: isPremium ? 'Daily limit reached. Please try again tomorrow.' : 'Daily limit reached. Upgrade to Premium for 40 Pro queries & unlimited Flash queries per day!',
+            modelUsed: 'Limit Reached'
+          });
       }
-
-      const {
-        question,
-        history = [],
-        imageBase64,
-        aiMode = 'standard',
-        isGameRunningLocally = false,
-        activeGame,
-        achievements,
-        news,
-        language = 'English'
-      } = req.body;
 
       if (!question && !imageBase64) {
         return res.status(400).json({ error: 'Question or image is required' });
@@ -784,7 +790,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
 
       // Query Gemini API
       let responseText = '';
-      let modelUsed = targetModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro Preview' : 'Gemini 3.8 Flash (Fallback)';
+      let modelUsed = targetModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.8 Flash';
 
       try {
         if (!skipPrimary) {

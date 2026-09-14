@@ -49,21 +49,6 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
   const silverCount = achievements.filter(a => a.unlocked && a.tier === 'silver').length;
   const bronzeCount = achievements.filter(a => a.unlocked && a.tier === 'bronze').length;
 
-  const handleToggle = (apiname: string, currentState: boolean) => {
-    playBlipSound(soundEnabled);
-    onToggleAchievement(apiname);
-
-    // If this unlocks the final achievement for 100%, trigger confetti and fanfare
-    if (!currentState && unlockedCount + 1 === totalCount && totalCount > 0) {
-      playFanfareSound(soundEnabled);
-      confetti({
-        particleCount: 100,
-        spread: 80,
-        origin: { y: 0.5 }
-      });
-    }
-  };
-
   // Filtered achievements
   const filtered = achievements.filter(a => {
     const isRare = (a.rarity || 0) < 10;

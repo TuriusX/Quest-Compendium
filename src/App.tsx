@@ -187,7 +187,7 @@ export default function App() {
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
   const [examinedImageUrl, setExaminedImageUrl] = useState<string | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
-  const [globalActiveGame, setGlobalActiveGame] = useState<{name: string, appId: number} | null>(null);
+  const [globalActiveGame, setGlobalActiveGame] = useState<SteamGameData | null>(null);
 
   // --- Resizing States ---
   const [sidebarWidth, setSidebarWidth] = useState(288);
@@ -673,7 +673,7 @@ export default function App() {
   }, [activeGame?.appId, settings.steamId, activeTab?.id]);
 
   // Handle Sending Message to Server Gemini API
-  const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string) => {
+  const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash') => {
     if (!activeTab) return;
 
     const userMessage: ChatMessage = {
@@ -711,6 +711,7 @@ export default function App() {
           imageBase64,
           audioBase64,
           aiMode: settings.aiMode,
+          preferredModel,
           isGameRunningLocally: globalActiveGame !== null,
           activeGame: activeGame ? {
             name: activeGame.name,
