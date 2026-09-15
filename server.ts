@@ -658,17 +658,18 @@ async function startServer() {
       const ai = getGeminiClient();
 
       // Persona & Mode System Instructions
-      let systemInstruction = '';
+      const currentDate = new Date().toLocaleString();
+      let systemInstruction = `[SYSTEM TIME: The current date and time is ${currentDate}. Always use this as the real present date.]\n\n`;
       const isGameDetected = isGameRunningLocally && !!activeGame;
 
       if (aiMode === 'roleplay' && isGameDetected) {
-        systemInstruction = `You are a dynamic, in-universe gaming companion. Your persona must seamlessly adapt to match the genre and world of the active game (${activeGame.name}).
+        systemInstruction += `You are a dynamic, in-universe gaming companion. Your persona must seamlessly adapt to match the genre and world of the active game (${activeGame.name}).
 
 CRITICAL RULE: NEVER refer to yourself as a "book", a "compendium", "tome", "pages", or an "AI assistant". You are a living entity, character, or construct within the game's universe. Fully commit to the roleplay.
 
 Stay in character 100% of the time, while ensuring all puzzle solutions, mechanical guidance, and gameplay advice remain perfectly accurate, clear, and actionable.`;
       } else {
-        systemInstruction = `You are a helpful and expert gaming guide.
+        systemInstruction += `You are a helpful and expert gaming guide.
 Your purpose is to give thorough, highly accurate, puzzle-solving, build-optimizing, and progression-guiding advice for video games.
 Provide clear, direct answers without adopting any specific character, persona, or AI identity.`;
 
@@ -818,6 +819,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             contents: contentsPayload,
             config: {
               systemInstruction,
+              tools: [{ googleSearch: {} }],
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
               safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -828,34 +830,45 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             }
           });
           const response = await withTimeout(primaryCall, 40000, 'Primary Gemini 3.1 Pro query') as any;
-          responseText = response.text || 'No response received. Please try asking again.';
+          responseText = response.text || '';
           
           if (clientDisconnected) {
             console.log('Client disconnected during Pro query. Aborting before deducting credit.');
             return;
           }
-          
-          userData.proQueriesAvailable = Math.max(0, userData.proQueriesAvailable - 1);
-          userData.proQueriesToday = (userData.proQueriesToday || 0) + 1; // legacy
+
+          if (responseText && responseText.trim().length > 0) {
+            userData.proQueriesAvailable = Math.max(0, userData.proQueriesAvailable - 1);
+            userData.proQueriesToday = (userData.proQueriesToday || 0) + 1; // legacy
+          } else {
+            console.log('Primary Pro query returned empty text (possibly blocked by safety). Not deducting credit.');
+            responseText = 'No response received. Please try asking again.';
+          }
         } else {
           const fallbackCall = ai.models.generateContent({
             model: targetModel,
             contents: contentsPayload,
             config: {
               systemInstruction,
+              tools: [{ googleSearch: {} }],
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
             }
           });
           const response = await withTimeout(fallbackCall, 25000, 'Flash query') as any;
-          responseText = response.text || 'No response received. Please try asking again.';
+          responseText = response.text || '';
           
           if (clientDisconnected) {
             console.log('Client disconnected during Flash query. Aborting before deducting credit.');
             return;
           }
 
-          userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
-          userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1; // legacy
+          if (responseText && responseText.trim().length > 0) {
+            userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
+            userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1; // legacy
+          } else {
+            console.log('Fallback Flash query returned empty text. Not deducting credit.');
+            responseText = 'No response received. Please try asking again.';
+          }
         }
         await updateFirestoreDocREST(idToken, userId, {
         lastResetDate: userData.lastResetDate,
@@ -875,15 +888,21 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             contents: [{ parts: currentParts }],
             config: {
               systemInstruction,
+              tools: [{ googleSearch: {} }],
             }
           });
           const retryResponse = await withTimeout(retryPromise, 20000, 'Flash Fallback query') as any;
-          responseText = retryResponse.text || 'No response received.';
+          responseText = retryResponse.text || '';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
           
           if (clientDisconnected) {
             console.log('Client disconnected during Fallback Flash query. Aborting.');
             return;
+          }
+
+          if (!responseText || responseText.trim().length === 0) {
+             console.log('Emergency Flash Lite fallback returned empty text.');
+             responseText = 'No response received. Please try asking again.';
           }
           
           userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
@@ -905,7 +924,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               contents: [{ parts: currentParts }],
               config: {
                 systemInstruction,
-              }
+            }
             });
             const emergencyResponse = await withTimeout(emergencyPromise, 10000, 'Flash Lite Emergency query') as any;
             responseText = emergencyResponse.text || 'No response received.';
