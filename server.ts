@@ -44,12 +44,21 @@ async function updateFirestoreDocREST(idToken: string, uid: string, fields: Reco
     else if (typeof v === 'string') firestoreFields[k] = { stringValue: v };
   }
 
-  const response = await fetch(url, {
-    method: 'PATCH',
-    headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields: firestoreFields })
-  });
-  if (!response.ok) throw new Error(`Firestore write error: ${await response.text()}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: firestoreFields }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) throw new Error(`Firestore write error: ${await response.text()}`);
+  } catch (e: any) {
+    clearTimeout(timeoutId);
+    console.error('Firestore update failed:', e.message);
+  }
 }
 import Stripe from 'stripe';
 
@@ -567,6 +576,14 @@ async function startServer() {
   });
 
   // --- API: Chat with Quest Compendium & Multimodal Game Vision ---
+  
+  const withTimeout = (promise: Promise<any>, ms: number, label: string) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms))
+    ]);
+  };
+
   app.post('/api/chat', requireAuth, async (req, res) => {
     let clientDisconnected = false;
     req.on('close', () => {
@@ -685,13 +702,18 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         situationalContext += `\n[System Status: No active video game is running locally on the player's system]\n`;
       }
 
-      if (achievements && achievements.length > 0) {
+      const promptLower = (question || '').toLowerCase();
+      const mentionsAchievements = promptLower.includes('achievement') || promptLower.includes('trophy') || promptLower.includes('completion');
+      const mentionsNews = promptLower.includes('patch') || promptLower.includes('update') || promptLower.includes('news');
+      
+      // Only inject heavy metadata on the first turn, or if the user explicitly asks about them
+      if (achievements && achievements.length > 0 && (history.length === 0 || mentionsAchievements)) {
         const unlocked = achievements.filter((a: any) => a.unlocked).map((a: any) => a.name);
         const locked = achievements.filter((a: any) => !a.unlocked).map((a: any) => a.name);
         situationalContext += `\n[Player Achievements Status: Unlocked (${unlocked.length}): ${unlocked.slice(0, 15).join(', ')} | Locked (${locked.length}): ${locked.slice(0, 15).join(', ')}]\n`;
       }
 
-      if (news && news.length > 0) {
+      if (news && news.length > 0 && (history.length === 0 || mentionsNews)) {
         situationalContext += `\n[Recent Game Patch Notes / News: ${news.slice(0, 3).map((n: any) => n.title || n).join('; ')}]\n`;
       }
       
@@ -704,17 +726,9 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       for (const msg of history.slice(-10)) {
         if (msg.role === 'user') {
           const parts: any[] = [{ text: msg.text }];
-          if (msg.imageUrl && msg.imageUrl.startsWith('data:image')) {
-            const match = msg.imageUrl.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-            if (match) {
-              parts.unshift({
-                inlineData: {
-                  mimeType: match[1],
-                  data: match[2]
-                }
-              });
-            }
-          }
+          // Historical images are intentionally stripped here to save API tokens.
+          // Only the text context is preserved for previous turns.
+          
           // Avoid consecutive user roles
           if (contentsPayload.length > 0 && contentsPayload[contentsPayload.length - 1].role === 'user') {
             contentsPayload[contentsPayload.length - 1].parts.push(...parts);
@@ -813,10 +827,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               ]
             }
           });
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('45s timeout exceeded')), 45000);
-          });
-          const response = await Promise.race([primaryCall, timeoutPromise]) as any;
+          const response = await withTimeout(primaryCall, 35000, 'Primary Gemini 3.1 Pro query') as any;
           responseText = response.text || 'No response received. Please try asking again.';
           
           if (clientDisconnected) {
@@ -835,7 +846,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
             }
           });
-          const response = await fallbackCall;
+          const response = await withTimeout(fallbackCall, 25000, 'Flash query') as any;
           responseText = response.text || 'No response received. Please try asking again.';
           
           if (clientDisconnected) {
@@ -859,13 +870,14 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         
         try {
           // Fallback retry
-          const retryResponse = await ai.models.generateContent({
+          const retryPromise = ai.models.generateContent({
             model: 'gemini-3.8-flash',
             contents: [{ parts: currentParts }],
             config: {
               systemInstruction,
             }
           });
+          const retryResponse = await withTimeout(retryPromise, 15000, 'Flash Fallback query') as any;
           responseText = retryResponse.text || 'No response received.';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
           
@@ -888,13 +900,14 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           console.log('Gemini 3.8 Flash fallback failed, attempting emergency fallback to Flash Lite. Reason:', fallbackErr?.message);
           
           try {
-            const emergencyResponse = await ai.models.generateContent({
+            const emergencyPromise = ai.models.generateContent({
               model: 'gemini-3.1-flash-lite',
               contents: [{ parts: currentParts }],
               config: {
                 systemInstruction,
               }
             });
+            const emergencyResponse = await withTimeout(emergencyPromise, 8000, 'Flash Lite Emergency query') as any;
             responseText = emergencyResponse.text || 'No response received.';
             modelUsed = 'Gemini 3.1 Flash Lite (Emergency Fallback)';
             
