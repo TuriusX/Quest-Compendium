@@ -820,13 +820,14 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             config: {
               systemInstruction,
               tools: [{ googleSearch: {} }],
-              temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
               safetySettings: [
-                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              ]
+                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
+              ],
+              temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
+
             }
           });
           const response = await withTimeout(primaryCall, 40000, 'Primary Gemini 3.1 Pro query') as any;
@@ -851,6 +852,12 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             config: {
               systemInstruction,
               tools: [{ googleSearch: {} }],
+              safetySettings: [
+                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
+              ],
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
             }
           });
@@ -889,6 +896,12 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             config: {
               systemInstruction,
               tools: [{ googleSearch: {} }],
+              safetySettings: [
+                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
+              ],
             }
           });
           const retryResponse = await withTimeout(retryPromise, 20000, 'Flash Fallback query') as any;
@@ -924,6 +937,12 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               contents: [{ parts: currentParts }],
               config: {
                 systemInstruction,
+              safetySettings: [
+                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
+              ],
             }
             });
             const emergencyResponse = await withTimeout(emergencyPromise, 10000, 'Flash Lite Emergency query') as any;
