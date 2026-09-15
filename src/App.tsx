@@ -694,7 +694,7 @@ export default function App() {
     const token = user ? await user.getIdToken() : null;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 60 seconds.")), 60000);
+    const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 75 seconds.")), 75000);
     const backendUrl = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
 
     try {
@@ -756,17 +756,25 @@ export default function App() {
 
       const data = await res.json();
 
+      let finalAiText = data.text;
+      if (!finalAiText || finalAiText.trim().length === 0) {
+        finalAiText = '⚠️ No response generated from the Compendium. Please try rephrasing your inquiry.';
+      }
+
       const aiMessage: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
-        text: data.text || 'No response generated from the Compendium.',
+        text: finalAiText,
         modelUsed: data.modelUsed || 'Gemini 3.1 Pro Preview',
         timestamp: Date.now()
       };
 
-      setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, messages: [...t.messages, aiMessage] } : t
-      ));
+      setTabs(prev => {
+        const nextTabs = prev.map(t => 
+          t.id === activeTab.id ? { ...t, messages: [...t.messages, aiMessage] } : t
+        );
+        return nextTabs;
+      });
     } catch (err: any) {
       console.error('Chat error:', err);
       let errorMsg = err?.message || 'Network error';
@@ -782,9 +790,12 @@ export default function App() {
         modelUsed: isLimitReached ? 'Limit Reached' : 'Offline Fallback'
       };
 
-      setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, messages: [...t.messages, errorMessage] } : t
-      ));
+      setTabs(prev => {
+        const nextTabs = prev.map(t => 
+          t.id === activeTab.id ? { ...t, messages: [...t.messages, errorMessage] } : t
+        );
+        return nextTabs;
+      });
     } finally {
       setIsLoadingAi(false);
     }

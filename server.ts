@@ -827,7 +827,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               ]
             }
           });
-          const response = await withTimeout(primaryCall, 35000, 'Primary Gemini 3.1 Pro query') as any;
+          const response = await withTimeout(primaryCall, 40000, 'Primary Gemini 3.1 Pro query') as any;
           responseText = response.text || 'No response received. Please try asking again.';
           
           if (clientDisconnected) {
@@ -877,7 +877,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               systemInstruction,
             }
           });
-          const retryResponse = await withTimeout(retryPromise, 15000, 'Flash Fallback query') as any;
+          const retryResponse = await withTimeout(retryPromise, 20000, 'Flash Fallback query') as any;
           responseText = retryResponse.text || 'No response received.';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
           
@@ -907,7 +907,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
                 systemInstruction,
               }
             });
-            const emergencyResponse = await withTimeout(emergencyPromise, 8000, 'Flash Lite Emergency query') as any;
+            const emergencyResponse = await withTimeout(emergencyPromise, 10000, 'Flash Lite Emergency query') as any;
             responseText = emergencyResponse.text || 'No response received.';
             modelUsed = 'Gemini 3.1 Flash Lite (Emergency Fallback)';
             
@@ -934,8 +934,12 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         }
       }
 
+      if (!responseText || responseText.trim().length === 0) {
+        responseText = 'The Compendium received a blank response from the AI. Please try again.';
+      }
+
       return res.json({
-        text: responseText.trim() || 'The Compendium could not decipher that. Please try rephrasing your inquiry.',
+        text: responseText.trim(),
         modelUsed
       });
 
