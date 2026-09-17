@@ -137,7 +137,7 @@ export function useCloudSync(
             }
           }
 
-          if (!hasDoneInitialCloudLoad || cloudTabsStr !== lastSyncedData.current.tabs) {
+          if (!hasDoneInitialCloudLoad) {
             if (data.tabs && Array.isArray(data.tabs)) {
                setLocalGameTabs(data.tabs);
                stateUpdated = true;

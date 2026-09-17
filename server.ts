@@ -149,8 +149,8 @@ async function startServer() {
     res.json({received: true});
   });
 
-  app.use(express.json({ limit: '25mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // --- Auth Middleware ---
   const requireAuth = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -1291,6 +1291,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('Express Error:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+  });
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[DEPLOYMENT] Quest Compendium Server v1.1.0 running on http://localhost:${PORT}`);

@@ -86,6 +86,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const audioQueueRef = useRef<string[]>([]);
   const ttsCacheRef = useRef<Map<string, string[]>>(new Map());
@@ -235,6 +236,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       setIsCapturingScreen(true);
       playSnapSound(soundEnabled);
 
+      // Mobile check - if on a mobile device, trigger the native camera instead of screen sharing
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+      if (isMobile) {
+        setIsCapturingScreen(false);
+        cameraInputRef.current?.click();
+        return null;
+      }
+
       if ((window as any).electronAPI?.takeScreenshot) {
         const dataUrl = await (window as any).electronAPI.takeScreenshot();
         if (dataUrl) {
@@ -245,21 +254,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         return dataUrl || null;
       }
 
-      // Check whether display-capture feature policy is permitted in current frame
-      let isPolicyAllowed = true;
-      try {
-        if (typeof document !== 'undefined') {
-          if ('permissionsPolicy' in document && (document as any).permissionsPolicy?.allowsFeature) {
-            isPolicyAllowed = (document as any).permissionsPolicy.allowsFeature('display-capture');
-          } else if ('featurePolicy' in document && (document as any).featurePolicy?.allowsFeature) {
-            isPolicyAllowed = (document as any).featurePolicy.allowsFeature('display-capture');
-          }
-        }
-      } catch {
-        isPolicyAllowed = true;
-      }
-
-      if (!isPolicyAllowed || !navigator?.mediaDevices?.getDisplayMedia) {
+      if (!navigator?.mediaDevices?.getDisplayMedia) {
         setIsCapturingScreen(false);
         fileInputRef.current?.click();
         return null;
@@ -312,18 +307,52 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
+  const processAndCompressImage = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const MAX_DIMENSION = 1600;
+
+          if (width > height) {
+            if (width > MAX_DIMENSION) {
+              height *= MAX_DIMENSION / width;
+              width = MAX_DIMENSION;
+            }
+          } else {
+            if (height > MAX_DIMENSION) {
+              width *= MAX_DIMENSION / height;
+              height = MAX_DIMENSION;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            setAttachedImage(dataUrl);
+            playSnapSound(soundEnabled);
+          }
+        };
+        img.src = event.target.result as string;
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setAttachedImage(event.target.result as string);
-          playSnapSound(soundEnabled);
-        }
-      };
-      reader.readAsDataURL(file);
+      processAndCompressImage(file);
     }
+    // Clear input so same file can be selected again
+    if (e.target) e.target.value = '';
   };
 
   const handleTextareaPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -336,14 +365,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         handled = true;
         const file = items[i].getAsFile();
         if (file) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            if (event.target?.result) {
-              setAttachedImage(event.target.result as string);
-              playSnapSound(soundEnabled);
-            }
-          };
-          reader.readAsDataURL(file);
+          processAndCompressImage(file);
         }
       }
     }
@@ -1046,6 +1068,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               accept="image/*"
               className="hidden"
               ref={fileInputRef}
+              onChange={handleFileUpload}
+            />
+
+            {/* Hidden file input for mobile camera capture */}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              ref={cameraInputRef}
               onChange={handleFileUpload}
             />
 

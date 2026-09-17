@@ -80,6 +80,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
           </svg>
           {loading ? 'Authenticating...' : 'Sign in with Google'}
         </button>
+        
+        {typeof window !== 'undefined' && window.self !== window.top && (
+          <div className="mt-6 pt-6 border-t border-white/10 flex flex-col items-center w-full">
+            <p className="text-xs text-red-400 mb-2 font-semibold">⚠️ Getting a 401 Error on Mobile?</p>
+            <p className="text-xs text-zinc-400 mb-4 px-2">
+              Google blocks logins from inside preview windows (iframes). You must open the app directly to log in.
+            </p>
+            <a
+              href={typeof window !== 'undefined' ? window.location.href : '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-semibold text-[var(--accent-color)] hover:text-white transition-colors bg-[var(--accent-dim)] px-4 py-2 rounded-lg border border-[var(--accent-border)] flex items-center gap-2"
+            >
+              Open Full App to Log In
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

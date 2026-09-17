@@ -17,6 +17,7 @@ import {
   ArrowRightToLine,
   Square
 } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
@@ -263,6 +264,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             )}
           </button>
         )}
+        <div className="flex items-center" style={{ WebkitAppRegion: "no-drag" } as any}>
+          <PWAInstallButton />
+        </div>
         {/* Vertical Divider */}
         <div className="h-4 w-[1px] bg-white/10 mx-0.5 hidden sm:block" />
 
