@@ -1148,7 +1148,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           const s = sentence.trim();
           if (!s) continue;
           
-          const targetLen = isFirstChunk ? 250 : 3500;
+          const targetLen = isFirstChunk ? 250 : 600;
           
           if ((currentChunk + ' ' + s).trim().length <= targetLen || !currentChunk) {
             currentChunk = currentChunk ? `${currentChunk} ${s}` : s;

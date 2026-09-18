@@ -10,12 +10,13 @@ function sanitizeTabsForCloud(tabs: GameTab[]): GameTab[] {
   return tabs.map(tab => {
     const sanitizedTab = { ...tab };
     
-    // Strip large message data (base64 audio/images)
+    // Strip large message data (base64 audio/images/banners)
     if (sanitizedTab.messages) {
       sanitizedTab.messages = sanitizedTab.messages.map(msg => {
         const newMsg = { ...msg };
         if (newMsg.audioBase64) delete newMsg.audioBase64;
         if (newMsg.imageUrl && newMsg.imageUrl.length > 2000) delete newMsg.imageUrl;
+        if (newMsg.bannerImageUrl && newMsg.bannerImageUrl.length > 2000) delete newMsg.bannerImageUrl;
         return newMsg;
       });
     }
