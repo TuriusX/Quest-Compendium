@@ -766,6 +766,7 @@ export default function App() {
         role: 'assistant',
         text: finalAiText,
         modelUsed: data.modelUsed || 'Gemini 3.1 Pro Preview',
+        bannerImageUrl: data.bannerImageUrl,
         timestamp: Date.now()
       };
 
@@ -900,13 +901,16 @@ export default function App() {
     }
   };
 
+  const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
+
   // Docking Layout Container classes
   const getDockClasses = (dock: DockPosition) => {
+    if (!isDesktop) {
+      return 'w-full h-full rounded-none border-none shadow-none';
+    }
     switch (dock) {
       case 'undocked':
-        // When floating freely, make it look like a nice app window with borders and rounded corners.
-        // We use h-[98%] and w-[98%] so the shadow doesn't get hard-clipped by the Electron window bounds,
-        // and we rely on the flex container to center it.
+        // When floating freely in desktop mode, make it look like a nice app window with borders and rounded corners.
         return 'w-[98%] h-[98%] rounded-xl border border-[var(--accent-border)] shadow-[0_0_40px_rgba(0,0,0,0.8)] mx-auto my-auto';
       default:
         // Snug fit for all docked corners (no rounded corners, no space)
@@ -914,16 +918,14 @@ export default function App() {
     }
   };
 
-  const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
-
   return (
     <Suspense fallback={<div className="w-screen h-screen bg-[#0c0d14]" />}>
     <div className={`w-screen h-screen flex overflow-hidden ${isDesktop ? 'bg-transparent' : 'bg-[#0c0d14]'}`}>
       {/* Background CRT scan line ambient glow */}
       <div className="absolute inset-0 bg-radial from-purple-900/10 via-transparent to-transparent pointer-events-none" />
 
-            {/* Edge Slide Toggle Tab */}
-      {settings.dockPosition !== 'undocked' && (
+      {/* Edge Slide Toggle Tab (Desktop Only) */}
+      {isDesktop && settings.dockPosition !== 'undocked' && (
         <button
           onClick={() => {
             if ((window as any).electronAPI?.toggleSlide) {

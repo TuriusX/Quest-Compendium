@@ -808,6 +808,33 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           contentsPayload.push({ role: 'user', parts: currentParts });
       }
 
+      // Banner Generation (Concurrent)
+      let bannerImagePromise: Promise<string | undefined> | null = null;
+      if (isGameDetected || question) {
+        const bannerPrompt = isGameDetected 
+          ? `Cinematic, immersive, atmospheric concept art banner for the video game "${activeGame!.name}". The art should reflect the theme of the game and this specific query: "${question || 'general gameplay'}". No text or logos, just pure environment or character art. Wide landscape banner format.`
+          : `Cinematic, immersive, atmospheric concept art banner for a video game reflecting this query: "${question}". No text or logos. Wide landscape banner format.`;
+          
+        bannerImagePromise = ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite-image',
+          contents: { parts: [{ text: bannerPrompt }] },
+          config: {
+            // @ts-ignore
+            imageConfig: { aspectRatio: '16:9' }
+          }
+        }).then(res => {
+          for (const part of res.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+              return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+            }
+          }
+          return undefined;
+        }).catch(err => {
+          console.warn('Banner generation failed:', err.message);
+          return undefined;
+        });
+      }
+
       // Query Gemini API
       let responseText = '';
       let modelUsed = targetModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.8 Flash';
@@ -976,9 +1003,19 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         responseText = 'The Compendium received a blank response from the AI. Please try again.';
       }
 
+      let bannerImageUrl: string | undefined;
+      if (bannerImagePromise) {
+        try {
+          bannerImageUrl = await bannerImagePromise;
+        } catch (e) {
+          console.warn('Failed to await banner image:', e);
+        }
+      }
+
       return res.json({
         text: responseText.trim(),
-        modelUsed
+        modelUsed,
+        bannerImageUrl
       });
 
     } catch (err: any) {

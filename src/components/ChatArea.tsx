@@ -875,6 +875,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       : 'bg-[#11121a]/95 border border-white/[0.08] text-zinc-200 shadow-[0_6px_25px_rgba(0,0,0,0.5)]'
                   }`}
                 >
+                  {!isUser && msg.bannerImageUrl && (
+                    <div className="mb-4 rounded-xl overflow-hidden border border-white/[0.06] shadow-lg relative h-32 w-full">
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#11121a]/95 via-transparent to-transparent z-10" />
+                      <img src={msg.bannerImageUrl} alt="Immersive Theme" className="absolute inset-0 w-full h-full object-cover" />
+                    </div>
+                  )}
                   {msg.imageUrl && (
                     <div className="mb-3 rounded-lg overflow-hidden border border-white/[0.06] shadow-md group relative">
                       <img src={msg.imageUrl} alt="Attached" className="max-w-full h-auto rounded-lg max-h-60 object-contain" />
@@ -1053,7 +1059,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 ? "Listening to your inquiry..." 
                 : attachedImage 
                   ? "Ask about this screenshot (e.g., puzzle answer, optimal route, stat comparison)..." 
-                  : "Ask the Compendium (Shift+Enter for new line)..."
+                  : "Ask the Compendium..."
             }
             rows={1}
             className="flex-1 max-h-48 min-h-[72px] py-4 pl-4 pr-32 bg-transparent text-white outline-none resize-none"

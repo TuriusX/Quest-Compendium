@@ -36,6 +36,7 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
   imageUrl?: string;
+  bannerImageUrl?: string;
   modelUsed?: string;
   audioBase64?: string;
   isStreaming?: boolean;

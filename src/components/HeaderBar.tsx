@@ -267,38 +267,44 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         <div className="flex items-center" style={{ WebkitAppRegion: "no-drag" } as any}>
           <PWAInstallButton />
         </div>
-        {/* Vertical Divider */}
-        <div className="h-4 w-[1px] bg-white/10 mx-0.5 hidden sm:block" />
 
-        {/* Close Button */}
-        <button
-          style={{ WebkitAppRegion: "no-drag" } as any}
-          onClick={() => {
-            if ((window as any).electronAPI?.closeApp) {
-              (window as any).electronAPI.closeApp();
-            }
-          }}
-          title="Close Quest Compendium"
-          className="p-2 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer ml-1"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
+        {/* Desktop Window Controls (Close & Dock) - only rendered in Electron desktop mode */}
+        {typeof window !== 'undefined' && !!(window as any).electronAPI && (
+          <>
+            {/* Vertical Divider */}
+            <div className="h-4 w-[1px] bg-white/10 mx-0.5 hidden sm:block" />
 
-        {/* Dock / Free-floating Window Mode */}
-        <button
-          style={{ WebkitAppRegion: "no-drag" } as any}
-          onClick={() => {
-            playBlipSound(soundEnabled);
-            onToggleDock();
-          }}
-          title={isDocked ? "Undock / Fullscreen View" : "Dock HUD Frame"}
-          className="p-2 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-all cursor-pointer"
-        >
-          {isDocked ? <Square className="w-4 h-4" /> : <ArrowRightToLine className="w-4 h-4" />}
-        </button>
+            {/* Close Button */}
+            <button
+              style={{ WebkitAppRegion: "no-drag" } as any}
+              onClick={() => {
+                if ((window as any).electronAPI?.closeApp) {
+                  (window as any).electronAPI.closeApp();
+                }
+              }}
+              title="Close Quest Compendium"
+              className="p-2 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer ml-1"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+
+            {/* Dock / Free-floating Window Mode */}
+            <button
+              style={{ WebkitAppRegion: "no-drag" } as any}
+              onClick={() => {
+                playBlipSound(soundEnabled);
+                onToggleDock();
+              }}
+              title={isDocked ? "Undock / Fullscreen View" : "Dock HUD Frame"}
+              className="p-2 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-all cursor-pointer"
+            >
+              {isDocked ? <Square className="w-4 h-4" /> : <ArrowRightToLine className="w-4 h-4" />}
+            </button>
+          </>
+        )}
       </div>
     </header>
   );
