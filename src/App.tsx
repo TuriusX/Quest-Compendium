@@ -440,8 +440,14 @@ export default function App() {
 
     // Listen for popup auth messages and storage events
     const handleMessage = (event: MessageEvent) => {
-      // Allow localhost and .run.app origins
-      if (!event.origin.includes('localhost') && !event.origin.endsWith('.run.app')) {
+      // Allow localhost, .run.app, itch, and custom domain origins
+      const isAllowedOrigin = 
+        event.origin.includes('localhost') || 
+        event.origin.endsWith('.run.app') || 
+        event.origin.includes('itch') ||
+        event.origin.includes('questcompendium.com');
+
+      if (!isAllowedOrigin) {
         return;
       }
       if (event.data?.type === 'STEAM_AUTH_SUCCESS' && event.data.steamId) {

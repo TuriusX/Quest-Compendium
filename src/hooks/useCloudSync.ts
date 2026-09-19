@@ -39,7 +39,22 @@ export function useCloudSync(
   setLocalSettings: (s: AppSettings) => void,
   setLocalGameTabs: (t: GameTab[]) => void
 ) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any | null>(null);
+  const [guestUser, setGuestUser] = useState<any | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('quest_guest_session');
+      if (saved) {
+        return {
+          uid: saved,
+          email: null,
+          displayName: 'Guest Explorer',
+          getIdToken: async () => saved,
+          isGuest: true
+        };
+      }
+    }
+    return null;
+  });
   const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'inactive' | 'beta' | 'loading'>('loading');
   const [userData, setUserData] = useState<any>(null);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -70,24 +85,78 @@ export function useCloudSync(
     return () => unsub();
   }, []);
 
+  // Listen to custom quest_auth_change events (e.g., entering or leaving guest mode)
+  useEffect(() => {
+    const handleAuthChange = () => {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('quest_guest_session');
+        if (saved) {
+          setGuestUser({
+            uid: saved,
+            email: null,
+            displayName: 'Guest Explorer',
+            getIdToken: async () => saved,
+            isGuest: true
+          });
+        } else {
+          setGuestUser(null);
+        }
+      }
+    };
+
+    window.addEventListener('quest_auth_change', handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+    return () => {
+      window.removeEventListener('quest_auth_change', handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, []);
+
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (!currentUser) {
-        setSubscriptionStatus('loading');
-        setIsInitializing(false);
+        // If guest session exists, activate guest mode
+        const savedGuest = typeof window !== 'undefined' ? localStorage.getItem('quest_guest_session') : null;
+        if (savedGuest) {
+          setSubscriptionStatus('beta');
+          setUserData({
+            isPremium: true,
+            proQueriesAvailable: 40,
+            flashQueriesAvailable: 100,
+            isGuest: true
+          });
+          setIsInitializing(false);
+        } else {
+          setSubscriptionStatus('loading');
+          setIsInitializing(false);
+        }
       } else {
-        // We are logging in, hold initialization true until cloud fetch finishes
+        // We are logging in with full account, hold initialization true until cloud fetch finishes
         setIsInitializing(true);
       }
     });
     return () => unsubscribe();
   }, []);
 
+  // Effect to populate guest state when guestUser changes
+  useEffect(() => {
+    if (!user && guestUser) {
+      setSubscriptionStatus('beta');
+      setUserData({
+        isPremium: true,
+        proQueriesAvailable: 40,
+        flashQueriesAvailable: 100,
+        isGuest: true
+      });
+      setIsInitializing(false);
+    }
+  }, [user, guestUser]);
+
   // Listen to User Profile (Subscription & Settings Sync)
   useEffect(() => {
-    if (!user) return;
+    if (!user || (user as any).isGuest) return;
     const userRef = doc(db, 'users', user.uid);
     
     let unsubscribe = () => {};
@@ -164,7 +233,7 @@ export function useCloudSync(
 
   // Sync Local to Cloud whenever settings or tabs change
   useEffect(() => {
-    if (!user || (subscriptionStatus !== 'active' && subscriptionStatus !== 'beta') || isInitializing) return;
+    if (!user || user.isGuest || (subscriptionStatus !== 'active' && subscriptionStatus !== 'beta') || isInitializing) return;
 
     const currentSettingsStr = JSON.stringify(localSettings);
     const currentTabsStr = JSON.stringify(sanitizeTabsForCloud(localGameTabs));
@@ -188,5 +257,7 @@ export function useCloudSync(
     return () => clearTimeout(syncTimeout);
   }, [localSettings, localGameTabs, user, subscriptionStatus, isInitializing]);
 
-  return { user, subscriptionStatus, userData, isInitializing, isOutdated };
+  const effectiveUser = user || guestUser;
+
+  return { user: effectiveUser, subscriptionStatus, userData, isInitializing, isOutdated };
 }

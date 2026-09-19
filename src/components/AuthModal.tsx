@@ -1,15 +1,18 @@
-import React, { useEffect } from 'react';
-import { Sparkles } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Sparkles, Play, AlertCircle, ExternalLink } from 'lucide-react';
 import { MagicalBookIcon } from './MagicalBookIcon';
 import { signInWithGoogle, auth } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { DEFAULT_PREVIEW_URL } from '../utils/api';
 
 interface AuthModalProps {
   onSignInSuccess: () => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isEmbedded = typeof window !== 'undefined' && window.self !== window.top;
 
   useEffect(() => {
     // Listen for external auth success if running in Electron
@@ -30,6 +33,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
   const handleSignIn = async () => {
     try {
       setLoading(true);
+      setErrorMessage(null);
       if ((window as any).electronAPI?.startDesktopLogin) {
         // We are in Electron, open system browser for OAuth
         (window as any).electronAPI.startDesktopLogin();
@@ -38,10 +42,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
         await signInWithGoogle();
         onSignInSuccess();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Sign in failed:', error);
+      if (error?.code === 'auth/popup-blocked') {
+        setErrorMessage('The sign-in popup was blocked by your browser. Please allow popups or use Guest Mode.');
+      } else if (error?.code === 'auth/unauthorized-domain') {
+        setErrorMessage('This embedded domain is not authorized for Google Sign-In. Please click "Continue as Guest" or open the full app.');
+      } else if (error?.code === 'auth/popup-closed-by-user') {
+        setErrorMessage('The sign-in window was closed. Try again or click "Continue as Guest".');
+      } else {
+        setErrorMessage(
+          isEmbedded
+            ? 'Embedded browsers often block Google popups. Use "Continue as Guest" below to try the app immediately!'
+            : 'Could not sign in with Google. Please try again or continue as Guest.'
+        );
+      }
       setLoading(false);
     }
+  };
+
+  const handleContinueAsGuest = () => {
+    if (typeof window !== 'undefined') {
+      const guestId = 'guest_' + Math.random().toString(36).substring(2, 12);
+      localStorage.setItem('quest_guest_session', guestId);
+      window.dispatchEvent(new Event('quest_auth_change'));
+    }
+    onSignInSuccess();
   };
 
   return (
@@ -51,14 +77,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
         <h2 className="font-fantasy font-bold text-2xl text-white mb-2 tracking-wide">
           QUEST COMPENDIUM
         </h2>
-        <p className="text-zinc-400 text-sm mb-8 leading-relaxed">
-          Sign in to sync your playthroughs, settings, and quest notes across all your devices.
+        <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
+          Your personal AI gaming companion for quest walkthroughs, lore lookups, and boss strategies.
         </p>
+
+        {errorMessage && (
+          <div className="w-full mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-start gap-2 text-left">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {/* Primary Action on Itch.io / Embedded: Continue as Guest */}
+        {isEmbedded && (
+          <button
+            onClick={handleContinueAsGuest}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold py-3.5 px-6 rounded-xl shadow-[0_0_20px_rgba(147,51,234,0.3)] hover:shadow-[0_0_25px_rgba(147,51,234,0.5)] transition-all transform active:scale-[0.98] mb-3"
+          >
+            <Play className="w-4 h-4 fill-white" />
+            Try Compendium as Guest (No Login Required)
+          </button>
+        )}
 
         <button
           onClick={handleSignIn}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 bg-white text-black font-semibold py-3 px-6 rounded-xl hover:bg-zinc-200 transition-colors disabled:opacity-50"
+          className={`w-full flex items-center justify-center gap-3 font-semibold py-3 px-6 rounded-xl transition-all disabled:opacity-50 ${
+            isEmbedded
+              ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-sm'
+              : 'bg-white text-black hover:bg-zinc-200'
+          }`}
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -80,21 +128,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
           </svg>
           {loading ? 'Authenticating...' : 'Sign in with Google'}
         </button>
+
+        {!isEmbedded && (
+          <button
+            onClick={handleContinueAsGuest}
+            className="w-full mt-3 py-2.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center justify-center gap-1.5"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            Continue as Guest (Try without signing in)
+          </button>
+        )}
         
-        {typeof window !== 'undefined' && window.self !== window.top && (
-          <div className="mt-6 pt-6 border-t border-white/10 flex flex-col items-center w-full">
-            <p className="text-xs text-red-400 mb-2 font-semibold">⚠️ Getting a 401 Error on Mobile?</p>
-            <p className="text-xs text-zinc-400 mb-4 px-2">
-              Google blocks logins from inside preview windows (iframes). You must open the app directly to log in.
+        {isEmbedded && (
+          <div className="mt-6 pt-5 border-t border-white/10 flex flex-col items-center w-full">
+            <p className="text-xs text-zinc-400 mb-3 px-2">
+              Playing on Itch.io? Google Sign-in requires opening the standalone web app in its own browser tab:
             </p>
             <a
-              href={typeof window !== 'undefined' ? window.location.href : '#'}
+              href={DEFAULT_PREVIEW_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-semibold text-[var(--accent-color)] hover:text-white transition-colors bg-[var(--accent-dim)] px-4 py-2 rounded-lg border border-[var(--accent-border)] flex items-center gap-2"
+              className="text-xs font-medium text-purple-300 hover:text-white transition-colors bg-purple-950/40 hover:bg-purple-900/60 px-4 py-2 rounded-lg border border-purple-500/30 flex items-center gap-1.5"
             >
-              Open Full App to Log In
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+              Open Standalone Web App
+              <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>
         )}

@@ -153,12 +153,20 @@ async function startServer() {
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // --- Auth Middleware ---
+  // Require authenticated user (supports Firebase Auth tokens or guest trial tokens)
   const requireAuth = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
     }
     const token = authHeader.split('Bearer ')[1];
+    
+    // Support guest trial sessions (e.g. for Itch.io in-browser players)
+    if (token.startsWith('guest_')) {
+      (req as any).user = { uid: token, email: undefined, isGuest: true };
+      return next();
+    }
+
     try {
       const decodedToken = await getAuth().verifyIdToken(token);
       (req as any).user = decodedToken;
@@ -253,6 +261,18 @@ async function startServer() {
     try {
       const idToken = req.headers.authorization!.split('Bearer ')[1];
       const userId = (req as any).user.uid;
+      const isGuest = (req as any).user.isGuest || userId.startsWith('guest_');
+
+      if (isGuest) {
+        return res.json({
+          isPremium: true,
+          freeQueriesUsed: 0,
+          proQueriesAvailable: 40,
+          flashQueriesAvailable: 100,
+          isGuest: true
+        });
+      }
+
       let userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
       
       const userEmail = (req as any).user?.email;
@@ -593,32 +613,48 @@ async function startServer() {
     try {
       const idToken = req.headers.authorization!.split('Bearer ')[1];
       const userId = (req as any).user.uid;
-            let userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
-      
-      const userEmail = (req as any).user?.email;
-      let isStripePremium = false;
-      if (userEmail) {
-        try {
-          const stripe = getStripe();
-          const customers = await stripe.customers.list({ email: userEmail.toLowerCase(), limit: 1 });
-          if (customers.data.length > 0) {
-            const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: 'active', limit: 1 });
-            isStripePremium = subs.data.length > 0;
-            // Persist the premium status to Firestore if it changed
-            if (isStripePremium && userData.isPremium !== true) {
-              await updateFirestoreDocREST(idToken, userId, { isPremium: true });
+      const isGuest = (req as any).user.isGuest || userId.startsWith('guest_');
+
+      let userData: any = { isPremium: false };
+
+      if (!isGuest) {
+        userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
+        const userEmail = (req as any).user?.email;
+        let isStripePremium = false;
+        if (userEmail) {
+          try {
+            const stripe = getStripe();
+            const customers = await stripe.customers.list({ email: userEmail.toLowerCase(), limit: 1 });
+            if (customers.data.length > 0) {
+              const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: 'active', limit: 1 });
+              isStripePremium = subs.data.length > 0;
+              // Persist the premium status to Firestore if it changed
+              if (isStripePremium && userData.isPremium !== true) {
+                await updateFirestoreDocREST(idToken, userId, { isPremium: true });
+              }
             }
+          } catch (e) {
+             isStripePremium = userData.isPremium === true;
           }
-        } catch (e) {
-           isStripePremium = userData.isPremium === true;
+        } else {
+          isStripePremium = userData.isPremium === true;
         }
+        
+        const today = new Date().toISOString().split('T')[0];
+        userData = syncUserLimits(userData, today, isStripePremium);
       } else {
-        isStripePremium = userData.isPremium === true;
+        // Guest mode trial: give active exploratory limits
+        const today = new Date().toISOString().split('T')[0];
+        userData = {
+          isPremium: true,
+          proQueriesAvailable: 40,
+          flashQueriesAvailable: 100,
+          lastResetDate: today,
+          isGuest: true
+        };
       }
-      
-      const today = new Date().toISOString().split('T')[0];
-      userData = syncUserLimits(userData, today, isStripePremium);
-      const isPremium = isStripePremium;
+
+      const isPremium = userData.isPremium === true;
       const {
         question,
         history = [],
@@ -904,14 +940,16 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             responseText = 'No response received. Please try asking again.';
           }
         }
-        await updateFirestoreDocREST(idToken, userId, {
-        lastResetDate: userData.lastResetDate,
-        proQueriesAvailable: userData.proQueriesAvailable,
-        flashQueriesAvailable: userData.flashQueriesAvailable,
-        proQueriesToday: userData.proQueriesToday,
-        flashQueriesToday: userData.flashQueriesToday,
-        _upgradedToday: userData._upgradedToday ?? false
-      });
+        if (!isGuest) {
+          await updateFirestoreDocREST(idToken, userId, {
+            lastResetDate: userData.lastResetDate,
+            proQueriesAvailable: userData.proQueriesAvailable,
+            flashQueriesAvailable: userData.flashQueriesAvailable,
+            proQueriesToday: userData.proQueriesToday,
+            flashQueriesToday: userData.flashQueriesToday,
+            _upgradedToday: userData._upgradedToday ?? false
+          });
+        }
       } catch (primaryErr: any) {
         console.log('Primary query issue or timeout, attempting fallback. Reason:', primaryErr?.message);
         
@@ -947,14 +985,16 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           
           userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
           userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1;
-          await updateFirestoreDocREST(idToken, userId, {
-        lastResetDate: userData.lastResetDate,
-        proQueriesAvailable: userData.proQueriesAvailable,
-        flashQueriesAvailable: userData.flashQueriesAvailable,
-        proQueriesToday: userData.proQueriesToday,
-        flashQueriesToday: userData.flashQueriesToday,
-        _upgradedToday: userData._upgradedToday ?? false
-      });
+          if (!isGuest) {
+            await updateFirestoreDocREST(idToken, userId, {
+              lastResetDate: userData.lastResetDate,
+              proQueriesAvailable: userData.proQueriesAvailable,
+              flashQueriesAvailable: userData.flashQueriesAvailable,
+              proQueriesToday: userData.proQueriesToday,
+              flashQueriesToday: userData.flashQueriesToday,
+              _upgradedToday: userData._upgradedToday ?? false
+            });
+          }
         } catch (fallbackErr: any) {
           console.log('Gemini 3.8 Flash fallback failed, attempting emergency fallback to Flash Lite. Reason:', fallbackErr?.message);
           
@@ -978,14 +1018,16 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             
             userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
             userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1;
-            await updateFirestoreDocREST(idToken, userId, {
-        lastResetDate: userData.lastResetDate,
-        proQueriesAvailable: userData.proQueriesAvailable,
-        flashQueriesAvailable: userData.flashQueriesAvailable,
-        proQueriesToday: userData.proQueriesToday,
-        flashQueriesToday: userData.flashQueriesToday,
-        _upgradedToday: userData._upgradedToday ?? false
-      });
+            if (!isGuest) {
+              await updateFirestoreDocREST(idToken, userId, {
+                lastResetDate: userData.lastResetDate,
+                proQueriesAvailable: userData.proQueriesAvailable,
+                flashQueriesAvailable: userData.flashQueriesAvailable,
+                proQueriesToday: userData.proQueriesToday,
+                flashQueriesToday: userData.flashQueriesToday,
+                _upgradedToday: userData._upgradedToday ?? false
+              });
+            }
           } catch (emergencyErr: any) {
             console.log('Emergency fallback to Flash Lite also failed:', emergencyErr?.message);
             
@@ -1311,6 +1353,137 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       console.error('API /api/tts error:', err);
       res.status(500).json({ error: err?.message || 'TTS generation error' });
     }
+  });
+
+  // --- Public Privacy Policy Endpoint (for Microsoft Store & Web verification) ---
+  app.get(['/privacy', '/privacy-policy'], (req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - Quest Compendium</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #0c0d14;
+      color: #e4e4e7;
+      line-height: 1.6;
+      margin: 0;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: #12131e;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 36px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+    h1 {
+      color: #a855f7;
+      font-size: 28px;
+      margin-top: 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 12px;
+    }
+    h2 {
+      color: #f4f4f5;
+      font-size: 20px;
+      margin-top: 28px;
+      margin-bottom: 12px;
+    }
+    p, li {
+      color: #a1a1aa;
+      font-size: 15px;
+    }
+    ul {
+      padding-left: 24px;
+    }
+    li {
+      margin-bottom: 6px;
+    }
+    a {
+      color: #c084fc;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 12px;
+      background-color: rgba(168, 85, 247, 0.15);
+      color: #d8b4fe;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      margin-bottom: 16px;
+    }
+    .updated {
+      font-size: 13px;
+      color: #71717a;
+      margin-bottom: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="badge">Official Legal Document</div>
+    <h1>Privacy Policy for Quest Compendium</h1>
+    <div class="updated">Last updated: September 18, 2026</div>
+
+    <p>Welcome to <strong>Quest Compendium</strong> (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;the application&rdquo;). This Privacy Policy explains how personal information and application data are collected, used, and protected when you use our desktop application and web services.</p>
+
+    <h2>1. Information We Collect</h2>
+    <p>Quest Compendium accesses, collects, or processes the following categories of data solely to provide gaming companion features:</p>
+    <ul>
+      <li><strong>Account Information:</strong> If you sign in, we collect your email address and authentication credentials managed securely through Firebase Authentication.</li>
+      <li><strong>Steam Profile & Gameplay Data:</strong> If you link your public Steam ID, we retrieve publicly accessible profile data, game libraries, and achievements via the public Steam Web API to display your in-game statistics and patch notes. We never collect or access your Steam passwords or login credentials.</li>
+      <li><strong>User-Submitted Queries & Content:</strong> Questions you ask the AI compendium, chat histories, personal playthrough notes, and quest checklist items you save.</li>
+      <li><strong>User-Initiated Audio & Screenshots:</strong> If you explicitly initiate voice input or attach an in-game screenshot for visual puzzle solving, the audio or image data is sent securely to our backend and processed by AI models to fulfill your request. We do not perform background screen recording or passive microphone listening.</li>
+      <li><strong>Payment Information:</strong> Subscriptions and upgrades are processed securely via Stripe. We do not store or process credit card numbers or financial account details on our servers.</li>
+    </ul>
+
+    <h2>2. How We Use Your Information</h2>
+    <p>We use the collected information strictly for:</p>
+    <ul>
+      <li>Providing context-aware gaming guides, walkthroughs, patch summaries, and AI responses.</li>
+      <li>Synchronizing your compendium tabs, notes, and preferences across your authorized devices using secure cloud storage.</li>
+      <li>Verifying subscription status and managing daily query quotas.</li>
+      <li>Maintaining and improving app reliability and performance.</li>
+    </ul>
+
+    <h2>3. Third-Party Services and Data Sharing</h2>
+    <p>We do not sell, rent, or trade your personal information. We share data only with the following trusted infrastructure providers to deliver the service:</p>
+    <ul>
+      <li><strong>Google Cloud & Firebase:</strong> Provides user authentication and encrypted cloud database synchronization (Firestore).</li>
+      <li><strong>Google Gemini API:</strong> Processes your submitted gameplay inquiries, images, and voice queries to generate answers, guides, and text-to-speech narration.</li>
+      <li><strong>Valve Steam Web API:</strong> Provides public game details, achievement lists, and news.</li>
+      <li><strong>Stripe:</strong> Secure payment gateway for managing subscriptions and checkout.</li>
+    </ul>
+
+    <h2>4. Data Storage and Security</h2>
+    <p>All data transmitted between the application, our server, and third-party APIs is encrypted in transit using industry-standard Transport Layer Security (TLS/HTTPS). Local settings and cache files are stored securely on your local device.</p>
+
+    <h2>5. Data Retention and Deletion</h2>
+    <p>You can delete your local compendium tabs and notes at any time from within the application. If you would like to request deletion of your account or cloud-stored data, please contact us at the email below.</p>
+
+    <h2>6. Children&rsquo;s Privacy</h2>
+    <p>Quest Compendium is not directed to children under the age of 13, and we do not knowingly collect personal information from children under 13.</p>
+
+    <h2>7. Contact Us</h2>
+    <p>If you have questions, concerns, or requests regarding this Privacy Policy or your data, please contact us at:</p>
+    <p><strong>Email:</strong> <a href="mailto:NoahFMinton@gmail.com">NoahFMinton@gmail.com</a><br>
+    <strong>Website:</strong> <a href="https://www.questcompendium.com">https://www.questcompendium.com</a></p>
+  </div>
+</body>
+</html>`);
   });
 
   // --- Vite Middleware for Development / Static in Production ---

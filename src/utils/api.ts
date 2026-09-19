@@ -18,6 +18,15 @@ export const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
     return DEFAULT_PREVIEW_URL;
   }
+
+  // If running embedded on Itch.io or its content delivery network (itch.zone / hwcdn.net)
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname.toLowerCase();
+    if (host.includes('itch.io') || host.includes('itch.zone') || host.includes('hwcdn.net')) {
+      return DEFAULT_PREVIEW_URL;
+    }
+  }
+
   // If running in development (localhost:3000) or as a web app on the cloud, use relative paths
   return '';
 };

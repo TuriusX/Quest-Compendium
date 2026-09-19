@@ -17,7 +17,12 @@
   },
   "win": {
     "icon": "public/icon.ico",
-    "target": ["nsis"]
+    "target": ["nsis", "appx"]
+  },
+  "appx": {
+    "backgroundColor": "#0c0d14",
+    "displayName": "Quest Compendium",
+    "addAutoUpdateUpdateSettings": false
   },
   "files": [
     "dist/**/*",

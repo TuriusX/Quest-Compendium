@@ -31,6 +31,10 @@ export const signInWithGoogle = async () => {
 
 export const logOut = async () => {
   try {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('quest_guest_session');
+      window.dispatchEvent(new Event('quest_auth_change'));
+    }
     await signOut(auth);
   } catch (error) {
     console.error("Error signing out", error);
