@@ -3,6 +3,7 @@ import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { AppSettings, GameTab } from '../types';
+import { getApiBaseUrl } from '../utils/api';
 
 const APP_VERSION = 1;
 
@@ -112,22 +113,53 @@ export function useCloudSync(
     };
   }, []);
 
+  // Listen for manual quota updates (e.g., from chat responses)
+  useEffect(() => {
+    const handleQuotaUpdate = (e: any) => {
+      if (e.detail) {
+        setUserData((prev: any) => ({
+          ...prev,
+          ...e.detail
+        }));
+      }
+    };
+    window.addEventListener('quest_quota_updated', handleQuotaUpdate);
+    return () => window.removeEventListener('quest_quota_updated', handleQuotaUpdate);
+  }, []);
+
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (!currentUser) {
-        // If guest session exists, activate guest mode
+        // If guest session exists, activate guest mode with unpaid tier limits (5 Pro, 5 Flash)
         const savedGuest = typeof window !== 'undefined' ? localStorage.getItem('quest_guest_session') : null;
         if (savedGuest) {
           setSubscriptionStatus('beta');
           setUserData({
-            isPremium: true,
-            proQueriesAvailable: 40,
-            flashQueriesAvailable: 100,
+            isPremium: false,
+            proQueriesAvailable: 5,
+            flashQueriesAvailable: 5,
             isGuest: true
           });
           setIsInitializing(false);
+
+          // Sync with server guest status
+          fetch(`${getApiBaseUrl()}/api/user/status`, {
+            headers: { Authorization: `Bearer ${savedGuest}` }
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (data && typeof data.proQueriesAvailable === 'number') {
+                setUserData({
+                  isPremium: false,
+                  proQueriesAvailable: data.proQueriesAvailable,
+                  flashQueriesAvailable: data.flashQueriesAvailable ?? 5,
+                  isGuest: true
+                });
+              }
+            })
+            .catch(() => {});
         } else {
           setSubscriptionStatus('loading');
           setIsInitializing(false);
@@ -145,12 +177,28 @@ export function useCloudSync(
     if (!user && guestUser) {
       setSubscriptionStatus('beta');
       setUserData({
-        isPremium: true,
-        proQueriesAvailable: 40,
-        flashQueriesAvailable: 100,
+        isPremium: false,
+        proQueriesAvailable: 5,
+        flashQueriesAvailable: 5,
         isGuest: true
       });
       setIsInitializing(false);
+
+      fetch(`${getApiBaseUrl()}/api/user/status`, {
+        headers: { Authorization: `Bearer ${guestUser.uid}` }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data && typeof data.proQueriesAvailable === 'number') {
+            setUserData({
+              isPremium: false,
+              proQueriesAvailable: data.proQueriesAvailable,
+              flashQueriesAvailable: data.flashQueriesAvailable ?? 5,
+              isGuest: true
+            });
+          }
+        })
+        .catch(() => {});
     }
   }, [user, guestUser]);
 

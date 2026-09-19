@@ -256,6 +256,26 @@ async function startServer() {
     return userData;
   }
 
+  interface GuestQuota {
+    proQueriesAvailable: number;
+    flashQueriesAvailable: number;
+    lastResetDate: string;
+  }
+  const guestQuotas = new Map<string, GuestQuota>();
+
+  function getOrCreateGuestQuota(guestId: string, today: string): GuestQuota {
+    let quota = guestQuotas.get(guestId);
+    if (!quota || quota.lastResetDate !== today) {
+      quota = {
+        proQueriesAvailable: 5,
+        flashQueriesAvailable: 5,
+        lastResetDate: today
+      };
+      guestQuotas.set(guestId, quota);
+    }
+    return quota;
+  }
+
   // --- API: User Status ---
   app.get('/api/user/status', requireAuth, async (req, res) => {
     try {
@@ -264,11 +284,13 @@ async function startServer() {
       const isGuest = (req as any).user.isGuest || userId.startsWith('guest_');
 
       if (isGuest) {
+        const today = new Date().toISOString().split('T')[0];
+        const quota = getOrCreateGuestQuota(userId, today);
         return res.json({
-          isPremium: true,
-          freeQueriesUsed: 0,
-          proQueriesAvailable: 40,
-          flashQueriesAvailable: 100,
+          isPremium: false,
+          freeQueriesUsed: (5 - quota.proQueriesAvailable) + (5 - quota.flashQueriesAvailable),
+          proQueriesAvailable: quota.proQueriesAvailable,
+          flashQueriesAvailable: quota.flashQueriesAvailable,
           isGuest: true
         });
       }
@@ -617,6 +639,7 @@ async function startServer() {
 
       let userData: any = { isPremium: false };
 
+      let guestQuota: GuestQuota | null = null;
       if (!isGuest) {
         userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
         const userEmail = (req as any).user?.email;
@@ -643,12 +666,13 @@ async function startServer() {
         const today = new Date().toISOString().split('T')[0];
         userData = syncUserLimits(userData, today, isStripePremium);
       } else {
-        // Guest mode trial: give active exploratory limits
+        // Guest mode trial: strictly match the unpaid tier (5 Pro & 5 Flash)
         const today = new Date().toISOString().split('T')[0];
+        guestQuota = getOrCreateGuestQuota(userId, today);
         userData = {
-          isPremium: true,
-          proQueriesAvailable: 40,
-          flashQueriesAvailable: 100,
+          isPremium: false,
+          proQueriesAvailable: guestQuota.proQueriesAvailable,
+          flashQueriesAvailable: guestQuota.flashQueriesAvailable,
           lastResetDate: today,
           isGuest: true
         };
@@ -949,6 +973,9 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             flashQueriesToday: userData.flashQueriesToday,
             _upgradedToday: userData._upgradedToday ?? false
           });
+        } else if (guestQuota) {
+          guestQuota.proQueriesAvailable = userData.proQueriesAvailable;
+          guestQuota.flashQueriesAvailable = userData.flashQueriesAvailable;
         }
       } catch (primaryErr: any) {
         console.log('Primary query issue or timeout, attempting fallback. Reason:', primaryErr?.message);
@@ -994,6 +1021,9 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               flashQueriesToday: userData.flashQueriesToday,
               _upgradedToday: userData._upgradedToday ?? false
             });
+          } else if (guestQuota) {
+            guestQuota.proQueriesAvailable = userData.proQueriesAvailable;
+            guestQuota.flashQueriesAvailable = userData.flashQueriesAvailable;
           }
         } catch (fallbackErr: any) {
           console.log('Gemini 3.8 Flash fallback failed, attempting emergency fallback to Flash Lite. Reason:', fallbackErr?.message);
@@ -1027,6 +1057,9 @@ You must respond entirely in ${language}. Do not use English unless the user's l
                 flashQueriesToday: userData.flashQueriesToday,
                 _upgradedToday: userData._upgradedToday ?? false
               });
+            } else if (guestQuota) {
+              guestQuota.proQueriesAvailable = userData.proQueriesAvailable;
+              guestQuota.flashQueriesAvailable = userData.flashQueriesAvailable;
             }
           } catch (emergencyErr: any) {
             console.log('Emergency fallback to Flash Lite also failed:', emergencyErr?.message);
@@ -1057,7 +1090,13 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       return res.json({
         text: responseText.trim(),
         modelUsed,
-        bannerImageUrl
+        bannerImageUrl,
+        userData: {
+          isPremium: userData.isPremium === true,
+          proQueriesAvailable: userData.proQueriesAvailable,
+          flashQueriesAvailable: userData.flashQueriesAvailable,
+          isGuest
+        }
       });
 
     } catch (err: any) {

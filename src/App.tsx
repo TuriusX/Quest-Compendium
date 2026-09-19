@@ -762,6 +762,10 @@ export default function App() {
 
       const data = await res.json();
 
+      if (data.userData && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('quest_quota_updated', { detail: data.userData }));
+      }
+
       let finalAiText = data.text;
       if (!finalAiText || finalAiText.trim().length === 0) {
         finalAiText = '⚠️ No response generated from the Compendium. Please try rephrasing your inquiry.';
