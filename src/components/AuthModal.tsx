@@ -34,6 +34,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
     try {
       setLoading(true);
       setErrorMessage(null);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('quest_guest_session');
+        window.dispatchEvent(new Event('quest_auth_change'));
+      }
       if ((window as any).electronAPI?.startDesktopLogin) {
         // We are in Electron, open system browser for OAuth
         (window as any).electronAPI.startDesktopLogin();
@@ -61,7 +65,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
     }
   };
 
-  const handleContinueAsGuest = () => {
+  const handleContinueAsGuest = async () => {
+    try {
+      await auth.signOut();
+    } catch (e) {}
     if (typeof window !== 'undefined') {
       const guestId = 'guest_' + Math.random().toString(36).substring(2, 12);
       localStorage.setItem('quest_guest_session', guestId);

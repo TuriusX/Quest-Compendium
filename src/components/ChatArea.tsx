@@ -26,10 +26,11 @@ import {
   ExternalLink,
   Flame,
   Info,
-  AlertTriangle
+  AlertTriangle,
+  AlertCircle
 } from 'lucide-react';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
-import { getApiBaseUrl } from '../utils/api';
+import { getApiBaseUrl, DEFAULT_PREVIEW_URL } from '../utils/api';
 import { auth } from '../lib/firebase';
 import { playSnapSound, playChimeSound, playBlipSound } from '../utils/audio';
 
@@ -82,6 +83,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [audioLoadingId, setAudioLoadingId] = useState<string | null>(null);
   const [isCapturingScreen, setIsCapturingScreen] = useState(false);
+  const [showIframeCaptureNotice, setShowIframeCaptureNotice] = useState(false);
   const [ttsStatusError, setTtsStatusError] = useState<{ msgId: string; error: string } | null>(null);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -297,8 +299,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       return dataUrl;
     } catch (err: any) {
       setIsCapturingScreen(false);
-      if (err?.name === 'NotAllowedError' && (err?.message?.includes('permissions policy') || err?.message?.includes('disallowed'))) {
-        // Fallback smoothly to file picker when display-capture permissions policy blocks getDisplayMedia
+      const isEmbedded = typeof window !== 'undefined' && window.self !== window.top;
+      if (err?.name === 'NotAllowedError' && (err?.message?.includes('permissions policy') || err?.message?.includes('disallowed') || isEmbedded)) {
+        setShowIframeCaptureNotice(true);
+      } else if (err?.name === 'NotAllowedError' && (err?.message?.includes('permissions policy') || err?.message?.includes('disallowed'))) {
         fileInputRef.current?.click();
       } else {
         console.warn('Screen capture not completed or cancelled:', err?.message || err);
@@ -876,9 +880,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   }`}
                 >
                   {!isUser && msg.bannerImageUrl && (
-                    <div className="mb-4 rounded-xl overflow-hidden border border-white/[0.06] shadow-lg relative h-32 w-full">
+                    <div className="mb-4 rounded-xl overflow-hidden border border-white/[0.06] shadow-lg relative h-36 w-full">
                       <div className="absolute inset-0 bg-gradient-to-t from-[#11121a]/95 via-transparent to-transparent z-10" />
-                      <img src={msg.bannerImageUrl} alt="Immersive Theme" className="absolute inset-0 w-full h-full object-cover" />
+                      <img 
+                        src={msg.bannerImageUrl} 
+                        alt="Immersive Game Theme Banner" 
+                        referrerPolicy="no-referrer"
+                        className="absolute inset-0 w-full h-full object-cover" 
+                      />
                     </div>
                   )}
                   {msg.imageUrl && (
@@ -1173,6 +1182,53 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         </div>
       </form>
+
+      {/* Embedded Browser Screen Capture Guidance Modal */}
+      {showIframeCaptureNotice && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#0e0e14] border border-amber-500/30 rounded-2xl p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
+                <AlertCircle className="w-5 h-5 shrink-0" />
+                <span>Screen Capture in Embedded Browser</span>
+              </div>
+              <button
+                onClick={() => setShowIframeCaptureNotice(false)}
+                className="text-zinc-500 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Browser security rules restrict embedded games (such as Itch.io iframes) from accessing screen capture APIs or selecting individual computer windows.
+            </p>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              To select and capture game windows directly on your computer, open the Standalone Web App or use the Desktop version. You can also upload a screenshot file below.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setShowIframeCaptureNotice(false);
+                  fileInputRef.current?.click();
+                }}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-medium transition-colors cursor-pointer text-center"
+              >
+                Upload File
+              </button>
+              <a
+                href={DEFAULT_PREVIEW_URL}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setShowIframeCaptureNotice(false)}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-[var(--accent-color)] text-black text-xs font-bold transition-colors flex items-center justify-center gap-1.5 hover:bg-white cursor-pointer text-center"
+              >
+                <span>Open Standalone App</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

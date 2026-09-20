@@ -25,6 +25,7 @@ import { logOut } from '../lib/firebase';
 interface HeaderBarProps {
   userData?: any;
   activeTab: GameTab | null;
+  tabsCount?: number;
   activeGame: SteamGameData | null;
   isGameRunningLocally: boolean;
   isSidebarOpen: boolean;
@@ -47,6 +48,7 @@ interface HeaderBarProps {
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   userData,
   activeTab,
+  tabsCount = 1,
   activeGame,
   isGameRunningLocally,
   isSidebarOpen,
@@ -94,52 +96,81 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     <header className="h-14 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between px-3 sm:px-4 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
       {/* Left side: Brand Logo + Game Library Toggle */}
       <div className="flex items-center gap-2.5 sm:gap-3">
-        <button
-          style={{ WebkitAppRegion: "no-drag" } as any}
-          onClick={() => {
-            playPageTurnSound(soundEnabled);
-            onToggleSidebar();
-          }}
-          title={isSidebarOpen ? "Collapse Games Library" : "Expand Games Library"}
-          className="group relative flex items-center justify-center p-2 rounded-xl hover:bg-white/[0.06] border border-transparent hover:border-white/10 transition-all cursor-pointer"
-        >
-          {/* Magical Aura */}
-          <div className="absolute inset-0 rounded-xl bg-[var(--accent-glow)] blur-md opacity-40 group-hover:opacity-80 animate-pulse transition-opacity" />
-          
-          <div className="relative flex-shrink-0 z-10">
-            <svg
-               width="28"
-               height="28"
-               viewBox="0 0 32 32"
-               fill="none"
-               className="drop-shadow-[0_0_10px_var(--accent-glow)] group-hover:scale-105 transition-transform"
+        <div className="relative flex items-center">
+          <button
+            style={{ WebkitAppRegion: "no-drag" } as any}
+            onClick={() => {
+              playPageTurnSound(soundEnabled);
+              onToggleSidebar();
+            }}
+            title={isSidebarOpen ? "Collapse Games Library" : "Expand Games Library"}
+            className={`group relative flex items-center justify-center p-2 rounded-xl border transition-all cursor-pointer ${
+              tabsCount === 0 && !isSidebarOpen
+                ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] ring-2 ring-[var(--accent-color)] ring-offset-2 ring-offset-[#0a0b10] shadow-[0_0_15px_var(--accent-glow)]'
+                : 'hover:bg-white/[0.06] border-transparent hover:border-white/10'
+            }`}
+          >
+            {/* Pulsing Beacon Rings when no tabs */}
+            {tabsCount === 0 && !isSidebarOpen && (
+              <>
+                <span className="absolute -inset-1 rounded-2xl bg-[var(--accent-color)] opacity-40 animate-ping pointer-events-none" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 rounded-full border-2 border-[#0a0b10] animate-bounce z-20 shadow-md" />
+              </>
+            )}
+
+            {/* Magical Aura */}
+            <div className={`absolute inset-0 rounded-xl bg-[var(--accent-glow)] blur-md transition-opacity ${
+              tabsCount === 0 && !isSidebarOpen ? 'opacity-80 animate-pulse' : 'opacity-40 group-hover:opacity-80'
+            }`} />
+            
+            <div className="relative flex-shrink-0 z-10">
+              <svg
+                 width="28"
+                 height="28"
+                 viewBox="0 0 32 32"
+                 fill="none"
+                 className="drop-shadow-[0_0_10px_var(--accent-glow)] group-hover:scale-105 transition-transform"
+              >
+                <rect x="5" y="28" width="24" height="2" fill="#050508" opacity="0.7"/>
+                <rect x="24" y="6" width="4" height="20" fill="#d9cdb4" />
+                <rect x="25" y="6" width="1" height="20" fill="#b3a58b" />
+                <rect x="27" y="6" width="1" height="20" fill="#b3a58b" />
+                <rect x="28" y="5" width="1" height="22" fill="#0d0817" />
+                <rect x="8" y="4" width="16" height="24" fill="#140d24" />
+                <rect x="4" y="4" width="4" height="24" fill="#0d0817" />
+                <rect x="6" y="4" width="1" height="24" fill="#241a38" />
+                <rect x="8" y="4" width="4" height="2" fill="#e5b838" />
+                <rect x="8" y="6" width="2" height="2" fill="#e5b838" />
+                <rect x="20" y="4" width="4" height="2" fill="#e5b838" />
+                <rect x="22" y="6" width="2" height="2" fill="#e5b838" />
+                <rect x="8" y="26" width="4" height="2" fill="#e5b838" />
+                <rect x="8" y="24" width="2" height="2" fill="#e5b838" />
+                <rect x="20" y="26" width="4" height="2" fill="#e5b838" />
+                <rect x="22" y="24" width="2" height="2" fill="#e5b838" />
+                <rect x="3" y="7" width="5" height="2" fill="#a07d1c" />
+                <rect x="3" y="23" width="5" height="2" fill="#a07d1c" />
+                <rect x="15" y="12" width="2" height="8" fill="var(--accent-color)" />
+                <rect x="13" y="14" width="6" height="4" fill="var(--accent-color)" />
+                <rect x="14" y="13" width="4" height="6" fill="var(--accent-color)" />
+                <rect x="14" y="14" width="4" height="4" fill="var(--accent-glow)" />
+                <rect x="15" y="15" width="2" height="2" fill="#ffffff" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Floating animated callout badge */}
+          {tabsCount === 0 && !isSidebarOpen && (
+            <div 
+              onClick={() => {
+                playPageTurnSound(soundEnabled);
+                onToggleSidebar();
+              }}
+              className="hidden sm:flex items-center gap-1.5 ml-2.5 px-2.5 py-1 rounded-full bg-[var(--accent-color)] text-white text-[11px] font-semibold shadow-lg shadow-[var(--accent-glow)] animate-pulse cursor-pointer hover:brightness-110 whitespace-nowrap"
             >
-              <rect x="5" y="28" width="24" height="2" fill="#050508" opacity="0.7"/>
-              <rect x="24" y="6" width="4" height="20" fill="#d9cdb4" />
-              <rect x="25" y="6" width="1" height="20" fill="#b3a58b" />
-              <rect x="27" y="6" width="1" height="20" fill="#b3a58b" />
-              <rect x="28" y="5" width="1" height="22" fill="#0d0817" />
-              <rect x="8" y="4" width="16" height="24" fill="#140d24" />
-              <rect x="4" y="4" width="4" height="24" fill="#0d0817" />
-              <rect x="6" y="4" width="1" height="24" fill="#241a38" />
-              <rect x="8" y="4" width="4" height="2" fill="#e5b838" />
-              <rect x="8" y="6" width="2" height="2" fill="#e5b838" />
-              <rect x="20" y="4" width="4" height="2" fill="#e5b838" />
-              <rect x="22" y="6" width="2" height="2" fill="#e5b838" />
-              <rect x="8" y="26" width="4" height="2" fill="#e5b838" />
-              <rect x="8" y="24" width="2" height="2" fill="#e5b838" />
-              <rect x="20" y="26" width="4" height="2" fill="#e5b838" />
-              <rect x="22" y="24" width="2" height="2" fill="#e5b838" />
-              <rect x="3" y="7" width="5" height="2" fill="#a07d1c" />
-              <rect x="3" y="23" width="5" height="2" fill="#a07d1c" />
-              <rect x="15" y="12" width="2" height="8" fill="var(--accent-color)" />
-              <rect x="13" y="14" width="6" height="4" fill="var(--accent-color)" />
-              <rect x="14" y="13" width="4" height="6" fill="var(--accent-color)" />
-              <rect x="14" y="14" width="4" height="4" fill="var(--accent-glow)" />
-              <rect x="15" y="15" width="2" height="2" fill="#ffffff" />
-            </svg>
-          </div>
-        </button>
+              <span>👈 Click to Open Tabs</span>
+            </div>
+          )}
+        </div>
         
         <div className="flex flex-col text-left py-1">
           <div className="flex items-center gap-1.5">
@@ -159,88 +190,97 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       {/* Right Controls Toolbar */}
       <div className="flex items-center gap-1 sm:gap-1.5">
         {/* AI Queries Badge */}
-        {userData && (
-          <div className="relative group" style={{ WebkitAppRegion: "no-drag" } as any}>
-            {/* Desktop Badge */}
-            <div 
-              className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 mr-2 cursor-default ${userData.isPremium ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400' : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)] group-hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'}`} 
-            >
-              <Cpu className="w-3.5 h-3.5" />
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold">
-                  {userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 5) - (userData.proQueriesToday || 0))} Pro
-                </span>
-              </div>
-              {!userData.isPremium && <Sparkles className="w-3.5 h-3.5 ml-1 text-amber-400 animate-pulse" />}
-            </div>
+        {userData && (() => {
+          const isPremiumUser = Boolean(userData.isPremium && !userData.isGuest);
+          const rawPro = userData.proQueriesAvailable ?? Math.max(0, (isPremiumUser ? 40 : 5) - (userData.proQueriesToday || 0));
+          const proCount = userData.isGuest ? Math.min(5, rawPro) : rawPro;
+          const proMax = isPremiumUser ? 100 : 5;
+          const rawFlash = userData.flashQueriesAvailable ?? Math.max(0, 5 - (userData.flashQueriesToday || 0));
+          const flashCount = userData.isGuest ? Math.min(5, rawFlash) : rawFlash;
 
-            {/* Mobile Icon */}
-            <div 
-              className={`flex sm:hidden items-center justify-center px-2 py-1 h-8 rounded-xl transition-all duration-300 mr-1 cursor-default text-xs font-bold gap-1 ${userData.isPremium ? 'bg-indigo-500/10 text-indigo-400' : 'bg-amber-500/10 text-amber-400'}`} 
-            >
-              <Cpu className="w-3.5 h-3.5" />
-              <span>{userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 5) - (userData.proQueriesToday || 0))}</span>
-            </div>
-            
-            {/* Elegant Hover Tooltip */}
-            <div className="absolute top-full right-2 pt-2 w-64 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-              <div className="p-4 rounded-xl bg-zinc-900 border border-white/10 shadow-2xl flex flex-col gap-3">
-                
-                {/* Pro Queries Progress */}
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-zinc-300 font-medium">Gemini Pro</span>
-                    <span className="text-zinc-400 font-mono text-[10px]">
-                      {userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 5) - (userData.proQueriesToday || 0))} / {userData.isPremium ? 100 : 5}
-                    </span>
-                  </div>
-                  <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full transition-all duration-500 ${userData.isPremium ? 'bg-indigo-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`} 
-                      style={{ width: `${((userData.proQueriesAvailable ?? Math.max(0, (userData.isPremium ? 40 : 5) - (userData.proQueriesToday || 0))) / (userData.isPremium ? 100 : 5)) * 100}%` }} 
-                    />
-                  </div>
+          return (
+            <div className="relative group" style={{ WebkitAppRegion: "no-drag" } as any}>
+              {/* Desktop Badge */}
+              <div 
+                className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 mr-2 cursor-default ${isPremiumUser ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400' : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)] group-hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'}`} 
+              >
+                <Cpu className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold">
+                    {proCount} Pro
+                  </span>
                 </div>
-                
-                {/* Flash Queries Progress */}
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-zinc-300 font-medium">Flash Fallback</span>
-                    <span className="text-zinc-400 font-mono text-[10px]">
-                      {userData.isPremium ? 'Unlimited' : `${userData.flashQueriesAvailable ?? Math.max(0, 5 - (userData.flashQueriesToday || 0))} / 5`}
-                    </span>
-                  </div>
-                  {!userData.isPremium && (
+                {!isPremiumUser && <Sparkles className="w-3.5 h-3.5 ml-1 text-amber-400 animate-pulse" />}
+              </div>
+
+              {/* Mobile Icon */}
+              <div 
+                className={`flex sm:hidden items-center justify-center px-2 py-1 h-8 rounded-xl transition-all duration-300 mr-1 cursor-default text-xs font-bold gap-1 ${isPremiumUser ? 'bg-indigo-500/10 text-indigo-400' : 'bg-amber-500/10 text-amber-400'}`} 
+              >
+                <Cpu className="w-3.5 h-3.5" />
+                <span>{proCount}</span>
+              </div>
+              
+              {/* Elegant Hover Tooltip */}
+              <div className="absolute top-full right-2 pt-2 w-64 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                <div className="p-4 rounded-xl bg-zinc-900 border border-white/10 shadow-2xl flex flex-col gap-3">
+                  
+                  {/* Pro Queries Progress */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-zinc-300 font-medium">Gemini Pro</span>
+                      <span className="text-zinc-400 font-mono text-[10px]">
+                        {proCount} / {proMax}
+                      </span>
+                    </div>
                     <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden">
                       <div 
-                        className="bg-zinc-500 h-full rounded-full transition-all duration-500" 
-                        style={{ width: `${((userData.flashQueriesAvailable ?? Math.max(0, 5 - (userData.flashQueriesToday || 0))) / 5) * 100}%` }} 
+                        className={`h-full rounded-full transition-all duration-500 ${isPremiumUser ? 'bg-indigo-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`} 
+                        style={{ width: `${Math.min(100, (proCount / proMax) * 100)}%` }} 
                       />
                     </div>
+                  </div>
+                  
+                  {/* Flash Queries Progress */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-zinc-300 font-medium">Flash Fallback</span>
+                      <span className="text-zinc-400 font-mono text-[10px]">
+                        {isPremiumUser ? 'Unlimited' : `${flashCount} / 5`}
+                      </span>
+                    </div>
+                    {!isPremiumUser && (
+                      <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-zinc-500 h-full rounded-full transition-all duration-500" 
+                          style={{ width: `${Math.min(100, (flashCount / 5) * 100)}%` }} 
+                        />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Reset Timer */}
+                  <div className="pt-2 mt-1 border-t border-white/5 flex justify-between items-center text-[11px]">
+                    <span className="text-zinc-500 font-medium">Allotment Resets In:</span>
+                    <span className="text-zinc-400 font-mono tracking-wider">{timeUntilReset}</span>
+                  </div>
+                  
+                  {!isPremiumUser && (
+                    <button 
+                      onClick={() => {
+                        if (onOpenPaywall) onOpenPaywall();
+                      }}
+                      className="mt-1 pt-3 border-t border-white/5 text-xs text-amber-400 font-medium flex items-center justify-center gap-1.5 hover:text-amber-300 transition-colors w-full cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Click to upgrade to Premium
+                    </button>
                   )}
                 </div>
-                
-                {/* Reset Timer */}
-                <div className="pt-2 mt-1 border-t border-white/5 flex justify-between items-center text-[11px]">
-                  <span className="text-zinc-500 font-medium">Allotment Resets In:</span>
-                  <span className="text-zinc-400 font-mono tracking-wider">{timeUntilReset}</span>
-                </div>
-                
-                {!userData.isPremium && (
-                  <button 
-                    onClick={() => {
-                      if (onOpenPaywall) onOpenPaywall();
-                    }}
-                    className="mt-1 pt-3 border-t border-white/5 text-xs text-amber-400 font-medium flex items-center justify-center gap-1.5 hover:text-amber-300 transition-colors w-full cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Click to upgrade to Premium
-                  </button>
-                )}
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
         
         {activeGame && (
           <button

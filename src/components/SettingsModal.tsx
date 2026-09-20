@@ -20,7 +20,8 @@ import {
   ExternalLink,
   Globe,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { AppSettings, AiMode, ColorTheme, DockPosition } from '../types';
 import { playBlipSound } from '../utils/audio';
@@ -393,6 +394,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div 
                       className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
                         settings.soundEnabled ? 'right-1' : 'left-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Thematic Inquiry Banners Toggle */}
+                <div className="flex items-center justify-between p-3 rounded-xl bg-black/40 border border-white/[0.08]">
+                  <div className="flex items-center gap-2.5">
+                    <ImageIcon className="w-4 h-4 text-[var(--accent-color)]" />
+                    <div>
+                      <span className="font-semibold text-xs text-white block">Thematic Inquiry Banners</span>
+                      <span className="text-[11px] text-zinc-400">Generate immersive concept art banners themed to your active game</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      playBlipSound(soundEnabled);
+                      onUpdateSettings({ enableThematicBanners: settings.enableThematicBanners === false });
+                    }}
+                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                      settings.enableThematicBanners !== false ? 'bg-[var(--accent-color)]' : 'bg-white/10'
+                    }`}
+                  >
+                    <div 
+                      className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        settings.enableThematicBanners !== false ? 'right-1' : 'left-1'
                       }`}
                     />
                   </button>

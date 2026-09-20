@@ -1,6 +1,9 @@
 import crypto from 'crypto';
-import express from 'express';
+import fs from 'fs';
 import path from 'path';
+import express from 'express';
+
+const logDebug = (...args: any[]) => {};
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from '@google/genai';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
@@ -156,6 +159,7 @@ async function startServer() {
   // Require authenticated user (supports Firebase Auth tokens or guest trial tokens)
   const requireAuth = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
+    logDebug(`[requireAuth] Header: ${authHeader ? authHeader.slice(0, 25) + '...' : 'none'}`);
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
     }
@@ -163,6 +167,7 @@ async function startServer() {
     
     // Support guest trial sessions (e.g. for Itch.io in-browser players)
     if (token.startsWith('guest_')) {
+      logDebug(`[requireAuth] Matched guest token: ${token}`);
       (req as any).user = { uid: token, email: undefined, isGuest: true };
       return next();
     }
@@ -627,15 +632,13 @@ async function startServer() {
   };
 
   app.post('/api/chat', requireAuth, async (req, res) => {
-    let clientDisconnected = false;
-    req.on('close', () => {
-      clientDisconnected = true;
-    });
+    logDebug(`[API Chat] Incoming request from uid: ${(req as any).user?.uid}`);
 
     try {
       const idToken = req.headers.authorization!.split('Bearer ')[1];
       const userId = (req as any).user.uid;
       const isGuest = (req as any).user.isGuest || userId.startsWith('guest_');
+      logDebug(`[API Chat] Processing for userId: ${userId}, isGuest: ${isGuest}`);
 
       let userData: any = { isPremium: false };
 
@@ -720,14 +723,17 @@ async function startServer() {
       // Persona & Mode System Instructions
       const currentDate = new Date().toLocaleString();
       let systemInstruction = `[SYSTEM TIME: The current date and time is ${currentDate}. Always use this as the real present date.]\n\n`;
-      const isGameDetected = isGameRunningLocally && !!activeGame;
+      // Check if a game is detected either by local process detection, tab selection, or inquiry text
+      const effectiveGame = activeGame || null;
+      const isGameContextAvailable = !!effectiveGame;
 
-      if (aiMode === 'roleplay' && isGameDetected) {
-        systemInstruction += `You are a dynamic, in-universe gaming companion. Your persona must seamlessly adapt to match the genre and world of the active game (${activeGame.name}).
+      if (aiMode === 'roleplay') {
+        const gameNameForRoleplay = effectiveGame ? effectiveGame.name : 'the gaming universe you are discussing';
+        systemInstruction += `You are a dynamic, immersive, in-universe gaming companion. Your persona must seamlessly adapt to match the genre, lore, atmosphere, and world of the game (${gameNameForRoleplay}). If the player mentions or asks about a specific game, immediately adopt the persona and vernacular of a knowledgeable character or guide from that specific game universe.
 
-CRITICAL RULE: NEVER refer to yourself as a "book", a "compendium", "tome", "pages", or an "AI assistant". You are a living entity, character, or construct within the game's universe. Fully commit to the roleplay.
+CRITICAL RULE: NEVER refer to yourself as a "book", a "compendium", "tome", "pages", "language model", or an "AI assistant". You are a living entity, in-universe companion, mentor, operative, or guide from the game world. Fully commit to the roleplay.
 
-Stay in character 100% of the time, while ensuring all puzzle solutions, mechanical guidance, and gameplay advice remain perfectly accurate, clear, and actionable.`;
+Stay in character 100% of the time, while ensuring all puzzle solutions, mechanical guidance, boss strategies, build advice, and gameplay tips remain completely accurate, clear, and actionable.`;
       } else {
         systemInstruction += `You are a helpful and expert gaming guide.
 Your purpose is to give thorough, highly accurate, puzzle-solving, build-optimizing, and progression-guiding advice for video games.
@@ -868,12 +874,13 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           contentsPayload.push({ role: 'user', parts: currentParts });
       }
 
-      // Banner Generation (Concurrent)
+      // Banner Generation: Only run if specifically requested in the payload and do not block chat
       let bannerImagePromise: Promise<string | undefined> | null = null;
-      if (isGameDetected || question) {
-        const bannerPrompt = isGameDetected 
-          ? `Cinematic, immersive, atmospheric concept art banner for the video game "${activeGame!.name}". The art should reflect the theme of the game and this specific query: "${question || 'general gameplay'}". No text or logos, just pure environment or character art. Wide landscape banner format.`
-          : `Cinematic, immersive, atmospheric concept art banner for a video game reflecting this query: "${question}". No text or logos. Wide landscape banner format.`;
+      if (req.body.generateBanner && (effectiveGame || question)) {
+        const gameNameForBanner = effectiveGame ? effectiveGame.name : '';
+        const bannerPrompt = gameNameForBanner
+          ? `Cinematic, immersive concept art banner for the video game "${gameNameForBanner}" reflecting: "${question || 'in-game scenery'}". Wide landscape 16:9 banner format, breathtaking high-quality game concept art, no text or UI elements.`
+          : `Cinematic, immersive concept art banner for a video game reflecting: "${question}". Wide landscape 16:9 banner format, high-quality digital illustration, no text or UI elements.`;
           
         bannerImagePromise = ai.models.generateContent({
           model: 'gemini-3.1-flash-lite-image',
@@ -890,7 +897,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           }
           return undefined;
         }).catch(err => {
-          console.warn('Banner generation failed:', err.message);
+          console.warn('[Banner Generation] Banner generation failed or skipped:', err?.message || err);
           return undefined;
         });
       }
@@ -899,8 +906,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       let responseText = '';
       let modelUsed = targetModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.8 Flash';
 
+      logDebug(`[API Chat] Processing question "${(question || '').slice(0, 30)}..." with model: ${targetModel}, skipPrimary: ${skipPrimary}`);
+
       try {
         if (!skipPrimary) {
+          logDebug(`[API Chat] Calling primaryCall: ${targetModel}`);
           const primaryCall = ai.models.generateContent({
             model: targetModel,
             contents: contentsPayload,
@@ -914,16 +924,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
               ],
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
-
             }
           });
-          const response = await withTimeout(primaryCall, 40000, 'Primary Gemini 3.1 Pro query') as any;
+          const response = await withTimeout(primaryCall, 18000, 'Primary Gemini 3.1 Pro query') as any;
           responseText = response.text || '';
-          
-          if (clientDisconnected) {
-            console.log('Client disconnected during Pro query. Aborting before deducting credit.');
-            return;
-          }
+          logDebug(`[API Chat] primaryCall succeeded, response length: ${responseText.length}`);
 
           if (responseText && responseText.trim().length > 0) {
             userData.proQueriesAvailable = Math.max(0, userData.proQueriesAvailable - 1);
@@ -948,13 +953,8 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
             }
           });
-          const response = await withTimeout(fallbackCall, 25000, 'Flash query') as any;
+          const response = await withTimeout(fallbackCall, 12000, 'Flash query') as any;
           responseText = response.text || '';
-          
-          if (clientDisconnected) {
-            console.log('Client disconnected during Flash query. Aborting before deducting credit.');
-            return;
-          }
 
           if (responseText && responseText.trim().length > 0) {
             userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
@@ -996,14 +996,9 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               ],
             }
           });
-          const retryResponse = await withTimeout(retryPromise, 20000, 'Flash Fallback query') as any;
+          const retryResponse = await withTimeout(retryPromise, 10000, 'Flash Fallback query') as any;
           responseText = retryResponse.text || '';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
-          
-          if (clientDisconnected) {
-            console.log('Client disconnected during Fallback Flash query. Aborting.');
-            return;
-          }
 
           if (!responseText || responseText.trim().length === 0) {
              console.log('Emergency Flash Lite fallback returned empty text.');
@@ -1042,7 +1037,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               ],
             }
             });
-            const emergencyResponse = await withTimeout(emergencyPromise, 10000, 'Flash Lite Emergency query') as any;
+            const emergencyResponse = await withTimeout(emergencyPromise, 6000, 'Flash Lite Emergency query') as any;
             responseText = emergencyResponse.text || 'No response received.';
             modelUsed = 'Gemini 3.1 Flash Lite (Emergency Fallback)';
             
@@ -1081,12 +1076,21 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       let bannerImageUrl: string | undefined;
       if (bannerImagePromise) {
         try {
-          bannerImageUrl = await bannerImagePromise;
+          bannerImageUrl = await Promise.race([
+            bannerImagePromise,
+            new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 5000))
+          ]);
+          if (bannerImageUrl) {
+            logDebug(`[API Chat] Successfully generated banner image (length: ${bannerImageUrl.length})`);
+          } else {
+            logDebug(`[API Chat] Banner image did not complete within race timeout.`);
+          }
         } catch (e) {
           console.warn('Failed to await banner image:', e);
         }
       }
 
+      logDebug(`[API Chat] Sending response for uid: ${(req as any).user?.uid}, modelUsed: ${modelUsed}`);
       return res.json({
         text: responseText.trim(),
         modelUsed,
@@ -1100,6 +1104,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       });
 
     } catch (err: any) {
+      logDebug(`[API Chat] Catastrophic error: ${err?.message}`);
       console.error('API /api/chat error:', err);
       return res.status(500).json({
         error: err?.message || 'Failed to generate response.'

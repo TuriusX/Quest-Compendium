@@ -92,4 +92,5 @@ export interface AppSettings {
   hideAppShortcut: string;
   voiceInputShortcut: string;
   autoScreenshotShortcut: string;
+  enableThematicBanners?: boolean;
 }

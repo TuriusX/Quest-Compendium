@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { BookOpen, Plus, Sparkles, Gamepad2 } from 'lucide-react';
 import { 
   GameTab, 
   SteamGameData, 
@@ -43,6 +44,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   hideAppShortcut: 'CmdOrCtrl+Shift+H',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
+  enableThematicBanners: true,
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
@@ -130,6 +132,25 @@ function SettingsStandalone() {
   );
 }
 
+const DEFAULT_GUEST_TABS: GameTab[] = [
+  {
+    id: 'guest-welcome-compendium',
+    name: 'Welcome, Explorer',
+    messages: [
+      {
+        id: 'welcome-msg',
+        role: 'assistant',
+        text: 'Welcome to Quest Compendium! Ask any gameplay questions, look up quest walkthroughs, puzzle solutions, or boss strategies.',
+        timestamp: Date.now()
+      }
+    ],
+    notes: '',
+    personalQuests: [],
+    createdAt: Date.now(),
+    lastActive: Date.now()
+  }
+];
+
 export default function App() {
   if (window.location.hash === '#settings') {
     return <Suspense fallback={<div className="w-screen h-screen bg-[#0c0d14]" />}><SettingsStandalone /></Suspense>;
@@ -157,6 +178,15 @@ export default function App() {
 
   const [tabs, setTabs] = useState<GameTab[]>(() => {
     try {
+      const isGuest = typeof window !== 'undefined' && Boolean(localStorage.getItem('quest_guest_session'));
+      if (isGuest) {
+        const guestSaved = localStorage.getItem('quest_guest_tabs');
+        if (guestSaved) {
+          const parsed = JSON.parse(guestSaved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+        return DEFAULT_GUEST_TABS;
+      }
       const saved = localStorage.getItem('quest_compendium_tabs');
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -233,6 +263,47 @@ export default function App() {
   }, [isDraggingSidebar, isDraggingAch]);
 
   const { user, subscriptionStatus, userData, isInitializing, isOutdated } = useCloudSync(settings, tabs, setSettings, setTabs);
+
+  // Switch and isolate tabs when user transitions between Guest and Authenticated User
+  const lastUserIdentityRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isInitializing) return;
+    const currentIdentity = user ? (user.isGuest ? 'guest' : user.uid) : 'unauthed';
+    if (lastUserIdentityRef.current !== null && lastUserIdentityRef.current !== currentIdentity) {
+      if (user?.isGuest) {
+        // Switching to guest session - isolate completely from Google account tabs
+        try {
+          const saved = localStorage.getItem('quest_guest_tabs');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setTabs(parsed);
+              setActiveTabId(parsed[0]?.id || '');
+              lastUserIdentityRef.current = currentIdentity;
+              return;
+            }
+          }
+        } catch {}
+        setTabs(DEFAULT_GUEST_TABS);
+        setActiveTabId(DEFAULT_GUEST_TABS[0].id);
+      } else if (user && !user.isGuest) {
+        // Switching to Google account
+        try {
+          const userKey = `quest_compendium_tabs_${user.uid}`;
+          const saved = localStorage.getItem(userKey) || localStorage.getItem('quest_compendium_tabs');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setTabs(parsed);
+              setActiveTabId(parsed[0]?.id || '');
+            }
+          }
+        } catch {}
+      }
+    }
+    lastUserIdentityRef.current = currentIdentity;
+  }, [user, isInitializing]);
 
   // Subscription Success Handling
   useEffect(() => {
@@ -484,9 +555,21 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('quest_compendium_tabs', JSON.stringify(tabs));
+      if (user?.isGuest) {
+        localStorage.setItem('quest_guest_tabs', JSON.stringify(tabs));
+      } else if (user && !user.isGuest) {
+        localStorage.setItem(`quest_compendium_tabs_${user.uid}`, JSON.stringify(tabs));
+        localStorage.setItem('quest_compendium_tabs', JSON.stringify(tabs));
+      } else {
+        const isGuestSaved = typeof window !== 'undefined' && Boolean(localStorage.getItem('quest_guest_session'));
+        if (isGuestSaved) {
+          localStorage.setItem('quest_guest_tabs', JSON.stringify(tabs));
+        } else {
+          localStorage.setItem('quest_compendium_tabs', JSON.stringify(tabs));
+        }
+      }
     } catch {}
-  }, [tabs]);
+  }, [tabs, user]);
 
   // Fetch Steam Profile
   useEffect(() => {
@@ -726,7 +809,8 @@ export default function App() {
             developer: activeGame.developer
           } : null,
           achievements: activeGame?.achievements || [],
-          news: activeGame?.patchNotes || []
+          news: activeGame?.patchNotes || [],
+          generateBanner: settings.enableThematicBanners !== false
         }),
       });
       clearTimeout(timeoutId);
@@ -966,6 +1050,7 @@ export default function App() {
         <HeaderBar
           userData={userData}
           activeTab={activeTab}
+          tabsCount={tabs.length}
           activeGame={activeGame}
           isGameRunningLocally={globalActiveGame !== null}
           isSidebarOpen={isSidebarOpen}
@@ -1088,10 +1173,66 @@ export default function App() {
                 soundEnabled={settings.soundEnabled}
               />
             ) : tabs.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center bg-[#07070b] crt-grid">
-                 <div className="text-zinc-500 text-center space-y-4 p-6 bg-black/40 border border-white/5 rounded-2xl shadow-xl backdrop-blur-sm max-w-md">
-                   <p className="text-2xl font-fantasy text-[var(--accent-color)]">No Compendium Active</p>
-                   <p className="text-sm">Click "+ Add New Compendium" in the sidebar to start a new session.</p>
+              <div className="flex-1 flex flex-col items-center justify-center bg-[#07070b] crt-grid p-4 sm:p-6 overflow-y-auto">
+                 <div className="text-center space-y-5 p-6 sm:p-8 bg-black/60 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md max-w-lg w-full relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                   {/* Top Accent Glow */}
+                   <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 bg-[var(--accent-glow)] blur-3xl opacity-30 pointer-events-none" />
+
+                   {/* Magical Icon & Header */}
+                   <div className="flex flex-col items-center gap-2">
+                     <div className="relative p-3 rounded-2xl bg-[var(--accent-dim)] border border-[var(--accent-border)] shadow-[0_0_20px_var(--accent-glow)]">
+                       <BookOpen className="w-8 h-8 text-[var(--accent-color)]" />
+                       <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 rounded-full border-2 border-[#0a0b10] animate-ping" />
+                     </div>
+                     <h2 className="text-2xl font-fantasy text-[var(--accent-color)] tracking-wide mt-2">No Compendium Active</h2>
+                     <p className="text-xs sm:text-sm text-zinc-400 max-w-sm">
+                       Select or create a compendium tab to start taking notes, asking AI quest guidance, and tracking your game.
+                     </p>
+                   </div>
+
+                   {/* Direct Action Buttons */}
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                     <button
+                       onClick={() => {
+                         setIsSidebarOpen(true);
+                       }}
+                       className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-white font-medium text-xs transition-all cursor-pointer group shadow-sm hover:border-white/30"
+                     >
+                       <BookOpen className="w-4 h-4 text-[var(--accent-color)] group-hover:scale-110 transition-transform" />
+                       <span>Open Games Library</span>
+                     </button>
+
+                     <button
+                       onClick={() => handleStartCreateTab()}
+                       className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[var(--accent-color)] hover:brightness-110 text-white font-semibold text-xs transition-all cursor-pointer shadow-lg shadow-[var(--accent-glow)] group"
+                     >
+                       <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" />
+                       <span>Create New Tab</span>
+                     </button>
+                   </div>
+
+                   {/* Quick Start Presets */}
+                   <div className="pt-4 border-t border-white/[0.08] text-left">
+                     <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block mb-2.5 flex items-center gap-1.5">
+                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                       <span>Or Quick-Start a Popular Game:</span>
+                     </span>
+
+                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                       {POPULAR_STEAM_GAMES.slice(0, 6).map((game) => (
+                         <button
+                           key={game.appId}
+                           onClick={() => {
+                             handleCreateTab(game.name, game);
+                           }}
+                           className="flex items-center gap-2 p-2 rounded-xl bg-white/[0.03] hover:bg-[var(--accent-dim)] border border-white/5 hover:border-[var(--accent-border)] text-zinc-300 hover:text-white text-xs transition-all cursor-pointer text-left truncate group"
+                         >
+                           <Gamepad2 className="w-3.5 h-3.5 flex-shrink-0 text-zinc-500 group-hover:text-[var(--accent-color)]" />
+                           <span className="truncate font-medium">{game.name}</span>
+                         </button>
+                       ))}
+                     </div>
+                   </div>
                  </div>
               </div>
             ) : (

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { auth, db } from '../lib/firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { AppSettings, GameTab } from '../types';
 import { getApiBaseUrl } from '../utils/api';
@@ -130,40 +130,47 @@ export function useCloudSync(
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      const savedGuest = typeof window !== 'undefined' ? localStorage.getItem('quest_guest_session') : null;
+      
+      // If a guest session is explicitly active, do NOT allow a cached Google user to take over
+      if (savedGuest) {
+        if (currentUser) {
+          // Explicitly sign out of Firebase so the Google account is detached from guest sessions
+          signOut(auth).catch(() => {});
+        }
+        setUser(null);
+        setSubscriptionStatus('beta');
+        setUserData({
+          isPremium: false,
+          proQueriesAvailable: 5,
+          flashQueriesAvailable: 5,
+          isGuest: true
+        });
+        setIsInitializing(false);
+
+        // Sync with server guest status, clamping to 5 maximum
+        fetch(`${getApiBaseUrl()}/api/user/status`, {
+          headers: { Authorization: `Bearer ${savedGuest}` }
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data && typeof data.proQueriesAvailable === 'number') {
+              setUserData({
+                isPremium: false,
+                proQueriesAvailable: Math.min(5, data.proQueriesAvailable),
+                flashQueriesAvailable: Math.min(5, data.flashQueriesAvailable ?? 5),
+                isGuest: true
+              });
+            }
+          })
+          .catch(() => {});
+        return;
+      }
+
       setUser(currentUser);
       if (!currentUser) {
-        // If guest session exists, activate guest mode with unpaid tier limits (5 Pro, 5 Flash)
-        const savedGuest = typeof window !== 'undefined' ? localStorage.getItem('quest_guest_session') : null;
-        if (savedGuest) {
-          setSubscriptionStatus('beta');
-          setUserData({
-            isPremium: false,
-            proQueriesAvailable: 5,
-            flashQueriesAvailable: 5,
-            isGuest: true
-          });
-          setIsInitializing(false);
-
-          // Sync with server guest status
-          fetch(`${getApiBaseUrl()}/api/user/status`, {
-            headers: { Authorization: `Bearer ${savedGuest}` }
-          })
-            .then(res => res.json())
-            .then(data => {
-              if (data && typeof data.proQueriesAvailable === 'number') {
-                setUserData({
-                  isPremium: false,
-                  proQueriesAvailable: data.proQueriesAvailable,
-                  flashQueriesAvailable: data.flashQueriesAvailable ?? 5,
-                  isGuest: true
-                });
-              }
-            })
-            .catch(() => {});
-        } else {
-          setSubscriptionStatus('loading');
-          setIsInitializing(false);
-        }
+        setSubscriptionStatus('loading');
+        setIsInitializing(false);
       } else {
         // We are logging in with full account, hold initialization true until cloud fetch finishes
         setIsInitializing(true);
@@ -174,7 +181,10 @@ export function useCloudSync(
 
   // Effect to populate guest state when guestUser changes
   useEffect(() => {
-    if (!user && guestUser) {
+    if (guestUser) {
+      if (auth.currentUser) {
+        signOut(auth).catch(() => {});
+      }
       setSubscriptionStatus('beta');
       setUserData({
         isPremium: false,
@@ -192,15 +202,15 @@ export function useCloudSync(
           if (data && typeof data.proQueriesAvailable === 'number') {
             setUserData({
               isPremium: false,
-              proQueriesAvailable: data.proQueriesAvailable,
-              flashQueriesAvailable: data.flashQueriesAvailable ?? 5,
+              proQueriesAvailable: Math.min(5, data.proQueriesAvailable),
+              flashQueriesAvailable: Math.min(5, data.flashQueriesAvailable ?? 5),
               isGuest: true
             });
           }
         })
         .catch(() => {});
     }
-  }, [user, guestUser]);
+  }, [guestUser]);
 
   // Listen to User Profile (Subscription & Settings Sync)
   useEffect(() => {
@@ -305,7 +315,7 @@ export function useCloudSync(
     return () => clearTimeout(syncTimeout);
   }, [localSettings, localGameTabs, user, subscriptionStatus, isInitializing]);
 
-  const effectiveUser = user || guestUser;
+  const effectiveUser = guestUser ? guestUser : user;
 
   return { user: effectiveUser, subscriptionStatus, userData, isInitializing, isOutdated };
 }
