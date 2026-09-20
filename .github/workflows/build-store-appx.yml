@@ -21,9 +21,11 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
+        shell: pwsh
         run: |
+          if (Test-Path package-lock.json) { Remove-Item package-lock.json -Force }
           npm install
-          npm install --no-save @rollup/rollup-win32-x64-msvc @esbuild/win32-x64
+          npm install --no-save @rollup/rollup-win32-x64-msvc @esbuild/win32-x64 lightningcss-win32-x64-msvc
 
       - name: Build Web Assets & Compile AppX
         run: npm run desktop:build:store
