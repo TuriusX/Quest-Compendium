@@ -1,4 +1,4 @@
-export const DEFAULT_PREVIEW_URL = 'https://quest-compendium-890629309063.us-east1.run.app';
+export const DEFAULT_PREVIEW_URL = 'https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app';
 
 export const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
@@ -6,16 +6,16 @@ export const getApiBaseUrl = (): string => {
     if (customUrl && customUrl.trim()) {
       return customUrl.trim().replace(/\/+$/, '');
     }
+
+    // When testing desktop in development on localhost, use local dev server directly
+    const host = window.location.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return '';
+    }
   }
 
-  // If running in Electron (electronAPI is present), use the published cloud backend
-  // so the desktop app can utilize the securely stored Gemini API key without prompting the user.
-  if (typeof window !== 'undefined' && (window as any).electronAPI) {
-    return DEFAULT_PREVIEW_URL;
-  }
-
-  // If running from file:// (edge case), we need an absolute URL to the backend.
-  if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
+  // If running in packaged Electron or standalone desktop with file protocol
+  if (typeof window !== 'undefined' && ((window as any).electronAPI || window.location.protocol === 'file:')) {
     return DEFAULT_PREVIEW_URL;
   }
 

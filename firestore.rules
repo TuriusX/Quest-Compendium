@@ -1,15 +1,26 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User data: strictly accessible only by the authenticated owner
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+
+    // App configuration (client update checks, desktop version info): public read, no client writes
     match /config/{document=**} {
       allow read: if true;
       allow write: if false;
     }
+
+    // Feedback submissions: signed-in users can create feedback documents
     match /feedback/{feedbackId} {
       allow create: if request.auth != null;
+      allow read, update, delete: if false;
     }
   }
 }

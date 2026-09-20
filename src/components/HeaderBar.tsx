@@ -39,6 +39,7 @@ interface HeaderBarProps {
   onOpenGameSearch: () => void;
   onOpenFeedback: () => void;
   onOpenPaywall?: () => void;
+  onOpenSettings?: () => void;
   soundEnabled: boolean;
   isDocked: boolean;
   onToggleDock: () => void;
@@ -62,6 +63,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onOpenGameSearch,
   onOpenFeedback,
   onOpenPaywall,
+  onOpenSettings,
   soundEnabled,
   isDocked,
   onToggleDock,
@@ -304,6 +306,20 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             )}
           </button>
         )}
+        {onOpenSettings && (
+          <button
+            style={{ WebkitAppRegion: "no-drag" } as any}
+            onClick={() => {
+              playBlipSound(soundEnabled);
+              onOpenSettings();
+            }}
+            title="Compendium Settings"
+            className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-all cursor-pointer"
+          >
+            <SettingsIcon className="w-4 h-4" />
+          </button>
+        )}
+
         <div className="flex items-center" style={{ WebkitAppRegion: "no-drag" } as any}>
           <PWAInstallButton />
         </div>

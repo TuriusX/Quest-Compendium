@@ -1064,6 +1064,7 @@ export default function App() {
           onOpenGameSearch={() => setIsGameSearchOpen(true)}
           onOpenFeedback={() => setIsFeedbackOpen(true)}
           onOpenPaywall={() => setIsPaywallOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           soundEnabled={settings.soundEnabled}
           isDocked={settings.dockPosition !== 'undocked'}
           onToggleDock={() => {

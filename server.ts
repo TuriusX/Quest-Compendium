@@ -1078,7 +1078,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         try {
           bannerImageUrl = await Promise.race([
             bannerImagePromise,
-            new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 5000))
+            new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 15000))
           ]);
           if (bannerImageUrl) {
             logDebug(`[API Chat] Successfully generated banner image (length: ${bannerImageUrl.length})`);
@@ -1087,6 +1087,13 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           }
         } catch (e) {
           console.warn('Failed to await banner image:', e);
+        }
+      }
+
+      // Reliable game art fallback: if custom AI image generation timed out or failed, use the game's official widescreen hero banner
+      if (!bannerImageUrl && req.body.generateBanner) {
+        if (effectiveGame?.appId) {
+          bannerImageUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${effectiveGame.appId}/library_hero.jpg`;
         }
       }
 
