@@ -883,17 +883,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {!isUser && msg.bannerImageUrl && (
                     <div 
                       onClick={() => onOpenScreenModal(msg.bannerImageUrl!)}
-                      title="Click to view full uncropped artwork"
-                      className="mb-4 rounded-xl overflow-hidden border border-white/10 shadow-lg relative w-full aspect-[2.1/1] sm:aspect-[2.35/1] min-h-[170px] max-h-[320px] group cursor-pointer"
+                      title="Click to view full high-res artwork"
+                      className="mb-4 rounded-xl overflow-hidden border border-white/10 shadow-lg relative w-full bg-black/70 group cursor-pointer flex items-center justify-center min-h-[160px] max-h-[500px]"
                     >
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#11121a]/90 via-transparent to-black/20 z-10 pointer-events-none" />
+                      {/* Ambient blurred backdrop for ultrawide bubbles */}
+                      <img 
+                        src={msg.bannerImageUrl} 
+                        alt="" 
+                        aria-hidden="true"
+                        referrerPolicy="no-referrer"
+                        className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-35 scale-110 pointer-events-none" 
+                      />
+                      {/* Full uncropped artwork */}
                       <img 
                         src={msg.bannerImageUrl} 
                         alt="Immersive Game Theme Banner" 
                         referrerPolicy="no-referrer"
-                        className="absolute inset-0 w-full h-full object-cover object-[center_12%] transition-transform duration-500 group-hover:scale-[1.02]" 
+                        className="relative z-10 w-full max-h-[480px] h-auto object-contain transition-transform duration-500 group-hover:scale-[1.01]" 
                       />
-                      <div className="absolute top-2.5 right-2.5 z-20 opacity-0 group-hover:opacity-100 transition-opacity bg-black/75 hover:bg-black/90 backdrop-blur-md text-white text-[11px] font-medium px-2.5 py-1 rounded-lg border border-white/20 shadow-md flex items-center gap-1.5">
+                      <div className="absolute top-2.5 right-2.5 z-20 opacity-0 group-hover:opacity-100 transition-opacity bg-black/75 hover:bg-black/90 backdrop-blur-md text-white text-[11px] font-medium px-2.5 py-1 rounded-lg border border-white/20 shadow-md flex items-center gap-1.5 pointer-events-none">
                         <Maximize2 className="w-3 h-3 text-purple-300" />
                         <span>View Full Art</span>
                       </div>
