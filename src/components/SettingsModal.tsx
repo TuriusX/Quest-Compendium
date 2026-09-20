@@ -26,7 +26,7 @@ import {
 import { AppSettings, AiMode, ColorTheme, DockPosition } from '../types';
 import { playBlipSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
-import { getApiBaseUrl, setApiBaseUrl, testBackendHealth, DEFAULT_LOCAL_URL, DEFAULT_PREVIEW_URL } from '../utils/api';
+import { getApiBaseUrl, setApiBaseUrl, testBackendHealth, DEFAULT_CLOUD_URL } from '../utils/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -628,12 +628,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span>Custom Backend Endpoint (Optional)</span>
                   </label>
                   <p className="text-[11px] text-zinc-400">
-                    The desktop overlay connects to your local Compendium server ({DEFAULT_LOCAL_URL}). If you are hosting your server on a custom port or private remote host, enter it here.
+                    The desktop overlay connects directly to your published Cloud Run server ({DEFAULT_CLOUD_URL}). You can specify a custom endpoint override if needed.
                   </p>
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      placeholder={DEFAULT_LOCAL_URL}
+                      placeholder={DEFAULT_CLOUD_URL}
                       value={customBackendInput}
                       onChange={(e) => setCustomBackendInput(e.target.value)}
                       className="flex-1 bg-black/60 border border-white/15 rounded-xl px-3.5 py-2 text-xs text-white outline-none focus:border-[var(--accent-border)] font-mono"

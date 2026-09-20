@@ -26,7 +26,7 @@ const UpdateRequiredModal = React.lazy(() => import('./components/UpdateRequired
 const BetaFeedbackModal = React.lazy(() => import('./components/BetaFeedbackModal').then(module => ({ default: module.BetaFeedbackModal })));
 import { db } from './lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
-import { getApiBaseUrl } from './utils/api';
+import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
 import { useCloudSync } from './hooks/useCloudSync';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -876,7 +876,7 @@ export default function App() {
       console.error('Chat error:', err);
       let errorMsg = err?.message || 'Network error';
       if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError') || errorMsg.includes('fetch failed')) {
-        errorMsg = `Connection failed to backend server at ${backendUrl || 'http://localhost:3000'}. Please ensure your local server is running or configure your server in Settings -> Cloud & Server.`;
+        errorMsg = `Connection failed to cloud server at ${backendUrl || DEFAULT_CLOUD_URL}. Please check your internet connection or verify your server in Settings -> Cloud & Server.`;
       }
       let isLimitReached = errorMsg.includes('Daily limit reached') || errorMsg.includes('Upgrade to Premium');
 

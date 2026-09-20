@@ -1,19 +1,22 @@
-export const DEFAULT_LOCAL_URL = 'http://localhost:3000';
-export const DEFAULT_PREVIEW_URL = 'https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app';
+export const DEFAULT_CLOUD_URL = 'https://quest-compendium-890629309063.us-east1.run.app';
+export const DEFAULT_PREVIEW_URL = DEFAULT_CLOUD_URL;
 
 export const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
     const customUrl = localStorage.getItem('quest_compendium_backend_url');
-    if (customUrl && customUrl.trim()) {
+    // If the user previously had localhost:3000 or the internal preview URL saved, clear it so it points to the published cloud URL
+    if (customUrl && (customUrl.includes('localhost:3000') || customUrl.includes('ais-pre-') || customUrl.includes('ais-dev-'))) {
+      localStorage.removeItem('quest_compendium_backend_url');
+    } else if (customUrl && customUrl.trim()) {
       return customUrl.trim().replace(/\/+$/, '');
     }
 
-    // If running in packaged Electron or standalone desktop with file protocol, use local server
+    // If running in packaged Electron or standalone desktop with file protocol, use the published Cloud Run backend
     if ((window as any).electronAPI || window.location.protocol === 'file:') {
-      return DEFAULT_LOCAL_URL;
+      return DEFAULT_CLOUD_URL;
     }
 
-    // When testing desktop in development on localhost, use local dev server directly
+    // When running in local development (vite dev server), use relative paths (or local proxy)
     const host = window.location.hostname.toLowerCase();
     if (host === 'localhost' || host === '127.0.0.1') {
       return '';
@@ -21,7 +24,7 @@ export const getApiBaseUrl = (): string => {
 
     // If running embedded on Itch.io or its content delivery network (itch.zone / hwcdn.net)
     if (host.includes('itch.io') || host.includes('itch.zone') || host.includes('hwcdn.net')) {
-      return DEFAULT_PREVIEW_URL;
+      return DEFAULT_CLOUD_URL;
     }
   }
 
