@@ -21,7 +21,9 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          npm install
+          npm install --no-save @rollup/rollup-win32-x64-msvc @esbuild/win32-x64
 
       - name: Build Web Assets & Compile AppX
         run: npm run desktop:build:store
