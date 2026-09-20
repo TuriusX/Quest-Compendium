@@ -112,11 +112,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   soundEnabled,
 }) => {
   const [activeTab, setActiveTab] = useState<TabId>('appearance');
-  const [customBackendUrl, setCustomBackendUrl] = useState<string>(() => {
-    return typeof window !== 'undefined' ? (localStorage.getItem('quest_compendium_backend_url') || '') : '';
+  const [backendStatus, setBackendStatus] = useState<'idle' | 'checking' | 'healthy' | 'error'>('idle');
+  const [customBackendInput, setCustomBackendInput] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('quest_compendium_backend_url') || '';
+    }
+    return '';
   });
-  const [testingHealth, setTestingHealth] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; status?: number; error?: string; hasGeminiKey?: boolean } | null>(null);
   const [localUiScale, setLocalUiScale] = useState(settings.uiScale || 1.0);
 
   React.useEffect(() => {
@@ -182,14 +184,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: '4+14', name: 'LB + D-Pad Left' },
     { id: '4+15', name: 'LB + D-Pad Right' },
   ];
-
-  const [backendStatus, setBackendStatus] = useState<'idle' | 'checking' | 'healthy' | 'error'>('idle');
-  const [customBackendInput, setCustomBackendInput] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('quest_compendium_backend_url') || '';
-    }
-    return '';
-  });
 
   const tabs: { id: TabId; label: string; icon: React.FC<any> }[] = [
     { id: 'appearance', label: 'Appearance', icon: Palette },
