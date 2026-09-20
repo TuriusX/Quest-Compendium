@@ -17,12 +17,19 @@
   },
   "win": {
     "icon": "public/icon.ico",
-    "target": ["nsis", "appx"]
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ]
   },
-  "appx": {
-    "backgroundColor": "#0c0d14",
-    "displayName": "Quest Compendium",
-    "addAutoUpdateUpdateSettings": false
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Quest Compendium"
   },
   "files": [
     "dist/**/*",
