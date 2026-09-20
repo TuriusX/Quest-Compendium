@@ -826,7 +826,9 @@ export default function App() {
           }
         } catch (e) {
           if (res.status === 404) {
-             errorText = `Cloud Backend 404 at ${backendUrl}: The server endpoint was not found. Please ensure your AI Studio app is published.`;
+             errorText = `Backend 404 at ${backendUrl}: The server endpoint was not found.`;
+          } else if (res.status === 403) {
+             errorText = `HTTP 403 Forbidden at ${backendUrl}. The server rejected the request. Please check your backend connection in Settings -> Cloud & Server.`;
           } else {
              errorText = `HTTP ${res.status} (Non-JSON response)`;
           }
@@ -873,6 +875,9 @@ export default function App() {
     } catch (err: any) {
       console.error('Chat error:', err);
       let errorMsg = err?.message || 'Network error';
+      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError') || errorMsg.includes('fetch failed')) {
+        errorMsg = `Connection failed to backend server at ${backendUrl || 'http://localhost:3000'}. Please ensure your local server is running or configure your server in Settings -> Cloud & Server.`;
+      }
       let isLimitReached = errorMsg.includes('Daily limit reached') || errorMsg.includes('Upgrade to Premium');
 
       const errorMessage: ChatMessage = {

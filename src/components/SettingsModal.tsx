@@ -26,7 +26,7 @@ import {
 import { AppSettings, AiMode, ColorTheme, DockPosition } from '../types';
 import { playBlipSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
-import { getApiBaseUrl, setApiBaseUrl, testBackendHealth, DEFAULT_PREVIEW_URL } from '../utils/api';
+import { getApiBaseUrl, setApiBaseUrl, testBackendHealth, DEFAULT_LOCAL_URL, DEFAULT_PREVIEW_URL } from '../utils/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -628,12 +628,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span>Custom Backend Endpoint (Optional)</span>
                   </label>
                   <p className="text-[11px] text-zinc-400">
-                    If running in Electron or custom environments, specify a dedicated backend host or leave empty to use the default Cloud Run instance.
+                    The desktop overlay connects to your local Compendium server ({DEFAULT_LOCAL_URL}). If you are hosting your server on a custom port or private remote host, enter it here.
                   </p>
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      placeholder={DEFAULT_PREVIEW_URL}
+                      placeholder={DEFAULT_LOCAL_URL}
                       value={customBackendInput}
                       onChange={(e) => setCustomBackendInput(e.target.value)}
                       className="flex-1 bg-black/60 border border-white/15 rounded-xl px-3.5 py-2 text-xs text-white outline-none focus:border-[var(--accent-border)] font-mono"

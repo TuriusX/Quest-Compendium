@@ -96,6 +96,36 @@ const http = require('http');
 
 const isDev = !app.isPackaged;
 let serverProcess = null;
+
+function ensureServerRunning() {
+  const req = http.get('http://127.0.0.1:3000/api/health', (res) => {
+    if (res.statusCode === 200) {
+      console.log('[Compendium Server] Local server is already running on port 3000.');
+    }
+  });
+
+  req.on('error', () => {
+    const fs = require('fs');
+    const serverPath = path.join(__dirname, '../dist/server.cjs');
+    if (fs.existsSync(serverPath)) {
+      console.log('[Compendium Server] Spawning local background server from:', serverPath);
+      try {
+        serverProcess = spawn(process.execPath, [serverPath], {
+          env: {
+            ...process.env,
+            PORT: '3000',
+            ELECTRON_RUN_AS_NODE: '1'
+          },
+          stdio: 'ignore'
+        });
+      } catch (err) {
+        console.error('[Compendium Server] Failed to spawn server process:', err);
+      }
+    }
+  });
+
+  req.setTimeout(1000, () => req.destroy());
+}
 let mainWindow = null;
 let tray = null;
 
@@ -448,6 +478,8 @@ app.whenReady().then(() => {
     responseHeaders['Cross-Origin-Embedder-Policy'] = ['unsafe-none'];
     callback({ responseHeaders });
   });
+
+  ensureServerRunning();
 
   if (!isDev) {
     setTimeout(createWindow, 1000);

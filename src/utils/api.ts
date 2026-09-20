@@ -1,3 +1,4 @@
+export const DEFAULT_LOCAL_URL = 'http://localhost:3000';
 export const DEFAULT_PREVIEW_URL = 'https://ais-pre-7asbcj4i2k3t5ydostzqlu-520069861129.us-east1.run.app';
 
 export const getApiBaseUrl = (): string => {
@@ -7,21 +8,18 @@ export const getApiBaseUrl = (): string => {
       return customUrl.trim().replace(/\/+$/, '');
     }
 
+    // If running in packaged Electron or standalone desktop with file protocol, use local server
+    if ((window as any).electronAPI || window.location.protocol === 'file:') {
+      return DEFAULT_LOCAL_URL;
+    }
+
     // When testing desktop in development on localhost, use local dev server directly
     const host = window.location.hostname.toLowerCase();
     if (host === 'localhost' || host === '127.0.0.1') {
       return '';
     }
-  }
 
-  // If running in packaged Electron or standalone desktop with file protocol
-  if (typeof window !== 'undefined' && ((window as any).electronAPI || window.location.protocol === 'file:')) {
-    return DEFAULT_PREVIEW_URL;
-  }
-
-  // If running embedded on Itch.io or its content delivery network (itch.zone / hwcdn.net)
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname.toLowerCase();
+    // If running embedded on Itch.io or its content delivery network (itch.zone / hwcdn.net)
     if (host.includes('itch.io') || host.includes('itch.zone') || host.includes('hwcdn.net')) {
       return DEFAULT_PREVIEW_URL;
     }
