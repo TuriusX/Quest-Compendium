@@ -879,8 +879,8 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       if (req.body.generateBanner && (effectiveGame || question)) {
         const gameNameForBanner = effectiveGame ? effectiveGame.name : '';
         const bannerPrompt = gameNameForBanner
-          ? `Cinematic, immersive concept art banner for the video game "${gameNameForBanner}" reflecting: "${question || 'in-game scenery'}". Wide landscape 16:9 banner format, breathtaking high-quality game concept art, no text or UI elements.`
-          : `Cinematic, immersive concept art banner for a video game reflecting: "${question}". Wide landscape 16:9 banner format, high-quality digital illustration, no text or UI elements.`;
+          ? `Cinematic, immersive wide landscape 16:9 concept art banner for the video game "${gameNameForBanner}" depicting: "${question || 'in-game scenery'}". Wide establishing shot with generous headroom, medium-to-wide cinematic framing, characters completely framed in shot with full heads and faces clearly visible, epic lighting and atmosphere, breathtaking high-quality game concept art, no text or UI elements.`
+          : `Cinematic, immersive wide landscape 16:9 concept art banner for a video game depicting: "${question}". Wide establishing shot with generous headroom, medium-to-wide composition, characters completely framed in shot with full heads and faces clearly visible, high-quality digital illustration, no text or UI elements.`;
           
         bannerImagePromise = ai.models.generateContent({
           model: 'gemini-3.1-flash-lite-image',

@@ -16,6 +16,7 @@ import {
   Copy, 
   Check, 
   Eye, 
+  Maximize2,
   Compass,
   Sword,
   Shield,
@@ -880,19 +881,35 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   }`}
                 >
                   {!isUser && msg.bannerImageUrl && (
-                    <div className="mb-4 rounded-xl overflow-hidden border border-white/[0.06] shadow-lg relative h-36 w-full">
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#11121a]/95 via-transparent to-transparent z-10" />
+                    <div 
+                      onClick={() => onOpenScreenModal(msg.bannerImageUrl!)}
+                      title="Click to view full uncropped artwork"
+                      className="mb-4 rounded-xl overflow-hidden border border-white/10 shadow-lg relative w-full aspect-[2.1/1] sm:aspect-[2.35/1] min-h-[170px] max-h-[320px] group cursor-pointer"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#11121a]/90 via-transparent to-black/20 z-10 pointer-events-none" />
                       <img 
                         src={msg.bannerImageUrl} 
                         alt="Immersive Game Theme Banner" 
                         referrerPolicy="no-referrer"
-                        className="absolute inset-0 w-full h-full object-cover" 
+                        className="absolute inset-0 w-full h-full object-cover object-[center_12%] transition-transform duration-500 group-hover:scale-[1.02]" 
                       />
+                      <div className="absolute top-2.5 right-2.5 z-20 opacity-0 group-hover:opacity-100 transition-opacity bg-black/75 hover:bg-black/90 backdrop-blur-md text-white text-[11px] font-medium px-2.5 py-1 rounded-lg border border-white/20 shadow-md flex items-center gap-1.5">
+                        <Maximize2 className="w-3 h-3 text-purple-300" />
+                        <span>View Full Art</span>
+                      </div>
                     </div>
                   )}
                   {msg.imageUrl && (
-                    <div className="mb-3 rounded-lg overflow-hidden border border-white/[0.06] shadow-md group relative">
-                      <img src={msg.imageUrl} alt="Attached" className="max-w-full h-auto rounded-lg max-h-60 object-contain" />
+                    <div 
+                      onClick={() => onOpenScreenModal(msg.imageUrl!)}
+                      title="Click to inspect screenshot"
+                      className="mb-3 rounded-lg overflow-hidden border border-white/[0.06] shadow-md group relative cursor-pointer"
+                    >
+                      <img src={msg.imageUrl} alt="Attached" className="max-w-full h-auto rounded-lg max-h-60 object-contain transition-transform duration-300 group-hover:opacity-90" />
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-[10px] px-2 py-0.5 rounded border border-white/10 flex items-center gap-1">
+                        <Maximize2 className="w-2.5 h-2.5 text-purple-300" />
+                        <span>Expand</span>
+                      </div>
                     </div>
                   )}
                   {msg.audioBase64 && (
