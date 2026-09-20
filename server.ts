@@ -10,6 +10,7 @@ import xml2js from 'xml2js';
 import { initializeApp, getApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import cors from 'cors';
+import { registerDeviceAuth } from './deviceAuth';
 async function getFirestoreDocREST(idToken: string, uid: string) {
   const isCloudRun = !!process.env.K_SERVICE;
   const projectId = 'quest-compendium-1bccf';
@@ -196,6 +197,17 @@ async function startServer() {
     }
     next();
   };
+
+  registerDeviceAuth(app, {
+    getAuth,
+    requireAuth,
+    firebaseWebConfig: {
+      apiKey: process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY',
+      authDomain: 'quest-compendium-1bccf.firebaseapp.com',
+      projectId: 'quest-compendium-1bccf',
+      appId: '1:890629309063:web:87293cf13f922fd3edee22',
+    },
+  });
 
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {
@@ -1536,6 +1548,9 @@ You must respond entirely in ${language}. Do not use English unless the user's l
 </body>
 </html>`);
   });
+
+  // Serve public assets statically (icons, store art, downloads)
+  app.use(express.static(path.join(process.cwd(), 'public')));
 
   // --- Vite Middleware for Development / Static in Production ---
   if (process.env.NODE_ENV !== 'production') {
