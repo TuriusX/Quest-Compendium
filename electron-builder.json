@@ -31,6 +31,14 @@
     "createStartMenuShortcut": true,
     "shortcutName": "Quest Compendium"
   },
+  "appx": {
+    "identityName": "Turius.QuestCompendium",
+    "publisher": "CN=A57BCB5A-9BA6-45BA-ADC2-BE500AFCA82C",
+    "publisherDisplayName": "Turius",
+    "applicationId": "QuestCompendium",
+    "displayName": "Quest Compendium",
+    "backgroundColor": "#0d0e15"
+  },
   "files": [
     "dist/**/*",
     "electron/**/*"
