@@ -21,7 +21,9 @@ import {
   Globe,
   AlertCircle,
   CheckCircle2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Download,
+  Package
 } from 'lucide-react';
 import { AppSettings, AiMode, ColorTheme, DockPosition } from '../types';
 import { playBlipSound } from '../utils/audio';
@@ -662,6 +664,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </button>
                     )}
                   </div>
+                </div>
+
+                {/* Itch.io Web Game Distribution */}
+                <div className="pt-4 border-t border-white/10 space-y-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Package className="w-4 h-4 text-emerald-400" />
+                      <h4 className="text-sm font-medium text-zinc-200">Itch.io Web Package (HTML5)</h4>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-1">
+                      Pre-bundled ZIP archive ready for direct upload as an HTML5 playable game/overlay on Itch.io. Pre-configured to communicate directly with your published Cloud Run server.
+                    </p>
+                  </div>
+                  <a
+                    href="/quest-compendium-itch.zip"
+                    download="quest-compendium-itch.zip"
+                    onClick={() => playBlipSound(soundEnabled)}
+                    className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200 rounded-xl text-xs font-semibold transition-all shadow-md cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download quest-compendium-itch.zip
+                  </a>
                 </div>
               </div>
             )}
