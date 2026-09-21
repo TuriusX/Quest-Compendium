@@ -592,7 +592,14 @@ export default function App() {
   // Fetch Steam Profile
   useEffect(() => {
     if (!settings.steamId) {
-      setSettings(prev => ({ ...prev, steamName: undefined, steamAvatar: undefined }));
+      if (settings.steamName || settings.steamAvatar) {
+        setSettings(prev => {
+          const next = { ...prev };
+          delete next.steamName;
+          delete next.steamAvatar;
+          return next;
+        });
+      }
       return;
     }
     

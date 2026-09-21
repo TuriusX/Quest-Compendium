@@ -10,15 +10,25 @@ const APP_VERSION = 1;
 /**
  * Deterministic JSON stringifier with sorted object keys to ensure stable
  * serialization regardless of property insertion order in local state vs Firestore.
+ * Omits undefined properties to match JSON.stringify and Firestore semantics.
  */
 export function canonicalStringify(obj: any): string {
-  if (obj === null || obj === undefined) return String(obj);
+  if (obj === null || obj === undefined) return 'null';
   if (typeof obj !== 'object') return JSON.stringify(obj);
   if (Array.isArray(obj)) {
-    return '[' + obj.map(item => canonicalStringify(item)).join(',') + ']';
+    return '[' + obj.map(item => (item === undefined ? 'null' : canonicalStringify(item))).join(',') + ']';
   }
-  const keys = Object.keys(obj).sort();
+  const keys = Object.keys(obj).filter(k => obj[k] !== undefined).sort();
   return '{' + keys.map(key => JSON.stringify(key) + ':' + canonicalStringify(obj[key])).join(',') + '}';
+}
+
+/**
+ * Recursively removes all undefined fields from an object or array.
+ * Firestore setDoc/updateDoc strictly rejects objects containing `undefined`.
+ */
+export function removeUndefinedFields<T>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  return JSON.parse(JSON.stringify(obj));
 }
 
 export interface TabMergeResult {
@@ -181,7 +191,7 @@ function sanitizeTabsForCloud(tabs: GameTab[]): GameTab[] {
     }
   } catch {}
 
-  return tabs
+  const mapped = tabs
     .filter(tab => tab && !isLegacyWelcomeTab(tab) && !deletedIds.has(tab.id))
     .map(tab => {
       const sanitizedTab = { ...tab };
@@ -207,6 +217,8 @@ function sanitizeTabsForCloud(tabs: GameTab[]): GameTab[] {
 
       return sanitizedTab;
     });
+
+  return removeUndefinedFields(mapped);
 }
 
 export function useCloudSync(
@@ -459,13 +471,13 @@ export function useCloudSync(
           lastSyncedData.current = { settings: initialSettingsCanonical, tabs: initialTabsCanonical };
           addEvent('INIT_DOC_CREATING', `Doc does not exist. Creating with ${localDataRef.current.tabs.length} local tabs (${estimatedUploadSizeKb} KB)...`);
 
-          await setDoc(userRef, {
+          await setDoc(userRef, removeUndefinedFields({
             email: user.email || null,
             subscriptionStatus: 'beta',
             settings: localDataRef.current.settings,
             tabs: initialTabs,
             updatedAt: Date.now()
-          });
+          }));
           const now = Date.now();
           setLastSuccessfulWriteTime(now);
           addEvent('INIT_DOC_SUCCESS', `Initial user doc created in Firestore with ${localDataRef.current.tabs.length} tabs`);
@@ -563,10 +575,10 @@ export function useCloudSync(
             // If local state had tabs or edits that cloud didn't have, push the merged set to cloud
             if (mergeResult.hasChangesFromLocal) {
               addEvent('MERGE_UPLOAD_START', `Local tabs contain newer/exclusive data. Uploading merged set (${mergeResult.merged.length} tabs)...`);
-              setDoc(userRef, {
+              setDoc(userRef, removeUndefinedFields({
                 tabs: sanitizedMerged,
                 updatedAt: Date.now()
-              }, { merge: true })
+              }), { merge: true })
                 .then(() => {
                   const writeNow = Date.now();
                   setLastSuccessfulWriteTime(writeNow);
@@ -625,11 +637,11 @@ export function useCloudSync(
       lastSyncedData.current = { settings: currentSettingsCanonical, tabs: currentTabsCanonical };
       const userRef = doc(db, 'users', user.uid);
       addEvent('WRITE_START', `Sync write starting: ${localGameTabs.length} tabs (${estimatedUploadSizeKb} KB)...`);
-      setDoc(userRef, {
+      setDoc(userRef, removeUndefinedFields({
         settings: localSettings,
         tabs: sanitizedTabs,
         updatedAt: Date.now()
-      }, { merge: true })
+      }), { merge: true })
         .then(() => {
           const now = Date.now();
           setLastSuccessfulWriteTime(now);
@@ -742,11 +754,11 @@ export function useCloudSync(
         const currentTabsCanonical = canonicalStringify(sanitizedTabs);
 
         addEvent('MANUAL_SYNC_START', `Manual push triggered: ${currentTabs.length} tabs (${estimatedUploadSizeKb} KB)...`);
-        await setDoc(userRef, {
+        await setDoc(userRef, removeUndefinedFields({
           settings: currentSettings,
           tabs: sanitizedTabs,
           updatedAt: Date.now()
-        }, { merge: true });
+        }), { merge: true });
 
         lastSyncedData.current = {
           settings: currentSettingsCanonical,
