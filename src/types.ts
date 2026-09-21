@@ -123,4 +123,5 @@ export interface CloudSyncDiagnostics {
   eventLogs: SyncEventLog[];
   copyDiagnostics: () => Promise<boolean>;
   getSummaryText: () => string;
+  triggerSyncNow?: () => Promise<boolean>;
 }
