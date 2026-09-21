@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Activity,
   Cpu,
+  Zap,
   LogOut,
   ArrowRightToLine,
   Square
@@ -192,35 +193,36 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       {/* Right Controls Toolbar */}
       <div className="flex items-center gap-1 sm:gap-1.5">
         {/* AI Queries Badge */}
-        {userData && (() => {
-          const isPremiumUser = Boolean(userData.isPremium && !userData.isGuest);
-          const rawPro = userData.proQueriesAvailable ?? Math.max(0, (isPremiumUser ? 40 : 5) - (userData.proQueriesToday || 0));
-          const proCount = userData.isGuest ? Math.min(5, rawPro) : rawPro;
+        {(() => {
+          const effectiveData = userData || { isPremium: false, proQueriesAvailable: 5, flashQueriesAvailable: 5, isGuest: true };
+          const isPremiumUser = Boolean(effectiveData.isPremium && !effectiveData.isGuest);
+          const rawPro = effectiveData.proQueriesAvailable ?? Math.max(0, (isPremiumUser ? 40 : 5) - (effectiveData.proQueriesToday || 0));
+          const proCount = effectiveData.isGuest ? Math.min(5, rawPro) : rawPro;
           const proMax = isPremiumUser ? 100 : 5;
-          const rawFlash = userData.flashQueriesAvailable ?? Math.max(0, 5 - (userData.flashQueriesToday || 0));
-          const flashCount = userData.isGuest ? Math.min(5, rawFlash) : rawFlash;
+          const rawFlash = effectiveData.flashQueriesAvailable ?? Math.max(0, 5 - (effectiveData.flashQueriesToday || 0));
+          const flashCount = effectiveData.isGuest ? Math.min(5, rawFlash) : rawFlash;
 
           return (
             <div className="relative group" style={{ WebkitAppRegion: "no-drag" } as any}>
-              {/* Desktop Badge */}
+              {/* Desktop & Compact Badge - Always shows both Pro & Flash */}
               <div 
-                className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 mr-2 cursor-default ${isPremiumUser ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400' : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)] group-hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'}`} 
+                className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-medium transition-all duration-300 mr-1 sm:mr-2 cursor-default ${
+                  isPremiumUser 
+                    ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shadow-[0_0_10px_rgba(99,102,241,0.1)]' 
+                    : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)] group-hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                }`} 
+                title={`${proCount} Pro questions left · ${isPremiumUser ? 'Unlimited' : `${flashCount} Flash`} questions left`}
               >
-                <Cpu className="w-3.5 h-3.5" />
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold">
-                    {proCount} Pro
-                  </span>
+                <div className="flex items-center gap-1">
+                  <Cpu className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  <span className="font-bold">{proCount} Pro</span>
                 </div>
-                {!isPremiumUser && <Sparkles className="w-3.5 h-3.5 ml-1 text-amber-400 animate-pulse" />}
-              </div>
-
-              {/* Mobile Icon */}
-              <div 
-                className={`flex sm:hidden items-center justify-center px-2 py-1 h-8 rounded-xl transition-all duration-300 mr-1 cursor-default text-xs font-bold gap-1 ${isPremiumUser ? 'bg-indigo-500/10 text-indigo-400' : 'bg-amber-500/10 text-amber-400'}`} 
-              >
-                <Cpu className="w-3.5 h-3.5" />
-                <span>{proCount}</span>
+                <span className="text-zinc-600 font-normal">·</span>
+                <div className="flex items-center gap-1">
+                  <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="font-bold">{isPremiumUser ? '∞ Flash' : `${flashCount} Flash`}</span>
+                </div>
+                {!isPremiumUser && <Sparkles className="w-3.5 h-3.5 ml-0.5 text-amber-400 animate-pulse hidden sm:inline-block" />}
               </div>
               
               {/* Elegant Hover Tooltip */}

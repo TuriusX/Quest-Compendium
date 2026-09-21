@@ -733,11 +733,15 @@ ipcMain.handle('take-screenshot', async () => {
   const wasVisible = isAppVisible;
   
   if (wasVisible) {
-    if (currentDockPosition !== 'undocked') {
-      const coords = getDockCoords(true);
-      await animateWindow(coords.x, coords.y, 150);
-    } else {
-      mainWindow.hide();
+    try {
+      if (currentDockPosition !== 'undocked') {
+        const coords = getDockCoords(true);
+        await animateWindow(coords.x, coords.y, 150);
+      } else if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.hide();
+      }
+    } catch (err) {
+      console.warn('Failed to hide window for screenshot:', err);
     }
     // Give window time to hide and OS to redraw the desktop / game screen
     await new Promise(resolve => setTimeout(resolve, 400));
@@ -745,31 +749,61 @@ ipcMain.handle('take-screenshot', async () => {
 
   let base64Image = null;
   try {
-    const sources = await desktopCapturer.getSources({ 
+    let sources = [];
+    const getSourcesPromise = desktopCapturer.getSources({ 
       types: ['screen'], 
       thumbnailSize: { width: 1280, height: 720 } 
     });
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('desktopCapturer timeout')), 2500)
+    );
     
-    // Pick the display where the cursor is currently located (the active monitor)
-    const cursorPoint = screen.getCursorScreenPoint();
-    const activeDisplay = screen.getDisplayNearestPoint(cursorPoint);
-    
-    // Match by display_id if available, otherwise fallback to the first screen
-    let targetSource = sources.find(s => s.display_id === activeDisplay.id.toString());
-    if (!targetSource) {
-      targetSource = sources[0];
+    try {
+      sources = await Promise.race([getSourcesPromise, timeoutPromise]);
+    } catch (e) {
+      console.warn('Screen capture primary failed or timed out:', e);
     }
 
-    if (targetSource && targetSource.thumbnail) {
-      // Use JPEG with 80% quality to drastically reduce payload size for the AI
-      const buffer = targetSource.thumbnail.toJPEG(80);
-      base64Image = 'data:image/jpeg;base64,' + buffer.toString('base64');
+    // Fallback to screen + window if screen alone returned no sources
+    if (!sources || sources.length === 0) {
+      try {
+        sources = await desktopCapturer.getSources({
+          types: ['screen', 'window'],
+          thumbnailSize: { width: 1280, height: 720 }
+        });
+      } catch (e) {
+        console.warn('Fallback screen capture failed:', e);
+      }
+    }
+
+    if (sources && sources.length > 0) {
+      // Pick the display where the cursor is currently located (the active monitor)
+      const cursorPoint = screen.getCursorScreenPoint();
+      const activeDisplay = screen.getDisplayNearestPoint(cursorPoint);
+      
+      // Match by display_id if available, otherwise fallback to active display or first screen
+      let targetSource = sources.find(s => s.display_id === activeDisplay.id.toString());
+      if (!targetSource) {
+        targetSource = sources.find(s => !s.name?.toLowerCase().includes('quest compendium')) || sources[0];
+      }
+
+      if (targetSource && targetSource.thumbnail && !targetSource.thumbnail.isEmpty()) {
+        // Use JPEG with 80% quality to drastically reduce payload size for the AI
+        const buffer = targetSource.thumbnail.toJPEG(80);
+        if (buffer && buffer.length > 0) {
+          base64Image = 'data:image/jpeg;base64,' + buffer.toString('base64');
+        }
+      }
     }
   } catch (error) {
     console.error('Screenshot failed:', error);
+  } finally {
+    try {
+      slideIn();
+    } catch (err) {
+      console.error('Failed to slideIn window:', err);
+    }
   }
-
-  slideIn();
 
   return base64Image;
 });

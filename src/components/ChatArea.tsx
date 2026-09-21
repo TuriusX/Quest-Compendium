@@ -395,7 +395,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       setIsCapturingScreen(true);
       playSnapSound(soundEnabled);
       try {
-        const dataUrl = await (window as any).electronAPI.takeScreenshot();
+        const screenshotPromise = (window as any).electronAPI.takeScreenshot();
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000));
+        const dataUrl = await Promise.race([screenshotPromise, timeoutPromise]);
         if (dataUrl) {
           finalImage = dataUrl;
         }
@@ -412,7 +414,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     // Default question if they submitted an image without any text
     if (!finalQuestion && finalImage) {
-      finalQuestion = "Please analyze this image.";
+      finalQuestion = "Please analyze this game screenshot and provide helpful tips, secrets, or current objectives.";
+    } else if (!finalQuestion) {
+      finalQuestion = "What should I do here? Please provide gameplay tips, secrets, or next steps.";
     }
 
     setInputQuestion('');
@@ -1122,25 +1126,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             />
 
             {/* Attach Screenshot / Game Screen */}
-            {!(typeof window !== 'undefined' && (window as any).electronAPI) && (
-              <button
-                type="button"
-                onClick={() => {
-                  playBlipSound(soundEnabled);
-                  captureGameScreen();
-                }}
-                title="Attach Game Screenshot (or paste with Ctrl+V)"
-                className={`p-2 rounded-xl transition-all cursor-pointer ${
-                  isCapturingScreen
-                    ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] animate-pulse shadow-[0_0_12px_var(--accent-glow)]'
-                    : attachedImage
-                      ? 'text-[var(--accent-color)] bg-[var(--accent-dim)]'
-                      : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
-                }`}
-              >
+            <button
+              type="button"
+              onClick={() => {
+                playBlipSound(soundEnabled);
+                captureGameScreen();
+              }}
+              disabled={isLoading || isCapturingScreen}
+              title={
+                typeof window !== 'undefined' && (window as any).electronAPI
+                  ? "Snap Game Screenshot (Click to preview & attach)"
+                  : "Attach Game Screenshot (or paste with Ctrl+V)"
+              }
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                isCapturingScreen
+                  ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] animate-pulse shadow-[0_0_12px_var(--accent-glow)]'
+                  : attachedImage
+                    ? 'text-[var(--accent-color)] bg-[var(--accent-dim)]'
+                    : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
+              }`}
+            >
+              {isCapturingScreen ? (
+                <div className="w-4 h-4 border-2 border-[var(--accent-color)] border-t-transparent rounded-full animate-spin" />
+              ) : (
                 <Camera className="w-4 h-4" />
-              </button>
-            )}
+              )}
+            </button>
 
             {/* Push to Talk / Voice Dictation */}
             <button
@@ -1190,7 +1201,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               }`}
             >
               <Bot className="w-4 h-4" />
-              <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline-block">
+              <span className="text-[10px] font-bold uppercase tracking-wider inline-block">
                 {preferredModel}
               </span>
             </button>
@@ -1198,11 +1209,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             {/* Submit Send Button */}
             <button
               type="submit"
-              disabled={(!inputQuestion.trim() && !attachedImage) || isLoading}
-              title="Consult Compendium"
-              className="p-2.5 rounded-xl bg-[var(--accent-color)] text-black font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-[0_0_12px_var(--accent-glow)]"
+              disabled={
+                (!inputQuestion.trim() && !attachedImage && !(typeof window !== 'undefined' && (window as any).electronAPI)) ||
+                isLoading ||
+                isCapturingScreen
+              }
+              title={
+                isCapturingScreen
+                  ? "Snapping screen..."
+                  : !inputQuestion.trim() && !attachedImage && typeof window !== 'undefined' && (window as any).electronAPI
+                    ? "Snap game screenshot & consult Compendium"
+                    : "Consult Compendium"
+              }
+              className="p-2.5 rounded-xl bg-[var(--accent-color)] text-black font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-[0_0_12px_var(--accent-glow)] flex items-center justify-center"
             >
-              <Send className="w-4 h-4" />
+              {isCapturingScreen ? (
+                <Camera className="w-4 h-4 animate-pulse text-black" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>

@@ -230,22 +230,31 @@ export function useCloudSync(
   const [user, setUser] = useState<any | null>(null);
   const [guestUser, setGuestUser] = useState<any | null>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('quest_guest_session');
-      if (saved) {
-        return {
-          uid: saved,
-          email: null,
-          displayName: 'Guest Explorer',
-          getIdToken: async () => saved,
-          isGuest: true
-        };
+      let saved = localStorage.getItem('quest_guest_session');
+      if (!saved) {
+        saved = 'guest_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+        try {
+          localStorage.setItem('quest_guest_session', saved);
+        } catch {}
       }
+      return {
+        uid: saved,
+        email: null,
+        displayName: 'Guest Explorer',
+        getIdToken: async () => saved,
+        isGuest: true
+      };
     }
     return null;
   });
-  const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'inactive' | 'beta' | 'loading'>('loading');
-  const [userData, setUserData] = useState<any>(null);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'inactive' | 'beta' | 'loading'>('beta');
+  const [userData, setUserData] = useState<any>(() => ({
+    isPremium: false,
+    proQueriesAvailable: 5,
+    flashQueriesAvailable: 5,
+    isGuest: true
+  }));
+  const [isInitializing, setIsInitializing] = useState(false);
   const [isOutdated, setIsOutdated] = useState(false);
 
   // Cloud Sync Diagnostics State
@@ -403,13 +412,31 @@ export function useCloudSync(
 
       setUser(currentUser);
       if (!currentUser) {
-        setSubscriptionStatus('loading');
+        setSubscriptionStatus('beta');
         setIsInitializing(false);
         addEvent('AUTH_LOGOUT', 'User signed out / no active session');
       } else {
         // We are logging in with full account, hold initialization true until cloud fetch finishes
         setIsInitializing(true);
         addEvent('AUTH_LOGIN', `Signed in as ${currentUser.email || 'no-email'} (UID: ...${currentUser.uid.slice(-6)})`);
+        currentUser.getIdToken().then(token => {
+          return fetch(`${getApiBaseUrl()}/api/user/status`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data && typeof data.proQueriesAvailable === 'number') {
+              setUserData((prev: any) => ({
+                ...prev,
+                isPremium: Boolean(data.isPremium),
+                proQueriesAvailable: data.proQueriesAvailable,
+                flashQueriesAvailable: data.flashQueriesAvailable ?? 5,
+                isGuest: false
+              }));
+            }
+          })
+          .catch(() => {});
       }
     });
     return () => unsubscribe();
