@@ -23,9 +23,11 @@ import {
   CheckCircle2,
   Image as ImageIcon,
   Download,
-  Package
+  Package,
+  Cloud,
+  Copy
 } from 'lucide-react';
-import { AppSettings, AiMode, ColorTheme, DockPosition } from '../types';
+import { AppSettings, AiMode, ColorTheme, DockPosition, CloudSyncDiagnostics } from '../types';
 import { playBlipSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
 import { getApiBaseUrl, setApiBaseUrl, testBackendHealth, DEFAULT_CLOUD_URL } from '../utils/api';
@@ -36,6 +38,7 @@ interface SettingsModalProps {
   settings: AppSettings;
   onUpdateSettings: (newSettings: Partial<AppSettings>) => void;
   soundEnabled: boolean;
+  syncDiagnostics?: CloudSyncDiagnostics | null;
 }
 
 type TabId = 'appearance' | 'persona' | 'shortcuts' | 'connection' | 'account';
@@ -112,9 +115,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onUpdateSettings,
   soundEnabled,
+  syncDiagnostics,
 }) => {
   const [activeTab, setActiveTab] = useState<TabId>('appearance');
   const [backendStatus, setBackendStatus] = useState<'idle' | 'checking' | 'healthy' | 'error'>('idle');
+  const [copiedDiag, setCopiedDiag] = useState(false);
+  const effectiveDiag = syncDiagnostics || (typeof window !== 'undefined' ? (window as any).__questSyncDiagnostics : null);
   const [customBackendInput, setCustomBackendInput] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('quest_compendium_backend_url') || '';
@@ -238,14 +244,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     playBlipSound(soundEnabled);
                     setActiveTab(tab.id);
                   }}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                     isActive 
                       ? 'bg-[var(--accent-dim)] text-white border border-[var(--accent-border)] shadow-sm' 
                       : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5 border border-transparent'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-[var(--accent-color)]' : 'text-zinc-500'}`} />
-                  {tab.label}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[var(--accent-color)]' : 'text-zinc-500'}`} />
+                    <span className="truncate">{tab.label}</span>
+                  </div>
+                  {tab.id === 'connection' && (
+                    effectiveDiag?.lastWriteError ? (
+                      <span className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0" title="Sync error" />
+                    ) : effectiveDiag?.isListenerAttached ? (
+                      <span className="w-2 h-2 rounded-full bg-emerald-500/80 flex-shrink-0" title="Sync active" />
+                    ) : null
+                  )}
                 </button>
               );
             })}
@@ -578,6 +593,242 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {activeTab === 'connection' && (
               <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
+                {/* Cloud Sync Status & Diagnostics */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+                      <Cloud className="w-4 h-4 text-[var(--accent-color)]" />
+                      <span>Cloud Sync Status</span>
+                    </label>
+                    <button
+                      onClick={async () => {
+                        playBlipSound(soundEnabled);
+                        if (effectiveDiag?.copyDiagnostics) {
+                          const ok = await effectiveDiag.copyDiagnostics();
+                          if (ok) {
+                            setCopiedDiag(true);
+                            setTimeout(() => setCopiedDiag(false), 2000);
+                          }
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer flex-shrink-0"
+                    >
+                      {copiedDiag ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy Diagnostics</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-black/40 border border-white/[0.08] space-y-3.5">
+                    {/* Status Header Badge */}
+                    <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-zinc-300 font-medium">Firestore Engine Status:</span>
+                        {effectiveDiag?.lastWriteError ? (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                            Sync Error Recorded
+                          </span>
+                        ) : effectiveDiag?.isListenerAttached ? (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            Listener Active
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-500/20 text-zinc-400 border border-zinc-500/30">
+                            Offline / Unattached
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 font-mono">
+                        Doc: users/{effectiveDiag?.uidLast6 ? `...${effectiveDiag.uidLast6}` : 'unauthenticated'}
+                      </div>
+                    </div>
+
+                    {/* Metrics Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs font-mono">
+                      {/* 1. Account Email & UID */}
+                      <div className="p-2.5 rounded-lg bg-black/50 border border-white/[0.06] flex flex-col justify-between">
+                        <span className="text-[10px] uppercase text-zinc-500 font-sans font-semibold">Account Email & UID</span>
+                        <div className="text-zinc-200 truncate font-semibold mt-1" title={effectiveDiag?.accountEmail || 'Not signed in'}>
+                          {effectiveDiag?.accountEmail || 'Not signed in'}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-1">
+                          UID: <span className="text-zinc-200">...{effectiveDiag?.uidLast6 || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      {/* 2. Subscription Status & Initializing */}
+                      <div className="p-2.5 rounded-lg bg-black/50 border border-white/[0.06] flex flex-col justify-between">
+                        <span className="text-[10px] uppercase text-zinc-500 font-sans font-semibold">Subscription & Engine</span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-zinc-200 font-semibold uppercase">{effectiveDiag?.subscriptionStatus || 'loading'}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            effectiveDiag?.isInitializing 
+                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
+                              : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          }`}>
+                            {effectiveDiag?.isInitializing ? 'isInitializing: true' : 'isInitializing: false'}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-1">
+                          Writes blocked while initializing
+                        </div>
+                      </div>
+
+                      {/* 3. Snapshot Listener Status */}
+                      <div className="p-2.5 rounded-lg bg-black/50 border border-white/[0.06] flex flex-col justify-between">
+                        <span className="text-[10px] uppercase text-zinc-500 font-sans font-semibold">Snapshot Listener</span>
+                        <div className="text-zinc-200 font-semibold mt-1">
+                          {effectiveDiag?.isListenerAttached ? (
+                            <span className="text-emerald-400">Attached (Subscribed)</span>
+                          ) : (
+                            <span className="text-zinc-500">Not Attached</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-1">
+                          onSnapshot(users/{"{uid}"})
+                        </div>
+                      </div>
+
+                      {/* 4. Last Snapshot Details */}
+                      <div className="p-2.5 rounded-lg bg-black/50 border border-white/[0.06] flex flex-col justify-between">
+                        <span className="text-[10px] uppercase text-zinc-500 font-sans font-semibold">Last Snapshot Info</span>
+                        <div className="text-zinc-200 font-semibold mt-1">
+                          {effectiveDiag?.lastSnapshotTime 
+                            ? new Date(effectiveDiag.lastSnapshotTime).toLocaleTimeString() 
+                            : 'No snapshot yet'}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-1">
+                          fromCache: <span className="text-zinc-200">{String(effectiveDiag?.lastSnapshotFromCache ?? 'N/A')}</span> | pendingWrites: <span className="text-zinc-200">{String(effectiveDiag?.lastSnapshotPendingWrites ?? 'N/A')}</span>
+                        </div>
+                      </div>
+
+                      {/* 5. Tabs Count: Local vs Cloud Snapshot */}
+                      <div className="p-2.5 rounded-lg bg-black/50 border border-white/[0.06] flex flex-col justify-between">
+                        <span className="text-[10px] uppercase text-zinc-500 font-sans font-semibold">Tabs (Local vs Cloud)</span>
+                        <div className="flex items-baseline gap-2 mt-1">
+                          <span className="text-sm font-bold text-white">{effectiveDiag?.localTabsCount ?? 0}</span>
+                          <span className="text-zinc-500 text-[11px]">local</span>
+                          <span className="text-zinc-600">/</span>
+                          <span className="text-sm font-bold text-indigo-400">{effectiveDiag?.cloudTabsCount ?? 'N/A'}</span>
+                          <span className="text-zinc-500 text-[11px]">cloud</span>
+                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-1">
+                          {effectiveDiag?.localTabsCount === effectiveDiag?.cloudTabsCount ? (
+                            <span className="text-emerald-400">Tab counts match</span>
+                          ) : (
+                            <span className="text-amber-400">Tab count mismatch</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 6. Estimated Upload Size (1MB Limit) */}
+                      <div className="p-2.5 rounded-lg bg-black/50 border border-white/[0.06] flex flex-col justify-between">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase text-zinc-500 font-sans font-semibold">Estimated Payload Size</span>
+                          <span className="text-[10px] text-zinc-400">Limit: 1024 KB</span>
+                        </div>
+                        <div className="flex items-baseline gap-1.5 mt-1">
+                          <span className="text-sm font-bold text-zinc-100">{effectiveDiag?.estimatedUploadSizeKb ?? 0} KB</span>
+                          <span className="text-[10px] text-zinc-500">({effectiveDiag?.estimatedUploadSizeBytes ?? 0} B)</span>
+                        </div>
+                        <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden mt-1">
+                          <div 
+                            className={`h-full ${
+                              (effectiveDiag?.estimatedUploadSizeKb ?? 0) > 900 
+                                ? 'bg-rose-500' 
+                                : (effectiveDiag?.estimatedUploadSizeKb ?? 0) > 500 
+                                  ? 'bg-amber-500' 
+                                  : 'bg-[var(--accent-color)]'
+                            }`}
+                            style={{ width: `${Math.min(100, Math.max(1, (((effectiveDiag?.estimatedUploadSizeBytes ?? 0) / 1048576) * 100)))}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 7. Last Successful Write Time */}
+                      <div className="p-2.5 rounded-lg bg-black/50 border border-white/[0.06] flex flex-col justify-between sm:col-span-2 lg:col-span-3">
+                        <span className="text-[10px] uppercase text-zinc-500 font-sans font-semibold">Last Successful Write Time</span>
+                        <div className="text-zinc-200 font-semibold mt-1">
+                          {effectiveDiag?.lastSuccessfulWriteTime ? (
+                            <span className="text-emerald-400 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              {new Date(effectiveDiag.lastSuccessfulWriteTime).toLocaleTimeString()} ({Math.max(0, Math.round((Date.now() - effectiveDiag.lastSuccessfulWriteTime) / 1000))}s ago)
+                            </span>
+                          ) : (
+                            <span className="text-zinc-500">No write completed yet in this session</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Last Write Error */}
+                    {effectiveDiag?.lastWriteError ? (
+                      <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono flex items-start gap-2.5">
+                        <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-rose-200">
+                            Last Write Error [Code: {effectiveDiag.lastWriteError.code || 'UNKNOWN'}]
+                          </div>
+                          <div className="text-[11px] text-rose-300 mt-0.5 break-words">
+                            {effectiveDiag.lastWriteError.message}
+                          </div>
+                          <div className="text-[10px] text-rose-400/80 mt-1">
+                            Recorded at: {new Date(effectiveDiag.lastWriteError.timestamp).toLocaleTimeString()}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2 px-3 rounded-lg bg-emerald-500/5 border border-emerald-500/15 text-emerald-400 text-xs font-mono flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>No write errors recorded.</span>
+                      </div>
+                    )}
+
+                    {/* Event Log (Last 20 events) */}
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between text-[11px] text-zinc-400 font-mono">
+                        <span>Recent Sync Events Log ({effectiveDiag?.eventLogs?.length ?? 0}/20)</span>
+                        <span className="text-zinc-500">Auto-recorded & console logged</span>
+                      </div>
+                      <div className="max-h-36 overflow-y-auto bg-black/70 border border-white/[0.08] rounded-lg p-2.5 space-y-1 font-mono text-[10px] select-text">
+                        {effectiveDiag?.eventLogs && effectiveDiag.eventLogs.length > 0 ? (
+                          effectiveDiag.eventLogs.map(log => (
+                            <div 
+                              key={log.id} 
+                              className={`flex items-start gap-1.5 leading-tight ${
+                                log.isError 
+                                  ? 'text-rose-400 bg-rose-500/10 px-1 py-0.5 rounded' 
+                                  : log.type.includes('WRITE') 
+                                    ? 'text-sky-300' 
+                                    : log.type.includes('SNAPSHOT')
+                                      ? 'text-purple-300'
+                                      : 'text-zinc-300'
+                              }`}
+                            >
+                              <span className="text-zinc-500 flex-shrink-0 font-semibold">[{log.timeFormatted}]</span>
+                              <span className="font-semibold flex-shrink-0">[{log.type}]</span>
+                              <span className="truncate flex-1" title={log.details}>{log.details}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-zinc-500 py-2 text-center italic">
+                            No sync events logged yet.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Active Backend Endpoint */}
                 <div className="space-y-2.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">

@@ -94,3 +94,33 @@ export interface AppSettings {
   autoScreenshotShortcut: string;
   enableThematicBanners?: boolean;
 }
+
+export interface SyncEventLog {
+  id: string;
+  timestamp: number;
+  timeFormatted: string;
+  type: string;
+  details: string;
+  isError?: boolean;
+}
+
+export interface CloudSyncDiagnostics {
+  accountEmail: string | null;
+  uid: string | null;
+  uidLast6: string | null;
+  subscriptionStatus: string;
+  isInitializing: boolean;
+  isListenerAttached: boolean;
+  lastSnapshotTime: number | null;
+  lastSnapshotFromCache: boolean | null;
+  lastSnapshotPendingWrites: boolean | null;
+  localTabsCount: number;
+  cloudTabsCount: number | null;
+  estimatedUploadSizeBytes: number;
+  estimatedUploadSizeKb: number;
+  lastSuccessfulWriteTime: number | null;
+  lastWriteError: { code?: string; message: string; timestamp: number } | null;
+  eventLogs: SyncEventLog[];
+  copyDiagnostics: () => Promise<boolean>;
+  getSummaryText: () => string;
+}

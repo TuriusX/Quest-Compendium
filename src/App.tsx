@@ -127,6 +127,7 @@ function SettingsStandalone() {
         settings={settings}
         onUpdateSettings={updateSettings}
         soundEnabled={settings.soundEnabled}
+        syncDiagnostics={typeof window !== 'undefined' ? (window as any).__questSyncDiagnostics : undefined}
       />
     </div>
   );
@@ -283,7 +284,7 @@ export default function App() {
     };
   }, [isDraggingSidebar, isDraggingAch]);
 
-  const { user, subscriptionStatus, userData, isInitializing, isOutdated } = useCloudSync(settings, tabs, setSettings, setTabs);
+  const { user, subscriptionStatus, userData, isInitializing, isOutdated, syncDiagnostics } = useCloudSync(settings, tabs, setSettings, setTabs);
 
   // Switch and isolate tabs when user transitions between Guest and Authenticated User
   const lastUserIdentityRef = useRef<string | null>(null);
@@ -1334,6 +1335,7 @@ export default function App() {
         settings={settings}
         onUpdateSettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
         soundEnabled={settings.soundEnabled}
+        syncDiagnostics={syncDiagnostics}
       />
 
       {/* Rename/Create Modal */}
