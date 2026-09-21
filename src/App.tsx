@@ -223,6 +223,8 @@ export default function App() {
   const [isGameSearchOpen, setIsGameSearchOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMessage, setAuthModalMessage] = useState<string | null>(null);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [renameModalMode, setRenameModalMode] = useState<'create' | 'rename'>('create');
   const [renameModalTabId, setRenameModalTabId] = useState<string | null>(null);
@@ -790,6 +792,18 @@ export default function App() {
   const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash') => {
     if (!activeTab) return;
 
+    if (!user) {
+      syncDiagnostics.addEvent?.('CHAT_NO_USER', 'Attempted to send chat message with no authenticated or guest user', true);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('quest_diagnostics_event', {
+          detail: { type: 'CHAT_NO_USER', details: 'Attempted to send chat message with no authenticated or guest user', isError: true }
+        }));
+      }
+      setAuthModalMessage("You're signed out. Please sign in or continue as guest to ask questions.");
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'user',
@@ -805,7 +819,46 @@ export default function App() {
     setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, messages: updatedMessages } : t));
     setIsLoadingAi(true);
 
-    const token = user ? await user.getIdToken() : null;
+    let token: string | null = null;
+    try {
+      token = await user.getIdToken();
+    } catch (e) {
+      token = null;
+    }
+
+    if (!token || !token.trim()) {
+      try {
+        token = typeof user.getIdToken === 'function' ? await user.getIdToken(true) : null;
+      } catch (e) {
+        token = null;
+      }
+    }
+
+    if (!token || !token.trim()) {
+      setIsLoadingAi(false);
+      syncDiagnostics.addEvent?.('CHAT_TOKEN_ERROR', 'Failed to retrieve valid ID token after force refresh retry', true);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('quest_diagnostics_event', {
+          detail: { type: 'CHAT_TOKEN_ERROR', details: 'Failed to retrieve valid ID token after force refresh retry', isError: true }
+        }));
+      }
+
+      setAuthModalMessage('Your session expired. Please sign in again.');
+      setIsAuthModalOpen(true);
+
+      const sessionExpiredMessage: ChatMessage = {
+        id: `msg-${Date.now() + 1}`,
+        role: 'assistant',
+        text: 'Your session expired. Please sign in again.',
+        timestamp: Date.now(),
+        modelUsed: 'Session Expired'
+      };
+
+      setTabs(prev => prev.map(t => 
+        t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
+      ));
+      return;
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 75 seconds.")), 75000);
@@ -841,6 +894,31 @@ export default function App() {
       clearTimeout(timeoutId);
 
       if (!res.ok) {
+        if (res.status === 401) {
+          syncDiagnostics.addEvent?.('CHAT_401', 'Server returned HTTP 401 Unauthorized for chat request', true);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('quest_diagnostics_event', {
+              detail: { type: 'CHAT_401', details: 'Server returned HTTP 401 Unauthorized for chat request', isError: true }
+            }));
+          }
+
+          setAuthModalMessage('Your session expired. Please sign in again.');
+          setIsAuthModalOpen(true);
+
+          const sessionExpiredMessage: ChatMessage = {
+            id: `msg-${Date.now() + 1}`,
+            role: 'assistant',
+            text: 'Your session expired. Please sign in again.',
+            timestamp: Date.now(),
+            modelUsed: 'Session Expired'
+          };
+
+          setTabs(prev => prev.map(t => 
+            t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
+          ));
+          return;
+        }
+
         let errorText = `HTTP ${res.status}`;
         let shouldOpenPaywall = false;
         try {
@@ -900,6 +978,29 @@ export default function App() {
     } catch (err: any) {
       console.error('Chat error:', err);
       let errorMsg = err?.message || 'Network error';
+
+      if (errorMsg === 'Your session expired. Please sign in again.' || errorMsg.includes('401') || errorMsg.includes('Unauthorized') || err?.status === 401) {
+        syncDiagnostics.addEvent?.('CHAT_401', 'Handled 401 Unauthorized in chat error handler', true);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('quest_diagnostics_event', {
+            detail: { type: 'CHAT_401', details: 'Handled 401 Unauthorized in chat error handler', isError: true }
+          }));
+        }
+        setAuthModalMessage('Your session expired. Please sign in again.');
+        setIsAuthModalOpen(true);
+        const sessionExpiredMessage: ChatMessage = {
+          id: `msg-${Date.now() + 1}`,
+          role: 'assistant',
+          text: 'Your session expired. Please sign in again.',
+          timestamp: Date.now(),
+          modelUsed: 'Session Expired'
+        };
+        setTabs(prev => prev.map(t => 
+          t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
+        ));
+        return;
+      }
+
       if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError') || errorMsg.includes('fetch failed')) {
         errorMsg = `Connection failed to cloud server at ${backendUrl || DEFAULT_CLOUD_URL}. Please check your internet connection or verify your server in Settings -> Cloud & Server.`;
       }
@@ -1374,8 +1475,18 @@ export default function App() {
       />
 
       {/* Auth & Paywall Overlays */}
-      {!isInitializing && !user && (
-        <AuthModal onSignInSuccess={() => {}} />
+      {!isInitializing && (!user || isAuthModalOpen) && (
+        <AuthModal 
+          onSignInSuccess={() => {
+            setIsAuthModalOpen(false);
+            setAuthModalMessage(null);
+          }}
+          initialMessage={authModalMessage}
+          onClose={() => {
+            setIsAuthModalOpen(false);
+            setAuthModalMessage(null);
+          }}
+        />
       )}
       {!isInitializing && user && isOutdated && (
         <UpdateRequiredModal />

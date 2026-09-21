@@ -797,7 +797,8 @@ export function useCloudSync(
       eventLogs,
       copyDiagnostics,
       getSummaryText,
-      triggerSyncNow
+      triggerSyncNow,
+      addEvent
     };
   }, [
     currentEmail,
@@ -816,8 +817,22 @@ export function useCloudSync(
     estimatedUploadSizeKb,
     lastSuccessfulWriteTime,
     lastWriteError,
-    eventLogs
+    eventLogs,
+    addEvent
   ]);
+
+  // Listen for custom diagnostics events from application features (e.g. chat auth errors)
+  useEffect(() => {
+    const handleLogEvent = (e: any) => {
+      if (e?.detail?.type && e?.detail?.details) {
+        addEvent(e.detail.type, e.detail.details, Boolean(e.detail.isError));
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('quest_diagnostics_event', handleLogEvent);
+      return () => window.removeEventListener('quest_diagnostics_event', handleLogEvent);
+    }
+  }, [addEvent]);
 
   // Expose to window.__questSyncDiagnostics for quick devtools console inspection
   useEffect(() => {

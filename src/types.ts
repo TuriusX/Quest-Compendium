@@ -124,4 +124,5 @@ export interface CloudSyncDiagnostics {
   copyDiagnostics: () => Promise<boolean>;
   getSummaryText: () => string;
   triggerSyncNow?: () => Promise<boolean>;
+  addEvent?: (type: string, details: string, isError?: boolean) => void;
 }

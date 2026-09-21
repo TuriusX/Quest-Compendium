@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, Play, AlertCircle, ExternalLink } from 'lucide-react';
+import { Sparkles, Play, AlertCircle, ExternalLink, X } from 'lucide-react';
 import { MagicalBookIcon } from './MagicalBookIcon';
 import { signInWithGoogle, auth } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
@@ -7,12 +7,20 @@ import { DEFAULT_PREVIEW_URL } from '../utils/api';
 
 interface AuthModalProps {
   onSignInSuccess: () => void;
+  initialMessage?: string | null;
+  onClose?: () => void;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMessage, onClose }) => {
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(initialMessage || null);
   const isEmbedded = typeof window !== 'undefined' && window.self !== window.top;
+
+  useEffect(() => {
+    if (initialMessage) {
+      setErrorMessage(initialMessage);
+    }
+  }, [initialMessage]);
 
   useEffect(() => {
     // Listen for external auth success if running in Electron
@@ -79,7 +87,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#0c0d14] border border-white/15 rounded-2xl shadow-[0_0_40px_var(--accent-glow)] overflow-hidden flex flex-col items-center p-8 text-center">
+      <div className="relative w-full max-w-md bg-[#0c0d14] border border-white/15 rounded-2xl shadow-[0_0_40px_var(--accent-glow)] overflow-hidden flex flex-col items-center p-8 text-center">
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+            title="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
         <MagicalBookIcon className="w-16 h-16 mb-6 shadow-[0_0_30px_rgba(171,119,250,0.3)] rounded-2xl" />
         <h2 className="font-fantasy font-bold text-2xl text-white mb-2 tracking-wide">
           QUEST COMPENDIUM
