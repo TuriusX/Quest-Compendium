@@ -85,10 +85,14 @@ function makeLimiter(max: number, windowMs: number, now: () => number) {
   };
 }
 
+/** X-Forwarded-For is "client-supplied..., real client as seen by Cloud Run's front end": count from the RIGHT (one trusted hop). */
 function clientIp(req: Request): string {
-  const xff = req.headers['x-forwarded-for'];
-  const first = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
-  return first || req.socket.remoteAddress || 'unknown';
+  const raw = req.headers['x-forwarded-for'];
+  const parts = (Array.isArray(raw) ? raw.join(',') : raw ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : req.socket.remoteAddress || 'unknown';
 }
 
 export function registerDeviceAuth(app: Express, deps: DeviceAuthDeps): void {

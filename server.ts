@@ -11,6 +11,7 @@ import { initializeApp, getApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import cors from 'cors';
 import { registerDeviceAuth } from './deviceAuth';
+import { registerGuestGuard } from './guestGuard';
 async function getFirestoreDocREST(idToken: string, uid: string) {
   const isCloudRun = !!process.env.K_SERVICE;
   const projectId = 'quest-compendium-1bccf';
@@ -197,6 +198,13 @@ async function startServer() {
     }
     next();
   };
+
+  // --- Guest abuse guard (must be registered BEFORE the /api/chat and /api/tts routes) ---
+  registerGuestGuard(app, {
+    verifyIdToken: async (token: string) => {
+      try { await getAuth().verifyIdToken(token); return true; } catch { return false; }
+    },
+  });
 
   registerDeviceAuth(app, {
     getAuth,
