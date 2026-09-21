@@ -1,225 +1,21 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut, getRedirectResult, browserPopupRedirectResolver } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, runTransaction } from 'firebase/firestore';
 import { AppSettings, GameTab, CloudSyncDiagnostics, SyncEventLog } from '../types';
 import { getApiBaseUrl } from '../utils/api';
+import {
+  canonicalStringify, removeUndefinedFields, isLegacyWelcomeTab, sanitizeTabsForCloud,
+  mergeTabState, readTombstones, writeTombstones, cleanTombstones, dropLegacyDeletedList, UploadGovernor,
+  type TabState, type MergeOutcome
+} from './tabMerge';
 
 const APP_VERSION = 1;
 
-/**
- * Deterministic JSON stringifier with sorted object keys to ensure stable
- * serialization regardless of property insertion order in local state vs Firestore.
- * Omits undefined properties to match JSON.stringify and Firestore semantics.
- */
-export function canonicalStringify(obj: any): string {
-  if (obj === null || obj === undefined) return 'null';
-  if (typeof obj !== 'object') return JSON.stringify(obj);
-  if (Array.isArray(obj)) {
-    return '[' + obj.map(item => (item === undefined ? 'null' : canonicalStringify(item))).join(',') + ']';
-  }
-  const keys = Object.keys(obj).filter(k => obj[k] !== undefined).sort();
-  return '{' + keys.map(key => JSON.stringify(key) + ':' + canonicalStringify(obj[key])).join(',') + '}';
-}
+const BUILD_INFO = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : { version: 'dev', commit: 'unknown', builtAt: 'unknown' };
 
-/**
- * Recursively removes all undefined fields from an object or array.
- * Firestore setDoc/updateDoc strictly rejects objects containing `undefined`.
- */
-export function removeUndefinedFields<T>(obj: T): T {
-  if (obj === null || obj === undefined) return obj;
-  return JSON.parse(JSON.stringify(obj));
-}
-
-export interface TabMergeResult {
-  merged: GameTab[];
-  hasChangesFromCloud: boolean;
-  hasChangesFromLocal: boolean;
-  reason: string;
-}
-
-export function isLegacyWelcomeTab(tab: GameTab): boolean {
-  if (!tab) return false;
-  return tab.id === 'guest-welcome-compendium' || tab.name === 'Welcome, Explorer';
-}
-
-/**
- * Merges local and cloud tabs without destroying local-only tabs.
- * - Unions tabs by ID.
- * - Filters out legacy Welcome Explorer tabs completely.
- * - Respects locally deleted tabs and purges them from cloud state.
- * - When same ID exists on both sides, keeps the one with the larger lastActive timestamp.
- * - Preserves rich local attributes (such as audioBase64 or local images/achievements) so sanitization does not degrade local state.
- * - Never discards local-only tabs.
- */
-export function mergeGameTabs(localTabs: GameTab[], cloudTabs: GameTab[]): TabMergeResult {
-  let deletedIds = new Set<string>();
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('quest_deleted_tab_ids') : null;
-    if (raw) {
-      deletedIds = new Set(JSON.parse(raw));
-    }
-  } catch {}
-
-  const rawLocal = Array.isArray(localTabs) ? localTabs : [];
-  const rawCloud = Array.isArray(cloudTabs) ? cloudTabs : [];
-
-  const cleanLocal = rawLocal.filter(t => t && !isLegacyWelcomeTab(t) && !deletedIds.has(t.id));
-  const cleanCloud = rawCloud.filter(t => t && !isLegacyWelcomeTab(t) && !deletedIds.has(t.id));
-
-  const localHadUnwanted = cleanLocal.length !== rawLocal.length;
-  const cloudHadUnwanted = cleanCloud.length !== rawCloud.length;
-
-  if (cleanLocal.length === 0 && cleanCloud.length === 0) {
-    return {
-      merged: [],
-      hasChangesFromCloud: localHadUnwanted,
-      hasChangesFromLocal: cloudHadUnwanted,
-      reason: 'Zero active tabs'
-    };
-  }
-
-  if (cleanLocal.length === 0) {
-    return {
-      merged: cleanCloud,
-      hasChangesFromCloud: true,
-      hasChangesFromLocal: cloudHadUnwanted,
-      reason: `Adopted ${cleanCloud.length} cloud tabs into empty local state`
-    };
-  }
-
-  if (cleanCloud.length === 0) {
-    return {
-      merged: cleanLocal,
-      hasChangesFromCloud: localHadUnwanted,
-      hasChangesFromLocal: true,
-      reason: `Preserved ${cleanLocal.length} local tabs for empty cloud document`
-    };
-  }
-
-  const cloudTabMap = new Map<string, GameTab>();
-  for (const t of cleanCloud) {
-    if (t && t.id) {
-      cloudTabMap.set(t.id, t);
-    }
-  }
-
-  const mergedTabs: GameTab[] = [];
-  const processedIds = new Set<string>();
-  let hasChangesFromCloud = localHadUnwanted;
-  let hasChangesFromLocal = cloudHadUnwanted;
-
-  // Process all local tabs to preserve existing local tab order
-  for (const localTab of cleanLocal) {
-    if (!localTab || !localTab.id) continue;
-    processedIds.add(localTab.id);
-
-    const cloudTab = cloudTabMap.get(localTab.id);
-    if (!cloudTab) {
-      // Local-only tab! Keep it and mark for cloud upload
-      mergedTabs.push(localTab);
-      hasChangesFromLocal = true;
-    } else {
-      // Tab exists on both sides: compare activity timestamps
-      const localTime = localTab.lastActive || localTab.createdAt || 0;
-      const cloudTime = cloudTab.lastActive || cloudTab.createdAt || 0;
-
-      if (localTime >= cloudTime) {
-        // Local is newer or identical. Keep localTab!
-        mergedTabs.push(localTab);
-        if (localTime > cloudTime) {
-          hasChangesFromLocal = true;
-        }
-      } else {
-        // Cloud is newer. Use cloudTab, but preserve local-only enrichments
-        // (e.g. audioBase64, local image URLs, achievements caches)
-        const enrichedFromLocal: GameTab = { ...cloudTab };
-
-        if (localTab.messages && enrichedFromLocal.messages) {
-          const localMsgMap = new Map(localTab.messages.map(m => [m.id, m]));
-          enrichedFromLocal.messages = enrichedFromLocal.messages.map(cloudMsg => {
-            const localMsg = localMsgMap.get(cloudMsg.id);
-            if (!localMsg) return cloudMsg;
-            return {
-              ...cloudMsg,
-              audioBase64: localMsg.audioBase64 || (cloudMsg as any).audioBase64,
-              imageUrl: (cloudMsg.imageUrl && cloudMsg.imageUrl.length > 0) ? cloudMsg.imageUrl : localMsg.imageUrl,
-              bannerImageUrl: (cloudMsg.bannerImageUrl && cloudMsg.bannerImageUrl.length > 0) ? cloudMsg.bannerImageUrl : localMsg.bannerImageUrl,
-            };
-          });
-        }
-
-        if (localTab.activeSteamGame && enrichedFromLocal.activeSteamGame) {
-          if (localTab.activeSteamGame.appId === enrichedFromLocal.activeSteamGame.appId) {
-            enrichedFromLocal.activeSteamGame = {
-              ...enrichedFromLocal.activeSteamGame,
-              achievements: localTab.activeSteamGame.achievements || enrichedFromLocal.activeSteamGame.achievements,
-              patchNotes: localTab.activeSteamGame.patchNotes || enrichedFromLocal.activeSteamGame.patchNotes
-            };
-          }
-        }
-
-        mergedTabs.push(enrichedFromLocal);
-        hasChangesFromCloud = true;
-      }
-    }
-  }
-
-  // Add any tabs that exist only in cloud
-  for (const cloudTab of cleanCloud) {
-    if (!cloudTab || !cloudTab.id) continue;
-    if (!processedIds.has(cloudTab.id)) {
-      mergedTabs.push(cloudTab);
-      hasChangesFromCloud = true;
-    }
-  }
-
-  return {
-    merged: mergedTabs,
-    hasChangesFromCloud,
-    hasChangesFromLocal,
-    reason: `Merged ${cleanLocal.length} local and ${cleanCloud.length} cloud tabs (total: ${mergedTabs.length})`
-  };
-}
-
-function sanitizeTabsForCloud(tabs: GameTab[]): GameTab[] {
-  let deletedIds = new Set<string>();
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('quest_deleted_tab_ids') : null;
-    if (raw) {
-      deletedIds = new Set(JSON.parse(raw));
-    }
-  } catch {}
-
-  const mapped = tabs
-    .filter(tab => tab && !isLegacyWelcomeTab(tab) && !deletedIds.has(tab.id))
-    .map(tab => {
-      const sanitizedTab = { ...tab };
-      
-      // Strip large message data (base64 audio/images/banners)
-      if (sanitizedTab.messages) {
-        sanitizedTab.messages = sanitizedTab.messages.map(msg => {
-          const newMsg = { ...msg };
-          if (newMsg.audioBase64) delete newMsg.audioBase64;
-          if (newMsg.imageUrl && newMsg.imageUrl.length > 2000) delete newMsg.imageUrl;
-          if (newMsg.bannerImageUrl && newMsg.bannerImageUrl.length > 2000) delete newMsg.bannerImageUrl;
-          return newMsg;
-        });
-      }
-      
-      // Strip heavy active game data (achievements/patch notes)
-      if (sanitizedTab.activeSteamGame) {
-         const safeGame = { ...sanitizedTab.activeSteamGame };
-         if (safeGame.achievements) delete safeGame.achievements;
-         if (safeGame.patchNotes) delete safeGame.patchNotes;
-         sanitizedTab.activeSteamGame = safeGame;
-      }
-
-      return sanitizedTab;
-    });
-
-  return removeUndefinedFields(mapped);
-}
+// The tab merge logic lives in ./tabMerge (pure, and unit-tested). Re-exported so existing imports keep working.
+export { canonicalStringify, removeUndefinedFields, isLegacyWelcomeTab };
 
 export function useCloudSync(
   localSettings: AppSettings,
@@ -307,6 +103,83 @@ export function useCloudSync(
   useEffect(() => {
     localDataRef.current = { settings: localSettings, tabs: localGameTabs };
   }, [localSettings, localGameTabs]);
+
+  // One-time cleanup: the old per-device "deleted tab ids" list caused a cross-device write war and is no longer used.
+  useEffect(() => {
+    dropLegacyDeletedList();
+    addEvent('BUILD_INFO', `Build v${BUILD_INFO.version} (${BUILD_INFO.commit}) built ${BUILD_INFO.builtAt}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Last line of defence: if uploads ever run away again, pause instead of hammering Firestore.
+  const uploadGovernor = useRef(new UploadGovernor());
+
+  /**
+   * The ONLY way tabs are written to the cloud. Inside one Firestore transaction it reads the current SERVER copy, merges it
+   * with this device's tabs and deletions (see tabMerge.ts), and writes only if the result differs from what the cloud already
+   * holds. Merging against fresh server data means a stale cache, or another device, can never be overwritten with an
+   * out-of-date list.
+   */
+  const pushTabs = async (uid: string, why: string): Promise<boolean> => {
+    if (!uploadGovernor.current.allow()) {
+      const message = 'Too many tab uploads in a short time. Sync paused for 30 seconds to protect your data.';
+      setLastWriteError({ code: 'sync-loop-guard', message, timestamp: Date.now() });
+      addEvent('SYNC_LOOP_GUARD', message, true);
+      return false;
+    }
+    const userRef = doc(db, 'users', uid);
+    const startTabs = localDataRef.current.tabs;
+    try {
+      let cloudCount = 0;
+      const outcome: MergeOutcome = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(userRef);
+        const data: any = snap.exists() ? snap.data() : {};
+        const cloudTabs: any[] = Array.isArray(data.tabs) ? data.tabs : [];
+        cloudCount = cloudTabs.length;
+        const cloudState: TabState = { tabs: cloudTabs, deleted: cleanTombstones(data.deletedTabs) };
+        const result = mergeTabState({ tabs: startTabs, deleted: readTombstones() }, cloudState);
+        if (result.cloudChanged) {
+          tx.set(userRef, removeUndefinedFields({
+            tabs: sanitizeTabsForCloud(result.merged.tabs),
+            deletedTabs: result.merged.deleted,
+            updatedAt: Date.now()
+          }), { mergeFields: ['tabs', 'deletedTabs', 'updatedAt'] });
+        }
+        return result;
+      });
+
+      // Apply the merged result locally, unless the user changed something while we were talking to the server
+      // (in that case the next sync round handles it).
+      if (outcome.localChanged && localDataRef.current.tabs === startTabs) {
+        setLocalGameTabs(outcome.merged.tabs);
+        try {
+          const json = JSON.stringify(outcome.merged.tabs);
+          localStorage.setItem(`quest_compendium_tabs_${uid}`, json);
+          localStorage.setItem('quest_compendium_tabs', json);
+          localStorage.setItem('quest_compendium_tabs_backup', json);
+        } catch {}
+      }
+      writeTombstones(outcome.merged.deleted);
+      lastSyncedData.current = { ...lastSyncedData.current, tabs: canonicalStringify(sanitizeTabsForCloud(outcome.merged.tabs)) };
+
+      const summary = `cloud had ${cloudCount} tabs, this device had ${startTabs.length}, merged ${outcome.merged.tabs.length}`;
+      if (outcome.cloudChanged) {
+        setLastSuccessfulWriteTime(Date.now());
+        setLastWriteError(null);
+        addEvent('WRITE_SUCCESS', `${why}: ${summary}. Uploaded.`);
+      } else {
+        addEvent('SYNC_NOOP', `${why}: ${summary}. Cloud already up to date.`);
+      }
+      return true;
+    } catch (err: any) {
+      const code = err?.code || 'unknown';
+      const message = err?.message || String(err);
+      setLastWriteError({ code, message, timestamp: Date.now() });
+      addEvent('WRITE_ERROR', `${why}: tab sync failed: [${code}] ${message}`, true);
+      lastSyncedData.current = { ...lastSyncedData.current, tabs: '' }; // retry on the next change
+      return false;
+    }
+  };
 
   // App Version Check
   useEffect(() => {
@@ -642,49 +515,32 @@ export function useCloudSync(
               }
             }
 
-            // Continuous bidirectional tabs synchronization using MERGE:
-            // Never discard local-only tabs; union by ID, keep newer lastActive, and preserve rich local fields
-            const currentLocalTabs = localDataRef.current.tabs;
-            const mergeResult = mergeGameTabs(currentLocalTabs, cloudTabs);
-
-            if (mergeResult.hasChangesFromCloud) {
-              setLocalGameTabs(mergeResult.merged);
-              addEvent('TABS_MERGED_LOCAL', `${mergeResult.reason}; applied to local state`);
+            // Tabs: merge with this device's tabs (see tabMerge.ts). Only write if the merged result differs from the cloud.
+            const outcome = mergeTabState(
+              { tabs: localDataRef.current.tabs, deleted: readTombstones() },
+              { tabs: cloudTabs, deleted: cleanTombstones(data.deletedTabs) }
+            );
+            if (outcome.localChanged) {
+              setLocalGameTabs(outcome.merged.tabs);
+              addEvent('TABS_MERGED_LOCAL', `${outcome.reason}; applied to local state`);
               try {
-                const json = JSON.stringify(mergeResult.merged);
+                const json = JSON.stringify(outcome.merged.tabs);
                 localStorage.setItem(`quest_compendium_tabs_${user.uid}`, json);
                 localStorage.setItem('quest_compendium_tabs', json);
                 localStorage.setItem('quest_compendium_tabs_backup', json);
               } catch {}
             }
+            writeTombstones(outcome.merged.deleted);
 
-            // Update tracker so local debounced sync doesn't loop
-            const sanitizedMerged = sanitizeTabsForCloud(mergeResult.merged);
-            const canonicalMergedTabsStr = canonicalStringify(sanitizedMerged);
-            lastSyncedData.current.tabs = canonicalMergedTabsStr;
+            // Update trackers so the local debounced sync doesn't loop
+            lastSyncedData.current.tabs = canonicalStringify(sanitizeTabsForCloud(outcome.merged.tabs));
             if (canonicalCloudSettingsStr) {
               lastSyncedData.current.settings = canonicalCloudSettingsStr;
             }
 
-            // If local state had tabs or edits that cloud didn't have, push the merged set to cloud
-            if (mergeResult.hasChangesFromLocal) {
-              addEvent('MERGE_UPLOAD_START', `Local tabs contain newer/exclusive data. Uploading merged set (${mergeResult.merged.length} tabs)...`);
-              setDoc(userRef, removeUndefinedFields({
-                tabs: sanitizedMerged,
-                updatedAt: Date.now()
-              }), { merge: true })
-                .then(() => {
-                  const writeNow = Date.now();
-                  setLastSuccessfulWriteTime(writeNow);
-                  addEvent('WRITE_SUCCESS', `Merged tabs successfully saved to cloud (${mergeResult.merged.length} tabs)`);
-                })
-                .catch(err => {
-                  const code = (err as any)?.code || 'unknown';
-                  const message = (err as any)?.message || String(err);
-                  setLastWriteError({ code, message, timestamp: Date.now() });
-                  addEvent('WRITE_ERROR', `Failed to upload merged tabs: [${code}] ${message}`, true);
-                  console.error("[CloudSync] Failed to upload merged tabs", err);
-                });
+            if (outcome.cloudChanged) {
+              addEvent('MERGE_UPLOAD_START', `This device has newer data than the cloud. Merging and uploading (${outcome.merged.tabs.length} tabs)...`);
+              void pushTabs(user.uid, 'snapshot');
             }
 
             hasDoneInitialCloudLoad = true;
@@ -718,38 +574,32 @@ export function useCloudSync(
     if (!user || user.isGuest || (subscriptionStatus !== 'active' && subscriptionStatus !== 'beta') || isInitializing) return;
 
     const currentSettingsCanonical = canonicalStringify(localSettings);
-    const sanitizedTabs = sanitizeTabsForCloud(localGameTabs);
-    const currentTabsCanonical = canonicalStringify(sanitizedTabs);
+    const currentTabsCanonical = canonicalStringify(sanitizeTabsForCloud(localGameTabs));
 
-    // Prevent loop: Only upload if the canonical local data has actually changed compared to the last sync
-    if (currentSettingsCanonical === lastSyncedData.current.settings && 
-        currentTabsCanonical === lastSyncedData.current.tabs) {
-      return;
-    }
+    // Prevent loop: only upload what actually changed compared to the last sync
+    const settingsChanged = currentSettingsCanonical !== lastSyncedData.current.settings;
+    const tabsChanged = currentTabsCanonical !== lastSyncedData.current.tabs;
+    if (!settingsChanged && !tabsChanged) return;
 
     const flushSync = () => {
-      lastSyncedData.current = { settings: currentSettingsCanonical, tabs: currentTabsCanonical };
-      const userRef = doc(db, 'users', user.uid);
-      addEvent('WRITE_START', `Sync write starting: ${localGameTabs.length} tabs (${estimatedUploadSizeKb} KB)...`);
-      setDoc(userRef, removeUndefinedFields({
-        settings: localSettings,
-        tabs: sanitizedTabs,
-        updatedAt: Date.now()
-      }), { merge: true })
-        .then(() => {
-          const now = Date.now();
-          setLastSuccessfulWriteTime(now);
-          addEvent('WRITE_SUCCESS', `Successfully synced ${localGameTabs.length} tabs to cloud`);
-        })
-        .catch(err => {
-          const code = (err as any)?.code || 'unknown';
-          const message = (err as any)?.message || String(err);
-          setLastWriteError({ code, message, timestamp: Date.now() });
-          addEvent('WRITE_ERROR', `Sync write error: [${code}] ${message}`, true);
-          console.error("[CloudSync] Sync error", err);
-          // Reset lastSyncedData on failure so retry happens on next edit
-          lastSyncedData.current = { settings: '', tabs: '' };
-        });
+      if (settingsChanged) {
+        lastSyncedData.current = { ...lastSyncedData.current, settings: currentSettingsCanonical };
+        setDoc(doc(db, 'users', user.uid), removeUndefinedFields({ settings: localSettings, updatedAt: Date.now() }), { merge: true })
+          .then(() => {
+            setLastSuccessfulWriteTime(Date.now());
+            addEvent('WRITE_SUCCESS', 'Settings synced to cloud');
+          })
+          .catch(err => {
+            const code = (err as any)?.code || 'unknown';
+            const message = (err as any)?.message || String(err);
+            setLastWriteError({ code, message, timestamp: Date.now() });
+            addEvent('WRITE_ERROR', `Settings sync error: [${code}] ${message}`, true);
+            lastSyncedData.current = { ...lastSyncedData.current, settings: '' }; // retry on next edit
+          });
+      }
+      if (tabsChanged) {
+        void pushTabs(user.uid, 'edit');
+      }
     };
 
     const syncTimeout = setTimeout(flushSync, 1000);
@@ -780,6 +630,10 @@ export function useCloudSync(
         `=== QUEST COMPENDIUM CLOUD SYNC DIAGNOSTICS ===`,
         `Timestamp: ${new Date().toISOString()}`,
         `Platform: ${isElectron ? 'Desktop (Electron)' : 'Web Browser'}`,
+        `Build: v${BUILD_INFO.version} (commit ${BUILD_INFO.commit}), built ${BUILD_INFO.builtAt}`,
+        `Firebase project: ${(auth as any)?.app?.options?.projectId ?? 'unknown'}`,
+        `API base URL: ${getApiBaseUrl() || '(same origin)'}`,
+        `Page origin: ${typeof window !== 'undefined' ? window.location.origin : 'unknown'}`,
         `User Agent: ${typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown'}`,
         `Account Email: ${currentEmail || 'Not signed in'}`,
         `Account UID: ${currentUid || 'None'} (Last 6: ${currentUid ? currentUid.slice(-6) : 'N/A'})`,
@@ -839,35 +693,18 @@ export function useCloudSync(
         addEvent('MANUAL_SYNC_SKIPPED', 'Cannot sync in guest mode or unauthenticated state');
         return false;
       }
+      addEvent('MANUAL_SYNC_START', `Manual sync: merging ${localDataRef.current.tabs.length} local tabs with the cloud (${estimatedUploadSizeKb} KB)...`);
+      const tabsOk = await pushTabs(user.uid, 'manual');
       try {
-        const userRef = doc(db, 'users', user.uid);
-        const currentTabs = localDataRef.current.tabs;
         const currentSettings = localDataRef.current.settings;
-        const sanitizedTabs = sanitizeTabsForCloud(currentTabs);
-        const currentSettingsCanonical = canonicalStringify(currentSettings);
-        const currentTabsCanonical = canonicalStringify(sanitizedTabs);
-
-        addEvent('MANUAL_SYNC_START', `Manual push triggered: ${currentTabs.length} tabs (${estimatedUploadSizeKb} KB)...`);
-        await setDoc(userRef, removeUndefinedFields({
-          settings: currentSettings,
-          tabs: sanitizedTabs,
-          updatedAt: Date.now()
-        }), { merge: true });
-
-        lastSyncedData.current = {
-          settings: currentSettingsCanonical,
-          tabs: currentTabsCanonical
-        };
-        const now = Date.now();
-        setLastSuccessfulWriteTime(now);
-        setLastWriteError(null);
-        addEvent('WRITE_SUCCESS', `Manual sync succeeded (${currentTabs.length} tabs)`);
-        return true;
+        await setDoc(doc(db, 'users', user.uid), removeUndefinedFields({ settings: currentSettings, updatedAt: Date.now() }), { merge: true });
+        lastSyncedData.current = { ...lastSyncedData.current, settings: canonicalStringify(currentSettings) };
+        return tabsOk;
       } catch (err: any) {
         const code = err?.code || 'unknown';
         const message = err?.message || String(err);
         setLastWriteError({ code, message, timestamp: Date.now() });
-        addEvent('WRITE_ERROR', `Manual sync failed: [${code}] ${message}`, true);
+        addEvent('WRITE_ERROR', `Manual settings sync failed: [${code}] ${message}`, true);
         return false;
       }
     };

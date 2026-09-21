@@ -3,10 +3,16 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { readFileSync } from 'fs';
+import { execSync } from 'child_process';
+const pkgVersion = (() => { try { return JSON.parse(readFileSync('./package.json', 'utf-8')).version as string; } catch { return 'unknown'; } })();
+const gitCommit = (() => { try { return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { return 'unknown'; } })();
+const BUILD_INFO = { version: pkgVersion, commit: gitCommit, builtAt: new Date().toISOString() };
 
 export default defineConfig(() => {
   return {
     base: './',
+    define: { __APP_BUILD__: JSON.stringify(BUILD_INFO) },
     plugins: [
       react(),
       tailwindcss(),

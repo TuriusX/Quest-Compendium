@@ -28,6 +28,7 @@ import { db } from './lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
 import { useCloudSync } from './hooks/useCloudSync';
+import { recordTombstone } from './hooks/tabMerge';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -1093,14 +1094,8 @@ export default function App() {
       setActiveTabId(remaining.length > 0 ? remaining[0].id : '');
     }
 
-    // Track deleted tab ID so sync knows it was deleted locally and does not restore it
-    try {
-      const deletedKey = 'quest_deleted_tab_ids';
-      const raw = localStorage.getItem(deletedKey);
-      const set = new Set<string>(raw ? JSON.parse(raw) : []);
-      set.add(tabId);
-      localStorage.setItem(deletedKey, JSON.stringify(Array.from(set).slice(-100)));
-    } catch {}
+    // Record a timestamped deletion. Sync shares it with every device so the tab is not restored (see tabMerge.ts).
+    recordTombstone(tabId);
 
     // Immediately persist remaining tabs locally
     try {
