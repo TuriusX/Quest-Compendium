@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { auth, db } from '../lib/firebase';
-import { onAuthStateChanged, User, signOut, getRedirectResult } from 'firebase/auth';
+import { onAuthStateChanged, User, signOut, getRedirectResult, browserPopupRedirectResolver } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { AppSettings, GameTab, CloudSyncDiagnostics, SyncEventLog } from '../types';
 import { getApiBaseUrl } from '../utils/api';
@@ -368,7 +368,7 @@ export function useCloudSync(
   // Auth Listener
   useEffect(() => {
     // Check if returning from a redirect sign-in flow
-    getRedirectResult(auth)
+    getRedirectResult(auth, browserPopupRedirectResolver)
       .then((result) => {
         if (result?.user) {
           if (typeof window !== 'undefined') {
@@ -393,6 +393,19 @@ export function useCloudSync(
         setIsInitializing(true);
         addEvent('AUTH_LOGIN', `Signed in as ${currentUser.email || 'no-email'} (UID: ...${currentUser.uid.slice(-6)})`);
 
+        // Check if user was previously verified as Pro in this client
+        const cachedPro = typeof window !== 'undefined' && localStorage.getItem(`quest_pro_${currentUser.uid}`) === 'true';
+        if (cachedPro) {
+          setSubscriptionStatus('active');
+          setUserData((prev: any) => ({
+            ...prev,
+            isPremium: true,
+            proQueriesAvailable: prev?.proQueriesAvailable ?? 40,
+            flashQueriesAvailable: prev?.flashQueriesAvailable ?? 1000,
+            isGuest: false
+          }));
+        }
+
         currentUser.getIdToken().then(token => {
           return fetch(`${getApiBaseUrl()}/api/user/status`, {
             headers: { Authorization: `Bearer ${token}` }
@@ -401,7 +414,10 @@ export function useCloudSync(
           .then(res => res.json())
           .then(data => {
             if (data && typeof data.proQueriesAvailable === 'number') {
-              const isPrem = Boolean(data.isPremium);
+              const isPrem = Boolean(data.isPremium || data.subscriptionStatus === 'active');
+              if (isPrem && typeof window !== 'undefined') {
+                localStorage.setItem(`quest_pro_${currentUser.uid}`, 'true');
+              }
               setUserData((prev: any) => ({
                 ...prev,
                 ...data,
@@ -581,16 +597,24 @@ export function useCloudSync(
 
           if (docSnap.exists()) {
             const data = docSnap.data();
-            setUserData((prev: any) => ({
-              ...prev,
-              ...data,
-              isPremium: Boolean(data.isPremium || prev?.isPremium),
-              proQueriesAvailable: data.proQueriesAvailable ?? prev?.proQueriesAvailable ?? (data.isPremium || prev?.isPremium ? 40 : 5),
-              flashQueriesAvailable: data.flashQueriesAvailable ?? prev?.flashQueriesAvailable ?? (data.isPremium || prev?.isPremium ? 1000 : 5),
-              isGuest: false
-            }));
+            const cachedPro = typeof window !== 'undefined' && localStorage.getItem(`quest_pro_${user.uid}`) === 'true';
             
-            if (data.isPremium || data.subscriptionStatus === 'active') {
+            setUserData((prev: any) => {
+              const isEffectivePrem = Boolean(data.isPremium || data.subscriptionStatus === 'active' || prev?.isPremium || cachedPro);
+              if (isEffectivePrem && typeof window !== 'undefined') {
+                localStorage.setItem(`quest_pro_${user.uid}`, 'true');
+              }
+              return {
+                ...prev,
+                ...data,
+                isPremium: isEffectivePrem,
+                proQueriesAvailable: data.proQueriesAvailable ?? prev?.proQueriesAvailable ?? (isEffectivePrem ? 40 : 5),
+                flashQueriesAvailable: data.flashQueriesAvailable ?? prev?.flashQueriesAvailable ?? (isEffectivePrem ? 1000 : 5),
+                isGuest: false
+              };
+            });
+            
+            if (data.isPremium || data.subscriptionStatus === 'active' || cachedPro) {
               setSubscriptionStatus('active');
             } else {
               setSubscriptionStatus(data.subscriptionStatus || 'beta');

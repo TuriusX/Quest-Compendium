@@ -4,11 +4,13 @@ import {
   initializeAuth, 
   browserLocalPersistence, 
   indexedDBLocalPersistence, 
+  browserSessionPersistence,
   inMemoryPersistence, 
+  browserPopupRedirectResolver,
   GoogleAuthProvider, 
   signInWithPopup, 
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithRedirect, 
+  getRedirectResult, 
   signOut 
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
@@ -25,27 +27,38 @@ const firebaseConfig = {
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-let authInstance;
-try {
-  authInstance = initializeAuth(app, {
-    persistence: [indexedDBLocalPersistence, browserLocalPersistence, inMemoryPersistence]
-  });
-} catch {
-  authInstance = getAuth(app);
-}
+export const auth = (() => {
+  let a;
+  try {
+    a = initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
+      popupRedirectResolver: browserPopupRedirectResolver
+    });
+  } catch {
+    a = getAuth(app);
+  }
+  if (a && !(a as any)._popupRedirectResolver && browserPopupRedirectResolver) {
+    try {
+      (a as any)._popupRedirectResolver = typeof (browserPopupRedirectResolver as any) === 'function'
+        ? new (browserPopupRedirectResolver as any)()
+        : browserPopupRedirectResolver;
+    } catch (e) {
+      console.warn("[Firebase] Could not attach fallback popup resolver:", e);
+    }
+  }
+  return a;
+})();
 
-export const auth = authInstance;
 export const db = getFirestore(app);
 
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope('openid');
-googleProvider.addScope('email');
-googleProvider.addScope('profile');
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const signInWithGoogle = async () => {
   try {
-    const result = await signInWithPopup(auth, googleProvider);
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
     return result;
   } catch (error) {
     console.error("Error signing in with Google", error);
@@ -55,14 +68,16 @@ export const signInWithGoogle = async () => {
 
 export const signInWithGoogleRedirect = async () => {
   try {
-    await signInWithRedirect(auth, googleProvider);
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    await signInWithRedirect(auth, provider, browserPopupRedirectResolver);
   } catch (error) {
     console.error("Error signing in with Google redirect", error);
     throw error;
   }
 };
 
-export { getRedirectResult };
+export { getRedirectResult, browserPopupRedirectResolver };
 
 export const logOut = async () => {
   try {

@@ -80,6 +80,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
         setErrorMessage('The sign-in window was closed. Click below to try again.');
       } else if (errCode === 'auth/network-request-failed') {
         setErrorMessage('Connection or cookie issue detected. Try allowing third-party cookies or use the redirect option below.');
+      } else if (errCode === 'auth/argument-error') {
+        setErrorMessage('Popup authentication was blocked by browser security. Please use the "Try Redirect Sign-in" option below.');
       } else {
         setErrorMessage(
           errMsg

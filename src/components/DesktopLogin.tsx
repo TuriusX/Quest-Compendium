@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider } from '../lib/firebase';
+import { GoogleAuthProvider } from 'firebase/auth';
+import { auth, signInWithGoogle } from '../lib/firebase';
 import { LogIn } from 'lucide-react';
 import { MagicalBookIcon } from './MagicalBookIcon';
 
@@ -13,7 +13,7 @@ export const DesktopLogin: React.FC = () => {
     try {
       setStatus('Opening Google Login...');
       setError('');
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithGoogle();
       const credential = GoogleAuthProvider.credentialFromResult(result);
       
       if (credential && credential.idToken) {

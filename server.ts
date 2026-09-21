@@ -344,18 +344,26 @@ async function startServer() {
             }
           }
           // Persist the premium status to Firestore if it changed
-          if (isStripePremium && userData.isPremium !== true) {
-            await updateFirestoreDocREST(idToken, userId, { isPremium: true });
+          if (isStripePremium && (userData.isPremium !== true || userData.subscriptionStatus !== 'active')) {
+            await updateFirestoreDocREST(idToken, userId, { isPremium: true, subscriptionStatus: 'active' });
+            userData.isPremium = true;
+            userData.subscriptionStatus = 'active';
           }
         } catch (e: any) {
           console.warn('[Stripe status check warn]:', e.message);
         }
       }
       
-      const isEffectivePremium = Boolean(userData.isPremium === true || isStripePremium);
+      const isEffectivePremium = Boolean(userData.isPremium === true || isStripePremium || userData.subscriptionStatus === 'active');
       const today = new Date().toISOString().split('T')[0];
       userData = syncUserLimits(userData, today, isEffectivePremium);
       userData.isPremium = isEffectivePremium;
+      userData.subscriptionStatus = isEffectivePremium ? 'active' : (userData.subscriptionStatus || 'beta');
+
+      // If effective premium was identified, ensure Firestore is in sync
+      if (isEffectivePremium && (userData.isPremium !== true || userData.subscriptionStatus !== 'active')) {
+        updateFirestoreDocREST(idToken, userId, { isPremium: true, subscriptionStatus: 'active' }).catch(() => {});
+      }
 
       res.json(userData);
     } catch (err) {
