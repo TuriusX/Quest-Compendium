@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, Play, AlertCircle, ExternalLink, X } from 'lucide-react';
 import { MagicalBookIcon } from './MagicalBookIcon';
-import { signInWithGoogle, auth } from '../lib/firebase';
+import { signInWithGoogle, signInWithGoogleRedirect, auth } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { DEFAULT_PREVIEW_URL } from '../utils/api';
 
@@ -25,10 +25,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
   useEffect(() => {
     // Listen for external auth success if running in Electron
     if ((window as any).electronAPI?.onDesktopAuthSuccess) {
-      (window as any).electronAPI.onDesktopAuthSuccess(async (idToken: string) => {
+      (window as any).electronAPI.onDesktopAuthSuccess(async (payload: any) => {
         try {
-          const credential = GoogleAuthProvider.credential(idToken);
-          await signInWithCredential(auth, credential);
+          const idToken = typeof payload === 'string' ? payload : (payload?.googleIdToken || payload?.idToken);
+          const accessToken = typeof payload === 'object' ? payload?.googleAccessToken : undefined;
+          let credential = null;
+          if (idToken) {
+            credential = GoogleAuthProvider.credential(idToken);
+          } else if (accessToken) {
+            credential = GoogleAuthProvider.credential(null, accessToken);
+          }
+          if (credential) {
+            await signInWithCredential(auth, credential);
+          }
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('quest_guest_session');
+            window.dispatchEvent(new Event('quest_auth_change'));
+          }
           onSignInSuccess();
         } catch (error) {
           console.error('Failed to sign in with external token:', error);
@@ -56,16 +69,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
       }
     } catch (error: any) {
       console.error('Sign in failed:', error);
-      if (error?.code === 'auth/popup-blocked') {
-        setErrorMessage('The sign-in popup was blocked by your browser. Please allow popups or use Guest Mode.');
-      } else if (error?.code === 'auth/unauthorized-domain') {
-        setErrorMessage('This embedded domain is not authorized for Google Sign-In. Please click "Continue as Guest" or open the full app.');
-      } else if (error?.code === 'auth/popup-closed-by-user') {
-        setErrorMessage('The sign-in window was closed. Try again or click "Continue as Guest".');
+      const errCode = error?.code || '';
+      const errMsg = error?.message || '';
+
+      if (errCode === 'auth/popup-blocked') {
+        setErrorMessage('The sign-in popup was blocked by your browser. Please allow popups or try the redirect option below.');
+      } else if (errCode === 'auth/unauthorized-domain') {
+        setErrorMessage('Domain not authorized in Firebase Console > Authentication > Settings > Authorized domains. You can continue as Guest or use the redirect option.');
+      } else if (errCode === 'auth/popup-closed-by-user') {
+        setErrorMessage('The sign-in window was closed. Click below to try again.');
+      } else if (errCode === 'auth/network-request-failed') {
+        setErrorMessage('Connection or cookie issue detected. Try allowing third-party cookies or use the redirect option below.');
       } else {
         setErrorMessage(
-          isEmbedded
-            ? 'Embedded browsers often block Google popups. Use "Continue as Guest" below to try the app immediately!'
+          errMsg
+            ? `Sign-in error: ${errMsg}`
             : 'Could not sign in with Google. Please try again or continue as Guest.'
         );
       }
@@ -152,6 +170,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
           </svg>
           {loading ? 'Authenticating...' : 'Sign in with Google'}
         </button>
+
+        {errorMessage && !isEmbedded && !(window as any).electronAPI?.startDesktopLogin && (
+          <button
+            onClick={async () => {
+              try {
+                setLoading(true);
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('quest_guest_session');
+                }
+                await signInWithGoogleRedirect();
+              } catch (e: any) {
+                setErrorMessage(e?.message || 'Redirect failed. Try Guest mode.');
+                setLoading(false);
+              }
+            }}
+            disabled={loading}
+            className="w-full mt-2.5 py-2 px-4 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-xs text-zinc-300 border border-zinc-700/60 transition-colors"
+          >
+            Try Redirect Sign-in (Bypass Popup Blockers)
+          </button>
+        )}
 
         {!isEmbedded && (
           <button

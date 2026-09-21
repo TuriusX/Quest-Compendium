@@ -35,12 +35,11 @@ async function getFirestoreDocREST(idToken: string, uid: string) {
 }
 
 async function updateFirestoreDocREST(idToken: string, uid: string, fields: Record<string, any>) {
-  const isCloudRun = !!process.env.K_SERVICE;
   const projectId = 'quest-compendium-1bccf';
   const databaseId = '(default)';
 
   const mask = Object.keys(fields).map(k => `updateMask.fieldPaths=${k}`).join('&');
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${uid}?${mask}`;
+  const patchUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${uid}?${mask}`;
   
   const firestoreFields: any = {};
   for (const [k, v] of Object.entries(fields)) {
@@ -52,17 +51,25 @@ async function updateFirestoreDocREST(idToken: string, uid: string, fields: Reco
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch(url, {
+    const response = await fetch(patchUrl, {
       method: 'PATCH',
       headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields: firestoreFields }),
       signal: controller.signal
     });
+    if (response.status === 404) {
+      // Document doesn't exist yet, create it via POST
+      const createUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users?documentId=${uid}`;
+      await fetch(createUrl, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: firestoreFields })
+      });
+    }
     clearTimeout(timeoutId);
-    if (!response.ok) throw new Error(`Firestore write error: ${await response.text()}`);
   } catch (e: any) {
     clearTimeout(timeoutId);
-    console.error('Firestore update failed:', e.message);
+    console.warn('Firestore update failed:', e.message);
   }
 }
 import Stripe from 'stripe';
@@ -322,28 +329,33 @@ async function startServer() {
 
       let userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
       
-      const userEmail = (req as any).user?.email;
+      const rawEmail = (req as any).user?.email;
+      const userEmail = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : null;
       let isStripePremium = false;
       if (userEmail) {
         try {
           const stripe = getStripe();
-          const customers = await stripe.customers.list({ email: userEmail.toLowerCase(), limit: 1 });
-          if (customers.data.length > 0) {
-            const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: 'active', limit: 1 });
-            isStripePremium = subs.data.length > 0;
-            // Persist the premium status to Firestore if it changed
-            if (isStripePremium && userData.isPremium !== true) {
-              await updateFirestoreDocREST(idToken, userId, { isPremium: true });
+          const customers = await stripe.customers.list({ email: userEmail, limit: 5 });
+          for (const customer of customers.data) {
+            const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'active', limit: 1 });
+            if (subs.data.length > 0) {
+              isStripePremium = true;
+              break;
             }
           }
-        } catch (e) {}
+          // Persist the premium status to Firestore if it changed
+          if (isStripePremium && userData.isPremium !== true) {
+            await updateFirestoreDocREST(idToken, userId, { isPremium: true });
+          }
+        } catch (e: any) {
+          console.warn('[Stripe status check warn]:', e.message);
+        }
       }
       
+      const isEffectivePremium = Boolean(userData.isPremium === true || isStripePremium);
       const today = new Date().toISOString().split('T')[0];
-      userData = syncUserLimits(userData, today, isStripePremium);
-      // update the frontend object
-      userData.isPremium = isStripePremium;
-
+      userData = syncUserLimits(userData, today, isEffectivePremium);
+      userData.isPremium = isEffectivePremium;
 
       res.json(userData);
     } catch (err) {
@@ -665,29 +677,32 @@ async function startServer() {
       let guestQuota: GuestQuota | null = null;
       if (!isGuest) {
         userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
-        const userEmail = (req as any).user?.email;
+        const rawEmail = (req as any).user?.email;
+        const userEmail = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : null;
         let isStripePremium = false;
         if (userEmail) {
           try {
             const stripe = getStripe();
-            const customers = await stripe.customers.list({ email: userEmail.toLowerCase(), limit: 1 });
-            if (customers.data.length > 0) {
-              const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: 'active', limit: 1 });
-              isStripePremium = subs.data.length > 0;
-              // Persist the premium status to Firestore if it changed
-              if (isStripePremium && userData.isPremium !== true) {
-                await updateFirestoreDocREST(idToken, userId, { isPremium: true });
+            const customers = await stripe.customers.list({ email: userEmail, limit: 5 });
+            for (const customer of customers.data) {
+              const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'active', limit: 1 });
+              if (subs.data.length > 0) {
+                isStripePremium = true;
+                break;
               }
             }
-          } catch (e) {
-             isStripePremium = userData.isPremium === true;
+            if (isStripePremium && userData.isPremium !== true) {
+              await updateFirestoreDocREST(idToken, userId, { isPremium: true });
+            }
+          } catch (e: any) {
+            console.warn('[Stripe chat check warn]:', e.message);
           }
-        } else {
-          isStripePremium = userData.isPremium === true;
         }
         
+        const isEffectivePremium = Boolean(userData.isPremium === true || isStripePremium);
         const today = new Date().toISOString().split('T')[0];
-        userData = syncUserLimits(userData, today, isStripePremium);
+        userData = syncUserLimits(userData, today, isEffectivePremium);
+        userData.isPremium = isEffectivePremium;
       } else {
         // Guest mode trial: strictly match the unpaid tier (5 Pro & 5 Flash)
         const today = new Date().toISOString().split('T')[0];

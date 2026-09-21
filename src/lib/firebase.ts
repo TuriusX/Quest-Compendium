@@ -7,6 +7,8 @@ import {
   inMemoryPersistence, 
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signOut 
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
@@ -36,6 +38,10 @@ export const auth = authInstance;
 export const db = getFirestore(app);
 
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('openid');
+googleProvider.addScope('email');
+googleProvider.addScope('profile');
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const signInWithGoogle = async () => {
   try {
@@ -46,6 +52,17 @@ export const signInWithGoogle = async () => {
     throw error;
   }
 };
+
+export const signInWithGoogleRedirect = async () => {
+  try {
+    await signInWithRedirect(auth, googleProvider);
+  } catch (error) {
+    console.error("Error signing in with Google redirect", error);
+    throw error;
+  }
+};
+
+export { getRedirectResult };
 
 export const logOut = async () => {
   try {

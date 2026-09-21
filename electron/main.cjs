@@ -160,6 +160,10 @@ const authServer = http.createServer((req, res) => {
       "    const app = initializeApp(firebaseConfig);",
       "    const auth = getAuth(app);",
       "    const provider = new GoogleAuthProvider();",
+      "    provider.addScope('openid');",
+      "    provider.addScope('email');",
+      "    provider.addScope('profile');",
+      "    provider.setCustomParameters({ prompt: 'select_account' });",
       "    ",
       "    document.getElementById('loginBtn').addEventListener('click', async () => {",
       "      document.getElementById('loginBtn').style.display = 'none';",
@@ -170,16 +174,24 @@ const authServer = http.createServer((req, res) => {
       "      try {",
       "        const result = await signInWithPopup(auth, provider);",
       "        const credential = GoogleAuthProvider.credentialFromResult(result);",
-      "        if (credential && credential.idToken) {",
-      "          document.getElementById('status').innerText = 'Login successful! Syncing...';",
-      "          await fetch('http://localhost:' + window.location.port + '/auth-callback', {",
-      "            method: 'POST',",
-      "            body: JSON.stringify({ idToken: credential.idToken })",
-      "          });",
-      "          document.getElementById('status').innerText = 'Done! You can close this window.';",
-      "          document.getElementById('spinner').style.display = 'none';",
-      "          setTimeout(() => window.close(), 1500);",
-      "        }",
+      "        const user = result.user;",
+      "        const firebaseIdToken = await user.getIdToken(true);",
+      "        const googleIdToken = credential ? credential.idToken : null;",
+      "        const googleAccessToken = credential ? credential.accessToken : null;",
+      "        document.getElementById('status').innerText = 'Login successful! Syncing...';",
+      "        await fetch('http://localhost:' + window.location.port + '/auth-callback', {",
+      "          method: 'POST',",
+      "          headers: { 'Content-Type': 'application/json' },",
+      "          body: JSON.stringify({",
+      "            idToken: googleIdToken || firebaseIdToken,",
+      "            googleIdToken: googleIdToken,",
+      "            googleAccessToken: googleAccessToken,",
+      "            firebaseIdToken: firebaseIdToken",
+      "          })",
+      "        });",
+      "        document.getElementById('status').innerText = 'Done! You can close this window.';",
+      "        document.getElementById('spinner').style.display = 'none';",
+      "        setTimeout(() => window.close(), 1200);",
       "      } catch(err) {",
       "        console.error(err);",
       "        document.getElementById('spinner').style.display = 'none';",
@@ -202,8 +214,8 @@ const authServer = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const creds = JSON.parse(body);
-        if (mainWindow && creds.idToken) {
-          mainWindow.webContents.send('desktop-auth-success', creds.idToken);
+        if (mainWindow && (creds.idToken || creds.googleIdToken || creds.firebaseIdToken)) {
+          mainWindow.webContents.send('desktop-auth-success', creds);
         }
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify({ success: true }));

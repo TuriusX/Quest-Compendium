@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { auth, db } from '../lib/firebase';
-import { onAuthStateChanged, User, signOut } from 'firebase/auth';
+import { onAuthStateChanged, User, signOut, getRedirectResult } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { AppSettings, GameTab, CloudSyncDiagnostics, SyncEventLog } from '../types';
 import { getApiBaseUrl } from '../utils/api';
@@ -230,20 +230,16 @@ export function useCloudSync(
   const [user, setUser] = useState<any | null>(null);
   const [guestUser, setGuestUser] = useState<any | null>(() => {
     if (typeof window !== 'undefined') {
-      let saved = localStorage.getItem('quest_guest_session');
-      if (!saved) {
-        saved = 'guest_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-        try {
-          localStorage.setItem('quest_guest_session', saved);
-        } catch {}
+      const saved = localStorage.getItem('quest_guest_session');
+      if (saved) {
+        return {
+          uid: saved,
+          email: null,
+          displayName: 'Guest Explorer',
+          getIdToken: async () => saved,
+          isGuest: true
+        };
       }
-      return {
-        uid: saved,
-        email: null,
-        displayName: 'Guest Explorer',
-        getIdToken: async () => saved,
-        isGuest: true
-      };
     }
     return null;
   });
@@ -252,7 +248,7 @@ export function useCloudSync(
     isPremium: false,
     proQueriesAvailable: 5,
     flashQueriesAvailable: 5,
-    isGuest: true
+    isGuest: false
   }));
   const [isInitializing, setIsInitializing] = useState(false);
   const [isOutdated, setIsOutdated] = useState(false);
@@ -371,16 +367,75 @@ export function useCloudSync(
 
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      const savedGuest = typeof window !== 'undefined' ? localStorage.getItem('quest_guest_session') : null;
-      
-      // If a guest session is explicitly active, do NOT allow a cached Google user to take over
-      if (savedGuest) {
-        if (currentUser) {
-          // Explicitly sign out of Firebase so the Google account is detached from guest sessions
-          signOut(auth).catch(() => {});
+    // Check if returning from a redirect sign-in flow
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('quest_guest_session');
+            window.dispatchEvent(new Event('quest_auth_change'));
+          }
+          setUser(result.user);
         }
+      })
+      .catch((err) => {
+        console.warn('[CloudSync] Redirect result error:', err);
+      });
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      // 1. If an authenticated user is logged in, they take absolute priority!
+      if (currentUser) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('quest_guest_session');
+        }
+        setGuestUser(null);
+        setUser(currentUser);
+        setIsInitializing(true);
+        addEvent('AUTH_LOGIN', `Signed in as ${currentUser.email || 'no-email'} (UID: ...${currentUser.uid.slice(-6)})`);
+
+        currentUser.getIdToken().then(token => {
+          return fetch(`${getApiBaseUrl()}/api/user/status`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data && typeof data.proQueriesAvailable === 'number') {
+              const isPrem = Boolean(data.isPremium);
+              setUserData((prev: any) => ({
+                ...prev,
+                ...data,
+                isPremium: isPrem,
+                proQueriesAvailable: data.proQueriesAvailable,
+                flashQueriesAvailable: data.flashQueriesAvailable ?? (isPrem ? 1000 : 5),
+                isGuest: false
+              }));
+              setSubscriptionStatus(isPrem ? 'active' : (data.subscriptionStatus || 'beta'));
+
+              // Persist verified Pro status directly to Firestore user doc so onSnapshot also has it
+              if (isPrem && currentUser) {
+                setDoc(doc(db, 'users', currentUser.uid), { isPremium: true, subscriptionStatus: 'active' }, { merge: true }).catch(() => {});
+              }
+            }
+            setIsInitializing(false);
+          })
+          .catch(() => {
+            setIsInitializing(false);
+          });
+        return;
+      }
+
+      // 2. Only if no Google account is logged in, check for an explicit guest session
+      const savedGuest = typeof window !== 'undefined' ? localStorage.getItem('quest_guest_session') : null;
+      if (savedGuest) {
         setUser(null);
+        setGuestUser({
+          uid: savedGuest,
+          email: null,
+          displayName: 'Guest Explorer',
+          getIdToken: async () => savedGuest,
+          isGuest: true
+        });
         setSubscriptionStatus('beta');
         setUserData({
           isPremium: false,
@@ -410,44 +465,21 @@ export function useCloudSync(
         return;
       }
 
-      setUser(currentUser);
-      if (!currentUser) {
-        setSubscriptionStatus('beta');
-        setIsInitializing(false);
-        addEvent('AUTH_LOGOUT', 'User signed out / no active session');
-      } else {
-        // We are logging in with full account, hold initialization true until cloud fetch finishes
-        setIsInitializing(true);
-        addEvent('AUTH_LOGIN', `Signed in as ${currentUser.email || 'no-email'} (UID: ...${currentUser.uid.slice(-6)})`);
-        currentUser.getIdToken().then(token => {
-          return fetch(`${getApiBaseUrl()}/api/user/status`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data && typeof data.proQueriesAvailable === 'number') {
-              setUserData((prev: any) => ({
-                ...prev,
-                isPremium: Boolean(data.isPremium),
-                proQueriesAvailable: data.proQueriesAvailable,
-                flashQueriesAvailable: data.flashQueriesAvailable ?? 5,
-                isGuest: false
-              }));
-            }
-          })
-          .catch(() => {});
-      }
+      // 3. Completely unauthenticated and no guest session
+      setUser(null);
+      setGuestUser(null);
+      setSubscriptionStatus('beta');
+      setIsInitializing(false);
+      addEvent('AUTH_LOGOUT', 'User signed out / no active session');
     });
+
     return () => unsubscribe();
   }, [addEvent]);
 
   // Effect to populate guest state when guestUser changes
   useEffect(() => {
-    if (guestUser) {
-      if (auth.currentUser) {
-        signOut(auth).catch(() => {});
-      }
+    // Only apply guest parameters if there is genuinely no logged-in Google account
+    if (guestUser && !auth.currentUser) {
       setSubscriptionStatus('beta');
       setUserData({
         isPremium: false,
@@ -500,11 +532,12 @@ export function useCloudSync(
 
           await setDoc(userRef, removeUndefinedFields({
             email: user.email || null,
-            subscriptionStatus: 'beta',
+            subscriptionStatus: userData?.isPremium ? 'active' : 'beta',
+            isPremium: Boolean(userData?.isPremium),
             settings: localDataRef.current.settings,
             tabs: initialTabs,
             updatedAt: Date.now()
-          }));
+          }), { merge: true });
           const now = Date.now();
           setLastSuccessfulWriteTime(now);
           addEvent('INIT_DOC_SUCCESS', `Initial user doc created in Firestore with ${localDataRef.current.tabs.length} tabs`);
@@ -548,10 +581,20 @@ export function useCloudSync(
 
           if (docSnap.exists()) {
             const data = docSnap.data();
-            setUserData(data);
+            setUserData((prev: any) => ({
+              ...prev,
+              ...data,
+              isPremium: Boolean(data.isPremium || prev?.isPremium),
+              proQueriesAvailable: data.proQueriesAvailable ?? prev?.proQueriesAvailable ?? (data.isPremium || prev?.isPremium ? 40 : 5),
+              flashQueriesAvailable: data.flashQueriesAvailable ?? prev?.flashQueriesAvailable ?? (data.isPremium || prev?.isPremium ? 1000 : 5),
+              isGuest: false
+            }));
             
-            // Default to 'beta' if subscriptionStatus is unset so writes are permitted
-            setSubscriptionStatus(data.subscriptionStatus || 'beta');
+            if (data.isPremium || data.subscriptionStatus === 'active') {
+              setSubscriptionStatus('active');
+            } else {
+              setSubscriptionStatus(data.subscriptionStatus || 'beta');
+            }
             
             const cloudSettings = data.settings || null;
             const cloudTabs: GameTab[] = Array.isArray(data.tabs) ? data.tabs : [];
