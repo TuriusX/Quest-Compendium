@@ -252,7 +252,8 @@ export function useCloudSync(
           setSubscriptionStatus(data.subscriptionStatus || 'beta');
           
           const cloudSettingsStr = JSON.stringify(data.settings || {});
-          const cloudTabsStr = JSON.stringify(data.tabs || []);
+          const cloudTabs = data.tabs;
+          const cloudTabsStr = JSON.stringify(cloudTabs || []);
 
           // Robust check: ONLY update local state if the cloud has genuinely different data
           // By checking against lastSyncedData, we don't get trapped by React closures.
@@ -265,10 +266,30 @@ export function useCloudSync(
             }
           }
 
-          if (!hasDoneInitialCloudLoad) {
-            if (data.tabs && Array.isArray(data.tabs)) {
-               setLocalGameTabs(data.tabs);
-               stateUpdated = true;
+          // Continuous bidirectional tabs synchronization
+          if (!hasDoneInitialCloudLoad || cloudTabsStr !== lastSyncedData.current.tabs) {
+            if (Array.isArray(cloudTabs) && cloudTabs.length > 0) {
+              setLocalGameTabs(cloudTabs);
+              stateUpdated = true;
+              try {
+                localStorage.setItem(`quest_compendium_tabs_${user.uid}`, cloudTabsStr);
+                localStorage.setItem('quest_compendium_tabs', cloudTabsStr);
+              } catch {}
+            } else if (!hasDoneInitialCloudLoad && (!cloudTabs || cloudTabs.length === 0)) {
+              // Cloud has no tabs yet, but local might already have tabs created by user!
+              if (localDataRef.current.tabs && localDataRef.current.tabs.length > 0) {
+                // Upload local tabs to cloud so they are saved
+                const localTabsStr = JSON.stringify(sanitizeTabsForCloud(localDataRef.current.tabs));
+                lastSyncedData.current.tabs = localTabsStr;
+                setDoc(userRef, {
+                  tabs: JSON.parse(localTabsStr),
+                  updatedAt: Date.now()
+                }, { merge: true }).catch(err => console.error("Initial tab upload error", err));
+              }
+            } else if (hasDoneInitialCloudLoad && Array.isArray(cloudTabs) && cloudTabs.length === 0) {
+              // Remote explicitly deleted all tabs
+              setLocalGameTabs([]);
+              stateUpdated = true;
             }
           }
 
@@ -302,17 +323,35 @@ export function useCloudSync(
       return;
     }
 
-    const syncTimeout = setTimeout(() => {
+    const flushSync = () => {
       lastSyncedData.current = { settings: currentSettingsStr, tabs: currentTabsStr };
       const userRef = doc(db, 'users', user.uid);
       setDoc(userRef, {
         settings: JSON.parse(currentSettingsStr),
         tabs: JSON.parse(currentTabsStr),
         updatedAt: Date.now()
-      }, { merge: true }).catch(err => console.error("Sync error", err));
-    }, 1500); // Debounce syncs by 1.5 seconds
+      }, { merge: true }).catch(err => {
+        console.error("Sync error", err);
+        // Reset lastSyncedData on failure so retry happens
+        lastSyncedData.current = { settings: '', tabs: '' };
+      });
+    };
 
-    return () => clearTimeout(syncTimeout);
+    const syncTimeout = setTimeout(flushSync, 1000);
+
+    const handleBeforeUnloadOrFlush = () => {
+      clearTimeout(syncTimeout);
+      flushSync();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnloadOrFlush);
+    window.addEventListener('quest_flush_sync', handleBeforeUnloadOrFlush);
+
+    return () => {
+      clearTimeout(syncTimeout);
+      window.removeEventListener('beforeunload', handleBeforeUnloadOrFlush);
+      window.removeEventListener('quest_flush_sync', handleBeforeUnloadOrFlush);
+    };
   }, [localSettings, localGameTabs, user, subscriptionStatus, isInitializing]);
 
   const effectiveUser = guestUser ? guestUser : user;

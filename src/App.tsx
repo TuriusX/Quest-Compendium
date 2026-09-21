@@ -190,15 +190,36 @@ export default function App() {
       const saved = localStorage.getItem('quest_compendium_tabs');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+
+      // Also check user-specific keys if saved was empty
+      if (typeof window !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('quest_compendium_tabs_')) {
+            const val = localStorage.getItem(key);
+            if (val) {
+              const parsed = JSON.parse(val);
+              if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            }
+          }
+        }
       }
     } catch {}
-    return [];
+    return DEFAULT_GUEST_TABS;
   });
 
   const [activeTabId, setActiveTabId] = useState<string>(() => {
     return tabs[0]?.id || '';
   });
+
+  // Ensure activeTabId always resolves to a valid tab when tabs exist
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.some(t => t.id === activeTabId)) {
+      setActiveTabId(tabs[0].id);
+    }
+  }, [tabs, activeTabId]);
 
   // --- UI Drawer & Modal States ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -270,7 +291,7 @@ export default function App() {
   useEffect(() => {
     if (isInitializing) return;
     const currentIdentity = user ? (user.isGuest ? 'guest' : user.uid) : 'unauthed';
-    if (lastUserIdentityRef.current !== null && lastUserIdentityRef.current !== currentIdentity) {
+    if (lastUserIdentityRef.current !== currentIdentity) {
       if (user?.isGuest) {
         // Switching to guest session - isolate completely from Google account tabs
         try {
@@ -288,7 +309,7 @@ export default function App() {
         setTabs(DEFAULT_GUEST_TABS);
         setActiveTabId(DEFAULT_GUEST_TABS[0].id);
       } else if (user && !user.isGuest) {
-        // Switching to Google account
+        // Switching to Google account: restore user-specific tabs if local is empty/default
         try {
           const userKey = `quest_compendium_tabs_${user.uid}`;
           const saved = localStorage.getItem(userKey) || localStorage.getItem('quest_compendium_tabs');
@@ -554,6 +575,9 @@ export default function App() {
   }, [settings]);
 
   useEffect(() => {
+    // Avoid overwriting persisted storage with empty tabs while initializing
+    if (isInitializing && tabs.length === 0) return;
+
     try {
       if (user?.isGuest) {
         localStorage.setItem('quest_guest_tabs', JSON.stringify(tabs));
@@ -564,12 +588,12 @@ export default function App() {
         const isGuestSaved = typeof window !== 'undefined' && Boolean(localStorage.getItem('quest_guest_session'));
         if (isGuestSaved) {
           localStorage.setItem('quest_guest_tabs', JSON.stringify(tabs));
-        } else {
+        } else if (tabs.length > 0) {
           localStorage.setItem('quest_compendium_tabs', JSON.stringify(tabs));
         }
       }
     } catch {}
-  }, [tabs, user]);
+  }, [tabs, user, isInitializing]);
 
   // Fetch Steam Profile
   useEffect(() => {

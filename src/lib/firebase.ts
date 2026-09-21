@@ -1,5 +1,14 @@
-import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { 
+  getAuth, 
+  initializeAuth, 
+  browserLocalPersistence, 
+  indexedDBLocalPersistence, 
+  inMemoryPersistence, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut 
+} from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -12,9 +21,18 @@ const firebaseConfig = {
   measurementId: "G-XX6RW18GHY"
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-// Use the specific firestore database ID provided in the config
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+
+let authInstance;
+try {
+  authInstance = initializeAuth(app, {
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence, inMemoryPersistence]
+  });
+} catch {
+  authInstance = getAuth(app);
+}
+
+export const auth = authInstance;
 export const db = getFirestore(app);
 
 export const googleProvider = new GoogleAuthProvider();

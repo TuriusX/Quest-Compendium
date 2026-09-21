@@ -32,15 +32,48 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
   const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent.toLowerCase());
   const FrameComponent = isElectron ? 'webview' : 'iframe';
 
-  const [tabs, setTabs] = useState<BrowserTab[]>([
-    { id: 'btab-1', name: 'Web Browser', url: 'https://www.google.com' },
-    { id: 'btab-2', name: 'Steam Community Guides', url: activeGame ? `https://steamcommunity.com/app/${activeGame.appId}/guides/` : 'https://steamcommunity.com' },
-  ]);
-  const [activeTabId, setActiveTabId] = useState<string | null>('btab-1');
-  const [inputUrl, setInputUrl] = useState('https://www.google.com');
-  const [bookmarks, setBookmarks] = useState<FavoriteBookmark[]>(DEFAULT_BOOKMARKS);
+  const [tabs, setTabs] = useState<BrowserTab[]>(() => {
+    try {
+      const saved = localStorage.getItem('quest_browser_tabs');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [
+      { id: 'btab-1', name: 'Web Browser', url: 'https://www.google.com' },
+      { id: 'btab-2', name: 'Steam Community Guides', url: activeGame ? `https://steamcommunity.com/app/${activeGame.appId}/guides/` : 'https://steamcommunity.com' },
+    ];
+  });
+  const [activeTabId, setActiveTabId] = useState<string | null>(() => tabs[0]?.id || 'btab-1');
+  const [inputUrl, setInputUrl] = useState(() => tabs[0]?.url || 'https://www.google.com');
+  const [bookmarks, setBookmarks] = useState<FavoriteBookmark[]>(() => {
+    try {
+      const saved = localStorage.getItem('quest_browser_bookmarks');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_BOOKMARKS;
+  });
   const [showBookmarksMenu, setShowBookmarksMenu] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(100);
+
+  // Persist browser tabs and bookmarks
+  React.useEffect(() => {
+    try {
+      if (tabs.length > 0) {
+        localStorage.setItem('quest_browser_tabs', JSON.stringify(tabs));
+      }
+    } catch {}
+  }, [tabs]);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('quest_browser_bookmarks', JSON.stringify(bookmarks));
+    } catch {}
+  }, [bookmarks]);
 
   const activeTab = tabs.find(t => t.id === activeTabId);
 

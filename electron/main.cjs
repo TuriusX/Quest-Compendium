@@ -90,6 +90,7 @@ async function fetchFullAchievementDetails(appId, steamId) {
 }
 
 const { app, BrowserWindow, ipcMain, shell, globalShortcut, screen, desktopCapturer, Tray, Menu, nativeImage } = require('electron');
+app.setName('Quest Compendium');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
@@ -246,6 +247,7 @@ authServer.listen(0, 'localhost', () => {
 app.commandLine.appendSwitch('disable-site-isolation-trials');
 app.commandLine.appendSwitch('disable-features', 'CrossOriginOpenerPolicy');
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+app.commandLine.appendSwitch('allow-file-access-from-files');
 
 app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -363,6 +365,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webviewTag: true,
+      webSecurity: false,
     },
   });
 
@@ -786,7 +789,8 @@ ipcMain.on('open-settings-window', () => {
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      webSecurity: false,
     },
     autoHideMenuBar: true,
     icon: path.join(__dirname, isDev ? '../public/app-icon.ico' : '../dist/app-icon.ico')

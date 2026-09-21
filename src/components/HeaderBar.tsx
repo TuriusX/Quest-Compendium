@@ -334,6 +334,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             <button
               style={{ WebkitAppRegion: "no-drag" } as any}
               onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new Event('quest_flush_sync'));
+                }
                 if ((window as any).electronAPI?.closeApp) {
                   (window as any).electronAPI.closeApp();
                 }
