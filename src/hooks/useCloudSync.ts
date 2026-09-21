@@ -28,42 +28,67 @@ export interface TabMergeResult {
   reason: string;
 }
 
+export function isLegacyWelcomeTab(tab: GameTab): boolean {
+  if (!tab) return false;
+  return tab.id === 'guest-welcome-compendium' || tab.name === 'Welcome, Explorer';
+}
+
 /**
  * Merges local and cloud tabs without destroying local-only tabs.
  * - Unions tabs by ID.
+ * - Filters out legacy Welcome Explorer tabs completely.
+ * - Respects locally deleted tabs and purges them from cloud state.
  * - When same ID exists on both sides, keeps the one with the larger lastActive timestamp.
  * - Preserves rich local attributes (such as audioBase64 or local images/achievements) so sanitization does not degrade local state.
  * - Never discards local-only tabs.
  */
 export function mergeGameTabs(localTabs: GameTab[], cloudTabs: GameTab[]): TabMergeResult {
-  if (!Array.isArray(localTabs) || localTabs.length === 0) {
-    if (Array.isArray(cloudTabs) && cloudTabs.length > 0) {
-      return {
-        merged: cloudTabs,
-        hasChangesFromCloud: true,
-        hasChangesFromLocal: false,
-        reason: `Adopted ${cloudTabs.length} cloud tabs into empty local state`
-      };
+  let deletedIds = new Set<string>();
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('quest_deleted_tab_ids') : null;
+    if (raw) {
+      deletedIds = new Set(JSON.parse(raw));
     }
+  } catch {}
+
+  const rawLocal = Array.isArray(localTabs) ? localTabs : [];
+  const rawCloud = Array.isArray(cloudTabs) ? cloudTabs : [];
+
+  const cleanLocal = rawLocal.filter(t => t && !isLegacyWelcomeTab(t) && !deletedIds.has(t.id));
+  const cleanCloud = rawCloud.filter(t => t && !isLegacyWelcomeTab(t) && !deletedIds.has(t.id));
+
+  const localHadUnwanted = cleanLocal.length !== rawLocal.length;
+  const cloudHadUnwanted = cleanCloud.length !== rawCloud.length;
+
+  if (cleanLocal.length === 0 && cleanCloud.length === 0) {
     return {
       merged: [],
-      hasChangesFromCloud: false,
-      hasChangesFromLocal: false,
-      reason: 'Both local and cloud tab lists are empty'
+      hasChangesFromCloud: localHadUnwanted,
+      hasChangesFromLocal: cloudHadUnwanted,
+      reason: 'Zero active tabs'
     };
   }
 
-  if (!Array.isArray(cloudTabs) || cloudTabs.length === 0) {
+  if (cleanLocal.length === 0) {
     return {
-      merged: localTabs,
-      hasChangesFromCloud: false,
-      hasChangesFromLocal: localTabs.length > 0,
-      reason: `Preserved ${localTabs.length} local tabs for empty cloud document`
+      merged: cleanCloud,
+      hasChangesFromCloud: true,
+      hasChangesFromLocal: cloudHadUnwanted,
+      reason: `Adopted ${cleanCloud.length} cloud tabs into empty local state`
+    };
+  }
+
+  if (cleanCloud.length === 0) {
+    return {
+      merged: cleanLocal,
+      hasChangesFromCloud: localHadUnwanted,
+      hasChangesFromLocal: true,
+      reason: `Preserved ${cleanLocal.length} local tabs for empty cloud document`
     };
   }
 
   const cloudTabMap = new Map<string, GameTab>();
-  for (const t of cloudTabs) {
+  for (const t of cleanCloud) {
     if (t && t.id) {
       cloudTabMap.set(t.id, t);
     }
@@ -71,11 +96,11 @@ export function mergeGameTabs(localTabs: GameTab[], cloudTabs: GameTab[]): TabMe
 
   const mergedTabs: GameTab[] = [];
   const processedIds = new Set<string>();
-  let hasChangesFromCloud = false;
-  let hasChangesFromLocal = false;
+  let hasChangesFromCloud = localHadUnwanted;
+  let hasChangesFromLocal = cloudHadUnwanted;
 
   // Process all local tabs to preserve existing local tab order
-  for (const localTab of localTabs) {
+  for (const localTab of cleanLocal) {
     if (!localTab || !localTab.id) continue;
     processedIds.add(localTab.id);
 
@@ -131,7 +156,7 @@ export function mergeGameTabs(localTabs: GameTab[], cloudTabs: GameTab[]): TabMe
   }
 
   // Add any tabs that exist only in cloud
-  for (const cloudTab of cloudTabs) {
+  for (const cloudTab of cleanCloud) {
     if (!cloudTab || !cloudTab.id) continue;
     if (!processedIds.has(cloudTab.id)) {
       mergedTabs.push(cloudTab);
@@ -143,35 +168,45 @@ export function mergeGameTabs(localTabs: GameTab[], cloudTabs: GameTab[]): TabMe
     merged: mergedTabs,
     hasChangesFromCloud,
     hasChangesFromLocal,
-    reason: `Merged ${localTabs.length} local and ${cloudTabs.length} cloud tabs (total: ${mergedTabs.length})`
+    reason: `Merged ${cleanLocal.length} local and ${cleanCloud.length} cloud tabs (total: ${mergedTabs.length})`
   };
 }
 
 function sanitizeTabsForCloud(tabs: GameTab[]): GameTab[] {
-  return tabs.map(tab => {
-    const sanitizedTab = { ...tab };
-    
-    // Strip large message data (base64 audio/images/banners)
-    if (sanitizedTab.messages) {
-      sanitizedTab.messages = sanitizedTab.messages.map(msg => {
-        const newMsg = { ...msg };
-        if (newMsg.audioBase64) delete newMsg.audioBase64;
-        if (newMsg.imageUrl && newMsg.imageUrl.length > 2000) delete newMsg.imageUrl;
-        if (newMsg.bannerImageUrl && newMsg.bannerImageUrl.length > 2000) delete newMsg.bannerImageUrl;
-        return newMsg;
-      });
+  let deletedIds = new Set<string>();
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('quest_deleted_tab_ids') : null;
+    if (raw) {
+      deletedIds = new Set(JSON.parse(raw));
     }
-    
-    // Strip heavy active game data (achievements/patch notes)
-    if (sanitizedTab.activeSteamGame) {
-       const safeGame = { ...sanitizedTab.activeSteamGame };
-       if (safeGame.achievements) delete safeGame.achievements;
-       if (safeGame.patchNotes) delete safeGame.patchNotes;
-       sanitizedTab.activeSteamGame = safeGame;
-    }
+  } catch {}
 
-    return sanitizedTab;
-  });
+  return tabs
+    .filter(tab => tab && !isLegacyWelcomeTab(tab) && !deletedIds.has(tab.id))
+    .map(tab => {
+      const sanitizedTab = { ...tab };
+      
+      // Strip large message data (base64 audio/images/banners)
+      if (sanitizedTab.messages) {
+        sanitizedTab.messages = sanitizedTab.messages.map(msg => {
+          const newMsg = { ...msg };
+          if (newMsg.audioBase64) delete newMsg.audioBase64;
+          if (newMsg.imageUrl && newMsg.imageUrl.length > 2000) delete newMsg.imageUrl;
+          if (newMsg.bannerImageUrl && newMsg.bannerImageUrl.length > 2000) delete newMsg.bannerImageUrl;
+          return newMsg;
+        });
+      }
+      
+      // Strip heavy active game data (achievements/patch notes)
+      if (sanitizedTab.activeSteamGame) {
+         const safeGame = { ...sanitizedTab.activeSteamGame };
+         if (safeGame.achievements) delete safeGame.achievements;
+         if (safeGame.patchNotes) delete safeGame.patchNotes;
+         sanitizedTab.activeSteamGame = safeGame;
+      }
+
+      return sanitizedTab;
+    });
 }
 
 export function useCloudSync(

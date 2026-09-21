@@ -133,25 +133,6 @@ function SettingsStandalone() {
   );
 }
 
-const DEFAULT_GUEST_TABS: GameTab[] = [
-  {
-    id: 'guest-welcome-compendium',
-    name: 'Welcome, Explorer',
-    messages: [
-      {
-        id: 'welcome-msg',
-        role: 'assistant',
-        text: 'Welcome to Quest Compendium! Ask any gameplay questions, look up quest walkthroughs, puzzle solutions, or boss strategies.',
-        timestamp: Date.now()
-      }
-    ],
-    notes: '',
-    personalQuests: [],
-    createdAt: Date.now(),
-    lastActive: Date.now()
-  }
-];
-
 export default function App() {
   if (window.location.hash === '#settings') {
     return <Suspense fallback={<div className="w-screen h-screen bg-[#0c0d14]" />}><SettingsStandalone /></Suspense>;
@@ -184,14 +165,18 @@ export default function App() {
         const guestSaved = localStorage.getItem('quest_guest_tabs');
         if (guestSaved) {
           const parsed = JSON.parse(guestSaved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed)) {
+            return parsed.filter(t => t && t.id !== 'guest-welcome-compendium' && t.name !== 'Welcome, Explorer');
+          }
         }
-        return DEFAULT_GUEST_TABS;
+        return [];
       }
       const saved = localStorage.getItem('quest_compendium_tabs');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter(t => t && t.id !== 'guest-welcome-compendium' && t.name !== 'Welcome, Explorer');
+        }
       }
 
       // Also check user-specific keys if saved was empty
@@ -202,23 +187,29 @@ export default function App() {
             const val = localStorage.getItem(key);
             if (val) {
               const parsed = JSON.parse(val);
-              if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+              if (Array.isArray(parsed)) {
+                return parsed.filter(t => t && t.id !== 'guest-welcome-compendium' && t.name !== 'Welcome, Explorer');
+              }
             }
           }
         }
       }
     } catch {}
-    return DEFAULT_GUEST_TABS;
+    return [];
   });
 
   const [activeTabId, setActiveTabId] = useState<string>(() => {
     return tabs[0]?.id || '';
   });
 
-  // Ensure activeTabId always resolves to a valid tab when tabs exist
+  // Ensure activeTabId always resolves to a valid tab when tabs exist, or resets when tabs is empty
   useEffect(() => {
-    if (tabs.length > 0 && !tabs.some(t => t.id === activeTabId)) {
-      setActiveTabId(tabs[0].id);
+    if (tabs.length > 0) {
+      if (!tabs.some(t => t.id === activeTabId)) {
+        setActiveTabId(tabs[0].id);
+      }
+    } else if (activeTabId !== '') {
+      setActiveTabId('');
     }
   }, [tabs, activeTabId]);
 
@@ -299,16 +290,17 @@ export default function App() {
           const saved = localStorage.getItem('quest_guest_tabs');
           if (saved) {
             const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setTabs(parsed);
-              setActiveTabId(parsed[0]?.id || '');
+            if (Array.isArray(parsed)) {
+              const cleaned = parsed.filter(t => t && t.id !== 'guest-welcome-compendium' && t.name !== 'Welcome, Explorer');
+              setTabs(cleaned);
+              setActiveTabId(cleaned[0]?.id || '');
               lastUserIdentityRef.current = currentIdentity;
               return;
             }
           }
         } catch {}
-        setTabs(DEFAULT_GUEST_TABS);
-        setActiveTabId(DEFAULT_GUEST_TABS[0].id);
+        setTabs([]);
+        setActiveTabId('');
       } else if (user && !user.isGuest) {
         // Switching to Google account: restore user-specific tabs if local is empty/default
         try {
@@ -316,9 +308,10 @@ export default function App() {
           const saved = localStorage.getItem(userKey) || localStorage.getItem('quest_compendium_tabs');
           if (saved) {
             const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setTabs(parsed);
-              setActiveTabId(parsed[0]?.id || '');
+            if (Array.isArray(parsed)) {
+              const cleaned = parsed.filter(t => t && t.id !== 'guest-welcome-compendium' && t.name !== 'Welcome, Explorer');
+              setTabs(cleaned);
+              setActiveTabId(cleaned[0]?.id || '');
             }
           }
         } catch {}
@@ -577,7 +570,7 @@ export default function App() {
 
   useEffect(() => {
     // Avoid overwriting persisted storage with empty tabs while initializing
-    if (isInitializing && tabs.length === 0) return;
+    if (isInitializing) return;
 
     try {
       if (user?.isGuest) {
@@ -589,7 +582,7 @@ export default function App() {
         const isGuestSaved = typeof window !== 'undefined' && Boolean(localStorage.getItem('quest_guest_session'));
         if (isGuestSaved) {
           localStorage.setItem('quest_guest_tabs', JSON.stringify(tabs));
-        } else if (tabs.length > 0) {
+        } else {
           localStorage.setItem('quest_compendium_tabs', JSON.stringify(tabs));
         }
       }
@@ -990,6 +983,32 @@ export default function App() {
     setTabs(remaining);
     if (activeTabId === tabId) {
       setActiveTabId(remaining.length > 0 ? remaining[0].id : '');
+    }
+
+    // Track deleted tab ID so sync knows it was deleted locally and does not restore it
+    try {
+      const deletedKey = 'quest_deleted_tab_ids';
+      const raw = localStorage.getItem(deletedKey);
+      const set = new Set<string>(raw ? JSON.parse(raw) : []);
+      set.add(tabId);
+      localStorage.setItem(deletedKey, JSON.stringify(Array.from(set).slice(-100)));
+    } catch {}
+
+    // Immediately persist remaining tabs locally
+    try {
+      if (user?.isGuest) {
+        localStorage.setItem('quest_guest_tabs', JSON.stringify(remaining));
+      } else if (user && !user.isGuest) {
+        localStorage.setItem(`quest_compendium_tabs_${user.uid}`, JSON.stringify(remaining));
+        localStorage.setItem('quest_compendium_tabs', JSON.stringify(remaining));
+      } else {
+        localStorage.setItem('quest_compendium_tabs', JSON.stringify(remaining));
+      }
+    } catch {}
+
+    // Trigger immediate flush of tab deletion to cloud
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('quest_flush_sync'));
     }
   };
 

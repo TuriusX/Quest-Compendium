@@ -211,6 +211,13 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           );
         })}
 
+        {tabs.length === 0 && (
+          <div className="py-6 px-2 text-center text-zinc-500 text-xs flex flex-col items-center gap-1">
+            <span className="font-medium text-zinc-400">No Compendiums Active</span>
+            <span className="text-[11px] text-zinc-500">Create a tab below to start your journey</span>
+          </div>
+        )}
+
         {/* Add New Game Form / Button */}
         <button
           onClick={() => {
