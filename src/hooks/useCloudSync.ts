@@ -609,13 +609,24 @@ export function useCloudSync(
       flushSync();
     };
 
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        clearTimeout(syncTimeout);
+        flushSync();
+      }
+    };
+
     window.addEventListener('beforeunload', handleBeforeUnloadOrFlush);
+    window.addEventListener('pagehide', handleBeforeUnloadOrFlush);
     window.addEventListener('quest_flush_sync', handleBeforeUnloadOrFlush);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       clearTimeout(syncTimeout);
       window.removeEventListener('beforeunload', handleBeforeUnloadOrFlush);
+      window.removeEventListener('pagehide', handleBeforeUnloadOrFlush);
       window.removeEventListener('quest_flush_sync', handleBeforeUnloadOrFlush);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [localSettings, localGameTabs, user, subscriptionStatus, isInitializing, addEvent, estimatedUploadSizeKb]);
 

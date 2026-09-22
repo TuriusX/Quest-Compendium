@@ -1227,6 +1227,7 @@ export default function App() {
             }
           }}
           theme={settings.theme}
+          onSync={syncDiagnostics?.triggerSyncNow}
         />
 
         {/* Font Quick Switcher Menu Popup */}
@@ -1305,6 +1306,7 @@ export default function App() {
             onOpenQuests={() => setIsQuestsOpen(true)}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenFeedback={() => setIsFeedbackOpen(true)}
+            onSync={syncDiagnostics?.triggerSyncNow}
           />
 
           {/* Sidebar Drag Handle */}

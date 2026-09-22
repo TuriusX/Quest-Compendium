@@ -13,7 +13,8 @@ import {
   Trophy,
   Sparkles,
   Save,
-  Globe
+  Globe,
+  RefreshCw
 } from 'lucide-react';
 import { GameTab, SteamGameData } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
@@ -38,6 +39,7 @@ interface GamesSidebarProps {
   onOpenSettings: () => void;
   onOpenFeedback: () => void;
   globalActiveGame?: SteamGameData | null;
+  onSync?: () => Promise<boolean>;
 }
 
 export const GamesSidebar: React.FC<GamesSidebarProps> = ({
@@ -59,10 +61,36 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   onOpenQuests,
   onOpenSettings,
   onOpenFeedback,
+  onSync,
 }) => {
   const [showFontControl, setShowFontControl] = useState(false);
   const [tabToDelete, setTabToDelete] = useState<{id: string, name: string} | null>(null);
   const [contextMenu, setContextMenu] = useState<{tabId: string, x: number, y: number} | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState(false);
+
+  const handleSyncClick = async () => {
+    if (isSyncing) return;
+    playBlipSound(soundEnabled);
+    setIsSyncing(true);
+    try {
+      if (onSync) {
+        const ok = await onSync();
+        if (ok) {
+          setSyncSuccess(true);
+          setTimeout(() => setSyncSuccess(false), 2000);
+        }
+      } else if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('quest_flush_sync'));
+        setSyncSuccess(true);
+        setTimeout(() => setSyncSuccess(false), 2000);
+      }
+    } catch (e) {
+      console.warn('[GamesSidebar] Sync error:', e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   return (
     <aside 
@@ -99,6 +127,20 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
+          {/* Cloud Sync Button */}
+          <button
+            onClick={handleSyncClick}
+            disabled={isSyncing}
+            title={isSyncing ? "Syncing tabs with cloud..." : syncSuccess ? "Synced with Cloud!" : "Sync with Cloud"}
+            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+              syncSuccess 
+                ? 'text-emerald-400 bg-emerald-500/20' 
+                : 'text-zinc-400 hover:text-white hover:bg-white/10'
+            } disabled:opacity-50`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-[var(--accent-color)]' : ''}`} />
+          </button>
+
           <button
             onClick={() => {
               playBlipSound(soundEnabled);

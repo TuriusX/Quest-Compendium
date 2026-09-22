@@ -16,7 +16,8 @@ import {
   Zap,
   LogOut,
   ArrowRightToLine,
-  Square
+  Square,
+  RefreshCw
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
@@ -45,6 +46,7 @@ interface HeaderBarProps {
   isDocked: boolean;
   onToggleDock: () => void;
   theme: ColorTheme;
+  onSync?: () => Promise<boolean>;
 }
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
@@ -68,7 +70,33 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   soundEnabled,
   isDocked,
   onToggleDock,
+  theme,
+  onSync,
 }) => {
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleCloseApp = async () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    try {
+      if (onSync) {
+        await Promise.race([
+          onSync(),
+          new Promise(resolve => setTimeout(resolve, 1500))
+        ]);
+      } else if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('quest_flush_sync'));
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+    } catch (err) {
+      console.warn('[HeaderBar] Auto-sync on close error:', err);
+    } finally {
+      if ((window as any).electronAPI?.closeApp) {
+        (window as any).electronAPI.closeApp();
+      }
+    }
+  };
+
   const achievements = activeGame?.achievements || [];
   const unlockedCount = achievements.filter(a => a.unlocked).length;
   const totalCount = achievements.length;
@@ -335,21 +363,19 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             {/* Close Button */}
             <button
               style={{ WebkitAppRegion: "no-drag" } as any}
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new Event('quest_flush_sync'));
-                }
-                if ((window as any).electronAPI?.closeApp) {
-                  (window as any).electronAPI.closeApp();
-                }
-              }}
-              title="Close Quest Compendium"
-              className="p-2 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer ml-1"
+              onClick={handleCloseApp}
+              disabled={isClosing}
+              title={isClosing ? "Syncing & Closing..." : "Close Quest Compendium"}
+              className="p-2 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer ml-1 disabled:opacity-50"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
+              {isClosing ? (
+                <RefreshCw className="w-4 h-4 animate-spin text-zinc-300" />
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              )}
             </button>
 
             {/* Dock / Free-floating Window Mode */}
