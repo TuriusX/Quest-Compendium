@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Target, Plus, Check, Trash2, X, Sparkles, Circle, CheckCircle2 } from 'lucide-react';
+import { Target, Plus, Check, Trash2, X, Sparkles, Circle, CheckCircle2 } from './icons';
 import { GameTab, PersonalQuest } from '../types';
 import { playBlipSound } from '../utils/audio';
 

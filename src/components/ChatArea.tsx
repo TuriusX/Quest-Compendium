@@ -29,7 +29,8 @@ import {
   Info,
   AlertTriangle,
   AlertCircle
-} from 'lucide-react';
+} from './icons';
+import { PixelDots } from './pixelArt';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
 import { getApiBaseUrl, DEFAULT_PREVIEW_URL } from '../utils/api';
 import { auth } from '../lib/firebase';
@@ -1049,6 +1050,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <span className="font-fantasy font-bold text-xs text-[var(--accent-color)] tracking-wide animate-pulse mt-1">
               Consulting the Quest Compendium...
             </span>
+            <PixelDots />
           </div>
         )}
       </div>
@@ -1221,7 +1223,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     ? "Snap game screenshot & consult Compendium"
                     : "Consult Compendium"
               }
-              className="p-2.5 rounded-xl bg-[var(--accent-color)] text-black font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-[0_0_12px_var(--accent-glow)] flex items-center justify-center"
+              className="qc-px-bevel p-2.5 rounded-xl bg-[var(--accent-color)] text-black font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-[0_0_12px_var(--accent-glow)] flex items-center justify-center"
             >
               {isCapturingScreen ? (
                 <Camera className="w-4 h-4 animate-pulse text-black" />

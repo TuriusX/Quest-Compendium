@@ -12,7 +12,8 @@ import {
   Flame,
   Newspaper,
   Calendar
-} from 'lucide-react';
+} from './icons';
+import { PixelMedal, useLofi } from './pixelArt';
 import { Achievement, SteamGameData } from '../types';
 import { playFanfareSound, playBlipSound } from '../utils/audio';
 
@@ -33,6 +34,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
   gameData,
   soundEnabled,
 }) => {
+  const lofi = useLofi();
   const [activeView, setActiveView] = useState<'medals' | 'patches'>('medals');
   const [filter, setFilter] = useState<'all' | 'locked' | 'unlocked' | 'rare'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,6 +68,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
   });
 
   const getMedalSvg = (tier: 'gold' | 'silver' | 'bronze') => {
+    if (lofi) return <PixelMedal tier={tier} size={20} />;
     const colors = {
       gold: '#ffd700',
       silver: '#d1d5db',
@@ -167,7 +170,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
                   <span className="text-white font-black text-[11px] tracking-wide drop-shadow-md">(100%)</span>
                 </div>
                 {/* 100% Progress Bar line */}
-                <div className="w-full h-[3px] rounded-full bg-cyan-900/30 overflow-hidden shadow-inner mt-1">
+                <div className="w-full h-[3px] rounded-full bg-cyan-900/30 overflow-hidden shadow-inner mt-1 qc-seg qc-seg-gold">
                   <div className="h-full bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(34,211,238,0.6)]" style={{ width: '100%' }} />
                 </div>
                 
@@ -186,7 +189,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
                 </div>
 
                 {/* Progress Bar */}
-                <div className="w-full h-[4px] rounded-full bg-white/10 overflow-hidden shadow-inner">
+                <div className="w-full h-[4px] rounded-full bg-white/10 overflow-hidden shadow-inner qc-seg">
                   <div
                     className="h-full rounded-full bg-[var(--accent-color)] transition-all duration-500 shadow-[0_0_8px_var(--accent-glow)]"
                     style={{ width: `${percent}%` }}

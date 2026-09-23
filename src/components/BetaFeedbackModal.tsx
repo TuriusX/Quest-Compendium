@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MessageSquareQuote, Send, Loader2 } from 'lucide-react';
+import { MessageSquareQuote, Send, Loader2 } from './icons';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { User } from 'firebase/auth';

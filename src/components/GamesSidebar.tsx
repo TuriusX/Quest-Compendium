@@ -15,7 +15,7 @@ import {
   Save,
   Globe,
   RefreshCw
-} from 'lucide-react';
+} from './icons';
 import { GameTab, SteamGameData } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 
@@ -236,7 +236,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                   {/* Micro Progress Bar for Achievements */}
                   {totalCount > 0 && (
                     <div className="mt-1 flex items-center gap-2 pt-1 border-t border-white/[0.04]">
-                      <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+                      <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden qc-seg qc-seg-gold">
                         <div 
                           className="h-full bg-gradient-to-r from-[var(--accent-color)] to-amber-400 rounded-full"
                           style={{ width: `${progressPercent}%` }}
@@ -269,7 +269,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           className="w-full py-2.5 px-3 rounded-xl border border-dashed border-white/15 text-zinc-400 hover:text-[var(--accent-color)] hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-all flex items-center justify-center gap-2 text-xs font-semibold cursor-pointer group"
         >
           <Plus className="w-3.5 h-3.5 group-hover:scale-125 transition-transform" />
-          <span>+ Add New Compendium</span>
+          <span>Add New Compendium</span>
         </button>
       </div>
 

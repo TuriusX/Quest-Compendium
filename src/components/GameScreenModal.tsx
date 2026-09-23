@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Download, ZoomIn, Sparkles } from 'lucide-react';
+import { X, Download, ZoomIn, Sparkles } from './icons';
 import { playBlipSound } from '../utils/audio';
 
 interface GameScreenModalProps {

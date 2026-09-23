@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from './icons';
 import { logOut } from '../lib/firebase';
 
 export const UpdateRequiredModal: React.FC = () => {

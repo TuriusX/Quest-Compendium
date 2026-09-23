@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, CreditCard, Sparkles, X } from 'lucide-react';
+import { Lock, CreditCard, Sparkles, X } from './icons';
 import { logOut } from '../lib/firebase';
 import { auth } from '../lib/firebase';
 import { getApiBaseUrl } from '../utils/api';

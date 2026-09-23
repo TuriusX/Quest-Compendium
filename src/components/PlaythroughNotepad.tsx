@@ -13,7 +13,7 @@ import {
   Sparkles, 
   Clock, 
   Download 
-} from 'lucide-react';
+} from './icons';
 import { GameTab } from '../types';
 import { playBlipSound } from '../utils/audio';
 

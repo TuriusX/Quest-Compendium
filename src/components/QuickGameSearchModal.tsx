@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Gamepad2, Plus, Sparkles, X, Trophy, ExternalLink, ChevronRight } from 'lucide-react';
+import { Search, Gamepad2, Plus, Sparkles, X, Trophy, ExternalLink, ChevronRight } from './icons';
 import { SteamGameData } from '../types';
 import { POPULAR_STEAM_GAMES } from '../data/mockGames';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';

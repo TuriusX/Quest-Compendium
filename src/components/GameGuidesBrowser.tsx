@@ -15,7 +15,7 @@ import {
   BookOpen,
   Globe,
   Share2
-} from 'lucide-react';
+} from './icons';
 import { BrowserTab, FavoriteBookmark, SteamGameData } from '../types';
 import { DEFAULT_BOOKMARKS } from '../data/mockGames';
 import { playBlipSound } from '../utils/audio';

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { GoogleAuthProvider } from 'firebase/auth';
 import { auth, signInWithGoogle } from '../lib/firebase';
-import { LogIn } from 'lucide-react';
+import { LogIn } from './icons';
 import { MagicalBookIcon } from './MagicalBookIcon';
 
 export const DesktopLogin: React.FC = () => {

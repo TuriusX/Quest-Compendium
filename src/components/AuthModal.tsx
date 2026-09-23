@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, Play, AlertCircle, ExternalLink, X } from 'lucide-react';
+import { Sparkles, Play, AlertCircle, ExternalLink, X } from './icons';
 import { MagicalBookIcon } from './MagicalBookIcon';
 import { signInWithGoogle, signInWithGoogleRedirect, auth } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';

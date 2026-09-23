@@ -26,7 +26,7 @@ import {
   Package,
   Cloud,
   Copy
-} from 'lucide-react';
+} from './icons';
 import { AppSettings, AiMode, ColorTheme, DockPosition, CloudSyncDiagnostics } from '../types';
 import { playBlipSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
@@ -138,16 +138,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   const themes: { id: ColorTheme; name: string; color: string; desc: string }[] = [
-    { id: 'purple', name: 'Illithid Violet', color: '#a87ffb', desc: 'Psionic illithid aura' },
-    { id: 'red', name: 'Mario Red', color: '#E52521', desc: 'Classic plumber intensity' },
-    { id: 'cyan', name: 'Megaman Cyan', color: '#00f0ff', desc: 'Retro plasma cannon glow' },
-    { id: 'blue', name: 'Sonic Blue', color: '#1E63F8', desc: 'High-speed hedgehog blur' },
-    { id: 'amber', name: 'Estus Amber', color: '#ffb84d', desc: 'Warm bonfire healing' },
-    { id: 'luigi', name: 'Luigi Green', color: '#55D731', desc: 'Player 2 ghost-hunting green' },
-    { id: 'masterchief', name: 'Masterchief Green', color: '#6A7D51', desc: 'Spartan armor tactical glow' },
-    { id: 'gold', name: 'Triforce Gold', color: '#ffd700', desc: 'Courage, wisdom, and power' },
-    { id: 'pink', name: 'Chun-Li Pink', color: '#ff69b4', desc: 'Fierce Player 2 energy' },
-    { id: 'silver', name: 'Witcher Silver', color: '#c0c0c0', desc: 'Monster-slaying shine' },
+    { id: 'purple', name: 'Arcane Violet', color: '#a87ffb', desc: 'Psionic glow (default)' },
+    { id: 'red', name: 'Crimson Hero', color: '#E52521', desc: 'Classic platformer red' },
+    { id: 'cyan', name: 'Plasma Cyan', color: '#00f0ff', desc: 'Retro blaster glow' },
+    { id: 'blue', name: 'Hyper Blue', color: '#1E63F8', desc: 'High-speed blur' },
+    { id: 'amber', name: 'Bonfire Amber', color: '#ffb84d', desc: 'Warm checkpoint glow' },
+    { id: 'luigi', name: 'Player Two Green', color: '#55D731', desc: 'Ghost-hunting green' },
+    { id: 'masterchief', name: 'Spartan Olive', color: '#6A7D51', desc: 'Tactical armor glow' },
+    { id: 'gold', name: 'Relic Gold', color: '#ffd700', desc: 'Treasure-room shine' },
+    { id: 'pink', name: 'Arcade Pink', color: '#ff69b4', desc: 'Fighting-game energy' },
+    { id: 'silver', name: 'Silver Blade', color: '#c0c0c0', desc: 'Monster-slayer steel' },
   ];
 
   const aiModes: { id: AiMode; label: string; desc: string; icon: string; experimental?: boolean }[] = [
@@ -273,6 +273,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {activeTab === 'appearance' && (
               <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
+                {/* Interface style: Lo-fi pixel (default) or Classic */}
+                <div className="space-y-2.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[var(--accent-color)]" />
+                    <span>Interface Style</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { id: 'lofi', name: 'Lo-fi Pixel', desc: 'Pixel icons, fonts and meters' },
+                      { id: 'classic', name: 'Classic', desc: 'The original smooth look' },
+                    ] as const).map((opt) => {
+                      const isSelected = (settings.uiStyle ?? 'lofi') === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => {
+                            playBlipSound(soundEnabled);
+                            onUpdateSettings({ uiStyle: opt.id });
+                          }}
+                          aria-pressed={isSelected}
+                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-[var(--accent-dim)] border-[var(--accent-border)]'
+                              : 'bg-black/30 border-white/[0.08] hover:border-white/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-xs text-white leading-tight">{opt.name}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-[var(--accent-color)]" />}
+                          </div>
+                          <div className="text-[10px] text-zinc-400 leading-tight mt-0.5">{opt.desc}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Color Themes */}
                 <div className="space-y-2.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
@@ -503,40 +540,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Thematic Inquiry Banners in Persona Tab */}
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--accent-dim)] border border-[var(--accent-border)] shadow-[0_0_15px_var(--accent-glow)]">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-[var(--accent-color)]/20 border border-[var(--accent-border)] flex items-center justify-center flex-shrink-0">
-                      <ImageIcon className="w-5 h-5 text-[var(--accent-color)]" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-xs text-white block">Thematic Inquiry Banners</span>
-                        <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--accent-color)]/20 text-[var(--accent-color)] border border-[var(--accent-border)]">
-                          Atmospheric
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-zinc-300">
-                        Generate cinematic game artwork and thematic concept banners atop AI answers
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      playBlipSound(soundEnabled);
-                      onUpdateSettings({ enableThematicBanners: settings.enableThematicBanners === false });
-                    }}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ml-3 ${
-                      settings.enableThematicBanners !== false ? 'bg-[var(--accent-color)]' : 'bg-white/10'
-                    }`}
-                  >
-                    <div 
-                      className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
-                        settings.enableThematicBanners !== false ? 'right-1' : 'left-1'
-                      }`}
-                    />
-                  </button>
-                </div>
 
                 {/* Voice Profile */}
                 <div className="space-y-2.5">

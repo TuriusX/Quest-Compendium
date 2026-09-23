@@ -18,7 +18,8 @@ import {
   ArrowRightToLine,
   Square,
   RefreshCw
-} from 'lucide-react';
+} from './icons';
+import { ManaBar } from './pixelArt';
 import { PWAInstallButton } from './PWAInstallButton';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
@@ -124,7 +125,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   }, [userData]);
 
   return (
-    <header className="h-14 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between px-3 sm:px-4 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
+    <header className="qc-stars h-14 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between px-3 sm:px-4 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
       {/* Left side: Brand Logo + Game Library Toggle */}
       <div className="flex items-center gap-2.5 sm:gap-3">
         <div className="relative flex items-center">
@@ -244,6 +245,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 <div className="flex items-center gap-1">
                   <Cpu className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                   <span className="font-bold">{proCount} Pro</span>
+                  <ManaBar value={proCount} max={isPremiumUser ? 100 : 5} />
                 </div>
                 <span className="text-zinc-600 font-normal">·</span>
                 <div className="flex items-center gap-1">
@@ -265,7 +267,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                         {proCount} / {proMax}
                       </span>
                     </div>
-                    <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden">
+                    <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden qc-seg">
                       <div 
                         className={`h-full rounded-full transition-all duration-500 ${isPremiumUser ? 'bg-indigo-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`} 
                         style={{ width: `${Math.min(100, (proCount / proMax) * 100)}%` }} 
@@ -282,7 +284,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                       </span>
                     </div>
                     {!isPremiumUser && (
-                      <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden">
+                      <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden qc-seg">
                         <div 
                           className="bg-zinc-500 h-full rounded-full transition-all duration-500" 
                           style={{ width: `${Math.min(100, (flashCount / 5) * 100)}%` }} 
