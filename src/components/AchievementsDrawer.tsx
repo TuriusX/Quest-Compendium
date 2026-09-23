@@ -13,7 +13,7 @@ import {
   Newspaper,
   Calendar
 } from './icons';
-import { PixelMedal, useLofi } from './pixelArt';
+import { PixelMedal, PixelTrophy, useLofi } from './pixelArt';
 import { Achievement, SteamGameData } from '../types';
 import { playFanfareSound, playBlipSound } from '../utils/audio';
 
@@ -111,17 +111,19 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
             <Trophy className="w-4 h-4 text-amber-400" />
           </div>
           <div className="flex flex-col">
-            <span className="font-fantasy font-bold text-xs tracking-wider text-white">
-              ACHIEVEMENTS
+            <span className="font-fantasy font-bold text-sm text-white leading-tight">
+              Achievements
             </span>
-            <span className="text-[10px] text-zinc-400 font-mono">
-              {gameData?.name || 'Active Game'}
+            <span className="text-[10px] text-zinc-400 font-mono uppercase truncate">
+              {gameData?.name ? `${gameData.name} · from Steam` : 'No game detected'}
             </span>
           </div>
         </div>
 
         <button
           onClick={onClose}
+          aria-label="Close achievements"
+          title="Close"
           className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
@@ -162,9 +164,9 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
               <div className="flex flex-col gap-1.5 z-10 relative">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Award className="w-[20px] h-[20px] text-sky-400 drop-shadow-[0_0_8px_rgba(56,189,248,0.5)] flex-shrink-0" />
+                    {lofi ? <PixelTrophy size={28} /> : <Award className="w-[20px] h-[20px] text-sky-400 drop-shadow-[0_0_8px_rgba(56,189,248,0.5)] flex-shrink-0" />}
                     <span className="text-white font-black text-[11px] tracking-wide uppercase drop-shadow-md">
-                      You've unlocked all achievements! {unlockedCount}/{totalCount}
+                      All {totalCount} unlocked!
                     </span>
                   </div>
                   <span className="text-white font-black text-[11px] tracking-wide drop-shadow-md">(100%)</span>
@@ -231,7 +233,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
                       : 'bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-white'
                   }`}
                 >
-                  {mode === 'rare' ? '🔥 Rare' : mode}
+                  {mode === 'rare' ? 'Rarest' : mode}
                 </button>
               ))}
             </div>
@@ -266,7 +268,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
                       ach.unlocked
                         ? isRare 
                           ? 'rare-achievement-glow text-white shadow-lg'
-                          : 'bg-[#151722]/95 border-amber-500/30 text-zinc-200'
+                          : 'bg-white/[0.02] border-white/[0.06] text-zinc-200'
                         : 'bg-black/40 border-white/[0.06] text-zinc-500 hover:border-white/20'
                     }`}
                   >

@@ -19,6 +19,21 @@ import {
 import { GameTab, SteamGameData } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 
+/** Short initials for a game tile, e.g. "Baldur's Gate 3" -> "BG3". */
+function initials(name: string): string {
+  const words = name.replace(/[^A-Za-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return words.slice(0, 3).map((w) => (/^\d+$/.test(w) ? w : w[0])).join('').toUpperCase().slice(0, 3);
+}
+
+/** A stable, muted tile color per game name. */
+function tileColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return `hsl(${h}, 45%, 38%)`;
+}
+
 interface GamesSidebarProps {
   width: number;
   isDragging: boolean;
@@ -112,26 +127,32 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
       >
       {/* Sidebar Header */}
       <div className="p-3.5 border-b border-white/[0.08] flex items-center justify-between bg-black/30">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[var(--accent-dim)] border border-[var(--accent-border)] flex items-center justify-center">
-            <Save className="w-4 h-4 text-[var(--accent-color)]" />
-          </div>
-          <div className="flex flex-col">
-            <span className="font-fantasy font-bold text-xs tracking-wider text-white">
-              SAVED GAMES
-            </span>
-            <span className="text-[10px] text-zinc-400 font-mono">
-              {tabs.length} Active Sessions
-            </span>
-          </div>
+        <div className="flex flex-col min-w-0">
+          <span className="font-fantasy font-bold text-sm text-white leading-tight">Your games</span>
+          <span className="text-[10px] text-zinc-400 font-mono uppercase">
+            {tabs.length === 0 ? 'None yet' : `${tabs.length} ${tabs.length === 1 ? 'compendium' : 'compendiums'}`}
+          </span>
         </div>
 
         <div className="flex items-center gap-1">
+          {/* New compendium */}
+          <button
+            onClick={() => {
+              playBlipSound(soundEnabled);
+              onStartCreateTab();
+            }}
+            title="New compendium"
+            aria-label="New compendium"
+            className="qc-px-bevel w-7 h-7 mr-1 rounded-lg bg-[var(--accent-color)] text-[#16101f] flex items-center justify-center hover:brightness-110 transition cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
           {/* Cloud Sync Button */}
           <button
             onClick={handleSyncClick}
             disabled={isSyncing}
             title={isSyncing ? "Syncing tabs with cloud..." : syncSuccess ? "Synced with Cloud!" : "Sync with Cloud"}
+            aria-label="Sync with cloud"
             className={`p-1.5 rounded-lg transition-all cursor-pointer ${
               syncSuccess 
                 ? 'text-emerald-400 bg-emerald-500/20' 
@@ -147,6 +168,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
               setShowFontControl(!showFontControl);
             }}
             title="Tab Scale Slider"
+            aria-label="Text size"
             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <span className="font-bold font-serif text-[15px] leading-none px-0.5">Aa</span>
@@ -180,6 +202,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           const unlockedCount = achievements.filter(a => a.unlocked).length;
           const totalCount = achievements.length;
           const progressPercent = totalCount > 0 ? Math.round((unlockedCount / totalCount) * 100) : 0;
+          const isLive = !!(isActive && globalActiveGame && globalActiveGame.isAutoDetected);
 
           return (
             <div
@@ -214,8 +237,12 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                           className="w-8 h-8 rounded-lg object-cover border border-white/15 flex-shrink-0" 
                         />
                       ) : (
-                        <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0">
-                          <Gamepad2 className="w-4 h-4 text-zinc-400 group-hover:text-[var(--accent-color)] transition-colors" />
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-[10px] font-mono font-bold uppercase text-white shadow-[inset_-2px_-2px_0_rgba(0,0,0,0.3),inset_2px_2px_0_rgba(255,255,255,0.18)]"
+                          style={{ backgroundColor: tileColor(game?.name || tab.name) }}
+                          aria-hidden="true"
+                        >
+                          {initials(game?.name || tab.name)}
                         </div>
                       )}
 
@@ -228,6 +255,12 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                         >
                           {tab.name}
                         </span>
+                        {(isLive || game?.name) && (
+                          <span className="text-[11px] text-zinc-500 truncate flex items-center gap-1.5 leading-tight mt-0.5">
+                            {isLive && <span className="w-1.5 h-1.5 flex-shrink-0 bg-emerald-400 rounded-full animate-pulse" />}
+                            {isLive ? 'Playing now on Steam' : game?.name}
+                          </span>
+                        )}
 
                       </div>
                     </div>
@@ -260,7 +293,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           </div>
         )}
 
-        {/* Add New Game Form / Button */}
+        {/* Add New Game button (the header's + does the same once games exist) */}
+        {tabs.length === 0 && (
         <button
           onClick={() => {
             playBlipSound(soundEnabled);
@@ -271,6 +305,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           <Plus className="w-3.5 h-3.5 group-hover:scale-125 transition-transform" />
           <span>Add New Compendium</span>
         </button>
+        )}
       </div>
 
       {/* Global Tools footer */}
@@ -280,10 +315,23 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
             playBlipSound(soundEnabled);
             onOpenGuides();
           }}
-          className="p-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 transition-all cursor-pointer shadow-sm"
-          title="Web Browser"
+          className="h-9 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-[var(--accent-border)] text-zinc-200 transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold"
+          title="Guides & web browser"
         >
-          <Globe className="w-5 h-5" />
+          <Globe className="w-4 h-4 text-sky-400" />
+          Guides
+        </button>
+        <button
+          onClick={() => {
+            playBlipSound(soundEnabled);
+            onOpenNotes();
+          }}
+          disabled={!activeTabId}
+          className="h-9 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-[var(--accent-border)] text-zinc-200 transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          title={activeTabId ? 'Playthrough notes' : 'Open a compendium to use notes'}
+        >
+          <FileText className="w-4 h-4 text-[var(--accent-color)]" />
+          Notes
         </button>
         <button
           onClick={() => {
@@ -292,6 +340,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           }}
           className="p-2 rounded-xl bg-zinc-500/10 hover:bg-white/[0.06] border border-white/5 hover:border-white/10 text-zinc-400 hover:text-[var(--accent-color)] transition-all cursor-pointer shadow-sm"
           title="Compendium Settings"
+          aria-label="Settings"
         >
           <Settings className="w-5 h-5" />
         </button>
@@ -303,6 +352,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           }}
           className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 hover:border-amber-500/40 text-amber-400 transition-all cursor-pointer shadow-sm"
           title="Submit Beta Feedback"
+          aria-label="Send beta feedback"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>

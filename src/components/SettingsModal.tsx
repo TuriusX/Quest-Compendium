@@ -6,6 +6,8 @@ import {
   Volume2, 
   Gamepad2, 
   Check,
+  Maximize2,
+  AlertTriangle,
   Bot,
   Key,
   LogOut,
@@ -42,6 +44,14 @@ interface SettingsModalProps {
 }
 
 type TabId = 'appearance' | 'persona' | 'shortcuts' | 'connection' | 'account';
+
+const isMacPlatform = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
+
+const DEFAULT_SHORTCUTS = {
+  hideAppShortcut: 'CmdOrCtrl+Shift+H',
+  voiceInputShortcut: 'CmdOrCtrl+Shift+V',
+  autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
+};
 
 const ShortcutInput: React.FC<{
   value: string;
@@ -103,7 +113,23 @@ const ShortcutInput: React.FC<{
             : 'border-white/15 text-white hover:border-white/30 hover:bg-white/[0.02]'
         }`}
       >
-        {isRecording ? 'Listening for shortcut... (Press Esc to cancel)' : (value || 'None')}
+        {isRecording ? (
+          'Press the new keys… (Esc to cancel)'
+        ) : value ? (
+          <span className="flex flex-wrap items-center gap-1.5">
+            {value.split('+').map((k, i) => (
+              <kbd
+                key={i}
+                className="min-w-[24px] px-2 py-0.5 rounded-md bg-white/[0.06] border border-white/15 border-b-[3px] text-center text-[11px] font-mono font-semibold text-zinc-100"
+              >
+                {k === 'CmdOrCtrl' || k === 'CommandOrControl' ? (isMacPlatform ? 'Cmd' : 'Ctrl') : k}
+              </kbd>
+            ))}
+            <span className="ml-auto text-[10px] text-zinc-500 font-sans">Click to change</span>
+          </span>
+        ) : (
+          'None (click to set)'
+        )}
       </button>
     </div>
   );
@@ -130,6 +156,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return '';
   });
   const [localUiScale, setLocalUiScale] = useState(settings.uiScale || 1.0);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   React.useEffect(() => {
     setLocalUiScale(settings.uiScale || 1.0);
@@ -197,10 +224,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const tabs: { id: TabId; label: string; icon: React.FC<any> }[] = [
     { id: 'appearance', label: 'Appearance', icon: Palette },
-    { id: 'persona', label: 'Persona & Voice', icon: Bot },
+    { id: 'persona', label: 'Companion', icon: Bot },
     { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
-    { id: 'connection', label: 'Cloud & Server', icon: Server },
-    { id: 'account', label: 'Account', icon: User },
+    { id: 'account', label: 'Account & sync', icon: User },
   ];
 
   return (
@@ -214,8 +240,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <Sparkles className="w-4 h-4 text-[var(--accent-color)]" />
             </div>
             <div>
-              <h3 className="font-fantasy font-bold text-sm tracking-wider text-white">
-                COMPENDIUM SETTINGS
+              <h3 className="font-fantasy font-bold text-base text-white">
+                Settings
               </h3>
               <p className="text-[11px] text-zinc-400 font-mono">
                 System configuration & preferences
@@ -227,6 +253,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               playBlipSound(soundEnabled);
               onClose();
             }}
+            aria-label="Close settings"
             className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -256,7 +283,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[var(--accent-color)]' : 'text-zinc-500'}`} />
                     <span className="truncate">{tab.label}</span>
                   </div>
-                  {tab.id === 'connection' && (
+                  {tab.id === 'account' && (
                     effectiveDiag?.lastWriteError ? (
                       <span className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0" title="Sync error" />
                     ) : effectiveDiag?.isListenerAttached ? (
@@ -316,7 +343,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <Palette className="w-4 h-4 text-[var(--accent-color)]" />
                     <span>HUD Themes</span>
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     {themes.map((t) => {
                       const isSelected = settings.theme === t.id;
                       return (
@@ -326,24 +353,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             playBlipSound(soundEnabled);
                             onUpdateSettings({ theme: t.id });
                           }}
-                          className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                          aria-pressed={isSelected}
+                          aria-label={t.name}
+                          className={`p-2.5 rounded-xl border text-left flex flex-col items-start gap-1.5 min-h-[86px] transition-all cursor-pointer ${
                             isSelected
-                              ? 'bg-white/[0.08] border-white/40 shadow-sm'
+                              ? 'bg-white/[0.07] shadow-sm'
                               : 'bg-black/30 border-white/[0.08] hover:border-white/20'
                           }`}
+                          style={isSelected ? { borderColor: t.color } : undefined}
                         >
-                          <span 
-                            className="w-4 h-4 rounded-full flex-shrink-0 shadow-[0_0_8px_currentColor]"
+                          <span
+                            className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center shadow-[0_0_10px_currentColor]"
                             style={{ backgroundColor: t.color, color: t.color }}
-                          />
+                          >
+                            {isSelected && <Check className="w-3.5 h-3.5 text-[#16101f]" />}
+                          </span>
                           <div className="min-w-0">
-                            <div className="font-semibold text-xs text-white leading-tight truncate">{t.name}</div>
-                            <div className="text-[10px] text-zinc-400 leading-tight">{t.desc}</div>
+                            <div className="font-semibold text-[11px] text-white leading-tight">{t.name}</div>
+                            <div className="text-[10px] text-zinc-500 leading-tight">{t.desc}</div>
                           </div>
                         </button>
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Live preview of the chosen theme */}
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-black/40 border border-white/[0.08]" aria-label="Theme preview">
+                  <span className="text-[10px] font-mono uppercase text-zinc-500 flex-shrink-0">Preview</span>
+                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                    <span className="px-2.5 py-1.5 rounded-xl bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[11px] text-white truncate">Where's the next boss?</span>
+                    <span className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] text-zinc-300 truncate"><strong className="text-[var(--accent-color)]">North gate.</strong> Bring fire resist.</span>
+                  </div>
+                  <span className="qc-px-bevel px-3 py-1.5 rounded-lg bg-[var(--accent-color)] text-[#16101f] text-[11px] font-bold flex-shrink-0">Ask</span>
                 </div>
 
                 {/* Thematic Inquiry Banners Toggle - High Prominence */}
@@ -387,33 +429,56 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <Monitor className="w-4 h-4 text-[var(--accent-color)]" />
                     <span>Dock Position</span>
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: 'top-right', label: 'Top Right' },
-                      { id: 'top-left', label: 'Top Left' },
-                      { id: 'bottom-right', label: 'Bottom Right' },
-                      { id: 'bottom-left', label: 'Bottom Left' },
-                      { id: 'undocked', label: 'Undocked (Free Floating)' }
-                    ].map(dock => (
-                      <button
-                        key={dock.id}
-                        onClick={() => {
-                          playBlipSound(soundEnabled);
-                          onUpdateSettings({ dockPosition: dock.id as any });
-                        }}
-                        className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                          settings.dockPosition === dock.id
-                            ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white shadow-sm'
-                            : 'bg-black/30 border-white/[0.08] text-zinc-400 hover:border-white/20'
-                        } ${dock.id === 'undocked' ? 'col-span-2 text-center justify-center' : ''}`}
-                      >
-                        <span className="font-semibold text-xs">{dock.label}</span>
-                        {settings.dockPosition === dock.id && dock.id !== 'undocked' && (
-                          <Check className="w-4 h-4 text-[var(--accent-color)]" />
-                        )}
-                      </button>
-                    ))}
+                  <div className="flex gap-3 items-stretch">
+                    {/* A little screen: click a corner to dock there */}
+                    <div className="grid grid-cols-2 gap-1.5 p-1.5 w-52 h-32 rounded-xl bg-black/50 border border-white/15 flex-shrink-0" role="group" aria-label="Dock to a screen corner">
+                      {([
+                        { id: 'top-left', label: 'Top left', align: 'items-start justify-start' },
+                        { id: 'top-right', label: 'Top right', align: 'items-start justify-end' },
+                        { id: 'bottom-left', label: 'Bottom left', align: 'items-end justify-start' },
+                        { id: 'bottom-right', label: 'Bottom right', align: 'items-end justify-end' },
+                      ] as const).map((dock) => {
+                        const selected = settings.dockPosition === dock.id;
+                        return (
+                          <button
+                            key={dock.id}
+                            aria-label={dock.label}
+                            aria-pressed={selected}
+                            title={dock.label}
+                            onClick={() => {
+                              playBlipSound(soundEnabled);
+                              onUpdateSettings({ dockPosition: dock.id });
+                            }}
+                            className={`flex ${dock.align} p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                              selected ? 'bg-[var(--accent-dim)] border-[var(--accent-border)]' : 'bg-white/[0.03] border-transparent hover:border-white/15'
+                            }`}
+                          >
+                            <span className={`w-9 h-6 rounded ${selected ? 'bg-[var(--accent-color)]' : 'border border-dashed border-white/20'}`} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      aria-pressed={settings.dockPosition === 'undocked'}
+                      onClick={() => {
+                        playBlipSound(soundEnabled);
+                        onUpdateSettings({ dockPosition: 'undocked' });
+                      }}
+                      className={`flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                        settings.dockPosition === 'undocked'
+                          ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white'
+                          : 'bg-black/30 border-white/[0.08] text-zinc-400 hover:border-white/20'
+                      }`}
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                      Floating window
+                    </button>
                   </div>
+                  <p className="text-[11px] text-zinc-500">
+                    {settings.dockPosition === 'undocked'
+                      ? 'Floats freely: drag it anywhere.'
+                      : `Docked ${String(settings.dockPosition).replace('-', ' ')}; slides in and out with your hide shortcut.`}
+                  </p>
                 </div>
 
                 {/* Window Opacity */}
@@ -574,29 +639,108 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </label>
                   <div className="space-y-3">
                     <ShortcutInput
-                      label="Slide App In/Out"
+                      label="Show or hide the window"
                       value={settings.hideAppShortcut}
                       onChange={(val) => onUpdateSettings({ hideAppShortcut: val })}
                     />
                     <ShortcutInput
-                      label="Trigger Voice Input"
+                      label="Ask with your voice"
                       value={settings.voiceInputShortcut}
                       onChange={(val) => onUpdateSettings({ voiceInputShortcut: val })}
                     />
                     <ShortcutInput
-                      label="Auto Screenshot & Ask"
+                      label="Screenshot your game and ask"
                       value={settings.autoScreenshotShortcut || 'CmdOrCtrl+Shift+S'}
                       onChange={(val) => onUpdateSettings({ autoScreenshotShortcut: val })}
                     />
-                    <p className="text-[11px] text-zinc-400 leading-relaxed col-span-2">
-                      Note: Changing the slide toggle shortcut requires an app restart to take full effect.
-                    </p>
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <p className="text-[11px] text-zinc-500 leading-relaxed">
+                        Changing the show/hide shortcut takes effect after restarting the app.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playBlipSound(soundEnabled);
+                          onUpdateSettings(DEFAULT_SHORTCUTS);
+                        }}
+                        className="flex-shrink-0 text-[11px] font-semibold text-[var(--accent-color)] hover:underline cursor-pointer"
+                      >
+                        Reset to defaults
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {activeTab === 'connection' && (
+            {activeTab === 'account' && (
+              <div className="space-y-3 animate-in slide-in-from-right-4 fade-in duration-300">
+                {/* Plain-language sync status */}
+                <div className={`p-4 rounded-xl border flex items-center gap-3 ${
+                  effectiveDiag?.lastWriteError ? 'bg-rose-500/[0.06] border-rose-500/30' : 'bg-emerald-500/[0.05] border-emerald-500/25'
+                }`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    effectiveDiag?.lastWriteError ? 'bg-rose-500/15 text-rose-300' : 'bg-emerald-500/15 text-emerald-300'
+                  }`}>
+                    {effectiveDiag?.lastWriteError ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-white">
+                      {effectiveDiag?.lastWriteError
+                        ? 'Sync ran into a problem'
+                        : effectiveDiag?.isListenerAttached
+                          ? 'Everything is synced'
+                          : 'Sync is offline (sign in to back up your games)'}
+                    </div>
+                    <div className="text-[11px] text-zinc-400 truncate">
+                      {effectiveDiag?.lastWriteError
+                        ? 'Try Sync now. If it keeps happening, copy the details below into a bug report.'
+                        : effectiveDiag?.lastSuccessfulWriteTime
+                          ? `Last synced ${new Date(effectiveDiag.lastSuccessfulWriteTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+                          : 'Your compendiums, notes and quests are backed up to your account.'}
+                    </div>
+                  </div>
+                  <button
+                    disabled={!effectiveDiag?.triggerSyncNow || isSyncingNow}
+                    onClick={async () => {
+                      playBlipSound(soundEnabled);
+                      if (effectiveDiag?.triggerSyncNow && !isSyncingNow) {
+                        setIsSyncingNow(true);
+                        try {
+                          const ok = await effectiveDiag.triggerSyncNow();
+                          if (ok) {
+                            setSyncNowSuccess(true);
+                            setTimeout(() => setSyncNowSuccess(false), 2000);
+                          }
+                        } finally {
+                          setIsSyncingNow(false);
+                        }
+                      }
+                    }}
+                    className="qc-px-bevel flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--accent-color)] text-[#16101f] text-xs font-bold disabled:opacity-40 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingNow ? 'animate-spin' : ''}`} />
+                    {syncNowSuccess ? 'Synced' : 'Sync now'}
+                  </button>
+                </div>
+
+                {/* Technical details, tucked away for bug reports */}
+                <button
+                  type="button"
+                  aria-expanded={showDiagnostics}
+                  onClick={() => setShowDiagnostics((v) => !v)}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border border-dashed border-white/15 text-left hover:border-white/25 cursor-pointer"
+                >
+                  <span>
+                    <span className="block text-xs font-semibold text-zinc-200">Sync diagnostics</span>
+                    <span className="block text-[11px] text-zinc-500">Technical details and server settings, for troubleshooting.</span>
+                  </span>
+                  <span className="text-[11px] font-semibold text-[var(--accent-color)] flex-shrink-0 ml-3">{showDiagnostics ? 'Hide' : 'Show'}</span>
+                </button>
+              </div>
+            )}
+
+            {(activeTab === 'connection' || (activeTab === 'account' && showDiagnostics)) && (
               <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
                 {/* Cloud Sync Status & Diagnostics */}
                 <div className="space-y-3">
@@ -1000,15 +1144,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {settings.steamId ? (
                     <div className="flex items-center justify-between p-3 rounded-xl bg-black/60 border border-white/15">
                       <div className="flex flex-col">
-                        <span className="text-xs text-white font-semibold">Connected</span>
-                        <span className="text-[11px] text-zinc-400 font-mono">{settings.steamId}</span>
+                        <span className="text-xs text-white font-semibold flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Connected{settings.steamName ? ` as ${settings.steamName}` : ''}</span>
+                        <span className="text-[11px] text-zinc-500">Your running game and achievements come from Steam</span>
                       </div>
                       <button
                         onClick={() => {
                           playBlipSound(soundEnabled);
                           onUpdateSettings({ steamId: '' });
                         }}
-                        className="px-3 py-1.5 text-xs font-semibold bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg transition-colors cursor-pointer"
+                        className="px-3 py-1.5 text-xs font-semibold bg-transparent text-zinc-300 border border-white/15 hover:border-red-500/40 hover:text-red-300 rounded-lg transition-colors cursor-pointer"
                       >
                         Disconnect
                       </button>
@@ -1038,22 +1182,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
 
-                {/* Account */}
-                <div className="space-y-2.5 pt-4 border-t border-white/[0.08]">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
-                    <LogOut className="w-4 h-4 text-red-400" />
-                    <span className="text-red-400">Account Management</span>
-                  </label>
-                  
+                {/* Sign out (kept quiet so it isn't hit by accident) */}
+                <div className="pt-4 border-t border-white/[0.08] flex justify-end">
                   <button
                     onClick={() => {
                       playBlipSound(soundEnabled);
                       logOut();
                       onClose();
                     }}
-                    className="w-full flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-300/90 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
                   >
-                    Sign out of Compendium
+                    <LogOut className="w-3.5 h-3.5" />
+                    Sign out
                   </button>
                 </div>
               </div>

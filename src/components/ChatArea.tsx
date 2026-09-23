@@ -36,6 +36,11 @@ import { getApiBaseUrl, DEFAULT_PREVIEW_URL } from '../utils/api';
 import { auth } from '../lib/firebase';
 import { playSnapSound, playChimeSound, playBlipSound } from '../utils/audio';
 
+const PERSONA_LABELS: Record<string, string> = { standard: 'Standard', roleplay: 'Roleplay', minmax: 'Min-Max' };
+
+/** Quick follow-ups offered under the latest answer (sent as a normal question). */
+const FOLLOW_UPS = ['Explain that more simply', 'What should I do next?', 'Anything missable here?'];
+
 interface ChatAreaProps {
   activeTab: GameTab | null;
   onSendMessage: (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash') => Promise<void>;
@@ -771,8 +776,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     },
   ];
 
+  const questionCount = activeTab?.messages?.filter((m) => m.role === 'user').length ?? 0;
+  const lastAssistantId = (() => {
+    const msgs = activeTab?.messages ?? [];
+    for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].role === 'assistant') return msgs[i].id;
+    return null;
+  })();
+  const isDesktopApp = typeof window !== 'undefined' && !!(window as any).electronAPI;
+  const gameLabel = activeGame?.name || activeTab?.activeSteamGame?.name || '';
+
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-[#0d0e14] via-[#090a0f] to-[#07070b] relative crt-grid">
+      {/* Conversation header: which compendium, which game, which persona */}
+      {activeTab && (
+        <div className="h-11 flex-shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 border-b border-white/[0.06] bg-black/20">
+          <div className="flex items-baseline gap-2.5 min-w-0">
+            <span className="font-fantasy font-bold text-sm text-white truncate">{activeTab.name}</span>
+            <span className="hidden sm:inline text-[11px] text-zinc-500 truncate">
+              {[activeGame?.name || activeTab.activeSteamGame?.name, `${PERSONA_LABELS[aiMode] ?? 'Standard'} persona`].filter(Boolean).join(' · ')}
+            </span>
+          </div>
+          {questionCount > 0 && (
+            <span className="text-[10px] font-mono uppercase text-zinc-500 flex-shrink-0">
+              {questionCount} {questionCount === 1 ? 'question' : 'questions'}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Messages List Area */}
       <div 
         ref={chatContainerRef}
@@ -869,10 +900,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       <div className="w-5 h-5 rounded-md bg-[var(--accent-dim)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-color)]">
                         <Sparkles className="w-3 h-3" />
                       </div>
-                      <span className="font-fantasy font-bold text-zinc-200">QUEST COMPENDIUM</span>
+                      <span className="font-fantasy font-bold text-zinc-200">Compendium</span>
                       <span className="px-1.5 py-0.2 rounded bg-white/10 text-[9.5px] text-zinc-400">
                         {msg.modelUsed || 'GEMINI'}
                       </span>
+                      <span className="text-zinc-500">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </>
                   )}
                 </div>
@@ -932,7 +964,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   )}
 
                   {/* Message Body with Markdown */}
-                  <div style={{ fontFamily: 'var(--chat-font-family)' }} className="leading-relaxed break-words space-y-2.5 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_strong]:text-white [&_strong]:font-semibold [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[var(--accent-color)] [&_h1]:border-b [&_h1]:border-white/10 [&_h1]:pb-1 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-[var(--accent-color)] [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-white [&_code]:bg-black/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-purple-300 [&_code]:font-code [&_code]:text-xs [&_pre]:bg-black/80 [&_pre]:border [&_pre]:border-white/10 [&_pre]:p-3.5 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_th]:border [&_th]:border-white/15 [&_th]:p-2 [&_th]:bg-white/[0.06] [&_th]:font-semibold [&_th]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:p-2 [&_td]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--accent-color)] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-zinc-400">
+                  <div style={{ fontFamily: 'var(--chat-font-family)' }} className="qc-md leading-relaxed break-words space-y-2.5 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_strong]:text-white [&_strong]:font-semibold [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[var(--accent-color)] [&_h1]:border-b [&_h1]:border-white/10 [&_h1]:pb-1 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-[var(--accent-color)] [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-white [&_code]:bg-black/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-purple-300 [&_code]:font-code [&_code]:text-xs [&_pre]:bg-black/80 [&_pre]:border [&_pre]:border-white/10 [&_pre]:p-3.5 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_th]:border [&_th]:border-white/15 [&_th]:p-2 [&_th]:bg-white/[0.06] [&_th]:font-semibold [&_th]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:p-2 [&_td]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--accent-color)] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-zinc-400">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {msg.text}
                     </ReactMarkdown>
@@ -992,13 +1024,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           ) : (
                             <BookmarkPlus className="w-3.5 h-3.5" />
                           )}
-                          <span className="hidden sm:inline text-[11px]">{isNoteSaved ? 'Saved!' : 'Save'}</span>
+                          <span className="hidden sm:inline text-[11px]">{isNoteSaved ? 'Saved to notes' : 'Save to notes'}</span>
                         </button>
 
                         {/* Copy button */}
                         <button
                           onClick={() => handleCopyMessage(msg.id, msg.text)}
                           title="Copy Answer to Clipboard"
+                          aria-label="Copy answer"
                           className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                         >
                           {copiedMessageId === msg.id ? (
@@ -1027,6 +1060,26 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* Suggested follow-ups under the latest answer */}
+                {!isUser && msg.id === lastAssistantId && !isLoading && (
+                  <div className="mt-2.5 flex flex-wrap gap-2 max-w-[94%] sm:max-w-[88%]">
+                    {FOLLOW_UPS.map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => {
+                          playBlipSound(soundEnabled);
+                          handleSubmit(undefined, f);
+                        }}
+                        className="qc-px-frame px-3 py-1.5 rounded-full bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[12px] font-medium text-zinc-200 hover:text-white hover:bg-[var(--accent-border)] transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Sparkles className="w-3 h-3 text-[var(--accent-color)]" />
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })
@@ -1075,6 +1128,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             onClick={() => setAttachedImage(null)}
             className="p-1.5 rounded-lg bg-white/10 hover:bg-red-500/20 text-zinc-400 hover:text-red-300 transition-colors cursor-pointer"
             title="Remove Screenshot"
+            aria-label="Remove screenshot"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1099,10 +1153,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 ? "Listening to your inquiry..." 
                 : attachedImage 
                   ? "Ask about this screenshot (e.g., puzzle answer, optimal route, stat comparison)..." 
-                  : "Ask the Compendium..."
+                  : gameLabel
+                    ? `Ask about ${gameLabel}…`
+                    : "Ask the Compendium..."
             }
             rows={1}
-            className="flex-1 max-h-48 min-h-[72px] py-4 pl-4 pr-32 bg-transparent text-white outline-none resize-none"
+            className="flex-1 max-h-48 min-h-[72px] py-4 pl-4 pr-4 sm:pr-4 pb-14 bg-transparent text-white outline-none resize-none"
           />
 
           {/* Action Buttons inside Input Bar */}
@@ -1135,6 +1191,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 captureGameScreen();
               }}
               disabled={isLoading || isCapturingScreen}
+              aria-label="Attach a game screenshot"
               title={
                 typeof window !== 'undefined' && (window as any).electronAPI
                   ? "Snap Game Screenshot (Click to preview & attach)"
@@ -1160,6 +1217,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               type="button"
               onClick={toggleVoiceRecording}
               title={isRecording ? "Stop Voice Recording" : "Voice Input (Push to Talk)"}
+              aria-label={isRecording ? "Stop voice recording" : "Ask with your voice"}
               className={`p-2 rounded-xl transition-all cursor-pointer ${
                 isRecording
                   ? 'bg-red-500/25 text-red-300 border border-red-500/40 animate-pulse shadow-[0_0_14px_rgba(239,68,68,0.5)]'
@@ -1178,6 +1236,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   onToggleFontMenu();
                 }}
                 title="Font & Typography Settings"
+                aria-label="Font settings"
                 className={`p-2 rounded-xl transition-all cursor-pointer ${
                   fontMenuOpen 
                     ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
@@ -1188,29 +1247,35 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </button>
             )}
 
-            {/* Model Quick Switcher */}
-            <button
-              type="button"
-              onClick={() => {
-                playBlipSound(soundEnabled);
-                setPreferredModel(prev => prev === 'pro' ? 'flash' : 'pro');
-              }}
-              title={preferredModel === 'pro' ? 'Using Gemini 3.1 Pro (Default)' : 'Using Gemini 3.8 Flash (Faster)'}
-              className={`flex items-center gap-1 p-2 rounded-xl transition-all cursor-pointer ${
-                preferredModel === 'flash' 
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
-                  : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
-              }`}
-            >
-              <Bot className="w-4 h-4" />
-              <span className="text-[10px] font-bold uppercase tracking-wider inline-block">
-                {preferredModel}
-              </span>
-            </button>
+            {/* Model switch: Pro (smarter) or Flash (faster) */}
+            <div role="group" aria-label="AI model" className="flex items-center p-0.5 rounded-xl bg-white/[0.05] border border-white/10">
+              {(['pro', 'flash'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={preferredModel === m}
+                  onClick={() => {
+                    playBlipSound(soundEnabled);
+                    setPreferredModel(m);
+                  }}
+                  title={m === 'pro' ? 'Gemini Pro: smarter, uses your Pro questions' : 'Gemini Flash: faster'}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                    preferredModel === m
+                      ? m === 'pro'
+                        ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] shadow-[inset_0_-2px_0_var(--accent-color)]'
+                        : 'bg-amber-500/20 text-amber-300 shadow-[inset_0_-2px_0_#f59e0b]'
+                      : 'text-zinc-500 hover:text-zinc-200'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
 
             {/* Submit Send Button */}
             <button
               type="submit"
+              aria-label="Send question"
               disabled={
                 (!inputQuestion.trim() && !attachedImage && !(typeof window !== 'undefined' && (window as any).electronAPI)) ||
                 isLoading ||
@@ -1232,6 +1297,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               )}
             </button>
           </div>
+        </div>
+        <div className="mt-2 text-center text-[10px] font-mono uppercase text-zinc-500">
+          {isDesktopApp ? 'Ctrl + Shift + S screenshots your game and asks' : 'Press Ctrl + V to paste a screenshot'}
         </div>
       </form>
 

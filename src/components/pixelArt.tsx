@@ -221,3 +221,18 @@ export function ManaBar({ value, max, segments = 10, color = 'var(--accent-color
     </span>
   );
 }
+
+
+// ---- Pixel trophy (achievements completion card) ---------------------------------------------------------
+const TROPHY_PATHS = {"O": "M2 1h12v1h-12zM1 2h1v1h-1zM14 2h1v1h-1zM0 3h1v1h-1zM2 3h1v1h-1zM13 3h1v1h-1zM15 3h1v1h-1zM0 4h1v1h-1zM2 4h1v1h-1zM13 4h1v1h-1zM15 4h1v1h-1zM1 5h1v1h-1zM3 5h1v1h-1zM12 5h1v1h-1zM14 5h1v1h-1zM2 6h2v1h-2zM12 6h2v1h-2zM4 7h1v1h-1zM11 7h1v1h-1zM5 8h1v1h-1zM10 8h1v1h-1zM6 9h1v1h-1zM9 9h1v1h-1zM6 10h1v1h-1zM9 10h1v1h-1zM5 11h1v1h-1zM10 11h1v1h-1zM4 12h8v1h-8zM4 13h1v1h-1zM11 13h1v1h-1zM4 14h8v1h-8z", "G": "M2 2h1v1h-1zM4 2h10v1h-10zM1 3h1v1h-1zM4 3h9v1h-9zM14 3h1v1h-1zM1 4h1v1h-1zM4 4h9v1h-9zM14 4h1v1h-1zM2 5h1v1h-1zM5 5h7v1h-7zM13 5h1v1h-1zM5 6h7v1h-7zM5 7h6v1h-6zM6 8h4v1h-4zM7 9h2v1h-2zM7 10h2v1h-2zM6 11h4v1h-4z", "H": "M3 2h1v1h-1zM3 3h1v1h-1zM3 4h1v1h-1zM4 5h1v1h-1zM4 6h1v1h-1z", "D": "M5 13h6v1h-6z"};
+
+export function PixelTrophy({ size = 32 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" shapeRendering="crispEdges" aria-hidden="true" className="flex-shrink-0">
+      <path d={TROPHY_PATHS.O} fill="#5a3f10" />
+      <path d={TROPHY_PATHS.G} fill="#e8b84a" />
+      <path d={TROPHY_PATHS.H} fill="#fff1b8" />
+      <path d={TROPHY_PATHS.D} fill="var(--accent-color)" />
+    </svg>
+  );
+}

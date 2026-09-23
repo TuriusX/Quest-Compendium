@@ -215,7 +215,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </div>
           <span className="flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase overflow-hidden whitespace-nowrap text-ellipsis max-w-[180px]">
             <span className={`w-1.5 h-1.5 flex-shrink-0 rounded-full ${isGameRunningLocally ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
-            <span className="truncate">{isGameRunningLocally ? `ACTIVE: ${activeGame?.name}` : 'NO ACTIVE STEAM GAME'}</span>
+            <span className="truncate">{isGameRunningLocally ? `Playing on Steam · ${activeGame?.name}` : 'No game detected'}</span>
           </span>
         </div>
       </div>
@@ -244,13 +244,13 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               >
                 <div className="flex items-center gap-1">
                   <Cpu className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <span className="font-bold">{proCount} Pro</span>
+                  <span className="font-bold">{proCount} Pro left</span>
                   <ManaBar value={proCount} max={isPremiumUser ? 100 : 5} />
                 </div>
                 <span className="text-zinc-600 font-normal">·</span>
                 <div className="flex items-center gap-1">
                   <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="font-bold">{isPremiumUser ? '∞ Flash' : `${flashCount} Flash`}</span>
+                  <span className="font-bold">{isPremiumUser ? 'Unlimited Flash' : `${flashCount} Flash left`}</span>
                 </div>
                 {!isPremiumUser && <Sparkles className="w-3.5 h-3.5 ml-0.5 text-amber-400 animate-pulse hidden sm:inline-block" />}
               </div>
@@ -324,6 +324,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               onToggleAchDrawer();
             }}
             title="Game Achievements"
+            aria-label="Achievements"
             className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
               isAchDrawerOpen 
                 ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
@@ -346,6 +347,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               onOpenSettings();
             }}
             title="Compendium Settings"
+            aria-label="Settings"
             className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-all cursor-pointer"
           >
             <SettingsIcon className="w-4 h-4" />
@@ -368,6 +370,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               onClick={handleCloseApp}
               disabled={isClosing}
               title={isClosing ? "Syncing & Closing..." : "Close Quest Compendium"}
+              aria-label="Close Quest Compendium"
               className="p-2 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer ml-1 disabled:opacity-50"
             >
               {isClosing ? (
@@ -388,6 +391,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 onToggleDock();
               }}
               title={isDocked ? "Undock / Fullscreen View" : "Dock HUD Frame"}
+              aria-label={isDocked ? "Undock window" : "Dock window"}
               className="p-2 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-all cursor-pointer"
             >
               {isDocked ? <Square className="w-4 h-4" /> : <ArrowRightToLine className="w-4 h-4" />}
