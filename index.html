@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-ui="lofi">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -15,7 +15,14 @@
     <meta property="og:description" content="An AI companion for PC games featuring multimodal game screen analysis, walkthroughs, achievement tracking, playthrough notes, built-in guides, and adaptive roleplay & min-max modes." />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800;900&family=Cinzel+Decorative:wght@700;900&family=JetBrains+Mono:wght@400;500;600;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=VT323&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800;900&family=Cinzel+Decorative:wght@700;900&family=JetBrains+Mono:wght@400;500;600;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=VT323&family=Pixelify+Sans:wght@400..700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+      // Apply the saved interface style before first paint (Lo-fi pixel by default).
+      try {
+        var qcSaved = JSON.parse(localStorage.getItem('quest_compendium_settings') || '{}');
+        document.documentElement.setAttribute('data-ui', qcSaved.uiStyle === 'classic' ? 'classic' : 'lofi');
+      } catch (e) {}
+    </script>
   </head>
   <body class="bg-transparent text-zinc-100 antialiased selection:bg-purple-500/30 selection:text-purple-200 overflow-hidden">
     <div id="root"></div>
