@@ -139,7 +139,17 @@ export interface MergeOutcome {
   reason: string;
 }
 
-const tabTime = (t: GameTab): number => t.lastActive || t.createdAt || 0;
+export const tabTime = (t: GameTab): number => {
+  let maxMsg = 0;
+  if (Array.isArray(t.messages)) {
+    for (const m of t.messages) {
+      if (typeof m?.timestamp === 'number' && m.timestamp > maxMsg) {
+        maxMsg = m.timestamp;
+      }
+    }
+  }
+  return Math.max(t.lastActive || 0, t.createdAt || 0, maxMsg);
+};
 
 const byOrder = (a: GameTab, b: GameTab): number =>
   (a.createdAt || 0) - (b.createdAt || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -148,12 +158,23 @@ const byOrder = (a: GameTab, b: GameTab): number =>
 function compareVersions(a: GameTab, b: GameTab): number {
   const d = tabTime(a) - tabTime(b);
   if (d !== 0) return d;
+
+  // If timestamps tie, prefer the tab with more messages (more conversation history)
+  const aMsgs = a.messages?.length || 0;
+  const bMsgs = b.messages?.length || 0;
+  if (aMsgs !== bMsgs) return aMsgs - bMsgs;
+
+  // Prefer tab with longer notes
+  const aNotes = a.notes?.length || 0;
+  const bNotes = b.notes?.length || 0;
+  if (aNotes !== bNotes) return aNotes - bNotes;
+
   const sa = canonicalStringify(sanitizeTab(a));
   const sb = canonicalStringify(sanitizeTab(b));
   return sa === sb ? 0 : sa > sb ? 1 : -1;
 }
 
-/** Cloud copy won, but keep this device's heavy local-only extras (audio, full images, achievements). */
+/** Cloud copy won, but keep this device's heavy local-only extras (audio, full images, achievements) and unsynced messages. */
 function enrichFromLocal(cloudTab: GameTab, localTab: GameTab): GameTab {
   const out: GameTab = { ...cloudTab };
   if (localTab.messages && out.messages) {
@@ -168,6 +189,15 @@ function enrichFromLocal(cloudTab: GameTab, localTab: GameTab): GameTab {
         bannerImageUrl: cm.bannerImageUrl && cm.bannerImageUrl.length > 0 ? cm.bannerImageUrl : lm.bannerImageUrl,
       };
     });
+
+    // Never lose messages that were added locally and not yet synced to the cloud
+    const cloudMsgIds = new Set(out.messages.map(m => m.id));
+    const extraLocal = localTab.messages.filter(m => !cloudMsgIds.has(m.id));
+    if (extraLocal.length > 0) {
+      out.messages = [...out.messages, ...extraLocal].sort((m1, m2) => (m1.timestamp || 0) - (m2.timestamp || 0));
+    }
+  } else if (localTab.messages && (!out.messages || out.messages.length === 0)) {
+    out.messages = localTab.messages;
   }
   if (localTab.activeSteamGame && out.activeSteamGame && localTab.activeSteamGame.appId === out.activeSteamGame.appId) {
     out.activeSteamGame = {

@@ -805,19 +805,22 @@ export default function App() {
       return;
     }
 
+    const now = Date.now();
     const userMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${now}`,
       role: 'user',
       text,
       imageUrl: imageBase64,
       audioBase64,
-      timestamp: Date.now()
+      timestamp: now
     };
 
-    const updatedMessages = [...activeTab.messages, userMessage];
-
-    // Optimistically update UI
-    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, messages: updatedMessages } : t));
+    // Optimistically update UI with updated lastActive timestamp
+    setTabs(prev => prev.map(t => t.id === activeTab.id ? { 
+      ...t, 
+      messages: [...t.messages, userMessage],
+      lastActive: now 
+    } : t));
     setIsLoadingAi(true);
 
     let token: string | null = null;
@@ -847,16 +850,17 @@ export default function App() {
       setAuthModalMessage('Your session expired. Please sign in again.');
       setIsAuthModalOpen(true);
 
+      const nowExpired = Date.now();
       const sessionExpiredMessage: ChatMessage = {
-        id: `msg-${Date.now() + 1}`,
+        id: `msg-${nowExpired + 1}`,
         role: 'assistant',
         text: 'Your session expired. Please sign in again.',
-        timestamp: Date.now(),
+        timestamp: nowExpired,
         modelUsed: 'Session Expired'
       };
 
       setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
+        t.id === activeTab.id ? { ...t, messages: [...t.messages, sessionExpiredMessage], lastActive: nowExpired } : t
       ));
       return;
     }
@@ -906,16 +910,17 @@ export default function App() {
           setAuthModalMessage('Your session expired. Please sign in again.');
           setIsAuthModalOpen(true);
 
+          const nowExpired = Date.now();
           const sessionExpiredMessage: ChatMessage = {
-            id: `msg-${Date.now() + 1}`,
+            id: `msg-${nowExpired + 1}`,
             role: 'assistant',
             text: 'Your session expired. Please sign in again.',
-            timestamp: Date.now(),
+            timestamp: nowExpired,
             modelUsed: 'Session Expired'
           };
 
           setTabs(prev => prev.map(t => 
-            t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
+            t.id === activeTab.id ? { ...t, messages: [...t.messages, sessionExpiredMessage], lastActive: nowExpired } : t
           ));
           return;
         }
@@ -961,18 +966,19 @@ export default function App() {
         finalAiText = '⚠️ No response generated from the Compendium. Please try rephrasing your inquiry.';
       }
 
+      const nowAi = Date.now();
       const aiMessage: ChatMessage = {
-        id: `msg-${Date.now() + 1}`,
+        id: `msg-${nowAi + 1}`,
         role: 'assistant',
         text: finalAiText,
         modelUsed: data.modelUsed || 'Gemini 3.1 Pro Preview',
         bannerImageUrl: data.bannerImageUrl,
-        timestamp: Date.now()
+        timestamp: nowAi
       };
 
       setTabs(prev => {
         const nextTabs = prev.map(t => 
-          t.id === activeTab.id ? { ...t, messages: [...t.messages, aiMessage] } : t
+          t.id === activeTab.id ? { ...t, messages: [...t.messages, aiMessage], lastActive: nowAi } : t
         );
         return nextTabs;
       });
@@ -989,15 +995,16 @@ export default function App() {
         }
         setAuthModalMessage('Your session expired. Please sign in again.');
         setIsAuthModalOpen(true);
+        const nowExpired = Date.now();
         const sessionExpiredMessage: ChatMessage = {
-          id: `msg-${Date.now() + 1}`,
+          id: `msg-${nowExpired + 1}`,
           role: 'assistant',
           text: 'Your session expired. Please sign in again.',
-          timestamp: Date.now(),
+          timestamp: nowExpired,
           modelUsed: 'Session Expired'
         };
         setTabs(prev => prev.map(t => 
-          t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
+          t.id === activeTab.id ? { ...t, messages: [...t.messages, sessionExpiredMessage], lastActive: nowExpired } : t
         ));
         return;
       }
@@ -1007,19 +1014,20 @@ export default function App() {
       }
       let isLimitReached = errorMsg.includes('Daily limit reached') || errorMsg.includes('Upgrade to Premium');
 
+      const nowCatch = Date.now();
       const errorMessage: ChatMessage = {
-        id: `msg-${Date.now() + 1}`,
+        id: `msg-${nowCatch + 1}`,
         role: 'assistant',
         text: isLimitReached 
           ? `⚠️ **Inquiry Limit Reached:**\n\n${errorMsg}`
           : `⚠️ **Compendium Inquiry Error:** Unable to reach Google Gemini server.\n\n*Details: ${errorMsg}*`,
-        timestamp: Date.now(),
+        timestamp: nowCatch,
         modelUsed: isLimitReached ? 'Limit Reached' : 'Offline Fallback'
       };
 
       setTabs(prev => {
         const nextTabs = prev.map(t => 
-          t.id === activeTab.id ? { ...t, messages: [...t.messages, errorMessage] } : t
+          t.id === activeTab.id ? { ...t, messages: [...t.messages, errorMessage], lastActive: nowCatch } : t
         );
         return nextTabs;
       });
@@ -1118,7 +1126,8 @@ export default function App() {
   // Playthrough Notes Handlers
   const handleUpdateNotes = (notes: string) => {
     if (!activeTab) return;
-    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, notes } : t));
+    const now = Date.now();
+    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, notes, lastActive: now } : t));
   };
 
   const handleAppendToNotes = (text: string) => {
@@ -1132,15 +1141,17 @@ export default function App() {
 
   const handleUpdateQuests = (quests: any[]) => {
     if (!activeTab) return;
-    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, personalQuests: quests } : t));
+    const now = Date.now();
+    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, personalQuests: quests, lastActive: now } : t));
   };
 
   // Game Switcher Selection
   const handleSelectGame = (game: SteamGameData) => {
     const gameWithFlag = { ...game, isAutoDetected: false };
+    const now = Date.now();
     if (activeTab) {
       setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, name: gameWithFlag.name, activeSteamGame: gameWithFlag } : t
+        t.id === activeTab.id ? { ...t, name: gameWithFlag.name, activeSteamGame: gameWithFlag, lastActive: now } : t
       ));
     } else {
       handleCreateTab(gameWithFlag.name, gameWithFlag);

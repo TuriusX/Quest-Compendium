@@ -100,6 +100,7 @@ export function useCloudSync(
   
   // Use a ref to guarantee we have the absolute latest local data in closures
   const localDataRef = useRef({ settings: localSettings, tabs: localGameTabs });
+  localDataRef.current = { settings: localSettings, tabs: localGameTabs };
   useEffect(() => {
     localDataRef.current = { settings: localSettings, tabs: localGameTabs };
   }, [localSettings, localGameTabs]);

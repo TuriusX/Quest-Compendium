@@ -12,6 +12,7 @@ import { getAuth } from 'firebase-admin/auth';
 import cors from 'cors';
 import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard } from './guestGuard';
+import { registerWebSearch } from './webSearch';
 async function getFirestoreDocREST(idToken: string, uid: string) {
   const isCloudRun = !!process.env.K_SERVICE;
   const projectId = 'quest-compendium-1bccf';
@@ -223,6 +224,8 @@ async function startServer() {
       appId: '1:890629309063:web:87293cf13f922fd3edee22',
     },
   });
+
+  registerWebSearch(app, { requireAuth, getGeminiClient });
 
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {

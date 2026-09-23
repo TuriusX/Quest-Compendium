@@ -212,4 +212,60 @@ test("UploadGovernor: slow, normal editing is never blocked", () => {
   for (let i = 0; i < 200; i++) assert.equal(g.allow(i * 3_000), true);
 });
 
+// ---------------------------------------------------------------- chat question & answer preservation
+test("chat: newly submitted user question locally never disappears when cloud snapshot arrives", () => {
+  const cloud = tab("x", {
+    lastActive: 1000,
+    messages: [{ id: "m1", role: "user", text: "first question", timestamp: 1000 }]
+  });
+  const local = tab("x", {
+    lastActive: 1000, // even if lastActive was not updated yet
+    messages: [
+      { id: "m1", role: "user", text: "first question", timestamp: 1000 },
+      { id: "m2", role: "user", text: "second question", timestamp: 2000 }
+    ]
+  });
+  const r = mergeTabState(S([local]), S([cloud]));
+  assert.equal(r.localChanged, false, "Local tab should not be overwritten by older cloud snapshot");
+  assert.equal(r.cloudChanged, true, "Cloud should be marked to receive the new question");
+  assert.equal(r.merged.tabs[0].messages.length, 2);
+  assert.equal(r.merged.tabs[0].messages[1].text, "second question");
+});
+
+test("chat: tie-breaking with identical timestamps prefers tab with more messages", () => {
+  const cloud = tab("x", {
+    lastActive: 1000,
+    messages: [{ id: "m1", role: "user", text: "question", timestamp: 1000 }]
+  });
+  const local = tab("x", {
+    lastActive: 1000,
+    messages: [
+      { id: "m1", role: "user", text: "question", timestamp: 1000 },
+      { id: "m2", role: "assistant", text: "answer", timestamp: 1000 }
+    ]
+  });
+  const r = mergeTabState(S([local]), S([cloud]));
+  assert.equal(r.merged.tabs[0].messages.length, 2);
+  assert.equal(r.localChanged, false);
+});
+
+test("chat: enrichFromLocal preserves newly added local messages even if cloud tab wins", () => {
+  const cloud = tab("x", {
+    lastActive: 5000,
+    name: "Renamed in Cloud",
+    messages: [{ id: "m1", role: "user", text: "question 1", timestamp: 1000 }]
+  });
+  const local = tab("x", {
+    lastActive: 2000,
+    messages: [
+      { id: "m1", role: "user", text: "question 1", timestamp: 1000 },
+      { id: "m2", role: "user", text: "local unsynced question", timestamp: 2000 }
+    ]
+  });
+  const r = mergeTabState(S([local]), S([cloud]));
+  assert.equal(r.merged.tabs[0].name, "Renamed in Cloud");
+  assert.equal(r.merged.tabs[0].messages.length, 2);
+  assert.equal(r.merged.tabs[0].messages[1].text, "local unsynced question");
+});
+
 console.log(`\n${passed} tests passed` + (process.exitCode ? " (WITH FAILURES)" : ""));
