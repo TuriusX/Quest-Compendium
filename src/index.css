@@ -260,3 +260,25 @@ html[data-ui="lofi"] .animate-magical-flip { animation: qc-bob 1s steps(1) infin
 /* Show/hide helpers for style-specific bits */
 html[data-ui="classic"] .qc-lofi-only { display: none !important; }
 html:not([data-ui="classic"]) .qc-classic-only { display: none !important; }
+
+/* AI answers in the Lo-fi style: pixel headings and diamond bullets */
+html[data-ui="lofi"] .qc-md h1,
+html[data-ui="lofi"] .qc-md h2,
+html[data-ui="lofi"] .qc-md h3 {
+  font-family: 'Pixelify Sans', 'VT323', monospace;
+  letter-spacing: 0.01em;
+}
+html[data-ui="lofi"] .qc-md h2 { font-size: 1.1rem; }
+html[data-ui="lofi"] .qc-md h3 { font-size: 1rem; }
+html[data-ui="lofi"] .qc-md ul { list-style: none !important; padding-left: 1.15rem !important; }
+html[data-ui="lofi"] .qc-md ul > li { position: relative; }
+html[data-ui="lofi"] .qc-md ul > li::before {
+  content: '';
+  position: absolute;
+  left: -1.05rem;
+  top: 0.6em;
+  width: 7px;
+  height: 7px;
+  background: var(--accent-color);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { BookOpen, Plus, Sparkles, Gamepad2 } from './components/icons';
+import { BookOpen, Plus, Sparkles, Gamepad2, Search, Camera, Mic, Moon, FileText } from './components/icons';
 import { 
   GameTab, 
   SteamGameData, 
@@ -63,6 +63,16 @@ const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: str
   silver: { color: '#c0c0c0', dim: 'rgba(192, 192, 192, 0.15)', border: 'rgba(192, 192, 192, 0.3)', glow: 'rgba(192, 192, 192, 0.4)' },
 };
 
+
+/** "CmdOrCtrl+Shift+S" -> "Ctrl + Shift + S" (shown as Cmd on a Mac). */
+function prettyShortcut(accel?: string): string {
+  if (!accel) return '';
+  const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
+  return accel
+    .split('+')
+    .map((k) => (k === 'CmdOrCtrl' || k === 'CommandOrControl' ? (isMac ? 'Cmd' : 'Ctrl') : k))
+    .join(' + ');
+}
 
 /** Apply the interface style: <html data-ui> switches the Lo-fi pixel layer in index.css on or off. */
 function applyUiStyle(style: AppSettings['uiStyle'], accentHex: string) {
@@ -830,19 +840,22 @@ export default function App() {
       return;
     }
 
+    const now = Date.now();
     const userMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${now}`,
       role: 'user',
       text,
       imageUrl: imageBase64,
       audioBase64,
-      timestamp: Date.now()
+      timestamp: now
     };
 
-    const updatedMessages = [...activeTab.messages, userMessage];
-
-    // Optimistically update UI
-    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, messages: updatedMessages } : t));
+    // Optimistically update UI with updated lastActive timestamp
+    setTabs(prev => prev.map(t => t.id === activeTab.id ? { 
+      ...t, 
+      messages: [...t.messages, userMessage],
+      lastActive: now 
+    } : t));
     setIsLoadingAi(true);
 
     let token: string | null = null;
@@ -872,26 +885,28 @@ export default function App() {
       setAuthModalMessage('Your session expired. Please sign in again.');
       setIsAuthModalOpen(true);
 
+      const nowExpired = Date.now();
       const sessionExpiredMessage: ChatMessage = {
-        id: `msg-${Date.now() + 1}`,
+        id: `msg-${nowExpired + 1}`,
         role: 'assistant',
         text: 'Your session expired. Please sign in again.',
-        timestamp: Date.now(),
+        timestamp: nowExpired,
         modelUsed: 'Session Expired'
       };
 
       setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
+        t.id === activeTab.id ? { ...t, messages: [...t.messages, sessionExpiredMessage], lastActive: nowExpired } : t
       ));
       return;
     }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 75 seconds.")), 75000);
-    const backendUrl = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
+    const backendUrl = getApiBaseUrl();
+    const chatEndpoint = backendUrl ? `${backendUrl}/api/chat` : '/api/chat';
 
     try {
-      const res = await fetch(`${backendUrl}/api/chat`, {
+      const res = await fetch(chatEndpoint, {
         method: 'POST',
         signal: controller.signal,
         headers: { 
@@ -931,16 +946,17 @@ export default function App() {
           setAuthModalMessage('Your session expired. Please sign in again.');
           setIsAuthModalOpen(true);
 
+          const nowExpired = Date.now();
           const sessionExpiredMessage: ChatMessage = {
-            id: `msg-${Date.now() + 1}`,
+            id: `msg-${nowExpired + 1}`,
             role: 'assistant',
             text: 'Your session expired. Please sign in again.',
-            timestamp: Date.now(),
+            timestamp: nowExpired,
             modelUsed: 'Session Expired'
           };
 
           setTabs(prev => prev.map(t => 
-            t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
+            t.id === activeTab.id ? { ...t, messages: [...t.messages, sessionExpiredMessage], lastActive: nowExpired } : t
           ));
           return;
         }
@@ -986,18 +1002,19 @@ export default function App() {
         finalAiText = '⚠️ No response generated from the Compendium. Please try rephrasing your inquiry.';
       }
 
+      const nowAi = Date.now();
       const aiMessage: ChatMessage = {
-        id: `msg-${Date.now() + 1}`,
+        id: `msg-${nowAi + 1}`,
         role: 'assistant',
         text: finalAiText,
         modelUsed: data.modelUsed || 'Gemini 3.1 Pro Preview',
         bannerImageUrl: data.bannerImageUrl,
-        timestamp: Date.now()
+        timestamp: nowAi
       };
 
       setTabs(prev => {
         const nextTabs = prev.map(t => 
-          t.id === activeTab.id ? { ...t, messages: [...t.messages, aiMessage] } : t
+          t.id === activeTab.id ? { ...t, messages: [...t.messages, aiMessage], lastActive: nowAi } : t
         );
         return nextTabs;
       });
@@ -1014,15 +1031,16 @@ export default function App() {
         }
         setAuthModalMessage('Your session expired. Please sign in again.');
         setIsAuthModalOpen(true);
+        const nowExpired = Date.now();
         const sessionExpiredMessage: ChatMessage = {
-          id: `msg-${Date.now() + 1}`,
+          id: `msg-${nowExpired + 1}`,
           role: 'assistant',
           text: 'Your session expired. Please sign in again.',
-          timestamp: Date.now(),
+          timestamp: nowExpired,
           modelUsed: 'Session Expired'
         };
         setTabs(prev => prev.map(t => 
-          t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
+          t.id === activeTab.id ? { ...t, messages: [...t.messages, sessionExpiredMessage], lastActive: nowExpired } : t
         ));
         return;
       }
@@ -1032,19 +1050,20 @@ export default function App() {
       }
       let isLimitReached = errorMsg.includes('Daily limit reached') || errorMsg.includes('Upgrade to Premium');
 
+      const nowCatch = Date.now();
       const errorMessage: ChatMessage = {
-        id: `msg-${Date.now() + 1}`,
+        id: `msg-${nowCatch + 1}`,
         role: 'assistant',
         text: isLimitReached 
           ? `⚠️ **Inquiry Limit Reached:**\n\n${errorMsg}`
           : `⚠️ **Compendium Inquiry Error:** Unable to reach Google Gemini server.\n\n*Details: ${errorMsg}*`,
-        timestamp: Date.now(),
+        timestamp: nowCatch,
         modelUsed: isLimitReached ? 'Limit Reached' : 'Offline Fallback'
       };
 
       setTabs(prev => {
         const nextTabs = prev.map(t => 
-          t.id === activeTab.id ? { ...t, messages: [...t.messages, errorMessage] } : t
+          t.id === activeTab.id ? { ...t, messages: [...t.messages, errorMessage], lastActive: nowCatch } : t
         );
         return nextTabs;
       });
@@ -1143,7 +1162,8 @@ export default function App() {
   // Playthrough Notes Handlers
   const handleUpdateNotes = (notes: string) => {
     if (!activeTab) return;
-    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, notes } : t));
+    const now = Date.now();
+    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, notes, lastActive: now } : t));
   };
 
   const handleAppendToNotes = (text: string) => {
@@ -1157,15 +1177,17 @@ export default function App() {
 
   const handleUpdateQuests = (quests: any[]) => {
     if (!activeTab) return;
-    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, personalQuests: quests } : t));
+    const now = Date.now();
+    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, personalQuests: quests, lastActive: now } : t));
   };
 
   // Game Switcher Selection
   const handleSelectGame = (game: SteamGameData) => {
     const gameWithFlag = { ...game, isAutoDetected: false };
+    const now = Date.now();
     if (activeTab) {
       setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, name: gameWithFlag.name, activeSteamGame: gameWithFlag } : t
+        t.id === activeTab.id ? { ...t, name: gameWithFlag.name, activeSteamGame: gameWithFlag, lastActive: now } : t
       ));
     } else {
       handleCreateTab(gameWithFlag.name, gameWithFlag);
@@ -1354,70 +1376,106 @@ export default function App() {
               />
             ) : tabs.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center bg-[#07070b] crt-grid p-4 sm:p-6 overflow-y-auto">
-                 <div className="text-center space-y-5 p-6 sm:p-8 bg-black/60 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-md max-w-lg w-full relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                   {/* Top Accent Glow */}
-                   <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 bg-[var(--accent-glow)] blur-3xl opacity-30 pointer-events-none" />
+                 <div className="w-full max-w-lg flex flex-col items-center gap-5 text-center animate-in fade-in zoom-in-95 duration-200">
+                   {/* Welcome art */}
+                   <img
+                     src={pixelSceneUrl}
+                     alt="A cozy pixel-art desk at night: a black cat on the windowsill under a crescent moon, a steaming mug, an open spellbook with a glowing gem, and a lit candle."
+                     className="qc-lofi-only w-full max-w-[384px] h-auto border-2 border-[var(--accent-border)] shadow-[6px_6px_0_rgba(0,0,0,0.6)]"
+                     style={{ imageRendering: 'pixelated', aspectRatio: '8 / 5' }}
+                   />
+                   <div className="qc-classic-only relative p-3 rounded-2xl bg-[var(--accent-dim)] border border-[var(--accent-border)] shadow-[0_0_20px_var(--accent-glow)]">
+                     <BookOpen className="w-8 h-8 text-[var(--accent-color)]" />
+                   </div>
 
-                   {/* Magical Icon & Header */}
-                   <div className="flex flex-col items-center gap-2">
-                     <img
-                       src={pixelSceneUrl}
-                       alt="A cozy pixel-art desk at night: a black cat on the windowsill under a crescent moon, a steaming mug, an open spellbook with a glowing gem, and a lit candle."
-                       className="qc-lofi-only w-full max-w-[384px] h-auto border-2 border-[var(--accent-border)]"
-                       style={{ imageRendering: 'pixelated', aspectRatio: '8 / 5' }}
-                     />
-                     <div className="qc-classic-only relative p-3 rounded-2xl bg-[var(--accent-dim)] border border-[var(--accent-border)] shadow-[0_0_20px_var(--accent-glow)]">
-                       <BookOpen className="w-8 h-8 text-[var(--accent-color)]" />
-                       <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 rounded-full border-2 border-[#0a0b10] animate-ping" />
-                     </div>
-                     <h2 className="text-2xl font-fantasy text-[var(--accent-color)] tracking-wide mt-2">No Compendium Active</h2>
-                     <p className="text-xs sm:text-sm text-zinc-400 max-w-sm">
-                       Select or create a compendium tab to start taking notes, asking AI quest guidance, and tracking your game.
+                   <div className="space-y-2">
+                     <h2 className="text-2xl font-fantasy font-bold text-white tracking-wide">Start your first compendium</h2>
+                     <p className="text-xs sm:text-sm text-zinc-400 max-w-sm mx-auto leading-relaxed">
+                       One per playthrough: your AI answers, notes and quest checklist in one place, synced across your devices.
                      </p>
                    </div>
 
-                   {/* Direct Action Buttons */}
-                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                   {/* The game running on Steam right now, one click to start */}
+                   {globalActiveGame && (
+                     <div className="qc-px-frame w-full flex items-center gap-3 p-3 rounded-2xl bg-[#11121a] border border-[var(--accent-border)] text-left">
+                       <img
+                         src={`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${globalActiveGame.appId}/header.jpg`}
+                         alt=""
+                         className="w-16 h-10 object-cover rounded-lg border border-white/10 flex-shrink-0"
+                         onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                       />
+                       <div className="flex-1 min-w-0">
+                         <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase text-emerald-400">
+                           <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                           Running on Steam
+                         </div>
+                         <div className="font-fantasy font-bold text-base text-white truncate">{globalActiveGame.name}</div>
+                       </div>
+                       <button
+                         onClick={() => handleCreateTab(globalActiveGame.name, { ...globalActiveGame, isAutoDetected: false })}
+                         className="qc-px-bevel flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[var(--accent-color)] hover:brightness-110 text-[#16101f] font-bold text-xs transition cursor-pointer"
+                       >
+                         <Plus className="w-3.5 h-3.5" />
+                         Start compendium
+                       </button>
+                     </div>
+                   )}
+
+                   {/* Pick any game */}
+                   <div className="w-full space-y-2.5">
+                     <div className="flex items-center gap-3 text-[10px] font-mono uppercase text-zinc-500">
+                       <span className="flex-1 h-px bg-white/[0.08]" />
+                       {globalActiveGame ? 'or pick a game' : 'pick a game'}
+                       <span className="flex-1 h-px bg-white/[0.08]" />
+                     </div>
                      <button
-                       onClick={() => {
-                         setIsSidebarOpen(true);
-                       }}
-                       className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-white font-medium text-xs transition-all cursor-pointer group shadow-sm hover:border-white/30"
+                       onClick={() => setIsGameSearchOpen(true)}
+                       className="w-full h-11 flex items-center gap-2.5 px-3.5 rounded-xl bg-[#13141d] border border-white/15 hover:border-[var(--accent-border)] text-left text-sm text-zinc-500 hover:text-zinc-300 transition cursor-pointer"
                      >
-                       <BookOpen className="w-4 h-4 text-[var(--accent-color)] group-hover:scale-110 transition-transform" />
-                       <span>Open Games Library</span>
+                       <Search className="w-4 h-4 text-zinc-500" />
+                       Search your Steam library or any game
                      </button>
-
-                     <button
-                       onClick={() => handleStartCreateTab()}
-                       className="qc-px-bevel flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[var(--accent-color)] hover:brightness-110 text-white font-semibold text-xs transition-all cursor-pointer shadow-lg shadow-[var(--accent-glow)] group"
-                     >
-                       <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" />
-                       <span>Create New Tab</span>
-                     </button>
-                   </div>
-
-                   {/* Quick Start Presets */}
-                   <div className="pt-4 border-t border-white/[0.08] text-left">
-                     <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block mb-2.5 flex items-center gap-1.5">
-                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                       <span>Or Quick-Start a Popular Game:</span>
-                     </span>
-
-                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                       {POPULAR_STEAM_GAMES.slice(0, 6).map((game) => (
+                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                       {POPULAR_STEAM_GAMES.slice(0, 4).map((game) => (
                          <button
                            key={game.appId}
-                           onClick={() => {
-                             handleCreateTab(game.name, game);
-                           }}
-                           className="flex items-center gap-2 p-2 rounded-xl bg-white/[0.03] hover:bg-[var(--accent-dim)] border border-white/5 hover:border-[var(--accent-border)] text-zinc-300 hover:text-white text-xs transition-all cursor-pointer text-left truncate group"
+                           onClick={() => handleCreateTab(game.name, game)}
+                           className="px-2 py-2.5 rounded-xl bg-white/[0.03] hover:bg-[var(--accent-dim)] border border-white/[0.08] hover:border-[var(--accent-border)] text-zinc-300 hover:text-white text-xs font-medium transition cursor-pointer truncate"
                          >
-                           <Gamepad2 className="w-3.5 h-3.5 flex-shrink-0 text-zinc-500 group-hover:text-[var(--accent-color)]" />
-                           <span className="truncate font-medium">{game.name}</span>
+                           {game.name}
                          </button>
                        ))}
                      </div>
+                     <button
+                       onClick={() => handleStartCreateTab()}
+                       className="text-[11px] text-zinc-500 hover:text-[var(--accent-color)] underline-offset-2 hover:underline cursor-pointer"
+                     >
+                       Or start a blank compendium
+                     </button>
+                   </div>
+
+                   {/* The three things worth knowing up front */}
+                   <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
+                     {[
+                       isDesktop
+                         ? { icon: Camera, title: 'Screenshot & ask', text: `${prettyShortcut(settings.autoScreenshotShortcut)} sends what's on screen.` }
+                         : { icon: Camera, title: 'Paste a screenshot', text: 'Ctrl + V drops a game screenshot into your question.' },
+                       { icon: Mic, title: 'Ask out loud', text: isDesktop ? `${prettyShortcut(settings.voiceInputShortcut)} to speak a question.` : 'Tap the mic to speak a question.' },
+                       isDesktop
+                         ? { icon: Moon, title: 'Hide anytime', text: `${prettyShortcut(settings.hideAppShortcut)} slides the window away.` }
+                         : { icon: FileText, title: 'Take notes', text: 'Save answers to your playthrough notes.' },
+                     ].map((tip) => {
+                       const Icon = tip.icon;
+                       return (
+                         <div key={tip.title} className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.07]">
+                           <div className="flex items-center gap-2 text-xs font-semibold text-white">
+                             <Icon className="w-3.5 h-3.5 text-[var(--accent-color)]" />
+                             {tip.title}
+                           </div>
+                           <div className="mt-1 text-[11px] text-zinc-400 leading-snug">{tip.text}</div>
+                         </div>
+                       );
+                     })}
                    </div>
                  </div>
               </div>
