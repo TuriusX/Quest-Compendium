@@ -867,10 +867,11 @@ export default function App() {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 75 seconds.")), 75000);
-    const backendUrl = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
+    const backendUrl = getApiBaseUrl();
+    const chatEndpoint = backendUrl ? `${backendUrl}/api/chat` : '/api/chat';
 
     try {
-      const res = await fetch(`${backendUrl}/api/chat`, {
+      const res = await fetch(chatEndpoint, {
         method: 'POST',
         signal: controller.signal,
         headers: { 

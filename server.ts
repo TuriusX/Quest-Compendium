@@ -972,7 +972,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
             }
           });
-          const response = await withTimeout(primaryCall, 18000, 'Primary Gemini 3.1 Pro query') as any;
+          const response = await withTimeout(primaryCall, 30000, 'Primary Gemini 3.1 Pro query') as any;
           responseText = response.text || '';
           logDebug(`[API Chat] primaryCall succeeded, response length: ${responseText.length}`);
 
@@ -999,7 +999,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
             }
           });
-          const response = await withTimeout(fallbackCall, 12000, 'Flash query') as any;
+          const response = await withTimeout(fallbackCall, 25000, 'Flash query') as any;
           responseText = response.text || '';
 
           if (responseText && responseText.trim().length > 0) {
@@ -1042,7 +1042,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               ],
             }
           });
-          const retryResponse = await withTimeout(retryPromise, 10000, 'Flash Fallback query') as any;
+          const retryResponse = await withTimeout(retryPromise, 25000, 'Flash Fallback query') as any;
           responseText = retryResponse.text || '';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
 
@@ -1083,7 +1083,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
               ],
             }
             });
-            const emergencyResponse = await withTimeout(emergencyPromise, 6000, 'Flash Lite Emergency query') as any;
+            const emergencyResponse = await withTimeout(emergencyPromise, 15000, 'Flash Lite Emergency query') as any;
             responseText = emergencyResponse.text || 'No response received.';
             modelUsed = 'Gemini 3.1 Flash Lite (Emergency Fallback)';
             
@@ -1124,7 +1124,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         try {
           bannerImageUrl = await Promise.race([
             bannerImagePromise,
-            new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 15000))
+            new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 6000))
           ]);
           if (bannerImageUrl) {
             logDebug(`[API Chat] Successfully generated banner image (length: ${bannerImageUrl.length})`);
