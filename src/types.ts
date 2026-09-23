@@ -2,6 +2,8 @@ export type AiMode = 'standard' | 'roleplay' | 'minmax';
 
 export type ColorTheme = 'purple' | 'red' | 'cyan' | 'blue' | 'amber' | 'luigi' | 'masterchief' | 'gold' | 'pink' | 'silver';
 
+export type UiStyle = 'lofi' | 'classic';
+
 export type DockPosition = 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left' | 'undocked';
 
 export type ChatFont = 'segoe' | 'pixel' | 'fantasy' | 'lore' | 'code';
@@ -93,6 +95,8 @@ export interface AppSettings {
   voiceInputShortcut: string;
   autoScreenshotShortcut: string;
   enableThematicBanners?: boolean;
+  /** Interface style: 'lofi' (pixel art, default) or 'classic' (the original look). */
+  uiStyle?: UiStyle;
 }
 
 export interface SyncEventLog {

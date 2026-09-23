@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { BookOpen, Plus, Sparkles, Gamepad2 } from 'lucide-react';
+import { BookOpen, Plus, Sparkles, Gamepad2 } from './components/icons';
 import { 
   GameTab, 
   SteamGameData, 
@@ -29,6 +29,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
 import { useCloudSync } from './hooks/useCloudSync';
 import { recordTombstone } from './hooks/tabMerge';
+import pixelSceneUrl from './pixel-scene.png';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -46,6 +47,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
   enableThematicBanners: true,
+  uiStyle: 'lofi',
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
@@ -60,6 +62,19 @@ const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: str
   pink: { color: '#ff69b4', dim: 'rgba(255, 105, 180, 0.15)', border: 'rgba(255, 105, 180, 0.3)', glow: 'rgba(255, 105, 180, 0.4)' },
   silver: { color: '#c0c0c0', dim: 'rgba(192, 192, 192, 0.15)', border: 'rgba(192, 192, 192, 0.3)', glow: 'rgba(192, 192, 192, 0.4)' },
 };
+
+
+/** Apply the interface style: <html data-ui> switches the Lo-fi pixel layer in index.css on or off. */
+function applyUiStyle(style: AppSettings['uiStyle'], accentHex: string) {
+  const html = document.documentElement;
+  html.dataset.ui = style === 'classic' ? 'classic' : 'lofi';
+  const hex = accentHex.replace('#', '');
+  const n = parseInt(hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex, 16);
+  if (!Number.isNaN(n)) {
+    const dark = (v: number) => Math.round(v * 0.45);
+    html.style.setProperty('--accent-dark', `rgb(${dark((n >> 16) & 255)}, ${dark((n >> 8) & 255)}, ${dark(n & 255)})`);
+  }
+}
 
 const DesktopLogin = React.lazy(() => import('./components/DesktopLogin').then(module => ({ default: module.DesktopLogin })));
 
@@ -119,6 +134,15 @@ function SettingsStandalone() {
 
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  useEffect(() => {
+    const t = THEME_STYLES[settings.theme] || THEME_STYLES.purple;
+    document.documentElement.style.setProperty('--accent-color', t.color);
+    document.documentElement.style.setProperty('--accent-dim', t.dim);
+    document.documentElement.style.setProperty('--accent-border', t.border);
+    document.documentElement.style.setProperty('--accent-glow', t.glow);
+    applyUiStyle(settings.uiStyle, t.color);
+  }, [settings.uiStyle, settings.theme]);
 
   return (
     <div className="w-screen h-screen bg-[#0c0d14] text-zinc-100 overflow-auto">
@@ -506,7 +530,8 @@ export default function App() {
       'code': "'JetBrains Mono', monospace"
     };
     root.setProperty('--chat-font-family', fonts[settings.chatFont] || fonts.segoe);
-  }, [settings.theme, settings.windowOpacity, settings.tabFontSize, settings.chatFontSize, settings.chatFont]);
+    applyUiStyle(settings.uiStyle, t.color);
+  }, [settings.theme, settings.windowOpacity, settings.tabFontSize, settings.chatFontSize, settings.chatFont, settings.uiStyle]);
 
   // Handle Steam Auth Return
   useEffect(() => {
@@ -805,22 +830,19 @@ export default function App() {
       return;
     }
 
-    const now = Date.now();
     const userMessage: ChatMessage = {
-      id: `msg-${now}`,
+      id: `msg-${Date.now()}`,
       role: 'user',
       text,
       imageUrl: imageBase64,
       audioBase64,
-      timestamp: now
+      timestamp: Date.now()
     };
 
-    // Optimistically update UI with updated lastActive timestamp
-    setTabs(prev => prev.map(t => t.id === activeTab.id ? { 
-      ...t, 
-      messages: [...t.messages, userMessage],
-      lastActive: now 
-    } : t));
+    const updatedMessages = [...activeTab.messages, userMessage];
+
+    // Optimistically update UI
+    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, messages: updatedMessages } : t));
     setIsLoadingAi(true);
 
     let token: string | null = null;
@@ -850,28 +872,26 @@ export default function App() {
       setAuthModalMessage('Your session expired. Please sign in again.');
       setIsAuthModalOpen(true);
 
-      const nowExpired = Date.now();
       const sessionExpiredMessage: ChatMessage = {
-        id: `msg-${nowExpired + 1}`,
+        id: `msg-${Date.now() + 1}`,
         role: 'assistant',
         text: 'Your session expired. Please sign in again.',
-        timestamp: nowExpired,
+        timestamp: Date.now(),
         modelUsed: 'Session Expired'
       };
 
       setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, messages: [...t.messages, sessionExpiredMessage], lastActive: nowExpired } : t
+        t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
       ));
       return;
     }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 75 seconds.")), 75000);
-    const backendUrl = getApiBaseUrl();
-    const chatEndpoint = backendUrl ? `${backendUrl}/api/chat` : '/api/chat';
+    const backendUrl = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
 
     try {
-      const res = await fetch(chatEndpoint, {
+      const res = await fetch(`${backendUrl}/api/chat`, {
         method: 'POST',
         signal: controller.signal,
         headers: { 
@@ -911,17 +931,16 @@ export default function App() {
           setAuthModalMessage('Your session expired. Please sign in again.');
           setIsAuthModalOpen(true);
 
-          const nowExpired = Date.now();
           const sessionExpiredMessage: ChatMessage = {
-            id: `msg-${nowExpired + 1}`,
+            id: `msg-${Date.now() + 1}`,
             role: 'assistant',
             text: 'Your session expired. Please sign in again.',
-            timestamp: nowExpired,
+            timestamp: Date.now(),
             modelUsed: 'Session Expired'
           };
 
           setTabs(prev => prev.map(t => 
-            t.id === activeTab.id ? { ...t, messages: [...t.messages, sessionExpiredMessage], lastActive: nowExpired } : t
+            t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
           ));
           return;
         }
@@ -967,19 +986,18 @@ export default function App() {
         finalAiText = '⚠️ No response generated from the Compendium. Please try rephrasing your inquiry.';
       }
 
-      const nowAi = Date.now();
       const aiMessage: ChatMessage = {
-        id: `msg-${nowAi + 1}`,
+        id: `msg-${Date.now() + 1}`,
         role: 'assistant',
         text: finalAiText,
         modelUsed: data.modelUsed || 'Gemini 3.1 Pro Preview',
         bannerImageUrl: data.bannerImageUrl,
-        timestamp: nowAi
+        timestamp: Date.now()
       };
 
       setTabs(prev => {
         const nextTabs = prev.map(t => 
-          t.id === activeTab.id ? { ...t, messages: [...t.messages, aiMessage], lastActive: nowAi } : t
+          t.id === activeTab.id ? { ...t, messages: [...t.messages, aiMessage] } : t
         );
         return nextTabs;
       });
@@ -996,16 +1014,15 @@ export default function App() {
         }
         setAuthModalMessage('Your session expired. Please sign in again.');
         setIsAuthModalOpen(true);
-        const nowExpired = Date.now();
         const sessionExpiredMessage: ChatMessage = {
-          id: `msg-${nowExpired + 1}`,
+          id: `msg-${Date.now() + 1}`,
           role: 'assistant',
           text: 'Your session expired. Please sign in again.',
-          timestamp: nowExpired,
+          timestamp: Date.now(),
           modelUsed: 'Session Expired'
         };
         setTabs(prev => prev.map(t => 
-          t.id === activeTab.id ? { ...t, messages: [...t.messages, sessionExpiredMessage], lastActive: nowExpired } : t
+          t.id === activeTab.id ? { ...t, messages: [...updatedMessages, sessionExpiredMessage] } : t
         ));
         return;
       }
@@ -1015,20 +1032,19 @@ export default function App() {
       }
       let isLimitReached = errorMsg.includes('Daily limit reached') || errorMsg.includes('Upgrade to Premium');
 
-      const nowCatch = Date.now();
       const errorMessage: ChatMessage = {
-        id: `msg-${nowCatch + 1}`,
+        id: `msg-${Date.now() + 1}`,
         role: 'assistant',
         text: isLimitReached 
           ? `⚠️ **Inquiry Limit Reached:**\n\n${errorMsg}`
           : `⚠️ **Compendium Inquiry Error:** Unable to reach Google Gemini server.\n\n*Details: ${errorMsg}*`,
-        timestamp: nowCatch,
+        timestamp: Date.now(),
         modelUsed: isLimitReached ? 'Limit Reached' : 'Offline Fallback'
       };
 
       setTabs(prev => {
         const nextTabs = prev.map(t => 
-          t.id === activeTab.id ? { ...t, messages: [...t.messages, errorMessage], lastActive: nowCatch } : t
+          t.id === activeTab.id ? { ...t, messages: [...t.messages, errorMessage] } : t
         );
         return nextTabs;
       });
@@ -1127,8 +1143,7 @@ export default function App() {
   // Playthrough Notes Handlers
   const handleUpdateNotes = (notes: string) => {
     if (!activeTab) return;
-    const now = Date.now();
-    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, notes, lastActive: now } : t));
+    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, notes } : t));
   };
 
   const handleAppendToNotes = (text: string) => {
@@ -1142,17 +1157,15 @@ export default function App() {
 
   const handleUpdateQuests = (quests: any[]) => {
     if (!activeTab) return;
-    const now = Date.now();
-    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, personalQuests: quests, lastActive: now } : t));
+    setTabs(prev => prev.map(t => t.id === activeTab.id ? { ...t, personalQuests: quests } : t));
   };
 
   // Game Switcher Selection
   const handleSelectGame = (game: SteamGameData) => {
     const gameWithFlag = { ...game, isAutoDetected: false };
-    const now = Date.now();
     if (activeTab) {
       setTabs(prev => prev.map(t => 
-        t.id === activeTab.id ? { ...t, name: gameWithFlag.name, activeSteamGame: gameWithFlag, lastActive: now } : t
+        t.id === activeTab.id ? { ...t, name: gameWithFlag.name, activeSteamGame: gameWithFlag } : t
       ));
     } else {
       handleCreateTab(gameWithFlag.name, gameWithFlag);
@@ -1333,7 +1346,7 @@ export default function App() {
           )}
 
           {/* Central Workspace: Chat OR Browser */}
-          <main className="flex-1 flex flex-col overflow-hidden relative">
+          <main className="qc-scanlines flex-1 flex flex-col overflow-hidden relative">
             {isBrowserMode ? (
               <GameGuidesBrowser
                 activeGame={activeGame}
@@ -1347,7 +1360,13 @@ export default function App() {
 
                    {/* Magical Icon & Header */}
                    <div className="flex flex-col items-center gap-2">
-                     <div className="relative p-3 rounded-2xl bg-[var(--accent-dim)] border border-[var(--accent-border)] shadow-[0_0_20px_var(--accent-glow)]">
+                     <img
+                       src={pixelSceneUrl}
+                       alt="A cozy pixel-art desk at night: a black cat on the windowsill under a crescent moon, a steaming mug, an open spellbook with a glowing gem, and a lit candle."
+                       className="qc-lofi-only w-full max-w-[384px] h-auto border-2 border-[var(--accent-border)]"
+                       style={{ imageRendering: 'pixelated', aspectRatio: '8 / 5' }}
+                     />
+                     <div className="qc-classic-only relative p-3 rounded-2xl bg-[var(--accent-dim)] border border-[var(--accent-border)] shadow-[0_0_20px_var(--accent-glow)]">
                        <BookOpen className="w-8 h-8 text-[var(--accent-color)]" />
                        <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 rounded-full border-2 border-[#0a0b10] animate-ping" />
                      </div>
@@ -1371,7 +1390,7 @@ export default function App() {
 
                      <button
                        onClick={() => handleStartCreateTab()}
-                       className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[var(--accent-color)] hover:brightness-110 text-white font-semibold text-xs transition-all cursor-pointer shadow-lg shadow-[var(--accent-glow)] group"
+                       className="qc-px-bevel flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[var(--accent-color)] hover:brightness-110 text-white font-semibold text-xs transition-all cursor-pointer shadow-lg shadow-[var(--accent-glow)] group"
                      >
                        <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" />
                        <span>Create New Tab</span>
