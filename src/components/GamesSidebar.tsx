@@ -18,6 +18,7 @@ import {
 } from './icons';
 import { GameTab, SteamGameData } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
+import pixelSceneUrl from '../pixel-scene.png';
 
 /** Short initials for a game tile, e.g. "Baldur's Gate 3" -> "BG3". */
 function initials(name: string): string {
@@ -306,6 +307,16 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           <span>Add New Compendium</span>
         </button>
         )}
+      </div>
+
+      {/* Lo-fi desk scene (cat on the windowsill) above the tools */}
+      <div className="qc-lofi-only px-3 pb-3 flex-shrink-0" aria-hidden="true">
+        <img
+          src={pixelSceneUrl}
+          alt=""
+          className="w-full h-20 object-cover opacity-60 border border-white/[0.06]"
+          style={{ imageRendering: 'pixelated', objectPosition: '22% 62%' }}
+        />
       </div>
 
       {/* Global Tools footer */}

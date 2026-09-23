@@ -30,7 +30,6 @@ import {
   AlertTriangle,
   AlertCircle
 } from './icons';
-import { PixelDots } from './pixelArt';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
 import { getApiBaseUrl, DEFAULT_PREVIEW_URL } from '../utils/api';
 import { auth } from '../lib/firebase';
@@ -1100,10 +1099,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <rect x="14" y="14" width="4" height="4" fill="var(--accent-glow)" />
               </svg>
             </div>
-            <span className="font-fantasy font-bold text-xs text-[var(--accent-color)] tracking-wide animate-pulse mt-1">
+            <span className="qc-keep-anim font-fantasy font-bold text-xs text-[var(--accent-color)] tracking-wide animate-pulse mt-1">
               Consulting the Quest Compendium...
             </span>
-            <PixelDots />
           </div>
         )}
       </div>
