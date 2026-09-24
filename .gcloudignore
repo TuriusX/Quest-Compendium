@@ -4,3 +4,8 @@
 node_modules/
 release/
 test-prod.cjs
+.env
+.env.*
+!.env.example
+.claude/
+*.zip
