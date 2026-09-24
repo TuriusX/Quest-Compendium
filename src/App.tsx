@@ -32,7 +32,7 @@ import { recordTombstone } from './hooks/tabMerge';
 import pixelSceneUrl from './pixel-scene.png';
 import { LOCALES, aiLanguageName, applyLocale, detectLocale, translate, useT } from './i18n';
 import { ControllerLayer } from './components/ControllerLayer';
-import { hiddenFor, setPointersActive } from './components/pointerStore';
+import { rememberAreaFind, setPointersActive } from './components/pointerStore';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -527,7 +527,7 @@ export default function App() {
     api.onLocateRequest(async ({ id, image }: { id: string; image: string }) => {
       const tab = tabsRef.current.find((t) => t.messages.some((m) => m.id === id));
       const msg = tab?.messages.find((m) => m.id === id);
-      const pending = (msg?.nearby ?? []).map((n, i) => ({ ...n, i })).filter((n) => !n.found);
+      const pending = (msg?.nearby ?? []).map((n, i) => ({ ...n, i })).filter((n) => !n.found && n.onMap);
       if (!tab || !msg || !pending.length) {
         api.locateDone?.(id, 0);
         return;
@@ -572,6 +572,7 @@ export default function App() {
                 },
           ),
         );
+        rememberAreaFind(id, { points: newPoints, refImage: image, startIndex });
         api.addPointers?.(id, newPoints, image, startIndex);
         api.locateDone?.(id, pending.length - found.length);
       } catch {
@@ -1117,7 +1118,7 @@ export default function App() {
         modelUsed: data.modelUsed || 'Gemini 3.1 Pro Preview',
         bannerImageUrl: data.bannerImageUrl,
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
-        ...(Array.isArray(data.nearby) && data.nearby.length ? { nearby: data.nearby.map((n: any) => ({ label: String(n.label), hint: String(n.hint || ''), found: false })) } : {}),
+        ...(Array.isArray(data.nearby) && data.nearby.length ? { nearby: data.nearby.map((n: any) => ({ label: String(n.label), hint: String(n.hint || ''), onMap: n.onMap === true, found: false })) } : {}),
         timestamp: nowAi
       };
 
@@ -1128,8 +1129,8 @@ export default function App() {
         (window as any).electronAPI?.showScreenPointers?.(aiMessage.points, accent, {
           refImage: imageBase64,
           sessionId: aiMessage.id,
-          hidden: hiddenFor(aiMessage.id),
-          watchNearby: !!aiMessage.nearby?.length,
+          hidden: [],
+          watchNearby: !!aiMessage.nearby?.some((n) => n.onMap),
         });
       }
 
@@ -1625,6 +1626,15 @@ export default function App() {
                 activeGame={activeGame}
                 soundEnabled={settings.soundEnabled}
                 onAppendToNotes={handleAppendToNotes}
+                onUpdateMessage={(msgId, patch) =>
+                  setTabs((prev) =>
+                    prev.map((t) =>
+                      t.messages.some((m) => m.id === msgId)
+                        ? { ...t, messages: t.messages.map((m) => (m.id === msgId ? { ...m, ...patch } : m)), lastActive: Date.now() }
+                        : t,
+                    ),
+                  )
+                }
                 onOpenScreenModal={(url) => setExaminedImageUrl(url)}
                 ttsVoice={settings.ttsVoice}
                 customApiKey={settings.customApiKey}

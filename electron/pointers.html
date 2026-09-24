@@ -33,6 +33,7 @@
   let stream = null;
   let hidden = new Set(); // markers the player switched off in the answer's list
   let live = null; // sticky-mode state, so markers can be added while tracking
+  let pendingAdds = []; // found items that arrived before tracking started
 
   function finish() {
     if (finished) return;
@@ -114,6 +115,10 @@
     const vel = opts.points.map(() => ({ x: 0, y: 0 }));
     const visible = opts.points.map(() => false);
     live = { tracker, ctx, w, h, els, target, shown, vel, visible };
+    // Found items that arrived while tracking was starting up (or that were found earlier and shown again).
+    const queued = pendingAdds;
+    pendingAdds = [];
+    for (const add of queued) await window.qcAddPoints(add);
     let checkedAt = { x: 0, y: 0 };
     let lastUpdate = performance.now();
     els.forEach((el) => el.classList.add('hidden')); // appear once they're in the right place
@@ -182,8 +187,13 @@
   };
 
   /** Items found as the player walked: add markers that track like the others. */
-  window.qcAddPoints = async ({ points, refImage, startIndex }) => {
-    if (!live || finished || !Array.isArray(points) || !points.length || !refImage) return;
+  window.qcAddPoints = async (add) => {
+    const { points, refImage, startIndex } = add || {};
+    if (finished || !Array.isArray(points) || !points.length || !refImage) return;
+    if (!live) {
+      pendingAdds.push(add);
+      return;
+    }
     const img = await loadImage(refImage);
     const { tracker, ctx, w, h, els, target, shown, vel, visible } = live;
     tracker.addMarkers(grayOf(ctx, img, w, h), points);
@@ -200,6 +210,7 @@
 
   window.qcStart = async (opts) => {
     hidden = new Set(opts.hidden || []);
+    if (Array.isArray(opts.extra)) pendingAdds.push(...opts.extra);
     document.documentElement.style.setProperty('--accent', opts.accent || '#a87ffb');
     const els = buildMarkers(opts.points || []);
     els.forEach((el, i) => hidden.has(i) && el.classList.add('hidden'));

@@ -1015,6 +1015,8 @@ function showScreenPointers(points, accent, opts = {}) {
   const watchNearby = sticky && opts.watchNearby === true;
   const payload = {
     hidden: Array.isArray(opts.hidden) ? opts.hidden.filter((n) => Number.isInteger(n)) : [],
+    // Items found earlier by area checks, each tracked against the screenshot it was found in.
+    extra: (Array.isArray(opts.extra) ? opts.extra : []).map(cleanAdd).filter(Boolean).slice(0, 6),
     watchMoves: watchNearby,
     points: valid,
     accent: /^#[0-9a-fA-F]{3,8}$/.test(accent || '') ? accent : '#a87ffb',
@@ -1055,7 +1057,8 @@ function showScreenPointers(points, accent, opts = {}) {
     },
   });
   pointerWindow = win;
-  pointerSession = { id: sessionId, win, watch: watchNearby, checks: 0, lastCheck: 0, inFlight: false, sourceId: lastCaptureSourceId };
+  pointerSession = { id: sessionId, win, watch: watchNearby, checks: 0, lastCheck: 0, inFlight: false, sourceId: lastCaptureSourceId, ready: false, queue: [] };
+  const session = pointerSession;
   win.setIgnoreMouseEvents(true);
   win.setAlwaysOnTop(true, 'screen-saver');
   // Either hidden from all screen capture, or visible in recordings (then the tracker ignores its own markers).
@@ -1077,6 +1080,10 @@ function showScreenPointers(points, accent, opts = {}) {
     win.webContents.executeJavaScript(`window.qcStart(${JSON.stringify(payload)})`).catch(() => {});
     win.showInactive();
     sendPointerState(sessionId, true);
+    // Found items that arrived while the page was loading.
+    session.ready = true;
+    for (const add of session.queue) win.webContents.executeJavaScript(`window.qcAddPoints(${JSON.stringify(add)})`).catch(() => {});
+    session.queue = [];
   });
   win.loadFile(path.join(__dirname, 'pointers.html'));
   // Safety net in case the page can't close itself.
@@ -1138,16 +1145,27 @@ ipcMain.on('pointers-moved', async (event) => {
   setTimeout(() => { if (pointerSession === session) session.inFlight = false; }, 30000);
 });
 
-// Items found by an area check: add their markers to the session on screen.
-ipcMain.on('pointers-add', (event, { id, points, refImage, startIndex } = {}) => {
-  const session = pointerSession;
-  if (!session || session.id !== id || !pointerWindow || pointerWindow.isDestroyed()) return;
-  const valid = (Array.isArray(points) ? points : [])
+/** Validate markers found by an area check (points + the screenshot they were found in). */
+function cleanAdd(add) {
+  if (!add) return null;
+  const valid = (Array.isArray(add.points) ? add.points : [])
     .filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
     .slice(0, 6)
     .map((p) => ({ x: p.x, y: p.y, label: String(p.label || '').slice(0, 40) }));
-  if (!valid.length || typeof refImage !== 'string' || !refImage.startsWith('data:image/')) return;
-  const payload = { points: valid, refImage, startIndex: Number.isInteger(startIndex) ? startIndex : 0 };
+  if (!valid.length || typeof add.refImage !== 'string' || !add.refImage.startsWith('data:image/')) return null;
+  return { points: valid, refImage: add.refImage, startIndex: Number.isInteger(add.startIndex) ? add.startIndex : 0 };
+}
+
+// Items found by an area check: add their markers to the session on screen (queued if the page is still loading).
+ipcMain.on('pointers-add', (event, { id, points, refImage, startIndex } = {}) => {
+  const session = pointerSession;
+  if (!session || session.id !== id || !pointerWindow || pointerWindow.isDestroyed()) return;
+  const payload = cleanAdd({ points, refImage, startIndex });
+  if (!payload) return;
+  if (!session.ready) {
+    session.queue.push(payload);
+    return;
+  }
   pointerWindow.webContents.executeJavaScript(`window.qcAddPoints(${JSON.stringify(payload)})`).catch(() => {});
 });
 

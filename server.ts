@@ -813,9 +813,10 @@ When your answer refers to specific things that are visible in the screenshot (a
 - Only point at things that are actually visible in the screenshot, and be precise. If nothing specific is worth pointing at, leave the block out entirely.
 - Never mention the block, coordinates or "pointers" in your answer text.
 
-If the player is asking about items, secrets or things to find, and you know of others in this same area (the same town, dungeon floor or room) that are NOT visible in the screenshot, list up to 6 of them in ONE more block:
-<qc-nearby>[{"label": "Elixir", "hint": "in the clay pot inside the inn"}]</qc-nearby>
+If the player is asking about items, secrets or things to find, and you know of others in this same place (the same town, dungeon or area) that are NOT visible in the screenshot, list up to 6 of them in ONE more block:
+<qc-nearby>[{"label": "Gold Needle", "hint": "crate in the southwest corner", "onThisMap": true}, {"label": "Elixir", "hint": "clay pot inside the inn", "onThisMap": false}]</qc-nearby>
 - label: what it is (1 to 4 words); hint: where it is, described by what the spot looks like (a few words). Both in the player's language.
+- onThisMap: true ONLY if it is on the same map the player is on right now, so it would scroll into view just by walking around (no door, stairs, cave entrance or screen transition in between). false for anything inside a building, on another floor, in another room, or behind a transition.
 - Only list things you are confident about. Leave the block out when there are none, and never mention it in your answer text.`;
       }
 
@@ -1196,21 +1197,21 @@ You must respond entirely in ${language}. Do not use English unless the user's l
    * Returns the answer without the block, and up to 5 validated points as 0-1 fractions.
    * The block is always removed, even when no screenshot was sent (the points would be meaningless then).
    */
-  function extractScreenPoints(text: string, hadImage: boolean): { text: string; points: { x: number; y: number; label: string }[]; nearby: { label: string; hint: string }[] } {
+  function extractScreenPoints(text: string, hadImage: boolean): { text: string; points: { x: number; y: number; label: string }[]; nearby: { label: string; hint: string; onMap: boolean }[] } {
     // Other items in the same area that aren't on screen yet (the desktop app looks for them as the player walks).
     let nearbyRaw = '';
     text = text.replace(/(?:```[a-z]*\s*)?<qc-nearby>([\s\S]*?)<\/qc-nearby>(?:\s*```)?/gi, (_m, inner) => {
       if (!nearbyRaw) nearbyRaw = inner;
       return '';
     });
-    const nearby: { label: string; hint: string }[] = [];
+    const nearby: { label: string; hint: string; onMap: boolean }[] = [];
     if (hadImage && nearbyRaw) {
       try {
         const parsed = JSON.parse(nearbyRaw.trim());
         if (Array.isArray(parsed)) {
           for (const n of parsed.slice(0, 6)) {
             const label = String(n?.label ?? '').trim().slice(0, 40);
-            if (label) nearby.push({ label, hint: String(n?.hint ?? '').trim().slice(0, 100) });
+            if (label) nearby.push({ label, hint: String(n?.hint ?? '').trim().slice(0, 100), onMap: n?.onThisMap === true });
           }
         }
       } catch {

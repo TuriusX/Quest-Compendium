@@ -30,7 +30,8 @@ import {
   AlertTriangle,
   AlertCircle
 } from './icons';
-import { AnnotatedShot } from './ScreenPointers';
+import { AnnotatedShot, MarkerBadge, withMarkerBadges } from './ScreenPointers';
+import { areaFindsFor, markersActiveFor } from './pointerStore';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
 import { getApiBaseUrl, DEFAULT_PREVIEW_URL } from '../utils/api';
 import { auth } from '../lib/firebase';
@@ -41,6 +42,8 @@ import { useT } from '../i18n';
 const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3'];
 
 interface ChatAreaProps {
+  /** Update fields of one message (e.g. which markers were checked off). */
+  onUpdateMessage?: (msgId: string, patch: Partial<ChatMessage>) => void;
   activeTab: GameTab | null;
   onSendMessage: (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash') => Promise<void>;
   isLoading: boolean;
@@ -74,6 +77,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   steamAvatar,
   fontMenuOpen,
   onToggleFontMenu,
+  onUpdateMessage,
 }) => {
   const t = useT();
   const [inputQuestion, setInputQuestion] = useState('');
@@ -966,32 +970,75 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         }
                         return undefined;
                       })();
+                    const points = msg.points;
+                    const done = msg.donePoints ?? [];
+                    const api = (window as any).electronAPI;
+                    // Put this answer's markers on screen, skipping the ones checked off.
+                    const startMarkers = (doneList: number[]) => {
+                      const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+                      api?.showScreenPointers?.(points.filter((p) => !p.fromArea), accent, {
+                        refImage: shotUrl,
+                        sessionId: msg.id,
+                        hidden: doneList,
+                        watchNearby: !!msg.nearby?.some((n) => n.onMap && !n.found),
+                        extra: areaFindsFor(msg.id),
+                      });
+                    };
+                    const setDone = (next: number[]) => {
+                      onUpdateMessage?.(msg.id, { donePoints: next });
+                      if (!isDesktopApp) return;
+                      if (next.length >= points.length) api?.hideScreenPointers?.();
+                      else if (markersActiveFor(msg.id)) api?.setPointersHidden?.(msg.id, next);
+                      else startMarkers(next);
+                    };
                     return (
                       <AnnotatedShot
                         msgId={msg.id}
                         imageUrl={shotUrl}
-                        points={msg.points}
+                        points={points}
                         nearby={msg.nearby}
+                        done={done}
                         isDesktop={isDesktopApp}
-                        onShow={(hidden) => {
-                          const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
-                          // Markers re-find their spots even if you've moved since, as long as they're on screen.
-                          // (Items found later by area checks are shown again by the next check.)
-                          const original = msg.points!.filter((p) => !p.fromArea);
-                          (window as any).electronAPI?.showScreenPointers?.(original, accent, {
-                            refImage: shotUrl,
-                            sessionId: msg.id,
-                            hidden: hidden.filter((i) => i < original.length),
-                            watchNearby: !!msg.nearby?.some((n) => !n.found),
-                          });
-                        }}
-                        onHide={() => (window as any).electronAPI?.hideScreenPointers?.()}
+                        onToggle={(i) => setDone(done.includes(i) ? done.filter((d) => d !== i) : [...done, i].sort((x, y) => x - y))}
+                        onShowAll={() => setDone([])}
+                        onHideAll={() => setDone(points.map((_, i) => i))}
                       />
                     );
                   })()}
                   <div style={{ fontFamily: 'var(--chat-font-family)' }} className="qc-md leading-relaxed break-words space-y-2.5 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_strong]:text-white [&_strong]:font-semibold [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[var(--accent-color)] [&_h1]:border-b [&_h1]:border-white/10 [&_h1]:pb-1 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-[var(--accent-color)] [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-white [&_code]:bg-black/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-purple-300 [&_code]:font-code [&_code]:text-xs [&_pre]:bg-black/80 [&_pre]:border [&_pre]:border-white/10 [&_pre]:p-3.5 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_th]:border [&_th]:border-white/15 [&_th]:p-2 [&_th]:bg-white/[0.06] [&_th]:font-semibold [&_th]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:p-2 [&_td]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--accent-color)] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-zinc-400">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.text}
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        a: ({ href, children, node, ...rest }: any) => {
+                          const m = typeof href === 'string' ? href.match(/^#qc-marker-(\d+)$/) : null;
+                          if (m && !isUser && msg.points) {
+                            const i = Number(m[1]) - 1;
+                            const done = msg.donePoints ?? [];
+                            return (
+                              <MarkerBadge
+                                n={i + 1}
+                                label={msg.points[i]?.label ?? ''}
+                                checked={done.includes(i)}
+                                onToggle={() => {
+                                  const next = done.includes(i) ? done.filter((d) => d !== i) : [...done, i].sort((x, y) => x - y);
+                                  onUpdateMessage?.(msg.id, { donePoints: next });
+                                  const api = (window as any).electronAPI;
+                                  if (!isDesktopApp) return;
+                                  if (next.length >= msg.points.length) api?.hideScreenPointers?.();
+                                  else if (markersActiveFor(msg.id)) api?.setPointersHidden?.(msg.id, next);
+                                }}
+                              />
+                            );
+                          }
+                          return (
+                            <a href={href} {...rest}>
+                              {children}
+                            </a>
+                          );
+                        },
+                      }}
+                    >
+                      {!isUser && msg.points?.length ? withMarkerBadges(msg.text, msg.points) : msg.text}
                     </ReactMarkdown>
                   </div>
 

@@ -45,6 +45,8 @@ export interface ScreenPoint {
 export interface NearbyItem {
   label: string;
   hint: string;
+  /** On the map the player is on (can scroll into view), vs inside another building, floor or room. */
+  onMap?: boolean;
   found?: boolean;
 }
 
@@ -62,6 +64,8 @@ export interface ChatMessage {
   points?: ScreenPoint[];
   /** Other items in the same area, looked for as the player walks (desktop). */
   nearby?: NearbyItem[];
+  /** Markers the player checked off as collected (their on-screen markers are hidden). */
+  donePoints?: number[];
 }
 
 export interface PersonalQuest {

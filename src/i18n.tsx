@@ -43,6 +43,15 @@ export function applyLocale(l: unknown) {
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  "chat.markersTitle": "Markers",
+  "chat.collected": "{done}/{total} collected",
+  "chat.onScreen": "on screen",
+  "chat.showAll": "Show all markers",
+  "chat.hideAll": "Hide all markers",
+  "chat.markDone": "Mark {label} as collected",
+  "chat.watching": "Watching for as you walk:",
+  "chat.alsoHere": "Also on this map:",
+  "chat.elsewhere": "Elsewhere nearby:",
   "chat.markerList": "Markers",
   "chat.markerToggle": "Show the {label} marker",
   "chat.foundNearby": "found nearby",
@@ -371,6 +380,15 @@ const en: Dict = {
 };
 
 const es: Dict = {
+  "chat.markersTitle": "Marcadores",
+  "chat.collected": "{done}/{total} recogidos",
+  "chat.onScreen": "en pantalla",
+  "chat.showAll": "Mostrar todos los marcadores",
+  "chat.hideAll": "Ocultar todos los marcadores",
+  "chat.markDone": "Marcar {label} como recogido",
+  "chat.watching": "Buscando mientras caminas:",
+  "chat.alsoHere": "También en este mapa:",
+  "chat.elsewhere": "En otros lugares cercanos:",
   "chat.markerList": "Marcadores",
   "chat.markerToggle": "Mostrar el marcador de {label}",
   "chat.foundNearby": "encontrado cerca",
@@ -690,6 +708,15 @@ const es: Dict = {
 };
 
 const pt: Dict = {
+  "chat.markersTitle": "Marcadores",
+  "chat.collected": "{done}/{total} coletados",
+  "chat.onScreen": "na tela",
+  "chat.showAll": "Mostrar todos os marcadores",
+  "chat.hideAll": "Ocultar todos os marcadores",
+  "chat.markDone": "Marcar {label} como coletado",
+  "chat.watching": "Procurando enquanto você anda:",
+  "chat.alsoHere": "Também neste mapa:",
+  "chat.elsewhere": "Em outros lugares por perto:",
   "chat.markerList": "Marcadores",
   "chat.markerToggle": "Mostrar o marcador de {label}",
   "chat.foundNearby": "encontrado perto",
