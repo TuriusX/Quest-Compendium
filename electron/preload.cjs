@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTriggerAutoScreenshot: (callback) => { ipcRenderer.removeAllListeners('trigger-auto-screenshot'); ipcRenderer.on('trigger-auto-screenshot', () => callback()); },
   // Controller support (see electron/controller.cjs)
   setOverlayOptions: (opts) => ipcRenderer.send('set-overlay-options', opts),
+  // On-screen pointers (markers drawn over the game)
+  showScreenPointers: (points, accent) => ipcRenderer.invoke('show-screen-pointers', { points, accent }),
+  hideScreenPointers: () => ipcRenderer.send('hide-screen-pointers'),
   setControllerConfig: (cfg) => ipcRenderer.send('set-controller-config', cfg),
   getControllerStatus: () => ipcRenderer.invoke('get-controller-status'),
   onControllerInput: (callback) => { ipcRenderer.removeAllListeners('controller-input'); ipcRenderer.on('controller-input', (event, evt) => callback(evt)); },

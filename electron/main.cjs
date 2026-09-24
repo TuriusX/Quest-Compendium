@@ -277,6 +277,10 @@ let overlaySession = 0;
 let openSnapshot = null; // { image: dataUrl, session }
 let openingInProgress = false;
 let lastSlideInAt = 0;
+// On-screen pointers: markers drawn over the game on the monitor the screenshot came from.
+let lastCaptureDisplay = null;
+let pointerWindow = null;
+let pointerTimer = null;
 let currentDockPosition = "top-right";
 let animationInterval = null;
 
@@ -824,6 +828,8 @@ ipcMain.on('toggle-slide', () => {
 
 /** Capture the screen the cursor is on (the game), as a JPEG data URL. Returns null on failure. */
 async function captureScreenImage() {
+  // Never capture our own on-screen pointers in the next screenshot.
+  closeScreenPointers();
   let base64Image = null;
   {
     let sources = [];
@@ -860,6 +866,9 @@ async function captureScreenImage() {
       
       // Match by display_id if available, otherwise fallback to active display or first screen
       let targetSource = sources.find(s => s.display_id === activeDisplay.id.toString());
+      lastCaptureDisplay = targetSource && targetSource.display_id === activeDisplay.id.toString()
+        ? activeDisplay
+        : (screen.getAllDisplays().find(d => targetSource && d.id.toString() === targetSource.display_id) || activeDisplay);
       if (!targetSource) {
         targetSource = sources.find(s => !s.name?.toLowerCase().includes('quest compendium')) || sources[0];
       }
@@ -875,6 +884,88 @@ async function captureScreenImage() {
   }
   return base64Image;
 }
+
+/** Close the on-screen pointers, if any. */
+function closeScreenPointers() {
+  if (pointerTimer) clearTimeout(pointerTimer);
+  pointerTimer = null;
+  if (pointerWindow && !pointerWindow.isDestroyed()) pointerWindow.destroy();
+  pointerWindow = null;
+}
+
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/**
+ * Draw pulsing markers over the game for a few seconds. Points are 0-1 fractions of the captured screen.
+ * The window is transparent, click-through and never takes focus, so the game keeps playing normally.
+ */
+function showScreenPointers(points, accent) {
+  closeScreenPointers();
+  const valid = (Array.isArray(points) ? points : [])
+    .filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
+    .slice(0, 5);
+  if (!valid.length) return false;
+  const display = lastCaptureDisplay || screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const { x, y, width, height } = display.bounds;
+  const color = /^#[0-9a-fA-F]{3,8}$/.test(accent || '') ? accent : '#a87ffb';
+  const markers = valid.map((p, i) => {
+    const left = Math.round(p.x * width);
+    const top = Math.round(p.y * height);
+    const flip = p.x > 0.75 ? ' flip' : '';
+    return `<div class="m${flip}" style="left:${left}px;top:${top}px"><div class="ring"></div><div class="dot">${i + 1}</div><div class="label">${escapeHtml(p.label || '')}</div></div>`;
+  }).join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+    html,body{margin:0;background:transparent;overflow:hidden;width:100%;height:100%;font-family:'Segoe UI',system-ui,sans-serif}
+    .m{position:absolute;transform:translate(-50%,-50%);animation:in .25s steps(3) both}
+    .dot{position:relative;width:34px;height:34px;background:${color};color:#16101f;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center;
+      box-shadow:0 0 0 3px #16101f,0 0 0 5px #fff,0 6px 18px rgba(0,0,0,.6)}
+    .ring{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border:4px solid ${color};animation:pulse 1s steps(4) infinite}
+    .label{position:absolute;left:44px;top:50%;transform:translateY(-50%);white-space:nowrap;background:rgba(16,12,28,.92);color:#fff;font-size:17px;font-weight:700;
+      padding:6px 12px;border:2px solid ${color};box-shadow:0 6px 18px rgba(0,0,0,.6)}
+    .flip .label{left:auto;right:44px}
+    body.out .m{animation:out .3s steps(3) forwards}
+    @keyframes pulse{0%{transform:scale(1);opacity:1}100%{transform:scale(2.6);opacity:0}}
+    @keyframes in{from{opacity:0;transform:translate(-50%,-50%) scale(.4)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+    @keyframes out{to{opacity:0}}
+  </style></head><body>${markers}</body></html>`;
+  pointerWindow = new BrowserWindow({
+    x, y, width, height,
+    transparent: true,
+    frame: false,
+    resizable: false,
+    movable: false,
+    focusable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    show: false,
+    alwaysOnTop: true,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  pointerWindow.setIgnoreMouseEvents(true);
+  pointerWindow.setAlwaysOnTop(true, 'screen-saver');
+  pointerWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+  pointerWindow.once('ready-to-show', () => {
+    if (pointerWindow && !pointerWindow.isDestroyed()) pointerWindow.showInactive();
+  });
+  const win = pointerWindow;
+  pointerTimer = setTimeout(() => {
+    if (win.isDestroyed()) return;
+    win.webContents.executeJavaScript("document.body.classList.add('out')").catch(() => {});
+    setTimeout(() => { if (pointerWindow === win) closeScreenPointers(); }, 400);
+  }, 8000);
+  return true;
+}
+
+ipcMain.handle('show-screen-pointers', async (event, payload) => {
+  try {
+    return showScreenPointers(payload && payload.points, payload && payload.accent);
+  } catch (err) {
+    console.warn('[pointers] failed:', err && err.message);
+    return false;
+  }
+});
+
+ipcMain.on('hide-screen-pointers', () => closeScreenPointers());
 
 ipcMain.handle('take-screenshot', async () => {
   // A clean snapshot from when the overlay opened beats a fresh capture of a game that paused itself.

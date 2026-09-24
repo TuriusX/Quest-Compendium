@@ -32,6 +32,13 @@ export interface SteamGameData {
   isAutoDetected?: boolean;
 }
 
+/** A spot the AI pointed at on the screenshot (0-1 fractions from the top-left) with a short label. */
+export interface ScreenPoint {
+  x: number;
+  y: number;
+  label: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -42,6 +49,8 @@ export interface ChatMessage {
   modelUsed?: string;
   audioBase64?: string;
   isStreaming?: boolean;
+  /** On-screen pointers for the screenshot this answer is about. */
+  points?: ScreenPoint[];
 }
 
 export interface PersonalQuest {
@@ -104,6 +113,8 @@ export interface AppSettings {
   controllerToggle?: 'back+start' | 'ls+rs' | 'lb+rb+back' | 'off';
   /** Desktop: screenshot the game just before the overlay opens (for games that pause when they lose focus). */
   snapshotOnOpen?: boolean;
+  /** Desktop: draw the AI's pointers over the game when an answer arrives. */
+  showPointersOnScreen?: boolean;
 }
 
 export interface SyncEventLog {

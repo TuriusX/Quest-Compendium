@@ -799,6 +799,18 @@ When analyzing screenshots, screen captures, or images:
 3. MISSING IMAGE HANDLING: If the user asks "What is on my screen?", "What game is this?", or refers to an image, BUT no image was actually provided in the prompt, YOU MUST state: "I don't see any image attached. Please click the screenshot button to attach your screen." Do not hallucinate or guess based on selected game context.
 4. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.`;
 
+      if (imageBase64) {
+        systemInstruction += `
+
+[ON-SCREEN POINTERS]
+When your answer refers to specific things that are visible in the screenshot (an item, lever, door, chest, NPC, enemy weak point, menu option, map marker, or the path to take), point at them so the player can see exactly where they are. After your answer, add ONE block in exactly this format:
+<qc-points>[{"y": 512, "x": 300, "label": "Lever"}]</qc-points>
+- "y" and "x" are the center of the thing in the screenshot, normalized to 0-1000 (y from the top edge, x from the left edge).
+- At most 5 points. Labels: 1 to 4 words, in the player's language.
+- Only point at things that are actually visible in the screenshot, and be precise. If nothing specific is worth pointing at, leave the block out entirely.
+- Never mention the block, coordinates or "pointers" in your answer text.`;
+      }
+
       systemInstruction += `
 
 [USER LANGUAGE PREFERENCE]
@@ -1119,6 +1131,10 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         responseText = 'The Compendium received a blank response from the AI. Please try again.';
       }
 
+      // On-screen pointers: pull the <qc-points> block out of the answer.
+      const { text: answerText, points } = extractScreenPoints(responseText, Boolean(imageBase64));
+      responseText = answerText;
+
       let bannerImageUrl: string | undefined;
       if (bannerImagePromise) {
         try {
@@ -1148,6 +1164,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         text: responseText.trim(),
         modelUsed,
         bannerImageUrl,
+        ...(points.length ? { points } : {}),
         userData: {
           isPremium: userData.isPremium === true,
           proQueriesAvailable: userData.proQueriesAvailable,
@@ -1164,6 +1181,39 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       });
     }
   });
+
+  /**
+   * On-screen pointers: the model may append <qc-points>[{"y":..,"x":..,"label":".."}]</qc-points> (0-1000 scale).
+   * Returns the answer without the block, and up to 5 validated points as 0-1 fractions.
+   * The block is always removed, even when no screenshot was sent (the points would be meaningless then).
+   */
+  function extractScreenPoints(text: string, hadImage: boolean): { text: string; points: { x: number; y: number; label: string }[] } {
+    const blockRe = /(?:```[a-z]*\s*)?<qc-points>([\s\S]*?)<\/qc-points>(?:\s*```)?/gi;
+    let raw = '';
+    const cleaned = text.replace(blockRe, (_m, inner) => {
+      if (!raw) raw = inner;
+      return '';
+    }).replace(/\n{3,}/g, '\n\n').trim();
+    const points: { x: number; y: number; label: string }[] = [];
+    if (hadImage && raw) {
+      try {
+        const parsed = JSON.parse(raw.trim());
+        if (Array.isArray(parsed)) {
+          for (const p of parsed.slice(0, 5)) {
+            const pt = Array.isArray(p?.point) ? { y: p.point[0], x: p.point[1] } : p;
+            const x = Number(pt?.x), y = Number(pt?.y);
+            const label = String(p?.label ?? '').trim().slice(0, 40);
+            if (Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= 1000 && y >= 0 && y <= 1000 && label) {
+              points.push({ x: Math.round(x) / 1000, y: Math.round(y) / 1000, label });
+            }
+          }
+        }
+      } catch {
+        /* malformed block: ignore the points, keep the answer */
+      }
+    }
+    return { text: cleaned || text, points };
+  }
 
   // Helper to convert 16-bit linear PCM audio buffer to standard WAV format
   function pcmToWav(pcmBuffer: Buffer, sampleRate: number = 24000, numChannels: number = 1): Buffer {

@@ -54,6 +54,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   controllerEnabled: true,
   controllerToggle: 'back+start',
   snapshotOnOpen: true,
+  showPointersOnScreen: true,
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
@@ -1045,8 +1046,15 @@ export default function App() {
         text: finalAiText,
         modelUsed: data.modelUsed || 'Gemini 3.1 Pro Preview',
         bannerImageUrl: data.bannerImageUrl,
+        ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
         timestamp: nowAi
       };
+
+      // Desktop: show the AI's pointers right on top of the game.
+      if (aiMessage.points && settings.showPointersOnScreen !== false) {
+        const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+        (window as any).electronAPI?.showScreenPointers?.(aiMessage.points, accent);
+      }
 
       setTabs(prev => {
         const nextTabs = prev.map(t => 

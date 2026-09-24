@@ -43,6 +43,10 @@ export function applyLocale(l: unknown) {
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  "chat.showOnScreen": "Show on my screen",
+  "chat.pointsZoom": "Click to enlarge",
+  "set.pointers": "Point at things on screen",
+  "set.pointersDesc": "When the AI points something out in your screenshot, show markers right on top of your game for a few seconds.",
   'set.snap': 'Snapshot the game when opening',
   'set.snapDesc': 'Takes a screenshot right before the overlay opens, so games that pause when you switch away still get a clean shot. It stays in memory and is discarded when the overlay closes.',
   'pad.select': 'Select',
@@ -357,6 +361,10 @@ const en: Dict = {
 };
 
 const es: Dict = {
+  "chat.showOnScreen": "Mostrar en mi pantalla",
+  "chat.pointsZoom": "Clic para ampliar",
+  "set.pointers": "Señalar cosas en pantalla",
+  "set.pointersDesc": "Cuando la IA señala algo en tu captura, muestra marcadores sobre tu juego durante unos segundos.",
   'set.snap': 'Capturar el juego al abrir',
   'set.snapDesc': 'Toma una captura justo antes de que se abra el overlay, así los juegos que se pausan al cambiar de ventana siguen dando una imagen limpia. Solo se guarda en memoria y se descarta al cerrar el overlay.',
   'pad.select': 'Elegir',
@@ -662,6 +670,10 @@ const es: Dict = {
 };
 
 const pt: Dict = {
+  "chat.showOnScreen": "Mostrar na minha tela",
+  "chat.pointsZoom": "Clique para ampliar",
+  "set.pointers": "Apontar coisas na tela",
+  "set.pointersDesc": "Quando a IA aponta algo na sua captura, mostra marcadores em cima do jogo por alguns segundos.",
   'set.snap': 'Capturar o jogo ao abrir',
   'set.snapDesc': 'Tira uma captura logo antes de o overlay abrir, então jogos que pausam quando você troca de janela ainda rendem uma imagem limpa. Fica só na memória e é descartada quando o overlay fecha.',
   'pad.select': 'Selecionar',
