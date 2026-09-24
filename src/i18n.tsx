@@ -43,10 +43,12 @@ export function applyLocale(l: unknown) {
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  "set.sticky": "Keep markers on things as you move",
+  "set.stickyDesc": "Markers follow what they point at while the game scrolls, for up to 90 seconds. They fade out when the scene changes.",
   "chat.showOnScreen": "Show on my screen",
   "chat.pointsZoom": "Click to enlarge",
   "set.pointers": "Point at things on screen",
-  "set.pointersDesc": "When the AI points something out in your screenshot, show markers right on top of your game for a few seconds.",
+  "set.pointersDesc": "When the AI points something out in your screenshot, show markers right on top of your game.",
   'set.snap': 'Snapshot the game when opening',
   'set.snapDesc': 'Takes a screenshot right before the overlay opens, so games that pause when you switch away still get a clean shot. It stays in memory and is discarded when the overlay closes.',
   'pad.select': 'Select',
@@ -361,10 +363,12 @@ const en: Dict = {
 };
 
 const es: Dict = {
+  "set.sticky": "Mantener los marcadores sobre las cosas al moverte",
+  "set.stickyDesc": "Los marcadores siguen lo que señalan mientras el juego se desplaza, hasta 90 segundos. Se desvanecen cuando cambia la escena.",
   "chat.showOnScreen": "Mostrar en mi pantalla",
   "chat.pointsZoom": "Clic para ampliar",
   "set.pointers": "Señalar cosas en pantalla",
-  "set.pointersDesc": "Cuando la IA señala algo en tu captura, muestra marcadores sobre tu juego durante unos segundos.",
+  "set.pointersDesc": "Cuando la IA señala algo en tu captura, muestra marcadores sobre tu juego.",
   'set.snap': 'Capturar el juego al abrir',
   'set.snapDesc': 'Toma una captura justo antes de que se abra el overlay, así los juegos que se pausan al cambiar de ventana siguen dando una imagen limpia. Solo se guarda en memoria y se descarta al cerrar el overlay.',
   'pad.select': 'Elegir',
@@ -670,10 +674,12 @@ const es: Dict = {
 };
 
 const pt: Dict = {
+  "set.sticky": "Manter os marcadores nas coisas enquanto você anda",
+  "set.stickyDesc": "Os marcadores acompanham o que apontam enquanto o jogo rola a tela, por até 90 segundos. Eles somem quando a cena muda.",
   "chat.showOnScreen": "Mostrar na minha tela",
   "chat.pointsZoom": "Clique para ampliar",
   "set.pointers": "Apontar coisas na tela",
-  "set.pointersDesc": "Quando a IA aponta algo na sua captura, mostra marcadores em cima do jogo por alguns segundos.",
+  "set.pointersDesc": "Quando a IA aponta algo na sua captura, mostra marcadores em cima do jogo.",
   'set.snap': 'Capturar o jogo ao abrir',
   'set.snapDesc': 'Tira uma captura logo antes de o overlay abrir, então jogos que pausam quando você troca de janela ainda rendem uma imagem limpa. Fica só na memória e é descartada quando o overlay fecha.',
   'pad.select': 'Selecionar',

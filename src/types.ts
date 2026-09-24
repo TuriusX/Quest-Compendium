@@ -115,6 +115,8 @@ export interface AppSettings {
   snapshotOnOpen?: boolean;
   /** Desktop: draw the AI's pointers over the game when an answer arrives. */
   showPointersOnScreen?: boolean;
+  /** Desktop: markers stay on the things they point at while the game scrolls. */
+  stickyPointers?: boolean;
 }
 
 export interface SyncEventLog {

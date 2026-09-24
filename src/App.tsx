@@ -55,6 +55,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   controllerToggle: 'back+start',
   snapshotOnOpen: true,
   showPointersOnScreen: true,
+  stickyPointers: true,
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
@@ -507,8 +508,8 @@ export default function App() {
 
   // Snapshot on open (desktop): capture the game before the overlay takes focus.
   useEffect(() => {
-    (window as any).electronAPI?.setOverlayOptions?.({ snapshotOnOpen: settings.snapshotOnOpen !== false });
-  }, [settings.snapshotOnOpen]);
+    (window as any).electronAPI?.setOverlayOptions?.({ snapshotOnOpen: settings.snapshotOnOpen !== false, stickyPointers: settings.stickyPointers !== false });
+  }, [settings.snapshotOnOpen, settings.stickyPointers]);
 
   // Controller: LB / RB switch between compendiums.
   useEffect(() => {
@@ -1053,7 +1054,8 @@ export default function App() {
       // Desktop: show the AI's pointers right on top of the game.
       if (aiMessage.points && settings.showPointersOnScreen !== false) {
         const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
-        (window as any).electronAPI?.showScreenPointers?.(aiMessage.points, accent);
+        // The screenshot this answer is about is the reference the markers track against.
+        (window as any).electronAPI?.showScreenPointers?.(aiMessage.points, accent, { refImage: imageBase64 });
       }
 
       setTabs(prev => {

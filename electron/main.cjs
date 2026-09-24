@@ -273,12 +273,15 @@ let focusBeforeOverlay = null;
 // Snapshot on open: some games pause as soon as they lose focus, so the overlay grabs a screenshot of the game
 // *before* it opens and takes focus. Questions asked during that visit use this clean snapshot.
 let snapshotOnOpen = true;
+let stickyPointers = true; // markers follow what they point at as the game scrolls
 let overlaySession = 0;
 let openSnapshot = null; // { image: dataUrl, session }
 let openingInProgress = false;
 let lastSlideInAt = 0;
 // On-screen pointers: markers drawn over the game on the monitor the screenshot came from.
 let lastCaptureDisplay = null;
+let lastCaptureSourceId = null; // the screen the last screenshot came from (for sticky markers)
+let lastCaptureImage = null; // that screenshot, used as the reference when markers track
 let pointerWindow = null;
 let pointerTimer = null;
 let currentDockPosition = "top-right";
@@ -890,6 +893,7 @@ ipcMain.on('set-dock-position', (event, pos) => {
 
 ipcMain.on('set-overlay-options', (event, opts) => {
   if (opts && typeof opts.snapshotOnOpen === 'boolean') snapshotOnOpen = opts.snapshotOnOpen;
+  if (opts && typeof opts.stickyPointers === 'boolean') stickyPointers = opts.stickyPointers;
   if (!snapshotOnOpen) openSnapshot = null;
 });
 
@@ -949,6 +953,7 @@ async function captureScreenImage() {
       
       // Match by display_id if available, otherwise fallback to active display or first screen
       let targetSource = sources.find(s => s.display_id === activeDisplay.id.toString());
+      lastCaptureSourceId = targetSource ? targetSource.id : null;
       lastCaptureDisplay = targetSource && targetSource.display_id === activeDisplay.id.toString()
         ? activeDisplay
         : (screen.getAllDisplays().find(d => targetSource && d.id.toString() === targetSource.display_id) || activeDisplay);
@@ -965,6 +970,7 @@ async function captureScreenImage() {
       }
     }
   }
+  lastCaptureImage = base64Image || lastCaptureImage;
   return base64Image;
 }
 
@@ -976,42 +982,33 @@ function closeScreenPointers() {
   pointerWindow = null;
 }
 
-const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
 /**
- * Draw pulsing markers over the game for a few seconds. Points are 0-1 fractions of the captured screen.
- * The window is transparent, click-through and never takes focus, so the game keeps playing normally.
+ * Draw markers over the game (electron/pointers.html). Points are 0-1 fractions of the captured screen.
+ * The window is transparent, click-through, never takes focus, and is excluded from screen capture, so the game
+ * keeps playing, and neither our screenshots nor the sticky-marker tracking ever see the markers themselves.
+ * Sticky mode keeps each marker on its spot as the game scrolls (pointerTracker.js), for up to 90 seconds.
  */
-function showScreenPointers(points, accent) {
+function showScreenPointers(points, accent, opts = {}) {
   closeScreenPointers();
   const valid = (Array.isArray(points) ? points : [])
     .filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
-    .slice(0, 5);
+    .slice(0, 5)
+    .map((p) => ({ x: p.x, y: p.y, label: String(p.label || '').slice(0, 40) }));
   if (!valid.length) return false;
   const display = lastCaptureDisplay || screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const { x, y, width, height } = display.bounds;
-  const color = /^#[0-9a-fA-F]{3,8}$/.test(accent || '') ? accent : '#a87ffb';
-  const markers = valid.map((p, i) => {
-    const left = Math.round(p.x * width);
-    const top = Math.round(p.y * height);
-    const flip = p.x > 0.75 ? ' flip' : '';
-    return `<div class="m${flip}" style="left:${left}px;top:${top}px"><div class="ring"></div><div class="dot">${i + 1}</div><div class="label">${escapeHtml(p.label || '')}</div></div>`;
-  }).join('');
-  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
-    html,body{margin:0;background:transparent;overflow:hidden;width:100%;height:100%;font-family:'Segoe UI',system-ui,sans-serif}
-    .m{position:absolute;transform:translate(-50%,-50%);animation:in .25s steps(3) both}
-    .dot{position:relative;width:34px;height:34px;background:${color};color:#16101f;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center;
-      box-shadow:0 0 0 3px #16101f,0 0 0 5px #fff,0 6px 18px rgba(0,0,0,.6)}
-    .ring{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border:4px solid ${color};animation:pulse 1s steps(4) infinite}
-    .label{position:absolute;left:44px;top:50%;transform:translateY(-50%);white-space:nowrap;background:rgba(16,12,28,.92);color:#fff;font-size:17px;font-weight:700;
-      padding:6px 12px;border:2px solid ${color};box-shadow:0 6px 18px rgba(0,0,0,.6)}
-    .flip .label{left:auto;right:44px}
-    body.out .m{animation:out .3s steps(3) forwards}
-    @keyframes pulse{0%{transform:scale(1);opacity:1}100%{transform:scale(2.6);opacity:0}}
-    @keyframes in{from{opacity:0;transform:translate(-50%,-50%) scale(.4)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
-    @keyframes out{to{opacity:0}}
-  </style></head><body>${markers}</body></html>`;
-  pointerWindow = new BrowserWindow({
+  const refImage = typeof opts.refImage === 'string' && opts.refImage.startsWith('data:image/') ? opts.refImage : lastCaptureImage;
+  const sticky = (typeof opts.sticky === 'boolean' ? opts.sticky : stickyPointers) && !!lastCaptureSourceId && !!refImage;
+  const payload = {
+    points: valid,
+    accent: /^#[0-9a-fA-F]{3,8}$/.test(accent || '') ? accent : '#a87ffb',
+    sticky,
+    sourceId: lastCaptureSourceId,
+    refImage: sticky ? refImage : null,
+    lifetimeMs: 90000,
+    fixedMs: 8000,
+  };
+  const win = new BrowserWindow({
     x, y, width, height,
     transparent: true,
     frame: false,
@@ -1022,26 +1019,33 @@ function showScreenPointers(points, accent) {
     hasShadow: false,
     show: false,
     alwaysOnTop: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
   });
-  pointerWindow.setIgnoreMouseEvents(true);
-  pointerWindow.setAlwaysOnTop(true, 'screen-saver');
-  pointerWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-  pointerWindow.once('ready-to-show', () => {
-    if (pointerWindow && !pointerWindow.isDestroyed()) pointerWindow.showInactive();
+  pointerWindow = win;
+  win.setIgnoreMouseEvents(true);
+  win.setAlwaysOnTop(true, 'screen-saver');
+  win.setContentProtection(true); // keep markers out of screenshots and out of the tracker's own view
+  win.on('closed', () => {
+    if (pointerWindow === win) {
+      pointerWindow = null;
+      if (pointerTimer) clearTimeout(pointerTimer);
+      pointerTimer = null;
+    }
   });
-  const win = pointerWindow;
-  pointerTimer = setTimeout(() => {
+  win.webContents.once('did-finish-load', () => {
     if (win.isDestroyed()) return;
-    win.webContents.executeJavaScript("document.body.classList.add('out')").catch(() => {});
-    setTimeout(() => { if (pointerWindow === win) closeScreenPointers(); }, 400);
-  }, 8000);
+    win.webContents.executeJavaScript(`window.qcStart(${JSON.stringify(payload)})`).catch(() => {});
+    win.showInactive();
+  });
+  win.loadFile(path.join(__dirname, 'pointers.html'));
+  // Safety net in case the page can't close itself.
+  pointerTimer = setTimeout(() => { if (pointerWindow === win) closeScreenPointers(); }, (sticky ? payload.lifetimeMs : payload.fixedMs) + 5000);
   return true;
 }
 
 ipcMain.handle('show-screen-pointers', async (event, payload) => {
   try {
-    return showScreenPointers(payload && payload.points, payload && payload.accent);
+    return showScreenPointers(payload && payload.points, payload && payload.accent, (payload && payload.opts) || {});
   } catch (err) {
     console.warn('[pointers] failed:', err && err.message);
     return false;

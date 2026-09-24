@@ -957,27 +957,31 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   )}
 
                   {/* Message Body with Markdown */}
-                  {!isUser && msg.points && msg.points.length > 0 && (
-                    <AnnotatedShot
-                      imageUrl={(() => {
+                  {!isUser && msg.points && msg.points.length > 0 && (() => {
+                    const shotUrl = (() => {
                         // The screenshot this answer is about: the nearest earlier question that had one.
                         for (let i = msgIndex - 1; i >= 0; i--) {
                           const m = activeTab.messages[i];
                           if (m.role === 'user') return m.imageUrl;
                         }
                         return undefined;
-                      })()}
-                      points={msg.points}
-                      onShowOnScreen={
-                        isDesktopApp
-                          ? () => {
-                              const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
-                              (window as any).electronAPI?.showScreenPointers?.(msg.points, accent);
-                            }
-                          : undefined
-                      }
-                    />
-                  )}
+                      })();
+                    return (
+                      <AnnotatedShot
+                        imageUrl={shotUrl}
+                        points={msg.points}
+                        onShowOnScreen={
+                          isDesktopApp
+                            ? () => {
+                                const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+                                // Markers re-find their spots even if you've moved since, as long as they're on screen.
+                                (window as any).electronAPI?.showScreenPointers?.(msg.points, accent, { refImage: shotUrl });
+                              }
+                            : undefined
+                        }
+                      />
+                    );
+                  })()}
                   <div style={{ fontFamily: 'var(--chat-font-family)' }} className="qc-md leading-relaxed break-words space-y-2.5 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_strong]:text-white [&_strong]:font-semibold [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[var(--accent-color)] [&_h1]:border-b [&_h1]:border-white/10 [&_h1]:pb-1 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-[var(--accent-color)] [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-white [&_code]:bg-black/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-purple-300 [&_code]:font-code [&_code]:text-xs [&_pre]:bg-black/80 [&_pre]:border [&_pre]:border-white/10 [&_pre]:p-3.5 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_th]:border [&_th]:border-white/15 [&_th]:p-2 [&_th]:bg-white/[0.06] [&_th]:font-semibold [&_th]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:p-2 [&_td]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--accent-color)] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-zinc-400">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {msg.text}

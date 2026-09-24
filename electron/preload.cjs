@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Controller support (see electron/controller.cjs)
   setOverlayOptions: (opts) => ipcRenderer.send('set-overlay-options', opts),
   // On-screen pointers (markers drawn over the game)
-  showScreenPointers: (points, accent) => ipcRenderer.invoke('show-screen-pointers', { points, accent }),
+  showScreenPointers: (points, accent, opts) => ipcRenderer.invoke('show-screen-pointers', { points, accent, opts }),
   hideScreenPointers: () => ipcRenderer.send('hide-screen-pointers'),
   setControllerConfig: (cfg) => ipcRenderer.send('set-controller-config', cfg),
   getControllerStatus: () => ipcRenderer.invoke('get-controller-status'),

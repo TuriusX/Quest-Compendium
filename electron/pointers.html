@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Quest Compendium markers</title>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; width: 100%; height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; }
+  .m { position: absolute; left: 0; top: 0; will-change: transform; transition: opacity .2s steps(3); }
+  .m.hidden { opacity: 0; }
+  .inner { position: relative; transform: translate(-50%, -50%); animation: pop .25s steps(3) both; }
+  .dot { position: relative; width: 34px; height: 34px; background: var(--accent); color: #16101f; font-weight: 800; font-size: 18px;
+         display: flex; align-items: center; justify-content: center;
+         box-shadow: 0 0 0 3px #16101f, 0 0 0 5px #fff, 0 6px 18px rgba(0, 0, 0, .6); }
+  .ring { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 4px solid var(--accent);
+          animation: pulse 1s steps(4) infinite; }
+  .label { position: absolute; left: 44px; top: 50%; transform: translateY(-50%); white-space: nowrap; background: rgba(16, 12, 28, .92); color: #fff;
+           font-size: 17px; font-weight: 700; padding: 6px 12px; border: 2px solid var(--accent); box-shadow: 0 6px 18px rgba(0, 0, 0, .6); }
+  .flip .label { left: auto; right: 44px; }
+  body.out .m { opacity: 0; transition: opacity .3s steps(3); }
+  @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2.6); opacity: 0; } }
+  @keyframes pop { from { opacity: 0; transform: translate(-50%, -50%) scale(.4); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+</style>
+</head>
+<body>
+<script src="pointerTracker.js"></script>
+<script>
+  // Started by the desktop app with the markers to draw. In sticky mode the markers follow the things they point at
+  // while the game scrolls (see pointerTracker.js); otherwise they simply stay for a few seconds.
+  'use strict';
+  const WORK_W = 384; // tracking resolution: small on purpose (fast, and plenty for finding a barrel)
+  let finished = false;
+  let stream = null;
+
+  function finish() {
+    if (finished) return;
+    finished = true;
+    document.body.classList.add('out');
+    try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+    setTimeout(() => window.close(), 350);
+  }
+
+  function place(el, x, y) {
+    el.style.transform = `translate(${Math.round(x * window.innerWidth)}px, ${Math.round(y * window.innerHeight)}px)`;
+    el.classList.toggle('flip', x > 0.75);
+  }
+
+  function buildMarkers(points) {
+    return points.map((p, i) => {
+      const el = document.createElement('div');
+      el.className = 'm';
+      const inner = document.createElement('div');
+      inner.className = 'inner';
+      const ring = document.createElement('div');
+      ring.className = 'ring';
+      const dot = document.createElement('div');
+      dot.className = 'dot';
+      dot.textContent = String(i + 1);
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.textContent = p.label || '';
+      inner.append(ring, dot, label);
+      el.append(inner);
+      document.body.append(el);
+      place(el, p.x, p.y);
+      return el;
+    });
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  function grayOf(ctx, source, w, h) {
+    ctx.drawImage(source, 0, 0, w, h);
+    return QCTracker.toGray(ctx.getImageData(0, 0, w, h).data, w, h);
+  }
+
+  async function startSticky(opts, els) {
+    const ref = await loadImage(opts.refImage);
+    const w = WORK_W;
+    const h = Math.max(16, Math.round((WORK_W * ref.naturalHeight) / ref.naturalWidth));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const tracker = QCTracker.createTracker({ ref: grayOf(ctx, ref, w, h), w, h, points: opts.points });
+
+    // A live, low-resolution view of the screen. This window itself is excluded from capture by the app.
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: opts.sourceId, maxWidth: 960, maxHeight: 960, maxFrameRate: 12 } },
+    });
+    const video = document.createElement('video');
+    video.muted = true;
+    video.srcObject = stream;
+    await video.play();
+
+    els.forEach((el) => el.classList.add('hidden')); // appear once they're in the right place
+    const started = Date.now();
+    const tick = () => {
+      if (finished) return;
+      if (Date.now() - started > opts.lifetimeMs) return finish();
+      if (video.readyState >= 2) {
+        const res = tracker.update(grayOf(ctx, video, w, h));
+        res.forEach((r, i) => {
+          place(els[i], r.x, r.y);
+          els[i].classList.toggle('hidden', !r.visible);
+        });
+        if (tracker.gone) return finish();
+      }
+      setTimeout(tick, 100);
+    };
+    tick();
+  }
+
+  window.qcStart = async (opts) => {
+    document.documentElement.style.setProperty('--accent', opts.accent || '#a87ffb');
+    const els = buildMarkers(opts.points || []);
+    if (opts.sticky && opts.sourceId && opts.refImage && window.QCTracker) {
+      try {
+        await startSticky(opts, els);
+        return;
+      } catch (err) {
+        console.warn('[markers] sticky tracking unavailable, showing fixed markers:', err && err.message);
+        els.forEach((el) => el.classList.remove('hidden'));
+      }
+    }
+    setTimeout(finish, opts.fixedMs || 8000);
+  };
+</script>
+</body>
+</html>
