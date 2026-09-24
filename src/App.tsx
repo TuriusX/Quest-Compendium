@@ -53,6 +53,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   language: detectLocale(),
   controllerEnabled: true,
   controllerToggle: 'back+start',
+  snapshotOnOpen: true,
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
@@ -502,6 +503,11 @@ export default function App() {
       chord: settings.controllerToggle || 'back+start',
     });
   }, [settings.controllerEnabled, settings.controllerToggle]);
+
+  // Snapshot on open (desktop): capture the game before the overlay takes focus.
+  useEffect(() => {
+    (window as any).electronAPI?.setOverlayOptions?.({ snapshotOnOpen: settings.snapshotOnOpen !== false });
+  }, [settings.snapshotOnOpen]);
 
   // Controller: LB / RB switch between compendiums.
   useEffect(() => {

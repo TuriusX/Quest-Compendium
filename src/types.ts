@@ -102,6 +102,8 @@ export interface AppSettings {
   /** Controller support (on by default) and the held chord that shows / hides the desktop overlay. */
   controllerEnabled?: boolean;
   controllerToggle?: 'back+start' | 'ls+rs' | 'lb+rb+back' | 'off';
+  /** Desktop: screenshot the game just before the overlay opens (for games that pause when they lose focus). */
+  snapshotOnOpen?: boolean;
 }
 
 export interface SyncEventLog {

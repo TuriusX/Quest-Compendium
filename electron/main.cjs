@@ -94,6 +94,8 @@ app.setName('Quest Compendium');
 const path = require('path');
 const { spawn } = require('child_process');
 const { createControllerService } = require('./controller.cjs');
+const { createFocusHelper } = require('./focus.cjs');
+const focusHelper = createFocusHelper();
 const http = require('http');
 
 const isDev = !app.isPackaged;
@@ -266,6 +268,15 @@ app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5
 
 let isAppVisible = true;
 let controllerService = null;
+// The window (usually the game) that had focus before the overlay opened, so focus can be handed back.
+let focusBeforeOverlay = null;
+// Snapshot on open: some games pause as soon as they lose focus, so the overlay grabs a screenshot of the game
+// *before* it opens and takes focus. Questions asked during that visit use this clean snapshot.
+let snapshotOnOpen = true;
+let overlaySession = 0;
+let openSnapshot = null; // { image: dataUrl, session }
+let openingInProgress = false;
+let lastSlideInAt = 0;
 let currentDockPosition = "top-right";
 let animationInterval = null;
 
@@ -332,13 +343,39 @@ function animateWindow(targetX, targetY, durationMs = 200) {
   });
 }
 
-function slideIn() {
+async function slideIn(opts = {}) {
   if (!mainWindow) return;
+  if (!isAppVisible) {
+    if (opts.snapshot) {
+      openSnapshot = { image: opts.snapshot, session: overlaySession + 1 };
+    } else if (snapshotOnOpen && !openingInProgress) {
+      // Capture the game while it's still focused and running (a fraction of a second, capped at 700 ms).
+      openingInProgress = true;
+      try {
+        const image = await Promise.race([
+          captureScreenImage(),
+          new Promise((resolve) => setTimeout(() => resolve(null), 700)),
+        ]);
+        openSnapshot = image ? { image, session: overlaySession + 1 } : null;
+      } catch (err) {
+        openSnapshot = null;
+      } finally {
+        openingInProgress = false;
+      }
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+    }
+    overlaySession++;
+  }
+  lastSlideInAt = Date.now();
   isAppVisible = true;
   mainWindow.show();
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.focus();
-  // Force focus for games
+  // Take focus from the game (Windows won't let a background app do this on its own when the overlay was
+  // opened with a controller), so the game stops reacting to controller input while the overlay is open.
+  const previous = focusHelper.take(mainWindow);
+  if (previous) focusBeforeOverlay = previous;
+  // macOS equivalent
   app.focus({ steal: true });
   
   if (currentDockPosition !== 'undocked') {
@@ -350,6 +387,10 @@ function slideIn() {
 function slideOut() {
   if (!mainWindow) return;
   isAppVisible = false;
+  // Hand focus back to the game so it gets the controller again.
+  focusHelper.restore(mainWindow, focusBeforeOverlay);
+  focusBeforeOverlay = null;
+  openSnapshot = null; // the snapshot only lives for one visit
   if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(true);
     animateWindow(coords.x, coords.y, 150);
@@ -384,6 +425,12 @@ function createWindow() {
   });
 
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
+
+  // If the player clicks back into the game while the overlay stays open, the opening snapshot is stale:
+  // the next question takes a fresh screenshot instead. (Focus changes right after opening are ignored.)
+  mainWindow.on('blur', () => {
+    if (isAppVisible && Date.now() - lastSlideInAt > 1000) openSnapshot = null;
+  });
 
   mainWindow.on('resize', () => {
     if (mainWindow) {
@@ -480,8 +527,9 @@ app.whenReady().then(() => {
       if (isAppVisible) {
         slideOut();
       } else {
-        slideIn();
-        mainWindow.webContents.send('controller-activated');
+        Promise.resolve(slideIn()).then(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-activated');
+        });
       }
     },
     onInput: (evt) => {
@@ -753,6 +801,11 @@ ipcMain.on('set-dock-position', (event, pos) => {
   }
 });
 
+ipcMain.on('set-overlay-options', (event, opts) => {
+  if (opts && typeof opts.snapshotOnOpen === 'boolean') snapshotOnOpen = opts.snapshotOnOpen;
+  if (!snapshotOnOpen) openSnapshot = null;
+});
+
 ipcMain.on('set-controller-config', (event, cfg) => {
   if (controllerService) controllerService.setConfig(cfg || {});
 });
@@ -768,26 +821,11 @@ ipcMain.on('toggle-slide', () => {
 });
 
 
-ipcMain.handle('take-screenshot', async () => {
-  const wasVisible = isAppVisible;
-  
-  if (wasVisible) {
-    try {
-      if (currentDockPosition !== 'undocked') {
-        const coords = getDockCoords(true);
-        await animateWindow(coords.x, coords.y, 150);
-      } else if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.hide();
-      }
-    } catch (err) {
-      console.warn('Failed to hide window for screenshot:', err);
-    }
-    // Give window time to hide and OS to redraw the desktop / game screen
-    await new Promise(resolve => setTimeout(resolve, 400));
-  }
 
+/** Capture the screen the cursor is on (the game), as a JPEG data URL. Returns null on failure. */
+async function captureScreenImage() {
   let base64Image = null;
-  try {
+  {
     let sources = [];
     const getSourcesPromise = desktopCapturer.getSources({ 
       types: ['screen'], 
@@ -834,11 +872,41 @@ ipcMain.handle('take-screenshot', async () => {
         }
       }
     }
+  }
+  return base64Image;
+}
+
+ipcMain.handle('take-screenshot', async () => {
+  // A clean snapshot from when the overlay opened beats a fresh capture of a game that paused itself.
+  if (isAppVisible && openSnapshot && openSnapshot.session === overlaySession) {
+    return openSnapshot.image;
+  }
+  const wasVisible = isAppVisible;
+  
+  if (wasVisible) {
+    try {
+      if (currentDockPosition !== 'undocked') {
+        const coords = getDockCoords(true);
+        await animateWindow(coords.x, coords.y, 150);
+      } else if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.hide();
+      }
+    } catch (err) {
+      console.warn('Failed to hide window for screenshot:', err);
+    }
+    // Give window time to hide and OS to redraw the desktop / game screen
+    await new Promise(resolve => setTimeout(resolve, 400));
+  }
+
+  let base64Image = null;
+  try {
+    base64Image = await captureScreenImage();
   } catch (error) {
     console.error('Screenshot failed:', error);
   } finally {
     try {
-      slideIn();
+      // If the overlay was closed, this capture doubles as its "snapshot on open".
+      slideIn({ snapshot: wasVisible ? undefined : base64Image });
     } catch (err) {
       console.error('Failed to slideIn window:', err);
     }

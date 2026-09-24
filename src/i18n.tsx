@@ -43,6 +43,8 @@ export function applyLocale(l: unknown) {
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  'set.snap': 'Snapshot the game when opening',
+  'set.snapDesc': 'Takes a screenshot right before the overlay opens, so games that pause when you switch away still get a clean shot. It stays in memory and is discarded when the overlay closes.',
   'pad.select': 'Select',
   'pad.back': 'Back',
   'pad.voice': 'Voice',
@@ -355,6 +357,8 @@ const en: Dict = {
 };
 
 const es: Dict = {
+  'set.snap': 'Capturar el juego al abrir',
+  'set.snapDesc': 'Toma una captura justo antes de que se abra el overlay, así los juegos que se pausan al cambiar de ventana siguen dando una imagen limpia. Solo se guarda en memoria y se descarta al cerrar el overlay.',
   'pad.select': 'Elegir',
   'pad.back': 'Atrás',
   'pad.voice': 'Voz',
@@ -658,6 +662,8 @@ const es: Dict = {
 };
 
 const pt: Dict = {
+  'set.snap': 'Capturar o jogo ao abrir',
+  'set.snapDesc': 'Tira uma captura logo antes de o overlay abrir, então jogos que pausam quando você troca de janela ainda rendem uma imagem limpa. Fica só na memória e é descartada quando o overlay fecha.',
   'pad.select': 'Selecionar',
   'pad.back': 'Voltar',
   'pad.voice': 'Voz',

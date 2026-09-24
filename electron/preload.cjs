@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTriggerVoiceInput: (callback) => { ipcRenderer.removeAllListeners('trigger-voice-input'); ipcRenderer.on('trigger-voice-input', () => callback()); },
   onTriggerAutoScreenshot: (callback) => { ipcRenderer.removeAllListeners('trigger-auto-screenshot'); ipcRenderer.on('trigger-auto-screenshot', () => callback()); },
   // Controller support (see electron/controller.cjs)
+  setOverlayOptions: (opts) => ipcRenderer.send('set-overlay-options', opts),
   setControllerConfig: (cfg) => ipcRenderer.send('set-controller-config', cfg),
   getControllerStatus: () => ipcRenderer.invoke('get-controller-status'),
   onControllerInput: (callback) => { ipcRenderer.removeAllListeners('controller-input'); ipcRenderer.on('controller-input', (event, evt) => callback(evt)); },
