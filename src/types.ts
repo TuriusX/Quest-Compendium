@@ -117,6 +117,8 @@ export interface AppSettings {
   showPointersOnScreen?: boolean;
   /** Desktop: markers stay on the things they point at while the game scrolls. */
   stickyPointers?: boolean;
+  /** Desktop: markers show up in screenshots and screen recordings. */
+  markersInRecordings?: boolean;
 }
 
 export interface SyncEventLog {

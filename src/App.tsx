@@ -56,6 +56,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   snapshotOnOpen: true,
   showPointersOnScreen: true,
   stickyPointers: true,
+  markersInRecordings: true,
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
@@ -508,8 +509,8 @@ export default function App() {
 
   // Snapshot on open (desktop): capture the game before the overlay takes focus.
   useEffect(() => {
-    (window as any).electronAPI?.setOverlayOptions?.({ snapshotOnOpen: settings.snapshotOnOpen !== false, stickyPointers: settings.stickyPointers !== false });
-  }, [settings.snapshotOnOpen, settings.stickyPointers]);
+    (window as any).electronAPI?.setOverlayOptions?.({ snapshotOnOpen: settings.snapshotOnOpen !== false, stickyPointers: settings.stickyPointers !== false, markersInRecordings: settings.markersInRecordings !== false });
+  }, [settings.snapshotOnOpen, settings.stickyPointers, settings.markersInRecordings]);
 
   // Controller: LB / RB switch between compendiums.
   useEffect(() => {

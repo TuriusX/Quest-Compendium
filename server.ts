@@ -807,6 +807,7 @@ When your answer refers to specific things that are visible in the screenshot (a
 <qc-points>[{"y": 512, "x": 300, "label": "Lever"}]</qc-points>
 - "y" and "x" are the center of the thing in the screenshot, normalized to 0-1000 (y from the top edge, x from the left edge).
 - At most 5 points. Labels: 1 to 4 words, in the player's language.
+- Label each point with what the player cares about, not with what the object is: name the item inside a container ("Teleport Stone", not "Barrel"; "Phoenix Down", not "Chest"), the action to take ("Pull lever", "Save here", "Jump here"), or who it is ("Talk to Duane"). Only fall back to naming the object when you don't know anything more useful about it.
 - Only point at things that are actually visible in the screenshot, and be precise. If nothing specific is worth pointing at, leave the block out entirely.
 - Never mention the block, coordinates or "pointers" in your answer text.`;
       }

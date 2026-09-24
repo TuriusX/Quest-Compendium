@@ -274,6 +274,7 @@ let focusBeforeOverlay = null;
 // *before* it opens and takes focus. Questions asked during that visit use this clean snapshot.
 let snapshotOnOpen = true;
 let stickyPointers = true; // markers follow what they point at as the game scrolls
+let markersInRecordings = true; // markers show up in screenshots / OBS / Game Bar
 let overlaySession = 0;
 let openSnapshot = null; // { image: dataUrl, session }
 let openingInProgress = false;
@@ -894,6 +895,7 @@ ipcMain.on('set-dock-position', (event, pos) => {
 ipcMain.on('set-overlay-options', (event, opts) => {
   if (opts && typeof opts.snapshotOnOpen === 'boolean') snapshotOnOpen = opts.snapshotOnOpen;
   if (opts && typeof opts.stickyPointers === 'boolean') stickyPointers = opts.stickyPointers;
+  if (opts && typeof opts.markersInRecordings === 'boolean') markersInRecordings = opts.markersInRecordings;
   if (!snapshotOnOpen) openSnapshot = null;
 });
 
@@ -984,8 +986,8 @@ function closeScreenPointers() {
 
 /**
  * Draw markers over the game (electron/pointers.html). Points are 0-1 fractions of the captured screen.
- * The window is transparent, click-through, never takes focus, and is excluded from screen capture, so the game
- * keeps playing, and neither our screenshots nor the sticky-marker tracking ever see the markers themselves.
+ * The window is transparent, click-through and never takes focus, so the game keeps playing. It shows up in screen
+ * recordings unless the player turns that off.
  * Sticky mode keeps each marker on its spot as the game scrolls (pointerTracker.js), for up to 2 minutes.
  */
 function showScreenPointers(points, accent, opts = {}) {
@@ -1005,6 +1007,7 @@ function showScreenPointers(points, accent, opts = {}) {
     sticky,
     sourceId: lastCaptureSourceId,
     refImage: sticky ? refImage : null,
+    selfVisible: markersInRecordings,
     lifetimeMs: 120000,
     // Our own overlay panel doesn't move with the game: keep the camera tracker from using it as background.
     exclude: (() => {
@@ -1034,7 +1037,9 @@ function showScreenPointers(points, accent, opts = {}) {
   pointerWindow = win;
   win.setIgnoreMouseEvents(true);
   win.setAlwaysOnTop(true, 'screen-saver');
-  win.setContentProtection(true); // keep markers out of screenshots and out of the tracker's own view
+  // Either hidden from all screen capture, or visible in recordings (then the tracker ignores its own markers).
+  // The app's own screenshots for the AI never include them either way: pointers are closed before capturing.
+  win.setContentProtection(!markersInRecordings);
   win.on('closed', () => {
     if (pointerWindow === win) {
       pointerWindow = null;

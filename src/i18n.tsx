@@ -43,6 +43,8 @@ export function applyLocale(l: unknown) {
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  "set.recordMarkers": "Show markers in screenshots and recordings",
+  "set.recordMarkersDesc": "Let screen captures, OBS and Game Bar see the markers. Turn off to keep them out of your recordings and streams.",
   "set.sticky": "Keep markers on things as you move",
   "set.stickyDesc": "Markers follow what they point at while you move around, even if you walk away and come back, for up to 2 minutes. They fade out when the scene changes.",
   "chat.showOnScreen": "Show on my screen",
@@ -363,6 +365,8 @@ const en: Dict = {
 };
 
 const es: Dict = {
+  "set.recordMarkers": "Mostrar marcadores en capturas y grabaciones",
+  "set.recordMarkersDesc": "Permite que las capturas, OBS y la Game Bar vean los marcadores. Desactívalo para que no aparezcan en tus grabaciones y directos.",
   "set.sticky": "Mantener los marcadores sobre las cosas al moverte",
   "set.stickyDesc": "Los marcadores siguen lo que señalan mientras te mueves, incluso si te alejas y vuelves, hasta 2 minutos. Se desvanecen cuando cambia la escena.",
   "chat.showOnScreen": "Mostrar en mi pantalla",
@@ -674,6 +678,8 @@ const es: Dict = {
 };
 
 const pt: Dict = {
+  "set.recordMarkers": "Mostrar marcadores em capturas e gravações",
+  "set.recordMarkersDesc": "Deixa capturas de tela, OBS e Game Bar verem os marcadores. Desative para mantê-los fora das suas gravações e lives.",
   "set.sticky": "Manter os marcadores nas coisas enquanto você anda",
   "set.stickyDesc": "Os marcadores acompanham o que apontam enquanto você anda, mesmo se você se afastar e voltar, por até 2 minutos. Eles somem quando a cena muda.",
   "chat.showOnScreen": "Mostrar na minha tela",

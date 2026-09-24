@@ -182,11 +182,16 @@
   }
 
   /**
-   * @param {{ ref: Float32Array, w: number, h: number, points: {x:number,y:number}[], exclude?: {x0:number,y0:number,x1:number,y1:number}[] }} opts
+   * @param {{ ref: Float32Array, w: number, h: number, points: {x:number,y:number,label?:string}[],
+   *   exclude?: {x0:number,y0:number,x1:number,y1:number}[], selfVisible?: boolean, screenWidth?: number }} opts
+   *   selfVisible: our markers appear in the captured frames (shown in recordings), so never match against the
+   *   spots they cover; markers then follow the camera alone.
    */
   function createTracker(opts) {
     const { ref, w, h } = opts;
     const exclude = opts.exclude || [];
+    const selfVisible = !!opts.selfVisible;
+    const screenW = opts.screenWidth || 1920;
     const markers = opts.points.map((p) => {
       const x = p.x * w;
       const y = p.y * h;
@@ -200,6 +205,24 @@
     let cameraLost = 0;
     let started = false;
     let gone = false;
+
+    /** Where our markers (dot + label) are drawn, in 0-1 screen fractions, for when they appear in captures. */
+    function markerRects() {
+      return markers.map((m, i) => {
+        const cx = m.x / w;
+        const cy = m.y / h;
+        const label = (opts.points[i] && opts.points[i].label) || '';
+        const labelW = (48 + 11 * label.length + 30) / screenW;
+        const dot = 36 / screenW;
+        const flip = cx > 0.75;
+        return {
+          x0: flip ? cx - dot - labelW : cx - dot,
+          x1: flip ? cx + dot : cx + dot + labelW,
+          y0: cy - (40 / screenW) * (w / h),
+          y1: cy + (40 / screenW) * (w / h),
+        };
+      });
+    }
 
     function locateAll(frame, ii) {
       // First frame: the player may have moved while the AI answered, so search the whole frame.
@@ -243,7 +266,7 @@
             m.x += dx;
             m.y += dy;
             const onScreen = m.x >= 0 && m.x <= w && m.y >= 0 && m.y <= h;
-            if (!onScreen || m.weak) {
+            if (!onScreen || m.weak || selfVisible) {
               m.lost = 0;
               continue;
             }
@@ -270,8 +293,8 @@
         m.visible = !gone && onScreen && m.lost <= LOST_FRAMES;
       });
       if (cameraLost === 0) {
-        // Only learn the background from frames where the camera was tracked.
-        anchors = pickAnchors(frame, w, h, ii, exclude);
+        // Only learn the background from frames where the camera was tracked (and never from our own markers).
+        anchors = pickAnchors(frame, w, h, ii, selfVisible ? exclude.concat(markerRects()) : exclude);
         prev = frame;
       }
       return markers.map((m) => ({ x: m.x / w, y: m.y / h, visible: m.visible, score: m.score }));
