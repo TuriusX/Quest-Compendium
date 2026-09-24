@@ -24,6 +24,7 @@ import { PWAInstallButton } from './PWAInstallButton';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
+import { useT } from '../i18n';
 
 interface HeaderBarProps {
   userData?: any;
@@ -74,6 +75,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   theme,
   onSync,
 }) => {
+  const t = useT();
   const [isClosing, setIsClosing] = useState(false);
 
   const handleCloseApp = async () => {
@@ -135,7 +137,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               playPageTurnSound(soundEnabled);
               onToggleSidebar();
             }}
-            title={isSidebarOpen ? "Collapse Games Library" : "Expand Games Library"}
+            title={isSidebarOpen ? t('header.collapseLibrary') : t('header.expandLibrary')}
             className={`group relative flex items-center justify-center p-2 rounded-xl border transition-all cursor-pointer ${
               tabsCount === 0 && !isSidebarOpen
                 ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] ring-2 ring-[var(--accent-color)] ring-offset-2 ring-offset-[#0a0b10] shadow-[0_0_15px_var(--accent-glow)]'
@@ -215,7 +217,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </div>
           <span className="flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase overflow-hidden whitespace-nowrap text-ellipsis max-w-[180px]">
             <span className={`w-1.5 h-1.5 flex-shrink-0 rounded-full ${isGameRunningLocally ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
-            <span className="truncate">{isGameRunningLocally ? `Playing on Steam · ${activeGame?.name}` : 'No game detected'}</span>
+            <span className="truncate">{isGameRunningLocally ? t('header.playing', { game: activeGame?.name ?? '' }) : t('header.noGame')}</span>
           </span>
         </div>
       </div>
@@ -240,17 +242,17 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shadow-[0_0_10px_rgba(99,102,241,0.1)]' 
                     : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)] group-hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'
                 }`} 
-                title={`${proCount} Pro questions left · ${isPremiumUser ? 'Unlimited' : `${flashCount} Flash`} questions left`}
+                title={t('header.quotaTitle', { pro: proCount, flash: isPremiumUser ? t('header.unlimited') : flashCount })}
               >
                 <div className="flex items-center gap-1">
                   <Cpu className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <span className="font-bold">{proCount} Pro left</span>
+                  <span className="font-bold">{t('header.proLeft', { n: proCount })}</span>
                   <ManaBar value={proCount} max={isPremiumUser ? 100 : 5} />
                 </div>
                 <span className="text-zinc-600 font-normal">·</span>
                 <div className="flex items-center gap-1">
                   <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="font-bold">{isPremiumUser ? 'Unlimited Flash' : `${flashCount} Flash left`}</span>
+                  <span className="font-bold">{isPremiumUser ? t('header.flashUnlimited') : t('header.flashLeft', { n: flashCount })}</span>
                 </div>
                 {!isPremiumUser && <Sparkles className="w-3.5 h-3.5 ml-0.5 text-amber-400 animate-pulse hidden sm:inline-block" />}
               </div>
@@ -278,9 +280,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   {/* Flash Queries Progress */}
                   <div className="flex flex-col gap-1.5">
                     <div className="flex justify-between items-center text-xs">
-                      <span className="text-zinc-300 font-medium">Flash Fallback</span>
+                      <span className="text-zinc-300 font-medium">{t('header.flashFallback')}</span>
                       <span className="text-zinc-400 font-mono text-[10px]">
-                        {isPremiumUser ? 'Unlimited' : `${flashCount} / 5`}
+                        {isPremiumUser ? t('header.unlimited') : `${flashCount} / 5`}
                       </span>
                     </div>
                     {!isPremiumUser && (
@@ -295,7 +297,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   
                   {/* Reset Timer */}
                   <div className="pt-2 mt-1 border-t border-white/5 flex justify-between items-center text-[11px]">
-                    <span className="text-zinc-500 font-medium">Allotment Resets In:</span>
+                    <span className="text-zinc-500 font-medium">{t('header.resetsIn')}</span>
                     <span className="text-zinc-400 font-mono tracking-wider">{timeUntilReset}</span>
                   </div>
                   
@@ -307,7 +309,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                       className="mt-1 pt-3 border-t border-white/5 text-xs text-amber-400 font-medium flex items-center justify-center gap-1.5 hover:text-amber-300 transition-colors w-full cursor-pointer"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      Click to upgrade to Premium
+                      {t('header.upgrade')}
                     </button>
                   )}
                 </div>
@@ -323,8 +325,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               playPageTurnSound(soundEnabled);
               onToggleAchDrawer();
             }}
-            title="Game Achievements"
-            aria-label="Achievements"
+            title={t('common.achievements')}
+            aria-label={t('common.achievements')}
             className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
               isAchDrawerOpen 
                 ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
@@ -346,8 +348,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               playBlipSound(soundEnabled);
               onOpenSettings();
             }}
-            title="Compendium Settings"
-            aria-label="Settings"
+            title={t('common.settings')}
+            aria-label={t('common.settings')}
             className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-all cursor-pointer"
           >
             <SettingsIcon className="w-4 h-4" />
@@ -369,8 +371,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               style={{ WebkitAppRegion: "no-drag" } as any}
               onClick={handleCloseApp}
               disabled={isClosing}
-              title={isClosing ? "Syncing & Closing..." : "Close Quest Compendium"}
-              aria-label="Close Quest Compendium"
+              title={isClosing ? t('header.closing') : t('header.close')}
+              aria-label={t('header.close')}
               className="p-2 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer ml-1 disabled:opacity-50"
             >
               {isClosing ? (
@@ -390,8 +392,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 playBlipSound(soundEnabled);
                 onToggleDock();
               }}
-              title={isDocked ? "Undock / Fullscreen View" : "Dock HUD Frame"}
-              aria-label={isDocked ? "Undock window" : "Dock window"}
+              title={isDocked ? t('header.undock') : t('header.dock')}
+              aria-label={isDocked ? t('header.undock') : t('header.dock')}
               className="p-2 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-all cursor-pointer"
             >
               {isDocked ? <Square className="w-4 h-4" /> : <ArrowRightToLine className="w-4 h-4" />}

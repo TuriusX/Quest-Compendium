@@ -97,6 +97,11 @@ export interface AppSettings {
   enableThematicBanners?: boolean;
   /** Interface style: 'lofi' (pixel art, default) or 'classic' (the original look). */
   uiStyle?: UiStyle;
+  /** Interface + AI answer language. */
+  language?: 'en' | 'es' | 'pt';
+  /** Controller support (on by default) and the held chord that shows / hides the desktop overlay. */
+  controllerEnabled?: boolean;
+  controllerToggle?: 'back+start' | 'ls+rs' | 'lb+rb+back' | 'off';
 }
 
 export interface SyncEventLog {

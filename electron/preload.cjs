@@ -23,5 +23,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTriggerVoiceInputStart: (callback) => { ipcRenderer.removeAllListeners('trigger-voice-input-start'); ipcRenderer.on('trigger-voice-input-start', () => callback()); },
   onTriggerVoiceInputStop: (callback) => { ipcRenderer.removeAllListeners('trigger-voice-input-stop'); ipcRenderer.on('trigger-voice-input-stop', () => callback()); },
   onTriggerVoiceInput: (callback) => { ipcRenderer.removeAllListeners('trigger-voice-input'); ipcRenderer.on('trigger-voice-input', () => callback()); },
-  onTriggerAutoScreenshot: (callback) => { ipcRenderer.removeAllListeners('trigger-auto-screenshot'); ipcRenderer.on('trigger-auto-screenshot', () => callback()); }
+  onTriggerAutoScreenshot: (callback) => { ipcRenderer.removeAllListeners('trigger-auto-screenshot'); ipcRenderer.on('trigger-auto-screenshot', () => callback()); },
+  // Controller support (see electron/controller.cjs)
+  setControllerConfig: (cfg) => ipcRenderer.send('set-controller-config', cfg),
+  getControllerStatus: () => ipcRenderer.invoke('get-controller-status'),
+  onControllerInput: (callback) => { ipcRenderer.removeAllListeners('controller-input'); ipcRenderer.on('controller-input', (event, evt) => callback(evt)); },
+  onControllerActivated: (callback) => { ipcRenderer.removeAllListeners('controller-activated'); ipcRenderer.on('controller-activated', () => callback()); }
 });

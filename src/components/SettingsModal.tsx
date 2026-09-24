@@ -33,6 +33,7 @@ import { AppSettings, AiMode, ColorTheme, DockPosition, CloudSyncDiagnostics } f
 import { playBlipSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
 import { getApiBaseUrl, setApiBaseUrl, testBackendHealth, DEFAULT_CLOUD_URL } from '../utils/api';
+import { LOCALES, normalizeLocale, useT } from '../i18n';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -58,6 +59,7 @@ const ShortcutInput: React.FC<{
   onChange: (value: string) => void;
   label: string;
 }> = ({ value, onChange, label }) => {
+  const t = useT();
   const [isRecording, setIsRecording] = useState(false);
 
   React.useEffect(() => {
@@ -114,7 +116,7 @@ const ShortcutInput: React.FC<{
         }`}
       >
         {isRecording ? (
-          'Press the new keys… (Esc to cancel)'
+          t('set.sc.listening')
         ) : value ? (
           <span className="flex flex-wrap items-center gap-1.5">
             {value.split('+').map((k, i) => (
@@ -125,10 +127,10 @@ const ShortcutInput: React.FC<{
                 {k === 'CmdOrCtrl' || k === 'CommandOrControl' ? (isMacPlatform ? 'Cmd' : 'Ctrl') : k}
               </kbd>
             ))}
-            <span className="ml-auto text-[10px] text-zinc-500 font-sans">Click to change</span>
+            <span className="ml-auto text-[10px] text-zinc-500 font-sans">{t('set.sc.change')}</span>
           </span>
         ) : (
-          'None (click to set)'
+          t('set.sc.none')
         )}
       </button>
     </div>
@@ -143,6 +145,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   soundEnabled,
   syncDiagnostics,
 }) => {
+  const tr = useT();
   const [activeTab, setActiveTab] = useState<TabId>('appearance');
   const [backendStatus, setBackendStatus] = useState<'idle' | 'checking' | 'healthy' | 'error'>('idle');
   const [copiedDiag, setCopiedDiag] = useState(false);
@@ -223,10 +226,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ];
 
   const tabs: { id: TabId; label: string; icon: React.FC<any> }[] = [
-    { id: 'appearance', label: 'Appearance', icon: Palette },
-    { id: 'persona', label: 'Companion', icon: Bot },
-    { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
-    { id: 'account', label: 'Account & sync', icon: User },
+    { id: 'appearance', label: tr('set.nav.appearance'), icon: Palette },
+    { id: 'persona', label: tr('set.nav.companion'), icon: Bot },
+    { id: 'shortcuts', label: tr('set.nav.shortcuts'), icon: Keyboard },
+    { id: 'account', label: tr('set.nav.account'), icon: User },
   ];
 
   return (
@@ -241,10 +244,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <div>
               <h3 className="font-fantasy font-bold text-base text-white">
-                Settings
+                {tr('set.title')}
               </h3>
               <p className="text-[11px] text-zinc-400 font-mono">
-                System configuration & preferences
+                {tr('set.subtitle')}
               </p>
             </div>
           </div>
@@ -253,7 +256,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               playBlipSound(soundEnabled);
               onClose();
             }}
-            aria-label="Close settings"
+            aria-label={tr('set.close')}
             className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -285,9 +288,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                   {tab.id === 'account' && (
                     effectiveDiag?.lastWriteError ? (
-                      <span className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0" title="Sync error" />
+                      <span className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0" title={tr('set.syncError')} />
                     ) : effectiveDiag?.isListenerAttached ? (
-                      <span className="w-2 h-2 rounded-full bg-emerald-500/80 flex-shrink-0" title="Sync active" />
+                      <span className="w-2 h-2 rounded-full bg-emerald-500/80 flex-shrink-0" title={tr('set.syncActive')} />
                     ) : null
                   )}
                 </button>
@@ -300,16 +303,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {activeTab === 'appearance' && (
               <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
+                {/* Language: interface text + the language the AI answers in */}
+                <div className="space-y-2.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-[var(--accent-color)]" />
+                    <span>{tr('set.language')}</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {LOCALES.map((l) => {
+                      const isSelected = normalizeLocale(settings.language) === l.id;
+                      return (
+                        <button
+                          key={l.id}
+                          aria-pressed={isSelected}
+                          onClick={() => {
+                            playBlipSound(soundEnabled);
+                            onUpdateSettings({ language: l.id });
+                          }}
+                          className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                            isSelected
+                              ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white'
+                              : 'bg-black/30 border-white/[0.08] text-zinc-300 hover:border-white/20'
+                          }`}
+                        >
+                          <span className="truncate">{l.label}</span>
+                          {isSelected && <Check className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-color)]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-zinc-500">{tr('set.languageHint')}</p>
+                </div>
+
                 {/* Interface style: Lo-fi pixel (default) or Classic */}
                 <div className="space-y-2.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-[var(--accent-color)]" />
-                    <span>Interface Style</span>
+                    <span>{tr('set.style')}</span>
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     {([
-                      { id: 'lofi', name: 'Lo-fi Pixel', desc: 'Pixel icons, fonts and meters' },
-                      { id: 'classic', name: 'Classic', desc: 'The original smooth look' },
+                      { id: 'lofi', name: tr('set.style.lofi'), desc: tr('set.style.lofiDesc') },
+                      { id: 'classic', name: tr('set.style.classic'), desc: tr('set.style.classicDesc') },
                     ] as const).map((opt) => {
                       const isSelected = (settings.uiStyle ?? 'lofi') === opt.id;
                       return (
@@ -341,7 +376,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="space-y-2.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
                     <Palette className="w-4 h-4 text-[var(--accent-color)]" />
-                    <span>HUD Themes</span>
+                    <span>{tr('set.themes')}</span>
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     {themes.map((t) => {
@@ -354,7 +389,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onUpdateSettings({ theme: t.id });
                           }}
                           aria-pressed={isSelected}
-                          aria-label={t.name}
+                          aria-label={tr(`set.theme.${t.id}`)}
                           className={`p-2.5 rounded-xl border text-left flex flex-col items-start gap-1.5 min-h-[86px] transition-all cursor-pointer ${
                             isSelected
                               ? 'bg-white/[0.07] shadow-sm'
@@ -369,8 +404,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             {isSelected && <Check className="w-3.5 h-3.5 text-[#16101f]" />}
                           </span>
                           <div className="min-w-0">
-                            <div className="font-semibold text-[11px] text-white leading-tight">{t.name}</div>
-                            <div className="text-[10px] text-zinc-500 leading-tight">{t.desc}</div>
+                            <div className="font-semibold text-[11px] text-white leading-tight">{tr(`set.theme.${t.id}`)}</div>
+                            <div className="text-[10px] text-zinc-500 leading-tight">{tr(`set.theme.${t.id}.d`)}</div>
                           </div>
                         </button>
                       );
@@ -379,13 +414,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Live preview of the chosen theme */}
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-black/40 border border-white/[0.08]" aria-label="Theme preview">
-                  <span className="text-[10px] font-mono uppercase text-zinc-500 flex-shrink-0">Preview</span>
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-black/40 border border-white/[0.08]" aria-label={tr('set.previewAria')}>
+                  <span className="text-[10px] font-mono uppercase text-zinc-500 flex-shrink-0">{tr('set.preview')}</span>
                   <div className="flex-1 min-w-0 flex items-center gap-2">
-                    <span className="px-2.5 py-1.5 rounded-xl bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[11px] text-white truncate">Where's the next boss?</span>
-                    <span className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] text-zinc-300 truncate"><strong className="text-[var(--accent-color)]">North gate.</strong> Bring fire resist.</span>
+                    <span className="px-2.5 py-1.5 rounded-xl bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[11px] text-white truncate">{tr('set.previewQ')}</span>
+                    <span className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] text-zinc-300 truncate"><strong className="text-[var(--accent-color)]">{tr('set.previewA1')}</strong> {tr('set.previewA2')}</span>
                   </div>
-                  <span className="qc-px-bevel px-3 py-1.5 rounded-lg bg-[var(--accent-color)] text-[#16101f] text-[11px] font-bold flex-shrink-0">Ask</span>
+                  <span className="qc-px-bevel px-3 py-1.5 rounded-lg bg-[var(--accent-color)] text-[#16101f] text-[11px] font-bold flex-shrink-0">{tr('set.previewAsk')}</span>
                 </div>
 
                 {/* Thematic Inquiry Banners Toggle - High Prominence */}
@@ -396,13 +431,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-xs text-white block">Thematic Inquiry Banners</span>
+                        <span className="font-semibold text-xs text-white block">{tr('set.banners')}</span>
                         <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--accent-color)]/20 text-[var(--accent-color)] border border-[var(--accent-border)]">
-                          Immersion
+                          {tr('set.bannersTag')}
                         </span>
                       </div>
                       <span className="text-[11px] text-zinc-300">
-                        Generate cinematic game artwork and thematic concept banners atop AI answers
+                        {tr('set.bannersDesc')}
                       </span>
                     </div>
                   </div>
@@ -427,16 +462,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="space-y-2.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
                     <Monitor className="w-4 h-4 text-[var(--accent-color)]" />
-                    <span>Dock Position</span>
+                    <span>{tr('set.dock')}</span>
                   </label>
                   <div className="flex gap-3 items-stretch">
                     {/* A little screen: click a corner to dock there */}
-                    <div className="grid grid-cols-2 gap-1.5 p-1.5 w-52 h-32 rounded-xl bg-black/50 border border-white/15 flex-shrink-0" role="group" aria-label="Dock to a screen corner">
+                    <div className="grid grid-cols-2 gap-1.5 p-1.5 w-52 h-32 rounded-xl bg-black/50 border border-white/15 flex-shrink-0" role="group" aria-label={tr('set.dockGroup')}>
                       {([
-                        { id: 'top-left', label: 'Top left', align: 'items-start justify-start' },
-                        { id: 'top-right', label: 'Top right', align: 'items-start justify-end' },
-                        { id: 'bottom-left', label: 'Bottom left', align: 'items-end justify-start' },
-                        { id: 'bottom-right', label: 'Bottom right', align: 'items-end justify-end' },
+                        { id: 'top-left', label: tr('set.dock.tl'), align: 'items-start justify-start' },
+                        { id: 'top-right', label: tr('set.dock.tr'), align: 'items-start justify-end' },
+                        { id: 'bottom-left', label: tr('set.dock.bl'), align: 'items-end justify-start' },
+                        { id: 'bottom-right', label: tr('set.dock.br'), align: 'items-end justify-end' },
                       ] as const).map((dock) => {
                         const selected = settings.dockPosition === dock.id;
                         return (
@@ -471,13 +506,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }`}
                     >
                       <Maximize2 className="w-4 h-4" />
-                      Floating window
+                      {tr('set.floating')}
                     </button>
                   </div>
                   <p className="text-[11px] text-zinc-500">
                     {settings.dockPosition === 'undocked'
-                      ? 'Floats freely: drag it anywhere.'
-                      : `Docked ${String(settings.dockPosition).replace('-', ' ')}; slides in and out with your hide shortcut.`}
+                      ? tr('set.floatingHelp')
+                      : tr('set.dockedHelp', { corner: tr(({ 'top-left': 'set.dock.tl', 'top-right': 'set.dock.tr', 'bottom-left': 'set.dock.bl', 'bottom-right': 'set.dock.br' } as Record<string, string>)[settings.dockPosition] ?? 'set.dock.tr').toLowerCase() })}
                   </p>
                 </div>
 
@@ -485,7 +520,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="space-y-2.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
                     <Monitor className="w-4 h-4 text-zinc-500" />
-                    <span>Background Opacity</span>
+                    <span>{tr('set.opacity')}</span>
                   </label>
                   <div className="flex items-center gap-3 bg-black/30 border border-white/[0.08] p-3 rounded-xl">
                     <input 
@@ -507,7 +542,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="space-y-2.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
                     <Monitor className="w-4 h-4 text-[var(--accent-color)]" />
-                    <span>App UI Scale (4K / Display Size)</span>
+                    <span>{tr('set.uiScale')}</span>
                   </label>
                   <div className="flex items-center gap-3 bg-black/30 border border-white/[0.08] p-3 rounded-xl">
                     <input 
@@ -538,8 +573,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex items-center gap-2.5">
                     <Volume2 className="w-4 h-4 text-[var(--accent-color)]" />
                     <div>
-                      <span className="font-semibold text-xs text-white block">HUD Sound Effects</span>
-                      <span className="text-[11px] text-zinc-400">Interface clicks, page turns & victory fanfares</span>
+                      <span className="font-semibold text-xs text-white block">{tr('set.sounds')}</span>
+                      <span className="text-[11px] text-zinc-400">{tr('set.soundsDesc')}</span>
                     </div>
                   </div>
                   <button
@@ -566,7 +601,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="space-y-2.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
                     <Bot className="w-4 h-4 text-[var(--accent-color)]" />
-                    <span>AI Companion Persona Mode</span>
+                    <span>{tr('set.persona')}</span>
                   </label>
                   <div className="space-y-2">
                     {aiModes.map((mode) => {
@@ -588,16 +623,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between font-semibold text-xs text-white mb-0.5">
                               <div className="flex items-center gap-2">
-                                <span>{mode.label}</span>
+                                <span>{tr(`set.persona.${mode.id}`)}</span>
                                 {mode.experimental && (
                                   <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                    Experimental
+                                    {tr('set.experimental')}
                                   </span>
                                 )}
                               </div>
                               {isSelected && <Check className="w-4 h-4 text-[var(--accent-color)]" />}
                             </div>
-                            <p className="text-[11px] text-zinc-400 leading-relaxed">{mode.desc}</p>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">{tr(`set.persona.${mode.id}.d`)}</p>
                           </div>
                         </div>
                       );
@@ -610,7 +645,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="space-y-2.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
                     <Volume2 className="w-4 h-4 text-[var(--accent-color)]" />
-                    <span>Voice Profile (TTS Narration)</span>
+                    <span>{tr('set.voice')}</span>
                   </label>
                   <select
                     value={settings.ttsVoice}
@@ -635,27 +670,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="space-y-4">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
                     <Keyboard className="w-4 h-4 text-[var(--accent-color)]" />
-                    <span>Keyboard Shortcuts</span>
+                    <span>{tr('set.shortcuts')}</span>
                   </label>
                   <div className="space-y-3">
                     <ShortcutInput
-                      label="Show or hide the window"
+                      label={tr('set.sc.hide')}
                       value={settings.hideAppShortcut}
                       onChange={(val) => onUpdateSettings({ hideAppShortcut: val })}
                     />
                     <ShortcutInput
-                      label="Ask with your voice"
+                      label={tr('set.sc.voice')}
                       value={settings.voiceInputShortcut}
                       onChange={(val) => onUpdateSettings({ voiceInputShortcut: val })}
                     />
                     <ShortcutInput
-                      label="Screenshot your game and ask"
+                      label={tr('set.sc.shot')}
                       value={settings.autoScreenshotShortcut || 'CmdOrCtrl+Shift+S'}
                       onChange={(val) => onUpdateSettings({ autoScreenshotShortcut: val })}
                     />
                     <div className="flex items-center justify-between gap-3 pt-1">
                       <p className="text-[11px] text-zinc-500 leading-relaxed">
-                        Changing the show/hide shortcut takes effect after restarting the app.
+                        {tr('set.sc.restart')}
                       </p>
                       <button
                         type="button"
@@ -665,10 +700,81 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }}
                         className="flex-shrink-0 text-[11px] font-semibold text-[var(--accent-color)] hover:underline cursor-pointer"
                       >
-                        Reset to defaults
+                        {tr('set.sc.reset')}
                       </button>
                     </div>
                   </div>
+                </div>
+
+                {/* Controller */}
+                <div className="space-y-3 pt-4 border-t border-white/[0.08]">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+                    <Gamepad2 className="w-4 h-4 text-[var(--accent-color)]" />
+                    <span>{tr('set.pad')}</span>
+                  </label>
+                  <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
+                    <div>
+                      <div className="text-xs font-semibold text-white">{tr('set.pad.enable')}</div>
+                      <div className="text-[11px] text-zinc-400">{tr('set.pad.enableDesc')}</div>
+                    </div>
+                    <button
+                      role="switch"
+                      aria-checked={settings.controllerEnabled !== false}
+                      aria-label={tr('set.pad.enable')}
+                      onClick={() => {
+                        playBlipSound(soundEnabled);
+                        onUpdateSettings({ controllerEnabled: settings.controllerEnabled === false });
+                      }}
+                      className={`w-11 h-6 flex-shrink-0 rounded-full p-0.5 flex transition-colors cursor-pointer ${
+                        settings.controllerEnabled !== false ? 'bg-[var(--accent-color)] justify-end' : 'bg-white/15 justify-start'
+                      }`}
+                    >
+                      <span className="w-5 h-5 rounded-full bg-[#16101f]" />
+                    </button>
+                  </div>
+
+                  {settings.controllerEnabled !== false && (
+                    <>
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-white">{tr('set.pad.toggle')}</div>
+                        <div className="text-[11px] text-zinc-400">{tr('set.pad.toggleDesc')}</div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {(['back+start', 'ls+rs', 'lb+rb+back', 'off'] as const).map((chord) => {
+                            const selected = (settings.controllerToggle || 'back+start') === chord;
+                            return (
+                              <button
+                                key={chord}
+                                aria-pressed={selected}
+                                onClick={() => {
+                                  playBlipSound(soundEnabled);
+                                  onUpdateSettings({ controllerToggle: chord });
+                                }}
+                                className={`p-2.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                                  selected
+                                    ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white'
+                                    : 'bg-black/30 border-white/[0.08] text-zinc-300 hover:border-white/20'
+                                }`}
+                              >
+                                {tr(`set.pad.chord.${chord}`)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-black/30 border border-white/[0.08] space-y-1.5">
+                        <div className="text-[10px] font-mono uppercase text-zinc-400">{tr('set.pad.controls')}</div>
+                        <ul className="grid sm:grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-zinc-300">
+                          {['move', 'a', 'b', 'x', 'y', 'menu', 'view', 'lbrb', 'rs'].map((k) => (
+                            <li key={k}>{tr(`set.pad.c.${k}`)}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <p className="text-[11px] text-zinc-500">
+                        {typeof window !== 'undefined' && (window as any).electronAPI ? tr('set.pad.noteDesktop') : tr('set.pad.noteWeb')}
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -687,17 +793,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-white">
                       {effectiveDiag?.lastWriteError
-                        ? 'Sync ran into a problem'
+                        ? tr('set.sync.problem')
                         : effectiveDiag?.isListenerAttached
-                          ? 'Everything is synced'
-                          : 'Sync is offline (sign in to back up your games)'}
+                          ? tr('set.sync.ok')
+                          : tr('set.sync.offline')}
                     </div>
                     <div className="text-[11px] text-zinc-400 truncate">
                       {effectiveDiag?.lastWriteError
-                        ? 'Try Sync now. If it keeps happening, copy the details below into a bug report.'
+                        ? tr('set.sync.problemHelp')
                         : effectiveDiag?.lastSuccessfulWriteTime
-                          ? `Last synced ${new Date(effectiveDiag.lastSuccessfulWriteTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
-                          : 'Your compendiums, notes and quests are backed up to your account.'}
+                          ? tr('set.sync.last', { time: new Date(effectiveDiag.lastSuccessfulWriteTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) })
+                          : tr('set.sync.backedUp')}
                     </div>
                   </div>
                   <button
@@ -720,7 +826,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="qc-px-bevel flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--accent-color)] text-[#16101f] text-xs font-bold disabled:opacity-40 cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncingNow ? 'animate-spin' : ''}`} />
-                    {syncNowSuccess ? 'Synced' : 'Sync now'}
+                    {syncNowSuccess ? tr('set.sync.done') : tr('set.sync.now')}
                   </button>
                 </div>
 
@@ -732,10 +838,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="w-full flex items-center justify-between p-3 rounded-xl border border-dashed border-white/15 text-left hover:border-white/25 cursor-pointer"
                 >
                   <span>
-                    <span className="block text-xs font-semibold text-zinc-200">Sync diagnostics</span>
-                    <span className="block text-[11px] text-zinc-500">Technical details and server settings, for troubleshooting.</span>
+                    <span className="block text-xs font-semibold text-zinc-200">{tr('set.diag')}</span>
+                    <span className="block text-[11px] text-zinc-500">{tr('set.diagDesc')}</span>
                   </span>
-                  <span className="text-[11px] font-semibold text-[var(--accent-color)] flex-shrink-0 ml-3">{showDiagnostics ? 'Hide' : 'Show'}</span>
+                  <span className="text-[11px] font-semibold text-[var(--accent-color)] flex-shrink-0 ml-3">{showDiagnostics ? tr('set.hide') : tr('set.show')}</span>
                 </button>
               </div>
             )}
@@ -1138,14 +1244,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="space-y-2.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
                     <Gamepad2 className="w-4 h-4 text-[var(--accent-color)]" />
-                    <span>Steam Connection</span>
+                    <span>{tr('set.steam')}</span>
                   </label>
                   
                   {settings.steamId ? (
                     <div className="flex items-center justify-between p-3 rounded-xl bg-black/60 border border-white/15">
                       <div className="flex flex-col">
-                        <span className="text-xs text-white font-semibold flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Connected{settings.steamName ? ` as ${settings.steamName}` : ''}</span>
-                        <span className="text-[11px] text-zinc-500">Your running game and achievements come from Steam</span>
+                        <span className="text-xs text-white font-semibold flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />{settings.steamName ? tr('set.steamConnectedAs', { name: settings.steamName }) : tr('set.steamConnected')}</span>
+                        <span className="text-[11px] text-zinc-500">{tr('set.steamHelp')}</span>
                       </div>
                       <button
                         onClick={() => {
@@ -1154,7 +1260,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }}
                         className="px-3 py-1.5 text-xs font-semibold bg-transparent text-zinc-300 border border-white/15 hover:border-red-500/40 hover:text-red-300 rounded-lg transition-colors cursor-pointer"
                       >
-                        Disconnect
+                        {tr('set.disconnect')}
                       </button>
                     </div>
                   ) : (
@@ -1167,16 +1273,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           } else {
                             const popup = window.open(`${getApiBaseUrl()}/api/auth/steam`, 'steam_login', 'width=800,height=600');
                             if (!popup) {
-                              alert('Please allow popups to sign in with Steam.');
+                              alert(tr('set.allowPopups'));
                             }
                           }
                         }}
                         className="w-full flex items-center justify-center gap-2 bg-[#171a21] hover:bg-[#2a475e] text-white border border-[#2a475e] rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer"
                       >
-                        Sign in through Steam
+                        {tr('set.steamSignIn')}
                       </button>
                       <p className="text-[11px] text-zinc-400 leading-relaxed mt-2.5">
-                        Sign in securely via Steam to automatically sync your game achievements instead of using the local mock data.
+                        {tr('set.steamSignInHelp')}
                       </p>
                     </div>
                   )}
@@ -1193,7 +1299,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-300/90 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
                   >
                     <LogOut className="w-3.5 h-3.5" />
-                    Sign out
+                    {tr('common.signOut')}
                   </button>
                 </div>
               </div>

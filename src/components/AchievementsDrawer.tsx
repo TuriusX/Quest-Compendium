@@ -16,6 +16,7 @@ import {
 import { PixelMedal, PixelTrophy, useLofi } from './pixelArt';
 import { Achievement, SteamGameData } from '../types';
 import { playFanfareSound, playBlipSound } from '../utils/audio';
+import { useT } from '../i18n';
 
 interface AchievementsDrawerProps {
   width: number;
@@ -34,6 +35,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
   gameData,
   soundEnabled,
 }) => {
+  const t = useT();
   const lofi = useLofi();
   const [activeView, setActiveView] = useState<'medals' | 'patches'>('medals');
   const [filter, setFilter] = useState<'all' | 'locked' | 'unlocked' | 'rare'>('all');
@@ -112,18 +114,18 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
           </div>
           <div className="flex flex-col">
             <span className="font-fantasy font-bold text-sm text-white leading-tight">
-              Achievements
+              {t('common.achievements')}
             </span>
             <span className="text-[10px] text-zinc-400 font-mono uppercase truncate">
-              {gameData?.name ? `${gameData.name} · from Steam` : 'No game detected'}
+              {gameData?.name ? t('ach.fromSteam', { game: gameData.name }) : t('header.noGame')}
             </span>
           </div>
         </div>
 
         <button
           onClick={onClose}
-          aria-label="Close achievements"
-          title="Close"
+          aria-label={t('ach.close')}
+          title={t('common.close')}
           className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
@@ -141,7 +143,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
           }`}
         >
           <Trophy className="w-3.5 h-3.5 text-amber-400" />
-          <span>Achievements ({totalCount})</span>
+          <span>{t('ach.tabAch', { n: totalCount })}</span>
         </button>
         <button
           onClick={() => setActiveView('patches')}
@@ -152,7 +154,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
           }`}
         >
           <Newspaper className="w-3.5 h-3.5 text-blue-400" />
-          <span>Patch Notes ({patchNotes.length})</span>
+          <span>{t('ach.tabPatch', { n: patchNotes.length })}</span>
         </button>
       </div>
 
@@ -166,7 +168,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
                   <div className="flex items-center gap-2">
                     {lofi ? <PixelTrophy size={28} /> : <Award className="w-[20px] h-[20px] text-sky-400 drop-shadow-[0_0_8px_rgba(56,189,248,0.5)] flex-shrink-0" />}
                     <span className="text-white font-black text-[11px] tracking-wide uppercase drop-shadow-md">
-                      All {totalCount} unlocked!
+                      {t('ach.allUnlocked', { n: totalCount })}
                     </span>
                   </div>
                   <span className="text-white font-black text-[11px] tracking-wide drop-shadow-md">(100%)</span>
@@ -183,7 +185,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
               <>
                 <div className="flex items-center justify-between text-[11px] tracking-wide">
                   <span className="text-zinc-400 font-bold uppercase">
-                    Completion: <strong className="text-white font-mono">{unlockedCount}/{totalCount}</strong>
+                    {t('ach.completion')} <strong className="text-white font-mono">{unlockedCount}/{totalCount}</strong>
                   </span>
                   <span className="font-mono text-sm font-bold text-[var(--accent-color)]">
                     {percent}%
@@ -202,17 +204,17 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
 
             {/* Medal Badges */}
             <div className="flex items-center justify-around pt-2 border-t border-white/[0.06] text-xs">
-              <div className="flex items-center gap-1.5" title="Gold Medals (<10% Global Rarity)">
+              <div className="flex items-center gap-1.5" title={t('ach.goldTitle')}>
                 {getMedalSvg('gold')}
-                <span className="font-mono text-xs font-bold text-amber-400">{goldCount} Gold</span>
+                <span className="font-mono text-xs font-bold text-amber-400">{t('ach.gold', { n: goldCount })}</span>
               </div>
-              <div className="flex items-center gap-1.5" title="Silver Medals (10-25% Global Rarity)">
+              <div className="flex items-center gap-1.5" title={t('ach.silverTitle')}>
                 {getMedalSvg('silver')}
-                <span className="font-mono text-xs font-bold text-zinc-300">{silverCount} Silver</span>
+                <span className="font-mono text-xs font-bold text-zinc-300">{t('ach.silver', { n: silverCount })}</span>
               </div>
-              <div className="flex items-center gap-1.5" title="Bronze Medals (>25% Global Rarity)">
+              <div className="flex items-center gap-1.5" title={t('ach.bronzeTitle')}>
                 {getMedalSvg('bronze')}
-                <span className="font-mono text-xs font-bold text-amber-600">{bronzeCount} Bronze</span>
+                <span className="font-mono text-xs font-bold text-amber-600">{t('ach.bronze', { n: bronzeCount })}</span>
               </div>
             </div>
           </div>
@@ -233,7 +235,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
                       : 'bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-white'
                   }`}
                 >
-                  {mode === 'rare' ? 'Rarest' : mode}
+                  {t(`ach.filter.${mode}`)}
                 </button>
               ))}
             </div>
@@ -243,7 +245,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
               <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search trophies & descriptions..."
+                placeholder={t('ach.search')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-black/60 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-zinc-500 outline-none focus:border-[var(--accent-color)] font-sans"
@@ -255,7 +257,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {filtered.length === 0 ? (
               <div className="text-center py-12 text-zinc-500 text-xs">
-                No trophies matching this filter.
+                {t('ach.empty')}
               </div>
             ) : (
               filtered.map((ach) => {
@@ -311,7 +313,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
                       {ach.unlocked && ach.unlockDate && (
                         <div className="mt-1 text-[9.5px] font-mono text-zinc-400 flex items-center gap-1">
                           <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-                          <span>Unlocked: {ach.unlockDate}</span>
+                          <span>{t('ach.unlockedOn', { date: ach.unlockDate })}</span>
                         </div>
                       )}
                     </div>
@@ -325,8 +327,8 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
         /* Patch Notes & Updates View */
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
           <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-200">
-            <span className="font-semibold block mb-1">Official Steam Updates</span>
-            <span>Live balance changes, weapon tuning & DLC patch notes synced for {gameData?.name || 'this game'}.</span>
+            <span className="font-semibold block mb-1">{t('ach.steamUpdates')}</span>
+            <span>{t('ach.steamUpdatesBody', { game: gameData?.name || t('ach.thisGame') })}</span>
           </div>
 
           {patchNotes.map((note, idx) => (

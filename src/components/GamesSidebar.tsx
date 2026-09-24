@@ -19,6 +19,7 @@ import {
 import { GameTab, SteamGameData } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import pixelSceneUrl from '../pixel-scene.png';
+import { useT } from '../i18n';
 
 /** Short initials for a game tile, e.g. "Baldur's Gate 3" -> "BG3". */
 function initials(name: string): string {
@@ -79,6 +80,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
   onOpenFeedback,
   onSync,
 }) => {
+  const t = useT();
   const [showFontControl, setShowFontControl] = useState(false);
   const [tabToDelete, setTabToDelete] = useState<{id: string, name: string} | null>(null);
   const [contextMenu, setContextMenu] = useState<{tabId: string, x: number, y: number} | null>(null);
@@ -129,9 +131,9 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
       {/* Sidebar Header */}
       <div className="p-3.5 border-b border-white/[0.08] flex items-center justify-between bg-black/30">
         <div className="flex flex-col min-w-0">
-          <span className="font-fantasy font-bold text-sm text-white leading-tight">Your games</span>
+          <span className="font-fantasy font-bold text-sm text-white leading-tight">{t('side.title')}</span>
           <span className="text-[10px] text-zinc-400 font-mono uppercase">
-            {tabs.length === 0 ? 'None yet' : `${tabs.length} ${tabs.length === 1 ? 'compendium' : 'compendiums'}`}
+            {tabs.length === 0 ? t('side.none') : t(tabs.length === 1 ? 'side.count1' : 'side.countN', { n: tabs.length })}
           </span>
         </div>
 
@@ -142,8 +144,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
               playBlipSound(soundEnabled);
               onStartCreateTab();
             }}
-            title="New compendium"
-            aria-label="New compendium"
+            title={t('side.new')}
+            aria-label={t('side.new')}
             className="qc-px-bevel w-7 h-7 mr-1 rounded-lg bg-[var(--accent-color)] text-[#16101f] flex items-center justify-center hover:brightness-110 transition cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -152,8 +154,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           <button
             onClick={handleSyncClick}
             disabled={isSyncing}
-            title={isSyncing ? "Syncing tabs with cloud..." : syncSuccess ? "Synced with Cloud!" : "Sync with Cloud"}
-            aria-label="Sync with cloud"
+            title={isSyncing ? t('side.syncing') : syncSuccess ? t('side.synced') : t('side.sync')}
+            aria-label={t('side.sync')}
             className={`p-1.5 rounded-lg transition-all cursor-pointer ${
               syncSuccess 
                 ? 'text-emerald-400 bg-emerald-500/20' 
@@ -168,8 +170,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
               playBlipSound(soundEnabled);
               setShowFontControl(!showFontControl);
             }}
-            title="Tab Scale Slider"
-            aria-label="Text size"
+            title={t('side.textSize')}
+            aria-label={t('side.textSize')}
             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <span className="font-bold font-serif text-[15px] leading-none px-0.5">Aa</span>
@@ -180,7 +182,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
       {/* Font Size Slider Popout */}
       {showFontControl && (
         <div className="px-3.5 py-2 bg-black/60 border-b border-white/[0.08] flex items-center gap-2 text-xs text-zinc-400 animate-in fade-in duration-150">
-          <span className="text-[11px] font-medium">Text Scale:</span>
+          <span className="text-[11px] font-medium">{t('side.textScale')}</span>
           <input
             type="range"
             min="13"
@@ -259,7 +261,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                         {(isLive || game?.name) && (
                           <span className="text-[11px] text-zinc-500 truncate flex items-center gap-1.5 leading-tight mt-0.5">
                             {isLive && <span className="w-1.5 h-1.5 flex-shrink-0 bg-emerald-400 rounded-full animate-pulse" />}
-                            {isLive ? 'Playing now on Steam' : game?.name}
+                            {isLive ? t('side.playingNow') : game?.name}
                           </span>
                         )}
 
@@ -289,8 +291,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
 
         {tabs.length === 0 && (
           <div className="py-6 px-2 text-center text-zinc-500 text-xs flex flex-col items-center gap-1">
-            <span className="font-medium text-zinc-400">No Compendiums Active</span>
-            <span className="text-[11px] text-zinc-500">Create a tab below to start your journey</span>
+            <span className="font-medium text-zinc-400">{t('side.emptyTitle')}</span>
+            <span className="text-[11px] text-zinc-500">{t('side.emptySub')}</span>
           </div>
         )}
 
@@ -304,7 +306,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           className="w-full py-2.5 px-3 rounded-xl border border-dashed border-white/15 text-zinc-400 hover:text-[var(--accent-color)] hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-all flex items-center justify-center gap-2 text-xs font-semibold cursor-pointer group"
         >
           <Plus className="w-3.5 h-3.5 group-hover:scale-125 transition-transform" />
-          <span>Add New Compendium</span>
+          <span>{t('side.add')}</span>
         </button>
         )}
       </div>
@@ -327,10 +329,10 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
             onOpenGuides();
           }}
           className="h-9 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-[var(--accent-border)] text-zinc-200 transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold"
-          title="Guides & web browser"
+          title={t('side.guidesTitle')}
         >
           <Globe className="w-4 h-4 text-sky-400" />
-          Guides
+          {t('side.guides')}
         </button>
         <button
           onClick={() => {
@@ -339,10 +341,10 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
           }}
           disabled={!activeTabId}
           className="h-9 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-[var(--accent-border)] text-zinc-200 transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-          title={activeTabId ? 'Playthrough notes' : 'Open a compendium to use notes'}
+          title={activeTabId ? t('side.notesTitle') : t('side.notesDisabled')}
         >
           <FileText className="w-4 h-4 text-[var(--accent-color)]" />
-          Notes
+          {t('side.notes')}
         </button>
         <button
           onClick={() => {
@@ -350,8 +352,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
             onOpenSettings();
           }}
           className="p-2 rounded-xl bg-zinc-500/10 hover:bg-white/[0.06] border border-white/5 hover:border-white/10 text-zinc-400 hover:text-[var(--accent-color)] transition-all cursor-pointer shadow-sm"
-          title="Compendium Settings"
-          aria-label="Settings"
+          title={t('common.settings')}
+          aria-label={t('common.settings')}
         >
           <Settings className="w-5 h-5" />
         </button>
@@ -362,8 +364,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
             onOpenFeedback();
           }}
           className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 hover:border-amber-500/40 text-amber-400 transition-all cursor-pointer shadow-sm"
-          title="Submit Beta Feedback"
-          aria-label="Send beta feedback"
+          title={t('side.feedback')}
+          aria-label={t('side.feedback')}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
@@ -405,7 +407,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                 }}
               >
                 <FileText className="w-4 h-4 text-purple-400" />
-                Playthrough Notes
+                {t('side.menuNotes')}
               </button>
 
               <button 
@@ -418,7 +420,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                 }}
               >
                 <Target className="w-4 h-4 text-amber-400" />
-                Personal Quests
+                {t('side.menuQuests')}
               </button>
 
               <button 
@@ -429,7 +431,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                 }}
               >
                 <Edit3 className="w-4 h-4 text-zinc-400" />
-                Rename Tab
+                {t('side.menuRename')}
               </button>
               
               <button 
@@ -440,7 +442,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                 }}
               >
                 <Trash2 className="w-4 h-4" />
-                Delete Tab
+                {t('side.menuDelete')}
               </button>
             </div>
           </div>
@@ -461,17 +463,17 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
             className="bg-[#1a1a1a] border-2 border-red-500 p-5 rounded-lg flex flex-col gap-4 shadow-[4px_4px_0px_rgba(239,68,68,0.4)] min-w-[300px]"
             onClick={(e) => e.stopPropagation()}
           >
-            <label className="font-fantasy text-red-500 text-xl tracking-wide">Delete Compendium?</label>
+            <label className="font-fantasy text-red-500 text-xl tracking-wide">{t('side.deleteTitle')}</label>
             <p className="text-zinc-300 text-sm">
-              Are you sure you want to delete <strong className="text-white">"{tabToDelete.name}"</strong>?<br/>
-              This action cannot be undone.
+              {t('side.deleteBody', { name: tabToDelete.name })}<br/>
+              {t('side.deleteWarn')}
             </p>
             <div className="flex justify-end gap-2.5 mt-2">
               <button 
                 onClick={() => setTabToDelete(null)}
                 className="bg-transparent border border-red-500 text-red-500 px-4 py-1.5 rounded font-fantasy text-lg font-bold cursor-pointer hover:bg-red-500/10"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button 
                 onClick={() => {
@@ -480,7 +482,7 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                 }}
                 className="bg-red-500 text-white border-none px-4 py-1.5 rounded font-fantasy text-lg font-bold cursor-pointer hover:bg-red-600"
               >
-                Delete
+                {t('common.delete')}
               </button>
             </div>
           </div>

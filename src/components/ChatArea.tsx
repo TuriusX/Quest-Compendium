@@ -34,11 +34,10 @@ import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
 import { getApiBaseUrl, DEFAULT_PREVIEW_URL } from '../utils/api';
 import { auth } from '../lib/firebase';
 import { playSnapSound, playChimeSound, playBlipSound } from '../utils/audio';
+import { useT } from '../i18n';
 
-const PERSONA_LABELS: Record<string, string> = { standard: 'Standard', roleplay: 'Roleplay', minmax: 'Min-Max' };
-
-/** Quick follow-ups offered under the latest answer (sent as a normal question). */
-const FOLLOW_UPS = ['Explain that more simply', 'What should I do next?', 'Anything missable here?'];
+/** Quick follow-ups offered under the latest answer (sent as a normal question, in the user's language). */
+const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3'];
 
 interface ChatAreaProps {
   activeTab: GameTab | null;
@@ -75,6 +74,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   fontMenuOpen,
   onToggleFontMenu,
 }) => {
+  const t = useT();
   const [inputQuestion, setInputQuestion] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [preferredModel, setPreferredModel] = useState<'pro' | 'flash'>('pro');
@@ -188,7 +188,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         reader.onloadend = () => {
           const base64Audio = reader.result as string;
           // Automatically send the voice note
-          onSendMessage("Voice Message", finalImage || undefined, base64Audio);
+          onSendMessage(t('chat.voiceMessage'), finalImage || undefined, base64Audio);
           setAttachedImage(null);
           attachedImageRef.current = null;
           setInputQuestion('');
@@ -218,11 +218,24 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     else startVoiceRecording();
   };
 
+  // Controller: a question picked from the quick-questions list or typed on the on-screen keyboard.
+  const handleControllerAsk = (e: Event) => {
+    const text = (e as CustomEvent).detail?.text;
+    if (typeof text === 'string' && text.trim() && !isLoading) {
+      setInputQuestion('');
+      handleSubmit(undefined, text.trim());
+    }
+  };
+  const handleControllerInput = (e: Event) => {
+    const text = (e as CustomEvent).detail?.text;
+    if (typeof text === 'string') setInputQuestion(text);
+  };
+
   const handleAutoScreenshotSubmit = async () => {
     if (isLoading) return;
     // Overriding the question to prompt the AI to examine the picture
     // And leaving the image undefined will trigger the auto-screenshot flow in handleSubmit
-    await handleSubmit(undefined, "Please reference this picture", undefined);
+    await handleSubmit(undefined, t('chat.referencePicture'), undefined);
   };
 
   useEffect(() => {
@@ -230,11 +243,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     window.addEventListener('trigger-voice-stop', stopVoiceRecording);
     window.addEventListener('trigger-voice-record', toggleVoiceRecording);
     window.addEventListener('trigger-auto-screenshot-submit', handleAutoScreenshotSubmit);
+    window.addEventListener('qc-ask', handleControllerAsk);
+    window.addEventListener('qc-set-input', handleControllerInput);
     return () => {
       window.removeEventListener('trigger-voice-start', startVoiceRecording);
       window.removeEventListener('trigger-voice-stop', stopVoiceRecording);
       window.removeEventListener('trigger-voice-record', toggleVoiceRecording);
       window.removeEventListener('trigger-auto-screenshot-submit', handleAutoScreenshotSubmit);
+      window.removeEventListener('qc-ask', handleControllerAsk);
+      window.removeEventListener('qc-set-input', handleControllerInput);
     };
   }, [isRecording, soundEnabled, attachedImage, onSendMessage, inputQuestion, isLoading]);
 
@@ -419,9 +436,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     // Default question if they submitted an image without any text
     if (!finalQuestion && finalImage) {
-      finalQuestion = "Please analyze this game screenshot and provide helpful tips, secrets, or current objectives.";
+      finalQuestion = t('chat.defaultShotQ');
     } else if (!finalQuestion) {
-      finalQuestion = "What should I do here? Please provide gameplay tips, secrets, or next steps.";
+      finalQuestion = t('chat.defaultQ');
     }
 
     setInputQuestion('');
@@ -745,34 +762,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   };
 
   const gamePrompts = [
-    { 
-      title: 'Boss Mechanics & Vulnerabilities',
-      desc: 'Phase triggers, attack patterns, parry timings & element weaknesses',
-      icon: Sword,
-      color: 'text-rose-400',
-      query: 'Analyze the current boss or major encounter: provide attack phases, dodge windows, weakness types, and recommended counters.' 
-    },
-    { 
-      title: 'World Navigation & Checkpoints',
-      desc: 'Optimal routing, nearest safe havens, and fast-travel landmarks',
-      icon: Compass,
-      color: 'text-cyan-400',
-      query: 'Where should I head next in this zone? What are the key checkpoints, shortcuts, and safe bonfires / sites nearby?' 
-    },
-    { 
-      title: 'Build Synergy & Gear Scaling',
-      desc: 'Optimal stat thresholds, weapon affinities, and talisman loadouts',
-      icon: Shield,
-      color: 'text-emerald-400',
-      query: 'What is the most effective stat allocation, weapon scaling, and gear synergy for this build archetype and current stage?' 
-    },
-    { 
-      title: 'Cryptic Puzzles & Missable Secrets',
-      desc: 'Dungeon riddles, hidden illusory walls, and quest branches',
-      icon: Key,
-      color: 'text-amber-400',
-      query: 'Are there any missable questlines, hidden illusory walls, or rare secret items in my current area?' 
-    },
+    { title: t('chat.p1.title'), desc: t('chat.p1.desc'), icon: Sword, color: 'text-rose-400', query: t('chat.p1.q') },
+    { title: t('chat.p2.title'), desc: t('chat.p2.desc'), icon: Compass, color: 'text-cyan-400', query: t('chat.p2.q') },
+    { title: t('chat.p3.title'), desc: t('chat.p3.desc'), icon: Shield, color: 'text-emerald-400', query: t('chat.p3.q') },
+    { title: t('chat.p4.title'), desc: t('chat.p4.desc'), icon: Key, color: 'text-amber-400', query: t('chat.p4.q') },
   ];
 
   const questionCount = activeTab?.messages?.filter((m) => m.role === 'user').length ?? 0;
@@ -792,12 +785,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <div className="flex items-baseline gap-2.5 min-w-0">
             <span className="font-fantasy font-bold text-sm text-white truncate">{activeTab.name}</span>
             <span className="hidden sm:inline text-[11px] text-zinc-500 truncate">
-              {[activeGame?.name || activeTab.activeSteamGame?.name, `${PERSONA_LABELS[aiMode] ?? 'Standard'} persona`].filter(Boolean).join(' · ')}
+              {[activeGame?.name || activeTab.activeSteamGame?.name, t('chat.personaLabel', { name: t(`chat.persona.${aiMode}`) })].filter(Boolean).join(' · ')}
             </span>
           </div>
           {questionCount > 0 && (
             <span className="text-[10px] font-mono uppercase text-zinc-500 flex-shrink-0">
-              {questionCount} {questionCount === 1 ? 'question' : 'questions'}
+              {t(questionCount === 1 ? 'chat.q1' : 'chat.qN', { n: questionCount })}
             </span>
           )}
         </div>
@@ -806,6 +799,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {/* Messages List Area */}
       <div 
         ref={chatContainerRef}
+        data-qc-scroll
         className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6"
       >
         {(!activeTab?.messages || activeTab.messages.length === 0) ? (
@@ -823,8 +817,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 QUEST COMPENDIUM <span className="text-[var(--accent-color)]">HUD</span>
               </h2>
               <p className="text-xs sm:text-sm text-zinc-400 font-sans leading-relaxed max-w-lg">
-                Your dedicated AI companion for <strong className="text-white font-semibold">{activeGame?.name || activeTab?.name || 'PC Gaming'}</strong>. 
-                Snap your screen to analyze puzzles, optimize stat synergies, or conquer legendary boss encounters.
+                {t('chat.heroIntro', { game: activeGame?.name || activeTab?.name || t('chat.heroGameFallback') })}
               </p>
             </div>
 
@@ -862,9 +855,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11px]">
                 <Camera className="w-3 h-3 text-[var(--accent-color)]" />
                 {typeof window !== 'undefined' && (window as any).electronAPI ? (
-                  <span>Your screen is captured automatically when you ask a question.</span>
+                  <span>{t('chat.heroAuto')}</span>
                 ) : (
-                  <span>Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded font-bold text-white">Ctrl + V</kbd> to paste game screenshots directly</span>
+                  <span>{t('chat.heroPastePre')} <kbd className="px-1.5 py-0.5 bg-white/10 rounded font-bold text-white">Ctrl + V</kbd> {t('chat.heroPastePost')}</span>
                 )}
               </span>
             </div>
@@ -899,7 +892,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       <div className="w-5 h-5 rounded-md bg-[var(--accent-dim)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-color)]">
                         <Sparkles className="w-3 h-3" />
                       </div>
-                      <span className="font-fantasy font-bold text-zinc-200">Compendium</span>
+                      <span className="font-fantasy font-bold text-zinc-200">{t('chat.compendium')}</span>
                       <span className="px-1.5 py-0.2 rounded bg-white/10 text-[9.5px] text-zinc-400">
                         {msg.modelUsed || 'GEMINI'}
                       </span>
@@ -919,7 +912,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {!isUser && msg.bannerImageUrl && (
                     <div 
                       onClick={() => onOpenScreenModal(msg.bannerImageUrl!)}
-                      title="Click to view full high-res artwork"
+                      title={t('chat.viewArt')}
                       className="mb-4 rounded-xl overflow-hidden border border-white/10 shadow-lg relative w-full bg-black/70 group cursor-pointer flex items-center justify-center min-h-[160px] max-h-[500px]"
                     >
                       {/* Ambient blurred backdrop for ultrawide bubbles */}
@@ -939,20 +932,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       />
                       <div className="absolute top-2.5 right-2.5 z-20 opacity-0 group-hover:opacity-100 transition-opacity bg-black/75 hover:bg-black/90 backdrop-blur-md text-white text-[11px] font-medium px-2.5 py-1 rounded-lg border border-white/20 shadow-md flex items-center gap-1.5 pointer-events-none">
                         <Maximize2 className="w-3 h-3 text-purple-300" />
-                        <span>View Full Art</span>
+                        <span>{t('chat.viewArt')}</span>
                       </div>
                     </div>
                   )}
                   {msg.imageUrl && (
                     <div 
                       onClick={() => onOpenScreenModal(msg.imageUrl!)}
-                      title="Click to inspect screenshot"
+                      title={t('chat.inspectShot')}
                       className="mb-3 rounded-lg overflow-hidden border border-white/[0.06] shadow-md group relative cursor-pointer"
                     >
                       <img src={msg.imageUrl} alt="Attached" className="max-w-full h-auto rounded-lg max-h-60 object-contain transition-transform duration-300 group-hover:opacity-90" />
                       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-[10px] px-2 py-0.5 rounded border border-white/10 flex items-center gap-1">
                         <Maximize2 className="w-2.5 h-2.5 text-purple-300" />
-                        <span>Expand</span>
+                        <span>{t('chat.expand')}</span>
                       </div>
                     </div>
                   )}
@@ -979,7 +972,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         {/* Audio TTS button with animated wave indicator / stop control */}
                         <button
                           onClick={() => handlePlayTTS(msg.id, msg.text)}
-                          title={isAudioPlaying ? "Click to Stop Narration" : "Read Aloud (Gemini Studio Voice)"}
+                          title={isAudioPlaying ? t('chat.stopNarration') : t('chat.readAloud')}
                           className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-xs font-medium ${
                             isAudioPlaying 
                               ? 'text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.3)] hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40' 
@@ -990,7 +983,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             audioLoadingId === msg.id ? (
                               <>
                                 <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                                <span className="text-[10px] font-mono">Generating...</span>
+                                <span className="text-[10px] font-mono">{t('chat.generating')}</span>
                               </>
                             ) : (
                               <>
@@ -1001,13 +994,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                   <span className="w-0.5 bg-emerald-400 rounded-full animate-soundwave-3" />
                                   <span className="w-0.5 bg-emerald-400 rounded-full animate-soundwave-4" />
                                 </div>
-                                <span className="text-[10px] font-mono">Stop</span>
+                                <span className="text-[10px] font-mono">{t('chat.stop')}</span>
                               </>
                             )
                           ) : (
                             <>
                               <Volume2 className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline text-[11px]">Listen</span>
+                              <span className="hidden sm:inline text-[11px]">{t('chat.listen')}</span>
                             </>
                           )}
                         </button>
@@ -1015,7 +1008,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         {/* Save to Notes Button */}
                         <button
                           onClick={() => handleSaveToNotes(msg.id, msg.text)}
-                          title="Append this strategy to Playthrough Notes"
+                          title={t('chat.saveTitle')}
                           className="px-2 py-1 rounded-lg text-zinc-400 hover:text-purple-300 hover:bg-white/10 transition-colors cursor-pointer flex items-center gap-1"
                         >
                           {isNoteSaved ? (
@@ -1023,14 +1016,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           ) : (
                             <BookmarkPlus className="w-3.5 h-3.5" />
                           )}
-                          <span className="hidden sm:inline text-[11px]">{isNoteSaved ? 'Saved to notes' : 'Save to notes'}</span>
+                          <span className="hidden sm:inline text-[11px]">{isNoteSaved ? t('chat.saved') : t('chat.save')}</span>
                         </button>
 
                         {/* Copy button */}
                         <button
                           onClick={() => handleCopyMessage(msg.id, msg.text)}
-                          title="Copy Answer to Clipboard"
-                          aria-label="Copy answer"
+                          title={t('chat.copy')}
+                          aria-label={t('chat.copy')}
                           className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                         >
                           {copiedMessageId === msg.id ? (
@@ -1063,7 +1056,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 {/* Suggested follow-ups under the latest answer */}
                 {!isUser && msg.id === lastAssistantId && !isLoading && (
                   <div className="mt-2.5 flex flex-wrap gap-2 max-w-[94%] sm:max-w-[88%]">
-                    {FOLLOW_UPS.map((f) => (
+                    {FOLLOW_UP_KEYS.map((key) => t(key)).map((f) => (
                       <button
                         key={f}
                         type="button"
@@ -1100,7 +1093,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </svg>
             </div>
             <span className="qc-keep-anim font-fantasy font-bold text-xs text-[var(--accent-color)] tracking-wide animate-pulse mt-1">
-              Consulting the Quest Compendium...
+              {t('chat.consulting')}
             </span>
           </div>
         )}
@@ -1111,22 +1104,22 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <div className="px-4 py-2.5 bg-[#12131c]/95 border-t border-white/10 flex items-center justify-between backdrop-blur-2xl">
           <div className="flex items-center gap-3">
             <div className="relative rounded-lg overflow-hidden border border-[var(--accent-border)] w-12 h-12 flex-shrink-0 shadow-md">
-              <img src={attachedImage} alt="Attached screenshot" className="w-full h-full object-cover" />
+              <img src={attachedImage} alt={t('chat.shotAlt')} className="w-full h-full object-cover" />
             </div>
             <div className="flex flex-col">
               <span className="text-xs font-semibold text-white flex items-center gap-1.5">
                 <Camera className="w-3.5 h-3.5 text-[var(--accent-color)]" />
-                Game Screenshot Attached
+                {t('chat.shotAttached')}
               </span>
-              <span className="text-[11px] text-zinc-400">Ready for Gemini Multimodal Vision analysis</span>
+              <span className="text-[11px] text-zinc-400">{t('chat.shotReady')}</span>
             </div>
           </div>
 
           <button
             onClick={() => setAttachedImage(null)}
             className="p-1.5 rounded-lg bg-white/10 hover:bg-red-500/20 text-zinc-400 hover:text-red-300 transition-colors cursor-pointer"
-            title="Remove Screenshot"
-            aria-label="Remove screenshot"
+            title={t('chat.removeShot')}
+            aria-label={t('chat.removeShot')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -1137,6 +1130,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       <form onSubmit={handleSubmit} className="p-3 sm:p-4 bg-[#0a0b10]/90 border-t border-white/[0.08] backdrop-blur-2xl">
         <div className="relative flex items-center rounded-2xl bg-[#13141d] border border-white/15 focus-within:border-[var(--accent-color)] focus-within:shadow-[0_0_20px_var(--accent-glow)] transition-all shadow-lg">
           <textarea
+            data-qc-ask-input
             value={inputQuestion}
             onChange={(e) => setInputQuestion(e.target.value)}
             onPaste={handleTextareaPaste}
@@ -1148,12 +1142,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             }}
             placeholder={
               isRecording 
-                ? "Listening to your inquiry..." 
+                ? t('chat.listening') 
                 : attachedImage 
-                  ? "Ask about this screenshot (e.g., puzzle answer, optimal route, stat comparison)..." 
+                  ? t('chat.askShot') 
                   : gameLabel
-                    ? `Ask about ${gameLabel}…`
-                    : "Ask the Compendium..."
+                    ? t('chat.askGame', { game: gameLabel })
+                    : t('chat.ask')
             }
             rows={1}
             className="flex-1 max-h-48 min-h-[72px] py-4 pl-4 pr-4 sm:pr-4 pb-14 bg-transparent text-white outline-none resize-none"
@@ -1189,11 +1183,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 captureGameScreen();
               }}
               disabled={isLoading || isCapturingScreen}
-              aria-label="Attach a game screenshot"
+              aria-label={t('chat.attachShot')}
               title={
                 typeof window !== 'undefined' && (window as any).electronAPI
-                  ? "Snap Game Screenshot (Click to preview & attach)"
-                  : "Attach Game Screenshot (or paste with Ctrl+V)"
+                  ? t('chat.snapTitle')
+                  : t('chat.attachTitle')
               }
               className={`p-2 rounded-xl transition-all cursor-pointer ${
                 isCapturingScreen
@@ -1214,8 +1208,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <button
               type="button"
               onClick={toggleVoiceRecording}
-              title={isRecording ? "Stop Voice Recording" : "Voice Input (Push to Talk)"}
-              aria-label={isRecording ? "Stop voice recording" : "Ask with your voice"}
+              title={isRecording ? t('chat.stopVoice') : t('chat.voice')}
+              aria-label={isRecording ? t('chat.stopVoice') : t('chat.voice')}
               className={`p-2 rounded-xl transition-all cursor-pointer ${
                 isRecording
                   ? 'bg-red-500/25 text-red-300 border border-red-500/40 animate-pulse shadow-[0_0_14px_rgba(239,68,68,0.5)]'
@@ -1233,8 +1227,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   playBlipSound(soundEnabled);
                   onToggleFontMenu();
                 }}
-                title="Font & Typography Settings"
-                aria-label="Font settings"
+                title={t('chat.fontSettings')}
+                aria-label={t('chat.fontSettings')}
                 className={`p-2 rounded-xl transition-all cursor-pointer ${
                   fontMenuOpen 
                     ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
@@ -1246,7 +1240,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             )}
 
             {/* Model switch: Pro (smarter) or Flash (faster) */}
-            <div role="group" aria-label="AI model" className="flex items-center p-0.5 rounded-xl bg-white/[0.05] border border-white/10">
+            <div role="group" aria-label={t('chat.model')} className="flex items-center p-0.5 rounded-xl bg-white/[0.05] border border-white/10">
               {(['pro', 'flash'] as const).map((m) => (
                 <button
                   key={m}
@@ -1256,7 +1250,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     playBlipSound(soundEnabled);
                     setPreferredModel(m);
                   }}
-                  title={m === 'pro' ? 'Gemini Pro: smarter, uses your Pro questions' : 'Gemini Flash: faster'}
+                  title={m === 'pro' ? t('chat.proTitle') : t('chat.flashTitle')}
                   className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${
                     preferredModel === m
                       ? m === 'pro'
@@ -1273,7 +1267,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             {/* Submit Send Button */}
             <button
               type="submit"
-              aria-label="Send question"
+              aria-label={t('chat.send')}
               disabled={
                 (!inputQuestion.trim() && !attachedImage && !(typeof window !== 'undefined' && (window as any).electronAPI)) ||
                 isLoading ||
@@ -1281,10 +1275,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               }
               title={
                 isCapturingScreen
-                  ? "Snapping screen..."
+                  ? t('chat.snapping')
                   : !inputQuestion.trim() && !attachedImage && typeof window !== 'undefined' && (window as any).electronAPI
-                    ? "Snap game screenshot & consult Compendium"
-                    : "Consult Compendium"
+                    ? t('chat.snapSend')
+                    : t('chat.send')
               }
               className="qc-px-bevel p-2.5 rounded-xl bg-[var(--accent-color)] text-black font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-[0_0_12px_var(--accent-glow)] flex items-center justify-center"
             >
@@ -1297,7 +1291,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         </div>
         <div className="mt-2 text-center text-[10px] font-mono uppercase text-zinc-500">
-          {isDesktopApp ? 'Ctrl + Shift + S screenshots your game and asks' : 'Press Ctrl + V to paste a screenshot'}
+          {isDesktopApp ? t('chat.hintDesktop') : t('chat.hintWeb')}
         </div>
       </form>
 

@@ -93,6 +93,7 @@ const { app, BrowserWindow, ipcMain, shell, globalShortcut, screen, desktopCaptu
 app.setName('Quest Compendium');
 const path = require('path');
 const { spawn } = require('child_process');
+const { createControllerService } = require('./controller.cjs');
 const http = require('http');
 
 const isDev = !app.isPackaged;
@@ -264,6 +265,7 @@ app.commandLine.appendSwitch('allow-file-access-from-files');
 app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 let isAppVisible = true;
+let controllerService = null;
 let currentDockPosition = "top-right";
 let animationInterval = null;
 
@@ -469,6 +471,24 @@ app.whenReady().then(() => {
     createWindow();
   }
 
+  // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
+  // overlay with the controller while it's visible. See controller.cjs.
+  controllerService = createControllerService({
+    isVisible: () => !!mainWindow && !mainWindow.isDestroyed() && isAppVisible && mainWindow.isVisible(),
+    onToggle: () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      if (isAppVisible) {
+        slideOut();
+      } else {
+        slideIn();
+        mainWindow.webContents.send('controller-activated');
+      }
+    },
+    onInput: (evt) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-input', evt);
+    },
+  });
+
   // Register default hotkey
   globalShortcut.register('CommandOrControl+Space', () => {
     if (isAppVisible) {
@@ -538,6 +558,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  if (controllerService) controllerService.stop();
   globalShortcut.unregisterAll();
 });
 
@@ -731,6 +752,12 @@ ipcMain.on('set-dock-position', (event, pos) => {
     }
   }
 });
+
+ipcMain.on('set-controller-config', (event, cfg) => {
+  if (controllerService) controllerService.setConfig(cfg || {});
+});
+
+ipcMain.handle('get-controller-status', async () => ({ available: !!(controllerService && controllerService.available) }));
 
 ipcMain.on('toggle-slide', () => {
   if (isAppVisible) {

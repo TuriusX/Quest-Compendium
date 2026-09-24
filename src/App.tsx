@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { BookOpen, Plus, Sparkles, Gamepad2, Search, Camera, Mic, Moon, FileText } from './components/icons';
+import { BookOpen, Plus, Sparkles, Gamepad2, Search, Camera, Mic, Moon, FileText, Globe } from './components/icons';
 import { 
   GameTab, 
   SteamGameData, 
@@ -30,6 +30,8 @@ import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
 import { useCloudSync } from './hooks/useCloudSync';
 import { recordTombstone } from './hooks/tabMerge';
 import pixelSceneUrl from './pixel-scene.png';
+import { LOCALES, aiLanguageName, applyLocale, detectLocale, translate, useT } from './i18n';
+import { ControllerLayer } from './components/ControllerLayer';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -48,6 +50,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
   enableThematicBanners: true,
   uiStyle: 'lofi',
+  language: detectLocale(),
+  controllerEnabled: true,
+  controllerToggle: 'back+start',
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
@@ -152,7 +157,8 @@ function SettingsStandalone() {
     document.documentElement.style.setProperty('--accent-border', t.border);
     document.documentElement.style.setProperty('--accent-glow', t.glow);
     applyUiStyle(settings.uiStyle, t.color);
-  }, [settings.uiStyle, settings.theme]);
+    applyLocale(settings.language);
+  }, [settings.uiStyle, settings.theme, settings.language]);
 
   return (
     <div className="w-screen h-screen bg-[#0c0d14] text-zinc-100 overflow-auto">
@@ -169,6 +175,7 @@ function SettingsStandalone() {
 }
 
 export default function App() {
+  const tr = useT();
   if (window.location.hash === '#settings') {
     return <Suspense fallback={<div className="w-screen h-screen bg-[#0c0d14]" />}><SettingsStandalone /></Suspense>;
   }
@@ -488,6 +495,27 @@ export default function App() {
     settings.autoScreenshotShortcut
   ]);
 
+  // Controller: tell the desktop app which chord shows / hides the overlay.
+  useEffect(() => {
+    (window as any).electronAPI?.setControllerConfig?.({
+      enabled: settings.controllerEnabled !== false,
+      chord: settings.controllerToggle || 'back+start',
+    });
+  }, [settings.controllerEnabled, settings.controllerToggle]);
+
+  // Controller: LB / RB switch between compendiums.
+  useEffect(() => {
+    const onSwitch = (e: Event) => {
+      const delta = (e as CustomEvent).detail?.delta ?? 0;
+      if (!tabs.length || !delta) return;
+      const i = Math.max(0, tabs.findIndex((tab) => tab.id === activeTabId));
+      const next = tabs[(i + delta + tabs.length) % tabs.length];
+      if (next && next.id !== activeTabId) setActiveTabId(next.id);
+    };
+    window.addEventListener('qc-switch-tab', onSwitch);
+    return () => window.removeEventListener('qc-switch-tab', onSwitch);
+  }, [tabs, activeTabId]);
+
   useEffect(() => {
     if ((window as any).electronAPI?.onTriggerVoiceInputStart) {
       (window as any).electronAPI.onTriggerVoiceInputStart(() => {
@@ -541,7 +569,8 @@ export default function App() {
     };
     root.setProperty('--chat-font-family', fonts[settings.chatFont] || fonts.segoe);
     applyUiStyle(settings.uiStyle, t.color);
-  }, [settings.theme, settings.windowOpacity, settings.tabFontSize, settings.chatFontSize, settings.chatFont, settings.uiStyle]);
+    applyLocale(settings.language);
+  }, [settings.theme, settings.windowOpacity, settings.tabFontSize, settings.chatFontSize, settings.chatFont, settings.uiStyle, settings.language]);
 
   // Handle Steam Auth Return
   useEffect(() => {
@@ -929,7 +958,8 @@ export default function App() {
           } : null,
           achievements: activeGame?.achievements || [],
           news: activeGame?.patchNotes || [],
-          generateBanner: settings.enableThematicBanners !== false
+          generateBanner: settings.enableThematicBanners !== false,
+          language: aiLanguageName(settings.language)
         }),
       });
       clearTimeout(timeoutId);
@@ -1113,7 +1143,7 @@ export default function App() {
         {
           id: `msg-${Date.now()}`,
           role: 'assistant',
-          text: `A new session has begun! The Compendium is ready to analyze your screen, track achievements, and guide your quest.`,
+          text: translate('chat.newSession'),
           timestamp: Date.now(),
           modelUsed: 'Gemini 3.1 Pro Preview'
         }
@@ -1377,10 +1407,24 @@ export default function App() {
             ) : tabs.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center bg-[#07070b] crt-grid p-4 sm:p-6 overflow-y-auto">
                  <div className="w-full max-w-lg flex flex-col items-center gap-5 text-center animate-in fade-in zoom-in-95 duration-200">
+                   {/* Language: changes the interface and the language the AI answers in */}
+                   <label className="self-end flex items-center gap-2 text-[11px] text-zinc-400">
+                     <Globe className="w-3.5 h-3.5 text-[var(--accent-color)]" />
+                     <span className="sr-only">{tr('welcome.language')}</span>
+                     <select
+                       value={settings.language ?? 'en'}
+                       onChange={(e) => { const language = e.target.value as AppSettings['language']; setSettings((s) => ({ ...s, language })); }}
+                       className="bg-[#13141d] border border-white/15 rounded-lg px-2 py-1 text-xs text-zinc-200 outline-none focus:border-[var(--accent-border)] cursor-pointer"
+                     >
+                       {LOCALES.map((l) => (
+                         <option key={l.id} value={l.id}>{l.label}</option>
+                       ))}
+                     </select>
+                   </label>
                    {/* Welcome art */}
                    <img
                      src={pixelSceneUrl}
-                     alt="A cozy pixel-art desk at night: a black cat on the windowsill under a crescent moon, a steaming mug, an open spellbook with a glowing gem, and a lit candle."
+                     alt={tr('welcome.sceneAlt')}
                      className="qc-lofi-only w-full max-w-[384px] h-auto border-2 border-[var(--accent-border)] shadow-[6px_6px_0_rgba(0,0,0,0.6)]"
                      style={{ imageRendering: 'pixelated', aspectRatio: '8 / 5' }}
                    />
@@ -1389,9 +1433,9 @@ export default function App() {
                    </div>
 
                    <div className="space-y-2">
-                     <h2 className="text-2xl font-fantasy font-bold text-white tracking-wide">Start your first compendium</h2>
+                     <h2 className="text-2xl font-fantasy font-bold text-white tracking-wide">{tr('welcome.title')}</h2>
                      <p className="text-xs sm:text-sm text-zinc-400 max-w-sm mx-auto leading-relaxed">
-                       One per playthrough: your AI answers, notes and quest checklist in one place, synced across your devices.
+                       {tr('welcome.body')}
                      </p>
                    </div>
 
@@ -1407,7 +1451,7 @@ export default function App() {
                        <div className="flex-1 min-w-0">
                          <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase text-emerald-400">
                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-                           Running on Steam
+                           {tr('welcome.running')}
                          </div>
                          <div className="font-fantasy font-bold text-base text-white truncate">{globalActiveGame.name}</div>
                        </div>
@@ -1416,7 +1460,7 @@ export default function App() {
                          className="qc-px-bevel flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[var(--accent-color)] hover:brightness-110 text-[#16101f] font-bold text-xs transition cursor-pointer"
                        >
                          <Plus className="w-3.5 h-3.5" />
-                         Start compendium
+                         {tr('welcome.start')}
                        </button>
                      </div>
                    )}
@@ -1425,7 +1469,7 @@ export default function App() {
                    <div className="w-full space-y-2.5">
                      <div className="flex items-center gap-3 text-[10px] font-mono uppercase text-zinc-500">
                        <span className="flex-1 h-px bg-white/[0.08]" />
-                       {globalActiveGame ? 'or pick a game' : 'pick a game'}
+                       {globalActiveGame ? tr('welcome.orPick') : tr('welcome.pick')}
                        <span className="flex-1 h-px bg-white/[0.08]" />
                      </div>
                      <button
@@ -1433,7 +1477,7 @@ export default function App() {
                        className="w-full h-11 flex items-center gap-2.5 px-3.5 rounded-xl bg-[#13141d] border border-white/15 hover:border-[var(--accent-border)] text-left text-sm text-zinc-500 hover:text-zinc-300 transition cursor-pointer"
                      >
                        <Search className="w-4 h-4 text-zinc-500" />
-                       Search your Steam library or any game
+                       {tr('welcome.search')}
                      </button>
                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                        {POPULAR_STEAM_GAMES.slice(0, 4).map((game) => (
@@ -1450,7 +1494,7 @@ export default function App() {
                        onClick={() => handleStartCreateTab()}
                        className="text-[11px] text-zinc-500 hover:text-[var(--accent-color)] underline-offset-2 hover:underline cursor-pointer"
                      >
-                       Or start a blank compendium
+                       {tr('welcome.blank')}
                      </button>
                    </div>
 
@@ -1458,12 +1502,12 @@ export default function App() {
                    <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
                      {[
                        isDesktop
-                         ? { icon: Camera, title: 'Screenshot & ask', text: `${prettyShortcut(settings.autoScreenshotShortcut)} sends what's on screen.` }
-                         : { icon: Camera, title: 'Paste a screenshot', text: 'Ctrl + V drops a game screenshot into your question.' },
-                       { icon: Mic, title: 'Ask out loud', text: isDesktop ? `${prettyShortcut(settings.voiceInputShortcut)} to speak a question.` : 'Tap the mic to speak a question.' },
+                         ? { icon: Camera, title: tr('welcome.tipShot'), text: tr('welcome.tipShotText', { keys: prettyShortcut(settings.autoScreenshotShortcut) }) }
+                         : { icon: Camera, title: tr('welcome.tipPaste'), text: tr('welcome.tipPasteText') },
+                       { icon: Mic, title: tr('welcome.tipVoice'), text: isDesktop ? tr('welcome.tipVoiceDesktop', { keys: prettyShortcut(settings.voiceInputShortcut) }) : tr('welcome.tipVoiceWeb') },
                        isDesktop
-                         ? { icon: Moon, title: 'Hide anytime', text: `${prettyShortcut(settings.hideAppShortcut)} slides the window away.` }
-                         : { icon: FileText, title: 'Take notes', text: 'Save answers to your playthrough notes.' },
+                         ? { icon: Moon, title: tr('welcome.tipHide'), text: tr('welcome.tipHideText', { keys: prettyShortcut(settings.hideAppShortcut) }) }
+                         : { icon: FileText, title: tr('welcome.tipNotes'), text: tr('welcome.tipNotesText') },
                      ].map((tip) => {
                        const Icon = tip.icon;
                        return (
@@ -1584,6 +1628,9 @@ export default function App() {
           onClose={() => setIsPaywallOpen(false)} 
         />
       )}
+
+      {/* Controller support: focus navigation, quick questions, on-screen keyboard, button hints */}
+      <ControllerLayer enabled={settings.controllerEnabled !== false} />
 
       {/* Quick Game Search & Switcher Modal */}
       <QuickGameSearchModal

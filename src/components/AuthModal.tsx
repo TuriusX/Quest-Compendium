@@ -4,6 +4,7 @@ import { MagicalBookIcon } from './MagicalBookIcon';
 import { signInWithGoogle, signInWithGoogleRedirect, auth } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { DEFAULT_PREVIEW_URL } from '../utils/api';
+import { useT } from '../i18n';
 
 interface AuthModalProps {
   onSignInSuccess: () => void;
@@ -12,6 +13,7 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMessage, onClose }) => {
+  const t = useT();
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(initialMessage || null);
   const isEmbedded = typeof window !== 'undefined' && window.self !== window.top;
@@ -73,20 +75,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
       const errMsg = error?.message || '';
 
       if (errCode === 'auth/popup-blocked') {
-        setErrorMessage('The sign-in popup was blocked by your browser. Please allow popups or try the redirect option below.');
+        setErrorMessage(t('auth.err.popupBlocked'));
       } else if (errCode === 'auth/unauthorized-domain') {
         setErrorMessage('Domain not authorized in Firebase Console > Authentication > Settings > Authorized domains. You can continue as Guest or use the redirect option.');
       } else if (errCode === 'auth/popup-closed-by-user') {
-        setErrorMessage('The sign-in window was closed. Click below to try again.');
+        setErrorMessage(t('auth.err.closed'));
       } else if (errCode === 'auth/network-request-failed') {
-        setErrorMessage('Connection or cookie issue detected. Try allowing third-party cookies or use the redirect option below.');
+        setErrorMessage(t('auth.err.network'));
       } else if (errCode === 'auth/argument-error') {
-        setErrorMessage('Popup authentication was blocked by browser security. Please use the "Try Redirect Sign-in" option below.');
+        setErrorMessage(t('auth.err.argument'));
       } else {
         setErrorMessage(
           errMsg
             ? `Sign-in error: ${errMsg}`
-            : 'Could not sign in with Google. Please try again or continue as Guest.'
+            : t('auth.err.generic')
         );
       }
       setLoading(false);
@@ -112,7 +114,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
           <button
             onClick={onClose}
             className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
-            title="Close"
+            title={t('common.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -122,7 +124,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
           QUEST COMPENDIUM
         </h2>
         <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
-          Your personal AI gaming companion for quest walkthroughs, lore lookups, and boss strategies.
+          {t('auth.tagline')}
         </p>
 
         {errorMessage && (
@@ -139,7 +141,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold py-3.5 px-6 rounded-xl shadow-[0_0_20px_rgba(147,51,234,0.3)] hover:shadow-[0_0_25px_rgba(147,51,234,0.5)] transition-all transform active:scale-[0.98] mb-3"
           >
             <Play className="w-4 h-4 fill-white" />
-            Try Compendium as Guest (No Login Required)
+            {t('auth.guestPrimary')}
           </button>
         )}
 
@@ -170,7 +172,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          {loading ? 'Authenticating...' : 'Sign in with Google'}
+          {loading ? t('auth.authenticating') : t('auth.google')}
         </button>
 
         {errorMessage && !isEmbedded && !(window as any).electronAPI?.startDesktopLogin && (
@@ -183,14 +185,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
                 }
                 await signInWithGoogleRedirect();
               } catch (e: any) {
-                setErrorMessage(e?.message || 'Redirect failed. Try Guest mode.');
+                setErrorMessage(e?.message || t('auth.redirectFailed'));
                 setLoading(false);
               }
             }}
             disabled={loading}
             className="w-full mt-2.5 py-2 px-4 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-xs text-zinc-300 border border-zinc-700/60 transition-colors"
           >
-            Try Redirect Sign-in (Bypass Popup Blockers)
+            {t('auth.redirect')}
           </button>
         )}
 
@@ -200,14 +202,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
             className="w-full mt-3 py-2.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center justify-center gap-1.5"
           >
             <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            Continue as Guest (Try without signing in)
+            {t('auth.guest')}
           </button>
         )}
         
         {isEmbedded && (
           <div className="mt-6 pt-5 border-t border-white/10 flex flex-col items-center w-full">
             <p className="text-xs text-zinc-400 mb-3 px-2">
-              Playing on Itch.io? Google Sign-in requires opening the standalone web app in its own browser tab:
+              {t('auth.itch')}
             </p>
             <a
               href={DEFAULT_PREVIEW_URL}
@@ -215,7 +217,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
               rel="noopener noreferrer"
               className="text-xs font-medium text-purple-300 hover:text-white transition-colors bg-purple-950/40 hover:bg-purple-900/60 px-4 py-2 rounded-lg border border-purple-500/30 flex items-center gap-1.5"
             >
-              Open Standalone Web App
+              {t('auth.openWeb')}
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>

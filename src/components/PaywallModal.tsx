@@ -3,6 +3,7 @@ import { Lock, CreditCard, Sparkles, X } from './icons';
 import { logOut } from '../lib/firebase';
 import { auth } from '../lib/firebase';
 import { getApiBaseUrl } from '../utils/api';
+import { useT } from '../i18n';
 
 interface PaywallModalProps {
   userId: string;
@@ -10,6 +11,7 @@ interface PaywallModalProps {
 }
 
 export const PaywallModal: React.FC<PaywallModalProps> = ({ userId, onClose }) => {
+  const t = useT();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -59,10 +61,10 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ userId, onClose }) =
         </div>
         
         <h2 className="font-fantasy font-bold text-3xl text-white mb-2 tracking-wide">
-          Unlock the Compendium
+          {t('pay.title')}
         </h2>
         <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
-          Upgrade to Premium for 40 Pro queries a day (unused roll over up to 100!), and UNLIMITED high-speed Flash queries. Never lose your progress again.
+          {t('pay.body')}
         </p>
 
         {errorMsg && (
@@ -73,13 +75,13 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ userId, onClose }) =
 
         <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-8 text-left">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-white font-semibold">Premium Access</span>
-            <span className="text-[var(--accent-color)] font-bold text-xl">$4.99<span className="text-sm text-zinc-500 font-normal">/mo</span></span>
+            <span className="text-white font-semibold">{t('pay.plan')}</span>
+            <span className="text-[var(--accent-color)] font-bold text-xl">$4.99<span className="text-sm text-zinc-500 font-normal">{t('pay.perMonth')}</span></span>
           </div>
           <ul className="space-y-2 text-sm text-zinc-300">
-            <li className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> 40 Pro Queries/Day (Rolls over to 100)</li>
-            <li className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> Unlimited Flash Fallback</li>
-            <li className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> Cross-device Cloud Sync</li>
+            <li className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> {t('pay.f1')}</li>
+            <li className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> {t('pay.f2')}</li>
+            <li className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> {t('pay.f3')}</li>
           </ul>
         </div>
         
@@ -89,14 +91,14 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ userId, onClose }) =
           className="w-full flex items-center justify-center gap-2 bg-[var(--accent-color)] text-black font-bold py-3 px-6 rounded-xl hover:bg-white transition-colors disabled:opacity-50"
         >
           <CreditCard className="w-5 h-5" />
-          {loading ? 'Connecting to Stripe...' : 'Subscribe via Stripe'}
+          {loading ? t('pay.connecting') : t('pay.subscribe')}
         </button>
         
         <button
           onClick={logOut}
           className="mt-6 text-xs text-zinc-500 hover:text-white transition-colors underline"
         >
-          Sign out
+          {t('common.signOut')}
         </button>
       </div>
     </div>

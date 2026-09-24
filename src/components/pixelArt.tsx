@@ -104,6 +104,7 @@ function makePixelIcon(key: string, Fallback: LucideIcon, name: string): LucideI
         viewBox="0 0 10 10"
         fill={color}
         shapeRendering="crispEdges"
+        data-icon={key}
         aria-hidden={rest['aria-label'] ? undefined : true}
         className={className ? `qc-pixel-icon ${className}` : 'qc-pixel-icon'}
         {...rest}
