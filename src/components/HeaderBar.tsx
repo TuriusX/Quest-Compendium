@@ -128,8 +128,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
   return (
     <header className="qc-stars h-14 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between px-3 sm:px-4 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
-      {/* Left side: Brand Logo + Game Library Toggle */}
-      <div className="flex items-center gap-2.5 sm:gap-3">
+      {/* Left side: Brand Logo + Game Library Toggle (shrinks, so the buttons on the right always stay visible) */}
+      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
         <div className="relative flex items-center">
           <button
             style={{ WebkitAppRegion: "no-drag" } as any}
@@ -206,23 +206,27 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           )}
         </div>
         
-        <div className="flex flex-col text-left py-1">
-          <div className="flex items-center gap-1.5">
-            <span className="font-fantasy font-bold text-sm tracking-wider text-white">
+        <div className="flex flex-col text-left py-1 min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-fantasy font-bold text-sm tracking-wider text-white truncate">
               QUEST COMPENDIUM
             </span>
             <span className="hidden xl:inline-block px-1.5 py-0.2 rounded text-[10px] font-pixel bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)]">
               AI HUD
             </span>
           </div>
-          <span className="flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase overflow-hidden whitespace-nowrap text-ellipsis max-w-[180px]">
+          <span
+            className="flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase min-w-0"
+            title={isGameRunningLocally ? t('header.playing', { game: activeGame?.name ?? '' }) : t('header.noGame')}
+          >
             <span className={`w-1.5 h-1.5 flex-shrink-0 rounded-full ${isGameRunningLocally ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
-            <span className="truncate">{isGameRunningLocally ? t('header.playing', { game: activeGame?.name ?? '' }) : t('header.noGame')}</span>
+            {/* The game's name matters most, so a narrow window shows just the name. */}
+            <span className="truncate">{isGameRunningLocally ? (activeGame?.name ?? '') : t('header.noGame')}</span>
           </span>
         </div>
       </div>
       {/* Right Controls Toolbar */}
-      <div className="flex items-center gap-1 sm:gap-1.5">
+      <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 ml-2">
         {/* AI Queries Badge */}
         {(() => {
           const effectiveData = userData || { isPremium: false, proQueriesAvailable: 5, flashQueriesAvailable: 5, isGuest: true };
@@ -235,28 +239,27 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
           return (
             <div className="relative group" style={{ WebkitAppRegion: "no-drag" } as any}>
-              {/* Desktop & Compact Badge - Always shows both Pro & Flash */}
-              <div 
-                className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-medium transition-all duration-300 mr-1 sm:mr-2 cursor-default ${
-                  isPremiumUser 
-                    ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shadow-[0_0_10px_rgba(99,102,241,0.1)]' 
-                    : 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)] group-hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]'
-                }`} 
+              {/* Compact usage badge: Pro and Flash counts, with the details in the hover card */}
+              <div
+                className={`flex items-center gap-2 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap cursor-default mr-1 ${
+                  isPremiumUser
+                    ? 'bg-indigo-500/10 border border-indigo-500/25 text-indigo-300'
+                    : 'bg-amber-500/10 border border-amber-500/25 text-amber-300'
+                }`}
                 title={t('header.quotaTitle', { pro: proCount, flash: isPremiumUser ? t('header.unlimited') : flashCount })}
               >
-                <div className="flex items-center gap-1">
+                <span className="flex items-center gap-1">
                   <Cpu className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <span className="font-bold">{t('header.proLeft', { n: proCount })}</span>
-                  <ManaBar value={proCount} max={isPremiumUser ? 100 : 5} />
-                </div>
-                <span className="text-zinc-600 font-normal">·</span>
-                <div className="flex items-center gap-1">
+                  {proCount}
+                  <span className="hidden md:inline font-mono uppercase text-[9px] opacity-70">Pro</span>
+                </span>
+                <span className="flex items-center gap-1">
                   <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="font-bold">{isPremiumUser ? t('header.flashUnlimited') : t('header.flashLeft', { n: flashCount })}</span>
-                </div>
-                {!isPremiumUser && <Sparkles className="w-3.5 h-3.5 ml-0.5 text-amber-400 animate-pulse hidden sm:inline-block" />}
+                  {isPremiumUser ? '∞' : flashCount}
+                  <span className="hidden md:inline font-mono uppercase text-[9px] opacity-70">Flash</span>
+                </span>
               </div>
-              
+
               {/* Elegant Hover Tooltip */}
               <div className="absolute top-full right-2 pt-2 w-64 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
                 <div className="p-4 rounded-xl bg-zinc-900 border border-white/10 shadow-2xl flex flex-col gap-3">
@@ -265,7 +268,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   <div className="flex flex-col gap-1.5">
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-zinc-300 font-medium">Gemini Pro</span>
-                      <span className="text-zinc-400 font-mono text-[10px]">
+                      <span className="flex items-center gap-2 text-zinc-400 font-mono text-[10px]">
+                        <ManaBar value={proCount} max={proMax} />
                         {proCount} / {proMax}
                       </span>
                     </div>
@@ -327,7 +331,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             }}
             title={t('common.achievements')}
             aria-label={t('common.achievements')}
-            className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
+            className={`px-2 sm:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
               isAchDrawerOpen 
                 ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
                 : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] border border-transparent'
@@ -335,7 +339,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           >
             <Trophy className="w-4 h-4 text-amber-400" />
             {totalCount > 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.08] text-zinc-300 font-mono font-bold">
+              <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.08] text-zinc-300 font-mono font-bold">
                 {unlockedCount}/{totalCount}
               </span>
             )}

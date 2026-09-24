@@ -619,32 +619,115 @@ const fs = require('fs');
 const os = require('os');
 let lastRunningAppId = 0;
 let activeSteamGame = null;
+let activeNameResolved = true;
+let lastNameAttempt = 0;
+
+// Steam tools that show up as the "running app" but aren't games.
+const NON_GAME_APP_IDS = new Set([
+  228980,  // Steamworks Common Redistributables (runs installers when a game launches)
+  250820,  // SteamVR
+  1070560, 1391110, 1628350, // Steam Linux Runtime
+  1493710, 961940, 1887720, 2348590, // Proton versions
+]);
+
+const gameNameCache = new Map();
+
+/** Steam's install folder(s) and every library folder, so names can be read from local manifests. */
+function steamLibraryFolders() {
+  const roots = [];
+  if (process.platform === 'win32') {
+    roots.push('C:\\Program Files (x86)\\Steam', 'C:\\Program Files\\Steam');
+    try {
+      const out = require('child_process').execSync('reg query HKCU\\Software\\Valve\\Steam /v SteamPath', { encoding: 'utf8', timeout: 3000, windowsHide: true });
+      const m = out.match(/SteamPath\s+REG_SZ\s+(.+)/);
+      if (m) roots.unshift(m[1].trim().replace(/\//g, '\\'));
+    } catch (_) { /* fall back to default locations */ }
+  } else {
+    roots.push(path.join(os.homedir(), '.steam', 'steam'), path.join(os.homedir(), '.local', 'share', 'Steam'));
+  }
+  const libs = new Set();
+  for (const root of roots) {
+    const steamapps = path.join(root, 'steamapps');
+    if (!fs.existsSync(steamapps)) continue;
+    libs.add(steamapps);
+    try {
+      const vdf = fs.readFileSync(path.join(steamapps, 'libraryfolders.vdf'), 'utf8');
+      for (const m of vdf.matchAll(/"path"\s+"([^"]+)"/g)) {
+        libs.add(path.join(m[1].replace(/\\\\/g, '\\'), 'steamapps'));
+      }
+    } catch (_) { /* no library file */ }
+  }
+  return [...libs];
+}
+
+/** The game's name from its local Steam manifest (fast, works offline, no rate limits). */
+function nameFromManifest(appId) {
+  for (const lib of steamLibraryFolders()) {
+    try {
+      const acf = fs.readFileSync(path.join(lib, `appmanifest_${appId}.acf`), 'utf8');
+      const m = acf.match(/"name"\s+"([^"]+)"/);
+      if (m && m[1].trim()) return m[1].trim();
+    } catch (_) { /* not in this library */ }
+  }
+  return null;
+}
+
+/** The game's name from the Steam store (for games whose manifest can't be read). */
+async function nameFromStore(appId) {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(`https://store.steampowered.com/api/appdetails?appids=${appId}&filters=basic&l=english`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const entry = data && data[appId];
+    return entry && entry.success && entry.data && entry.data.name ? entry.data.name : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function lookupGameName(appId) {
+  if (gameNameCache.has(appId)) return gameNameCache.get(appId);
+  const name = nameFromManifest(appId) || (await nameFromStore(appId));
+  if (name) gameNameCache.set(appId, name);
+  return name;
+}
+
+function sendActiveGame() {
+  if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('active-game-detected', activeSteamGame);
+}
+
+async function resolveActiveName(appId) {
+  lastNameAttempt = Date.now();
+  const name = await lookupGameName(appId);
+  if (appId !== lastRunningAppId) return; // a different game started meanwhile
+  activeNameResolved = !!name;
+  activeSteamGame = { name: name || `Steam Game (${appId})`, appId };
+  sendActiveGame();
+  console.log(`[detect] running app ${appId}: ${name || 'name not found yet, will retry'}`);
+}
 
 function processNewAppId(currentAppId) {
+  // Launch helpers (redistributable installers, runtimes) aren't the game: keep whatever we had.
+  if (NON_GAME_APP_IDS.has(currentAppId)) return;
+
   if (currentAppId !== lastRunningAppId) {
     lastRunningAppId = currentAppId;
-    
     if (currentAppId === 0) {
       activeSteamGame = null;
-      if (mainWindow && mainWindow.webContents) {
-        mainWindow.webContents.send('active-game-detected', null);
-      }
+      activeNameResolved = true;
+      sendActiveGame();
     } else {
-      // A game launched! Look up its name from Steam API
-      fetch(`https://store.steampowered.com/api/appdetails?appids=${currentAppId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data[currentAppId] && data[currentAppId].success) {
-            activeSteamGame = { name: data[currentAppId].data.name, appId: currentAppId };
-          } else {
-            // Fallback for non-Steam shortcuts or games missing store entries
-            activeSteamGame = { name: `Steam Game (${currentAppId})`, appId: currentAppId };
-          }
-          if (mainWindow && mainWindow.webContents) {
-            mainWindow.webContents.send('active-game-detected', activeSteamGame);
-          }
-        }).catch(() => {});
+      resolveActiveName(currentAppId);
     }
+    return;
+  }
+
+  // Same game, but its name couldn't be found yet (offline, store hiccup): try again every 20 seconds.
+  if (currentAppId !== 0 && !activeNameResolved && Date.now() - lastNameAttempt > 20000) {
+    resolveActiveName(currentAppId);
   }
 }
 
