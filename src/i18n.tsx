@@ -43,6 +43,12 @@ export function applyLocale(l: unknown) {
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  "chat.markerList": "Markers",
+  "chat.markerToggle": "Show the {label} marker",
+  "chat.foundNearby": "found nearby",
+  "chat.nearbyTitle": "Also in this area:",
+  "chat.nearbyLooking": "Markers appear on these as you walk near them.",
+  "chat.hideMarkers": "Hide markers",
   "set.recordMarkers": "Show markers in screenshots and recordings",
   "set.recordMarkersDesc": "Let screen captures, OBS and Game Bar see the markers. Turn off to keep them out of your recordings and streams.",
   "set.sticky": "Keep markers on things as you move",
@@ -365,6 +371,12 @@ const en: Dict = {
 };
 
 const es: Dict = {
+  "chat.markerList": "Marcadores",
+  "chat.markerToggle": "Mostrar el marcador de {label}",
+  "chat.foundNearby": "encontrado cerca",
+  "chat.nearbyTitle": "También en esta zona:",
+  "chat.nearbyLooking": "Aparecerán marcadores cuando te acerques.",
+  "chat.hideMarkers": "Ocultar marcadores",
   "set.recordMarkers": "Mostrar marcadores en capturas y grabaciones",
   "set.recordMarkersDesc": "Permite que las capturas, OBS y la Game Bar vean los marcadores. Desactívalo para que no aparezcan en tus grabaciones y directos.",
   "set.sticky": "Mantener los marcadores sobre las cosas al moverte",
@@ -678,6 +690,12 @@ const es: Dict = {
 };
 
 const pt: Dict = {
+  "chat.markerList": "Marcadores",
+  "chat.markerToggle": "Mostrar o marcador de {label}",
+  "chat.foundNearby": "encontrado perto",
+  "chat.nearbyTitle": "Também nesta área:",
+  "chat.nearbyLooking": "Marcadores aparecem quando você chegar perto.",
+  "chat.hideMarkers": "Ocultar marcadores",
   "set.recordMarkers": "Mostrar marcadores em capturas e gravações",
   "set.recordMarkersDesc": "Deixa capturas de tela, OBS e Game Bar verem os marcadores. Desative para mantê-los fora das suas gravações e lives.",
   "set.sticky": "Manter os marcadores nas coisas enquanto você anda",

@@ -968,17 +968,24 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       })();
                     return (
                       <AnnotatedShot
+                        msgId={msg.id}
                         imageUrl={shotUrl}
                         points={msg.points}
-                        onShowOnScreen={
-                          isDesktopApp
-                            ? () => {
-                                const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
-                                // Markers re-find their spots even if you've moved since, as long as they're on screen.
-                                (window as any).electronAPI?.showScreenPointers?.(msg.points, accent, { refImage: shotUrl });
-                              }
-                            : undefined
-                        }
+                        nearby={msg.nearby}
+                        isDesktop={isDesktopApp}
+                        onShow={(hidden) => {
+                          const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+                          // Markers re-find their spots even if you've moved since, as long as they're on screen.
+                          // (Items found later by area checks are shown again by the next check.)
+                          const original = msg.points!.filter((p) => !p.fromArea);
+                          (window as any).electronAPI?.showScreenPointers?.(original, accent, {
+                            refImage: shotUrl,
+                            sessionId: msg.id,
+                            hidden: hidden.filter((i) => i < original.length),
+                            watchNearby: !!msg.nearby?.some((n) => !n.found),
+                          });
+                        }}
+                        onHide={() => (window as any).electronAPI?.hideScreenPointers?.()}
                       />
                     );
                   })()}

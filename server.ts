@@ -13,6 +13,7 @@ import cors from 'cors';
 import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
+import { registerLocate } from './locate';
 async function getFirestoreDocREST(idToken: string, uid: string) {
   const isCloudRun = !!process.env.K_SERVICE;
   const projectId = 'quest-compendium-1bccf';
@@ -226,6 +227,7 @@ async function startServer() {
   });
 
   registerWebSearch(app, { requireAuth, getGeminiClient });
+  registerLocate(app, { requireAuth, getGeminiClient });
 
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {
@@ -809,7 +811,12 @@ When your answer refers to specific things that are visible in the screenshot (a
 - At most 5 points. Labels: 1 to 4 words, in the player's language.
 - Label each point with what the player cares about, not with what the object is: name the item inside a container ("Teleport Stone", not "Barrel"; "Phoenix Down", not "Chest"), the action to take ("Pull lever", "Save here", "Jump here"), or who it is ("Talk to Duane"). Only fall back to naming the object when you don't know anything more useful about it.
 - Only point at things that are actually visible in the screenshot, and be precise. If nothing specific is worth pointing at, leave the block out entirely.
-- Never mention the block, coordinates or "pointers" in your answer text.`;
+- Never mention the block, coordinates or "pointers" in your answer text.
+
+If the player is asking about items, secrets or things to find, and you know of others in this same area (the same town, dungeon floor or room) that are NOT visible in the screenshot, list up to 6 of them in ONE more block:
+<qc-nearby>[{"label": "Elixir", "hint": "in the clay pot inside the inn"}]</qc-nearby>
+- label: what it is (1 to 4 words); hint: where it is, described by what the spot looks like (a few words). Both in the player's language.
+- Only list things you are confident about. Leave the block out when there are none, and never mention it in your answer text.`;
       }
 
       systemInstruction += `
@@ -1133,7 +1140,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       }
 
       // On-screen pointers: pull the <qc-points> block out of the answer.
-      const { text: answerText, points } = extractScreenPoints(responseText, Boolean(imageBase64));
+      const { text: answerText, points, nearby } = extractScreenPoints(responseText, Boolean(imageBase64));
       responseText = answerText;
 
       let bannerImageUrl: string | undefined;
@@ -1166,6 +1173,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         modelUsed,
         bannerImageUrl,
         ...(points.length ? { points } : {}),
+        ...(nearby.length ? { nearby } : {}),
         userData: {
           isPremium: userData.isPremium === true,
           proQueriesAvailable: userData.proQueriesAvailable,
@@ -1188,7 +1196,27 @@ You must respond entirely in ${language}. Do not use English unless the user's l
    * Returns the answer without the block, and up to 5 validated points as 0-1 fractions.
    * The block is always removed, even when no screenshot was sent (the points would be meaningless then).
    */
-  function extractScreenPoints(text: string, hadImage: boolean): { text: string; points: { x: number; y: number; label: string }[] } {
+  function extractScreenPoints(text: string, hadImage: boolean): { text: string; points: { x: number; y: number; label: string }[]; nearby: { label: string; hint: string }[] } {
+    // Other items in the same area that aren't on screen yet (the desktop app looks for them as the player walks).
+    let nearbyRaw = '';
+    text = text.replace(/(?:```[a-z]*\s*)?<qc-nearby>([\s\S]*?)<\/qc-nearby>(?:\s*```)?/gi, (_m, inner) => {
+      if (!nearbyRaw) nearbyRaw = inner;
+      return '';
+    });
+    const nearby: { label: string; hint: string }[] = [];
+    if (hadImage && nearbyRaw) {
+      try {
+        const parsed = JSON.parse(nearbyRaw.trim());
+        if (Array.isArray(parsed)) {
+          for (const n of parsed.slice(0, 6)) {
+            const label = String(n?.label ?? '').trim().slice(0, 40);
+            if (label) nearby.push({ label, hint: String(n?.hint ?? '').trim().slice(0, 100) });
+          }
+        }
+      } catch {
+        /* ignore a malformed list */
+      }
+    }
     const blockRe = /(?:```[a-z]*\s*)?<qc-points>([\s\S]*?)<\/qc-points>(?:\s*```)?/gi;
     let raw = '';
     const cleaned = text.replace(blockRe, (_m, inner) => {
@@ -1213,7 +1241,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         /* malformed block: ignore the points, keep the answer */
       }
     }
-    return { text: cleaned || text, points };
+    return { text: cleaned || text, points, nearby };
   }
 
   // Helper to convert 16-bit linear PCM audio buffer to standard WAV format

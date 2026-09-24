@@ -32,6 +32,7 @@ import { recordTombstone } from './hooks/tabMerge';
 import pixelSceneUrl from './pixel-scene.png';
 import { LOCALES, aiLanguageName, applyLocale, detectLocale, translate, useT } from './i18n';
 import { ControllerLayer } from './components/ControllerLayer';
+import { hiddenFor, setPointersActive } from './components/pointerStore';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -511,6 +512,73 @@ export default function App() {
   useEffect(() => {
     (window as any).electronAPI?.setOverlayOptions?.({ snapshotOnOpen: settings.snapshotOnOpen !== false, stickyPointers: settings.stickyPointers !== false, markersInRecordings: settings.markersInRecordings !== false });
   }, [settings.snapshotOnOpen, settings.stickyPointers, settings.markersInRecordings]);
+
+  // On-screen markers: know which answer's markers are showing, and run area checks for nearby items.
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const locateUserRef = useRef<any>(null);
+  locateUserRef.current = user;
+  const locateGameRef = useRef<SteamGameData | null>(null);
+  locateGameRef.current = globalActiveGame;
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.onLocateRequest) return;
+    api.onPointersState?.(({ id, active }: { id: string; active: boolean }) => setPointersActive(id, active));
+    api.onLocateRequest(async ({ id, image }: { id: string; image: string }) => {
+      const tab = tabsRef.current.find((t) => t.messages.some((m) => m.id === id));
+      const msg = tab?.messages.find((m) => m.id === id);
+      const pending = (msg?.nearby ?? []).map((n, i) => ({ ...n, i })).filter((n) => !n.found);
+      if (!tab || !msg || !pending.length) {
+        api.locateDone?.(id, 0);
+        return;
+      }
+      try {
+        const u = locateUserRef.current;
+        const token = u && typeof u.getIdToken === 'function' ? await u.getIdToken() : null;
+        const base = getApiBaseUrl();
+        const res = await fetch(`${base}/api/locate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({
+            imageBase64: image,
+            targets: pending.map((n) => ({ label: n.label, hint: n.hint })),
+            game: tab.activeSteamGame?.name || locateGameRef.current?.name || '',
+          }),
+        });
+        const data = res.ok ? await res.json() : { found: [] };
+        const found: { index: number; x: number; y: number }[] = Array.isArray(data.found) ? data.found : [];
+        if (!found.length) {
+          api.locateDone?.(id, pending.length);
+          return;
+        }
+        const startIndex = msg.points?.length ?? 0;
+        const newPoints = found.map((f) => ({ x: f.x, y: f.y, label: pending[f.index].label, fromArea: true }));
+        const foundIdx = new Set(found.map((f) => pending[f.index].i));
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id !== tab.id
+              ? t
+              : {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id !== id
+                      ? m
+                      : {
+                          ...m,
+                          points: [...(m.points ?? []), ...newPoints],
+                          nearby: (m.nearby ?? []).map((n, i) => (foundIdx.has(i) ? { ...n, found: true } : n)),
+                        },
+                  ),
+                },
+          ),
+        );
+        api.addPointers?.(id, newPoints, image, startIndex);
+        api.locateDone?.(id, pending.length - found.length);
+      } catch {
+        api.locateDone?.(id, pending.length);
+      }
+    });
+  }, []);
 
   // Controller: LB / RB switch between compendiums.
   useEffect(() => {
@@ -1049,6 +1117,7 @@ export default function App() {
         modelUsed: data.modelUsed || 'Gemini 3.1 Pro Preview',
         bannerImageUrl: data.bannerImageUrl,
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
+        ...(Array.isArray(data.nearby) && data.nearby.length ? { nearby: data.nearby.map((n: any) => ({ label: String(n.label), hint: String(n.hint || ''), found: false })) } : {}),
         timestamp: nowAi
       };
 
@@ -1056,7 +1125,12 @@ export default function App() {
       if (aiMessage.points && settings.showPointersOnScreen !== false) {
         const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
         // The screenshot this answer is about is the reference the markers track against.
-        (window as any).electronAPI?.showScreenPointers?.(aiMessage.points, accent, { refImage: imageBase64 });
+        (window as any).electronAPI?.showScreenPointers?.(aiMessage.points, accent, {
+          refImage: imageBase64,
+          sessionId: aiMessage.id,
+          hidden: hiddenFor(aiMessage.id),
+          watchNearby: !!aiMessage.nearby?.length,
+        });
       }
 
       setTabs(prev => {

@@ -285,6 +285,10 @@ let lastCaptureSourceId = null; // the screen the last screenshot came from (for
 let lastCaptureImage = null; // that screenshot, used as the reference when markers track
 let pointerWindow = null;
 let pointerTimer = null;
+// The marker session currently on screen: which answer it belongs to, and the nearby-item checks it has made.
+let pointerSession = null;
+const LOCATE_MIN_INTERVAL_MS = 8000;
+const LOCATE_MAX_PER_SESSION = 12;
 let currentDockPosition = "top-right";
 let animationInterval = null;
 
@@ -977,11 +981,17 @@ async function captureScreenImage() {
 }
 
 /** Close the on-screen pointers, if any. */
+function sendPointerState(id, active) {
+  if (id && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('pointers-state', { id, active });
+}
+
 function closeScreenPointers() {
   if (pointerTimer) clearTimeout(pointerTimer);
   pointerTimer = null;
   if (pointerWindow && !pointerWindow.isDestroyed()) pointerWindow.destroy();
   pointerWindow = null;
+  if (pointerSession) sendPointerState(pointerSession.id, false);
+  pointerSession = null;
 }
 
 /**
@@ -1001,7 +1011,11 @@ function showScreenPointers(points, accent, opts = {}) {
   const { x, y, width, height } = display.bounds;
   const refImage = typeof opts.refImage === 'string' && opts.refImage.startsWith('data:image/') ? opts.refImage : lastCaptureImage;
   const sticky = (typeof opts.sticky === 'boolean' ? opts.sticky : stickyPointers) && !!lastCaptureSourceId && !!refImage;
+  const sessionId = typeof opts.sessionId === 'string' ? opts.sessionId : null;
+  const watchNearby = sticky && opts.watchNearby === true;
   const payload = {
+    hidden: Array.isArray(opts.hidden) ? opts.hidden.filter((n) => Number.isInteger(n)) : [],
+    watchMoves: watchNearby,
     points: valid,
     accent: /^#[0-9a-fA-F]{3,8}$/.test(accent || '') ? accent : '#a87ffb',
     sticky,
@@ -1032,9 +1046,16 @@ function showScreenPointers(points, accent, opts = {}) {
     hasShadow: false,
     show: false,
     alwaysOnTop: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
+      preload: path.join(__dirname, 'pointersPreload.cjs'),
+    },
   });
   pointerWindow = win;
+  pointerSession = { id: sessionId, win, watch: watchNearby, checks: 0, lastCheck: 0, inFlight: false, sourceId: lastCaptureSourceId };
   win.setIgnoreMouseEvents(true);
   win.setAlwaysOnTop(true, 'screen-saver');
   // Either hidden from all screen capture, or visible in recordings (then the tracker ignores its own markers).
@@ -1045,12 +1066,17 @@ function showScreenPointers(points, accent, opts = {}) {
       pointerWindow = null;
       if (pointerTimer) clearTimeout(pointerTimer);
       pointerTimer = null;
+      if (pointerSession && pointerSession.win === win) {
+        sendPointerState(pointerSession.id, false);
+        pointerSession = null;
+      }
     }
   });
   win.webContents.once('did-finish-load', () => {
     if (win.isDestroyed()) return;
     win.webContents.executeJavaScript(`window.qcStart(${JSON.stringify(payload)})`).catch(() => {});
     win.showInactive();
+    sendPointerState(sessionId, true);
   });
   win.loadFile(path.join(__dirname, 'pointers.html'));
   // Safety net in case the page can't close itself.
@@ -1068,6 +1094,70 @@ ipcMain.handle('show-screen-pointers', async (event, payload) => {
 });
 
 ipcMain.on('hide-screen-pointers', () => closeScreenPointers());
+
+// The player switched individual markers on or off in the answer's list.
+ipcMain.on('pointers-hidden', (event, { id, hidden } = {}) => {
+  if (!pointerSession || pointerSession.id !== id || !pointerWindow || pointerWindow.isDestroyed()) return;
+  const list = Array.isArray(hidden) ? hidden.filter((n) => Number.isInteger(n)) : [];
+  pointerWindow.webContents.executeJavaScript(`window.qcSetHidden(${JSON.stringify(list)})`).catch(() => {});
+});
+
+/** A screenshot of the marker session's screen, with our markers kept out of it. */
+async function captureForLocate(session) {
+  const win = session.win;
+  try {
+    if (win && !win.isDestroyed()) win.setContentProtection(true);
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1280, height: 720 } });
+    const source = sources.find((s) => s.id === session.sourceId) || sources[0];
+    if (!source || !source.thumbnail || source.thumbnail.isEmpty()) return null;
+    return 'data:image/jpeg;base64,' + source.thumbnail.toJPEG(75).toString('base64');
+  } catch (err) {
+    console.warn('[pointers] locate capture failed:', err && err.message);
+    return null;
+  } finally {
+    if (win && !win.isDestroyed()) win.setContentProtection(!markersInRecordings);
+  }
+}
+
+// The marker page says the player walked far enough: look for the answer's nearby items (free, rate-limited).
+ipcMain.on('pointers-moved', async (event) => {
+  const session = pointerSession;
+  if (!session || !session.watch || !session.id || event.sender !== (session.win && !session.win.isDestroyed() && session.win.webContents)) return;
+  const now = Date.now();
+  if (session.inFlight || session.checks >= LOCATE_MAX_PER_SESSION || now - session.lastCheck < LOCATE_MIN_INTERVAL_MS) return;
+  session.inFlight = true;
+  session.lastCheck = now;
+  session.checks++;
+  const image = await captureForLocate(session);
+  if (!image || pointerSession !== session || !mainWindow || mainWindow.isDestroyed()) {
+    session.inFlight = false;
+    return;
+  }
+  mainWindow.webContents.send('locate-request', { id: session.id, image });
+  // If the app never answers (offline, closed), allow the next check anyway.
+  setTimeout(() => { if (pointerSession === session) session.inFlight = false; }, 30000);
+});
+
+// Items found by an area check: add their markers to the session on screen.
+ipcMain.on('pointers-add', (event, { id, points, refImage, startIndex } = {}) => {
+  const session = pointerSession;
+  if (!session || session.id !== id || !pointerWindow || pointerWindow.isDestroyed()) return;
+  const valid = (Array.isArray(points) ? points : [])
+    .filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
+    .slice(0, 6)
+    .map((p) => ({ x: p.x, y: p.y, label: String(p.label || '').slice(0, 40) }));
+  if (!valid.length || typeof refImage !== 'string' || !refImage.startsWith('data:image/')) return;
+  const payload = { points: valid, refImage, startIndex: Number.isInteger(startIndex) ? startIndex : 0 };
+  pointerWindow.webContents.executeJavaScript(`window.qcAddPoints(${JSON.stringify(payload)})`).catch(() => {});
+});
+
+// An area check finished: with nothing left to find, stop checking.
+ipcMain.on('pointers-locate-done', (event, { id, remaining } = {}) => {
+  const session = pointerSession;
+  if (!session || session.id !== id) return;
+  session.inFlight = false;
+  if (!remaining) session.watch = false;
+});
 
 ipcMain.handle('take-screenshot', async () => {
   // A clean snapshot from when the overlay opened beats a fresh capture of a game that paused itself.

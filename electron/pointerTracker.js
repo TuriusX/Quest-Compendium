@@ -192,14 +192,20 @@
     const exclude = opts.exclude || [];
     const selfVisible = !!opts.selfVisible;
     const screenW = opts.screenWidth || 1920;
-    const markers = opts.points.map((p) => {
+    const makeMarker = (img, p) => {
       const x = p.x * w;
       const y = p.y * h;
       const x0 = Math.max(0, Math.min(w - PATCH, Math.round(x - PATCH / 2)));
       const y0 = Math.max(0, Math.min(h - PATCH, Math.round(y - PATCH / 2)));
-      const tpl = cut(ref, w, x0, y0, PATCH);
-      return { x, y, tpl, offX: x - x0, offY: y - y0, weak: tpl.std < MIN_STD, lost: 0, visible: false, score: 0 };
-    });
+      const tpl = cut(img, w, x0, y0, PATCH);
+      return { x, y, tpl, offX: x - x0, offY: y - y0, weak: tpl.std < MIN_STD, lost: 0, visible: false, score: 0, label: p.label || '' };
+    };
+    const markers = opts.points.map((p) => makeMarker(ref, p));
+    const labels = () => markers.map((m) => m.label);
+    // Markers added later (items found as the player walks): they're located anew in the next frames.
+    const PENDING_TRIES = 10;
+    let camX = 0; // how far the camera has moved in total, in screen fractions
+    let camY = 0;
     let prev = null; // previous frame + its integral image
     let anchors = [];
     let cameraLost = 0;
@@ -211,7 +217,7 @@
       return markers.map((m, i) => {
         const cx = m.x / w;
         const cy = m.y / h;
-        const label = (opts.points[i] && opts.points[i].label) || '';
+        const label = labels()[i] || '';
         const labelW = (48 + 11 * label.length + 30) / screenW;
         const dot = 36 / screenW;
         const flip = cx > 0.75;
@@ -261,8 +267,11 @@
           cameraLost = 0;
           const dx = median(moves.map((m) => m.dx));
           const dy = median(moves.map((m) => m.dy));
+          camX += dx / w;
+          camY += dy / h;
           // 2. Move every marker with the camera (on-screen or not), then fine-tune the ones we can see.
           for (const m of markers) {
+            if (m.pending || m.dropped) continue;
             m.x += dx;
             m.y += dy;
             const onScreen = m.x >= 0 && m.x <= w && m.y >= 0 && m.y <= h;
@@ -288,9 +297,24 @@
           if (cameraLost >= CUT_FRAMES) gone = true;
         }
       }
+      // Newly added markers: find their spot anywhere in the frame (the camera moved while the AI looked).
+      for (const m of markers) {
+        if (!m.pending || gone) continue;
+        const r = find(frame, w, h, ii, m.tpl, m.x - m.offX, m.y - m.offY, Math.max(w, h));
+        if (r.score >= CONFIDENT && !m.weak) {
+          m.x = r.x + m.offX;
+          m.y = r.y + m.offY;
+          m.pending = false;
+          m.lost = 0;
+          m.score = r.score;
+        } else if (++m.tries >= PENDING_TRIES) {
+          m.pending = false;
+          m.dropped = true;
+        }
+      }
       markers.forEach((m) => {
         const onScreen = m.x >= 0 && m.x <= w && m.y >= 0 && m.y <= h;
-        m.visible = !gone && onScreen && m.lost <= LOST_FRAMES;
+        m.visible = !gone && !m.pending && !m.dropped && onScreen && m.lost <= LOST_FRAMES;
       });
       if (cameraLost === 0) {
         // Only learn the background from frames where the camera was tracked (and never from our own markers).
@@ -300,8 +324,23 @@
       return markers.map((m) => ({ x: m.x / w, y: m.y / h, visible: m.visible, score: m.score }));
     }
 
+    /** Add markers for things found later, located in `img` (grayscale at the working size). */
+    function addMarkers(img, points) {
+      for (const p of points) {
+        const m = makeMarker(img, p);
+        m.pending = true;
+        m.tries = 0;
+        markers.push(m);
+      }
+    }
+
     return {
       update,
+      addMarkers,
+      /** Total camera movement since the markers appeared, in screen fractions. */
+      get camera() {
+        return { x: camX, y: camY };
+      },
       /** True after a scene change (camera tracking broke), or if nothing could be found at the start. */
       get gone() {
         return gone;

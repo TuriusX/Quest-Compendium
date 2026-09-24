@@ -28,8 +28,11 @@
   // while the game scrolls (see pointerTracker.js); otherwise they simply stay for a few seconds.
   'use strict';
   const WORK_W = 384; // tracking resolution: small on purpose (fast, and plenty for finding a barrel)
+  const CHECK_DISTANCE = 0.6; // walk this far (in screens) before asking about nearby items again
   let finished = false;
   let stream = null;
+  let hidden = new Set(); // markers the player switched off in the answer's list
+  let live = null; // sticky-mode state, so markers can be added while tracking
 
   function finish() {
     if (finished) return;
@@ -44,8 +47,9 @@
     el.classList.toggle('flip', x > 0.75);
   }
 
-  function buildMarkers(points) {
-    return points.map((p, i) => {
+  function buildMarkers(points, startIndex = 0) {
+    return points.map((p, j) => {
+      const i = startIndex + j;
       const el = document.createElement('div');
       el.className = 'm';
       const inner = document.createElement('div');
@@ -105,11 +109,12 @@
 
     // Tracking runs 20 times a second; drawing runs every frame and glides toward the tracked spots,
     // predicting a little ahead with each marker's speed, so movement looks smooth rather than stepped.
-    const n = els.length;
     const target = opts.points.map((p) => ({ x: p.x, y: p.y }));
     const shown = opts.points.map((p) => ({ x: p.x, y: p.y }));
     const vel = opts.points.map(() => ({ x: 0, y: 0 }));
     const visible = opts.points.map(() => false);
+    live = { tracker, ctx, w, h, els, target, shown, vel, visible };
+    let checkedAt = { x: 0, y: 0 };
     let lastUpdate = performance.now();
     els.forEach((el) => el.classList.add('hidden')); // appear once they're in the right place
 
@@ -121,7 +126,7 @@
         const now = performance.now();
         const dt = Math.max(0.001, (now - lastUpdate) / 1000);
         const res = tracker.update(grayOf(ctx, video, w, h));
-        for (let i = 0; i < n; i++) {
+        for (let i = 0; i < res.length && i < els.length; i++) {
           const r = res[i];
           const becameVisible = r.visible && !visible[i];
           vel[i].x = becameVisible ? 0 : Math.max(-3, Math.min(3, (r.x - target[i].x) / dt));
@@ -133,10 +138,16 @@
             shown[i].y = r.y;
           }
           visible[i] = r.visible;
-          els[i].classList.toggle('hidden', !r.visible);
+          els[i].classList.toggle('hidden', !r.visible || hidden.has(i));
         }
         lastUpdate = now;
         if (tracker.gone) return finish();
+        // Walked far enough since the last look? Ask the app to check for nearby items.
+        const cam = tracker.camera;
+        if (opts.watchMoves && window.qcBridge && Math.hypot(cam.x - checkedAt.x, cam.y - checkedAt.y) >= CHECK_DISTANCE) {
+          checkedAt = { x: cam.x, y: cam.y };
+          window.qcBridge.moved();
+        }
       }
       setTimeout(track, 50);
     };
@@ -148,7 +159,7 @@
       lastFrame = now;
       const ahead = Math.min(0.08, (now - lastUpdate) / 1000);
       const k = 1 - Math.exp(-frameDt / 0.045);
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < els.length; i++) {
         const px = target[i].x + vel[i].x * ahead;
         const py = target[i].y + vel[i].y * ahead;
         shown[i].x += (px - shown[i].x) * k;
@@ -161,9 +172,37 @@
     requestAnimationFrame(draw);
   }
 
+  /** Markers the player switched off (indexes into the answer's list). */
+  window.qcSetHidden = (list) => {
+    hidden = new Set(Array.isArray(list) ? list : []);
+    document.querySelectorAll('.m').forEach((el, i) => {
+      if (hidden.has(i)) el.classList.add('hidden');
+      else if (!live) el.classList.remove('hidden');
+    });
+  };
+
+  /** Items found as the player walked: add markers that track like the others. */
+  window.qcAddPoints = async ({ points, refImage, startIndex }) => {
+    if (!live || finished || !Array.isArray(points) || !points.length || !refImage) return;
+    const img = await loadImage(refImage);
+    const { tracker, ctx, w, h, els, target, shown, vel, visible } = live;
+    tracker.addMarkers(grayOf(ctx, img, w, h), points);
+    const added = buildMarkers(points, startIndex);
+    added.forEach((el, j) => {
+      el.classList.add('hidden');
+      els.push(el);
+      target.push({ x: points[j].x, y: points[j].y });
+      shown.push({ x: points[j].x, y: points[j].y });
+      vel.push({ x: 0, y: 0 });
+      visible.push(false);
+    });
+  };
+
   window.qcStart = async (opts) => {
+    hidden = new Set(opts.hidden || []);
     document.documentElement.style.setProperty('--accent', opts.accent || '#a87ffb');
     const els = buildMarkers(opts.points || []);
+    els.forEach((el, i) => hidden.has(i) && el.classList.add('hidden'));
     if (opts.sticky && opts.sourceId && opts.refImage && window.QCTracker) {
       try {
         await startSticky(opts, els);

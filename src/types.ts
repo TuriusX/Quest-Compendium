@@ -37,6 +37,15 @@ export interface ScreenPoint {
   x: number;
   y: number;
   label: string;
+  /** Found later by an area check (not on the original screenshot). */
+  fromArea?: boolean;
+}
+
+/** Something the AI knows is in this area but wasn't on screen yet. */
+export interface NearbyItem {
+  label: string;
+  hint: string;
+  found?: boolean;
 }
 
 export interface ChatMessage {
@@ -51,6 +60,8 @@ export interface ChatMessage {
   isStreaming?: boolean;
   /** On-screen pointers for the screenshot this answer is about. */
   points?: ScreenPoint[];
+  /** Other items in the same area, looked for as the player walks (desktop). */
+  nearby?: NearbyItem[];
 }
 
 export interface PersonalQuest {

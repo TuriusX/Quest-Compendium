@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // On-screen pointers (markers drawn over the game)
   showScreenPointers: (points, accent, opts) => ipcRenderer.invoke('show-screen-pointers', { points, accent, opts }),
   hideScreenPointers: () => ipcRenderer.send('hide-screen-pointers'),
+  setPointersHidden: (id, hidden) => ipcRenderer.send('pointers-hidden', { id, hidden }),
+  addPointers: (id, points, refImage, startIndex) => ipcRenderer.send('pointers-add', { id, points, refImage, startIndex }),
+  locateDone: (id, remaining) => ipcRenderer.send('pointers-locate-done', { id, remaining }),
+  onPointersState: (callback) => { ipcRenderer.removeAllListeners('pointers-state'); ipcRenderer.on('pointers-state', (event, s) => callback(s)); },
+  onLocateRequest: (callback) => { ipcRenderer.removeAllListeners('locate-request'); ipcRenderer.on('locate-request', (event, r) => callback(r)); },
   setControllerConfig: (cfg) => ipcRenderer.send('set-controller-config', cfg),
   getControllerStatus: () => ipcRenderer.invoke('get-controller-status'),
   onControllerInput: (callback) => { ipcRenderer.removeAllListeners('controller-input'); ipcRenderer.on('controller-input', (event, evt) => callback(evt)); },
