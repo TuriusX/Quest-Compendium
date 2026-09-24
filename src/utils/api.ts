@@ -11,6 +11,12 @@ export const getApiBaseUrl = (): string => {
       return customUrl.trim().replace(/\/+$/, '');
     }
 
+    // Desktop app in development (npm run desktop:dev loads the page from the local server): use that local
+    // server, so server changes can be tested before deploying. The installed app loads from file:// instead.
+    if ((window as any).electronAPI && window.location.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+      return '';
+    }
+
     // If running in packaged Electron or standalone desktop with file protocol, use the published Cloud Run backend
     if ((window as any).electronAPI || window.location.protocol === 'file:') {
       return DEFAULT_CLOUD_URL;
