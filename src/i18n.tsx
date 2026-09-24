@@ -44,7 +44,7 @@ type Dict = Record<string, string>;
 
 const en: Dict = {
   "set.sticky": "Keep markers on things as you move",
-  "set.stickyDesc": "Markers follow what they point at while the game scrolls, for up to 90 seconds. They fade out when the scene changes.",
+  "set.stickyDesc": "Markers follow what they point at while you move around, even if you walk away and come back, for up to 2 minutes. They fade out when the scene changes.",
   "chat.showOnScreen": "Show on my screen",
   "chat.pointsZoom": "Click to enlarge",
   "set.pointers": "Point at things on screen",
@@ -364,7 +364,7 @@ const en: Dict = {
 
 const es: Dict = {
   "set.sticky": "Mantener los marcadores sobre las cosas al moverte",
-  "set.stickyDesc": "Los marcadores siguen lo que señalan mientras el juego se desplaza, hasta 90 segundos. Se desvanecen cuando cambia la escena.",
+  "set.stickyDesc": "Los marcadores siguen lo que señalan mientras te mueves, incluso si te alejas y vuelves, hasta 2 minutos. Se desvanecen cuando cambia la escena.",
   "chat.showOnScreen": "Mostrar en mi pantalla",
   "chat.pointsZoom": "Clic para ampliar",
   "set.pointers": "Señalar cosas en pantalla",
@@ -675,7 +675,7 @@ const es: Dict = {
 
 const pt: Dict = {
   "set.sticky": "Manter os marcadores nas coisas enquanto você anda",
-  "set.stickyDesc": "Os marcadores acompanham o que apontam enquanto o jogo rola a tela, por até 90 segundos. Eles somem quando a cena muda.",
+  "set.stickyDesc": "Os marcadores acompanham o que apontam enquanto você anda, mesmo se você se afastar e voltar, por até 2 minutos. Eles somem quando a cena muda.",
   "chat.showOnScreen": "Mostrar na minha tela",
   "chat.pointsZoom": "Clique para ampliar",
   "set.pointers": "Apontar coisas na tela",

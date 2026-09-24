@@ -986,7 +986,7 @@ function closeScreenPointers() {
  * Draw markers over the game (electron/pointers.html). Points are 0-1 fractions of the captured screen.
  * The window is transparent, click-through, never takes focus, and is excluded from screen capture, so the game
  * keeps playing, and neither our screenshots nor the sticky-marker tracking ever see the markers themselves.
- * Sticky mode keeps each marker on its spot as the game scrolls (pointerTracker.js), for up to 90 seconds.
+ * Sticky mode keeps each marker on its spot as the game scrolls (pointerTracker.js), for up to 2 minutes.
  */
 function showScreenPointers(points, accent, opts = {}) {
   closeScreenPointers();
@@ -1005,7 +1005,17 @@ function showScreenPointers(points, accent, opts = {}) {
     sticky,
     sourceId: lastCaptureSourceId,
     refImage: sticky ? refImage : null,
-    lifetimeMs: 90000,
+    lifetimeMs: 120000,
+    // Our own overlay panel doesn't move with the game: keep the camera tracker from using it as background.
+    exclude: (() => {
+      try {
+        if (!mainWindow || mainWindow.isDestroyed() || !isAppVisible) return [];
+        const b = mainWindow.getBounds();
+        return [{ x0: (b.x - x) / width, y0: (b.y - y) / height, x1: (b.x + b.width - x) / width, y1: (b.y + b.height - y) / height }];
+      } catch (_) {
+        return [];
+      }
+    })(),
     fixedMs: 8000,
   };
   const win = new BrowserWindow({
