@@ -31,6 +31,10 @@
   const AGREE = 6; // how far a marker match may disagree with the camera before we distrust it
   const REGISTER_RADIUS = 110; // how far the camera may have moved between a screenshot and now (working px)
   const CUT_FRAMES = 4; // camera lost (or nothing left to track, e.g. a fade to black) this many frames: the scene changed
+  const DARK = 10; // average brightness (0-255) of a screen that's gone black: a transition, never gameplay
+  const BRIGHT = 245; // ... or gone white
+  const GAP_MS = 300; // screen capture only sends frames when something changes: a gap this long needs a whole-screen check
+  const WHOLE_CHECK_EVERY = 30; // frames between whole-screen checks while tracking (about half a second at 60 fps)
 
   function integral(g, w, h) {
     const W = w + 1;
@@ -375,6 +379,8 @@
     // when the reference changes (every second or two), not 30 times a second.
     let keyRel = { x: 0, y: 0 }; // how far the scene has moved since the reference frame
     let keyWeak = 0; // frames in a row the reference frame didn't match well
+    let prevWhole = null; // the last frame where the camera was tracked (for whole-screen checks)
+    let sinceWhole = 0;
     let stepAnchors = []; // patches from the previous frame
     let cameraLost = 0;
     let started = false;
@@ -405,9 +411,20 @@
       return true;
     }
 
-    function update(rawFrame) {
+    function update(rawFrame, gapMs) {
+      // A black or white screen is a transition (a door, stairs, a battle), never something to keep markers on.
+      let sum = 0;
+      for (let i = 0; i < rawFrame.length; i += 7) sum += rawFrame[i];
+      const brightness = (sum * 7) / rawFrame.length;
+      if (started && (brightness < DARK || brightness > BRIGHT)) gone = true;
       const frame = soften(rawFrame, w, h);
       const ii = integral(frame, w, h);
+      // After a gap in the frames, or every so often while tracking, the whole screen must still line up with the
+      // last tracked view. Patches alone can be fooled by look-alike tiles in a new room; the whole screen can't.
+      if (started && !gone && prevWhole && (gapMs > GAP_MS || ++sinceWhole >= WHOLE_CHECK_EVERY)) {
+        sinceWhole = 0;
+        if (!registerFrames(prevWhole, frame, w, h, selfVisible ? exclude.concat(markerRects()) : exclude)) gone = true;
+      }
       if (!started) {
         started = true;
         // If the screen can't be matched to the screenshot at all, it's a different scene: show nothing.
@@ -529,6 +546,7 @@
         }
         stepAnchors = pickAnchors(frame, w, h, ii, avoid);
         prev = frame;
+        prevWhole = frame;
       }
       return markers.map((m) => ({ x: m.x / w, y: m.y / h, visible: m.visible, score: m.score }));
     }

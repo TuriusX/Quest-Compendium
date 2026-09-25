@@ -169,13 +169,14 @@
       const moving = vel.x !== 0 || vel.y !== 0;
       // Every frame (up to 60 a second) while the screen moves; 30 a second when it's still (saves processor).
       if (video.readyState >= 2 && now - lastTrack >= (moving ? 12 : 30)) {
+        const gapMs = lastTrack ? now - lastTrack : 0; // screen capture skips frames while nothing changes
         lastTrack = now;
         const captureT = meta && typeof meta.captureTime === 'number' ? meta.captureTime : now - 45;
         if (meta && typeof meta.captureTime === 'number') {
           delaySum += now - meta.captureTime;
           delayN++;
         }
-        const res = tracker.update(grayOf(ctx, video, w, h));
+        const res = tracker.update(grayOf(ctx, video, w, h), gapMs);
         framesDone++;
         for (let i = 0; i < res.length && i < els.length; i++) {
           const r = res[i];
