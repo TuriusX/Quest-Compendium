@@ -570,6 +570,9 @@ export default function App() {
   locateUserRef.current = user;
   const locateGameRef = useRef<SteamGameData | null>(null);
   locateGameRef.current = globalActiveGame;
+  // Area-check misses per answer, per nearby item: stop looking for an item after MAX_AREA_MISSES looks without it.
+  const MAX_AREA_MISSES = 3;
+  const areaMissesRef = useRef(new Map<string, Map<number, number>>());
   useEffect(() => {
     const api = (window as any).electronAPI;
     if (!api?.onLocateRequest) return;
@@ -577,14 +580,31 @@ export default function App() {
     api.onLocateRequest(async ({ id, image, occupied }: { id: string; image: string; occupied?: { x: number; y: number }[] }) => {
       const tab = tabsRef.current.find((t) => t.messages.some((m) => m.id === id));
       const msg = tab?.messages.find((m) => m.id === id);
-      const notFound = (msg?.nearby ?? []).map((n, i) => ({ ...n, i })).filter((n) => !n.found);
-      // Items on this map first; if the AI marked none as on this map, look for all of them.
-      const pending = notFound.some((n) => n.onMap) ? notFound.filter((n) => n.onMap) : notFound;
+      let misses = areaMissesRef.current.get(id);
+      if (!misses) areaMissesRef.current.set(id, (misses = new Map()));
+      // Only items the AI placed on this map: "elsewhere" items are on another screen, and changing screens ends the
+      // markers anyway. Items missed MAX_AREA_MISSES times are dropped (hidden items look like every other barrel,
+      // so repeated looks rarely find them and each one is a paid AI call).
+      const pending = (msg?.nearby ?? [])
+        .map((n, i) => ({ ...n, i }))
+        .filter((n) => !n.found && n.onMap && (misses.get(n.i) ?? 0) < MAX_AREA_MISSES);
       const log = (m: string) => api.markerLog?.(m);
       if (!tab || !msg || !pending.length) {
         api.locateDone?.(id, 0);
         return;
       }
+      /** Count a miss for every looked-for item that wasn't found; report how many are still worth looking for. */
+      const finish = (foundIdx: Set<number>) => {
+        let remaining = 0;
+        for (const n of pending) {
+          if (foundIdx.has(n.i)) continue;
+          const count = (misses.get(n.i) ?? 0) + 1;
+          misses.set(n.i, count);
+          if (count < MAX_AREA_MISSES) remaining++;
+          else log(`stopped looking for ${n.label} after ${count} checks`);
+        }
+        api.locateDone?.(id, remaining);
+      };
       try {
         const u = locateUserRef.current;
         const token = u && typeof u.getIdToken === 'function' ? await u.getIdToken() : null;
@@ -598,11 +618,17 @@ export default function App() {
             game: tab.activeSteamGame?.name || locateGameRef.current?.name || '',
           }),
         });
-        const data = res.ok ? await res.json() : { found: [] };
-        const found: { index: number; x: number; y: number }[] = Array.isArray(data.found) ? data.found : [];
-        log(res.ok ? `area check: looked for ${pending.map((n) => n.label).join(', ')}; found ${found.length}` : `area check failed: HTTP ${res.status}`);
-        if (!found.length) {
+        if (!res.ok) {
+          // Not a miss: the check didn't happen (rate limit, Premium-only, server error).
+          log(`area check failed: HTTP ${res.status}`);
           api.locateDone?.(id, pending.length);
+          return;
+        }
+        const data = await res.json();
+        const found: { index: number; x: number; y: number }[] = Array.isArray(data.found) ? data.found : [];
+        log(`area check: looked for ${pending.map((n) => n.label).join(', ')}; found ${found.length}`);
+        if (!found.length) {
+          finish(new Set());
           return;
         }
         const startIndex = msg.points?.length ?? 0;
@@ -625,7 +651,7 @@ export default function App() {
         const newPoints = fresh.map((f) => ({ x: f.x, y: f.y, label: pending[f.index].label, fromArea: true }));
         const foundIdx = new Set(fresh.map((f) => pending[f.index].i));
         if (!newPoints.length) {
-          api.locateDone?.(id, pending.length);
+          finish(foundIdx);
           return;
         }
         setTabs((prev) =>
@@ -649,7 +675,7 @@ export default function App() {
         rememberAreaFind(id, { points: newPoints, refImage: image, startIndex });
         playBlipSound(settingsRef.current.soundEnabled);
         api.addPointers?.(id, newPoints, image, startIndex);
-        api.locateDone?.(id, pending.length - fresh.length);
+        finish(foundIdx);
       } catch {
         api.locateDone?.(id, pending.length);
       }

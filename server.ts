@@ -1262,6 +1262,8 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         responseText = 'The Compendium received a blank response from the AI. Please try again.';
       }
 
+      responseText = stripSearchCitations(responseText);
+
       // On-screen pointers: pull the <qc-points> block out of the answer.
       const { text: answerText, points, nearby } = extractScreenPoints(responseText, Boolean(imageBase64));
       responseText = answerText;
@@ -1313,6 +1315,14 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       });
     }
   });
+
+  /**
+   * Google Search grounding can leave raw citation tags in the answer, e.g. `[PerQueryResult(index="3.2.9")]`
+   * (search 3, result 2, part 9). They're meant for software, not players, so remove them, one or several per bracket.
+   */
+  function stripSearchCitations(text: string): string {
+    return text.replace(/[ \t]*\[\s*PerQueryResult\([^)\]]*\)(?:\s*,\s*PerQueryResult\([^)\]]*\))*\s*\]/g, '');
+  }
 
   /**
    * On-screen pointers: the model may append <qc-points>[{"y":..,"x":..,"label":".."}]</qc-points> (0-1000 scale).

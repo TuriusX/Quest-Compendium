@@ -15,7 +15,7 @@
  *   LOCATE_PER_USER_HOURLY (60), LOCATE_PER_GUEST_HOURLY (60), LOCATE_GLOBAL_DAILY (10000), LOCATE_MODEL (gemini-3.8-flash)
  */
 import type { Express, NextFunction, Request, Response } from 'express';
-import type { GoogleGenAI } from '@google/genai';
+import { ThinkingLevel, type GoogleGenAI } from '@google/genai';
 import { clientIp } from './guestGuard';
 import { logUsage } from './usage';
 
@@ -34,6 +34,9 @@ export interface LocateTarget {
 }
 
 const MAX_TARGETS = 6;
+// These replies are a short JSON list, so default thinking was nearly all the cost (often 3,000+ thinking tokens to
+// answer "[]"). LOW is the lowest level gemini-3.8-flash accepts (MINIMAL is rejected with a 400).
+const LOCATE_THINKING = { thinkingLevel: ThinkingLevel.LOW };
 const MAX_IMAGE_CHARS = 4_000_000; // ~3 MB of base64: a 1280x720 JPEG is far smaller
 
 const envNum = (v: string | undefined, d: number) => {
@@ -132,7 +135,7 @@ export function registerLocate(app: Express, deps: LocateDeps): void {
         ai.models.generateContent({
           model,
           contents: [{ role: 'user', parts: [{ inlineData: { mimeType: m[1], data: m[2] } }, { text: prompt }] }],
-          config: { responseMimeType: 'application/json', temperature: 0.1 },
+          config: { responseMimeType: 'application/json', temperature: 0.1, thinkingConfig: LOCATE_THINKING },
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
       ]);
@@ -210,7 +213,7 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
         ai.models.generateContent({
           model,
           contents: [{ role: 'user', parts }],
-          config: { responseMimeType: 'application/json', temperature: 0.1 },
+          config: { responseMimeType: 'application/json', temperature: 0.1, thinkingConfig: LOCATE_THINKING },
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
       ]);
