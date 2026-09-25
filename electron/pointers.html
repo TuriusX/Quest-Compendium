@@ -121,7 +121,7 @@
     // A live, low-resolution view of the screen.
     stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: opts.sourceId, maxWidth: 960, maxHeight: 960, maxFrameRate: 30 } },
+      video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: opts.sourceId, maxWidth: 960, maxHeight: 960, maxFrameRate: 60 } },
     });
     const video = document.createElement('video');
     video.muted = true;
@@ -145,25 +145,42 @@
     live.restartTimer = () => { started = Date.now(); };
     live.opts = opts;
     let lastTrack = 0;
-    const track = () => {
+    let lastAsk = 0;
+    // Delay compensation (tuned on real FF6 footage): frames reach us a little late (screen capture), so while the
+    // camera moves, markers are drawn slightly ahead along the camera's recent motion. Partial (70%) and capped, so
+    // turning or stopping never throws them far; the instant the camera stops, prediction stops.
+    const LEAD_SHARE = 0.7;
+    const LEAD_CAP_PX = 25;
+    const camHist = []; // { t (ms, capture time), x, y } in screen fractions
+    let vel = { x: 0, y: 0 }; // camera speed, screen fractions per second
+    let lastCaptureT = performance.now();
+    let delaySum = 0;
+    let delayN = 0;
+    let framesDone = 0;
+    let lastReport = performance.now();
+
+    const track = (rafNow, meta) => {
       if (finished) return;
       if (opts.lifetimeMs > 0 && Date.now() - started > opts.lifetimeMs) {
         log('display time is up: fading out');
         return finish();
       }
       const now = performance.now();
-      if (video.readyState >= 2 && now - lastTrack >= 30) {
+      const moving = vel.x !== 0 || vel.y !== 0;
+      // Every frame (up to 60 a second) while the screen moves; 30 a second when it's still (saves processor).
+      if (video.readyState >= 2 && now - lastTrack >= (moving ? 12 : 30)) {
         lastTrack = now;
+        const captureT = meta && typeof meta.captureTime === 'number' ? meta.captureTime : now - 45;
+        if (meta && typeof meta.captureTime === 'number') {
+          delaySum += now - meta.captureTime;
+          delayN++;
+        }
         const res = tracker.update(grayOf(ctx, video, w, h));
+        framesDone++;
         for (let i = 0; i < res.length && i < els.length; i++) {
           const r = res[i];
-          const becameVisible = r.visible && !visible[i];
           target[i].x = r.x;
           target[i].y = r.y;
-          if (becameVisible) {
-            shown[i].x = r.x; // snap into place instead of gliding in from somewhere else
-            shown[i].y = r.y;
-          }
           if (r.visible !== visible[i]) log(`marker ${i + 1} ${r.visible ? 'shown' : 'hidden'}`);
           visible[i] = r.visible;
           els[i].classList.toggle('hidden', !r.visible || hidden.has(i));
@@ -172,34 +189,61 @@
           log('scene changed (or nothing left to track): fading out');
           return finish();
         }
-        // Enough new screen since the last look? Ask the app to check for nearby items.
+        // Camera speed over the last ~100 ms; zero as soon as it has been still for ~50 ms.
         const cam = tracker.camera;
+        camHist.push({ t: captureT, x: cam.x, y: cam.y });
+        while (camHist.length && captureT - camHist[0].t > 250) camHist.shift();
+        const olderThan = (ms) => {
+          let e = camHist[0];
+          for (const c of camHist) if (captureT - c.t >= ms) e = c;
+          return e;
+        };
+        const a = olderThan(100);
+        const b = olderThan(50);
+        const stillPx = Math.hypot((cam.x - b.x) * window.innerWidth, (cam.y - b.y) * window.innerHeight);
+        vel = stillPx < 1.5 || captureT - a.t <= 0 ? { x: 0, y: 0 } : { x: ((cam.x - a.x) * 1000) / (captureT - a.t), y: ((cam.y - a.y) * 1000) / (captureT - a.t) };
+        lastCaptureT = captureT;
+
+        if (now - lastReport > 10000) {
+          log(`tracking ${Math.round((framesDone * 1000) / (now - lastReport))} fps, capture delay ${delayN ? Math.round(delaySum / delayN) + ' ms' : 'unknown (assuming 45 ms)'}`);
+          lastReport = now;
+          framesDone = 0;
+          delaySum = 0;
+          delayN = 0;
+        }
+
+        // Enough new screen since the last look? Ask the app to check for nearby items (at most every 4 s).
         const dx = Math.abs(cam.x - checkedAt.x);
         const dy = Math.abs(cam.y - checkedAt.y);
         const newArea = 1 - Math.max(0, 1 - dx) * Math.max(0, 1 - dy);
-        if (opts.watchMoves && window.qcBridge && newArea >= CHECK_NEW_AREA) {
+        if (opts.watchMoves && window.qcBridge && newArea >= CHECK_NEW_AREA && now - lastAsk >= 4000) {
+          lastAsk = now;
           checkedAt = { x: cam.x, y: cam.y };
           live.checkCam = { x: cam.x, y: cam.y }; // the next found items were spotted from here
           log(`${Math.round(newArea * 100)}% of the screen is new: asking about nearby items`);
           window.qcBridge.moved(target.filter((_, i) => visible[i]).map((p) => ({ x: p.x, y: p.y })));
         }
       }
-      // Process each new frame of the screen as it arrives (about 30 a second).
+      // Process each new frame of the screen as it arrives.
       if (typeof video.requestVideoFrameCallback === 'function') video.requestVideoFrameCallback(track);
-      else setTimeout(track, 33);
+      else setTimeout(track, 16);
     };
 
-    // Draw every screen refresh, gliding toward the tracked spots. No predicting ahead: markers never overshoot
-    // when your character stops.
-    let lastFrame = performance.now();
+    // Draw every screen refresh at the tracked spot, nudged ahead along the camera's motion to make up for the
+    // capture delay (none when the camera is still).
     const draw = (now) => {
       if (finished) return;
-      const frameDt = Math.min(0.1, (now - lastFrame) / 1000);
-      lastFrame = now;
-      const k = 1 - Math.exp(-frameDt / 0.03);
+      const lead = (Math.min(80, now - lastCaptureT + 16) / 1000) * LEAD_SHARE;
+      let ox = vel.x * lead;
+      let oy = vel.y * lead;
+      const px = Math.hypot(ox * window.innerWidth, oy * window.innerHeight);
+      if (px > LEAD_CAP_PX) {
+        ox *= LEAD_CAP_PX / px;
+        oy *= LEAD_CAP_PX / px;
+      }
       for (let i = 0; i < els.length; i++) {
-        shown[i].x += (target[i].x - shown[i].x) * k;
-        shown[i].y += (target[i].y - shown[i].y) * k;
+        shown[i].x = target[i].x + ox;
+        shown[i].y = target[i].y + oy;
         place(els[i], shown[i].x, shown[i].y);
       }
       requestAnimationFrame(draw);
