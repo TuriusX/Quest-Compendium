@@ -1075,6 +1075,10 @@ function showScreenPointers(points, accent, opts = {}) {
       }
     }
   });
+  // The marker page's "[markers] ..." diagnostics go to the app's log (visible in the desktop:dev output).
+  win.webContents.on('console-message', (event, level, message) => {
+    if (typeof message === 'string' && message.startsWith('[markers]')) console.log(message);
+  });
   win.webContents.once('did-finish-load', () => {
     if (win.isDestroyed()) return;
     win.webContents.executeJavaScript(`window.qcStart(${JSON.stringify(payload)})`).catch(() => {});
@@ -1140,6 +1144,7 @@ ipcMain.on('pointers-moved', async (event) => {
     session.inFlight = false;
     return;
   }
+  console.log(`[markers] area check ${session.checks} of ${LOCATE_MAX_PER_SESSION}`);
   mainWindow.webContents.send('locate-request', { id: session.id, image });
   // If the app never answers (offline, closed), allow the next check anyway.
   setTimeout(() => { if (pointerSession === session) session.inFlight = false; }, 30000);
@@ -1162,6 +1167,8 @@ ipcMain.on('pointers-add', (event, { id, points, refImage, startIndex } = {}) =>
   if (!session || session.id !== id || !pointerWindow || pointerWindow.isDestroyed()) return;
   const payload = cleanAdd({ points, refImage, startIndex });
   if (!payload) return;
+  payload.fromCheck = true; // found by an area check just now (placed from the camera movement since)
+  console.log(`[markers] area check found: ${payload.points.map((p) => p.label).join(', ')}`);
   if (!session.ready) {
     session.queue.push(payload);
     return;

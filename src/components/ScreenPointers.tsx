@@ -13,9 +13,11 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** Add a numbered checkbox right after the first mention of each marked item in the answer text. */
 export function withMarkerBadges(text: string, points: ScreenPoint[]): string {
   let out = text;
+  const used = new Set<string>();
   points.forEach((p, i) => {
     const label = p.label.trim();
-    if (label.length < 3) return;
+    if (label.length < 3 || used.has(label.toLowerCase())) return; // one checkbox per item name
+    used.add(label.toLowerCase());
     const re = new RegExp(`(^|[^\\p{L}\\p{N}\\[])(${escapeRe(label)})(?![\\p{L}\\p{N}])`, 'iu');
     const m = re.exec(out);
     if (!m) return;

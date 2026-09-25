@@ -892,6 +892,7 @@ If the player is asking about items, secrets or things to find, and you know of 
 <qc-nearby>[{"label": "Gold Needle", "hint": "crate in the southwest corner", "onThisMap": true}, {"label": "Elixir", "hint": "clay pot inside the inn", "onThisMap": false}]</qc-nearby>
 - label: what it is (1 to 4 words); hint: where it is, described by what the spot looks like (a few words). Both in the player's language.
 - onThisMap: true ONLY if it is on the same map the player is on right now, so it would scroll into view just by walking around (no door, stairs, cave entrance or screen transition in between). false for anything inside a building, on another floor, in another room, or behind a transition.
+- Never list anything you already pointed at in <qc-points>: only other items.
 - Only list things you are confident about. Leave the block out when there are none, and never mention it in your answer text.`;
       }
 

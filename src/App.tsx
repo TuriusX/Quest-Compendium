@@ -529,8 +529,14 @@ export default function App() {
           return;
         }
         const startIndex = msg.points?.length ?? 0;
-        const newPoints = found.map((f) => ({ x: f.x, y: f.y, label: pending[f.index].label, fromArea: true }));
+        const already = new Set((msg.points ?? []).map((p) => p.label.trim().toLowerCase()));
+        const fresh = found.filter((f) => !already.has(pending[f.index].label.trim().toLowerCase()));
+        const newPoints = fresh.map((f) => ({ x: f.x, y: f.y, label: pending[f.index].label, fromArea: true }));
         const foundIdx = new Set(found.map((f) => pending[f.index].i));
+        if (!newPoints.length) {
+          api.locateDone?.(id, pending.length - found.length);
+          return;
+        }
         setTabs((prev) =>
           prev.map((t) =>
             t.id !== tab.id
@@ -1095,7 +1101,14 @@ export default function App() {
         modelUsed: data.modelUsed || 'Gemini 3.1 Pro Preview',
         bannerImageUrl: data.bannerImageUrl,
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
-        ...(Array.isArray(data.nearby) && data.nearby.length ? { nearby: data.nearby.map((n: any) => ({ label: String(n.label), hint: String(n.hint || ''), onMap: n.onMap === true, found: false })) } : {}),
+        ...(() => {
+          // Nearby items, minus anything the answer already points at (no duplicate markers).
+          const pointed = new Set((Array.isArray(data.points) ? data.points : []).map((p: any) => String(p.label).trim().toLowerCase()));
+          const nearby = (Array.isArray(data.nearby) ? data.nearby : [])
+            .filter((n: any) => !pointed.has(String(n.label).trim().toLowerCase()))
+            .map((n: any) => ({ label: String(n.label), hint: String(n.hint || ''), onMap: n.onMap === true, found: false }));
+          return nearby.length ? { nearby } : {};
+        })(),
         timestamp: nowAi
       };
 
