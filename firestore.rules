@@ -6,9 +6,34 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // User data: strictly accessible only by the authenticated owner
+    // Fields only the server may set (it uses the Admin SDK, which these rules don't apply to).
+    // Players must never be able to grant themselves Premium or reset their own question counts.
+    function serverOnlyFields() {
+      return ['isPremium', 'subscriptionStatus', 'stripeCustomerId',
+              'proQueriesAvailable', 'flashQueriesAvailable', 'proQueriesToday', 'flashQueriesToday',
+              'lastResetDate', '_upgradedToday', 'freeQueriesUsed'];
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // User data (settings, compendium tabs, notes): only the signed-in owner.
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isOwner(userId);
+
+      // New accounts: the app may start the record with the free defaults, nothing more.
+      allow create: if isOwner(userId)
+        && !request.resource.data.keys().hasAny(serverOnlyFields().removeAll(['isPremium', 'subscriptionStatus']))
+        && (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false)
+        && (!('subscriptionStatus' in request.resource.data) || request.resource.data.subscriptionStatus in ['beta', 'inactive']);
+
+      // Updates: anything except the server-only fields.
+      allow update: if isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverOnlyFields());
+
+      // No deleting: a fresh record would reset the daily question counts.
+      allow delete: if false;
     }
 
     // App configuration (client update checks, desktop version info): public read, no client writes

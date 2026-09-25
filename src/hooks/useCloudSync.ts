@@ -302,10 +302,7 @@ export function useCloudSync(
               }));
               setSubscriptionStatus(isPrem ? 'active' : (data.subscriptionStatus || 'beta'));
 
-              // Persist verified Pro status directly to Firestore user doc so onSnapshot also has it
-              if (isPrem && currentUser) {
-                setDoc(doc(db, 'users', currentUser.uid), { isPremium: true, subscriptionStatus: 'active' }, { merge: true }).catch(() => {});
-              }
+              // (The server stores verified Premium status itself; the app may not write it.)
             }
             setIsInitializing(false);
           })
@@ -422,8 +419,7 @@ export function useCloudSync(
 
           await setDoc(userRef, removeUndefinedFields({
             email: user.email || null,
-            subscriptionStatus: userData?.isPremium ? 'active' : 'beta',
-            isPremium: Boolean(userData?.isPremium),
+            // Premium and quota fields are set by the server only (see firestore.rules).
             settings: localDataRef.current.settings,
             tabs: initialTabs,
             updatedAt: Date.now()

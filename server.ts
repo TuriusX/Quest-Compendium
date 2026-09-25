@@ -9,13 +9,71 @@ import dotenv from 'dotenv';
 import xml2js from 'xml2js';
 import { initializeApp, getApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import nodeFs from 'fs';
+import nodeOs from 'os';
+import nodePath from 'path';
 import cors from 'cors';
 import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
 import { registerLocate } from './locate';
+/**
+ * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
+ * Firestore security rules don't restrict. That's what lets the rules lock Premium and quota fields so that players
+ * can't change them. Without server credentials (a dev machine with no Application Default Credentials), it falls
+ * back to the player's own sign-in token: reads work, but writes to the locked fields are refused there.
+ */
+/**
+ * Only use the Admin SDK where server credentials exist: on Cloud Run, or a machine with a service-account key or
+ * Application Default Credentials. (Without them the Admin SDK doesn't just fail: it crashes the process from a
+ * background task, so it must not be touched at all.)
+ */
+function hasServerCredentials(): boolean {
+  if (process.env.K_SERVICE || process.env.GOOGLE_APPLICATION_CREDENTIALS) return true;
+  const adc =
+    process.platform === 'win32'
+      ? nodePath.join(process.env.APPDATA || '', 'gcloud', 'application_default_credentials.json')
+      : nodePath.join(nodeOs.homedir(), '.config', 'gcloud', 'application_default_credentials.json');
+  try {
+    return nodeFs.existsSync(adc);
+  } catch {
+    return false;
+  }
+}
+
+let adminFirestoreUnavailable = !hasServerCredentials();
+if (adminFirestoreUnavailable) {
+  console.warn("[firestore] No server credentials on this machine: user records are read with the player's token (dev only).");
+}
+
+const isCredentialError = (e: any) =>
+  /credential|default credentials|UNAUTHENTICATED|invalid_grant|metadata/i.test(String(e?.message ?? e)) || e?.code === 16;
+
+/** Only the simple fields the server uses (not the synced tabs and settings, which can be large). */
+function pickSimpleFields(data: Record<string, any> | undefined) {
+  const out: any = {};
+  for (const [k, v] of Object.entries(data ?? {})) {
+    if (typeof v === 'string' || typeof v === 'boolean' || typeof v === 'number') out[k] = v;
+  }
+  return out;
+}
+
 async function getFirestoreDocREST(idToken: string, uid: string) {
-  const isCloudRun = !!process.env.K_SERVICE;
+  if (!adminFirestoreUnavailable) {
+    try {
+      const snap = await getFirestore().collection('users').doc(uid).get();
+      return snap.exists ? pickSimpleFields(snap.data()) : null;
+    } catch (e: any) {
+      if (!isCredentialError(e)) throw e;
+      adminFirestoreUnavailable = true;
+      console.warn('[firestore] No server credentials here; using the player\'s token instead (reads only):', e?.message);
+    }
+  }
+  return getFirestoreDocWithToken(idToken, uid);
+}
+
+async function getFirestoreDocWithToken(idToken: string, uid: string) {
   const projectId = 'quest-compendium-1bccf';
   const databaseId = '(default)';
 
@@ -37,6 +95,23 @@ async function getFirestoreDocREST(idToken: string, uid: string) {
 }
 
 async function updateFirestoreDocREST(idToken: string, uid: string, fields: Record<string, any>) {
+  if (!adminFirestoreUnavailable) {
+    try {
+      await getFirestore().collection('users').doc(uid).set(pickSimpleFields(fields), { merge: true });
+      return;
+    } catch (e: any) {
+      if (!isCredentialError(e)) {
+        console.warn('Firestore update failed:', e?.message);
+        return;
+      }
+      adminFirestoreUnavailable = true;
+      console.warn('[firestore] No server credentials here; using the player\'s token instead:', e?.message);
+    }
+  }
+  return updateFirestoreDocWithToken(idToken, uid, fields);
+}
+
+async function updateFirestoreDocWithToken(idToken: string, uid: string, fields: Record<string, any>) {
   const projectId = 'quest-compendium-1bccf';
   const databaseId = '(default)';
 

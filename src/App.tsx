@@ -374,36 +374,13 @@ export default function App() {
     if (user && !isInitializing) {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('upgrade') === 'success') {
-        const upgradeUser = async () => {
-          try {
-            await setDoc(doc(db, 'users', user.uid), {
-              isPremium: true,
-              subscriptionStatus: 'active'
-            }, { merge: true });
-            console.log('Successfully upgraded user to Premium locally!');
-            window.history.replaceState({}, document.title, window.location.pathname);
-          } catch (e) {
-            console.error('Failed to update premium status:', e);
-          }
-        };
-        upgradeUser();
+        // Premium is granted by the server after it verifies the payment with Stripe (the app can't set it).
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
 
       if (urlParams.get('downgrade') === 'true') {
-        const downgradeUser = async () => {
-          try {
-            await setDoc(doc(db, 'users', user.uid), {
-              isPremium: false,
-              subscriptionStatus: 'inactive'
-            }, { merge: true });
-            console.log('Successfully downgraded user to Free locally!');
-            // Remove the param from URL
-            window.history.replaceState({}, document.title, window.location.pathname);
-          } catch (e) {
-            console.error('Failed to update premium status:', e);
-          }
-        };
-        downgradeUser();
+        // Subscription changes are applied by the server from Stripe.
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
     }
   }, [user, isInitializing]);
