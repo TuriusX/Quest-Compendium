@@ -5,30 +5,24 @@
 <title>Quest Compendium markers</title>
 <style>
   html, body { margin: 0; background: transparent; overflow: hidden; width: 100%; height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; }
-  /* A marker frames the item with pixel corner brackets and floats a numbered label above it, so the item itself
-     stays visible (and the sticky tracker can keep checking it). */
+  /* A marker is a numbered label floating just above the item, with a small arrow pointing down at it. Nothing
+     covers the item itself, so it stays visible (and the sticky tracker can keep checking it). */
   .m { position: absolute; left: 0; top: 0; will-change: transform; transition: opacity .2s steps(3); }
   .m.hidden { opacity: 0; }
   .inner { position: relative; animation: pop .25s steps(3) both; }
-  .frame { position: absolute; left: -32px; top: -32px; width: 64px; height: 64px; animation: pulse 1.2s steps(2) infinite; }
-  .c { position: absolute; width: 16px; height: 16px; border: 0 solid var(--accent); filter: drop-shadow(0 0 1px #16101f) drop-shadow(0 0 1px #16101f); }
-  .c.tl { left: 0; top: 0; border-top-width: 4px; border-left-width: 4px; }
-  .c.tr { right: 0; top: 0; border-top-width: 4px; border-right-width: 4px; }
-  .c.bl { left: 0; bottom: 0; border-bottom-width: 4px; border-left-width: 4px; }
-  .c.br { right: 0; bottom: 0; border-bottom-width: 4px; border-right-width: 4px; }
-  .tag { position: absolute; left: 0; bottom: 42px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  .tag { position: absolute; left: 0; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; white-space: nowrap;
          background: rgba(16, 12, 28, .94); border: 2px solid var(--accent); padding: 3px 12px 3px 3px; color: #fff;
-         font-size: 16px; font-weight: 700; box-shadow: 0 6px 18px rgba(0, 0, 0, .6); }
+         font-size: 16px; font-weight: 700; box-shadow: 0 6px 18px rgba(0, 0, 0, .6); animation: bob 1.4s steps(2) infinite; }
   .num { width: 24px; height: 24px; background: var(--accent); color: #16101f; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; }
-  .tag::after { content: ''; position: absolute; left: 50%; bottom: -9px; margin-left: -7px; border: 7px solid transparent; border-bottom: 0; border-top-color: var(--accent); }
-  .below .tag { bottom: auto; top: 42px; }
-  .below .tag::after { bottom: auto; top: -9px; border-top: 0; border-bottom: 7px solid var(--accent); }
+  .tag::after { content: ''; position: absolute; left: 50%; bottom: -12px; margin-left: -9px; border: 9px solid transparent; border-bottom: 0; border-top: 10px solid var(--accent); }
+  .below .tag { bottom: auto; top: 22px; }
+  .below .tag::after { bottom: auto; top: -12px; border-top: 0; border-bottom: 10px solid var(--accent); }
   body.out .m { opacity: 0; transition: opacity .3s steps(3); }
   .toast { position: absolute; left: 50%; top: 48px; transform: translateX(-50%); padding: 8px 16px; background: rgba(16, 12, 28, .95);
            border: 2px solid var(--accent); color: #fff; font-size: 17px; font-weight: 700; box-shadow: 0 6px 18px rgba(0, 0, 0, .6);
            animation: pop .25s steps(3) both; white-space: nowrap; }
   .toast b { color: var(--accent); }
-  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+  @keyframes bob { 0%, 100% { margin-bottom: 0; } 50% { margin-bottom: 3px; } }
   @keyframes pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
 </style>
 </head>
@@ -68,13 +62,6 @@
       el.className = 'm';
       const inner = document.createElement('div');
       inner.className = 'inner';
-      const frame = document.createElement('div');
-      frame.className = 'frame';
-      for (const corner of ['tl', 'tr', 'bl', 'br']) {
-        const c = document.createElement('div');
-        c.className = `c ${corner}`;
-        frame.append(c);
-      }
       const tag = document.createElement('div');
       tag.className = 'tag';
       const num = document.createElement('span');
@@ -83,7 +70,7 @@
       const label = document.createElement('span');
       label.textContent = p.label || '';
       tag.append(num, label);
-      inner.append(frame, tag);
+      inner.append(tag);
       el.append(inner);
       document.body.append(el);
       place(el, p.x, p.y);
@@ -141,6 +128,17 @@
     let checkedAt = { x: 0, y: 0 };
     els.forEach((el) => el.classList.add('hidden')); // appear once they're in the right place
 
+    // Watchdog: screen capture sends no frames while the screen sits still, so a scene change (like closing the game)
+    // might be followed by nothing at all. If tracking failed and hasn't recovered within half a second, end.
+    let lastTracked = performance.now();
+    const watchdog = setInterval(() => {
+      if (finished) return clearInterval(watchdog);
+      if (tracker.lost && performance.now() - lastTracked > 500) {
+        log('lost the scene and no new frames arrived: fading out');
+        clearInterval(watchdog);
+        finish();
+      }
+    }, 200);
     let started = Date.now();
     live.restartTimer = () => { started = Date.now(); };
     live.opts = opts;
@@ -190,6 +188,7 @@
           log('scene changed (or nothing left to track): fading out');
           return finish();
         }
+        if (!tracker.lost) lastTracked = now;
         // Camera speed over the last ~100 ms; zero as soon as it has been still for ~50 ms.
         const cam = tracker.camera;
         camHist.push({ t: captureT, x: cam.x, y: cam.y });

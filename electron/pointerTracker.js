@@ -348,7 +348,7 @@
     // When our markers show up in the capture, their label floats above the item: match on the item and the
     // ground below it, not on the area our label covers.
     const TPL = selfVisible ? 24 : PATCH;
-    const TPL_UP = selfVisible ? 6 : PATCH / 2;
+    const TPL_UP = selfVisible ? 3 : PATCH / 2;
     const makeMarker = (img, p, shift) => {
       const x = (p.x + (shift ? shift.x : 0)) * w;
       const y = (p.y + (shift ? shift.y : 0)) * h;
@@ -393,8 +393,9 @@
         const cx = m.x / w;
         const cy = m.y / h;
         const label = labels()[i] || '';
-        const half = Math.max(36, (40 + 11 * label.length) / 2) / screenW;
-        return { x0: cx - half, x1: cx + half, y0: cy - (84 / screenW) * aspect, y1: cy + (40 / screenW) * aspect };
+        // The label floats just above the item (its arrow tip ~12 px above the spot); nothing covers the item.
+        const half = Math.max(30, (48 + 11 * label.length) / 2) / screenW;
+        return { x0: cx - half, x1: cx + half, y0: cy - (70 / screenW) * aspect, y1: cy - (8 / screenW) * aspect };
       });
     }
 
@@ -490,6 +491,10 @@
           // Keep the last good background to compare against: a flash or a character passing by recovers within
           // a few frames; a new room, a cutscene or a fade to black (nothing left to track) never does.
           cameraLost++;
+          // Don't wait for more frames to decide: screen capture may not send any while the screen sits still
+          // (a closed game, a paused desktop). If the whole screen no longer lines up with the last good view, it's
+          // a different scene right now.
+          if (cameraLost === 1 && prevWhole && !registerFrames(prevWhole, frame, w, h, selfVisible ? exclude.concat(markerRects()) : exclude)) gone = true;
           if (cameraLost >= CUT_FRAMES) gone = true;
         }
 
@@ -604,6 +609,10 @@
       /** True after a scene change (camera tracking broke), or if nothing could be found at the start. */
       get gone() {
         return gone;
+      },
+      /** True while the camera can't be followed (the page ends the markers if this lasts, even with no new frames). */
+      get lost() {
+        return cameraLost > 0;
       },
     };
   }

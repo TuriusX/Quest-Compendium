@@ -723,6 +723,8 @@ function processNewAppId(currentAppId) {
   if (NON_GAME_APP_IDS.has(currentAppId)) return;
 
   if (currentAppId !== lastRunningAppId) {
+    // The game closed or switched: markers belong to the old game's screen, so clear them.
+    if (lastRunningAppId !== 0 && typeof closeScreenPointers === 'function') closeScreenPointers();
     lastRunningAppId = currentAppId;
     if (currentAppId === 0) {
       activeSteamGame = null;
