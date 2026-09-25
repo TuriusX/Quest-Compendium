@@ -12,6 +12,8 @@ const RATES: Record<string, { input: number; output: number }> = {
   'gemini-3.8-flash': { input: 0.75, output: 3.75 },
   'gemini-3.1-pro-preview': { input: 2.0, output: 12.0 },
   'gemini-3.1-flash-tts-preview': { input: 0.5, output: 20.0 }, // audio output (rate from the project's billing report)
+  'gemini-3.8-flash-tts': { input: 0.5, output: 9.0 }, // audio output, per Google's price list
+  // gemini-3.8-flash-lite-tts: priced below Flash TTS; logged without an estimate until its rate is confirmed
 };
 const SEARCH_COST = 14 / 1000; // after the monthly free allowance
 export const BANNER_IMAGE_COST = 0.0336; // one 1K image from the Flash-Lite image model

@@ -24,6 +24,8 @@ export interface LocateDeps {
   getGeminiClient: () => GoogleGenAI;
   env?: Record<string, string | undefined>;
   now?: () => number;
+  /** Whether this player gets marker AI features (Premium, or everyone during the beta). Default: yes. */
+  allowed?: (req: Request) => Promise<boolean>;
 }
 
 export interface LocateTarget {
@@ -86,6 +88,7 @@ export function registerLocate(app: Express, deps: LocateDeps): void {
   }, 60_000).unref();
 
   app.post('/api/locate', deps.requireAuth as any, async (req: Request, res: Response) => {
+    if (deps.allowed && !(await deps.allowed(req))) return res.status(403).json({ error: 'Part of Premium.', premiumRequired: true, found: [] });
     const image = String(req.body?.imageBase64 ?? '');
     const m = image.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
     if (!m || image.length > MAX_IMAGE_CHARS) return res.status(400).json({ error: 'A screenshot is required.' });
@@ -161,6 +164,7 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
   }, 60_000).unref();
 
   app.post('/api/refine', deps.requireAuth as any, async (req: Request, res: Response) => {
+    if (deps.allowed && !(await deps.allowed(req))) return res.status(403).json({ error: 'Part of Premium.', premiumRequired: true, found: [] });
     const crops = (Array.isArray(req.body?.crops) ? req.body.crops : [])
       .slice(0, 5)
       .map((c: any) => ({ image: String(c?.image ?? ''), label: String(c?.label ?? '').trim().slice(0, 40), where: String(c?.where ?? '').trim().slice(0, 100) }))

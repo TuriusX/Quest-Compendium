@@ -46,12 +46,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   dockPosition: 'top-right',
   windowOpacity: 96,
   steamId: '',
-  ttsVoice: 'puck',
+  ttsVoice: 'device', // the device's built-in voice (free); Gemini voices are an option
   customApiKey: '',
   hideAppShortcut: 'CmdOrCtrl+Shift+H',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
-  enableThematicBanners: true,
+  enableThematicBanners: false,
   uiStyle: 'lofi',
   language: detectLocale(),
   controllerEnabled: true,
@@ -106,9 +106,9 @@ function SettingsStandalone() {
     try {
       const saved = localStorage.getItem('quest_compendium_settings');
       let parsed = saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
-      const validVoices = ['puck', 'charon', 'fenrir', 'kore', 'aoede'];
+      const validVoices = ['device', 'puck', 'charon', 'fenrir', 'kore', 'aoede'];
       if (!validVoices.includes(parsed.ttsVoice)) {
-        parsed = { ...parsed, ttsVoice: 'puck' };
+        parsed = { ...parsed, ttsVoice: 'device' };
         localStorage.setItem('quest_compendium_settings', JSON.stringify(parsed));
       }
       return parsed;
@@ -197,9 +197,9 @@ export default function App() {
     try {
       const saved = localStorage.getItem('quest_compendium_settings');
       let parsed = saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
-      const validVoices = ['puck', 'charon', 'fenrir', 'kore', 'aoede'];
+      const validVoices = ['device', 'puck', 'charon', 'fenrir', 'kore', 'aoede'];
       if (!validVoices.includes(parsed.ttsVoice)) {
-        parsed = { ...parsed, ttsVoice: 'puck' };
+        parsed = { ...parsed, ttsVoice: 'device' };
         localStorage.setItem('quest_compendium_settings', JSON.stringify(parsed));
       }
       return parsed;
@@ -1111,7 +1111,7 @@ export default function App() {
           } : null,
           achievements: activeGame?.achievements || [],
           news: activeGame?.patchNotes || [],
-          generateBanner: settings.enableThematicBanners !== false,
+          generateBanner: false, // AI banner art is retired
           language: aiLanguageName(settings.language)
         }),
       });

@@ -303,8 +303,20 @@ async function startServer() {
   });
 
   registerWebSearch(app, { requireAuth, getGeminiClient });
-  registerLocate(app, { requireAuth, getGeminiClient });
-  registerRefine(app, { requireAuth, getGeminiClient });
+  // Marker AI features (area checks, precision pass): Premium, or everyone during the beta.
+  const markerAiAllowed = async (req: any) => {
+    if (BETA_ALL_ACCESS) return true;
+    const u = req.user;
+    if (!u?.uid || u.isGuest || String(u.uid).startsWith('guest_')) return false;
+    try {
+      const token = req.headers.authorization?.split('Bearer ')[1] || '';
+      return (await getFirestoreDocREST(token, u.uid))?.isPremium === true;
+    } catch {
+      return false;
+    }
+  };
+  registerLocate(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed });
+  registerRefine(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed });
 
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {
@@ -312,6 +324,20 @@ async function startServer() {
   });
 
 
+
+  // ---- Plans ---------------------------------------------------------------------------------------------------
+  // One daily question allowance (no more separate Pro / Flash counts). During the beta every player gets the full
+  // experience; after it, set BETA_ALL_ACCESS=false and free players get Flash-Lite answers and no Gemini voices or
+  // area checks, while Premium keeps everything. All of these can be changed with environment variables.
+  const envInt = (v: string | undefined, d: number) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : d);
+  const BETA_ALL_ACCESS = (process.env.BETA_ALL_ACCESS ?? 'true') !== 'false';
+  const FREE_DAILY_QUESTIONS = envInt(process.env.FREE_DAILY_QUESTIONS, 10);
+  const PREMIUM_DAILY_QUESTIONS = envInt(process.env.PREMIUM_DAILY_QUESTIONS, 60);
+  const MAIN_MODEL = process.env.MAIN_MODEL || 'gemini-3.8-flash';
+  const FREE_MODEL = process.env.FREE_MODEL || 'gemini-3.1-flash-lite';
+  const BACKSTOP_MODEL = 'gemini-3.1-flash-lite';
+  /** Whether a player gets the full feature set (Premium, or anyone during the beta). */
+  const hasFullAccess = (isPremium: boolean) => isPremium || BETA_ALL_ACCESS;
 
   function verifySeal(userData: any) {
     if (!userData.securitySeal) return false;
@@ -339,34 +365,25 @@ async function startServer() {
        return userData;
     }
 
+    const allowance = isPremium ? PREMIUM_DAILY_QUESTIONS : FREE_DAILY_QUESTIONS;
     if (userData.lastResetDate !== today) {
-      if (isPremium) {
-        let currentAvailable = userData.proQueriesAvailable !== undefined 
-            ? userData.proQueriesAvailable 
-            : Math.max(0, 40 - (userData.proQueriesToday || 0));
-        userData.proQueriesAvailable = Math.min(100, currentAvailable + 40);
-        userData.flashQueriesAvailable = 1000;
-      } else {
-        userData.proQueriesAvailable = 5;
-        userData.flashQueriesAvailable = 5;
-      }
+      userData.flashQueriesAvailable = allowance;
       userData.lastResetDate = today;
       userData.proQueriesToday = 0;
       userData.flashQueriesToday = 0;
+      userData._upgradedToday = false;
     } else {
-      if (userData.proQueriesAvailable === undefined) {
-        userData.proQueriesAvailable = Math.max(0, (isPremium ? 40 : 5) - (userData.proQueriesToday || 0));
-      }
       if (userData.flashQueriesAvailable === undefined) {
-        userData.flashQueriesAvailable = Math.max(0, (isPremium ? 1000 : 5) - (userData.flashQueriesToday || 0));
+        userData.flashQueriesAvailable = Math.max(0, allowance - (userData.flashQueriesToday || 0) - (userData.proQueriesToday || 0));
       }
-      
-      if (isPremium && userData.proQueriesAvailable < 40 && (userData.proQueriesToday || 0) < 40 && !userData._upgradedToday) {
-         userData.proQueriesAvailable = Math.max(userData.proQueriesAvailable, 40 - (userData.proQueriesToday || 0));
-         userData.flashQueriesAvailable = 1000;
-         userData._upgradedToday = true;
+      // Upgraded to Premium today: top up to the Premium allowance once.
+      if (isPremium && !userData._upgradedToday && userData.flashQueriesAvailable < allowance) {
+        userData.flashQueriesAvailable = Math.max(0, allowance - (userData.flashQueriesToday || 0) - (userData.proQueriesToday || 0));
+        userData._upgradedToday = true;
       }
     }
+    // One allowance. Older app versions (and the Steam Deck plugin) still read a "Pro" count: give them the same number.
+    userData.proQueriesAvailable = userData.flashQueriesAvailable;
     return userData;
   }
 
@@ -381,8 +398,8 @@ async function startServer() {
     let quota = guestQuotas.get(guestId);
     if (!quota || quota.lastResetDate !== today) {
       quota = {
-        proQueriesAvailable: 5,
-        flashQueriesAvailable: 5,
+        proQueriesAvailable: FREE_DAILY_QUESTIONS,
+        flashQueriesAvailable: FREE_DAILY_QUESTIONS,
         lastResetDate: today
       };
       guestQuotas.set(guestId, quota);
@@ -402,9 +419,13 @@ async function startServer() {
         const quota = getOrCreateGuestQuota(userId, today);
         return res.json({
           isPremium: false,
-          freeQueriesUsed: (5 - quota.proQueriesAvailable) + (5 - quota.flashQueriesAvailable),
-          proQueriesAvailable: quota.proQueriesAvailable,
+          freeQueriesUsed: FREE_DAILY_QUESTIONS - quota.flashQueriesAvailable,
+          proQueriesAvailable: quota.flashQueriesAvailable,
           flashQueriesAvailable: quota.flashQueriesAvailable,
+          questionsAvailable: quota.flashQueriesAvailable,
+          dailyQuestions: FREE_DAILY_QUESTIONS,
+          fullAccess: hasFullAccess(false),
+          beta: BETA_ALL_ACCESS,
           isGuest: true
         });
       }
@@ -447,7 +468,13 @@ async function startServer() {
         updateFirestoreDocREST(idToken, userId, { isPremium: true, subscriptionStatus: 'active' }).catch(() => {});
       }
 
-      res.json(userData);
+      res.json({
+        ...userData,
+        questionsAvailable: userData.flashQueriesAvailable,
+        dailyQuestions: isEffectivePremium ? PREMIUM_DAILY_QUESTIONS : FREE_DAILY_QUESTIONS,
+        fullAccess: hasFullAccess(isEffectivePremium),
+        beta: BETA_ALL_ACCESS,
+      });
     } catch (err) {
       console.error('Status fetch error:', err);
       res.status(500).json({ error: 'Failed to fetch user status' });
@@ -820,27 +847,18 @@ async function startServer() {
         language = 'English'
       } = req.body;
 
-      // Model lineup (Sept 2026): everything runs on Gemini 3.8 Flash. The "Pro" choice means deeper thinking on
-      // the same model (Gemini 3.1 Pro cost ~3-4x more per answer and often ran past the timeout); if 3.8 Flash
-      // fails, answers fall back to Flash-Lite.
-      const deepThinking = preferredModel !== 'flash';
-      let targetModel = 'gemini-3.8-flash';
-      let skipPrimary = !deepThinking; // the "primary" path is the deep-thinking one
+      // One seamless mode: Gemini 3.8 Flash with adaptive thinking (it thinks briefly on easy questions and longer on
+      // hard ones, up to a medium allowance). Free players get Flash-Lite after the beta. Backstop: Flash-Lite.
+      let targetModel = hasFullAccess(isPremium) ? MAIN_MODEL : FREE_MODEL;
+      const skipPrimary = true;
 
-      if (deepThinking && userData.proQueriesAvailable <= 0) {
-        if (userData.flashQueriesAvailable <= 0) {
-          return res.status(429).json({
-            text: isPremium ? 'Daily limit reached. Please try again tomorrow.' : 'Daily limit reached. Upgrade to Premium for 40 Pro queries & unlimited Flash queries per day!',
-            modelUsed: 'Limit Reached'
-          });
-        }
-        targetModel = 'gemini-3.8-flash';
-        skipPrimary = true;
-      } else if (targetModel === 'gemini-3.8-flash' && userData.flashQueriesAvailable <= 0) {
-          return res.status(429).json({
-            text: isPremium ? 'Daily limit reached. Please try again tomorrow.' : 'Daily limit reached. Upgrade to Premium for 40 Pro queries & unlimited Flash queries per day!',
-            modelUsed: 'Limit Reached'
-          });
+      if (userData.flashQueriesAvailable <= 0) {
+        return res.status(429).json({
+          text: isPremium
+            ? "You've reached today's question limit. It resets tomorrow."
+            : `You've used today's ${FREE_DAILY_QUESTIONS} free questions. Upgrade to Premium for ${PREMIUM_DAILY_QUESTIONS} questions a day, on-screen markers and more!`,
+          modelUsed: 'Limit Reached'
+        });
       }
 
       if (!question && !imageBase64) {
@@ -940,7 +958,14 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       const contentsPayload: any[] = [];
 
       // Add past conversation turns
-      for (const msg of history.slice(-10)) {
+      // Conversation context sent with each question: the last 6 messages, with older answers shortened. The newest
+      // answer stays whole so follow-ups ("and the second one?") still work. This is resent on every question.
+      const recentHistory = history.slice(-6).map((m: any, i: number, arr: any[]) =>
+        m.role !== 'user' && i < arr.length - 1 && typeof m.text === 'string' && m.text.length > 1500
+          ? { ...m, text: m.text.slice(0, 1500) + ' …' }
+          : m,
+      );
+      for (const msg of recentHistory) {
         if (msg.role === 'user') {
           const parts: any[] = [{ text: msg.text }];
           // Historical images are intentionally stripped here to save API tokens.
@@ -1026,7 +1051,8 @@ You must respond entirely in ${language}. Do not use English unless the user's l
 
       // Banner Generation: Only run if specifically requested in the payload and do not block chat
       let bannerImagePromise: Promise<string | undefined> | null = null;
-      if (req.body.generateBanner && (effectiveGame || question)) {
+      // AI banner art is retired (it cost more than the answer itself). Set ENABLE_BANNERS=true to bring it back.
+      if (process.env.ENABLE_BANNERS === 'true' && req.body.generateBanner && (effectiveGame || question)) {
         const gameNameForBanner = effectiveGame ? effectiveGame.name : '';
         const bannerPrompt = gameNameForBanner
           ? `Cinematic, immersive wide landscape 16:9 concept art banner for the video game "${gameNameForBanner}" depicting: "${question || 'in-game scenery'}". Wide establishing shot with generous headroom, medium-to-wide cinematic framing, characters completely framed in shot with full heads and faces clearly visible, epic lighting and atmosphere, breathtaking high-quality game concept art, no text or UI elements.`
@@ -1056,7 +1082,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
 
       // Query Gemini API
       let responseText = '';
-      let modelUsed = skipPrimary ? 'Gemini 3.8 Flash' : 'Gemini 3.8 Flash · Deep';
+      let modelUsed = targetModel === MAIN_MODEL ? 'Gemini 3.8 Flash' : 'Gemini Flash-Lite';
 
       logDebug(`[API Chat] Processing question "${(question || '').slice(0, 30)}..." with model: ${targetModel}, skipPrimary: ${skipPrimary}`);
 
@@ -1106,7 +1132,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
               ],
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
-              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+              ...(targetModel === MAIN_MODEL ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } } : {}),
             }
           });
           const response = await withTimeout(fallbackCall, 25000, 'Flash query') as any;
@@ -1115,6 +1141,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
 
           if (responseText && responseText.trim().length > 0) {
             userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
+            userData.proQueriesAvailable = userData.flashQueriesAvailable;
             userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1; // legacy
           } else {
             console.log('Fallback Flash query returned empty text. Not deducting credit.');
@@ -1165,6 +1192,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
           }
           
           userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
+          userData.proQueriesAvailable = userData.flashQueriesAvailable;
           userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1;
           if (!isGuest) {
             await updateFirestoreDocREST(idToken, userId, {
@@ -1202,6 +1230,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             modelUsed = 'Gemini 3.1 Flash Lite (Emergency Fallback)';
             
             userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
+            userData.proQueriesAvailable = userData.flashQueriesAvailable;
             userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1;
             if (!isGuest) {
               await updateFirestoreDocREST(idToken, userId, {
@@ -1255,7 +1284,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       }
 
       // Reliable game art fallback: if custom AI image generation timed out or failed, use the game's official widescreen hero banner
-      if (!bannerImageUrl && req.body.generateBanner) {
+      if (!bannerImageUrl && req.body.generateBanner && process.env.ENABLE_BANNERS === 'true') {
         if (effectiveGame?.appId) {
           bannerImageUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${effectiveGame.appId}/library_hero.jpg`;
         }
@@ -1393,11 +1422,32 @@ You must respond entirely in ${language}. Do not use English unless the user's l
   const ttsServerCache = new Map<string, { audioBase64: string; mimeType: string; voice: string }>();
 
   // --- API: Text-to-Speech (TTS) using Gemini Neural Voice Studio ---
+  // Gemini voices. The app's default narrator is the device's own built-in voice (free); Gemini voices are part of
+  // the full experience (Premium, or everyone during the beta). Model: Google's recommended read-aloud model, with the
+  // older one as a fallback if it's unavailable.
+  let ttsModel = process.env.TTS_MODEL || 'gemini-3.8-flash-lite-tts';
+  const TTS_FALLBACK_MODEL = 'gemini-3.1-flash-tts-preview';
+
   app.post('/api/tts', optionalAuth, async (req, res) => {
     try {
       const { text, voice = 'Puck', stream = true } = req.body;
       if (!text) {
         return res.status(400).json({ error: 'Text is required for speech' });
+      }
+      if (!BETA_ALL_ACCESS) {
+        const u = (req as any).user;
+        const token = req.headers.authorization?.split('Bearer ')[1] || '';
+        let premium = false;
+        if (u?.uid && !u.isGuest && !String(u.uid).startsWith('guest_')) {
+          try {
+            premium = (await getFirestoreDocREST(token, u.uid))?.isPremium === true;
+          } catch {
+            premium = false;
+          }
+        }
+        if (!premium) {
+          return res.status(403).json({ error: 'Gemini voices are part of Premium. The built-in voice is free.', premiumRequired: true });
+        }
       }
 
       // Clean markdown formatting, tables, citations, URLs, and code blocks for crisp speech
@@ -1476,19 +1526,29 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         const synthesizeChunk = async (chunkText: string): Promise<{pcm: Buffer | null, error?: string}> => {
           if (!chunkText.trim()) return { pcm: null };
           try {
-            const ttsResult = await ai.models.generateContent({
-              model: 'gemini-3.1-flash-tts-preview',
-              contents: chunkText,
-              config: {
-                responseModalities: ['AUDIO'],
-                speechConfig: {
-                  voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName: targetVoice }
+            const speak = (model: string) =>
+              ai.models.generateContent({
+                model,
+                contents: chunkText,
+                config: {
+                  responseModalities: ['AUDIO'],
+                  speechConfig: {
+                    voiceConfig: {
+                      prebuiltVoiceConfig: { voiceName: targetVoice }
+                    }
                   }
                 }
-              }
-            });
-            logUsage('narration', 'gemini-3.1-flash-tts-preview', ttsResult);
+              });
+            let ttsResult: any;
+            try {
+              ttsResult = await speak(ttsModel);
+            } catch (modelErr: any) {
+              if (ttsModel === TTS_FALLBACK_MODEL) throw modelErr;
+              console.warn(`[tts] ${ttsModel} failed (${modelErr?.message}); using ${TTS_FALLBACK_MODEL} from now on`);
+              ttsModel = TTS_FALLBACK_MODEL;
+              ttsResult = await speak(ttsModel);
+            }
+            logUsage('narration', ttsModel, ttsResult);
             const inlinePart = ttsResult.candidates?.[0]?.content?.parts?.[0];
             const b64Data = inlinePart?.inlineData?.data;
             return { pcm: b64Data ? Buffer.from(b64Data, 'base64') : null };

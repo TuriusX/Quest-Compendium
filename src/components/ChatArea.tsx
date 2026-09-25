@@ -643,6 +643,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       });
     };
 
+    // The device's built-in voice (the default, and free): no server call.
+    if ((ttsVoice || '').toLowerCase() === 'device') {
+      setPlayingAudioId(msgId);
+      fallbackToBrowserTTS('built-in voice selected');
+      return;
+    }
+
     const abortController = new AbortController();
     ttsAbortControllerRef.current = abortController;
 
@@ -1325,31 +1332,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <span className="font-bold font-serif text-[15px] leading-none px-0.5">Aa</span>
               </button>
             )}
-
-            {/* Model switch: Pro (smarter) or Flash (faster) */}
-            <div role="group" aria-label={t('chat.model')} className="flex items-center p-0.5 rounded-xl bg-white/[0.05] border border-white/10">
-              {(['pro', 'flash'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  aria-pressed={preferredModel === m}
-                  onClick={() => {
-                    playBlipSound(soundEnabled);
-                    setPreferredModel(m);
-                  }}
-                  title={m === 'pro' ? t('chat.proTitle') : t('chat.flashTitle')}
-                  className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${
-                    preferredModel === m
-                      ? m === 'pro'
-                        ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] shadow-[inset_0_-2px_0_var(--accent-color)]'
-                        : 'bg-amber-500/20 text-amber-300 shadow-[inset_0_-2px_0_#f59e0b]'
-                      : 'text-zinc-500 hover:text-zinc-200'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
 
             {/* Submit Send Button */}
             <button

@@ -204,11 +204,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ];
 
   const voices = [
-    { id: 'puck', name: 'Puck (Warm & Energetic Male - Recommended)' },
-    { id: 'charon', name: 'Charon (Deep & Resonant Male)' },
-    { id: 'fenrir', name: 'Fenrir (Wise & Commanding Male)' },
-    { id: 'kore', name: 'Kore (Clear & Calm Female)' },
-    { id: 'aoede', name: 'Aoede (Expressive & Melodic Female)' },
+    { id: 'device', name: tr('set.voiceDevice') },
+    { id: 'puck', name: `Gemini · Puck (${tr('set.voicePuck')})` },
+    { id: 'charon', name: `Gemini · Charon (${tr('set.voiceCharon')})` },
+    { id: 'fenrir', name: `Gemini · Fenrir (${tr('set.voiceFenrir')})` },
+    { id: 'kore', name: `Gemini · Kore (${tr('set.voiceKore')})` },
+    { id: 'aoede', name: `Gemini · Aoede (${tr('set.voiceAoede')})` },
   ];
 
   const controllerButtons = [
@@ -421,41 +422,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] text-zinc-300 truncate"><strong className="text-[var(--accent-color)]">{tr('set.previewA1')}</strong> {tr('set.previewA2')}</span>
                   </div>
                   <span className="qc-px-bevel px-3 py-1.5 rounded-lg bg-[var(--accent-color)] text-[#16101f] text-[11px] font-bold flex-shrink-0">{tr('set.previewAsk')}</span>
-                </div>
-
-                {/* Thematic Inquiry Banners Toggle - High Prominence */}
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--accent-dim)] border border-[var(--accent-border)] shadow-[0_0_15px_var(--accent-glow)]">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-[var(--accent-color)]/20 border border-[var(--accent-border)] flex items-center justify-center flex-shrink-0">
-                      <ImageIcon className="w-5 h-5 text-[var(--accent-color)]" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-xs text-white block">{tr('set.banners')}</span>
-                        <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--accent-color)]/20 text-[var(--accent-color)] border border-[var(--accent-border)]">
-                          {tr('set.bannersTag')}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-zinc-300">
-                        {tr('set.bannersDesc')}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      playBlipSound(soundEnabled);
-                      onUpdateSettings({ enableThematicBanners: settings.enableThematicBanners === false });
-                    }}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ml-3 ${
-                      settings.enableThematicBanners !== false ? 'bg-[var(--accent-color)]' : 'bg-white/10'
-                    }`}
-                  >
-                    <div 
-                      className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
-                        settings.enableThematicBanners !== false ? 'right-1' : 'left-1'
-                      }`}
-                    />
-                  </button>
                 </div>
 
                 {/* Docking Location */}

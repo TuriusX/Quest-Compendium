@@ -227,86 +227,53 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </div>
       {/* Right Controls Toolbar */}
       <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 ml-2">
-        {/* AI Queries Badge */}
+        {/* Questions left today: one daily allowance */}
         {(() => {
-          const effectiveData = userData || { isPremium: false, proQueriesAvailable: 5, flashQueriesAvailable: 5, isGuest: true };
+          const effectiveData = userData || { isPremium: false, flashQueriesAvailable: 10, isGuest: true };
           const isPremiumUser = Boolean(effectiveData.isPremium && !effectiveData.isGuest);
-          const rawPro = effectiveData.proQueriesAvailable ?? Math.max(0, (isPremiumUser ? 40 : 5) - (effectiveData.proQueriesToday || 0));
-          const proCount = effectiveData.isGuest ? Math.min(5, rawPro) : rawPro;
-          const proMax = isPremiumUser ? 100 : 5;
-          const rawFlash = effectiveData.flashQueriesAvailable ?? Math.max(0, 5 - (effectiveData.flashQueriesToday || 0));
-          const flashCount = effectiveData.isGuest ? Math.min(5, rawFlash) : rawFlash;
+          const daily = Number(effectiveData.dailyQuestions) || (isPremiumUser ? 60 : 10);
+          const left = Math.max(0, Math.min(daily, Number(effectiveData.flashQueriesAvailable ?? effectiveData.questionsAvailable ?? daily)));
 
           return (
             <div className="relative group" style={{ WebkitAppRegion: "no-drag" } as any}>
-              {/* Compact usage badge: Pro and Flash counts, with the details in the hover card */}
               <div
-                className={`flex items-center gap-2 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap cursor-default mr-1 ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap cursor-default mr-1 ${
                   isPremiumUser
                     ? 'bg-indigo-500/10 border border-indigo-500/25 text-indigo-300'
                     : 'bg-amber-500/10 border border-amber-500/25 text-amber-300'
                 }`}
-                title={t('header.quotaTitle', { pro: proCount, flash: isPremiumUser ? t('header.unlimited') : flashCount })}
+                title={t('header.questionsTitle', { left, daily })}
               >
-                <span className="flex items-center gap-1">
-                  <Cpu className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  {proCount}
-                  <span className="hidden md:inline font-mono uppercase text-[9px] opacity-70">Pro</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  {isPremiumUser ? '∞' : flashCount}
-                  <span className="hidden md:inline font-mono uppercase text-[9px] opacity-70">Flash</span>
-                </span>
+                <Zap className="w-3.5 h-3.5 shrink-0" />
+                {left}
+                <span className="hidden md:inline font-mono uppercase text-[9px] opacity-70">{t('header.left')}</span>
               </div>
 
-              {/* Elegant Hover Tooltip */}
               <div className="absolute top-full right-2 pt-2 w-64 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
                 <div className="p-4 rounded-xl bg-zinc-900 border border-white/10 shadow-2xl flex flex-col gap-3">
-                  
-                  {/* Pro Queries Progress */}
                   <div className="flex flex-col gap-1.5">
                     <div className="flex justify-between items-center text-xs">
-                      <span className="text-zinc-300 font-medium">Pro (deep thinking)</span>
+                      <span className="text-zinc-300 font-medium">{t('header.questionsToday')}</span>
                       <span className="flex items-center gap-2 text-zinc-400 font-mono text-[10px]">
-                        <ManaBar value={proCount} max={proMax} />
-                        {proCount} / {proMax}
+                        <ManaBar value={left} max={daily} />
+                        {left} / {daily}
                       </span>
                     </div>
                     <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden qc-seg">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-500 ${isPremiumUser ? 'bg-indigo-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`} 
-                        style={{ width: `${Math.min(100, (proCount / proMax) * 100)}%` }} 
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${isPremiumUser ? 'bg-indigo-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`}
+                        style={{ width: `${Math.min(100, (left / daily) * 100)}%` }}
                       />
                     </div>
                   </div>
-                  
-                  {/* Flash Queries Progress */}
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-zinc-300 font-medium">{t('header.flashFallback')}</span>
-                      <span className="text-zinc-400 font-mono text-[10px]">
-                        {isPremiumUser ? t('header.unlimited') : `${flashCount} / 5`}
-                      </span>
-                    </div>
-                    {!isPremiumUser && (
-                      <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden qc-seg">
-                        <div 
-                          className="bg-zinc-500 h-full rounded-full transition-all duration-500" 
-                          style={{ width: `${Math.min(100, (flashCount / 5) * 100)}%` }} 
-                        />
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Reset Timer */}
+
                   <div className="pt-2 mt-1 border-t border-white/5 flex justify-between items-center text-[11px]">
                     <span className="text-zinc-500 font-medium">{t('header.resetsIn')}</span>
                     <span className="text-zinc-400 font-mono tracking-wider">{timeUntilReset}</span>
                   </div>
-                  
+
                   {!isPremiumUser && (
-                    <button 
+                    <button
                       onClick={() => {
                         if (onOpenPaywall) onOpenPaywall();
                       }}
@@ -321,7 +288,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             </div>
           );
         })()}
-        
+
         {activeGame && (
           <button
             style={{ WebkitAppRegion: "no-drag" } as any}
