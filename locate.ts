@@ -17,6 +17,7 @@
 import type { Express, NextFunction, Request, Response } from 'express';
 import type { GoogleGenAI } from '@google/genai';
 import { clientIp } from './guestGuard';
+import { logUsage } from './usage';
 
 export interface LocateDeps {
   requireAuth: (req: Request, res: Response, next: NextFunction) => unknown;
@@ -132,6 +133,7 @@ export function registerLocate(app: Express, deps: LocateDeps): void {
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
       ]);
+      logUsage('area-check', model, response);
       return res.json({ found: parseLocateReply(response?.text ?? '', targets.length) });
     } catch (err: any) {
       console.warn('[locate] failed:', err?.message);
@@ -208,6 +210,7 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
       ]);
+      logUsage('precision', model, response);
       return res.json({ found: parseLocateReply(response?.text ?? '', crops.length) });
     } catch (err: any) {
       console.warn('[refine] failed:', err?.message);

@@ -4,7 +4,8 @@ import path from 'path';
 import express from 'express';
 
 const logDebug = (...args: any[]) => {};
-import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from '@google/genai';
+import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold, ThinkingLevel } from '@google/genai';
+import { logUsage } from './usage';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
 import { initializeApp, getApp } from 'firebase-admin/app';
@@ -877,6 +878,11 @@ When analyzing screenshots, screen captures, or images:
 3. MISSING IMAGE HANDLING: If the user asks "What is on my screen?", "What game is this?", or refers to an image, BUT no image was actually provided in the prompt, YOU MUST state: "I don't see any image attached. Please click the screenshot button to attach your screen." Do not hallucinate or guess based on selected game context.
 4. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.`;
 
+      systemInstruction += `
+
+[ANSWER LENGTH]
+The player is in the middle of playing. Keep answers tight and scannable: usually under about 200 words, leading with what they need to do or know right now. Use a short list for steps; use a table only when comparing three or more options. Go longer only when the player asks for detail or a full walkthrough.`;
+
       if (imageBase64) {
         systemInstruction += `
 
@@ -1069,9 +1075,13 @@ You must respond entirely in ${language}. Do not use English unless the user's l
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
               ],
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
+              // Game help rarely needs deep deliberation. Thinking is billed like answer text and was the largest
+              // single cost; low thinking also keeps Pro well inside the 30 s timeout (a timed-out Pro call is still billed).
+              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
             }
           });
           const response = await withTimeout(primaryCall, 30000, 'Primary Gemini 3.1 Pro query') as any;
+          logUsage('chat', targetModel, response);
           responseText = response.text || '';
           logDebug(`[API Chat] primaryCall succeeded, response length: ${responseText.length}`);
 
@@ -1096,9 +1106,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
               ],
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
+              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
             }
           });
           const response = await withTimeout(fallbackCall, 25000, 'Flash query') as any;
+          logUsage('chat', targetModel, response);
           responseText = response.text || '';
 
           if (responseText && responseText.trim().length > 0) {
@@ -1132,6 +1144,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             contents: [{ parts: currentParts }],
             config: {
               systemInstruction,
+              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
               tools: [{ googleSearch: {} }],
               safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -1142,6 +1155,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             }
           });
           const retryResponse = await withTimeout(retryPromise, 25000, 'Flash Fallback query') as any;
+          logUsage('chat-fallback', 'gemini-3.8-flash', retryResponse);
           responseText = retryResponse.text || '';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
 
@@ -1183,6 +1197,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             }
             });
             const emergencyResponse = await withTimeout(emergencyPromise, 15000, 'Flash Lite Emergency query') as any;
+            logUsage('chat-emergency', 'gemini-3.1-flash-lite', emergencyResponse);
             responseText = emergencyResponse.text || 'No response received.';
             modelUsed = 'Gemini 3.1 Flash Lite (Emergency Fallback)';
             
@@ -1473,6 +1488,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
                 }
               }
             });
+            logUsage('narration', 'gemini-3.1-flash-tts-preview', ttsResult);
             const inlinePart = ttsResult.candidates?.[0]?.content?.parts?.[0];
             const b64Data = inlinePart?.inlineData?.data;
             return { pcm: b64Data ? Buffer.from(b64Data, 'base64') : null };
