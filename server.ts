@@ -381,6 +381,10 @@ async function startServer() {
         userData.flashQueriesAvailable = Math.max(0, allowance - (userData.flashQueriesToday || 0) - (userData.proQueriesToday || 0));
         userData._upgradedToday = true;
       }
+      // Saved under older, bigger allowances (Premium once had 1,000 Flash questions a day), or Premium ended today:
+      // never more than what's left of today's allowance.
+      const leftToday = Math.max(0, allowance - (userData.flashQueriesToday || 0) - (userData.proQueriesToday || 0));
+      if (userData.flashQueriesAvailable > leftToday) userData.flashQueriesAvailable = leftToday;
     }
     // One allowance. Older app versions (and the Steam Deck plugin) still read a "Pro" count: give them the same number.
     userData.proQueriesAvailable = userData.flashQueriesAvailable;
