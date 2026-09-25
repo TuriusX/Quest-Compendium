@@ -267,7 +267,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   {/* Pro Queries Progress */}
                   <div className="flex flex-col gap-1.5">
                     <div className="flex justify-between items-center text-xs">
-                      <span className="text-zinc-300 font-medium">Gemini Pro</span>
+                      <span className="text-zinc-300 font-medium">Pro (deep thinking)</span>
                       <span className="flex items-center gap-2 text-zinc-400 font-mono text-[10px]">
                         <ManaBar value={proCount} max={proMax} />
                         {proCount} / {proMax}

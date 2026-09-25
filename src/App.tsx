@@ -1190,7 +1190,7 @@ export default function App() {
         id: `msg-${nowAi + 1}`,
         role: 'assistant',
         text: finalAiText,
-        modelUsed: data.modelUsed || 'Gemini 3.1 Pro Preview',
+        modelUsed: data.modelUsed || 'Gemini 3.8 Flash',
         bannerImageUrl: data.bannerImageUrl,
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
         ...(() => {
@@ -1323,7 +1323,7 @@ export default function App() {
           role: 'assistant',
           text: translate('chat.newSession'),
           timestamp: Date.now(),
-          modelUsed: 'Gemini 3.1 Pro Preview'
+          modelUsed: 'Gemini 3.8 Flash'
         }
       ],
       notes: '',

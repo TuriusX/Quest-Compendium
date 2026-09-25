@@ -5,7 +5,7 @@ import express from 'express';
 
 const logDebug = (...args: any[]) => {};
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold, ThinkingLevel } from '@google/genai';
-import { logUsage } from './usage';
+import { logBanner, logUsage } from './usage';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
 import { initializeApp, getApp } from 'firebase-admin/app';
@@ -820,10 +820,14 @@ async function startServer() {
         language = 'English'
       } = req.body;
 
-      let targetModel = preferredModel === 'flash' ? 'gemini-3.8-flash' : 'gemini-3.1-pro-preview';
-      let skipPrimary = targetModel === 'gemini-3.8-flash';
+      // Model lineup (Sept 2026): everything runs on Gemini 3.8 Flash. The "Pro" choice means deeper thinking on
+      // the same model (Gemini 3.1 Pro cost ~3-4x more per answer and often ran past the timeout); if 3.8 Flash
+      // fails, answers fall back to Flash-Lite.
+      const deepThinking = preferredModel !== 'flash';
+      let targetModel = 'gemini-3.8-flash';
+      let skipPrimary = !deepThinking; // the "primary" path is the deep-thinking one
 
-      if (targetModel === 'gemini-3.1-pro-preview' && userData.proQueriesAvailable <= 0) {
+      if (deepThinking && userData.proQueriesAvailable <= 0) {
         if (userData.flashQueriesAvailable <= 0) {
           return res.status(429).json({
             text: isPremium ? 'Daily limit reached. Please try again tomorrow.' : 'Daily limit reached. Upgrade to Premium for 40 Pro queries & unlimited Flash queries per day!',
@@ -877,11 +881,6 @@ When analyzing screenshots, screen captures, or images:
 2. ACCURATE GAME IDENTIFICATION: If the system context confirms an active game is running, you should acknowledge it if asked (e.g. "You are playing [Game Name]"). However, NEVER hallucinate visual details about the screenshot if they aren't visibly there. If the screenshot is black, blank, or menus, state that the game is running but describe only what is actually visible.
 3. MISSING IMAGE HANDLING: If the user asks "What is on my screen?", "What game is this?", or refers to an image, BUT no image was actually provided in the prompt, YOU MUST state: "I don't see any image attached. Please click the screenshot button to attach your screen." Do not hallucinate or guess based on selected game context.
 4. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.`;
-
-      systemInstruction += `
-
-[ANSWER LENGTH]
-The player is in the middle of playing. Keep answers tight and scannable: usually under about 200 words, leading with what they need to do or know right now. Use a short list for steps; use a table only when comparing three or more options. Go longer only when the player asks for detail or a full walkthrough.`;
 
       if (imageBase64) {
         systemInstruction += `
@@ -1043,9 +1042,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         }).then(res => {
           for (const part of res.candidates?.[0]?.content?.parts || []) {
             if (part.inlineData) {
+              logBanner(true);
               return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
             }
           }
+          logBanner(false);
           return undefined;
         }).catch(err => {
           console.warn('[Banner Generation] Banner generation failed or skipped:', err?.message || err);
@@ -1055,7 +1056,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
 
       // Query Gemini API
       let responseText = '';
-      let modelUsed = targetModel === 'gemini-3.1-pro-preview' ? 'Gemini 3.1 Pro' : 'Gemini 3.8 Flash';
+      let modelUsed = skipPrimary ? 'Gemini 3.8 Flash' : 'Gemini 3.8 Flash · Deep';
 
       logDebug(`[API Chat] Processing question "${(question || '').slice(0, 30)}..." with model: ${targetModel}, skipPrimary: ${skipPrimary}`);
 
@@ -1075,12 +1076,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
               ],
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
-              // Game help rarely needs deep deliberation. Thinking is billed like answer text and was the largest
-              // single cost; low thinking also keeps Pro well inside the 30 s timeout (a timed-out Pro call is still billed).
-              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+              // "Pro" = more thinking on 3.8 Flash. Thinking is billed like answer text, so it's medium, not high.
+              thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
             }
           });
-          const response = await withTimeout(primaryCall, 30000, 'Primary Gemini 3.1 Pro query') as any;
+          const response = await withTimeout(primaryCall, 30000, 'Deep-thinking Gemini 3.8 Flash query') as any;
           logUsage('chat', targetModel, response);
           responseText = response.text || '';
           logDebug(`[API Chat] primaryCall succeeded, response length: ${responseText.length}`);
