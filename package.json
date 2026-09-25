@@ -3,7 +3,7 @@
   "private": true,
   "description": "An intelligent gaming companion and reference tool.",
   "author": "Noah Minton",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
