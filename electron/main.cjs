@@ -287,8 +287,9 @@ let pointerWindow = null;
 let pointerTimer = null;
 // The marker session currently on screen: which answer it belongs to, and the nearby-item checks it has made.
 let pointerSession = null;
-const LOCATE_MIN_INTERVAL_MS = 8000;
-const LOCATE_MAX_PER_SESSION = 12;
+const LOCATE_MIN_INTERVAL_MS = 4000;
+const LOCATE_MAX_PER_SESSION = 20;
+let markerLifetimeMs = 120000; // how long markers stay on screen (0 = until hidden or the scene changes)
 let currentDockPosition = "top-right";
 let animationInterval = null;
 
@@ -900,6 +901,15 @@ ipcMain.on('set-overlay-options', (event, opts) => {
   if (opts && typeof opts.snapshotOnOpen === 'boolean') snapshotOnOpen = opts.snapshotOnOpen;
   if (opts && typeof opts.stickyPointers === 'boolean') stickyPointers = opts.stickyPointers;
   if (opts && typeof opts.markersInRecordings === 'boolean') markersInRecordings = opts.markersInRecordings;
+  if (opts && Number.isFinite(opts.markerLifetimeMs) && opts.markerLifetimeMs >= 0) {
+    markerLifetimeMs = opts.markerLifetimeMs;
+    // Apply to markers already on screen too.
+    if (pointerWindow && !pointerWindow.isDestroyed() && pointerSession && pointerSession.ready) {
+      pointerWindow.webContents.executeJavaScript(`window.qcSetLifetime(${markerLifetimeMs})`).catch(() => {});
+      if (pointerTimer) clearTimeout(pointerTimer);
+      pointerTimer = null;
+    }
+  }
   if (!snapshotOnOpen) openSnapshot = null;
 });
 
@@ -1024,7 +1034,7 @@ function showScreenPointers(points, accent, opts = {}) {
     sourceId: lastCaptureSourceId,
     refImage: sticky ? refImage : null,
     selfVisible: markersInRecordings,
-    lifetimeMs: 120000,
+    lifetimeMs: markerLifetimeMs,
     // Our own overlay panel doesn't move with the game: keep the camera tracker from using it as background.
     exclude: (() => {
       try {
@@ -1088,10 +1098,13 @@ function showScreenPointers(points, accent, opts = {}) {
     session.ready = true;
     for (const add of session.queue) win.webContents.executeJavaScript(`window.qcAddPoints(${JSON.stringify(add)})`).catch(() => {});
     session.queue = [];
+    for (const js of session.queueJs || []) win.webContents.executeJavaScript(js).catch(() => {});
+    session.queueJs = [];
   });
   win.loadFile(path.join(__dirname, 'pointers.html'));
   // Safety net in case the page can't close itself.
-  pointerTimer = setTimeout(() => { if (pointerWindow === win) closeScreenPointers(); }, (sticky ? payload.lifetimeMs : payload.fixedMs) + 5000);
+  const safety = sticky ? payload.lifetimeMs : payload.fixedMs;
+  if (safety > 0) pointerTimer = setTimeout(() => { if (pointerWindow === win) closeScreenPointers(); }, safety + 5000);
   return true;
 }
 
@@ -1174,6 +1187,24 @@ ipcMain.on('pointers-add', (event, { id, points, refImage, startIndex } = {}) =>
     return;
   }
   pointerWindow.webContents.executeJavaScript(`window.qcAddPoints(${JSON.stringify(payload)})`).catch(() => {});
+});
+
+// Precision pass: slide markers onto the exact object (queued if the page is still loading).
+ipcMain.on('pointers-move', (event, { id, moves } = {}) => {
+  const session = pointerSession;
+  if (!session || session.id !== id || !pointerWindow || pointerWindow.isDestroyed()) return;
+  const valid = (Array.isArray(moves) ? moves : [])
+    .filter((m) => m && Number.isInteger(m.index) && Number.isFinite(m.x) && Number.isFinite(m.y) && m.x >= 0 && m.x <= 1 && m.y >= 0 && m.y <= 1)
+    .slice(0, 5);
+  if (!valid.length) return;
+  const js = `window.qcMovePoints(${JSON.stringify({ moves: valid })})`;
+  if (!session.ready) session.queueJs = [...(session.queueJs || []), js];
+  else pointerWindow.webContents.executeJavaScript(js).catch(() => {});
+});
+
+// Diagnostics from the chat side (area checks, precision pass).
+ipcMain.on('pointers-log', (event, message) => {
+  if (typeof message === 'string') console.log(`[markers] ${message.slice(0, 300)}`);
 });
 
 // An area check finished: with nothing left to find, stop checking.

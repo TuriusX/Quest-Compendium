@@ -43,6 +43,9 @@ export function applyLocale(l: unknown) {
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  "chat.keep": "Keep",
+  "chat.keepLabel": "How long markers stay on screen",
+  "chat.keepAlways": "Always",
   "chat.markersTitle": "Markers",
   "chat.collected": "{done}/{total} collected",
   "chat.onScreen": "on screen",
@@ -380,6 +383,9 @@ const en: Dict = {
 };
 
 const es: Dict = {
+  "chat.keep": "Mantener",
+  "chat.keepLabel": "Cuánto tiempo se quedan los marcadores en pantalla",
+  "chat.keepAlways": "Siempre",
   "chat.markersTitle": "Marcadores",
   "chat.collected": "{done}/{total} recogidos",
   "chat.onScreen": "en pantalla",
@@ -708,6 +714,9 @@ const es: Dict = {
 };
 
 const pt: Dict = {
+  "chat.keep": "Manter",
+  "chat.keepLabel": "Quanto tempo os marcadores ficam na tela",
+  "chat.keepAlways": "Sempre",
   "chat.markersTitle": "Marcadores",
   "chat.collected": "{done}/{total} coletados",
   "chat.onScreen": "na tela",

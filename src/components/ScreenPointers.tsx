@@ -58,6 +58,8 @@ export function AnnotatedShot({
   onToggle,
   onShowAll,
   onHideAll,
+  lifetime,
+  onChangeLifetime,
 }: {
   msgId: string;
   imageUrl?: string;
@@ -68,6 +70,8 @@ export function AnnotatedShot({
   onToggle: (index: number) => void;
   onShowAll: () => void;
   onHideAll: () => void;
+  lifetime?: number;
+  onChangeLifetime?: (seconds: number) => void;
 }) {
   const t = useT();
   const [large, setLarge] = useState(false);
@@ -103,6 +107,24 @@ export function AnnotatedShot({
             >
               {t('chat.hideAll')}
             </button>
+            {onChangeLifetime && (
+              <label className="flex items-center gap-1 text-[11px] text-zinc-400">
+                <span>{t('chat.keep')}</span>
+                <select
+                  value={String(lifetime ?? 120)}
+                  onChange={(e) => onChangeLifetime(Number(e.target.value))}
+                  aria-label={t('chat.keepLabel')}
+                  title={t('chat.keepLabel')}
+                  className="bg-black/40 border border-white/15 rounded-lg px-1.5 py-1 text-[11px] text-zinc-200 outline-none cursor-pointer"
+                >
+                  <option value="30">30 s</option>
+                  <option value="60">1 min</option>
+                  <option value="120">2 min</option>
+                  <option value="300">5 min</option>
+                  <option value="0">{t('chat.keepAlways')}</option>
+                </select>
+              </label>
+            )}
           </div>
         )}
       </div>

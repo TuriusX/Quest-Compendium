@@ -37,6 +37,8 @@ export interface ScreenPoint {
   x: number;
   y: number;
   label: string;
+  /** Which exact object it is among similar ones ("lower-right barrel of the three"). */
+  where?: string;
   /** Found later by an area check (not on the original screenshot). */
   fromArea?: boolean;
 }
@@ -134,6 +136,8 @@ export interface AppSettings {
   stickyPointers?: boolean;
   /** Desktop: markers show up in screenshots and screen recordings. */
   markersInRecordings?: boolean;
+  /** Desktop: how long markers stay on screen, in seconds (0 = until hidden or the scene changes). */
+  markerLifetime?: number;
 }
 
 export interface SyncEventLog {

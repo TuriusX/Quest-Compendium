@@ -5,6 +5,7 @@ import {
   SteamGameData, 
   AppSettings, 
   ChatMessage, 
+  ScreenPoint,
   ColorTheme,
   DockPosition
 } from './types';
@@ -27,6 +28,7 @@ const BetaFeedbackModal = React.lazy(() => import('./components/BetaFeedbackModa
 import { db } from './lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
+import { playBlipSound } from './utils/audio';
 import { useCloudSync } from './hooks/useCloudSync';
 import { recordTombstone } from './hooks/tabMerge';
 import pixelSceneUrl from './pixel-scene.png';
@@ -58,6 +60,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   showPointersOnScreen: true,
   stickyPointers: true,
   markersInRecordings: true,
+  markerLifetime: 120,
 };
 
 const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: string; glow: string }> = {
@@ -487,12 +490,73 @@ export default function App() {
 
   // Snapshot on open (desktop): capture the game before the overlay takes focus.
   useEffect(() => {
-    (window as any).electronAPI?.setOverlayOptions?.({ snapshotOnOpen: settings.snapshotOnOpen !== false, stickyPointers: settings.stickyPointers !== false, markersInRecordings: settings.markersInRecordings !== false });
-  }, [settings.snapshotOnOpen, settings.stickyPointers, settings.markersInRecordings]);
+    (window as any).electronAPI?.setOverlayOptions?.({ snapshotOnOpen: settings.snapshotOnOpen !== false, stickyPointers: settings.stickyPointers !== false, markersInRecordings: settings.markersInRecordings !== false, markerLifetimeMs: Math.max(0, settings.markerLifetime ?? 120) * 1000 });
+  }, [settings.snapshotOnOpen, settings.stickyPointers, settings.markersInRecordings, settings.markerLifetime]);
+
+  /** Update one message wherever it is (used by the marker features). */
+  const updateMessageById = (msgId: string, fn: (m: ChatMessage) => ChatMessage) =>
+    setTabs((prev) => prev.map((t) => (t.messages.some((m) => m.id === msgId) ? { ...t, messages: t.messages.map((m) => (m.id === msgId ? fn(m) : m)) } : t)));
+
+  /**
+   * Precision pass: crop a zoomed-in square around each marked spot and ask the fast model to pinpoint the exact
+   * object, using the AI's own description ("lower-right barrel of the three"). Markers then slide onto it.
+   */
+  const refineMarkers = async (msgId: string, image: string, points: ScreenPoint[], game: string, token: string | null) => {
+    const log = (m: string) => (window as any).electronAPI?.markerLog?.(m);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = image;
+      });
+      const W = img.naturalWidth;
+      const H = img.naturalHeight;
+      const side = Math.round(Math.min(W * 0.3, H * 0.7));
+      const canvas = document.createElement('canvas');
+      canvas.width = 768;
+      canvas.height = 768;
+      const ctx = canvas.getContext('2d');
+      if (!ctx || side < 40) return;
+      const crops = points.map((p, index) => {
+        const x0 = Math.max(0, Math.min(W - side, Math.round(p.x * W - side / 2)));
+        const y0 = Math.max(0, Math.min(H - side, Math.round(p.y * H - side / 2)));
+        ctx.imageSmoothingEnabled = false; // keep pixel art crisp when zooming in
+        ctx.drawImage(img, x0, y0, side, side, 0, 0, 768, 768);
+        return { index, x0, y0, image: canvas.toDataURL('image/jpeg', 0.85), label: p.label, where: p.where || '' };
+      });
+      const res = await fetch(`${getApiBaseUrl()}/api/refine`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ crops: crops.map((c) => ({ image: c.image, label: c.label, where: c.where })), game }),
+      });
+      const data = res.ok ? await res.json() : { found: [] };
+      const moves = (Array.isArray(data.found) ? data.found : [])
+        .map((f: { index: number; x: number; y: number }) => {
+          const c = crops[f.index];
+          return c ? { index: c.index, x: (c.x0 + f.x * side) / W, y: (c.y0 + f.y * side) / H } : null;
+        })
+        .filter((m: any) => m && Math.hypot(m.x - points[m.index].x, (m.y - points[m.index].y) * (H / W)) > 0.004);
+      log(`precision pass: ${moves.length} of ${points.length} marker(s) adjusted`);
+      if (!moves.length) return;
+      updateMessageById(msgId, (m) => ({
+        ...m,
+        points: (m.points ?? []).map((p, i) => {
+          const mv = moves.find((x: any) => x.index === i);
+          return mv ? { ...p, x: mv.x, y: mv.y } : p;
+        }),
+      }));
+      (window as any).electronAPI?.movePointers?.(msgId, moves);
+    } catch (e: any) {
+      log(`precision pass skipped: ${e?.message ?? e}`);
+    }
+  };
 
   // On-screen markers: know which answer's markers are showing, and run area checks for nearby items.
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const locateUserRef = useRef<any>(null);
   locateUserRef.current = user;
   const locateGameRef = useRef<SteamGameData | null>(null);
@@ -504,7 +568,10 @@ export default function App() {
     api.onLocateRequest(async ({ id, image }: { id: string; image: string }) => {
       const tab = tabsRef.current.find((t) => t.messages.some((m) => m.id === id));
       const msg = tab?.messages.find((m) => m.id === id);
-      const pending = (msg?.nearby ?? []).map((n, i) => ({ ...n, i })).filter((n) => !n.found && n.onMap);
+      const notFound = (msg?.nearby ?? []).map((n, i) => ({ ...n, i })).filter((n) => !n.found);
+      // Items on this map first; if the AI marked none as on this map, look for all of them.
+      const pending = notFound.some((n) => n.onMap) ? notFound.filter((n) => n.onMap) : notFound;
+      const log = (m: string) => api.markerLog?.(m);
       if (!tab || !msg || !pending.length) {
         api.locateDone?.(id, 0);
         return;
@@ -524,6 +591,7 @@ export default function App() {
         });
         const data = res.ok ? await res.json() : { found: [] };
         const found: { index: number; x: number; y: number }[] = Array.isArray(data.found) ? data.found : [];
+        log(res.ok ? `area check: looked for ${pending.map((n) => n.label).join(', ')}; found ${found.length}` : `area check failed: HTTP ${res.status}`);
         if (!found.length) {
           api.locateDone?.(id, pending.length);
           return;
@@ -556,6 +624,7 @@ export default function App() {
           ),
         );
         rememberAreaFind(id, { points: newPoints, refImage: image, startIndex });
+        playBlipSound(settingsRef.current.soundEnabled);
         api.addPointers?.(id, newPoints, image, startIndex);
         api.locateDone?.(id, pending.length - found.length);
       } catch {
@@ -1120,8 +1189,12 @@ export default function App() {
           refImage: imageBase64,
           sessionId: aiMessage.id,
           hidden: [],
-          watchNearby: !!aiMessage.nearby?.some((n) => n.onMap),
+          watchNearby: !!aiMessage.nearby?.length,
         });
+      }
+      // Precision pass: zoom in on each marked spot so markers land on the exact object (free, rate-limited).
+      if (aiMessage.points?.length && imageBase64) {
+        refineMarkers(aiMessage.id, imageBase64, aiMessage.points, activeTab.activeSteamGame?.name || globalActiveGame?.name || '', token);
       }
 
       setTabs(prev => {
@@ -1616,6 +1689,8 @@ export default function App() {
                 activeGame={activeGame}
                 soundEnabled={settings.soundEnabled}
                 onAppendToNotes={handleAppendToNotes}
+                markerLifetime={settings.markerLifetime ?? 120}
+                onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
                 onUpdateMessage={(msgId, patch) =>
                   setTabs((prev) =>
                     prev.map((t) =>

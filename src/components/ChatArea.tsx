@@ -42,6 +42,9 @@ import { useT } from '../i18n';
 const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3'];
 
 interface ChatAreaProps {
+  /** Desktop: how long markers stay on screen, in seconds (0 = always). */
+  markerLifetime?: number;
+  onChangeMarkerLifetime?: (seconds: number) => void;
   /** Update fields of one message (e.g. which markers were checked off). */
   onUpdateMessage?: (msgId: string, patch: Partial<ChatMessage>) => void;
   activeTab: GameTab | null;
@@ -78,6 +81,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   fontMenuOpen,
   onToggleFontMenu,
   onUpdateMessage,
+  markerLifetime,
+  onChangeMarkerLifetime,
 }) => {
   const t = useT();
   const [inputQuestion, setInputQuestion] = useState('');
@@ -980,7 +985,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         refImage: shotUrl,
                         sessionId: msg.id,
                         hidden: doneList,
-                        watchNearby: !!msg.nearby?.some((n) => n.onMap && !n.found),
+                        watchNearby: !!msg.nearby?.some((n) => !n.found),
                         extra: areaFindsFor(msg.id),
                       });
                     };
@@ -1002,6 +1007,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         onToggle={(i) => setDone(done.includes(i) ? done.filter((d) => d !== i) : [...done, i].sort((x, y) => x - y))}
                         onShowAll={() => setDone([])}
                         onHideAll={() => setDone(points.map((_, i) => i))}
+                        lifetime={markerLifetime ?? 120}
+                        onChangeLifetime={onChangeMarkerLifetime}
                       />
                     );
                   })()}

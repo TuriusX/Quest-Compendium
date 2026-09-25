@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setPointersHidden: (id, hidden) => ipcRenderer.send('pointers-hidden', { id, hidden }),
   addPointers: (id, points, refImage, startIndex) => ipcRenderer.send('pointers-add', { id, points, refImage, startIndex }),
   locateDone: (id, remaining) => ipcRenderer.send('pointers-locate-done', { id, remaining }),
+  movePointers: (id, moves) => ipcRenderer.send('pointers-move', { id, moves }),
+  markerLog: (message) => ipcRenderer.send('pointers-log', message),
   onPointersState: (callback) => { ipcRenderer.removeAllListeners('pointers-state'); ipcRenderer.on('pointers-state', (event, s) => callback(s)); },
   onLocateRequest: (callback) => { ipcRenderer.removeAllListeners('locate-request'); ipcRenderer.on('locate-request', (event, r) => callback(r)); },
   setControllerConfig: (cfg) => ipcRenderer.send('set-controller-config', cfg),

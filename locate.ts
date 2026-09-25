@@ -7,8 +7,12 @@
  * ("nearby"). As the player walks around, the desktop app sends a small screenshot here to ask: are any of these
  * visible now? Found ones get a marker that sticks like the others.
  *
- * Free: these checks never use the player's Pro/Flash questions. Limited instead:
- *   LOCATE_PER_USER_HOURLY (30), LOCATE_PER_GUEST_HOURLY (30), LOCATE_GLOBAL_DAILY (5000), LOCATE_MODEL (gemini-3.8-flash)
+ * Also POST /api/refine: the precision pass. Right after an answer, the app sends a zoomed-in crop around each marked
+ * spot, with the AI's own description of which object it is ("lower-right barrel of the three"), and gets back the
+ * exact spot inside each crop. Tiny objects in a scaled-down screenshot are easy to miss by one; close-ups aren't.
+ *
+ * Free: these never use the player's Pro/Flash questions. Limited instead (each endpoint separately):
+ *   LOCATE_PER_USER_HOURLY (60), LOCATE_PER_GUEST_HOURLY (60), LOCATE_GLOBAL_DAILY (10000), LOCATE_MODEL (gemini-3.8-flash)
  */
 import type { Express, NextFunction, Request, Response } from 'express';
 import type { GoogleGenAI } from '@google/genai';
@@ -68,9 +72,9 @@ export function registerLocate(app: Express, deps: LocateDeps): void {
   const env = deps.env ?? process.env;
   const now = deps.now ?? Date.now;
   const model = env.LOCATE_MODEL || 'gemini-3.8-flash';
-  const perUserHourly = envNum(env.LOCATE_PER_USER_HOURLY, 30);
-  const perGuestHourly = envNum(env.LOCATE_PER_GUEST_HOURLY, 30);
-  const globalDaily = envNum(env.LOCATE_GLOBAL_DAILY, 5000);
+  const perUserHourly = envNum(env.LOCATE_PER_USER_HOURLY, 60);
+  const perGuestHourly = envNum(env.LOCATE_PER_GUEST_HOURLY, 60);
+  const globalDaily = envNum(env.LOCATE_GLOBAL_DAILY, 10000);
   const proxyHops = envNum(env.GUEST_PROXY_HOPS, 1);
 
   const hourly = new Map<string, { n: number; reset: number }>();
@@ -132,6 +136,82 @@ export function registerLocate(app: Express, deps: LocateDeps): void {
     } catch (err: any) {
       console.warn('[locate] failed:', err?.message);
       return res.status(502).json({ error: 'Could not check the screenshot.', found: [] });
+    }
+  });
+}
+
+const DATA_URL_RE = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
+
+/** Precision pass: POST /api/refine { crops: [{ image, label, where }], game? } -> { found: [{ index, x, y }] } (0-1 within each crop). */
+export function registerRefine(app: Express, deps: LocateDeps): void {
+  const env = deps.env ?? process.env;
+  const now = deps.now ?? Date.now;
+  const model = env.LOCATE_MODEL || 'gemini-3.8-flash';
+  const perUserHourly = envNum(env.LOCATE_PER_USER_HOURLY, 60);
+  const perGuestHourly = envNum(env.LOCATE_PER_GUEST_HOURLY, 60);
+  const globalDaily = envNum(env.LOCATE_GLOBAL_DAILY, 10000);
+  const proxyHops = envNum(env.GUEST_PROXY_HOPS, 1);
+  const hourly = new Map<string, { n: number; reset: number }>();
+  let global = { day: '', n: 0 };
+  setInterval(() => {
+    const t = now();
+    for (const [k, v] of hourly) if (t >= v.reset) hourly.delete(k);
+  }, 60_000).unref();
+
+  app.post('/api/refine', deps.requireAuth as any, async (req: Request, res: Response) => {
+    const crops = (Array.isArray(req.body?.crops) ? req.body.crops : [])
+      .slice(0, 5)
+      .map((c: any) => ({ image: String(c?.image ?? ''), label: String(c?.label ?? '').trim().slice(0, 40), where: String(c?.where ?? '').trim().slice(0, 100) }))
+      .filter((c: any) => c.label && DATA_URL_RE.test(c.image) && c.image.length <= MAX_IMAGE_CHARS);
+    if (!crops.length) return res.json({ found: [] });
+
+    const user = (req as any).user ?? {};
+    const uid = String(user.uid ?? '');
+    const isGuest = !!user.isGuest || uid.startsWith('guest_');
+    const limiterKey = isGuest ? `ip:${clientIp(req, proxyHops)}` : `uid:${uid}`;
+    const t = now();
+    const day = new Date(t).toISOString().slice(0, 10);
+    if (global.day !== day) global = { day, n: 0 };
+    let w = hourly.get(limiterKey);
+    if (!w || t >= w.reset) {
+      w = { n: 0, reset: t + 60 * 60 * 1000 };
+      hourly.set(limiterKey, w);
+    }
+    if (w.n >= (isGuest ? perGuestHourly : perUserHourly) || global.n >= globalDaily) {
+      return res.status(429).json({ error: 'Precision checks are paused for a bit.', found: [] });
+    }
+    w.n++;
+    global.n++;
+
+    const game = String(req.body?.game ?? '').trim().slice(0, 120);
+    const parts: any[] = [];
+    crops.forEach((c: any, i: number) => {
+      const m = c.image.match(DATA_URL_RE)!;
+      parts.push({ text: `Image ${i}:` });
+      parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+    });
+    const list = crops.map((c: any, i: number) => `${i}. In image ${i}: ${c.label}${c.where ? ` (${c.where})` : ''}`).join('\n');
+    parts.push({
+      text:
+        `Each image is a close-up from a screenshot${game ? ` of the video game ${game}` : ''}. Find exactly this object in each:\n${list}\n\n` +
+        'Reply with JSON only: an array of {"i": image number, "y": 0-1000 from the top of THAT image, "x": 0-1000 from its left} ' +
+        'for the center of the exact object described (when there are several similar objects, pick the one the description ' +
+        'singles out). Leave an image out if the object is not in it.',
+    });
+    try {
+      const ai = deps.getGeminiClient();
+      const response: any = await Promise.race([
+        ai.models.generateContent({
+          model,
+          contents: [{ role: 'user', parts }],
+          config: { responseMimeType: 'application/json', temperature: 0.1 },
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
+      ]);
+      return res.json({ found: parseLocateReply(response?.text ?? '', crops.length) });
+    } catch (err: any) {
+      console.warn('[refine] failed:', err?.message);
+      return res.status(502).json({ error: 'Could not refine the markers.', found: [] });
     }
   });
 }

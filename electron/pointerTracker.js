@@ -208,7 +208,10 @@
       const tpl = cut(img, w, x0, y0, TPL);
       tpl.offX = sx - x0;
       tpl.offY = sy - y0;
-      return { x, y, tpl, offX: sx - x0, offY: sy - y0, weak: tpl.std < MIN_STD, lost: 0, visible: false, score: 0, label: p.label || '' };
+      return {
+        x, y, tpl, offX: sx - x0, offY: sy - y0, weak: tpl.std < MIN_STD, lost: 0, visible: false, score: 0, label: p.label || '',
+        src: img, rx: p.x, ry: p.y, // the screenshot this marker was placed in, and where
+      };
     };
     const markers = opts.points.map((p) => makeMarker(ref, p));
     const labels = () => markers.map((m) => m.label);
@@ -374,9 +377,31 @@
       }
     }
 
+    /**
+     * Precision pass: some markers belong on a slightly different spot of their screenshot (the neighboring barrel).
+     * Move them by the same amount on screen and re-learn what the item looks like at the corrected spot.
+     */
+    function moveMarkers(moves) {
+      for (const mv of moves) {
+        const m = markers[mv.index];
+        if (!m || !Number.isFinite(mv.x) || !Number.isFinite(mv.y)) continue;
+        const fresh = makeMarker(m.src, { x: mv.x, y: mv.y, label: m.label });
+        m.x += (mv.x - m.rx) * w;
+        m.y += (mv.y - m.ry) * h;
+        m.rx = mv.x;
+        m.ry = mv.y;
+        m.tpl = fresh.tpl;
+        m.offX = fresh.offX;
+        m.offY = fresh.offY;
+        m.weak = fresh.weak;
+        m.lost = 0;
+      }
+    }
+
     return {
       update,
       addMarkers,
+      moveMarkers,
       /** Total camera movement since the markers appeared, in screen fractions. */
       get camera() {
         return { x: camX, y: camY };
