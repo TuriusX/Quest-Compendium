@@ -1144,7 +1144,7 @@ async function captureForLocate(session) {
 }
 
 // The marker page says the player walked far enough: look for the answer's nearby items (free, rate-limited).
-ipcMain.on('pointers-moved', async (event) => {
+ipcMain.on('pointers-moved', async (event, occupied) => {
   const session = pointerSession;
   if (!session || !session.watch || !session.id || event.sender !== (session.win && !session.win.isDestroyed() && session.win.webContents)) return;
   const now = Date.now();
@@ -1158,7 +1158,8 @@ ipcMain.on('pointers-moved', async (event) => {
     return;
   }
   console.log(`[markers] area check ${session.checks} of ${LOCATE_MAX_PER_SESSION}`);
-  mainWindow.webContents.send('locate-request', { id: session.id, image });
+  const spots = (Array.isArray(occupied) ? occupied : []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y)).slice(0, 20);
+  mainWindow.webContents.send('locate-request', { id: session.id, image, occupied: spots });
   // If the app never answers (offline, closed), allow the next check anyway.
   setTimeout(() => { if (pointerSession === session) session.inFlight = false; }, 30000);
 });

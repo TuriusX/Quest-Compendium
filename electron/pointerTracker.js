@@ -7,7 +7,12 @@
  *     including markers that are off-screen, so they're in the right place when you come back.
  *  2. Marker refinement. When a marker is on screen, the patch of the original screenshot around it is matched
  *     near its predicted spot and nudges it into place (this also handles small 3D camera moves).
- * A scene change (a new room, a cutscene, a battle) breaks camera tracking for a moment: that's when markers fade.
+ * A scene change (a new room, a cutscene, a battle, a fade to black) breaks camera tracking: that's when markers fade.
+ *
+ * Tuned on real FF6 footage (a town full of identical roofs, windows and barrels). Lessons from it:
+ *  - never search the whole screen for one item's picture: it snaps onto an identical copy elsewhere;
+ *  - to learn how far the camera moved since a screenshot, make the whole screen agree (many patches, one answer);
+ *  - fine-tune each marker only within a few pixels, and never let a failed fine-tune hide a marker.
  *
  * Positions are measured between pixels (sub-pixel peak fitting) so markers glide instead of stepping.
  * Works on grayscale Float32Array frames of a fixed working size. Loaded by pointers.html; runs in Node for tests.
@@ -24,9 +29,7 @@
   const CAMERA_RADIUS = 26; // max camera movement between two frames (working px)
   const REFINE_RADIUS = 6; // marker search around its camera-predicted spot
   const AGREE = 6; // how far a marker match may disagree with the camera before we distrust it
-  const LOST_FRAMES = 20; // on-screen marker hidden after this many frames (1 s) without confirming its item
-  const CHECK_EVERY = 8; // every few frames, on-screen markers re-confirm against their items (drift correction)
-  const CHECK_RADIUS = 12; // smaller than the gap between two identical barrels, so a check never jumps to a neighbor
+  const REGISTER_RADIUS = 110; // how far the camera may have moved between a screenshot and now (working px)
   const CUT_FRAMES = 4; // camera lost (or nothing left to track, e.g. a fade to black) this many frames: the scene changed
 
   function integral(g, w, h) {
@@ -89,6 +92,30 @@
       }
     }
     return acc / (count * st.std * tpl.std);
+  }
+
+  /**
+   * A light blur. Pixel art shrunk to the working size looks slightly different depending on where it lands on the
+   * pixel grid; blurring a little first makes matches much steadier as the camera moves.
+   */
+  function soften(g, w, h) {
+    const tmp = new Float32Array(w * h);
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const o = y * w;
+      for (let x = 0; x < w; x++) {
+        const l = g[o + (x > 0 ? x - 1 : x)];
+        const r = g[o + (x < w - 1 ? x + 1 : x)];
+        tmp[o + x] = (l + 2 * g[o + x] + r) * 0.25;
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      const u = (y > 0 ? y - 1 : y) * w;
+      const d = (y < h - 1 ? y + 1 : y) * w;
+      const o = y * w;
+      for (let x = 0; x < w; x++) out[o + x] = (tmp[u + x] + 2 * tmp[o + x] + tmp[d + x]) * 0.25;
+    }
+    return out;
   }
 
   /** Parabola through three scores: the peak's offset from the middle one (-0.5..0.5). */
@@ -183,6 +210,125 @@
     return out.slice(0, ANCHORS).map((a) => ({ x: a.x, y: a.y, tpl: cut(g, w, a.x, a.y, APATCH) }));
   }
 
+  // ---- Whole-screen registration (phase correlation) -------------------------------------------------------
+
+  /** In-place radix-2 FFT of complex arrays (re, im) of length n (a power of two). */
+  function fft1(re, im, n, inverse) {
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) {
+        let t = re[i]; re[i] = re[j]; re[j] = t;
+        t = im[i]; im[i] = im[j]; im[j] = t;
+      }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = ((inverse ? 2 : -2) * Math.PI) / len;
+      const wr = Math.cos(ang);
+      const wi = Math.sin(ang);
+      for (let i = 0; i < n; i += len) {
+        let cr = 1;
+        let ci = 0;
+        for (let k = 0; k < len / 2; k++) {
+          const a = i + k;
+          const b = a + len / 2;
+          const xr = re[b] * cr - im[b] * ci;
+          const xi = re[b] * ci + im[b] * cr;
+          re[b] = re[a] - xr; im[b] = im[a] - xi;
+          re[a] += xr; im[a] += xi;
+          const nr = cr * wr - ci * wi;
+          ci = cr * wi + ci * wr;
+          cr = nr;
+        }
+      }
+    }
+  }
+
+  function fft2(re, im, W2, H2, inverse) {
+    const rr = new Float64Array(Math.max(W2, H2));
+    const ri = new Float64Array(Math.max(W2, H2));
+    for (let y = 0; y < H2; y++) {
+      const o = y * W2;
+      for (let x = 0; x < W2; x++) { rr[x] = re[o + x]; ri[x] = im[o + x]; }
+      fft1(rr, ri, W2, inverse);
+      for (let x = 0; x < W2; x++) { re[o + x] = rr[x]; im[o + x] = ri[x]; }
+    }
+    for (let x = 0; x < W2; x++) {
+      for (let y = 0; y < H2; y++) { rr[y] = re[y * W2 + x]; ri[y] = im[y * W2 + x]; }
+      fft1(rr, ri, H2, inverse);
+      for (let y = 0; y < H2; y++) { re[y * W2 + x] = rr[y]; im[y * W2 + x] = ri[y]; }
+    }
+  }
+
+  /** Windowed, zero-mean copy of a frame, padded to a power-of-two grid. */
+  function prepPC(g, w, h, W2, H2) {
+    let mean = 0;
+    for (let i = 0; i < w * h; i++) mean += g[i];
+    mean /= w * h;
+    const re = new Float64Array(W2 * H2);
+    for (let y = 0; y < h; y++) {
+      const wy = 0.5 - 0.5 * Math.cos((2 * Math.PI * y) / (h - 1));
+      for (let x = 0; x < w; x++) {
+        const wx = 0.5 - 0.5 * Math.cos((2 * Math.PI * x) / (w - 1));
+        re[y * W2 + x] = (g[y * w + x] - mean) * wx * wy;
+      }
+    }
+    return re;
+  }
+
+  /**
+   * How far the scene moved from `from` to `to` (working px), measured over the whole screen at once, so repeating
+   * tiles can't fool it. Then double-checked with textured patches, most of which must agree. Returns null if the
+   * two frames don't show the same place.
+   */
+  function registerFrames(rawFrom, rawTo, w, h, exclude) {
+    const from = soften(rawFrom, w, h);
+    const to = soften(rawTo, w, h);
+    let W2 = 1;
+    while (W2 < w) W2 <<= 1;
+    let H2 = 1;
+    while (H2 < h) H2 <<= 1;
+    const aRe = prepPC(from, w, h, W2, H2);
+    const aIm = new Float64Array(W2 * H2);
+    const bRe = prepPC(to, w, h, W2, H2);
+    const bIm = new Float64Array(W2 * H2);
+    fft2(aRe, aIm, W2, H2, false);
+    fft2(bRe, bIm, W2, H2, false);
+    // Normalized cross-power spectrum
+    for (let i = 0; i < aRe.length; i++) {
+      const r = bRe[i] * aRe[i] + bIm[i] * aIm[i];
+      const im = bIm[i] * aRe[i] - bRe[i] * aIm[i];
+      const mag = Math.hypot(r, im) || 1;
+      aRe[i] = r / mag;
+      aIm[i] = im / mag;
+    }
+    fft2(aRe, aIm, W2, H2, true);
+    let best = -Infinity;
+    let bx = 0;
+    let by = 0;
+    for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
+      const v = aRe[y * W2 + x];
+      if (v > best) { best = v; bx = x; by = y; }
+    }
+    let dx = bx > W2 / 2 ? bx - W2 : bx;
+    let dy = by > H2 / 2 ? by - H2 : by;
+    // Double-check with patches: most must agree on this movement (within a few px).
+    const iiFrom = integral(from, w, h);
+    const iiTo = integral(to, w, h);
+    const patches = pickAnchors(from, w, h, iiFrom, exclude || []);
+    const moves = [];
+    for (const a of patches) {
+      if (a.x + dx < 0 || a.x + dx > w - APATCH || a.y + dy < 0 || a.y + dy > h - APATCH) continue;
+      const r = find(to, w, h, iiTo, a.tpl, a.x + dx, a.y + dy, 4);
+      if (r.score >= ANCHOR_OK) moves.push({ dx: r.x - a.x, dy: r.y - a.y });
+    }
+    if (moves.length < 4) return null;
+    dx = median(moves.map((m) => m.dx));
+    dy = median(moves.map((m) => m.dy));
+    return { dx, dy };
+  }
+
   /**
    * @param {{ ref: Float32Array, w: number, h: number, points: {x:number,y:number,label?:string}[],
    *   exclude?: {x0:number,y0:number,x1:number,y1:number}[], selfVisible?: boolean, screenWidth?: number }} opts
@@ -190,7 +336,8 @@
    *   spots they cover; markers then follow the camera alone.
    */
   function createTracker(opts) {
-    const { ref, w, h } = opts;
+    const { w, h } = opts;
+    const ref = soften(opts.ref, w, h);
     const exclude = opts.exclude || [];
     const selfVisible = !!opts.selfVisible;
     const screenW = opts.screenWidth || 1920;
@@ -211,17 +358,24 @@
       return {
         x, y, tpl, offX: sx - x0, offY: sy - y0, weak: tpl.std < MIN_STD, lost: 0, visible: false, score: 0, label: p.label || '',
         src: img, rx: p.x, ry: p.y, // the screenshot this marker was placed in, and where
+        bx: x - camX * w, by: y - camY * h, // position relative to the camera
+        cx: 0, cy: 0, // bounded correction from matching the item
       };
     };
+    let camX = 0; // how far the camera has moved in total, in screen fractions
+    let camY = 0;
     const markers = opts.points.map((p) => makeMarker(ref, p));
     const labels = () => markers.map((m) => m.label);
     // Markers added later (items found as the player walks): they're located anew in the next frames.
     const PENDING_TRIES = 10;
-    let camX = 0; // how far the camera has moved in total, in screen fractions
-    let camY = 0;
     let frameNo = 0;
     let prev = null; // previous frame + its integral image
     let anchors = [];
+    // Camera tracking compares against a reference frame (not just the previous one), so tiny errors add up only
+    // when the reference changes (every second or two), not 30 times a second.
+    let keyRel = { x: 0, y: 0 }; // how far the scene has moved since the reference frame
+    let keyWeak = 0; // frames in a row the reference frame didn't match well
+    let stepAnchors = []; // patches from the previous frame
     let cameraLost = 0;
     let started = false;
     let gone = false;
@@ -238,65 +392,82 @@
       });
     }
 
-    function locateAll(frame, ii) {
-      // First frame: the player may have moved while the AI answered, so search the whole frame.
-      const shifts = [];
-      markers.forEach((m) => {
-        if (m.weak) return;
-        const r = find(frame, w, h, ii, m.tpl, m.x - m.offX, m.y - m.offY, Math.max(w, h));
-        if (r.score >= CONFIDENT) shifts.push({ m, dx: r.x + m.offX - m.x, dy: r.y + m.offY - m.y, score: r.score });
-      });
-      if (!shifts.length) return false;
-      const mdx = median(shifts.map((s) => s.dx));
-      const mdy = median(shifts.map((s) => s.dy));
-      markers.forEach((m) => {
-        const own = shifts.find((s) => s.m === m && Math.abs(s.dx - mdx) <= AGREE * 2 && Math.abs(s.dy - mdy) <= AGREE * 2);
-        m.x += own ? own.dx : mdx;
-        m.y += own ? own.dy : mdy;
-        m.score = own ? own.score : 0;
-      });
+    /** First frame: move every marker by how far the camera moved since the screenshot (whole-screen agreement). */
+    function registerStart(frame) {
+      const shift = registerFrames(ref, frame, w, h, exclude);
+      if (!shift) return false;
+      for (const m of markers) {
+        m.x += shift.dx;
+        m.y += shift.dy;
+        m.bx += shift.dx;
+        m.by += shift.dy;
+      }
       return true;
     }
 
-    function update(frame) {
+    function update(rawFrame) {
+      const frame = soften(rawFrame, w, h);
       const ii = integral(frame, w, h);
       if (!started) {
         started = true;
-        if (!locateAll(frame, ii)) gone = true;
+        // If the screen can't be matched to the screenshot at all, it's a different scene: show nothing.
+        if (!registerStart(frame)) gone = true;
       } else if (prev) {
-        // 1. How far did the camera move since the last frame?
-        const moves = [];
-        for (const a of anchors) {
+        // 1a. Frame to frame: how far did the scene move since the previous frame? (reliable, but tiny errors add up)
+        const stepMoves = [];
+        for (const a of stepAnchors) {
           const r = find(frame, w, h, ii, a.tpl, a.x, a.y, CAMERA_RADIUS);
-          if (r.score >= ANCHOR_OK) moves.push({ dx: r.x - a.x, dy: r.y - a.y });
+          if (r.score >= ANCHOR_OK) stepMoves.push({ dx: r.x - a.x, dy: r.y - a.y });
         }
-        const enough = moves.length >= Math.max(3, Math.ceil(anchors.length * 0.35));
+        const stepOk = stepMoves.length >= Math.max(3, Math.ceil(stepAnchors.length * 0.35));
+        const stepX = stepOk ? median(stepMoves.map((m) => m.dx)) : 0;
+        const stepY = stepOk ? median(stepMoves.map((m) => m.dy)) : 0;
+        // 1b. Against the reference frame: if most of its patches match strongly, use that (it doesn't drift).
+        const guessX = keyRel.x + stepX;
+        const guessY = keyRel.y + stepY;
+        const keyMoves = [];
+        let keyInView = 0;
+        for (const a of anchors) {
+          const px = a.x + guessX;
+          const py = a.y + guessY;
+          if (px < 0 || px > w - APATCH || py < 0 || py > h - APATCH) continue;
+          keyInView++;
+          const r = find(frame, w, h, ii, a.tpl, px, py, 3);
+          if (r.score >= ANCHOR_OK) keyMoves.push({ dx: r.x - a.x, dy: r.y - a.y });
+        }
+        const keyOk = keyMoves.length >= Math.max(4, Math.ceil(keyInView * 0.5));
+        const enough = stepOk || keyOk;
         if (enough) {
           cameraLost = 0;
-          const dx = median(moves.map((m) => m.dx));
-          const dy = median(moves.map((m) => m.dy));
+          const relX = keyOk ? median(keyMoves.map((m) => m.dx)) : guessX;
+          const relY = keyOk ? median(keyMoves.map((m) => m.dy)) : guessY;
+          keyWeak = keyOk ? 0 : keyWeak + 1;
+          const dx = relX - keyRel.x;
+          const dy = relY - keyRel.y;
+          keyRel = { x: relX, y: relY };
           camX += dx / w;
           camY += dy / h;
-          // 2. Move every marker with the camera (on-screen or not), then fine-tune the ones we can see.
+          // 2. Every marker rides on the camera (on-screen or not). The ones we can see get a small correction from
+          //    matching their item, but that correction is bounded and doesn't accumulate: on repeating patterns
+          //    (roof tiles, rows of barrels) tiny per-frame nudges would otherwise walk a marker off its item.
           for (const m of markers) {
             if (m.pending || m.dropped) continue;
-            m.x += dx;
-            m.y += dy;
-            const onScreen = m.x >= 0 && m.x <= w && m.y >= 0 && m.y <= h;
-            if (!onScreen || m.weak) {
-              m.lost = 0;
-              continue;
+            const camPX = m.bx + camX * w;
+            const camPY = m.by + camY * h;
+            const onScreen = camPX >= 0 && camPX <= w && camPY >= 0 && camPY <= h;
+            if (onScreen && !m.weak) {
+              const r = find(frame, w, h, ii, m.tpl, camPX + m.cx - m.offX, camPY + m.cy - m.offY, REFINE_RADIUS);
+              m.score = r.score;
+              const ex = r.x + m.offX - camPX;
+              const ey = r.y + m.offY - camPY;
+              if (r.score >= CONFIDENT && Math.abs(ex) <= AGREE && Math.abs(ey) <= AGREE) {
+                m.cx += (ex - m.cx) * 0.25;
+                m.cy += (ey - m.cy) * 0.25;
+              }
+              // No match (a character in front of it, a speech bubble...): keep following the camera.
             }
-            const r = find(frame, w, h, ii, m.tpl, m.x - m.offX, m.y - m.offY, REFINE_RADIUS);
-            m.score = r.score;
-            if (r.score >= CONFIDENT && Math.abs(r.x + m.offX - m.x) <= AGREE && Math.abs(r.y + m.offY - m.y) <= AGREE) {
-              // Blend toward the match: steady, and still corrects any drift.
-              m.x += (r.x + m.offX - m.x) * 0.5;
-              m.y += (r.y + m.offY - m.y) * 0.5;
-              m.lost = 0;
-            } else {
-              m.lost++; // maybe covered by a character or a menu: keep following the camera
-            }
+            m.x = camPX + m.cx;
+            m.y = camPY + m.cy;
           }
         } else {
           // Keep the last good background to compare against: a flash or a character passing by recovers within
@@ -305,57 +476,58 @@
           if (cameraLost >= CUT_FRAMES) gone = true;
         }
 
-        // Drift correction: on-screen markers re-confirm against their items. Markers share the camera's error,
-        // so two that agree on a correction fix everyone, including markers that are off-screen.
-        if (!gone && cameraLost === 0 && ++frameNo % CHECK_EVERY === 0) {
-          const fixes = [];
-          for (const m of markers) {
-            if (m.pending || m.dropped || m.weak) continue;
-            if (m.x < 0 || m.x > w || m.y < 0 || m.y > h) continue;
-            const r = find(frame, w, h, ii, m.tpl, m.x - m.offX, m.y - m.offY, CHECK_RADIUS);
-            if (r.score >= 0.72) fixes.push({ m, dx: r.x + m.offX - m.x, dy: r.y + m.offY - m.y, score: r.score });
-          }
-          if (fixes.length >= 2) {
-            const mdx = median(fixes.map((f) => f.dx));
-            const mdy = median(fixes.map((f) => f.dy));
-            const agree = fixes.filter((f) => Math.abs(f.dx - mdx) <= 3 && Math.abs(f.dy - mdy) <= 3);
-            if (agree.length >= 2 && Math.hypot(mdx, mdy) > 1) {
-              for (const m of markers) {
-                if (m.pending || m.dropped) continue;
-                m.x += mdx;
-                m.y += mdy;
-              }
-            }
-          } else if (fixes.length === 1 && fixes[0].score >= 0.85) {
-            fixes[0].m.x += fixes[0].dx;
-            fixes[0].m.y += fixes[0].dy;
-          }
-        }
       }
-      // Newly added markers: search near where the camera movement puts them (or the whole frame if unknown).
+      // Newly added markers: start where the camera movement puts them, then fine-tune nearby. If we don't know
+      // how far the camera moved since their screenshot, the whole screen has to agree on it first.
       for (const m of markers) {
         if (!m.pending || gone) continue;
-        const radius = m.placed ? 14 : Math.max(w, h);
-        const r = find(frame, w, h, ii, m.tpl, m.x - m.offX, m.y - m.offY, radius);
+        if (!m.placed) {
+          const shift = registerFrames(m.src, frame, w, h, exclude);
+          if (!shift) {
+            if (++m.tries >= PENDING_TRIES) {
+              m.pending = false;
+              m.dropped = true;
+            }
+            continue;
+          }
+          m.x = m.rx * w + shift.dx;
+          m.y = m.ry * h + shift.dy;
+          m.bx = m.x - camX * w;
+          m.by = m.y - camY * h;
+          m.placed = true;
+        }
+        const r = find(frame, w, h, ii, m.tpl, m.x - m.offX, m.y - m.offY, 8);
         if (r.score >= CONFIDENT && !m.weak) {
           m.x = r.x + m.offX;
           m.y = r.y + m.offY;
+          m.bx = m.x - camX * w;
+          m.by = m.y - camY * h;
+          m.cx = 0;
+          m.cy = 0;
           m.pending = false;
+          m.tries = 0;
           m.lost = 0;
           m.score = r.score;
         } else if (++m.tries >= PENDING_TRIES) {
           m.pending = false;
-          if (m.placed) m.lost = 0; // no confirmation, but the camera says it's here: keep it (drift checks refine it)
-          else m.dropped = true;
+          m.lost = 0; // no close match, but the camera says it's here: keep it
         }
       }
       markers.forEach((m) => {
         const onScreen = m.x >= 0 && m.x <= w && m.y >= 0 && m.y <= h;
-        m.visible = !gone && !m.pending && !m.dropped && onScreen && m.lost <= LOST_FRAMES;
+        m.visible = !gone && !m.pending && !m.dropped && onScreen;
       });
       if (cameraLost === 0) {
-        // Only learn the background from frames where the camera was tracked (and never from our own markers).
-        anchors = pickAnchors(frame, w, h, ii, selfVisible ? exclude.concat(markerRects()) : exclude);
+        // Pick a new reference frame once the view has moved on (a quarter screen), or when too few of the
+        // reference's patches are still in view. Only from frames where the camera was tracked, never from our markers.
+        const avoid = selfVisible ? exclude.concat(markerRects()) : exclude;
+        const inViewNow = anchors.filter((a) => a.x + keyRel.x >= 0 && a.x + keyRel.x <= w - APATCH && a.y + keyRel.y >= 0 && a.y + keyRel.y <= h - APATCH).length;
+        if (!anchors.length || keyWeak >= 3 || Math.abs(keyRel.x) > w * 0.25 || Math.abs(keyRel.y) > h * 0.25 || inViewNow < 6) {
+          anchors = pickAnchors(frame, w, h, ii, avoid);
+          keyRel = { x: 0, y: 0 };
+          keyWeak = 0;
+        }
+        stepAnchors = pickAnchors(frame, w, h, ii, avoid);
         prev = frame;
       }
       return markers.map((m) => ({ x: m.x / w, y: m.y / h, visible: m.visible, score: m.score }));
@@ -366,7 +538,8 @@
      * `since`: the camera position (tracker.camera) when `img` was taken, so the markers start where the camera
      * movement since then puts them. Without it they're searched for across the whole frame.
      */
-    function addMarkers(img, points, since) {
+    function addMarkers(rawImg, points, since) {
+      const img = soften(rawImg, w, h);
       const shift = since ? { x: camX - since.x, y: camY - since.y } : null;
       for (const p of points) {
         const m = makeMarker(img, p, shift);
@@ -388,6 +561,10 @@
         const fresh = makeMarker(m.src, { x: mv.x, y: mv.y, label: m.label });
         m.x += (mv.x - m.rx) * w;
         m.y += (mv.y - m.ry) * h;
+        m.bx += (mv.x - m.rx) * w;
+        m.by += (mv.y - m.ry) * h;
+        m.cx = 0;
+        m.cy = 0;
         m.rx = mv.x;
         m.ry = mv.y;
         m.tpl = fresh.tpl;

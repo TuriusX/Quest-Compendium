@@ -8,3 +8,6 @@ coverage/
 .env*
 !.env.example
 .claude/
+
+# Sticky-marker test bench footage (large, local only)
+tests/markers/footage/

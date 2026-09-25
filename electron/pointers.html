@@ -181,7 +181,7 @@
           checkedAt = { x: cam.x, y: cam.y };
           live.checkCam = { x: cam.x, y: cam.y }; // the next found items were spotted from here
           log(`${Math.round(newArea * 100)}% of the screen is new: asking about nearby items`);
-          window.qcBridge.moved();
+          window.qcBridge.moved(target.filter((_, i) => visible[i]).map((p) => ({ x: p.x, y: p.y })));
         }
       }
       // Process each new frame of the screen as it arrives (about 30 a second).

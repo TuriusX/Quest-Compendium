@@ -501,48 +501,57 @@ export default function App() {
    * Precision pass: crop a zoomed-in square around each marked spot and ask the fast model to pinpoint the exact
    * object, using the AI's own description ("lower-right barrel of the three"). Markers then slide onto it.
    */
+  /**
+   * Zoom in on spots of a screenshot and ask the fast model to pinpoint each described object in its close-up.
+   * Returns the objects it found (0-1 in the full screenshot); objects it couldn't find are left out.
+   */
+  const pinpoint = async (image: string, items: { x: number; y: number; label: string; where: string }[], game: string, token: string | null) => {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = image;
+    });
+    const W = img.naturalWidth;
+    const H = img.naturalHeight;
+    const side = Math.round(Math.min(W * 0.3, H * 0.7));
+    const canvas = document.createElement('canvas');
+    canvas.width = 768;
+    canvas.height = 768;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || side < 40) return [];
+    const crops = items.map((p, index) => {
+      const x0 = Math.max(0, Math.min(W - side, Math.round(p.x * W - side / 2)));
+      const y0 = Math.max(0, Math.min(H - side, Math.round(p.y * H - side / 2)));
+      ctx.imageSmoothingEnabled = false; // keep pixel art crisp when zooming in
+      ctx.drawImage(img, x0, y0, side, side, 0, 0, 768, 768);
+      return { index, x0, y0, image: canvas.toDataURL('image/jpeg', 0.85), label: p.label, where: p.where };
+    });
+    const res = await fetch(`${getApiBaseUrl()}/api/refine`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ crops: crops.map((c) => ({ image: c.image, label: c.label, where: c.where })), game }),
+    });
+    const data = res.ok ? await res.json() : { found: [] };
+    return (Array.isArray(data.found) ? data.found : [])
+      .map((f: { index: number; x: number; y: number }) => {
+        const c = crops[f.index];
+        return c ? { index: c.index, x: (c.x0 + f.x * side) / W, y: (c.y0 + f.y * side) / H } : null;
+      })
+      .filter(Boolean) as { index: number; x: number; y: number }[];
+  };
+
   const refineMarkers = async (msgId: string, image: string, points: ScreenPoint[], game: string, token: string | null) => {
     const log = (m: string) => (window as any).electronAPI?.markerLog?.(m);
     try {
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = reject;
-        el.src = image;
-      });
-      const W = img.naturalWidth;
-      const H = img.naturalHeight;
-      const side = Math.round(Math.min(W * 0.3, H * 0.7));
-      const canvas = document.createElement('canvas');
-      canvas.width = 768;
-      canvas.height = 768;
-      const ctx = canvas.getContext('2d');
-      if (!ctx || side < 40) return;
-      const crops = points.map((p, index) => {
-        const x0 = Math.max(0, Math.min(W - side, Math.round(p.x * W - side / 2)));
-        const y0 = Math.max(0, Math.min(H - side, Math.round(p.y * H - side / 2)));
-        ctx.imageSmoothingEnabled = false; // keep pixel art crisp when zooming in
-        ctx.drawImage(img, x0, y0, side, side, 0, 0, 768, 768);
-        return { index, x0, y0, image: canvas.toDataURL('image/jpeg', 0.85), label: p.label, where: p.where || '' };
-      });
-      const res = await fetch(`${getApiBaseUrl()}/api/refine`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ crops: crops.map((c) => ({ image: c.image, label: c.label, where: c.where })), game }),
-      });
-      const data = res.ok ? await res.json() : { found: [] };
-      const moves = (Array.isArray(data.found) ? data.found : [])
-        .map((f: { index: number; x: number; y: number }) => {
-          const c = crops[f.index];
-          return c ? { index: c.index, x: (c.x0 + f.x * side) / W, y: (c.y0 + f.y * side) / H } : null;
-        })
-        .filter((m: any) => m && Math.hypot(m.x - points[m.index].x, (m.y - points[m.index].y) * (H / W)) > 0.004);
+      const found = await pinpoint(image, points.map((p) => ({ x: p.x, y: p.y, label: p.label, where: p.where || '' })), game, token);
+      const moves = found.filter((m) => Math.hypot(m.x - points[m.index].x, m.y - points[m.index].y) > 0.004);
       log(`precision pass: ${moves.length} of ${points.length} marker(s) adjusted`);
       if (!moves.length) return;
       updateMessageById(msgId, (m) => ({
         ...m,
         points: (m.points ?? []).map((p, i) => {
-          const mv = moves.find((x: any) => x.index === i);
+          const mv = moves.find((x) => x.index === i);
           return mv ? { ...p, x: mv.x, y: mv.y } : p;
         }),
       }));
@@ -565,7 +574,7 @@ export default function App() {
     const api = (window as any).electronAPI;
     if (!api?.onLocateRequest) return;
     api.onPointersState?.(({ id, active }: { id: string; active: boolean }) => setPointersActive(id, active));
-    api.onLocateRequest(async ({ id, image }: { id: string; image: string }) => {
+    api.onLocateRequest(async ({ id, image, occupied }: { id: string; image: string; occupied?: { x: number; y: number }[] }) => {
       const tab = tabsRef.current.find((t) => t.messages.some((m) => m.id === id));
       const msg = tab?.messages.find((m) => m.id === id);
       const notFound = (msg?.nearby ?? []).map((n, i) => ({ ...n, i })).filter((n) => !n.found);
@@ -598,11 +607,25 @@ export default function App() {
         }
         const startIndex = msg.points?.length ?? 0;
         const already = new Set((msg.points ?? []).map((p) => p.label.trim().toLowerCase()));
-        const fresh = found.filter((f) => !already.has(pending[f.index].label.trim().toLowerCase()));
+        // Gate 1: not an item we already have, and not sitting on top of a marker that's showing.
+        const clear = found.filter((f) => {
+          if (already.has(pending[f.index].label.trim().toLowerCase())) return false;
+          const onTop = (occupied ?? []).some((o) => Math.hypot(o.x - f.x, (o.y - f.y) * 0.5625) < 0.045);
+          if (onTop) log(`ignored ${pending[f.index].label}: on top of a marker that's already showing`);
+          return !onTop;
+        });
+        // Gate 2: a close-up of the spot must independently find the described object there.
+        const confirmed = clear.length
+          ? await pinpoint(image, clear.map((f) => ({ x: f.x, y: f.y, label: pending[f.index].label, where: pending[f.index].hint || '' })), tab.activeSteamGame?.name || locateGameRef.current?.name || '', token)
+          : [];
+        const fresh = confirmed
+          .filter((c) => Math.hypot(c.x - clear[c.index].x, (c.y - clear[c.index].y) * 0.5625) < 0.08)
+          .map((c) => ({ ...clear[c.index], x: c.x, y: c.y }));
+        if (clear.length > fresh.length) log(`close-up check rejected ${clear.length - fresh.length} find(s)`);
         const newPoints = fresh.map((f) => ({ x: f.x, y: f.y, label: pending[f.index].label, fromArea: true }));
-        const foundIdx = new Set(found.map((f) => pending[f.index].i));
+        const foundIdx = new Set(fresh.map((f) => pending[f.index].i));
         if (!newPoints.length) {
-          api.locateDone?.(id, pending.length - found.length);
+          api.locateDone?.(id, pending.length);
           return;
         }
         setTabs((prev) =>
@@ -626,7 +649,7 @@ export default function App() {
         rememberAreaFind(id, { points: newPoints, refImage: image, startIndex });
         playBlipSound(settingsRef.current.soundEnabled);
         api.addPointers?.(id, newPoints, image, startIndex);
-        api.locateDone?.(id, pending.length - found.length);
+        api.locateDone?.(id, pending.length - fresh.length);
       } catch {
         api.locateDone?.(id, pending.length);
       }

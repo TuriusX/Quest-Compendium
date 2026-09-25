@@ -3,5 +3,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('qcBridge', {
-  moved: () => ipcRenderer.send('pointers-moved'),
+  // `occupied`: where markers are showing right now (0-1 fractions), so finds on top of them can be ignored.
+  moved: (occupied) => ipcRenderer.send('pointers-moved', Array.isArray(occupied) ? occupied.slice(0, 20) : []),
 });
