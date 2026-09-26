@@ -35,6 +35,10 @@
   const BRIGHT = 245; // ... or gone white
   const GAP_MS = 300; // screen capture only sends frames when something changes: a gap this long needs a whole-screen check
   const WHOLE_CHECK_EVERY = 30; // frames between whole-screen checks while tracking (about half a second at 60 fps)
+  // 3D games: turning the camera looks like a small slide from one frame to the next, so camera tracking alone never
+  // notices the view has changed. The item itself does: once it stops matching under its marker, that marker ends.
+  const ITEM_GONE_SCORE = 0.45; // below this, the item isn't under its marker
+  const ITEM_GONE_FRAMES = 30; // ... for this many frames (about a second): the marker ends. A good match pays back 3.
 
   function integral(g, w, h) {
     const W = w + 1;
@@ -360,7 +364,7 @@
       tpl.offX = sx - x0;
       tpl.offY = sy - y0;
       return {
-        x, y, tpl, offX: sx - x0, offY: sy - y0, weak: tpl.std < MIN_STD, lost: 0, visible: false, score: 0, label: p.label || '',
+        x, y, tpl, offX: sx - x0, offY: sy - y0, weak: tpl.std < MIN_STD, lost: 0, miss: 0, matched: false, visible: false, score: 0, label: p.label || '',
         src: img, rx: p.x, ry: p.y, // the screenshot this marker was placed in, and where
         bx: x - camX * w, by: y - camY * h, // position relative to the camera
         cx: 0, cy: 0, // bounded correction from matching the item
@@ -482,6 +486,13 @@
                 m.cx += (ex - m.cx) * 0.25;
                 m.cy += (ey - m.cy) * 0.25;
               }
+              // Only markers whose item was clearly seen can tell us it's gone (a brief cover-up pays back quickly).
+              if (r.score >= CONFIDENT) {
+                m.matched = true;
+                m.miss = Math.max(0, m.miss - 3);
+              } else if (m.matched && r.score < ITEM_GONE_SCORE && ++m.miss >= ITEM_GONE_FRAMES) {
+                m.dropped = true;
+              }
               // No match (a character in front of it, a speech bubble...): keep following the camera.
             }
             m.x = camPX + m.cx;
@@ -529,11 +540,19 @@
           m.pending = false;
           m.tries = 0;
           m.lost = 0;
+          m.miss = 0;
+          m.matched = true;
           m.score = r.score;
         } else if (++m.tries >= PENDING_TRIES) {
           m.pending = false;
           m.lost = 0; // no close match, but the camera says it's here: keep it
         }
+      }
+      // Every marker we could check has lost its item: the view has changed, end them all. (Markers that simply
+      // scrolled off screen don't count: in 2D games the player often walks away and comes back.)
+      if (started && !gone) {
+        const checkable = markers.filter((m) => m.matched && !m.pending);
+        if (checkable.length && checkable.every((m) => m.dropped)) gone = true;
       }
       markers.forEach((m) => {
         const onScreen = m.x >= 0 && m.x <= w && m.y >= 0 && m.y <= h;
@@ -595,6 +614,8 @@
         m.offY = fresh.offY;
         m.weak = fresh.weak;
         m.lost = 0;
+        m.miss = 0;
+        m.matched = false;
       }
     }
 
