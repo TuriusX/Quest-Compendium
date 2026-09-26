@@ -108,7 +108,7 @@
     // A live, low-resolution view of the screen.
     stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: opts.sourceId, maxWidth: 960, maxHeight: 960, maxFrameRate: 60 } },
+      video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: opts.sourceId, maxWidth: 960, maxHeight: 960, maxFrameRate: 30 } },
     });
     const video = document.createElement('video');
     video.muted = true;
@@ -155,6 +155,7 @@
     let delaySum = 0;
     let delayN = 0;
     let framesDone = 0;
+    let workMs = 0; // time spent reading and tracking frames since the last report
     let lastReport = performance.now();
 
     const track = (rafNow, meta) => {
@@ -165,8 +166,8 @@
       }
       const now = performance.now();
       const moving = vel.x !== 0 || vel.y !== 0;
-      // Every frame (up to 60 a second) while the screen moves; 30 a second when it's still (saves processor).
-      if (video.readyState >= 2 && now - lastTrack >= (moving ? 12 : 30)) {
+      // Game performance comes first: 30 frames a second while the screen moves, 15 while it's still.
+      if (video.readyState >= 2 && now - lastTrack >= (moving ? 30 : 63)) {
         const gapMs = lastTrack ? now - lastTrack : 0; // screen capture skips frames while nothing changes
         lastTrack = now;
         const captureT = meta && typeof meta.captureTime === 'number' ? meta.captureTime : now - 45;
@@ -174,7 +175,9 @@
           delaySum += now - meta.captureTime;
           delayN++;
         }
+        const workStart = performance.now();
         const res = tracker.update(grayOf(ctx, video, w, h), gapMs);
+        workMs += performance.now() - workStart;
         framesDone++;
         for (let i = 0; i < res.length && i < els.length; i++) {
           const r = res[i];
@@ -205,9 +208,11 @@
         lastCaptureT = captureT;
 
         if (now - lastReport > 10000) {
-          log(`tracking ${Math.round((framesDone * 1000) / (now - lastReport))} fps, capture delay ${delayN ? Math.round(delaySum / delayN) + ' ms' : 'unknown (assuming 45 ms)'}`);
+          const perFrame = framesDone ? workMs / framesDone : 0;
+          log(`tracking ${Math.round((framesDone * 1000) / (now - lastReport))} fps, capture delay ${delayN ? Math.round(delaySum / delayN) + ' ms' : 'unknown (assuming 45 ms)'}, work ${perFrame.toFixed(1)} ms/frame (${Math.round((workMs * 100) / (now - lastReport))}% of one core)`);
           lastReport = now;
           framesDone = 0;
+          workMs = 0;
           delaySum = 0;
           delayN = 0;
         }
@@ -244,6 +249,12 @@
       for (let i = 0; i < els.length; i++) {
         shown[i].x = target[i].x + ox;
         shown[i].y = target[i].y + oy;
+        // Only touch the page when a marker actually moved a pixel: an unchanged page costs the game nothing.
+        const px = Math.round(shown[i].x * window.innerWidth);
+        const py = Math.round(shown[i].y * window.innerHeight);
+        if (els[i]._px === px && els[i]._py === py) continue;
+        els[i]._px = px;
+        els[i]._py = py;
         place(els[i], shown[i].x, shown[i].y);
       }
       requestAnimationFrame(draw);

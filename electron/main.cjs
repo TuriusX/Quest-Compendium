@@ -997,7 +997,34 @@ function sendPointerState(id, active) {
   if (id && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('pointers-state', { id, active });
 }
 
+const NEARBY_CHECKS = false;
+
+// While markers are up, log how much processor the app uses (100% = one full core), to keep an eye on game performance.
+let perfTimer = null;
+function startPerfLog(win) {
+  if (perfTimer) clearInterval(perfTimer);
+  app.getAppMetrics(); // start the measurement window
+  perfTimer = setInterval(() => {
+    if (!win || win.isDestroyed()) return stopPerfLog();
+    let markerPid = 0;
+    try { markerPid = win.webContents.getOSProcessId(); } catch { /* window closing */ }
+    let markers = 0, gpu = 0, total = 0;
+    for (const m of app.getAppMetrics()) {
+      const c = m.cpu ? m.cpu.percentCPUUsage : 0;
+      total += c;
+      if (m.pid === markerPid) markers += c;
+      else if (m.type === 'GPU') gpu += c;
+    }
+    console.log(`[perf] processor: marker window ${Math.round(markers)}%, graphics process ${Math.round(gpu)}%, whole app ${Math.round(total)}% (100% = one core)`);
+  }, 10000);
+}
+function stopPerfLog() {
+  if (perfTimer) clearInterval(perfTimer);
+  perfTimer = null;
+}
+
 function closeScreenPointers() {
+  stopPerfLog();
   if (pointerTimer) clearTimeout(pointerTimer);
   pointerTimer = null;
   if (pointerWindow && !pointerWindow.isDestroyed()) pointerWindow.destroy();
@@ -1024,7 +1051,8 @@ function showScreenPointers(points, accent, opts = {}) {
   const refImage = typeof opts.refImage === 'string' && opts.refImage.startsWith('data:image/') ? opts.refImage : lastCaptureImage;
   const sticky = (typeof opts.sticky === 'boolean' ? opts.sticky : stickyPointers) && !!lastCaptureSourceId && !!refImage;
   const sessionId = typeof opts.sessionId === 'string' ? opts.sessionId : null;
-  const watchNearby = sticky && opts.watchNearby === true;
+  // "Found nearby" area checks are off: they rarely found anything and cost an AI call each time.
+  const watchNearby = NEARBY_CHECKS && sticky && opts.watchNearby === true;
   const payload = {
     hidden: Array.isArray(opts.hidden) ? opts.hidden.filter((n) => Number.isInteger(n)) : [],
     // Items found earlier by area checks, each tracked against the screenshot it was found in.
@@ -1096,6 +1124,7 @@ function showScreenPointers(points, accent, opts = {}) {
     win.webContents.executeJavaScript(`window.qcStart(${JSON.stringify(payload)})`).catch(() => {});
     win.showInactive();
     sendPointerState(sessionId, true);
+    if (sticky) startPerfLog(win);
     // Found items that arrived while the page was loading.
     session.ready = true;
     for (const add of session.queue) win.webContents.executeJavaScript(`window.qcAddPoints(${JSON.stringify(add)})`).catch(() => {});

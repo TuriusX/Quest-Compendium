@@ -174,7 +174,7 @@ export function AnnotatedShot({
 
       {watching.length > 0 && (
         <p className="text-[11px] text-zinc-400 leading-relaxed">
-          <span className="font-semibold text-zinc-300">{isDesktop ? t('chat.watching') : t('chat.alsoHere')}</span> {describe(watching)}
+          <span className="font-semibold text-zinc-300">{t('chat.alsoHere')}</span> {describe(watching)}
         </p>
       )}
       {elsewhere.length > 0 && (
