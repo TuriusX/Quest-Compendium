@@ -999,7 +999,8 @@ function sendPointerState(id, active) {
 
 const NEARBY_CHECKS = false;
 
-// While markers are up, log how much processor the app uses (100% = one full core), to keep an eye on game performance.
+// While markers are up, log how much processor the app uses (Electron reports a share of the whole processor, all
+// cores together: one fully busy core on a 16-core PC shows about 6%), to keep an eye on game performance.
 let perfTimer = null;
 function startPerfLog(win) {
   if (perfTimer) clearInterval(perfTimer);
@@ -1015,7 +1016,7 @@ function startPerfLog(win) {
       if (m.pid === markerPid) markers += c;
       else if (m.type === 'GPU') gpu += c;
     }
-    console.log(`[perf] processor: marker window ${Math.round(markers)}%, graphics process ${Math.round(gpu)}%, whole app ${Math.round(total)}% (100% = one core)`);
+    console.log(`[perf] processor: marker window ${Math.round(markers)}%, graphics process ${Math.round(gpu)}%, whole app ${Math.round(total)}% (share of the whole processor)`);
   }, 10000);
 }
 function stopPerfLog() {
