@@ -9,3 +9,5 @@ test-prod.cjs
 !.env.example
 .claude/
 *.zip
+# Sticky-marker test bench footage (large, local only)
+tests/markers/footage/

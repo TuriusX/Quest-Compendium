@@ -6,3 +6,5 @@ release
 .env
 .env.*
 !.env.example
+# Sticky-marker test bench footage (large, local only)
+tests/markers/footage/
