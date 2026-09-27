@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Plus, 
   Trash2, 
@@ -14,7 +15,8 @@ import {
   Sparkles,
   Save,
   Globe,
-  RefreshCw
+  RefreshCw,
+  MessageSquareText
 } from './icons';
 import { GameTab, SteamGameData } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
@@ -321,18 +323,19 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
         />
       </div>
 
-      {/* Global Tools footer */}
-      <div className="p-3 border-t border-white/[0.08] bg-black/40 flex items-center justify-start gap-2">
+      {/* Global Tools footer: the two labelled buttons share the space and the icon buttons keep a fixed size, so
+          nothing is pushed off the edge however narrow the sidebar is. */}
+      <div className="p-3 border-t border-white/[0.08] bg-black/40 flex items-center gap-1.5">
         <button
           onClick={() => {
             playBlipSound(soundEnabled);
             onOpenGuides();
           }}
-          className="h-9 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-[var(--accent-border)] text-zinc-200 transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold"
+          className="h-9 px-2.5 min-w-0 flex-1 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-[var(--accent-border)] text-zinc-200 transition-all cursor-pointer flex items-center justify-center gap-1.5 text-xs font-semibold"
           title={t('side.guidesTitle')}
         >
-          <Globe className="w-4 h-4 text-sky-400" />
-          {t('side.guides')}
+          <Globe className="w-4 h-4 shrink-0 text-sky-400" />
+          <span className="truncate">{t('side.guides')}</span>
         </button>
         <button
           onClick={() => {
@@ -340,36 +343,33 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
             onOpenNotes();
           }}
           disabled={!activeTabId}
-          className="h-9 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-[var(--accent-border)] text-zinc-200 transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          className="h-9 px-2.5 min-w-0 flex-1 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-[var(--accent-border)] text-zinc-200 transition-all cursor-pointer flex items-center justify-center gap-1.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
           title={activeTabId ? t('side.notesTitle') : t('side.notesDisabled')}
         >
-          <FileText className="w-4 h-4 text-[var(--accent-color)]" />
-          {t('side.notes')}
+          <FileText className="w-4 h-4 shrink-0 text-[var(--accent-color)]" />
+          <span className="truncate">{t('side.notes')}</span>
         </button>
         <button
           onClick={() => {
             playBlipSound(soundEnabled);
             onOpenSettings();
           }}
-          className="p-2 rounded-xl bg-zinc-500/10 hover:bg-white/[0.06] border border-white/5 hover:border-white/10 text-zinc-400 hover:text-[var(--accent-color)] transition-all cursor-pointer shadow-sm"
+          className="h-9 w-9 shrink-0 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-[var(--accent-border)] text-zinc-200 hover:text-[var(--accent-color)] transition-all cursor-pointer flex items-center justify-center"
           title={t('common.settings')}
           aria-label={t('common.settings')}
         >
-          <Settings className="w-5 h-5" />
+          <Settings className="w-[18px] h-[18px]" />
         </button>
-        <div className="flex-1" />
         <button
           onClick={() => {
             playBlipSound(soundEnabled);
             onOpenFeedback();
           }}
-          className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 hover:border-amber-500/40 text-amber-400 transition-all cursor-pointer shadow-sm"
+          className="h-9 w-9 shrink-0 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 hover:border-amber-500/45 text-amber-400 transition-all cursor-pointer flex items-center justify-center"
           title={t('side.feedback')}
           aria-label={t('side.feedback')}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
+          <MessageSquareText className="w-[18px] h-[18px]" />
         </button>
       </div>
 
@@ -449,44 +449,57 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
         );
       })()}
 
-      {/* Delete Confirmation Modal */}
-      {tabToDelete && (
-        <div 
-          className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[9999] flex items-center justify-center"
+      {/* Delete confirmation. Drawn at the page level: inside the sidebar, its 3D flip effect pulled the window off
+          to the side of the app. Styled like the app's other dialogs. */}
+      {tabToDelete && createPortal(
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
           style={{ WebkitAppRegion: 'no-drag' } as any}
           onClick={(e) => {
-             e.stopPropagation();
-             setTabToDelete(null);
+            e.stopPropagation();
+            setTabToDelete(null);
           }}
+          onKeyDown={(e) => { if (e.key === 'Escape') setTabToDelete(null); }}
         >
-          <div 
-            className="bg-[#1a1a1a] border-2 border-red-500 p-5 rounded-lg flex flex-col gap-4 shadow-[4px_4px_0px_rgba(239,68,68,0.4)] min-w-[300px]"
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="qc-delete-title"
+            className="w-full max-w-sm bg-[#0c0d14] border border-white/10 rounded-2xl shadow-2xl p-5 flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <label className="font-fantasy text-red-500 text-xl tracking-wide">{t('side.deleteTitle')}</label>
-            <p className="text-zinc-300 text-sm">
-              {t('side.deleteBody', { name: tabToDelete.name })}<br/>
-              {t('side.deleteWarn')}
-            </p>
-            <div className="flex justify-end gap-2.5 mt-2">
-              <button 
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 shrink-0 rounded-xl bg-red-500/10 border border-red-500/25 flex items-center justify-center">
+                <Trash2 className="w-4 h-4 text-red-400" />
+              </div>
+              <div className="min-w-0">
+                <h2 id="qc-delete-title" className="font-fantasy font-bold text-white text-base">{t('side.deleteTitle')}</h2>
+                <p className="text-zinc-400 text-sm mt-1 break-words">
+                  {t('side.deleteBody', { name: tabToDelete.name })} {t('side.deleteWarn')}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                autoFocus
                 onClick={() => setTabToDelete(null)}
-                className="bg-transparent border border-red-500 text-red-500 px-4 py-1.5 rounded font-fantasy text-lg font-bold cursor-pointer hover:bg-red-500/10"
+                className="h-9 px-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 text-zinc-200 text-sm font-semibold transition-colors cursor-pointer"
               >
                 {t('common.cancel')}
               </button>
-              <button 
+              <button
                 onClick={() => {
                   onDeleteTab(tabToDelete.id);
                   setTabToDelete(null);
                 }}
-                className="bg-red-500 text-white border-none px-4 py-1.5 rounded font-fantasy text-lg font-bold cursor-pointer hover:bg-red-600"
+                className="h-9 px-4 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 hover:border-red-500/60 text-red-300 hover:text-red-200 text-sm font-semibold transition-colors cursor-pointer"
               >
                 {t('common.delete')}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </aside>
   );

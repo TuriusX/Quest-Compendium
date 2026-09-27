@@ -34,7 +34,8 @@ export function useLofi(): boolean {
 const PATHS: Record<string, string> = {
   "square": "M1 1h8v1h-8zM1 2h8v1h-8zM1 3h8v1h-8zM1 4h8v1h-8zM1 5h8v1h-8zM1 6h8v1h-8zM1 7h8v1h-8zM1 8h8v1h-8z",
   "trophy": "M1 0h8v1h-8zM0 1h2v1h-2zM3 1h4v1h-4zM8 1h2v1h-2zM0 2h1v1h-1zM3 2h4v1h-4zM9 2h1v1h-1zM0 3h2v1h-2zM3 3h4v1h-4zM8 3h2v1h-2zM1 4h8v1h-8zM3 5h4v1h-4zM4 6h2v1h-2zM4 7h2v1h-2zM2 8h6v1h-6zM2 9h6v1h-6z",
-  "gear": "M4 0h2v1h-2zM1 1h1v1h-1zM3 1h4v1h-4zM8 1h1v1h-1zM2 2h6v1h-6zM1 3h3v1h-3zM6 3h3v1h-3zM0 4h3v1h-3zM7 4h3v1h-3zM0 5h3v1h-3zM7 5h3v1h-3zM1 6h3v1h-3zM6 6h3v1h-3zM2 7h6v1h-6zM1 8h1v1h-1zM3 8h4v1h-4zM8 8h1v1h-1zM4 9h2v1h-2z",
+  "gear": "M4 0h2v1h-2zM1 1h2v1h-2zM4 1h2v1h-2zM7 1h2v1h-2zM1 2h8v1h-8zM2 3h2v1h-2zM6 3h2v1h-2zM0 4h3v1h-3zM7 4h3v1h-3zM0 5h3v1h-3zM7 5h3v1h-3zM2 6h2v1h-2zM6 6h2v1h-2zM1 7h8v1h-8zM1 8h2v1h-2zM4 8h2v1h-2zM7 8h2v1h-2zM4 9h2v1h-2z",
+  "chat": "M1 0h8v1h-8zM0 1h1v1h-1zM9 1h1v1h-1zM0 2h1v1h-1zM2 2h6v1h-6zM9 2h1v1h-1zM0 3h1v1h-1zM9 3h1v1h-1zM0 4h1v1h-1zM2 4h4v1h-4zM9 4h1v1h-1zM0 5h1v1h-1zM9 5h1v1h-1zM1 6h1v1h-1zM3 6h6v1h-6zM1 7h1v1h-1zM3 7h1v1h-1zM1 8h2v1h-2zM1 9h1v1h-1z",
   "close": "M0 0h2v1h-2zM8 0h2v1h-2zM0 1h3v1h-3zM7 1h3v1h-3zM1 2h3v1h-3zM6 2h3v1h-3zM2 3h6v1h-6zM3 4h4v1h-4zM3 5h4v1h-4zM2 6h6v1h-6zM1 7h3v1h-3zM6 7h3v1h-3zM0 8h3v1h-3zM7 8h3v1h-3zM0 9h2v1h-2zM8 9h2v1h-2z",
   "plus": "M4 0h2v1h-2zM4 1h2v1h-2zM4 2h2v1h-2zM4 3h2v1h-2zM0 4h10v1h-10zM0 5h10v1h-10zM4 6h2v1h-2zM4 7h2v1h-2zM4 8h2v1h-2zM4 9h2v1h-2z",
   "globe": "M2 0h6v1h-6zM1 1h1v1h-1zM4 1h2v1h-2zM8 1h1v1h-1zM0 2h1v1h-1zM3 2h1v1h-1zM6 2h1v1h-1zM9 2h1v1h-1zM0 3h10v1h-10zM0 4h1v1h-1zM3 4h1v1h-1zM6 4h1v1h-1zM9 4h1v1h-1zM0 5h1v1h-1zM3 5h1v1h-1zM6 5h1v1h-1zM9 5h1v1h-1zM0 6h10v1h-10zM0 7h1v1h-1zM3 7h1v1h-1zM6 7h1v1h-1zM9 7h1v1h-1zM1 8h1v1h-1zM4 8h2v1h-2zM8 8h1v1h-1zM2 9h6v1h-6z",
@@ -118,6 +119,7 @@ function makePixelIcon(key: string, Fallback: LucideIcon, name: string): LucideI
 }
 
 export const Settings = makePixelIcon('gear', Lucide.Settings, 'Settings');
+export const MessageSquareText = makePixelIcon('chat', Lucide.MessageSquareText, 'MessageSquareText');
 export const X = makePixelIcon('close', Lucide.X, 'X');
 export const Trophy = makePixelIcon('trophy', Lucide.Trophy, 'Trophy');
 export const Award = makePixelIcon('star', Lucide.Award, 'Award');

@@ -3,6 +3,7 @@
 export * from 'lucide-react';
 export {
   Settings,
+  MessageSquareText,
   X,
   Trophy,
   Award,
