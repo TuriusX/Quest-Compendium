@@ -1176,7 +1176,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         {isLoading && (
           <div className="flex items-center gap-3 ml-4 mb-4 w-fit">
             <div className="w-5 h-5 shrink-0 flex items-center justify-center animate-magical-flip">
-              <QuestLogo size={16} />
+              <QuestLogo size={16} compact />
             </div>
             <span className="qc-keep-anim font-fantasy font-bold text-xs text-[var(--accent-color)] tracking-wide animate-pulse mt-1">
               {t('chat.consulting')}

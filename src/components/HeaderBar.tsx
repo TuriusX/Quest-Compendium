@@ -161,6 +161,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             <div className="relative flex-shrink-0 z-10">
               <QuestLogo
                 size={32}
+                compact
                 className="drop-shadow-[0_0_10px_var(--accent-glow)] group-hover:scale-105 transition-transform"
               />
             </div>
