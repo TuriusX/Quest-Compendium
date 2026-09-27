@@ -859,8 +859,8 @@ async function startServer() {
       if (userData.flashQueriesAvailable <= 0) {
         return res.status(429).json({
           text: isPremium
-            ? "You've reached today's question limit. It resets tomorrow."
-            : `You've used today's ${FREE_DAILY_QUESTIONS} free questions. Upgrade to Premium for ${PREMIUM_DAILY_QUESTIONS} questions a day, on-screen markers and more!`,
+            ? "You've used all of today's Glain. They refill tomorrow."
+            : `You've used today's ${FREE_DAILY_QUESTIONS} free Glain (1 per question). Upgrade to Premium for ${PREMIUM_DAILY_QUESTIONS} Glain a day, premium voices and more!`,
           modelUsed: 'Limit Reached'
         });
       }

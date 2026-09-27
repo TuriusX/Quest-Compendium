@@ -13,7 +13,6 @@ import {
   ChevronDown,
   Activity,
   Cpu,
-  Zap,
   LogOut,
   ArrowRightToLine,
   Square,
@@ -26,6 +25,7 @@ import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
 import { useT } from '../i18n';
 import { QuestLogo } from './QuestLogo';
+import { GlainIcon } from './GlainIcon';
 
 interface HeaderBarProps {
   userData?: any;
@@ -202,7 +202,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </div>
       {/* Right Controls Toolbar */}
       <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 ml-2">
-        {/* Questions left today: one daily allowance */}
+        {/* Glain left today: one daily allowance (each question uses 1 Glain) */}
         {(() => {
           const effectiveData = userData || { isPremium: false, flashQueriesAvailable: 10, isGuest: true };
           const isPremiumUser = Boolean(effectiveData.isPremium && !effectiveData.isGuest);
@@ -219,7 +219,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 }`}
                 title={t('header.questionsTitle', { left, daily })}
               >
-                <Zap className="w-3.5 h-3.5 shrink-0" />
+                <GlainIcon size={15} />
                 {left}
                 <span className="hidden md:inline font-mono uppercase text-[9px] opacity-70">{t('header.left')}</span>
               </div>
@@ -240,6 +240,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                         style={{ width: `${Math.min(100, (left / daily) * 100)}%` }}
                       />
                     </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                    <GlainIcon size={10} />
+                    {t('header.glainHint')}
                   </div>
 
                   <div className="pt-2 mt-1 border-t border-white/5 flex justify-between items-center text-[11px]">
