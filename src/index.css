@@ -338,6 +338,9 @@ html[data-ui="lofi"] .qc-glyph { border-radius: 0; font-family: 'Silkscreen', mo
   background: var(--accent-color); color: #16101f; font-size: 10px; font-weight: 800; border-radius: 999px;
 }
 @keyframes qc-pt-pulse { from { transform: scale(1); opacity: 1; } to { transform: scale(2.4); opacity: 0; } }
+/* The marker for the list line being pointed at */
+.qc-pt-hl .qc-pt-dot { transform: scale(1.35); box-shadow: 0 0 0 2px #16101f, 0 0 0 4px #fff, 0 0 16px var(--accent-color); z-index: 2; }
+.qc-pt-hl { z-index: 2; }
 html[data-ui="lofi"] .qc-pt-ring { animation-timing-function: steps(4); }
 html[data-ui="lofi"] .qc-pt-dot, html[data-ui="lofi"] .qc-pt-num, html[data-ui="lofi"] .qc-pt-ring { border-radius: 0; font-family: 'Silkscreen', monospace; }
 

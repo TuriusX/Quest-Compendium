@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showScreenPointers: (points, accent, opts) => ipcRenderer.invoke('show-screen-pointers', { points, accent, opts }),
   hideScreenPointers: () => ipcRenderer.send('hide-screen-pointers'),
   setPointersHidden: (id, hidden) => ipcRenderer.send('pointers-hidden', { id, hidden }),
+  highlightPointer: (id, index) => ipcRenderer.send('pointers-highlight', { id, index }),
   addPointers: (id, points, refImage, startIndex) => ipcRenderer.send('pointers-add', { id, points, refImage, startIndex }),
   locateDone: (id, remaining) => ipcRenderer.send('pointers-locate-done', { id, remaining }),
   movePointers: (id, moves) => ipcRenderer.send('pointers-move', { id, moves }),

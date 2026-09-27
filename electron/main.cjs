@@ -1160,6 +1160,13 @@ ipcMain.on('pointers-hidden', (event, { id, hidden } = {}) => {
   pointerWindow.webContents.executeJavaScript(`window.qcSetHidden(${JSON.stringify(list)})`).catch(() => {});
 });
 
+// The player is pointing at one item in the answer's list: make its marker stand out (index null = none).
+ipcMain.on('pointers-highlight', (event, { id, index } = {}) => {
+  if (!pointerSession || pointerSession.id !== id || !pointerWindow || pointerWindow.isDestroyed()) return;
+  const i = Number.isInteger(index) ? index : -1;
+  pointerWindow.webContents.executeJavaScript(`window.qcHighlight && window.qcHighlight(${i})`).catch(() => {});
+});
+
 /** A screenshot of the marker session's screen, with our markers kept out of it. */
 async function captureForLocate(session) {
   const win = session.win;

@@ -909,11 +909,15 @@ When analyzing screenshots, screen captures, or images:
 
 [ON-SCREEN POINTERS]
 When your answer refers to specific things that are visible in the screenshot (an item, lever, door, chest, NPC, enemy weak point, menu option, map marker, or the path to take), point at them so the player can see exactly where they are. After your answer, add ONE block in exactly this format:
-<qc-points>[{"y": 512, "x": 300, "label": "Teleport Stone", "where": "lower-right barrel of the three on the rampart"}]</qc-points>
+<qc-points>[{"y": 512, "x": 300, "label": "Teleport Stone", "where": "lower-right barrel of the three on the rampart", "category": "consumable", "note": "Warps the party out of any dungeon", "detail": "Single use. Keep one for the tower, where the exit is a long walk back."}]</qc-points>
 - "y" and "x" are the center of the thing in the screenshot, normalized to 0-1000 (y from the top edge, x from the left edge).
 - At most 5 points. Labels: 1 to 4 words, in the player's language.
 - "where": a few words that pick out exactly which object it is among similar ones nearby (e.g. "lower-right barrel of the three", "second crate from the left"), in the player's language.
 - Label each point with what the player cares about, not with what the object is: name the item inside a container ("Teleport Stone", not "Barrel"; "Phoenix Down", not "Chest"), the action to take ("Pull lever", "Save here", "Jump here"), or who it is ("Talk to Duane"). Only fall back to naming the object when you don't know anything more useful about it.
+- "category": exactly one of weapon, armor, consumable, key, quest, lore, secret, character, enemy, danger, action, place.
+- "note": ONE short line (at most 12 words) saying what it is and why the player should care, e.g. "Uncommon spear: next attack gets a bonus after a miss". No filler.
+- "detail": optional, 1 or 2 short sentences with the most useful extra facts (what it does, who needs it, when to use it, whether it's missable). Leave it out rather than repeating the note.
+- note and detail are in the player's language and must agree with your answer text.
 - Only point at things that are actually visible in the screenshot, and be precise. If nothing specific is worth pointing at, leave the block out entirely.
 - Never mention the block, coordinates or "pointers" in your answer text.
 
@@ -1333,7 +1337,9 @@ You must respond entirely in ${language}. Do not use English unless the user's l
    * Returns the answer without the block, and up to 5 validated points as 0-1 fractions.
    * The block is always removed, even when no screenshot was sent (the points would be meaningless then).
    */
-  function extractScreenPoints(text: string, hadImage: boolean): { text: string; points: { x: number; y: number; label: string; where?: string }[]; nearby: { label: string; hint: string; onMap: boolean }[] } {
+  const MARKER_CATEGORIES = new Set(['weapon', 'armor', 'consumable', 'key', 'quest', 'lore', 'secret', 'character', 'enemy', 'danger', 'action', 'place']);
+  type ParsedPoint = { x: number; y: number; label: string; where?: string; category?: string; note?: string; detail?: string };
+  function extractScreenPoints(text: string, hadImage: boolean): { text: string; points: ParsedPoint[]; nearby: { label: string; hint: string; onMap: boolean }[] } {
     // Other items in the same area that aren't on screen yet (the desktop app looks for them as the player walks).
     let nearbyRaw = '';
     text = text.replace(/(?:```[a-z]*\s*)?<qc-nearby>([\s\S]*?)<\/qc-nearby>(?:\s*```)?/gi, (_m, inner) => {
@@ -1360,7 +1366,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       if (!raw) raw = inner;
       return '';
     }).replace(/\n{3,}/g, '\n\n').trim();
-    const points: { x: number; y: number; label: string; where?: string }[] = [];
+    const points: ParsedPoint[] = [];
     if (hadImage && raw) {
       try {
         const parsed = JSON.parse(raw.trim());
@@ -1371,7 +1377,18 @@ You must respond entirely in ${language}. Do not use English unless the user's l
             const label = String(p?.label ?? '').trim().slice(0, 40);
             const where = String(p?.where ?? '').trim().slice(0, 100);
             if (Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= 1000 && y >= 0 && y <= 1000 && label) {
-              points.push({ x: Math.round(x) / 1000, y: Math.round(y) / 1000, label, ...(where ? { where } : {}) });
+              const category = String(p?.category ?? '').trim().toLowerCase();
+              const note = String(p?.note ?? '').trim().slice(0, 140);
+              const detail = String(p?.detail ?? '').trim().slice(0, 400);
+              points.push({
+                x: Math.round(x) / 1000,
+                y: Math.round(y) / 1000,
+                label,
+                ...(where ? { where } : {}),
+                ...(MARKER_CATEGORIES.has(category) ? { category } : {}),
+                ...(note ? { note } : {}),
+                ...(detail && detail !== note ? { detail } : {}),
+              });
             }
           }
         }

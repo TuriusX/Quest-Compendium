@@ -4,9 +4,26 @@
  * for as you walk, and what's elsewhere nearby. Numbered checkboxes also appear inside the answer text.
  */
 import React, { useState } from 'react';
+import { BookOpen, ChevronDown, FlaskConical, Gem, Hand, KeyRound, MapPin, ScrollText, Shield, Skull, Sparkles, Sword, TriangleAlert, User } from 'lucide-react';
 import type { NearbyItem, ScreenPoint } from '../types';
 import { useT } from '../i18n';
 import { useMarkersActive } from './pointerStore';
+
+/** A small icon per kind of thing, so the list can be scanned at a glance. */
+const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  weapon: Sword,
+  armor: Shield,
+  consumable: FlaskConical,
+  key: KeyRound,
+  quest: ScrollText,
+  lore: BookOpen,
+  secret: Sparkles,
+  character: User,
+  enemy: Skull,
+  danger: TriangleAlert,
+  action: Hand,
+  place: MapPin,
+};
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -60,6 +77,7 @@ export function AnnotatedShot({
   onHideAll,
   lifetime,
   onChangeLifetime,
+  onHighlight,
 }: {
   msgId: string;
   imageUrl?: string;
@@ -72,9 +90,17 @@ export function AnnotatedShot({
   onHideAll: () => void;
   lifetime?: number;
   onChangeLifetime?: (seconds: number) => void;
+  /** The player is pointing at one item in the list (null = none): its marker stands out on screen. */
+  onHighlight?: (index: number | null) => void;
 }) {
   const t = useT();
   const [large, setLarge] = useState(false);
+  const [open, setOpen] = useState<Set<number>>(new Set());
+  const [hover, setHover] = useState<number | null>(null);
+  const pointAt = (i: number | null) => {
+    setHover(i);
+    onHighlight?.(i);
+  };
   const active = useMarkersActive(msgId);
   const doneSet = new Set(done);
   const watching = (nearby ?? []).filter((n) => n.onMap && !n.found);
@@ -140,7 +166,7 @@ export function AnnotatedShot({
           <img src={imageUrl} alt={t('chat.shotAlt')} className="w-full h-auto block" />
           {points.map((p, i) =>
             p.fromArea || doneSet.has(i) ? null : (
-              <span key={i} className="qc-pt absolute" style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }} aria-hidden="true">
+              <span key={i} className={`qc-pt absolute ${hover === i ? 'qc-pt-hl' : ''}`} style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }} aria-hidden="true">
                 <span className="qc-pt-ring" />
                 <span className="qc-pt-dot">{i + 1}</span>
               </span>
@@ -149,24 +175,55 @@ export function AnnotatedShot({
         </button>
       )}
 
-      {/* The checklist: checked = collected (its marker leaves the screen) */}
-      <ul className="space-y-1" aria-label={t('chat.markersTitle')}>
+      {/* The checklist: checked = collected (its marker leaves the screen). Each line shows what the item is and why it
+          matters; pointing at a line makes its marker stand out, and the arrow opens a little more detail. */}
+      <ul className="space-y-1.5" aria-label={t('chat.markersTitle')} onMouseLeave={() => pointAt(null)}>
         {points.map((p, i) => {
           const checked = doneSet.has(i);
+          const Icon = (p.category && CATEGORY_ICONS[p.category]) || Gem;
+          const isOpen = open.has(i);
+          const toggleOpen = () =>
+            setOpen((prev) => {
+              const next = new Set(prev);
+              if (next.has(i)) next.delete(i);
+              else next.add(i);
+              return next;
+            });
           return (
-            <li key={i}>
-              <label className={`flex items-center gap-2 cursor-pointer select-none text-[13px] ${checked ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
+            <li
+              key={i}
+              onMouseEnter={() => pointAt(i)}
+              onFocus={() => pointAt(i)}
+              className={`rounded-lg px-1.5 py-1 -mx-1.5 transition-colors ${hover === i ? 'bg-white/[0.05]' : ''}`}
+            >
+              <div className="flex items-start gap-2">
                 <input
                   type="checkbox"
                   checked={checked}
                   onChange={() => onToggle(i)}
-                  className="w-4 h-4 accent-[var(--accent-color)] cursor-pointer flex-shrink-0"
+                  className="w-4 h-4 mt-0.5 accent-[var(--accent-color)] cursor-pointer flex-shrink-0"
                   aria-label={t('chat.markDone', { label: p.label })}
                 />
-                <span className="qc-pt-num flex-shrink-0">{i + 1}</span>
-                <span className="font-medium">{p.label}</span>
-                {p.fromArea && <span className="no-underline text-[10px] text-emerald-400 font-mono uppercase">{t('chat.foundNearby')}</span>}
-              </label>
+                <span className="qc-pt-num flex-shrink-0 mt-0.5">{i + 1}</span>
+                <button
+                  type="button"
+                  onClick={p.detail ? toggleOpen : () => onToggle(i)}
+                  aria-expanded={p.detail ? isOpen : undefined}
+                  className="flex-1 min-w-0 text-left cursor-pointer"
+                >
+                  <span className={`flex items-center gap-1.5 text-[13px] ${checked ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
+                    <Icon className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-color)]" aria-hidden="true" />
+                    <span className="font-medium">{p.label}</span>
+                    {p.category && <span className="sr-only">({t(`chat.cat.${p.category}`)})</span>}
+                    {p.fromArea && <span className="no-underline text-[10px] text-emerald-400 font-mono uppercase">{t('chat.foundNearby')}</span>}
+                    {p.detail && (
+                      <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 text-zinc-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                    )}
+                  </span>
+                  {p.note && <span className={`block text-[12px] leading-snug mt-0.5 ${checked ? 'text-zinc-600' : 'text-zinc-400'}`}>{p.note}</span>}
+                  {p.detail && isOpen && <span className="block text-[12px] leading-relaxed mt-1 text-zinc-300">{p.detail}</span>}
+                </button>
+              </div>
             </li>
           );
         })}

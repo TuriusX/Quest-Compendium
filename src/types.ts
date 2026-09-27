@@ -41,6 +41,12 @@ export interface ScreenPoint {
   where?: string;
   /** Found later by an area check (not on the original screenshot). */
   fromArea?: boolean;
+  /** What kind of thing it is: weapon, armor, consumable, key, quest, lore, secret, character, enemy, danger, action, place. */
+  category?: string;
+  /** One short line: what it is and why it matters. */
+  note?: string;
+  /** A sentence or two more, shown when the player expands the item. */
+  detail?: string;
 }
 
 /** Something the AI knows is in this area but wasn't on screen yet. */

@@ -18,6 +18,12 @@
   .below .tag { bottom: auto; top: 22px; }
   .below .tag::after { bottom: auto; top: -12px; border-top: 0; border-bottom: 10px solid var(--accent); }
   body.out .m { opacity: 0; transition: opacity .3s steps(3); }
+  /* One item picked in the answer's list: it grows and glows, the others step back. */
+  .m.hl { z-index: 10; }
+  .m.hl .tag { transform: translateX(-50%) scale(1.3); transform-origin: 50% 100%; animation: none;
+               box-shadow: 0 0 0 3px rgba(255, 255, 255, .85), 0 0 22px var(--accent), 0 6px 18px rgba(0, 0, 0, .6); }
+  .below.hl .tag { transform-origin: 50% 0; }
+  body.focus .m:not(.hl):not(.hidden) { opacity: .35; }
   .toast { position: absolute; left: 50%; top: 48px; transform: translateX(-50%); padding: 8px 16px; background: rgba(16, 12, 28, .95);
            border: 2px solid var(--accent); color: #fff; font-size: 17px; font-weight: 700; box-shadow: 0 6px 18px rgba(0, 0, 0, .6);
            animation: pop .25s steps(3) both; white-space: nowrap; }
@@ -264,6 +270,12 @@
   }
 
   /** Markers the player switched off (indexes into the answer's list). */
+  window.qcHighlight = (index) => {
+    const els = document.querySelectorAll('.m');
+    els.forEach((el, i) => el.classList.toggle('hl', i === index));
+    document.body.classList.toggle('focus', index >= 0 && index < els.length);
+  };
+
   window.qcSetHidden = (list) => {
     hidden = new Set(Array.isArray(list) ? list : []);
     document.querySelectorAll('.m').forEach((el, i) => {
