@@ -43,10 +43,9 @@ export function applyLocale(l: unknown) {
 type Dict = Record<string, string>;
 
 const en: Dict = {
-  "header.questionsTitle": "{left} of {daily} Glain left today",
+  "header.questionsTitle": "{left} of {daily} questions left today",
   "header.left": "left",
-  "header.questionsToday": "Glain today",
-  "header.glainHint": "Each question uses 1 Glain",
+  "header.questionsToday": "Questions today",
   "set.voiceDevice": "Built-in voice (free, from your device)",
   "set.voicePuck": "warm & energetic",
   "set.voiceCharon": "deep & resonant",
@@ -367,10 +366,10 @@ const en: Dict = {
   'set.steamSignInHelp': 'Sign in securely through Steam to sync your real game achievements.',
   // paywall
   'pay.title': 'Unlock the Compendium',
-  'pay.body': 'Premium gives you 60 Glain a day (one per question) with the full AI, on-screen markers on the Windows app, and premium Gemini narration voices.',
+  'pay.body': 'Premium gives you 60 questions a day with the full AI, on-screen markers on the Windows app, and premium Gemini narration voices.',
   'pay.plan': 'Premium',
   'pay.perMonth': '/mo',
-  'pay.f1': '60 Glain a day with the full AI (1 Glain = 1 question)',
+  'pay.f1': '60 questions a day with the full AI',
   'pay.f2': 'On-screen markers (early feature, Windows app)',
   'pay.f3': 'Premium Gemini narration voices, plus cloud sync across devices',
   'pay.connecting': 'Connecting to Stripe…',
@@ -393,10 +392,9 @@ const en: Dict = {
 };
 
 const es: Dict = {
-  "header.questionsTitle": "Te quedan {left} de {daily} Glain hoy",
+  "header.questionsTitle": "Te quedan {left} de {daily} preguntas hoy",
   "header.left": "quedan",
-  "header.questionsToday": "Glain de hoy",
-  "header.glainHint": "Cada pregunta usa 1 Glain",
+  "header.questionsToday": "Preguntas de hoy",
   "set.voiceDevice": "Voz integrada (gratis, de tu dispositivo)",
   "set.voicePuck": "cálida y enérgica",
   "set.voiceCharon": "grave y resonante",
@@ -709,10 +707,10 @@ const es: Dict = {
   'set.steamSignIn': 'Iniciar sesión con Steam',
   'set.steamSignInHelp': 'Inicia sesión de forma segura con Steam para sincronizar tus logros reales.',
   'pay.title': 'Desbloquea el Compendio',
-  'pay.body': 'Premium te da 60 Glain al día (uno por pregunta) con la IA completa, marcadores en pantalla en la app de Windows y voces de narración Gemini premium.',
+  'pay.body': 'Premium te da 60 preguntas al día con la IA completa, marcadores en pantalla en la app de Windows y voces de narración Gemini premium.',
   'pay.plan': 'Premium',
   'pay.perMonth': '/mes',
-  'pay.f1': '60 Glain al día con la IA completa (1 Glain = 1 pregunta)',
+  'pay.f1': '60 preguntas al día con la IA completa',
   'pay.f2': 'Marcadores en pantalla (función temprana, app de Windows)',
   'pay.f3': 'Voces de narración Gemini premium y sincronización en la nube',
   'pay.connecting': 'Conectando con Stripe…',
@@ -734,10 +732,9 @@ const es: Dict = {
 };
 
 const pt: Dict = {
-  "header.questionsTitle": "Restam {left} de {daily} Glain hoje",
+  "header.questionsTitle": "Restam {left} de {daily} perguntas hoje",
   "header.left": "restam",
-  "header.questionsToday": "Glain de hoje",
-  "header.glainHint": "Cada pergunta usa 1 Glain",
+  "header.questionsToday": "Perguntas de hoje",
   "set.voiceDevice": "Voz integrada (grátis, do seu dispositivo)",
   "set.voicePuck": "calorosa e enérgica",
   "set.voiceCharon": "grave e ressonante",
@@ -1050,10 +1047,10 @@ const pt: Dict = {
   'set.steamSignIn': 'Entrar com a Steam',
   'set.steamSignInHelp': 'Entre com segurança pela Steam para sincronizar suas conquistas reais.',
   'pay.title': 'Desbloqueie o Compêndio',
-  'pay.body': 'O Premium dá 60 Glain por dia (um por pergunta) com a IA completa, marcadores na tela no app do Windows e vozes de narração Gemini premium.',
+  'pay.body': 'O Premium dá 60 perguntas por dia com a IA completa, marcadores na tela no app do Windows e vozes de narração Gemini premium.',
   'pay.plan': 'Premium',
   'pay.perMonth': '/mês',
-  'pay.f1': '60 Glain por dia com a IA completa (1 Glain = 1 pergunta)',
+  'pay.f1': '60 perguntas por dia com a IA completa',
   'pay.f2': 'Marcadores na tela (recurso inicial, app do Windows)',
   'pay.f3': 'Vozes de narração Gemini premium e sincronização na nuvem',
   'pay.connecting': 'Conectando ao Stripe…',

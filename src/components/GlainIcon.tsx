@@ -1,7 +1,7 @@
 import React from 'react';
 
 /**
- * The Glain: the app's currency, the same stone as on the logo's cover.
+ * The Glain stone from the logo's cover, used as the icon for the daily question count.
  * The stone follows the player's theme (--accent-color). Drawn on a 5x5 grid, so use sizes
  * that are multiples of 5 (10, 15, 20) to keep every pixel crisp.
  */
