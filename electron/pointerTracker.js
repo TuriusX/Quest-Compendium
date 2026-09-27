@@ -338,7 +338,7 @@
   }
 
   /**
-   * @param {{ ref: Float32Array, w: number, h: number, points: {x:number,y:number,label?:string}[],
+   * @param {{ ref: Float32Array, w: number, h: number, points: {x:number,y:number,label?:string,note?:string}[],
    *   exclude?: {x0:number,y0:number,x1:number,y1:number}[], selfVisible?: boolean, screenWidth?: number }} opts
    *   selfVisible: our markers appear in the captured frames (shown in recordings), so never match against the
    *   spots they cover; markers then follow the camera alone.
@@ -364,7 +364,7 @@
       tpl.offX = sx - x0;
       tpl.offY = sy - y0;
       return {
-        x, y, tpl, offX: sx - x0, offY: sy - y0, weak: tpl.std < MIN_STD, lost: 0, miss: 0, matched: false, visible: false, score: 0, label: p.label || '',
+        x, y, tpl, offX: sx - x0, offY: sy - y0, weak: tpl.std < MIN_STD, lost: 0, miss: 0, matched: false, visible: false, score: 0, label: p.label || '', note: p.note || '',
         src: img, rx: p.x, ry: p.y, // the screenshot this marker was placed in, and where
         bx: x - camX * w, by: y - camY * h, // position relative to the camera
         cx: 0, cy: 0, // bounded correction from matching the item
@@ -398,8 +398,11 @@
         const cy = m.y / h;
         const label = labels()[i] || '';
         // The label floats just above the item (its arrow tip ~12 px above the spot); nothing covers the item.
-        const half = Math.max(30, (48 + 11 * label.length) / 2) / screenW;
-        return { x0: cx - half, x1: cx + half, y0: cy - (70 / screenW) * aspect, y1: cy - (8 / screenW) * aspect };
+        const note = markers[i].note || '';
+        // Width: the longer of the name and the one-line note (which is cut off at 300 px); a note adds a second line.
+        const half = Math.max(30, (48 + 11 * label.length) / 2, note ? (52 + Math.min(300, 7 * note.length)) / 2 : 0) / screenW;
+        const top = note ? 90 : 70;
+        return { x0: cx - half, x1: cx + half, y0: cy - (top / screenW) * aspect, y1: cy - (8 / screenW) * aspect };
       });
     }
 
@@ -600,7 +603,7 @@
       for (const mv of moves) {
         const m = markers[mv.index];
         if (!m || !Number.isFinite(mv.x) || !Number.isFinite(mv.y)) continue;
-        const fresh = makeMarker(m.src, { x: mv.x, y: mv.y, label: m.label });
+        const fresh = makeMarker(m.src, { x: mv.x, y: mv.y, label: m.label, note: m.note });
         m.x += (mv.x - m.rx) * w;
         m.y += (mv.y - m.ry) * h;
         m.bx += (mv.x - m.rx) * w;

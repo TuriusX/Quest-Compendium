@@ -915,7 +915,7 @@ When your answer refers to specific things that are visible in the screenshot (a
 - "where": a few words that pick out exactly which object it is among similar ones nearby (e.g. "lower-right barrel of the three", "second crate from the left"), in the player's language.
 - Label each point with what the player cares about, not with what the object is: name the item inside a container ("Teleport Stone", not "Barrel"; "Phoenix Down", not "Chest"), the action to take ("Pull lever", "Save here", "Jump here"), or who it is ("Talk to Duane"). Only fall back to naming the object when you don't know anything more useful about it.
 - "category": exactly one of weapon, armor, consumable, key, quest, lore, secret, character, enemy, danger, action, place.
-- "note": ONE short line (at most 12 words) saying what it is and why the player should care, e.g. "Uncommon spear: next attack gets a bonus after a miss". No filler.
+- "note": ONE short line (at most 8 words, it's shown under the marker on screen) saying what it is and why the player should care, e.g. "Spear: advantage after a missed attack". No filler, no repeating the label.
 - "detail": optional, 1 or 2 short sentences with the most useful extra facts (what it does, who needs it, when to use it, whether it's missable). Leave it out rather than repeating the note.
 - note and detail are in the player's language and must agree with your answer text.
 - Only point at things that are actually visible in the screenshot, and be precise. If nothing specific is worth pointing at, leave the block out entirely.

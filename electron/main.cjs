@@ -1047,7 +1047,13 @@ function showScreenPointers(points, accent, opts = {}) {
   const valid = (Array.isArray(points) ? points : [])
     .filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
     .slice(0, 5)
-    .map((p) => ({ x: p.x, y: p.y, label: String(p.label || '').slice(0, 40) }));
+    .map((p) => ({
+      x: p.x,
+      y: p.y,
+      label: String(p.label || '').slice(0, 40),
+      category: /^[a-z]{2,12}$/.test(String(p.category || '')) ? String(p.category) : '',
+      note: String(p.note || '').slice(0, 140),
+    }));
   if (!valid.length) return false;
   const display = lastCaptureDisplay || screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const { x, y, width, height } = display.bounds;
@@ -1211,7 +1217,13 @@ function cleanAdd(add) {
   const valid = (Array.isArray(add.points) ? add.points : [])
     .filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
     .slice(0, 6)
-    .map((p) => ({ x: p.x, y: p.y, label: String(p.label || '').slice(0, 40) }));
+    .map((p) => ({
+      x: p.x,
+      y: p.y,
+      label: String(p.label || '').slice(0, 40),
+      category: /^[a-z]{2,12}$/.test(String(p.category || '')) ? String(p.category) : '',
+      note: String(p.note || '').slice(0, 140),
+    }));
   if (!valid.length || typeof add.refImage !== 'string' || !add.refImage.startsWith('data:image/')) return null;
   return { points: valid, refImage: add.refImage, startIndex: Number.isInteger(add.startIndex) ? add.startIndex : 0 };
 }
