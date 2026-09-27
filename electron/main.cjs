@@ -474,7 +474,9 @@ function createWindow() {
 
 app.whenReady().then(() => {
   // Setup System Tray
-  const iconPath = path.join(__dirname, isDev ? '../public/app-icon.png' : '../dist/app-icon.png');
+  // Windows picks the right size from the .ico (a crisp 16 px in the tray); other systems use the PNG.
+  const trayFile = process.platform === 'win32' ? 'app-icon.ico' : 'app-icon.png';
+  const iconPath = path.join(__dirname, isDev ? `../public/${trayFile}` : `../dist/${trayFile}`);
   tray = new Tray(nativeImage.createFromPath(iconPath));
   tray.setToolTip('Quest Compendium');
   

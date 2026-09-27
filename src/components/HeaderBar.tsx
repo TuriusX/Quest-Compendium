@@ -25,6 +25,7 @@ import { GameTab, SteamGameData, ColorTheme } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
 import { useT } from '../i18n';
+import { QuestLogo } from './QuestLogo';
 
 interface HeaderBarProps {
   userData?: any;
@@ -158,37 +159,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             }`} />
             
             <div className="relative flex-shrink-0 z-10">
-              <svg
-                 width="28"
-                 height="28"
-                 viewBox="0 0 32 32"
-                 fill="none"
-                 className="drop-shadow-[0_0_10px_var(--accent-glow)] group-hover:scale-105 transition-transform"
-              >
-                <rect x="5" y="28" width="24" height="2" fill="#050508" opacity="0.7"/>
-                <rect x="24" y="6" width="4" height="20" fill="#d9cdb4" />
-                <rect x="25" y="6" width="1" height="20" fill="#b3a58b" />
-                <rect x="27" y="6" width="1" height="20" fill="#b3a58b" />
-                <rect x="28" y="5" width="1" height="22" fill="#0d0817" />
-                <rect x="8" y="4" width="16" height="24" fill="#140d24" />
-                <rect x="4" y="4" width="4" height="24" fill="#0d0817" />
-                <rect x="6" y="4" width="1" height="24" fill="#241a38" />
-                <rect x="8" y="4" width="4" height="2" fill="#e5b838" />
-                <rect x="8" y="6" width="2" height="2" fill="#e5b838" />
-                <rect x="20" y="4" width="4" height="2" fill="#e5b838" />
-                <rect x="22" y="6" width="2" height="2" fill="#e5b838" />
-                <rect x="8" y="26" width="4" height="2" fill="#e5b838" />
-                <rect x="8" y="24" width="2" height="2" fill="#e5b838" />
-                <rect x="20" y="26" width="4" height="2" fill="#e5b838" />
-                <rect x="22" y="24" width="2" height="2" fill="#e5b838" />
-                <rect x="3" y="7" width="5" height="2" fill="#a07d1c" />
-                <rect x="3" y="23" width="5" height="2" fill="#a07d1c" />
-                <rect x="15" y="12" width="2" height="8" fill="var(--accent-color)" />
-                <rect x="13" y="14" width="6" height="4" fill="var(--accent-color)" />
-                <rect x="14" y="13" width="4" height="6" fill="var(--accent-color)" />
-                <rect x="14" y="14" width="4" height="4" fill="var(--accent-glow)" />
-                <rect x="15" y="15" width="2" height="2" fill="#ffffff" />
-              </svg>
+              <QuestLogo
+                size={32}
+                className="drop-shadow-[0_0_10px_var(--accent-glow)] group-hover:scale-105 transition-transform"
+              />
             </div>
           </button>
 
