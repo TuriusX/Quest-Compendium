@@ -41,7 +41,7 @@ import { QuestLogo } from './QuestLogo';
 import { PlaceBar } from './PlaceBar';
 
 /** Quick follow-ups offered under the latest answer (sent as a normal question, in the user's language). */
-const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3'];
+const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3', 'chat.follow4'];
 
 interface ChatAreaProps {
   /** Desktop: how long markers stay on screen, in seconds (0 = always). */
