@@ -1139,8 +1139,15 @@ export default function App() {
           news: activeGame?.patchNotes || [],
           generateBanner: false, // AI banner art is retired
           language: aiLanguageName(settings.language),
-          // Where the player is in this game (confirmed by them, or the AI's last guess).
-          place: activeTab.place || null
+          // Where the player is in this game (confirmed by them, or the AI's last guess). A new compendium for the same
+          // game starts from what the player's other compendiums for it already know.
+          place: activeTab.place || (() => {
+            const game = (activeTab.activeSteamGame?.name || activeTab.name || '').toLowerCase();
+            const other = tabs
+              .filter((x) => x.id !== activeTab.id && x.place && (x.activeSteamGame?.name || x.name || '').toLowerCase() === game)
+              .sort((a, b) => b.lastActive - a.lastActive)[0];
+            return other?.place || null;
+          })()
         }),
       });
       clearTimeout(timeoutId);
@@ -1222,7 +1229,20 @@ export default function App() {
         bannerImageUrl: data.bannerImageUrl,
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
         ...(data.place && typeof data.place.name === 'string'
-          ? { place: { name: String(data.place.name), sure: data.place.sure === true, options: Array.isArray(data.place.options) ? data.place.options.map(String).slice(0, 3) : [] } }
+          ? {
+              place: {
+                name: String(data.place.name),
+                sure: data.place.sure === true,
+                options: Array.isArray(data.place.options) ? data.place.options.map(String).slice(0, 3) : [],
+                ...(typeof data.place.story === 'string' && data.place.story
+                  ? {
+                      story: String(data.place.story),
+                      storySure: data.place.storySure === true,
+                      storyOptions: Array.isArray(data.place.storyOptions) ? data.place.storyOptions.map(String).slice(0, 3) : [],
+                    }
+                  : {}),
+              },
+            }
           : {}),
         ...(() => {
           // Nearby items, minus anything the answer already points at (no duplicate markers).
@@ -1257,8 +1277,14 @@ export default function App() {
           // Remember where the player is: a sure answer (a sign on screen, or the player said so) counts as confirmed;
           // an unsure guess never replaces a place the player confirmed.
           let place = t.place;
-          if (aiMessage.place?.sure) place = { name: aiMessage.place.name, confirmed: true };
-          else if (aiMessage.place && !t.place?.confirmed) place = { name: aiMessage.place.name, confirmed: false };
+          const g = aiMessage.place;
+          if (g?.sure) place = { ...place, name: g.name, confirmed: true };
+          else if (g && !t.place?.confirmed) place = { ...place, name: g.name, confirmed: false };
+          // The story point: same rule. A confirmed one is only replaced by another the AI is sure of.
+          if (g?.story && place) {
+            if (g.storySure) place = { ...place, story: g.story, storyConfirmed: true };
+            else if (!t.place?.storyConfirmed) place = { ...place, story: g.story, storyConfirmed: false };
+          }
           return { ...t, messages: [...t.messages, aiMessage], lastActive: nowAi, ...(place ? { place } : {}) };
         });
         return nextTabs;
@@ -1752,7 +1778,14 @@ export default function App() {
                 markerLifetime={settings.markerLifetime ?? 120}
                 onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
                 onSetPlace={(name) =>
-                  setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: { name, confirmed: true }, lastActive: Date.now() } : t)))
+                  setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: { ...t.place, name, confirmed: true }, lastActive: Date.now() } : t)))
+                }
+                onSetStory={(story) =>
+                  setTabs((prev) =>
+                    prev.map((t) =>
+                      t.id === activeTab.id ? { ...t, place: { name: t.place?.name || '', confirmed: !!t.place?.confirmed, ...t.place, story, storyConfirmed: true }, lastActive: Date.now() } : t,
+                    ),
+                  )
                 }
                 onUpdateMessage={(msgId, patch) =>
                   setTabs((prev) =>

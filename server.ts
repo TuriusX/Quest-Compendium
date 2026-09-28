@@ -987,6 +987,14 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       const place = req.body.place && typeof req.body.place.name === 'string' && req.body.place.name.trim()
         ? { name: String(req.body.place.name).trim().slice(0, 80), confirmed: req.body.place.confirmed === true }
         : null;
+      const story = req.body.place && typeof req.body.place.story === 'string' && req.body.place.story.trim()
+        ? { text: String(req.body.place.story).trim().slice(0, 120), confirmed: req.body.place.storyConfirmed === true }
+        : null;
+      if (story?.confirmed) {
+        situationalContext += `\n[PLAYER'S CONFIRMED STORY POINT: ${story.text}. The player confirmed this; trust it over your own guess, and only mention what's available at this point.]\n`;
+      } else if (story) {
+        situationalContext += `\n[Last known story point (an earlier guess, not confirmed): ${story.text}]\n`;
+      }
       if (place?.confirmed) {
         situationalContext += `\n[PLAYER'S CONFIRMED LOCATION: ${place.name}. The player confirmed this. Trust it over your own guess from the screenshot, unless the screen clearly shows they've moved somewhere else.]\n`;
       } else if (place) {
@@ -998,12 +1006,21 @@ You must respond entirely in ${language}. Do not use English unless the user's l
 Many games reuse near-identical rooms and tiles, so never assume a specific place from looks alone.
 - Only name a specific place (town, house, dungeon, area) in your answer if something confirms it: on-screen text or a sign, a unique landmark, the player said so, or a confirmed location above that still matches the screen. Otherwise describe what's visible ("this house", "this room") and keep the answer to what's safe without knowing the exact place.
 - At the very end of your answer, add one line in exactly this format (it's removed before the player sees it):
-<qc-place>{"name": "Place, Region", "sure": true, "options": []}</qc-place>
+<qc-place>{"name": "Place, Region", "sure": true, "options": [], "story": "Story point", "storySure": false, "storyOptions": []}</qc-place>
   - "name": your best identification of where the player is, e.g. "Duncan's House, near South Figaro".
   - "sure": true only when something confirms it, as above. If the player just told you where they are, use their words and true.
   - "options": when not sure, up to 3 likely places, most likely first (the player picks one with a single tap). Empty when sure.
   - If a confirmed location is given above and the screen still fits it, repeat that name with sure true.
+  - "story": where the player is in the story, in a few words, e.g. "Early game: Terra, Edgar and Locke heading to Mt. Kolts".
+    Many places are visited more than once, and the lead character alone rarely tells you which visit this is.
+  - "storySure": true only if the conversation, a confirmed story point above, or something on screen settles it
+    (the whole party is visible, a story event is happening). Otherwise false, and don't build the answer on a guess:
+    stick to what's true on every visit (the save point, the exits), not NPCs or events from one particular visit.
+  - "storyOptions": when not sure, up to 3 likely story points for this place, most likely first.
+  - If a confirmed story point is given above and the screen still fits it, repeat it with storySure true.
   - Leave the line out entirely for menus, title screens, battles, loading screens, or anything that isn't a place.
+- Markers and on-screen people: only mark people and things you can actually see in this screenshot right now. Never
+  mark someone who "should" be there (an NPC from a story event); if you can't see them, don't mark them.
 
 [VERIFY GAME DATA BEFORE STATING IT]
 Exact game data is easy to misremember, and a wrong weakness can lose the player a fight. For enemy weaknesses,
@@ -1425,8 +1442,9 @@ percentages:
   });
 
   /** The AI's "where is the player" line: {name, sure, options}. Removed from the answer text either way. */
-  function extractPlace(text: string): { text: string; place: { name: string; sure: boolean; options: string[] } | null } {
-    let place: { name: string; sure: boolean; options: string[] } | null = null;
+  type PlaceOut = { name: string; sure: boolean; options: string[]; story?: string; storySure?: boolean; storyOptions?: string[] };
+  function extractPlace(text: string): { text: string; place: PlaceOut | null } {
+    let place: PlaceOut | null = null;
     const cleaned = text.replace(/<qc-place>([\s\S]*?)<\/qc-place>/gi, (_m, body) => {
       try {
         const p = JSON.parse(String(body).trim());
@@ -1436,7 +1454,12 @@ percentages:
             .map((o: unknown) => String(o ?? '').trim().slice(0, 80))
             .filter((o: string, i: number, arr: string[]) => o && o.toLowerCase() !== name.toLowerCase() && arr.indexOf(o) === i)
             .slice(0, 3);
-          place = { name, sure: p?.sure === true, options };
+          const story = String(p?.story ?? '').trim().slice(0, 120);
+          const storyOptions = (Array.isArray(p?.storyOptions) ? p.storyOptions : [])
+            .map((o: unknown) => String(o ?? '').trim().slice(0, 120))
+            .filter((o: string, i: number, arr: string[]) => o && o.toLowerCase() !== story.toLowerCase() && arr.indexOf(o) === i)
+            .slice(0, 3);
+          place = { name, sure: p?.sure === true, options, ...(story ? { story, storySure: p?.storySure === true, storyOptions } : {}) };
         }
       } catch {
         /* a malformed line is simply dropped */

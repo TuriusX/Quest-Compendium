@@ -78,6 +78,8 @@ export interface ChatMessage {
   place?: PlaceGuess;
   /** The place the player picked for this answer (hides the "where are you?" buttons). */
   placeChosen?: string;
+  /** The story point the player picked for this answer. */
+  storyChosen?: string;
 }
 
 export interface PlaceGuess {
@@ -85,6 +87,10 @@ export interface PlaceGuess {
   sure: boolean;
   /** Other likely places, for one-tap correction. */
   options?: string[];
+  /** Where in the story the AI thinks the player is (places are often visited more than once). */
+  story?: string;
+  storySure?: boolean;
+  storyOptions?: string[];
 }
 
 export interface PersonalQuest {
@@ -103,7 +109,7 @@ export interface GameTab {
   notes: string;
   personalQuests?: PersonalQuest[];
   /** Where the player is in this game. confirmed = the player picked or said it, not just the AI's guess. */
-  place?: { name: string; confirmed: boolean };
+  place?: { name: string; confirmed: boolean; story?: string; storyConfirmed?: boolean };
   createdAt: number;
   lastActive: number;
 }

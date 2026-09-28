@@ -49,6 +49,8 @@ interface ChatAreaProps {
   onChangeMarkerLifetime?: (seconds: number) => void;
   /** The player picked where they are (one tap or voice): remember it for this game. */
   onSetPlace?: (name: string) => void;
+  /** The player picked where they are in the story: remember it for this game. */
+  onSetStory?: (story: string) => void;
   /** Update fields of one message (e.g. which markers were checked off). */
   onUpdateMessage?: (msgId: string, patch: Partial<ChatMessage>) => void;
   activeTab: GameTab | null;
@@ -88,6 +90,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   markerLifetime,
   onChangeMarkerLifetime,
   onSetPlace,
+  onSetStory,
 }) => {
   const t = useT();
   const [inputQuestion, setInputQuestion] = useState('');
@@ -987,13 +990,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         return undefined;
                       })()}
                       confirmedPlace={activeTab.place?.confirmed ? activeTab.place.name : undefined}
-                      onChoose={(name) => {
+                      confirmedStory={activeTab.place?.storyConfirmed ? activeTab.place.story : undefined}
+                      onChoosePlace={(name) => {
                         onUpdateMessage?.(msg.id, { placeChosen: name });
                         onSetPlace?.(name);
                       }}
-                      onReask={(name, q) => {
+                      onChooseStory={(story) => {
+                        onUpdateMessage?.(msg.id, { storyChosen: story });
+                        onSetStory?.(story);
+                      }}
+                      onReask={(name, story, q) => {
                         if (isLoading) return;
-                        onSendMessage(t('place.reaskQuestion', { place: name, question: q.text }), q.imageUrl || undefined);
+                        const where = story ? `${name} (${story})` : name;
+                        onSendMessage(t('place.reaskQuestion', { place: where, question: q.text }), q.imageUrl || undefined);
                       }}
                     />
                   )}
