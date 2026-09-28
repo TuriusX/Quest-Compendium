@@ -39,6 +39,7 @@ import { playSnapSound, playChimeSound, playBlipSound } from '../utils/audio';
 import { useT } from '../i18n';
 import { QuestLogo } from './QuestLogo';
 import { PlaceBar } from './PlaceBar';
+import { GlainIcon } from './GlainIcon';
 
 /** Quick follow-ups offered under the latest answer (sent as a normal question, in the user's language). */
 const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3', 'chat.follow4'];
@@ -832,7 +833,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             {/* Illuminated Center Crest */}
             <div className="relative mb-5 group">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[var(--accent-dim)] to-black/60 border border-[var(--accent-border)] flex items-center justify-center shadow-[0_0_30px_var(--accent-glow)]">
-                <Sparkles className="w-10 h-10 text-[var(--accent-color)] animate-pulse" />
+                <QuestLogo size={48} large className="animate-pulse" />
               </div>
               <div className="absolute -inset-1 rounded-2xl bg-[var(--accent-color)] opacity-20 blur-lg -z-10 group-hover:opacity-40 transition-opacity" />
             </div>
@@ -914,8 +915,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     </>
                   ) : (
                     <>
-                      <div className="w-5 h-5 rounded-md bg-[var(--accent-dim)] border border-[var(--accent-border)] flex items-center justify-center text-[var(--accent-color)]">
-                        <Sparkles className="w-3 h-3" />
+                      <div className="w-5 h-5 rounded-md bg-[var(--accent-dim)] border border-[var(--accent-border)] flex items-center justify-center">
+                        <QuestLogo size={16} compact />
                       </div>
                       <span className="font-fantasy font-bold text-zinc-200">{t('chat.compendium')}</span>
                       <span className="px-1.5 py-0.2 rounded bg-white/10 text-[9.5px] text-zinc-400">
@@ -1196,7 +1197,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         }}
                         className="qc-px-frame px-3 py-1.5 rounded-full bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[12px] font-medium text-zinc-200 hover:text-white hover:bg-[var(--accent-border)] transition-colors cursor-pointer flex items-center gap-1.5"
                       >
-                        <Sparkles className="w-3 h-3 text-[var(--accent-color)]" />
+                        <GlainIcon size={10} />
                         {f}
                       </button>
                     ))}
