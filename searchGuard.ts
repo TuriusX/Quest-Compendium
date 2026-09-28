@@ -142,7 +142,7 @@ export function recordSearches(opts: { uid: string; isGuest: boolean; userData: 
 // knows what it's about (kind), where it applies (place) and when (story point), where it came from (sources) and how
 // often searches have backed it up (confirmations). The same facts feed the AI's answers today and the "known here"
 // panel and guide pages later.
-//   - Enemies, bosses and NPCs are the same everywhere, so their id is just the name. Items, secrets, missables and
+//   - Enemies and bosses are the same everywhere, so their id is just the name. Items, secrets, missables, NPCs and
 //     places belong to a place, so "Potion" in one house and "Potion" in another are separate facts.
 //   - Corrections: a search that finds a different value replaces the fact (old value kept as `previous`, confirmations
 //     restart); the same value again adds a confirmation; a player saying it's wrong marks it `disputed` until re-checked.
@@ -173,7 +173,8 @@ const slug = (x: string, max = 80) =>
     .replace(/^-+|-+$/g, '')
     .slice(0, max);
 const gameKey = (game: string) => slug(game, 80);
-const PLACE_BOUND = new Set<FactKind>(['item', 'secret', 'missable', 'place']);
+// NPCs belong to a place too (a shopkeeper, a quest giver): "the Relic Merchant sells Sprint Shoes" is a fact about the shop.
+const PLACE_BOUND = new Set<FactKind>(['item', 'secret', 'missable', 'place', 'npc']);
 const asKind = (k: unknown): FactKind => (FACT_KINDS as readonly string[]).includes(String(k)) ? (String(k) as FactKind) : 'other';
 const factId = (subject: string, kind: FactKind, place?: string) =>
   (PLACE_BOUND.has(kind) && place ? `${slug(subject, 60)}@${slug(place, 60)}` : slug(subject, 60)) || '';
@@ -245,10 +246,10 @@ export function saveGameFacts(
   game: string | undefined,
   reports: FactReport[],
   opts: { searched: boolean; place?: string; story?: string; sources?: string[] },
-): void {
-  if (!game || !reports.length) return;
+): number {
+  if (!game || !reports.length) return 0;
   const key = gameKey(game);
-  if (!key) return;
+  if (!key) return 0;
   const now = Date.now();
   let cached = factCache.get(key);
   if (!cached) {
@@ -286,15 +287,17 @@ export function saveGameFacts(
     if (old && !same) console.log(`[facts] corrected ${game} / ${subject}: "${old.fact}" -> "${fact}"`);
     writes.push({ id, data });
   }
-  if (!writes.length) return;
+  if (!writes.length) return 0;
   for (const w of writes) cached.facts.set(w.id, { ...(cached.facts.get(w.id) || {}), ...w.data } as Fact);
+  const saved = writes.filter((w) => w.data.fact).length; // learned or re-confirmed (not just flagged as disputed)
   const d = db();
-  if (!d) return;
+  if (!d) return saved;
   const batch = d.batch();
   const gameRef = d.collection('gameFacts').doc(key);
   batch.set(gameRef, { game: game.slice(0, 120), updatedAt: now }, { merge: true });
   for (const w of writes) batch.set(gameRef.collection('facts').doc(w.id), w.data, { merge: true });
   batch.commit().catch((e) => console.warn('[facts] could not save:', e?.message));
+  return saved;
 }
 
 /** Web pages a response's searches used (domains), to note where a fact came from. */

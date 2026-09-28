@@ -18,8 +18,9 @@ const KIND_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
 
 /**
  * "Known here": what the Compendium already knows about the player's confirmed place, from the shared game knowledge
- * base. No AI call, so it's free. A small bar above the question box; open it to see the list. Hidden when nothing is
- * known yet. Refreshes when the place changes and after each answer (answers can teach it new facts).
+ * base. No AI call, so it's free. A small bar above the question box, shown as soon as the place is confirmed (with
+ * "nothing yet" until something is learned); open it to see the list. Refreshes when the place changes and after
+ * each answer (answers can teach it new facts).
  */
 export function KnownHere({ game, place, story, refreshKey }: { game?: string; place?: string; story?: string; refreshKey: number }) {
   const t = useT();
@@ -54,7 +55,7 @@ export function KnownHere({ game, place, story, refreshKey }: { game?: string; p
     };
   }, [game, place, refreshKey]);
 
-  if (!facts.length || !place) return null;
+  if (!place) return null;
   const sameStory = (s: string) => !s || !story || s.toLowerCase() === story.toLowerCase();
 
   return (
@@ -69,12 +70,13 @@ export function KnownHere({ game, place, story, refreshKey }: { game?: string; p
         <span className="font-semibold text-zinc-100">{t('here.title')}</span>
         <span className="truncate text-zinc-400">· {place}</span>
         <span className="ml-auto flex items-center gap-1.5 text-zinc-400">
-          {facts.length}
+          {facts.length ? facts.length : t('here.nothingYet')}
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
         </span>
       </button>
       {open && (
         <div className="mt-2 mb-1 max-h-56 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-2.5">
+          {!facts.length && <p className="text-[12px] leading-snug text-zinc-400">{t('here.empty')}</p>}
           <ul className="space-y-2">
             {facts.map((f, i) => {
               const Icon = KIND_ICONS[f.kind] || BookOpen;
@@ -91,7 +93,7 @@ export function KnownHere({ game, place, story, refreshKey }: { game?: string; p
               );
             })}
           </ul>
-          <div className="mt-2 pt-2 border-t border-white/5 text-[11px] text-zinc-500">{t('here.free')}</div>
+          {facts.length > 0 && <div className="mt-2 pt-2 border-t border-white/5 text-[11px] text-zinc-500">{t('here.free')}</div>}
         </div>
       )}
     </div>

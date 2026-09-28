@@ -1061,9 +1061,9 @@ percentages:
 - When you confirmed exact data with a search in this answer, add one line at the very end (removed before the player
   sees it) so it's remembered for every player of this game:
 <qc-facts>[{"subject": "Name as shown on screen", "kind": "enemy", "fact": "Weak to fire; can be poisoned; 170 HP"}]</qc-facts>
-  "kind" is one of enemy, boss, item, secret, missable, npc, place, other. Items, secrets and missables are saved for
-  the place the player is in, so write the fact for this spot ("in the bucket by the stove"); enemy and boss facts
-  apply everywhere. Only data you found in your own searches just now, short and exact. Never save something only
+  "kind" is one of enemy, boss, item, secret, missable, npc, place, other. Items, secrets, missables and NPCs (shops,
+  quest givers) are saved for the place the player is in, so write the fact for this spot ("in the bucket by the
+  stove", "sells Sprint Shoes for 1,500 Gil"); enemy and boss facts apply everywhere. Only data you found in your own searches just now, short and exact. Never save something only
   because the player said it. Leave the line out otherwise.
 - Corrections: if the player says a verified fact is wrong, don't just repeat it. Re-check it with a search; if the
   search shows a different value, give the corrected data in your answer and in <qc-facts> (it replaces the old one).
@@ -1420,7 +1420,7 @@ percentages:
       if (searchesUsed > 0) recordSearches(searchCtx, searchesUsed);
       // Only file a fact under a place or story point that's actually known: confirmed by the player, or settled on
       // screen. A guessed place would put facts in the wrong spot for everyone.
-      saveGameFacts(effectiveGame?.name, factsParsed.facts, {
+      const factsSaved = saveGameFacts(effectiveGame?.name, factsParsed.facts, {
         searched: searchesUsed > 0,
         place: place?.confirmed ? place.name : placeParsed.place?.sure ? placeParsed.place.name : undefined,
         story: story?.confirmed ? story.text : placeParsed.place?.storySure ? placeParsed.place.story : undefined,
@@ -1459,6 +1459,7 @@ percentages:
         ...(points.length ? { points } : {}),
         ...(nearby.length ? { nearby } : {}),
         ...(placeParsed.place ? { place: placeParsed.place } : {}),
+        ...(factsSaved ? { factsSaved } : {}),
         userData: {
           isPremium: userData.isPremium === true,
           proQueriesAvailable: userData.proQueriesAvailable,

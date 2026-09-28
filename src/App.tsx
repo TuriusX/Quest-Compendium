@@ -1266,6 +1266,7 @@ export default function App() {
         modelUsed: data.modelUsed || 'Gemini 3.8 Flash',
         bannerImageUrl: data.bannerImageUrl,
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
+        ...(typeof data.factsSaved === 'number' && data.factsSaved > 0 ? { factsSaved: data.factsSaved } : {}),
         ...(data.place && typeof data.place.name === 'string'
           ? {
               place: {

@@ -28,7 +28,8 @@ import {
   Flame,
   Info,
   AlertTriangle,
-  AlertCircle
+  AlertCircle,
+  BookOpen,
 } from './icons';
 import { AnnotatedShot, MarkerBadge, withMarkerBadges } from './ScreenPointers';
 import { areaFindsFor, markersActiveFor } from './pointerStore';
@@ -1094,6 +1095,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       {!isUser && msg.points?.length ? withMarkerBadges(msg.text, msg.points) : msg.text}
                     </ReactMarkdown>
                   </div>
+
+                  {/* The answer taught the game knowledge base something (shown in "Known here" for this place) */}
+                  {!isUser && msg.factsSaved ? (
+                    <div className="mt-3 flex items-center gap-1.5 text-[11px] text-zinc-500">
+                      <BookOpen className="w-3.5 h-3.5 text-[var(--accent-color)]" aria-hidden="true" />
+                      {msg.factsSaved === 1 ? t('here.learnedOne') : t('here.learned', { n: msg.factsSaved })}
+                    </div>
+                  ) : null}
 
                   {/* Message Bottom Toolbar (for AI responses) */}
                   {!isUser && (

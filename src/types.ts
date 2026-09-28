@@ -82,6 +82,8 @@ export interface ChatMessage {
   storyChosen?: string;
   /** Markers the close-up check removed because it couldn't see them on screen (shown as a note under the list). */
   removedMarkers?: string[];
+  /** How many facts this answer taught (or re-confirmed for) the game knowledge base. */
+  factsSaved?: number;
 }
 
 export interface PlaceGuess {
