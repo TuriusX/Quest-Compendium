@@ -228,7 +228,54 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
       ]);
       logUsage('precision', model, response);
-      return res.json({ found: parseLocateReply(response?.text ?? '', crops.length) });
+      let found = parseLocateReply(response?.text ?? '', crops.length);
+
+      // Blind second look at people and enemies. Told what to expect, a model will happily see "an old man" in a
+      // cushioned chair; asked cold what's in the middle of the picture, it says "a chair". So, without naming the
+      // target, ask whether a character is actually there, and drop the marker if not.
+      const people = crops.map((c: any, i: number) => ({ c, i })).filter(({ c }: any) => c.category === 'character' || c.category === 'enemy');
+      if (people.length) {
+        try {
+          const blindParts: any[] = [];
+          people.forEach(({ c }: any, k: number) => {
+            const m = c.image.match(DATA_URL_RE)!;
+            blindParts.push({ text: `Image ${k}:` });
+            blindParts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+          });
+          blindParts.push({
+            text:
+              `Each image is a close-up from a video game screenshot${game ? ` (${game})` : ''}. For each, look at what is in the ` +
+              'middle of the image and reply with JSON only: an array of {"i": image number, "what": "3 to 6 words", ' +
+              '"character": true or false}. "character" is true only if a person, creature or enemy sprite is clearly there, ' +
+              'with a visible head and body. Furniture (chairs, tables, beds), statues, plants, objects, empty floor and walls ' +
+              'are false. Describe only what you see.',
+          });
+          const blind: any = await Promise.race([
+            ai.models.generateContent({
+              model,
+              contents: [{ role: 'user', parts: blindParts }],
+              config: { responseMimeType: 'application/json', temperature: 0, thinkingConfig: LOCATE_THINKING },
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
+          ]);
+          logUsage('precision-people', model, blind);
+          const rows = JSON.parse(String(blind?.text ?? '[]').replace(/```json|```/g, '').trim());
+          if (Array.isArray(rows)) {
+            const noOne = new Set<number>();
+            for (const r of rows) {
+              const k = Number(r?.i);
+              if (Number.isInteger(k) && people[k] && r?.character === false) {
+                noOne.add(people[k].i);
+                console.log(`[refine] no character at "${people[k].c.label}": ${String(r?.what ?? '').slice(0, 60)}`);
+              }
+            }
+            if (noOne.size) found = found.filter((f: any) => !noOne.has(f.index));
+          }
+        } catch (e: any) {
+          console.warn('[refine] people check skipped:', e?.message); // keep the first check's result
+        }
+      }
+      return res.json({ found });
     } catch (err: any) {
       console.warn('[refine] failed:', err?.message);
       return res.status(502).json({ error: 'Could not refine the markers.', found: [] });
