@@ -74,6 +74,17 @@ export interface ChatMessage {
   nearby?: NearbyItem[];
   /** Markers the player checked off as collected (their on-screen markers are hidden). */
   donePoints?: number[];
+  /** Where the AI thinks the player is when it answered, and whether it's sure. */
+  place?: PlaceGuess;
+  /** The place the player picked for this answer (hides the "where are you?" buttons). */
+  placeChosen?: string;
+}
+
+export interface PlaceGuess {
+  name: string;
+  sure: boolean;
+  /** Other likely places, for one-tap correction. */
+  options?: string[];
 }
 
 export interface PersonalQuest {
@@ -91,6 +102,8 @@ export interface GameTab {
   messages: ChatMessage[];
   notes: string;
   personalQuests?: PersonalQuest[];
+  /** Where the player is in this game. confirmed = the player picked or said it, not just the AI's guess. */
+  place?: { name: string; confirmed: boolean };
   createdAt: number;
   lastActive: number;
 }

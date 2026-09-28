@@ -1138,7 +1138,9 @@ export default function App() {
           achievements: activeGame?.achievements || [],
           news: activeGame?.patchNotes || [],
           generateBanner: false, // AI banner art is retired
-          language: aiLanguageName(settings.language)
+          language: aiLanguageName(settings.language),
+          // Where the player is in this game (confirmed by them, or the AI's last guess).
+          place: activeTab.place || null
         }),
       });
       clearTimeout(timeoutId);
@@ -1219,6 +1221,9 @@ export default function App() {
         modelUsed: data.modelUsed || 'Gemini 3.8 Flash',
         bannerImageUrl: data.bannerImageUrl,
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
+        ...(data.place && typeof data.place.name === 'string'
+          ? { place: { name: String(data.place.name), sure: data.place.sure === true, options: Array.isArray(data.place.options) ? data.place.options.map(String).slice(0, 3) : [] } }
+          : {}),
         ...(() => {
           // Nearby items, minus anything the answer already points at (no duplicate markers).
           const pointed = new Set((Array.isArray(data.points) ? data.points : []).map((p: any) => String(p.label).trim().toLowerCase()));
@@ -1247,9 +1252,15 @@ export default function App() {
       }
 
       setTabs(prev => {
-        const nextTabs = prev.map(t => 
-          t.id === activeTab.id ? { ...t, messages: [...t.messages, aiMessage], lastActive: nowAi } : t
-        );
+        const nextTabs = prev.map(t => {
+          if (t.id !== activeTab.id) return t;
+          // Remember where the player is: a sure answer (a sign on screen, or the player said so) counts as confirmed;
+          // an unsure guess never replaces a place the player confirmed.
+          let place = t.place;
+          if (aiMessage.place?.sure) place = { name: aiMessage.place.name, confirmed: true };
+          else if (aiMessage.place && !t.place?.confirmed) place = { name: aiMessage.place.name, confirmed: false };
+          return { ...t, messages: [...t.messages, aiMessage], lastActive: nowAi, ...(place ? { place } : {}) };
+        });
         return nextTabs;
       });
     } catch (err: any) {
@@ -1740,6 +1751,9 @@ export default function App() {
                 onAppendToNotes={handleAppendToNotes}
                 markerLifetime={settings.markerLifetime ?? 120}
                 onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
+                onSetPlace={(name) =>
+                  setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: { name, confirmed: true }, lastActive: Date.now() } : t)))
+                }
                 onUpdateMessage={(msgId, patch) =>
                   setTabs((prev) =>
                     prev.map((t) =>

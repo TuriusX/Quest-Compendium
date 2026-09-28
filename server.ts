@@ -960,6 +960,30 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         situationalContext += `\n[Recent Game Patch Notes / News: ${news.slice(0, 3).map((n: any) => n.title || n).join('; ')}]\n`;
       }
       
+      // Where the player is. Many games reuse near-identical rooms, so the AI must not guess a place and build the
+      // answer on it: it reports its guess, the app lets the player confirm it with one tap (or by voice), and a
+      // confirmed place is sent back here on every later question.
+      const place = req.body.place && typeof req.body.place.name === 'string' && req.body.place.name.trim()
+        ? { name: String(req.body.place.name).trim().slice(0, 80), confirmed: req.body.place.confirmed === true }
+        : null;
+      if (place?.confirmed) {
+        situationalContext += `\n[PLAYER'S CONFIRMED LOCATION: ${place.name}. The player confirmed this. Trust it over your own guess from the screenshot, unless the screen clearly shows they've moved somewhere else.]\n`;
+      } else if (place) {
+        situationalContext += `\n[Last known location (an earlier guess, not confirmed by the player): ${place.name}]\n`;
+      }
+      systemInstruction += `
+
+[WHERE THE PLAYER IS]
+Many games reuse near-identical rooms and tiles, so never assume a specific place from looks alone.
+- Only name a specific place (town, house, dungeon, area) in your answer if something confirms it: on-screen text or a sign, a unique landmark, the player said so, or a confirmed location above that still matches the screen. Otherwise describe what's visible ("this house", "this room") and keep the answer to what's safe without knowing the exact place.
+- At the very end of your answer, add one line in exactly this format (it's removed before the player sees it):
+<qc-place>{"name": "Place, Region", "sure": true, "options": []}</qc-place>
+  - "name": your best identification of where the player is, e.g. "Duncan's House, near South Figaro".
+  - "sure": true only when something confirms it, as above. If the player just told you where they are, use their words and true.
+  - "options": when not sure, up to 3 likely places, most likely first (the player picks one with a single tap). Empty when sure.
+  - If a confirmed location is given above and the screen still fits it, repeat that name with sure true.
+  - Leave the line out entirely for menus, title screens, battles, loading screens, or anything that isn't a place.`;
+
       systemInstruction += `\n\n${situationalContext}`;
 
       // Build Multi-turn Contents
@@ -1275,6 +1299,9 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       // On-screen pointers: pull the <qc-points> block out of the answer.
       const { text: answerText, points, nearby } = extractScreenPoints(responseText, Boolean(imageBase64));
       responseText = answerText;
+      // Where the AI thinks the player is: pull the <qc-place> line out of the answer.
+      const placeParsed = extractPlace(responseText);
+      responseText = placeParsed.text;
 
       let bannerImageUrl: string | undefined;
       if (bannerImagePromise) {
@@ -1307,6 +1334,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         bannerImageUrl,
         ...(points.length ? { points } : {}),
         ...(nearby.length ? { nearby } : {}),
+        ...(placeParsed.place ? { place: placeParsed.place } : {}),
         userData: {
           isPremium: userData.isPremium === true,
           proQueriesAvailable: userData.proQueriesAvailable,
@@ -1323,6 +1351,28 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       });
     }
   });
+
+  /** The AI's "where is the player" line: {name, sure, options}. Removed from the answer text either way. */
+  function extractPlace(text: string): { text: string; place: { name: string; sure: boolean; options: string[] } | null } {
+    let place: { name: string; sure: boolean; options: string[] } | null = null;
+    const cleaned = text.replace(/<qc-place>([\s\S]*?)<\/qc-place>/gi, (_m, body) => {
+      try {
+        const p = JSON.parse(String(body).trim());
+        const name = String(p?.name ?? '').trim().slice(0, 80);
+        if (name) {
+          const options = (Array.isArray(p?.options) ? p.options : [])
+            .map((o: unknown) => String(o ?? '').trim().slice(0, 80))
+            .filter((o: string, i: number, arr: string[]) => o && o.toLowerCase() !== name.toLowerCase() && arr.indexOf(o) === i)
+            .slice(0, 3);
+          place = { name, sure: p?.sure === true, options };
+        }
+      } catch {
+        /* a malformed line is simply dropped */
+      }
+      return '';
+    });
+    return { text: cleaned.replace(/\n{3,}/g, '\n\n').trim(), place };
+  }
 
   /**
    * Google Search grounding can leave raw citation tags in the answer, e.g. `[PerQueryResult(index="3.2.9")]`

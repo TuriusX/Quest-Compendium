@@ -38,6 +38,7 @@ import { auth } from '../lib/firebase';
 import { playSnapSound, playChimeSound, playBlipSound } from '../utils/audio';
 import { useT } from '../i18n';
 import { QuestLogo } from './QuestLogo';
+import { PlaceBar } from './PlaceBar';
 
 /** Quick follow-ups offered under the latest answer (sent as a normal question, in the user's language). */
 const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3'];
@@ -46,6 +47,8 @@ interface ChatAreaProps {
   /** Desktop: how long markers stay on screen, in seconds (0 = always). */
   markerLifetime?: number;
   onChangeMarkerLifetime?: (seconds: number) => void;
+  /** The player picked where they are (one tap or voice): remember it for this game. */
+  onSetPlace?: (name: string) => void;
   /** Update fields of one message (e.g. which markers were checked off). */
   onUpdateMessage?: (msgId: string, patch: Partial<ChatMessage>) => void;
   activeTab: GameTab | null;
@@ -84,6 +87,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onUpdateMessage,
   markerLifetime,
   onChangeMarkerLifetime,
+  onSetPlace,
 }) => {
   const t = useT();
   const [inputQuestion, setInputQuestion] = useState('');
@@ -974,6 +978,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   )}
 
                   {/* Message Body with Markdown */}
+                  {!isUser && msg.place && (
+                    <PlaceBar
+                      msg={msg}
+                      question={(() => {
+                        const idx = activeTab.messages.findIndex((m) => m.id === msg.id);
+                        for (let j = idx - 1; j >= 0; j--) if (activeTab.messages[j].role === 'user') return activeTab.messages[j];
+                        return undefined;
+                      })()}
+                      confirmedPlace={activeTab.place?.confirmed ? activeTab.place.name : undefined}
+                      onChoose={(name) => {
+                        onUpdateMessage?.(msg.id, { placeChosen: name });
+                        onSetPlace?.(name);
+                      }}
+                      onReask={(name, q) => {
+                        if (isLoading) return;
+                        onSendMessage(t('place.reaskQuestion', { place: name, question: q.text }), q.imageUrl || undefined);
+                      }}
+                    />
+                  )}
                   {!isUser && msg.points && msg.points.length > 0 && (() => {
                     const shotUrl = (() => {
                         // The screenshot this answer is about: the nearest earlier question that had one.
