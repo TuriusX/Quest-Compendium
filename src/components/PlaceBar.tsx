@@ -94,6 +94,19 @@ export function PlaceBar({
           {(storyNow || place.story) && <span className="text-zinc-400">· {storyNow || place.story}</span>}
         </div>
         {reask}
+        {!reask && (!placeNow || (place.story && !storyNow)) && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!placeNow) onChoosePlace(place.name);
+              if (place.story && !storyNow) onChooseStory(place.story);
+            }}
+            className="h-7 px-2.5 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-dim)] text-[12px] font-semibold text-zinc-100 hover:brightness-125 transition cursor-pointer inline-flex items-center gap-1"
+          >
+            <Check className="w-3.5 h-3.5" aria-hidden="true" />
+            {t('place.right')}
+          </button>
+        )}
         {!reask && (
           <button
             type="button"

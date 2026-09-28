@@ -1051,6 +1051,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         onHideAll={() => setDone(points.map((_, i) => i))}
                         lifetime={markerLifetime ?? 120}
                         onChangeLifetime={onChangeMarkerLifetime}
+                        removed={msg.removedMarkers}
                         onHighlight={(i) => {
                           if (isDesktopApp && markersActiveFor(msg.id)) api?.highlightPointer?.(msg.id, i);
                         }}

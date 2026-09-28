@@ -80,6 +80,8 @@ export interface ChatMessage {
   placeChosen?: string;
   /** The story point the player picked for this answer. */
   storyChosen?: string;
+  /** Markers the close-up check removed because it couldn't see them on screen (shown as a note under the list). */
+  removedMarkers?: string[];
 }
 
 export interface PlaceGuess {

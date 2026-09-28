@@ -494,8 +494,14 @@ export default function App() {
   }, [settings.snapshotOnOpen, settings.stickyPointers, settings.markersInRecordings, settings.markerLifetime]);
 
   /** Update one message wherever it is (used by the marker features). */
+  // Bumps the tab's lastActive: a sync keeps whichever copy of a tab is newer, so an edit made after the answer was
+  // saved (like the precision pass removing a marker) must count as newer, or the cloud copy would bring it back.
   const updateMessageById = (msgId: string, fn: (m: ChatMessage) => ChatMessage) =>
-    setTabs((prev) => prev.map((t) => (t.messages.some((m) => m.id === msgId) ? { ...t, messages: t.messages.map((m) => (m.id === msgId ? fn(m) : m)) } : t)));
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.messages.some((m) => m.id === msgId) ? { ...t, messages: t.messages.map((m) => (m.id === msgId ? fn(m) : m)), lastActive: Date.now() } : t,
+      ),
+    );
 
   /**
    * Precision pass: crop a zoomed-in square around each marked spot and ask the fast model to pinpoint the exact
@@ -571,7 +577,13 @@ export default function App() {
           })
           .filter((_, i) => !unseen.includes(i));
         log(`precision pass: removed ${unseen.length} marker(s) the close-up check couldn't see`);
-        updateMessageById(msgId, (m) => ({ ...m, points: kept.length ? kept : undefined, donePoints: [] }));
+        const removedLabels = unseen.map((i) => points[i].label);
+        updateMessageById(msgId, (m) => ({
+          ...m,
+          points: kept.length ? kept : undefined,
+          donePoints: [],
+          removedMarkers: [...(m.removedMarkers || []), ...removedLabels],
+        }));
         const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
         if (kept.length) (window as any).electronAPI?.showScreenPointers?.(kept, accent, { refImage: image, sessionId: msgId, hidden: [] });
         else (window as any).electronAPI?.hideScreenPointers?.();

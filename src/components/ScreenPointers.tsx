@@ -78,6 +78,7 @@ export function AnnotatedShot({
   lifetime,
   onChangeLifetime,
   onHighlight,
+  removed,
 }: {
   msgId: string;
   imageUrl?: string;
@@ -92,6 +93,8 @@ export function AnnotatedShot({
   onChangeLifetime?: (seconds: number) => void;
   /** The player is pointing at one item in the list (null = none): its marker stands out on screen. */
   onHighlight?: (index: number | null) => void;
+  /** Markers the close-up check removed because it couldn't see them. */
+  removed?: string[];
 }) {
   const t = useT();
   const [large, setLarge] = useState(false);
@@ -229,6 +232,9 @@ export function AnnotatedShot({
         })}
       </ul>
 
+      {removed && removed.length > 0 && (
+        <p className="mt-2 text-[11px] leading-snug text-zinc-500">{t('chat.removedMarkers', { list: removed.join(', ') })}</p>
+      )}
       {watching.length > 0 && (
         <p className="text-[11px] text-zinc-400 leading-relaxed">
           <span className="font-semibold text-zinc-300">{t('chat.alsoHere')}</span> {describe(watching)}
