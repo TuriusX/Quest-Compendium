@@ -19,7 +19,7 @@ import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
-import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames } from './searchGuard';
+import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
  * Firestore security rules don't restrict. That's what lets the rules lock Premium and quota fields so that players
@@ -1087,6 +1087,7 @@ percentages:
       const searchOk = await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
       let searchesUsed = 0;
       let searchSourcesSeen: string[] = [];
+      let groundedSeen: string[] = [];
       const knownFacts = factsForPrompt(await getGameFacts(effectiveGame?.name), {
         text: [question || '', ...history.slice(-4).map((m: any) => (typeof m?.text === 'string' ? m.text : ''))].join('\n'),
         place: place?.name,
@@ -1252,6 +1253,7 @@ percentages:
           logUsage('chat', targetModel, response);
           searchesUsed += countSearches(response);
           searchSourcesSeen = searchSources(response);
+          groundedSeen = groundedText(response);
           responseText = response.text || '';
           logDebug(`[API Chat] primaryCall succeeded, response length: ${responseText.length}`);
 
@@ -1283,6 +1285,7 @@ percentages:
           logUsage('chat', targetModel, response);
           searchesUsed += countSearches(response);
           searchSourcesSeen = searchSources(response);
+          groundedSeen = groundedText(response);
           responseText = response.text || '';
 
           if (responseText && responseText.trim().length > 0) {
@@ -1331,6 +1334,7 @@ percentages:
           logUsage('chat-fallback', 'gemini-3.8-flash', retryResponse);
           searchesUsed += countSearches(retryResponse);
           searchSourcesSeen = searchSources(retryResponse);
+          groundedSeen = groundedText(retryResponse);
           responseText = retryResponse.text || '';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
 
@@ -1429,7 +1433,9 @@ percentages:
       if (searchesUsed > 0) recordSearches(searchCtx, searchesUsed);
       // Only file a fact under a place or story point that's actually known: confirmed by the player, or settled on
       // screen. A guessed place would put facts in the wrong spot for everyone.
-      const factsSaved = saveGameFacts(effectiveGame?.name, factsParsed.facts, {
+      // A fact only counts if its subject shows up in a part of the answer a search result actually backs up;
+      // the AI can report facts from memory even when it searched for something else.
+      const factsSaved = saveGameFacts(effectiveGame?.name, factsBackedBySearch(factsParsed.facts, groundedSeen), {
         searched: searchesUsed > 0,
         place: place?.confirmed ? place.name : placeParsed.place?.sure ? placeParsed.place.name : undefined,
         story: story?.confirmed ? story.text : placeParsed.place?.storySure ? placeParsed.place.story : undefined,

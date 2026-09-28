@@ -5,12 +5,14 @@
  *   options: --auto-publish   publish pages that pass the checks straight away (instead of saving them as drafts)
  *            --redo           rebuild areas that already exist
  *
- * For each area: research and write (with Google Search) -> keep only details at least two sources agree on -> a
- * separate fact-check pass drops anything the sources don't support -> save the page (draft, published or held back)
- * -> save every checked fact to the game knowledge base under that area's name. A search cap stops the run before it
+ * For each area: research with Google Search (a step that runs no searches is retried once, then fails, so nothing
+ * comes from the model's memory) -> keep only details that at least two different websites back, judged from Google's
+ * own grounding data rather than anything the model says about its sources -> a separate fact-check, which must also
+ * search, drops anything it can't confirm -> save the page (draft, published or held back) -> save the details that
+ * passed both checks to the game knowledge base under that area's name. A search cap stops the run before it
  * spends more than you allow; it's separate from players' search budget.
  */
-import { db, gemini, MODEL, slug, gameKey, arg, parseJson, searchesIn, sourcesIn, type GuideArea, type GuideEntry } from './common';
+import { db, gemini, MODEL, slug, gameKey, arg, searchesIn, type GuideArea, type GuideEntry } from './common';
 import { getGameFacts, saveGameFacts, recordMonthly } from '../../searchGuard';
 
 const game = arg('game');
@@ -28,80 +30,161 @@ const ai = gemini();
 let searches = 0;
 const budgetLeft = () => maxSearches - searches;
 
-async function grounded(prompt: string, label: string): Promise<{ text: string; sources: string[] }> {
-  if (budgetLeft() <= 0) throw new Error('search cap reached');
-  const res: any = await ai.models.generateContent({
-    model: MODEL,
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    config: { tools: [{ googleSearch: {} }], temperature: 0.2 },
-  });
-  const n = searchesIn(res);
-  searches += n;
-  recordMonthly(n); // guide runs count toward the app's monthly search total too
-  console.log(`  [${label}] ${n} searches (run total ${searches}/${maxSearches})`);
-  return { text: res?.text || '', sources: sourcesIn(res) };
+/**
+ * A research call with Google Search. Searching is optional for the model, so it can quietly answer from memory:
+ * when a step must be backed by searches, a reply that ran none is retried once with a firmer instruction, and if it
+ * still ran none, the step fails (nothing from memory gets through).
+ */
+async function grounded(prompt: string, label: string, requireSearch = true): Promise<{ text: string; response: any }> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (budgetLeft() <= 0) throw new Error('search cap reached');
+    const res: any = await ai.models.generateContent({
+      model: MODEL,
+      contents: [{
+        role: 'user',
+        parts: [{ text: (attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : '') + prompt }],
+      }],
+      config: { tools: [{ googleSearch: {} }], temperature: 0.2 },
+    });
+    const n = searchesIn(res);
+    searches += n;
+    recordMonthly(n); // guide runs count toward the app's monthly search total too
+    console.log(`  [${label}] ${n} searches (run total ${searches}/${maxSearches})`);
+    if (n > 0 || !requireSearch) return { text: res?.text || '', response: res };
+  }
+  throw new Error(`no-search: ${label} ran no searches`);
+}
+
+/**
+ * Which websites actually back each line of a reply, from Google's own grounding data (the pages the search really
+ * returned and the parts of the answer each one supports), not from anything the model writes about its sources.
+ */
+function realSourcesByLine(text: string, response: any): Set<string>[] {
+  const lines = text.split('\n');
+  const starts: number[] = [];
+  let pos = 0;
+  for (const l of lines) {
+    starts.push(pos);
+    pos += l.length + 1;
+  }
+  const lineAt = (idx: number) => {
+    let k = 0;
+    while (k + 1 < starts.length && starts[k + 1] <= idx) k++;
+    return k;
+  };
+  const gm = response?.candidates?.[0]?.groundingMetadata || {};
+  const chunks: any[] = gm.groundingChunks || [];
+  const site = (i: number) => {
+    const w = chunks[i]?.web || {};
+    const t = String(w.title || w.domain || '').toLowerCase().trim();
+    return t;
+  };
+  const out = lines.map(() => new Set<string>());
+  for (const sup of gm.groundingSupports || []) {
+    const seg = String(sup?.segment?.text || '').trim();
+    if (!seg) continue;
+    const at = text.indexOf(seg);
+    if (at < 0) continue;
+    const first = lineAt(at);
+    const last = lineAt(at + seg.length - 1);
+    for (const ci of sup.groundingChunkIndices || []) {
+      const s = site(ci);
+      if (!s) continue;
+      for (let k = first; k <= last; k++) out[k].add(s);
+    }
+  }
+  return out;
 }
 
 const RULES =
-  'Write everything in your own words; never copy sentences from websites. Only include details you found in your ' +
-  'searches, and for each one list the websites that support it. Use the names the game itself uses.';
+  'Search the web for this; don\'t answer from memory. Write everything in your own words, never copying sentences ' +
+  'from websites. Only include details you found in your searches. Use the names the game itself uses.';
 
 async function outline(): Promise<{ name: string; story: string }[]> {
   const { text } = await grounded(
     `List the areas a player visits in ${part} of the video game "${game}", in story order, up to ${maxAreas} areas. ` +
       'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ' +
-      'Reply with JSON only: [{"name": "Area name as the game calls it", "story": "a few words on when in the story this visit happens"}].',
+      `${RULES} Reply with one line per area, exactly: AREA: name as the game calls it | a few words on when in the story this visit happens`,
     'outline',
   );
-  const list = parseJson<any[]>(text) || [];
-  return list
-    .map((a) => ({ name: String(a?.name || '').trim().slice(0, 80), story: String(a?.story || '').trim().slice(0, 120) }))
+  return text
+    .split('\n')
+    .map((l) => l.match(/^\s*[-*]?\s*AREA:\s*(.+?)\s*\|\s*(.*)$/i))
+    .filter(Boolean)
+    .map((m) => ({ name: m![1].trim().slice(0, 80), story: m![2].trim().slice(0, 120) }))
     .filter((a) => a.name)
     .slice(0, maxAreas);
 }
 
-async function research(area: { name: string; story: string }) {
-  const { text, sources } = await grounded(
+type Parsed = { overview: GuideEntry | null; items: GuideEntry[]; secrets: GuideEntry[]; enemies: GuideEntry[]; shops: GuideEntry[]; tips: GuideEntry[] };
+
+/** Research an area. The reply is one detail per line, so Google's grounding data can be matched to each detail. */
+async function research(area: { name: string; story: string }): Promise<Parsed> {
+  const { text, response } = await grounded(
     `Research the area "${area.name}" in the video game "${game}" (${area.story}). ${RULES}\n` +
-      'Reply with JSON only, in this shape (leave a list empty rather than guessing):\n' +
-      '{"overview": "2 to 3 sentences on what happens here and what to do",\n' +
-      ' "items": [{"id": "i1", "name": "item", "where": "exactly where in this area", "missable": false, "sources": ["site", "site"]}],\n' +
-      ' "secrets": [{"id": "s1", "text": "hidden thing and how to find it", "sources": []}],\n' +
-      ' "enemies": [{"id": "e1", "name": "enemy", "weakness": "", "steal": "", "notes": "", "sources": []}],\n' +
-      ' "shops": [{"id": "h1", "name": "shop or NPC", "sells": "what they sell or offer", "sources": []}],\n' +
-      ' "tips": ["short practical tip"]}',
+      'Reply with one detail per line, using exactly these formats (leave out anything you didn\'t find):\n' +
+      'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
+      'ITEM: item name | exactly where in this area | missable: yes or no\n' +
+      'SECRET: hidden thing and how to find it\n' +
+      'ENEMY: enemy name | weakness | what can be stolen | short note\n' +
+      'SHOP: shop or NPC name | what they sell or offer\n' +
+      'TIP: short practical tip',
     `research ${area.name}`,
   );
-  return { data: parseJson<any>(text) || {}, sources };
+  const real = realSourcesByLine(text, response);
+  const out: Parsed = { overview: null, items: [], secrets: [], enemies: [], shops: [], tips: [] };
+  let n = 0;
+  text.split('\n').forEach((line, k) => {
+    const m = line.match(/^\s*[-*]?\s*(OVERVIEW|ITEM|SECRET|ENEMY|SHOP|TIP):\s*(.+)$/i);
+    if (!m) return;
+    const f = m[2].split('|').map((x) => x.trim());
+    const sources = [...real[k]];
+    const id = `x${n++}`;
+    switch (m[1].toUpperCase()) {
+      case 'OVERVIEW': out.overview = { id, text: m[2].trim(), sources }; break;
+      case 'ITEM': out.items.push({ id, name: f[0], where: f[1] || '', missable: /yes/i.test(f[2] || ''), sources }); break;
+      case 'SECRET': out.secrets.push({ id, text: m[2].trim(), sources }); break;
+      case 'ENEMY': out.enemies.push({ id, name: f[0], weakness: f[1] || '', steal: f[2] || '', notes: f[3] || '', sources }); break;
+      case 'SHOP': out.shops.push({ id, name: f[0], sells: f[1] || '', sources }); break;
+      case 'TIP': out.tips.push({ id, text: m[2].trim(), sources }); break;
+    }
+  });
+  return out;
 }
 
 type Claim = { id: string; text: string };
 
-function claimsFor(areaName: string, d: any): Claim[] {
+function claimsFor(areaName: string, d: Parsed): Claim[] {
   const out: Claim[] = [];
-  for (const it of d.items || []) out.push({ id: it.id, text: `In ${areaName}, the item ${it.name} can be found ${it.where}.${it.missable ? ' It can be missed.' : ''}` });
-  for (const s of d.secrets || []) out.push({ id: s.id, text: `In ${areaName}: ${s.text}` });
-  for (const e of d.enemies || [])
+  for (const it of d.items) out.push({ id: it.id, text: `In ${areaName}, the item ${it.name} can be found ${it.where}.${it.missable ? ' It can be missed.' : ''}` });
+  for (const s of d.secrets) out.push({ id: s.id, text: `In ${areaName}: ${s.text}` });
+  for (const e of d.enemies)
     out.push({ id: e.id, text: `The enemy ${e.name} appears in ${areaName}.${e.weakness ? ` It is weak to ${e.weakness}.` : ''}${e.steal ? ` It can be stolen from: ${e.steal}.` : ''}` });
-  for (const h of d.shops || []) out.push({ id: h.id, text: `In ${areaName}, ${h.name} sells or offers: ${h.sells}.` });
-  (d.tips || []).forEach((t: string, i: number) => out.push({ id: `t${i}`, text: `${areaName} tip: ${t}` }));
-  if (d.overview) out.push({ id: 'overview', text: String(d.overview) });
+  for (const h of d.shops) out.push({ id: h.id, text: `In ${areaName}, ${h.name} sells or offers: ${h.sells}.` });
+  for (const t of d.tips) out.push({ id: t.id, text: `${areaName} tip: ${t.text}` });
+  if (d.overview) out.push({ id: d.overview.id, text: d.overview.text || '' });
   return out.filter((c) => c.id && c.text);
 }
 
+/** A separate check that must itself search; only claims it marks supported survive. */
 async function factCheck(areaName: string, claims: Claim[]): Promise<Set<string>> {
   if (!claims.length) return new Set();
   const { text } = await grounded(
-    `Fact-check these statements about "${areaName}" in the video game "${game}". Search to verify each one. ` +
-      'Reply with JSON only: [{"id": "...", "verdict": "supported" | "unsupported" | "unsure"}]. Mark "supported" only ' +
-      'if a reliable source confirms it.\n' + claims.map((c) => `${c.id}: ${c.text}`).join('\n'),
+    `Fact-check these statements about "${areaName}" in the video game "${game}". Search to verify each one; don't ` +
+      'rely on memory. Reply with one line per statement, exactly: ID: SUPPORTED, ID: UNSUPPORTED or ID: UNSURE. ' +
+      'Use SUPPORTED only if a source you found confirms it.\n' + claims.map((c) => `${c.id}: ${c.text}`).join('\n'),
     `fact-check ${areaName}`,
   );
-  const rows = parseJson<any[]>(text) || [];
-  return new Set(rows.filter((r) => r?.verdict === 'supported').map((r) => String(r.id)));
+  const ok = new Set<string>();
+  for (const l of text.split('\n')) {
+    const m = l.match(/(x\d+)\s*:\s*SUPPORTED\b/i);
+    if (m) ok.add(m[1]);
+  }
+  return ok;
 }
 
-const twoSources = (e: GuideEntry) => new Set((e.sources || []).map((s) => String(s).toLowerCase().trim()).filter(Boolean)).size >= 2;
+/** Two-source rule on real search data: at least two different websites back this detail. */
+const twoSources = (e: GuideEntry) => (e.sources || []).length >= 2;
 
 async function main() {
   console.log(`Building guide: ${game} (${part}), up to ${maxAreas} areas, search cap ${maxSearches}${autoPublish ? ', auto-publish' : ', as drafts'}`);
@@ -129,25 +212,28 @@ async function main() {
     }
     console.log(`- ${area.name}`);
     try {
-      const { data, sources } = await research(area);
+      const data = await research(area);
       const claims = claimsFor(area.name, data);
       const supported = await factCheck(area.name, claims);
       const keep = (e: GuideEntry) => twoSources(e) && supported.has(e.id);
-      const pick = (list: any[]) => (Array.isArray(list) ? list : []).filter(keep);
-      const items = pick(data.items), secrets = pick(data.secrets), enemies = pick(data.enemies), shops = pick(data.shops);
-      const tips = (data.tips || []).filter((_: string, k: number) => supported.has(`t${k}`)).slice(0, 6);
+      const items = data.items.filter(keep), secrets = data.secrets.filter(keep), enemies = data.enemies.filter(keep), shops = data.shops.filter(keep);
+      // Overview and tips are general advice: one real source plus the fact-check is enough.
+      const tips = data.tips.filter((t) => (t.sources || []).length >= 1 && supported.has(t.id)).map((t) => t.text!).slice(0, 6);
+      const overviewOk = data.overview && (data.overview.sources || []).length >= 1 && supported.has(data.overview.id);
       const kept = items.length + secrets.length + enemies.length + shops.length;
-      const singleSource = [...(data.items || []), ...(data.secrets || []), ...(data.enemies || []), ...(data.shops || [])].filter((e: GuideEntry) => !twoSources(e)).length;
+      const all = [...data.items, ...data.secrets, ...data.enemies, ...data.shops];
+      const singleSource = all.filter((e) => !twoSources(e)).length;
       const rejected = claims.length - supported.size;
-      const heldReason = kept < 3 ? 'too few confirmed details' : claims.length && rejected / claims.length > 0.4 ? 'too many details failed the fact-check' : '';
+      const heldReason = kept < 3 ? 'too few details confirmed by two real sources' : claims.length && rejected / claims.length > 0.4 ? 'too many details failed the fact-check' : '';
+      const usedSources = [...new Set([...items, ...secrets, ...enemies, ...shops].flatMap((e) => e.sources || []))];
       const page: GuideArea = {
         name: area.name,
         slug: s,
         order: order.findIndex((o) => o.slug === s),
         story: area.story,
-        overview: supported.has('overview') ? String(data.overview || '') : '',
+        overview: overviewOk ? String(data.overview!.text || '') : '',
         items, secrets, enemies, shops, tips,
-        sources: sources.slice(0, 8),
+        sources: usedSources.slice(0, 8),
         status: heldReason ? 'held' : autoPublish ? 'published' : 'draft',
         checks: { claims: claims.length, supported: supported.size, rejected, singleSource },
         ...(heldReason ? { heldReason } : {}),
@@ -156,19 +242,28 @@ async function main() {
       await ref.set(page);
       if (heldReason) held++;
       else built++;
-      console.log(`  ${page.status}: ${kept} details kept, ${rejected} failed the fact-check, ${singleSource} had only one source${heldReason ? ` (${heldReason})` : ''}`);
-      // Every checked detail also goes into the game knowledge base, filed under this area.
-      const facts = [
-        ...items.map((e: GuideEntry) => ({ subject: e.name!, kind: e.missable ? 'missable' : 'item', fact: e.where! })),
-        ...secrets.map((e: GuideEntry) => ({ subject: (e.text || '').split(/[.:]/)[0].slice(0, 60), kind: 'secret', fact: e.text! })),
-        ...enemies.map((e: GuideEntry) => ({ subject: e.name!, kind: 'enemy', fact: [e.weakness && `Weak to ${e.weakness}`, e.steal && `Steal: ${e.steal}`, e.notes].filter(Boolean).join('; ') })),
-        ...shops.map((e: GuideEntry) => ({ subject: e.name!, kind: 'npc', fact: `Sells: ${e.sells}` })),
-      ].filter((f) => f.subject && f.fact);
-      if (facts.length) saveGameFacts(game, facts, { searched: true, place: area.name, story: area.story, sources: sources.slice(0, 3) });
+      console.log(`  ${page.status}: ${kept} details kept (two real sources + fact-check), ${singleSource} dropped for fewer than two real sources, ${rejected} failed the fact-check${heldReason ? ` (${heldReason})` : ''}`);
+      // Only details that passed both checks go into the game knowledge base, filed under this area.
+      if (!heldReason) {
+        const facts = [
+          ...items.map((e) => ({ subject: e.name!, kind: e.missable ? 'missable' : 'item', fact: e.where! })),
+          ...secrets.map((e) => ({ subject: (e.text || '').split(/[.:]/)[0].slice(0, 60), kind: 'secret', fact: e.text! })),
+          ...enemies.map((e) => ({ subject: e.name!, kind: 'enemy', fact: [e.weakness && `Weak to ${e.weakness}`, e.steal && `Steal: ${e.steal}`, e.notes].filter(Boolean).join('; ') })),
+          ...shops.map((e) => ({ subject: e.name!, kind: 'npc', fact: `Sells: ${e.sells}` })),
+        ].filter((f) => f.subject && f.fact);
+        if (facts.length) saveGameFacts(game, facts, { searched: true, place: area.name, story: area.story, sources: usedSources.slice(0, 3) });
+      }
     } catch (e: any) {
       if (String(e?.message).includes('search cap')) {
         console.log('Stopping: search cap reached. Run again later to continue.');
         break;
+      }
+      if (String(e?.message).startsWith('no-search')) {
+        // The model wouldn't search: nothing from memory is allowed through, so the page is held back.
+        await ref.set({ name: area.name, slug: s, order: order.findIndex((o) => o.slug === s), story: area.story, overview: '', items: [], secrets: [], enemies: [], shops: [], tips: [], sources: [], status: 'held', heldReason: 'research ran no searches', checks: { claims: 0, supported: 0, rejected: 0, singleSource: 0 }, updatedAt: Date.now() });
+        held++;
+        console.log('  held: the research ran no searches, so nothing could be verified');
+        continue;
       }
       console.warn(`  failed: ${e?.message}`);
     }

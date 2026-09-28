@@ -321,6 +321,21 @@ export async function getGuideAreaNames(game: string | undefined): Promise<strin
   }
 }
 
+/**
+ * The parts of an answer that Google's grounding data says a search result backs up. Used to make sure a fact the AI
+ * reports really came from a search, not from its memory.
+ */
+export function groundedText(response: any): string[] {
+  const sups = response?.candidates?.[0]?.groundingMetadata?.groundingSupports;
+  return Array.isArray(sups) ? sups.map((x: any) => String(x?.segment?.text || '')).filter(Boolean) : [];
+}
+
+/** Keep only reported facts whose subject appears in a part of the answer that a search result backs up. */
+export function factsBackedBySearch(reports: FactReport[], grounded: string[]): FactReport[] {
+  const hay = grounded.join('\n').toLowerCase();
+  return reports.filter((r) => r.status === 'disputed' || (r.subject && hay.includes(String(r.subject).toLowerCase())));
+}
+
 /** Web pages a response's searches used (domains), to note where a fact came from. */
 export function searchSources(response: any): string[] {
   const chunks = response?.candidates?.[0]?.groundingMetadata?.groundingChunks;
