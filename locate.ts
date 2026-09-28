@@ -205,7 +205,8 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
         `Each image is a close-up from a screenshot${game ? ` of the video game ${game}` : ''}. Find exactly this object in each:\n${list}\n\n` +
         'Reply with JSON only: an array of {"i": image number, "y": 0-1000 from the top of THAT image, "x": 0-1000 from its left} ' +
         'for the center of the exact object described (when there are several similar objects, pick the one the description ' +
-        'singles out). Leave an image out if the object is not in it.',
+        'singles out). If the description is a group of objects (for example "Search these", or "the three sarcophagi along ' +
+        'the wall"), reply with the center of the whole group, never one member of it. Leave an image out if the object is not in it.',
     });
     try {
       const ai = deps.getGeminiClient();

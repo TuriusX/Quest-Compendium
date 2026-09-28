@@ -910,21 +910,30 @@ When analyzing screenshots, screen captures, or images:
         systemInstruction += `
 
 [ON-SCREEN POINTERS]
-When your answer refers to specific things that are visible in the screenshot (an item, lever, door, chest, NPC, enemy weak point, menu option, map marker, or the path to take), point at them so the player can see exactly where they are. After your answer, add ONE block in exactly this format:
-<qc-points>[{"y": 512, "x": 300, "label": "Teleport Stone", "where": "lower-right barrel of the three on the rampart", "category": "consumable", "note": "Warps the party out of any dungeon", "detail": "Single use. Keep one for the tower, where the exit is a long walk back."}]</qc-points>
+When your answer refers to specific things that are visible in the game world in the screenshot (an item, container, lever, switch, door, character, enemy or enemy weak point, place, or the path to take), point at them so the player can see exactly where they are. After your answer, add ONE block in exactly this format:
+<qc-points>[{"y": 512, "x": 300, "label": "<item, action or person>", "where": "<which object it is among similar ones>", "category": "<one category>", "note": "<what it is: why it matters>", "detail": "<optional extra facts>"}]</qc-points>
+The <...> parts are placeholders: always write your own values. Never copy the placeholder text or any example wording from these instructions into a marker.
 - "y" and "x" are the center of the thing in the screenshot, normalized to 0-1000 (y from the top edge, x from the left edge).
-- At most 5 points. Labels: 1 to 4 words, in the player's language.
-- "where": a few words that pick out exactly which object it is among similar ones nearby (e.g. "lower-right barrel of the three", "second crate from the left"), in the player's language.
-- Label each point with what the player cares about, not with what the object is: name the item inside a container ("Teleport Stone", not "Barrel"; "Phoenix Down", not "Chest"), the action to take ("Pull lever", "Save here", "Jump here"), or who it is ("Talk to Duane"). Only fall back to naming the object when you don't know anything more useful about it.
-- "category": exactly one of weapon, armor, consumable, key, quest, lore, secret, character, enemy, danger, action, place.
-- "note": ONE short line (at most 8 words, it's shown under the marker on screen) saying what it is and why the player should care, e.g. "Spear: advantage after a missed attack". No filler, no repeating the label.
+- Game world only: markers are for things in the game world (items, containers, enemies, characters, doors, levers, switches, paths and places). Never put a marker on the game's own interface: battle menus, command lists, HP, MP or ATB bars, inventory screens or other HUD elements. Advice about which command to use, whose turn it is, or what to do next belongs in your answer text, not on a marker. The only exception: if the player explicitly asks where something is in a menu, you may point at that menu item.
+- Fewer, better markers: mark only what matters most for the question, usually 1 to 3, never more than 5. If several markers would say the same thing (for example several identical enemies), give the note to one of them and leave the note out on the others, so they show the label alone.
+- Labels: 1 to 4 words, in the player's language.
+- "where": a few words that pick out exactly which object it is among similar ones nearby (for example its position: lower-right of the three, second from the left), in the player's language.
+- Label each point with what the player cares about, not with what the object is: the item inside a container (not "Barrel" or "Chest"), the action to take ("Pull lever", "Save here"), or who it is ("Talk to <name>"). Only fall back to naming the object when you don't know anything more useful about it.
+- "category": exactly one of these, matching the thing itself: weapon (weapons), armor (armor, shields, clothing, rings, amulets), consumable (potions, scrolls, food, ammo, and items spent as currency such as Soul Coins), key (keys and key items needed to progress or open something), quest (quest objectives and quest givers), lore (books, notes and readables), secret (hidden switches, passages and stashes), character (people to talk to), enemy, danger (traps and hazards), action (something to do: a lever to pull, a spot to jump), place (exits, waypoints, save points).
+- "note": ONE short line (at most 8 words, it's shown under the marker on screen) saying what it is and why the player should care. No filler, no repeating the label. Leave it out on duplicate markers (see above).
 - "detail": optional, 1 or 2 short sentences with the most useful extra facts (what it does, who needs it, when to use it, whether it's missable). Leave it out rather than repeating the note.
 - note and detail are in the player's language and must agree with your answer text.
 - Only point at things that are actually visible in the screenshot, and be precise. If nothing specific is worth pointing at, leave the block out entirely.
 - Never mention the block, coordinates or "pointers" in your answer text.
 
+Accuracy: a wrong marker is worse than no marker. Players act on these, so:
+- Check before pinning: before you name a specific item in a specific container or spot, be certain. If you aren't, use Google Search to confirm it first (for example "<game> <area> <item> location"). If you still can't confirm which object it is, don't pin it: say where to look in your answer text instead.
+- Random loot: many containers roll random or level-scaled loot. For those, never list specific contents; say it's random and what it usually holds (for example a note like "Random loot, usually potions or gold"). Only name exact contents for a fixed, known placement.
+- Groups: if you know an item is in one of several similar objects but not which one, don't guess a single object. Use ONE marker at the center of the group, with the label "Search these" (in the player's language), "where" describing the whole group (for example "the three sarcophagi along the side wall"), and a note naming the item (for example "<item> is in one of these").
+- Never invent names, contents or effects to fill a field. Leave "detail" out, or keep the note general, when you don't know.
+
 If the player is asking about items, secrets or things to find, and you know of others in this same place (the same town, dungeon or area) that are NOT visible in the screenshot, list up to 6 of them in ONE more block:
-<qc-nearby>[{"label": "Gold Needle", "hint": "crate in the southwest corner", "onThisMap": true}, {"label": "Elixir", "hint": "clay pot inside the inn", "onThisMap": false}]</qc-nearby>
+<qc-nearby>[{"label": "<item>", "hint": "<what the spot looks like>", "onThisMap": true}]</qc-nearby>
 - label: what it is (1 to 4 words); hint: where it is, described by what the spot looks like (a few words). Both in the player's language.
 - onThisMap: true ONLY if it is on the same map the player is on right now, so it would scroll into view just by walking around (no door, stairs, cave entrance or screen transition in between). false for anything inside a building, on another floor, in another room, or behind a transition.
 - Never list anything you already pointed at in <qc-points>: only other items.
