@@ -25,6 +25,8 @@ export interface WebSearchDeps {
   now?: () => number;
   /** Injected in tests. Defaults to global fetch. */
   fetchImpl?: typeof fetch;
+  /** Shared whole-app monthly search budget (see searchGuard.ts). Optional, so tests run without it. */
+  searchBudget?: { allowed: () => Promise<boolean>; record: (searches: number) => void };
 }
 
 export interface WebResult {
@@ -190,6 +192,9 @@ export function registerWebSearch(app: Express, deps: WebSearchDeps): void {
     if (w.n >= limit || global.n >= globalDaily) {
       return res.status(429).json({ error: 'Too many searches right now. Try again in a little while.' });
     }
+    if (deps.searchBudget && !(await deps.searchBudget.allowed())) {
+      return res.status(429).json({ error: 'Web search is paused for now. Try again later.' });
+    }
     w.n++;
     global.n++;
 
@@ -218,6 +223,7 @@ export function registerWebSearch(app: Express, deps: WebSearchDeps): void {
       );
 
       const gm = response?.candidates?.[0]?.groundingMetadata ?? {};
+      deps.searchBudget?.record(Array.isArray(gm.webSearchQueries) ? gm.webSearchQueries.length : 0);
       const chunks: any[] = gm.groundingChunks ?? [];
       const snippets: string[] = [];
       for (const s of gm.groundingSupports ?? []) {

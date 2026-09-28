@@ -19,6 +19,7 @@ import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
+import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
  * Firestore security rules don't restrict. That's what lets the rules lock Premium and quota fields so that players
@@ -302,7 +303,8 @@ async function startServer() {
     },
   });
 
-  registerWebSearch(app, { requireAuth, getGeminiClient });
+  // The Deck's web search runs Google searches too, so it shares the monthly search budget.
+  registerWebSearch(app, { requireAuth, getGeminiClient, searchBudget: { allowed: monthlyBudgetOk, record: recordMonthly } });
   // Marker AI features (area checks, precision pass): Premium, or everyone during the beta.
   const markerAiAllowed = async (req: any) => {
     if (BETA_ALL_ACCESS) return true;
@@ -994,9 +996,33 @@ percentages:
 - If you can't confirm it, don't state it as fact. Leave it out, or say it's unconfirmed and how to check in-game
   (for example a Scan or Libra spell).
 - This applies to marker notes too: a note may only contain data you've confirmed.
-- Stay consistent with your earlier answers in this conversation. If one was wrong, say so plainly and correct it.`;
+- Stay consistent with your earlier answers in this conversation. If one was wrong, say so plainly and correct it.
+- When you confirmed exact data with a search in this answer, add one line at the very end (removed before the player
+  sees it) so it's remembered for every player of this game:
+<qc-facts>[{"subject": "Enemy or item name as shown on screen", "fact": "Weak to fire; can be poisoned; 170 HP"}]</qc-facts>
+  Only data you found in your own searches just now, short and exact. Never save something only because the player
+  said it. Leave the line out otherwise.
+- Corrections: if the player says a verified fact is wrong, don't just repeat it. Re-check it with a search; if the
+  search shows a different value, give the corrected data in your answer and in <qc-facts> (it replaces the old one).
+  If you can't search right now, say you'll treat it as unconfirmed, and report it as
+  <qc-facts>[{"subject": "Name", "status": "disputed"}]</qc-facts> so it gets re-checked next time.`;
 
       systemInstruction += `\n\n${situationalContext}`;
+
+      // Search budget: per-player daily allowance plus a whole-app monthly cap. Without search, the AI answers from
+      // what it knows and marks exact data as unconfirmed. Facts looked up earlier for this game come along for free.
+      const searchCtx = { uid: userId, isGuest, userData };
+      const searchOk = await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
+      let searchesUsed = 0;
+      let searchSourcesSeen: string[] = [];
+      const knownFacts = factsForPrompt(await getGameFacts(effectiveGame?.name), {
+        text: [question || '', ...history.slice(-4).map((m: any) => (typeof m?.text === 'string' ? m.text : ''))].join('\n'),
+        place: place?.name,
+      });
+      if (knownFacts) systemInstruction += `\n\n${knownFacts}`;
+      if (!searchOk) {
+        systemInstruction += `\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. Don't mention search limits to the player.`;
+      }
 
       // Build Multi-turn Contents
       const contentsPayload: any[] = [];
@@ -1138,7 +1164,7 @@ percentages:
             contents: contentsPayload,
             config: {
               systemInstruction,
-              tools: [{ googleSearch: {} }],
+              ...(searchOk ? { tools: [{ googleSearch: {} }] } : {}),
               safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -1152,6 +1178,8 @@ percentages:
           });
           const response = await withTimeout(primaryCall, 30000, 'Deep-thinking Gemini 3.8 Flash query') as any;
           logUsage('chat', targetModel, response);
+          searchesUsed += countSearches(response);
+          searchSourcesSeen = searchSources(response);
           responseText = response.text || '';
           logDebug(`[API Chat] primaryCall succeeded, response length: ${responseText.length}`);
 
@@ -1168,7 +1196,7 @@ percentages:
             contents: contentsPayload,
             config: {
               systemInstruction,
-              tools: [{ googleSearch: {} }],
+              ...(searchOk ? { tools: [{ googleSearch: {} }] } : {}),
               safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -1181,6 +1209,8 @@ percentages:
           });
           const response = await withTimeout(fallbackCall, 25000, 'Flash query') as any;
           logUsage('chat', targetModel, response);
+          searchesUsed += countSearches(response);
+          searchSourcesSeen = searchSources(response);
           responseText = response.text || '';
 
           if (responseText && responseText.trim().length > 0) {
@@ -1216,7 +1246,7 @@ percentages:
             config: {
               systemInstruction,
               thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-              tools: [{ googleSearch: {} }],
+              ...(searchOk ? { tools: [{ googleSearch: {} }] } : {}),
               safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -1227,6 +1257,8 @@ percentages:
           });
           const retryResponse = await withTimeout(retryPromise, 25000, 'Flash Fallback query') as any;
           logUsage('chat-fallback', 'gemini-3.8-flash', retryResponse);
+          searchesUsed += countSearches(retryResponse);
+          searchSourcesSeen = searchSources(retryResponse);
           responseText = retryResponse.text || '';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
 
@@ -1314,6 +1346,15 @@ percentages:
       // Where the AI thinks the player is: pull the <qc-place> line out of the answer.
       const placeParsed = extractPlace(responseText);
       responseText = placeParsed.text;
+      // Facts the AI confirmed with a search: remember them for this game. Count the searches this question ran.
+      const factsParsed = extractFacts(responseText);
+      responseText = factsParsed.text;
+      if (searchesUsed > 0) recordSearches(searchCtx, searchesUsed);
+      saveGameFacts(effectiveGame?.name, factsParsed.facts, {
+        searched: searchesUsed > 0,
+        place: placeParsed.place?.name || place?.name,
+        sources: searchSourcesSeen,
+      });
 
       let bannerImageUrl: string | undefined;
       if (bannerImagePromise) {
