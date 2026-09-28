@@ -1384,6 +1384,11 @@ percentages:
       // Where the AI thinks the player is: pull the <qc-place> line out of the answer.
       const placeParsed = extractPlace(responseText);
       responseText = placeParsed.text;
+      // A story point can't be "sure" from a single screenshot with no conversation and nothing the player confirmed:
+      // the same place is often visited several times. Force the question so the player can confirm with one tap.
+      if (placeParsed.place?.story && placeParsed.place.storySure && !story?.confirmed && history.length === 0) {
+        placeParsed.place.storySure = false;
+      }
       // Facts the AI confirmed with a search: remember them for this game. Count the searches this question ran.
       const factsParsed = extractFacts(responseText);
       responseText = factsParsed.text;

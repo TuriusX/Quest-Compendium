@@ -36,8 +36,9 @@ export function PlaceBar({
   const same = (a?: string, b?: string) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
   const placeNow = msg.placeChosen || (same(confirmedPlace, place.name) ? confirmedPlace : undefined);
   const storyNow = msg.storyChosen || (same(confirmedStory, place.story) ? confirmedStory : undefined);
-  const askPlace = !placeNow && (!place.sure || open);
-  const askStory = !!place.story && !storyNow && (!place.storySure || open);
+  // "Not right?" opens the choices even for something already confirmed.
+  const askPlace = open || (!placeNow && !place.sure);
+  const askStory = !!place.story && (open || (!storyNow && !place.storySure));
 
   const btn =
     'h-8 px-3 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 max-w-full';
@@ -54,9 +55,17 @@ export function PlaceBar({
       {t('place.say')}
     </button>
   );
-  const choices = (list: string[], pick: (v: string) => void) =>
+  const choices = (list: string[], pick: (v: string) => void, closes: boolean) =>
     list.map((v, i) => (
-      <button key={v} type="button" onClick={() => pick(v)} className={i === 0 ? guessBtn : otherBtn}>
+      <button
+        key={v}
+        type="button"
+        onClick={() => {
+          pick(v);
+          if (closes) setOpen(false);
+        }}
+        className={i === 0 ? guessBtn : otherBtn}
+      >
         {i === 0 && <Check className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />}
         <span className="truncate">{v}</span>
       </button>
@@ -78,13 +87,19 @@ export function PlaceBar({
 
   if (!askPlace && !askStory) {
     return (
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-[12px] text-zinc-500">
-        <MapPin className="w-3.5 h-3.5 text-[var(--accent-color)]" aria-hidden="true" />
-        <span className="text-zinc-300">{placeNow || place.name}</span>
-        {(storyNow || place.story) && <span className="text-zinc-500">· {storyNow || place.story}</span>}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="inline-flex items-center gap-2 min-w-0 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-[12px]">
+          <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-color)]" aria-hidden="true" />
+          <span className="text-zinc-200 font-medium">{placeNow || place.name}</span>
+          {(storyNow || place.story) && <span className="text-zinc-400">· {storyNow || place.story}</span>}
+        </div>
         {reask}
-        {!reask && !(msg.placeChosen && (!place.story || msg.storyChosen)) && (
-          <button type="button" onClick={() => setOpen(true)} className="text-zinc-500 hover:text-[var(--accent-color)] underline underline-offset-2 cursor-pointer">
+        {!reask && (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="h-7 px-2.5 rounded-lg border border-[var(--accent-border)] text-[12px] font-semibold text-[var(--accent-color)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer"
+          >
             {t('place.notRight')}
           </button>
         )}
@@ -93,15 +108,15 @@ export function PlaceBar({
   }
 
   return (
-    <div className="mb-3 p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-3" role="group" aria-label={t('place.where')}>
+    <div className="mb-3 p-3 rounded-xl bg-[var(--accent-dim)] border-2 border-[var(--accent-border)] space-y-3" role="group" aria-label={t('place.where')}>
       {askPlace && (
         <div>
           <div className="flex items-center gap-2 text-[12px] text-zinc-300 mb-2">
             <MapPin className="w-3.5 h-3.5 text-[var(--accent-color)]" aria-hidden="true" />
-            <span className="font-semibold">{t('place.where')}</span>
+            <span className="font-semibold text-white">{t('place.where')}</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {choices([place.name, ...(place.options || [])], onChoosePlace)}
+            {choices([place.name, ...(place.options || [])], onChoosePlace, !askStory)}
             {say}
           </div>
         </div>
@@ -110,15 +125,15 @@ export function PlaceBar({
         <div>
           <div className="flex items-center gap-2 text-[12px] text-zinc-300 mb-2">
             <BookOpen className="w-3.5 h-3.5 text-[var(--accent-color)]" aria-hidden="true" />
-            <span className="font-semibold">{t('place.when')}</span>
+            <span className="font-semibold text-white">{t('place.when')}</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {choices([place.story as string, ...(place.storyOptions || [])], onChooseStory)}
+            {choices([place.story as string, ...(place.storyOptions || [])], onChooseStory, true)}
             {!askPlace && say}
           </div>
         </div>
       )}
-      <div className="text-[11px] text-zinc-500">{t('place.hint')}</div>
+      <div className="text-[11px] text-zinc-400">{t('place.hint')}</div>
     </div>
   );
 }

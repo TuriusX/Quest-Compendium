@@ -163,6 +163,8 @@ export interface AppSettings {
   markersInRecordings?: boolean;
   /** Desktop: how long markers stay on screen, in seconds (0 = until hidden or the scene changes). */
   markerLifetime?: number;
+  /** Where the player is in each game (keyed by game name, lowercase), so a new compendium starts from it. */
+  gameProgress?: Record<string, { name: string; confirmed: boolean; story?: string; storyConfirmed?: boolean }>;
 }
 
 export interface SyncEventLog {

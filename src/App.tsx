@@ -541,10 +541,38 @@ export default function App() {
       .filter(Boolean) as { index: number; x: number; y: number }[];
   };
 
+  // Where the player is in each game, kept in settings so it outlives any one compendium.
+  const gameProgressKey = (t: GameTab) => (t.activeSteamGame?.name || t.name || '').trim().toLowerCase();
+  const rememberGameProgress = (t: GameTab, place: NonNullable<GameTab['place']>) => {
+    const key = gameProgressKey(t);
+    if (!key) return;
+    setSettings((s) => ({ ...s, gameProgress: { ...(s.gameProgress || {}), [key]: place } }));
+  };
+
   const refineMarkers = async (msgId: string, image: string, points: ScreenPoint[], game: string, token: string | null) => {
     const log = (m: string) => (window as any).electronAPI?.markerLog?.(m);
     try {
       const found = await pinpoint(image, points.map((p) => ({ x: p.x, y: p.y, label: p.label, where: p.where || '' })), game, token);
+      // People and enemies the close-up check couldn't find aren't actually on screen (the AI expected them from a
+      // different point in the story): remove those markers. Items can be hidden inside containers, so they stay.
+      // Only when the check worked (it found at least one marker).
+      const unseen = found.length
+        ? points.map((p, i) => i).filter((i) => (points[i].category === 'character' || points[i].category === 'enemy') && !found.some((f) => f.index === i))
+        : [];
+      if (unseen.length) {
+        const kept = points
+          .map((p, i) => {
+            const mv = found.find((f) => f.index === i);
+            return mv ? { ...p, x: mv.x, y: mv.y } : p;
+          })
+          .filter((_, i) => !unseen.includes(i));
+        log(`precision pass: removed ${unseen.length} marker(s) for people not on screen`);
+        updateMessageById(msgId, (m) => ({ ...m, points: kept.length ? kept : undefined, donePoints: [] }));
+        const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+        if (kept.length) (window as any).electronAPI?.showScreenPointers?.(kept, accent, { refImage: image, sessionId: msgId, hidden: [] });
+        else (window as any).electronAPI?.hideScreenPointers?.();
+        return;
+      }
       const moves = found.filter((m) => Math.hypot(m.x - points[m.index].x, m.y - points[m.index].y) > 0.004);
       log(`precision pass: ${moves.length} of ${points.length} marker(s) adjusted`);
       if (!moves.length) return;
@@ -1141,13 +1169,7 @@ export default function App() {
           language: aiLanguageName(settings.language),
           // Where the player is in this game (confirmed by them, or the AI's last guess). A new compendium for the same
           // game starts from what the player's other compendiums for it already know.
-          place: activeTab.place || (() => {
-            const game = (activeTab.activeSteamGame?.name || activeTab.name || '').toLowerCase();
-            const other = tabs
-              .filter((x) => x.id !== activeTab.id && x.place && (x.activeSteamGame?.name || x.name || '').toLowerCase() === game)
-              .sort((a, b) => b.lastActive - a.lastActive)[0];
-            return other?.place || null;
-          })()
+          place: activeTab.place || settings.gameProgress?.[gameProgressKey(activeTab)] || null
         }),
       });
       clearTimeout(timeoutId);
@@ -1276,15 +1298,12 @@ export default function App() {
           if (t.id !== activeTab.id) return t;
           // Remember where the player is: a sure answer (a sign on screen, or the player said so) counts as confirmed;
           // an unsure guess never replaces a place the player confirmed.
-          let place = t.place;
+          // Only the player confirms a place or story point (a tap or saying it). The AI's guesses, sure or not, are kept
+          // as unconfirmed and never overwrite what the player confirmed.
+          let place = t.place || settings.gameProgress?.[gameProgressKey(t)];
           const g = aiMessage.place;
-          if (g?.sure) place = { ...place, name: g.name, confirmed: true };
-          else if (g && !t.place?.confirmed) place = { ...place, name: g.name, confirmed: false };
-          // The story point: same rule. A confirmed one is only replaced by another the AI is sure of.
-          if (g?.story && place) {
-            if (g.storySure) place = { ...place, story: g.story, storyConfirmed: true };
-            else if (!t.place?.storyConfirmed) place = { ...place, story: g.story, storyConfirmed: false };
-          }
+          if (g && !place?.confirmed) place = { ...place, name: g.name, confirmed: false };
+          if (g?.story && place && !place.storyConfirmed) place = { ...place, story: g.story, storyConfirmed: false };
           return { ...t, messages: [...t.messages, aiMessage], lastActive: nowAi, ...(place ? { place } : {}) };
         });
         return nextTabs;
@@ -1777,16 +1796,16 @@ export default function App() {
                 onAppendToNotes={handleAppendToNotes}
                 markerLifetime={settings.markerLifetime ?? 120}
                 onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
-                onSetPlace={(name) =>
-                  setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: { ...t.place, name, confirmed: true }, lastActive: Date.now() } : t)))
-                }
-                onSetStory={(story) =>
-                  setTabs((prev) =>
-                    prev.map((t) =>
-                      t.id === activeTab.id ? { ...t, place: { name: t.place?.name || '', confirmed: !!t.place?.confirmed, ...t.place, story, storyConfirmed: true }, lastActive: Date.now() } : t,
-                    ),
-                  )
-                }
+                onSetPlace={(name) => {
+                  const next = { ...(activeTab.place || {}), name, confirmed: true };
+                  setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));
+                  rememberGameProgress(activeTab, next);
+                }}
+                onSetStory={(story) => {
+                  const next = { name: activeTab.place?.name || '', confirmed: !!activeTab.place?.confirmed, ...(activeTab.place || {}), story, storyConfirmed: true };
+                  setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));
+                  rememberGameProgress(activeTab, next);
+                }}
                 onUpdateMessage={(msgId, patch) =>
                   setTabs((prev) =>
                     prev.map((t) =>
