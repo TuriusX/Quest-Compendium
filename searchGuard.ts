@@ -300,6 +300,27 @@ export function saveGameFacts(
   return saved;
 }
 
+// ---- area names from a game's guide ----
+const areaCache = new Map<string, { names: string[]; readAt: number }>();
+
+/** The game's areas, as named in its guide (empty if it has no guide yet). Cached for 10 minutes. */
+export async function getGuideAreaNames(game: string | undefined): Promise<string[]> {
+  if (!game) return [];
+  const key = gameKey(game);
+  const hit = areaCache.get(key);
+  if (hit && Date.now() - hit.readAt < 10 * 60_000) return hit.names;
+  const d = db();
+  if (!d) return hit?.names || [];
+  try {
+    const snap = await d.collection('guides').doc(key).get();
+    const names = ((snap.exists ? snap.data()?.areas : null) || []).map((a: any) => String(a?.name || '')).filter(Boolean).slice(0, 300);
+    areaCache.set(key, { names, readAt: Date.now() });
+    return names;
+  } catch {
+    return hit?.names || [];
+  }
+}
+
 /** Web pages a response's searches used (domains), to note where a fact came from. */
 export function searchSources(response: any): string[] {
   const chunks = response?.candidates?.[0]?.groundingMetadata?.groundingChunks;

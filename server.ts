@@ -19,7 +19,7 @@ import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
-import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly } from './searchGuard';
+import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
  * Firestore security rules don't restrict. That's what lets the rules lock Premium and quota fields so that players
@@ -314,7 +314,11 @@ async function startServer() {
       const placeName = String(req.body?.place ?? '').trim().slice(0, 80).toLowerCase();
       if (!game || !placeName) return res.json({ facts: [] });
       const facts = (await getGameFacts(game))
-        .filter((f) => f.place && f.place.toLowerCase() === placeName)
+        // Same place, allowing for extra detail on either side ("Duncan's Cabin" vs "Duncan's Cabin, near South Figaro").
+        .filter((f) => {
+          const p = (f.place || '').toLowerCase();
+          return !!p && (p === placeName || placeName.startsWith(`${p},`) || p.startsWith(`${placeName},`));
+        })
         .sort((a, b) => (b.confirmations || 1) - (a.confirmations || 1) || b.at - a.at)
         .slice(0, 30)
         .map((f) => ({ subject: f.subject, fact: f.fact, kind: f.kind, story: f.story || '', confirmations: f.confirmations || 1, disputed: !!f.disputed }));
@@ -1011,6 +1015,11 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       const story = req.body.place && typeof req.body.place.story === 'string' && req.body.place.story.trim()
         ? { text: String(req.body.place.story).trim().slice(0, 120), confirmed: req.body.place.storyConfirmed === true }
         : null;
+      // A game with a guide has official area names: the AI uses them, so places line up with guide pages and facts.
+      const guideAreas = await getGuideAreaNames(effectiveGame?.name);
+      if (guideAreas.length) {
+        situationalContext += `\n[AREAS IN THIS GAME'S GUIDE, in story order. When the player is in one of these, use its exact name as the place name: ${guideAreas.join(' | ')}]\n`;
+      }
       if (story?.confirmed) {
         situationalContext += `\n[PLAYER'S CONFIRMED STORY POINT: ${story.text}. The player confirmed this; trust it over your own guess, and only mention what's available at this point.]\n`;
       } else if (story) {
