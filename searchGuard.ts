@@ -11,10 +11,10 @@
  * When a guard says no, the question is answered without search (never an error for the player), and the AI is told to
  * mark exact game data as unconfirmed.
  *
- * Remembered facts: when the AI confirms exact data with a search (a weakness, an HP value), it reports it in a
- * <qc-facts> block; it's stored per game at gameFacts/{game}, shared by every player of that game, and given to the AI
- * on later questions, so the same fact doesn't need another search and answers stay consistent. Facts never expire;
- * wrong ones are corrected (see below).
+ * The game knowledge base: when the AI confirms something with a search (a weakness, where an item is), it reports it
+ * in a <qc-facts> block, and it's stored per game with what, where, when and how sure (see below). Every player of that
+ * game benefits: later questions get the facts for free, and answers stay consistent. Facts never expire; wrong ones
+ * are corrected.
  */
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
@@ -137,108 +137,164 @@ export function recordSearches(opts: { uid: string; isGuest: boolean; userData: 
     .catch((e) => console.warn('[search] could not update the player count:', e?.message));
 }
 
-// ---- remembered facts per game ----
-// Facts never expire: the goal is a growing database of proven facts per game. Mistakes are fixed by correction:
-//   - a later search that finds a different value replaces the fact (the old value is kept as `previous`)
-//   - a player saying a fact is wrong marks it `disputed`, so the AI re-checks it with a search next time it can
-//   - you can edit or delete any fact by hand in Firebase (gameFacts/{game} -> facts)
-// Only facts the AI found in its own searches are saved, never something a player asserted.
-type Fact = { subject: string; fact: string; at: number; place?: string; sources?: string[]; disputed?: boolean; previous?: string };
-export type FactReport = { subject: string; fact?: string; status?: 'verified' | 'disputed' };
-const factCache = new Map<string, { facts: Fact[]; readAt: number }>();
+// ---- the game knowledge base ----
+// One document per fact at gameFacts/{game}/facts/{id}, shared by every player of that game, never expiring. Each fact
+// knows what it's about (kind), where it applies (place) and when (story point), where it came from (sources) and how
+// often searches have backed it up (confirmations). The same facts feed the AI's answers today and the "known here"
+// panel and guide pages later.
+//   - Enemies, bosses and NPCs are the same everywhere, so their id is just the name. Items, secrets, missables and
+//     places belong to a place, so "Potion" in one house and "Potion" in another are separate facts.
+//   - Corrections: a search that finds a different value replaces the fact (old value kept as `previous`, confirmations
+//     restart); the same value again adds a confirmation; a player saying it's wrong marks it `disputed` until re-checked.
+//   - Only facts the AI found in its own searches are saved, never something a player asserted.
+//   - Edit or delete any fact by hand in Firebase: gameFacts -> {game} -> facts.
+export const FACT_KINDS = ['enemy', 'boss', 'item', 'secret', 'missable', 'npc', 'place', 'other'] as const;
+export type FactKind = (typeof FACT_KINDS)[number];
+type Fact = {
+  subject: string;
+  fact: string;
+  kind: FactKind;
+  place?: string;
+  story?: string;
+  sources?: string[];
+  confirmations: number;
+  firstAt: number;
+  at: number;
+  disputed?: boolean;
+  previous?: string;
+};
+export type FactReport = { subject: string; fact?: string; kind?: string; status?: 'verified' | 'disputed' };
+const factCache = new Map<string, { facts: Map<string, Fact>; readAt: number }>();
 
-const gameKey = (game: string) =>
-  game
+const slug = (x: string, max = 80) =>
+  x
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-const factId = (subject: string) => subject.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+    .slice(0, max);
+const gameKey = (game: string) => slug(game, 80);
+const PLACE_BOUND = new Set<FactKind>(['item', 'secret', 'missable', 'place']);
+const asKind = (k: unknown): FactKind => (FACT_KINDS as readonly string[]).includes(String(k)) ? (String(k) as FactKind) : 'other';
+const factId = (subject: string, kind: FactKind, place?: string) =>
+  (PLACE_BOUND.has(kind) && place ? `${slug(subject, 60)}@${slug(place, 60)}` : slug(subject, 60)) || '';
+
+function db(): ReturnType<typeof getFirestore> | null {
+  try {
+    return getFirestore();
+  } catch {
+    return null; // no database access (e.g. local dev without credentials)
+  }
+}
 
 export async function getGameFacts(game: string | undefined): Promise<Fact[]> {
   if (!game) return [];
   const key = gameKey(game);
   if (!key) return [];
   const hit = factCache.get(key);
-  if (hit && Date.now() - hit.readAt < 5 * 60_000) return hit.facts;
+  if (hit && Date.now() - hit.readAt < 5 * 60_000) return [...hit.facts.values()];
+  const d = db();
+  if (!d) return hit ? [...hit.facts.values()] : [];
   try {
-    const snap = await getFirestore().collection('gameFacts').doc(key).get();
-    const map = (snap.exists ? snap.data()?.facts : null) || {};
-    const facts = (Object.values(map) as Fact[]).filter((f) => f && f.subject && f.fact).sort((a, b) => b.at - a.at);
+    const facts = new Map<string, Fact>();
+    // Facts saved before the knowledge base had its own documents lived in one map on the game document.
+    const legacy = await d.collection('gameFacts').doc(key).get();
+    const old = (legacy.exists ? legacy.data()?.facts : null) || {};
+    for (const f of Object.values(old) as any[]) {
+      if (!f?.subject || !f?.fact) continue;
+      const kind = asKind(f.kind);
+      facts.set(factId(f.subject, kind, f.place), { confirmations: 1, firstAt: f.at || 0, kind, ...f });
+    }
+    const snap = await d.collection('gameFacts').doc(key).collection('facts').orderBy('at', 'desc').limit(3000).get();
+    snap.forEach((doc) => {
+      const f = doc.data() as Fact;
+      if (f?.subject && f?.fact) facts.set(doc.id, f);
+    });
     factCache.set(key, { facts, readAt: Date.now() });
-    return facts;
-  } catch {
-    return hit?.facts || [];
+    return [...facts.values()];
+  } catch (e: any) {
+    console.warn('[facts] could not read:', e?.message);
+    return hit ? [...hit.facts.values()] : [];
   }
 }
 
 /**
- * The facts to give the AI, most relevant first: facts about things named in the question or recent conversation,
- * then facts learned at the player's current place, then the newest. Kept to a sensible size.
+ * The facts to give the AI, most relevant first: things named in the question or recent conversation, then facts for
+ * the player's current place, then the best-confirmed and newest. Kept to a sensible size.
  */
 export function factsForPrompt(facts: Fact[], context: { text?: string; place?: string } = {}): string {
   if (!facts.length) return '';
   const text = (context.text || '').toLowerCase();
   const place = (context.place || '').toLowerCase();
   const score = (f: Fact) =>
-    (text && text.includes(f.subject.toLowerCase()) ? 2 : 0) + (place && f.place && f.place.toLowerCase() === place ? 1 : 0);
+    (text && text.includes(f.subject.toLowerCase()) ? 4 : 0) +
+    (place && f.place && f.place.toLowerCase() === place ? 2 : 0) +
+    Math.min(1, (f.confirmations || 1) / 3);
   const picked = [...facts].sort((a, b) => score(b) - score(a) || b.at - a.at).slice(0, 40);
-  const lines = picked.map((f) => `- ${f.subject}: ${f.fact}${f.disputed ? ' (a player said this may be wrong: re-check it with a search before relying on it)' : ''}`);
+  const lines = picked.map((f) => {
+    const tags = [f.kind !== 'other' ? f.kind : '', f.place || '', f.story || ''].filter(Boolean).join(', ');
+    return `- ${f.subject}${tags ? ` (${tags})` : ''}: ${f.fact}${f.disputed ? ' [a player said this may be wrong: re-check it with a search before relying on it]' : ''}`;
+  });
   return `[VERIFIED FACTS FOR THIS GAME (found with Google Search earlier; use these instead of searching again)]\n${lines.join('\n')}`;
 }
 
-/** Save what the AI reported. `searched` = this answer ran a search (required for new or changed facts). */
-export function saveGameFacts(game: string | undefined, reports: FactReport[], opts: { searched: boolean; place?: string; sources?: string[] }): void {
+/**
+ * Save what the AI reported. `searched` = this answer ran a search (required for new or changed facts). `place` and
+ * `story` are only passed when known (confirmed by the player, or something on screen settled it).
+ */
+export function saveGameFacts(
+  game: string | undefined,
+  reports: FactReport[],
+  opts: { searched: boolean; place?: string; story?: string; sources?: string[] },
+): void {
   if (!game || !reports.length) return;
   const key = gameKey(game);
   if (!key) return;
   const now = Date.now();
-  const cached = factCache.get(key);
-  const known = new Map((cached?.facts || []).map((f) => [factId(f.subject), f]));
-  const factsMap: Record<string, Partial<Fact>> = {};
+  let cached = factCache.get(key);
+  if (!cached) {
+    cached = { facts: new Map(), readAt: 0 }; // unknown yet: writes still merge safely in the database
+    factCache.set(key, cached);
+  }
+  const writes: { id: string; data: Partial<Fact> }[] = [];
   for (const r of reports.slice(0, 10)) {
     const subject = String(r.subject || '').trim().slice(0, 60);
-    const id = factId(subject);
+    const kind = asKind(r.kind);
+    const place = PLACE_BOUND.has(kind) ? opts.place?.slice(0, 80) : undefined;
+    const id = factId(subject, kind, place);
     if (!id) continue;
-    const old = known.get(id);
+    const old = cached.facts.get(id);
     if (r.status === 'disputed') {
-      // A player says it's wrong but it couldn't be re-checked yet: flag it, keep the value.
-      if (old) factsMap[id] = { disputed: true };
+      if (old) writes.push({ id, data: { disputed: true } }); // keep the value, flag it for a re-check
       continue;
     }
     const fact = String(r.fact || '').trim().slice(0, 200);
     if (!fact || !opts.searched) continue; // new or changed facts need a search behind them
-    const changed = old && old.fact.toLowerCase() !== fact.toLowerCase();
-    factsMap[id] = {
+    const same = old && old.fact.toLowerCase() === fact.toLowerCase();
+    const data: Fact = {
       subject,
       fact,
+      kind,
+      ...(place ? { place } : {}),
+      ...(place && opts.story ? { story: opts.story.slice(0, 120) } : old?.story ? { story: old.story } : {}),
+      sources: [...new Set([...(same ? old?.sources || [] : []), ...(opts.sources || [])])].slice(0, 5),
+      confirmations: same ? (old!.confirmations || 1) + 1 : 1,
+      firstAt: same ? old!.firstAt || now : now,
       at: now,
       disputed: false,
-      ...(opts.place ? { place: opts.place.slice(0, 80) } : {}),
-      ...(opts.sources?.length ? { sources: opts.sources.slice(0, 3) } : {}),
-      ...(changed ? { previous: old!.fact } : {}),
+      ...(old && !same ? { previous: old.fact } : old?.previous ? { previous: old.previous } : {}),
     };
-    if (changed) console.log(`[facts] corrected ${game} / ${subject}: "${old!.fact}" -> "${fact}"`);
+    if (old && !same) console.log(`[facts] corrected ${game} / ${subject}: "${old.fact}" -> "${fact}"`);
+    writes.push({ id, data });
   }
-  if (!Object.keys(factsMap).length) return;
-  if (cached) {
-    for (const [id, f] of Object.entries(factsMap)) {
-      const i = cached.facts.findIndex((x) => factId(x.subject) === id);
-      if (i >= 0) cached.facts[i] = { ...cached.facts[i], ...f } as Fact;
-      else if (f.subject) cached.facts.unshift(f as Fact);
-    }
-  }
-  let db: ReturnType<typeof getFirestore>;
-  try {
-    db = getFirestore();
-  } catch {
-    return;
-  }
-  db
-    .collection('gameFacts')
-    .doc(key)
-    .set({ game: game.slice(0, 120), updatedAt: now, facts: factsMap }, { merge: true })
-    .catch((e) => console.warn('[facts] could not save:', e?.message));
+  if (!writes.length) return;
+  for (const w of writes) cached.facts.set(w.id, { ...(cached.facts.get(w.id) || {}), ...w.data } as Fact);
+  const d = db();
+  if (!d) return;
+  const batch = d.batch();
+  const gameRef = d.collection('gameFacts').doc(key);
+  batch.set(gameRef, { game: game.slice(0, 120), updatedAt: now }, { merge: true });
+  for (const w of writes) batch.set(gameRef.collection('facts').doc(w.id), w.data, { merge: true });
+  batch.commit().catch((e) => console.warn('[facts] could not save:', e?.message));
 }
 
 /** Web pages a response's searches used (domains), to note where a fact came from. */
@@ -266,6 +322,7 @@ export function extractFacts(text: string): { text: string; facts: FactReport[] 
             facts.push({
               subject: String(f.subject),
               fact: f.fact ? String(f.fact) : undefined,
+              kind: f.kind ? String(f.kind).toLowerCase() : undefined,
               status: f.status === 'disputed' ? 'disputed' : 'verified',
             });
     } catch {
