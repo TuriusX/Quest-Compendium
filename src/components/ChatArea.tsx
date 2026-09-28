@@ -39,6 +39,7 @@ import { playSnapSound, playChimeSound, playBlipSound } from '../utils/audio';
 import { useT } from '../i18n';
 import { QuestLogo } from './QuestLogo';
 import { PlaceBar } from './PlaceBar';
+import { KnownHere } from './KnownHere';
 import { GlainIcon } from './GlainIcon';
 
 /** Quick follow-ups offered under the latest answer (sent as a normal question, in the user's language). */
@@ -1220,6 +1221,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         )}
       </div>
+
+      {/* What the Compendium already knows about the confirmed place (free, from the game knowledge base) */}
+      <KnownHere
+        game={activeTab.activeSteamGame?.name || activeTab.name}
+        place={activeTab.place?.confirmed ? activeTab.place.name : undefined}
+        story={activeTab.place?.storyConfirmed ? activeTab.place.story : undefined}
+        refreshKey={activeTab.messages.length}
+      />
 
       {/* Screenshot Upload / Attached Thumbnail Preview Bar */}
       {attachedImage && (

@@ -305,6 +305,25 @@ async function startServer() {
 
   // The Deck's web search runs Google searches too, so it shares the monthly search budget.
   registerWebSearch(app, { requireAuth, getGeminiClient, searchBudget: { allowed: monthlyBudgetOk, record: recordMonthly } });
+
+  // "Known here": what the game knowledge base already knows about the player's confirmed place. Straight from the
+  // database, no AI call, so it never costs a question.
+  app.post('/api/facts/here', requireAuth, async (req, res) => {
+    try {
+      const game = String(req.body?.game ?? '').trim().slice(0, 120);
+      const placeName = String(req.body?.place ?? '').trim().slice(0, 80).toLowerCase();
+      if (!game || !placeName) return res.json({ facts: [] });
+      const facts = (await getGameFacts(game))
+        .filter((f) => f.place && f.place.toLowerCase() === placeName)
+        .sort((a, b) => (b.confirmations || 1) - (a.confirmations || 1) || b.at - a.at)
+        .slice(0, 30)
+        .map((f) => ({ subject: f.subject, fact: f.fact, kind: f.kind, story: f.story || '', confirmations: f.confirmations || 1, disputed: !!f.disputed }));
+      res.json({ facts });
+    } catch (e: any) {
+      console.warn('[facts] known-here failed:', e?.message);
+      res.json({ facts: [] });
+    }
+  });
   // Marker AI features (area checks, precision pass): Premium, or everyone during the beta.
   const markerAiAllowed = async (req: any) => {
     if (BETA_ALL_ACCESS) return true;
