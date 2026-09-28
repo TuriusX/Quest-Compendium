@@ -215,7 +215,8 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
         'Be strict, this check exists to catch mistakes: only include an image if you can actually see the described thing ' +
         'in it. A person or character [kind: character or enemy] must be a visible character sprite, not a chair, table, ' +
         'statue or empty spot where someone might stand. Stairs, doors and exits must be visibly there. For an item inside ' +
-        'a container, find the container described. If you are not sure, leave the image out.',
+        'a container, find the container described. Big things (a large monster, a building) can be bigger than the ' +
+        'close-up: seeing part of it counts, so include it. If you are not sure, leave the image out.',
     });
     try {
       const ai = deps.getGeminiClient();
@@ -247,8 +248,8 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
               `Each image is a close-up from a video game screenshot${game ? ` (${game})` : ''}. For each, look at what is in the ` +
               'middle of the image and reply with JSON only: an array of {"i": image number, "what": "3 to 6 words", ' +
               '"character": true or false}. "character" is true only if a person, creature or enemy sprite is clearly there, ' +
-              'with a visible head and body. Furniture (chairs, tables, beds), statues, plants, objects, empty floor and walls ' +
-              'are false. Describe only what you see.',
+              'with a visible head and body, or clearly part of a large creature (a close-up may only show part of a big monster). ' +
+              'Furniture (chairs, tables, beds), statues, plants, objects, empty floor and walls are false. Describe only what you see.',
           });
           const blind: any = await Promise.race([
             ai.models.generateContent({

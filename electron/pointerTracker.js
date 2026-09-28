@@ -365,6 +365,9 @@
       tpl.offY = sy - y0;
       return {
         x, y, tpl, offX: sx - x0, offY: sy - y0, weak: tpl.std < MIN_STD, lost: 0, miss: 0, matched: false, visible: false, score: 0, label: p.label || '', note: p.note || '',
+        // Enemies and characters move and animate (a dragon breathing, an NPC walking), so their picture stops matching even
+        // though they're still there: they don't end on "item stopped matching", only on real scene changes.
+        moving: p.category === 'enemy' || p.category === 'character',
         src: img, rx: p.x, ry: p.y, // the screenshot this marker was placed in, and where
         bx: x - camX * w, by: y - camY * h, // position relative to the camera
         cx: 0, cy: 0, // bounded correction from matching the item
@@ -493,7 +496,7 @@
               if (r.score >= CONFIDENT) {
                 m.matched = true;
                 m.miss = Math.max(0, m.miss - 3);
-              } else if (m.matched && r.score < ITEM_GONE_SCORE && ++m.miss >= ITEM_GONE_FRAMES) {
+              } else if (m.matched && !m.moving && r.score < ITEM_GONE_SCORE && ++m.miss >= ITEM_GONE_FRAMES) {
                 m.dropped = true;
               }
               // No match (a character in front of it, a speech bubble...): keep following the camera.
@@ -554,7 +557,7 @@
       // Every marker we could check has lost its item: the view has changed, end them all. (Markers that simply
       // scrolled off screen don't count: in 2D games the player often walks away and comes back.)
       if (started && !gone) {
-        const checkable = markers.filter((m) => m.matched && !m.pending);
+        const checkable = markers.filter((m) => m.matched && !m.pending && !m.moving);
         if (checkable.length && checkable.every((m) => m.dropped)) gone = true;
       }
       markers.forEach((m) => {
