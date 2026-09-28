@@ -505,7 +505,8 @@ export default function App() {
    * Zoom in on spots of a screenshot and ask the fast model to pinpoint each described object in its close-up.
    * Returns the objects it found (0-1 in the full screenshot); objects it couldn't find are left out.
    */
-  const pinpoint = async (image: string, items: { x: number; y: number; label: string; where: string }[], game: string, token: string | null) => {
+  /** Close-up check of each marker. Returns null when the check couldn't run (so nothing is removed on errors). */
+  const pinpoint = async (image: string, items: { x: number; y: number; label: string; where: string; category?: string }[], game: string, token: string | null): Promise<{ index: number; x: number; y: number }[] | null> => {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const el = new Image();
       el.onload = () => resolve(el);
@@ -519,20 +520,21 @@ export default function App() {
     canvas.width = 768;
     canvas.height = 768;
     const ctx = canvas.getContext('2d');
-    if (!ctx || side < 40) return [];
+    if (!ctx || side < 40) return null;
     const crops = items.map((p, index) => {
       const x0 = Math.max(0, Math.min(W - side, Math.round(p.x * W - side / 2)));
       const y0 = Math.max(0, Math.min(H - side, Math.round(p.y * H - side / 2)));
       ctx.imageSmoothingEnabled = false; // keep pixel art crisp when zooming in
       ctx.drawImage(img, x0, y0, side, side, 0, 0, 768, 768);
-      return { index, x0, y0, image: canvas.toDataURL('image/jpeg', 0.85), label: p.label, where: p.where };
+      return { index, x0, y0, image: canvas.toDataURL('image/jpeg', 0.85), label: p.label, where: p.where, category: p.category };
     });
     const res = await fetch(`${getApiBaseUrl()}/api/refine`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ crops: crops.map((c) => ({ image: c.image, label: c.label, where: c.where })), game }),
+      body: JSON.stringify({ crops: crops.map((c) => ({ image: c.image, label: c.label, where: c.where, category: c.category })), game }),
     });
-    const data = res.ok ? await res.json() : { found: [] };
+    if (!res.ok) return null;
+    const data = await res.json();
     return (Array.isArray(data.found) ? data.found : [])
       .map((f: { index: number; x: number; y: number }) => {
         const c = crops[f.index];
@@ -552,13 +554,15 @@ export default function App() {
   const refineMarkers = async (msgId: string, image: string, points: ScreenPoint[], game: string, token: string | null) => {
     const log = (m: string) => (window as any).electronAPI?.markerLog?.(m);
     try {
-      const found = await pinpoint(image, points.map((p) => ({ x: p.x, y: p.y, label: p.label, where: p.where || '' })), game, token);
-      // People and enemies the close-up check couldn't find aren't actually on screen (the AI expected them from a
-      // different point in the story): remove those markers. Items can be hidden inside containers, so they stay.
-      // Only when the check worked (it found at least one marker).
-      const unseen = found.length
-        ? points.map((p, i) => i).filter((i) => (points[i].category === 'character' || points[i].category === 'enemy') && !found.some((f) => f.index === i))
-        : [];
+      const found = await pinpoint(image, points.map((p) => ({ x: p.x, y: p.y, label: p.label, where: p.where || '', category: p.category })), game, token);
+      if (!found) {
+        log('precision pass skipped (check unavailable)');
+        return;
+      }
+      // Markers the strict close-up check couldn't find aren't really on screen (the AI expected something from its
+      // memory of the place, like an NPC from another visit or stairs that aren't there): remove them. Only markers the
+      // check actually looked at (the first five) can be removed.
+      const unseen = points.map((p, i) => i).filter((i) => i < 5 && !found.some((f) => f.index === i));
       if (unseen.length) {
         const kept = points
           .map((p, i) => {
@@ -566,7 +570,7 @@ export default function App() {
             return mv ? { ...p, x: mv.x, y: mv.y } : p;
           })
           .filter((_, i) => !unseen.includes(i));
-        log(`precision pass: removed ${unseen.length} marker(s) for people not on screen`);
+        log(`precision pass: removed ${unseen.length} marker(s) the close-up check couldn't see`);
         updateMessageById(msgId, (m) => ({ ...m, points: kept.length ? kept : undefined, donePoints: [] }));
         const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
         if (kept.length) (window as any).electronAPI?.showScreenPointers?.(kept, accent, { refImage: image, sessionId: msgId, hidden: [] });
@@ -670,7 +674,7 @@ export default function App() {
         });
         // Gate 2: a close-up of the spot must independently find the described object there.
         const confirmed = clear.length
-          ? await pinpoint(image, clear.map((f) => ({ x: f.x, y: f.y, label: pending[f.index].label, where: pending[f.index].hint || '' })), tab.activeSteamGame?.name || locateGameRef.current?.name || '', token)
+          ? (await pinpoint(image, clear.map((f) => ({ x: f.x, y: f.y, label: pending[f.index].label, where: pending[f.index].hint || '' })), tab.activeSteamGame?.name || locateGameRef.current?.name || '', token)) ?? []
           : [];
         const fresh = confirmed
           .filter((c) => Math.hypot(c.x - clear[c.index].x, (c.y - clear[c.index].y) * 0.5625) < 0.08)

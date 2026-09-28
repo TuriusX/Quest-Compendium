@@ -170,7 +170,12 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
     if (deps.allowed && !(await deps.allowed(req))) return res.status(403).json({ error: 'Part of Premium.', premiumRequired: true, found: [] });
     const crops = (Array.isArray(req.body?.crops) ? req.body.crops : [])
       .slice(0, 5)
-      .map((c: any) => ({ image: String(c?.image ?? ''), label: String(c?.label ?? '').trim().slice(0, 40), where: String(c?.where ?? '').trim().slice(0, 100) }))
+      .map((c: any) => ({
+        image: String(c?.image ?? ''),
+        label: String(c?.label ?? '').trim().slice(0, 40),
+        where: String(c?.where ?? '').trim().slice(0, 100),
+        category: /^[a-z]{2,12}$/.test(String(c?.category ?? '')) ? String(c.category) : '',
+      }))
       .filter((c: any) => c.label && DATA_URL_RE.test(c.image) && c.image.length <= MAX_IMAGE_CHARS);
     if (!crops.length) return res.json({ found: [] });
 
@@ -199,14 +204,18 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
       parts.push({ text: `Image ${i}:` });
       parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
     });
-    const list = crops.map((c: any, i: number) => `${i}. In image ${i}: ${c.label}${c.where ? ` (${c.where})` : ''}`).join('\n');
+    const list = crops.map((c: any, i: number) => `${i}. In image ${i}: ${c.label}${c.where ? ` (${c.where})` : ''}${c.category ? ` [kind: ${c.category}]` : ''}`).join('\n');
     parts.push({
       text:
         `Each image is a close-up from a screenshot${game ? ` of the video game ${game}` : ''}. Find exactly this object in each:\n${list}\n\n` +
         'Reply with JSON only: an array of {"i": image number, "y": 0-1000 from the top of THAT image, "x": 0-1000 from its left} ' +
         'for the center of the exact object described (when there are several similar objects, pick the one the description ' +
         'singles out). If the description is a group of objects (for example "Search these", or "the three sarcophagi along ' +
-        'the wall"), reply with the center of the whole group, never one member of it. Leave an image out if the object is not in it.',
+        'the wall"), reply with the center of the whole group, never one member of it. Leave an image out if the object is not in it.\n' +
+        'Be strict, this check exists to catch mistakes: only include an image if you can actually see the described thing ' +
+        'in it. A person or character [kind: character or enemy] must be a visible character sprite, not a chair, table, ' +
+        'statue or empty spot where someone might stand. Stairs, doors and exits must be visibly there. For an item inside ' +
+        'a container, find the container described. If you are not sure, leave the image out.',
     });
     try {
       const ai = deps.getGeminiClient();
