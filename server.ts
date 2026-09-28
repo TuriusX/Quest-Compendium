@@ -904,7 +904,17 @@ When analyzing screenshots, screen captures, or images:
    - NEVER invent or hallucinate fictional gameplay encounters, wild Pokémon battles, enemies, or combat scenes that are not visibly present in the image.
 2. ACCURATE GAME IDENTIFICATION: If the system context confirms an active game is running, you should acknowledge it if asked (e.g. "You are playing [Game Name]"). However, NEVER hallucinate visual details about the screenshot if they aren't visibly there. If the screenshot is black, blank, or menus, state that the game is running but describe only what is actually visible.
 3. MISSING IMAGE HANDLING: If the user asks "What is on my screen?", "What game is this?", or refers to an image, BUT no image was actually provided in the prompt, YOU MUST state: "I don't see any image attached. Please click the screenshot button to attach your screen." Do not hallucinate or guess based on selected game context.
-4. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.`;
+4. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.
+
+[STORY TIMING]
+Work out where the player is in the story from the screenshot and the conversation: their location, who is in the party, and which world or chapter they're in (for example Final Fantasy VI's World of Balance vs World of Ruin).
+- Only mention items, events and routes that are available at that point in the game.
+- If something only becomes available later, leave it out, or clearly say it's "available later in the game" without spoiling how or why.
+
+[PLAIN, ACCURATE TERMS]
+Describe things the way the game does. A door is a door, not a "secret passage"; a crate is a crate.
+- Don't invent hidden routes, secret rooms, or dramatic details that aren't in the game.
+- Only call something secret or hidden when the game actually treats it that way.`;
 
       if (imageBase64) {
         systemInstruction += `
