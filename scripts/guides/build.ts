@@ -251,6 +251,13 @@ async function main() {
           ...enemies.map((e) => ({ subject: e.name!, kind: 'enemy', fact: [e.weakness && `Weak to ${e.weakness}`, e.steal && `Steal: ${e.steal}`, e.notes].filter(Boolean).join('; ') })),
           ...shops.map((e) => ({ subject: e.name!, kind: 'npc', fact: `Sells: ${e.sells}` })),
         ].filter((f) => f.subject && f.fact);
+        // Two details with the same name in one area (two Phoenix Downs) would overwrite each other in the knowledge
+        // base, which files facts by name and place: give repeats a short "where" so each is kept.
+        const seen = new Map<string, number>();
+        for (const f of facts) seen.set(f.subject.toLowerCase(), (seen.get(f.subject.toLowerCase()) || 0) + 1);
+        for (const f of facts) {
+          if ((seen.get(f.subject.toLowerCase()) || 0) > 1) f.subject = `${f.subject} (${f.fact.split(/[,.;]/)[0].trim().slice(0, 30)})`.slice(0, 60);
+        }
         if (facts.length) saveGameFacts(game, facts, { searched: true, place: area.name, story: area.story, sources: usedSources.slice(0, 3) });
       }
     } catch (e: any) {
