@@ -10,7 +10,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { db, gameKey, arg, type GuideArea, type GuideEntry } from './common';
+import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 
 const SITE = 'https://questcompendium.com';
 const OUT = path.resolve('Marketing_Website_Files');
@@ -87,9 +87,13 @@ function areaBody(game: string, a: GuideArea, prev?: { slug: string; name: strin
   const up = '../../../';
   const items = checklist(a.items, (e) => `<strong class="text-white">${esc(e.name)}</strong>${e.missable ? ' <span class="text-amber-400 text-xs font-bold">MISSABLE</span>' : ''}: ${esc(e.where)}`);
   const secrets = checklist(a.secrets, (e) => esc(e.text));
-  const enemies = a.enemies.length
-    ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-zinc-400"><th class="py-2 pr-4">Enemy</th><th class="py-2 pr-4">Weakness</th><th class="py-2 pr-4">Steal</th><th class="py-2">Notes</th></tr></thead><tbody>${a.enemies
-        .map((e) => `<tr class="border-t border-white/5"><td class="py-2 pr-4 text-white font-semibold">${esc(e.name)}</td><td class="py-2 pr-4">${esc(e.weakness || '')}</td><td class="py-2 pr-4">${esc(e.steal || '')}</td><td class="py-2">${esc(e.notes || '')}</td></tr>`)
+  // Columns only for what this game actually has (no "Steal" column for a game without stealing).
+  const foes = a.enemies.map(cleanEntry);
+  const hasWeak = foes.some((e) => e.weakness), hasSteal = foes.some((e) => e.steal), hasNotes = foes.some((e) => e.notes);
+  const cell = (v?: string) => `<td class="py-2 pr-4">${esc(v || '')}</td>`;
+  const enemies = foes.length
+    ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-zinc-400"><th class="py-2 pr-4">Enemy</th>${hasWeak ? '<th class="py-2 pr-4">Weakness</th>' : ''}${hasSteal ? '<th class="py-2 pr-4">Steal / drop</th>' : ''}${hasNotes ? '<th class="py-2">Notes</th>' : ''}</tr></thead><tbody>${foes
+        .map((e) => `<tr class="border-t border-white/5"><td class="py-2 pr-4 text-white font-semibold">${esc(e.name)}</td>${hasWeak ? cell(e.weakness) : ''}${hasSteal ? cell(e.steal) : ''}${hasNotes ? cell(e.notes) : ''}</tr>`)
         .join('')}</tbody></table></div>`
     : '';
   const shops = a.shops.length ? `<ul class="space-y-2">${a.shops.map((e) => `<li><strong class="text-white">${esc(e.name)}</strong>: ${esc(e.sells)}</li>`).join('')}</ul>` : '';

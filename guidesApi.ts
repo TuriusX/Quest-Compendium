@@ -99,7 +99,16 @@ export function registerGuidesApi(app: Express): void {
         const doc = await getFirestore().collection('guides').doc(key).collection('areas').doc(slug).get();
         const a: any = doc.exists ? doc.data() : null;
         if (!a || a.status !== 'published') return null;
-        const clean = (list: any[]) => (Array.isArray(list) ? list : []).map(({ sources, ...rest }) => rest); // sources stay server-side
+        // Sources stay server-side; placeholder values like "Steal: nothing" or "Weakness: N/A" are dropped.
+        const blank = (v: unknown) =>
+          /^(none|nothing|no|n\/?a|-+|—|unknown|not applicable|nothing to steal|cannot be stolen|can't be stolen|not stealable|no weakness(es)?|none known)$/.test(
+            String(v ?? '').trim().toLowerCase().replace(/[.!]+$/, ''),
+          ) || !String(v ?? '').trim();
+        const clean = (list: any[]) =>
+          (Array.isArray(list) ? list : []).map(({ sources, ...rest }) => {
+            for (const k of ['weakness', 'steal', 'notes', 'where', 'sells']) if (k in rest && blank(rest[k])) delete rest[k];
+            return rest;
+          });
         return {
           key, slug, name: a.name, story: a.story || '', overview: a.overview || '',
           items: clean(a.items), secrets: clean(a.secrets), enemies: clean(a.enemies), shops: clean(a.shops),

@@ -185,7 +185,7 @@ async function research(area: { name: string; story: string }): Promise<Parsed> 
       'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
       'ITEM: item name | exactly where in this area | missable: yes or no\n' +
       'SECRET: hidden thing and how to find it\n' +
-      'ENEMY: enemy name | weakness | what can be stolen | short note\n' +
+      'ENEMY: enemy name | weakness (empty if it has none or the game has no weaknesses) | what can be stolen, or a notable drop (only if the game has stealing or drops worth noting; otherwise empty) | short note\n' +
       'SHOP: shop or NPC name | what they sell or offer\n' +
       'TIP: short practical tip',
     `research ${area.name}`,
@@ -284,7 +284,7 @@ async function quickArea(area: { name: string; story: string }): Promise<Parsed>
       'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
       'ITEM: item name | exactly where in this area | missable: yes or no\n' +
       'SECRET: hidden thing and how to find it\n' +
-      'ENEMY: enemy name | weakness | what can be stolen | short note\n' +
+      'ENEMY: enemy name | weakness (empty if it has none or the game has no weaknesses) | what can be stolen, or a notable drop (only if the game has stealing or drops worth noting; otherwise empty) | short note\n' +
       'SHOP: shop or NPC name | what they sell or offer\n' +
       'TIP: short practical tip',
     `write ${area.name}`,

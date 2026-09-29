@@ -173,3 +173,16 @@ export type GuideArea = {
   heldReason?: string;
   updatedAt: number;
 };
+
+/** Placeholder values the AI sometimes writes instead of leaving a field empty ("Steal: nothing", "Weakness: N/A"). */
+export function blankish(v: unknown): boolean {
+  const s = String(v ?? '').trim().toLowerCase().replace(/[.!]+$/, '');
+  return !s || /^(none|nothing|no|n\/?a|-+|—|unknown|not applicable|nothing to steal|cannot be stolen|can't be stolen|not stealable|no weakness(es)?|none known)$/.test(s);
+}
+
+/** An enemy/item entry with placeholder values removed. */
+export function cleanEntry<T extends Record<string, any>>(e: T): T {
+  const out: Record<string, any> = { ...e };
+  for (const k of ['weakness', 'steal', 'notes', 'where', 'sells']) if (k in out && blankish(out[k])) delete out[k];
+  return out as T;
+}
