@@ -40,8 +40,12 @@ export const gameKey = (game: string) =>
  * narshe-world-of-ruin. The first visit keeps the plain name.
  */
 export const visitName = (name: string, revisit?: string) => {
-  const r = String(revisit || '').trim().replace(/^\(|\)$/g, '').trim();
   const base = name.trim();
+  const raw = String(revisit || '').trim();
+  // The AI sometimes puts the whole visit name in the revisit field ("Baron Castle (Surface)"): use it as the name.
+  if (raw.toLowerCase().startsWith(`${base.toLowerCase()} (`) && raw.endsWith(')')) return raw;
+  // Brackets inside the field ("Other Place (Surface)"): keep just the last bracketed part, never a nested name.
+  const r = (raw.match(/\(([^()]*)\)\s*$/)?.[1] ?? raw.replace(/[()]/g, '')).trim();
   if (!r || /^(none|n\/a|-|first visit)$/i.test(r) || base.toLowerCase().includes(`(${r.toLowerCase()})`)) return base;
   return `${base} (${r})`;
 };
