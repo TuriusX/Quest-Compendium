@@ -18,6 +18,16 @@ const RATES: Record<string, { input: number; output: number }> = {
 const SEARCH_COST = 14 / 1000; // after the monthly free allowance
 export const BANNER_IMAGE_COST = 0.0336; // one 1K image from the Flash-Lite image model
 
+/** Estimated cost of one response in dollars (tokens only, searches excluded), or null for a model without a known rate. */
+export function estimateCost(model: string, response: any): number | null {
+  const u = response?.usageMetadata;
+  const rate = RATES[model];
+  if (!u || !rate) return null;
+  const input = Number(u.promptTokenCount ?? 0);
+  const out = Number(u.candidatesTokenCount ?? 0) + Number(u.thoughtsTokenCount ?? 0);
+  return (input * rate.input + out * rate.output) / 1_000_000;
+}
+
 export function logUsage(feature: string, model: string, response: any): void {
   const u = response?.usageMetadata;
   if (!u) return;

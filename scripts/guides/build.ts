@@ -7,13 +7,16 @@
  *
  * For each area: research with Google Search (a step that runs no searches is retried once, then fails, so nothing
  * comes from the model's memory) -> keep only details that at least two different websites back, judged from Google's
- * own grounding data rather than anything the model says about its sources -> a separate fact-check, which must also
- * search, drops anything it can't confirm -> save the page (draft, published or held back) -> save the details that
- * passed both checks to the game knowledge base under that area's name. A search cap stops the run before it
+ * own grounding data rather than anything the model says about its sources; a detail with just one real source gets a
+ * separate fact-check (which must also search) and is kept only if confirmed -> save the page (draft, published or
+ * held back) -> save the checked details to the game knowledge base under that area's name. Each run logs its
+ * searches and an estimated AI cost. A search cap stops the run before it
  * spends more than you allow; it's separate from players' search budget.
  */
 import { db, gemini, MODEL, slug, gameKey, arg, searchesIn, type GuideArea, type GuideEntry } from './common';
 import { getGameFacts, saveGameFacts, recordMonthly } from '../../searchGuard';
+import { estimateCost } from '../../usage';
+import { ThinkingLevel } from '@google/genai';
 
 const game = arg('game');
 const part = arg('part', 'the beginning of the game');
@@ -28,6 +31,10 @@ if (!game) {
 
 const ai = gemini();
 let searches = 0;
+let dollars = 0; // estimated AI cost of this run (tokens; searches are free up to 5,000 a month)
+let unpriced = 0; // calls on a model without a known rate
+// The area list is simple work: the cheaper Flash-Lite model does it (falling back to the main model if it won't search).
+const LITE_MODEL = process.env.GUIDE_LITE_MODEL || process.env.FREE_MODEL || 'gemini-3.1-flash-lite';
 const budgetLeft = () => maxSearches - searches;
 
 /**
@@ -35,21 +42,25 @@ const budgetLeft = () => maxSearches - searches;
  * when a step must be backed by searches, a reply that ran none is retried once with a firmer instruction, and if it
  * still ran none, the step fails (nothing from memory gets through).
  */
-async function grounded(prompt: string, label: string, requireSearch = true): Promise<{ text: string; response: any }> {
+async function grounded(prompt: string, label: string, requireSearch = true, model = MODEL): Promise<{ text: string; response: any }> {
   for (let attempt = 0; attempt < 2; attempt++) {
     if (budgetLeft() <= 0) throw new Error('search cap reached');
     const res: any = await ai.models.generateContent({
-      model: MODEL,
+      model,
       contents: [{
         role: 'user',
         parts: [{ text: (attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : '') + prompt }],
       }],
-      config: { tools: [{ googleSearch: {} }], temperature: 0.2 },
+      // Low thinking: the searching does the work here, and thinking tokens are billed like output.
+      config: { tools: [{ googleSearch: {} }], temperature: 0.2, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     const n = searchesIn(res);
     searches += n;
     recordMonthly(n); // guide runs count toward the app's monthly search total too
-    console.log(`  [${label}] ${n} searches (run total ${searches}/${maxSearches})`);
+    const cost = estimateCost(model, res);
+    if (cost === null) unpriced++;
+    else dollars += cost;
+    console.log(`  [${label}] ${n} searches${cost !== null ? `, ≈ $${cost.toFixed(4)}` : ''} (run total ${searches}/${maxSearches} searches, ≈ $${dollars.toFixed(3)})`);
     if (n > 0 || !requireSearch) return { text: res?.text || '', response: res };
   }
   throw new Error(`no-search: ${label} ran no searches`);
@@ -101,12 +112,22 @@ const RULES =
   'from websites. Only include details you found in your searches. Use the names the game itself uses.';
 
 async function outline(): Promise<{ name: string; story: string }[]> {
-  const { text } = await grounded(
+  const ask = (model: string) => grounded(
     `List the areas a player visits in ${part} of the video game "${game}", in story order, up to ${maxAreas} areas. ` +
       'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ' +
       `${RULES} Reply with one line per area, exactly: AREA: name as the game calls it | a few words on when in the story this visit happens`,
     'outline',
+    true,
+    model,
   );
+  let text = '';
+  try {
+    text = (await ask(LITE_MODEL)).text;
+  } catch (e: any) {
+    if (String(e?.message).includes('search cap')) throw e;
+    console.log(`  (the cheaper model couldn't do the area list: ${String(e?.message).slice(0, 80)}; using the main model)`);
+  }
+  if (!/AREA:/i.test(text)) text = (await ask(MODEL)).text;
   return text
     .split('\n')
     .map((l) => l.match(/^\s*[-*]?\s*AREA:\s*(.+?)\s*\|\s*(.*)$/i))
@@ -213,18 +234,27 @@ async function main() {
     console.log(`- ${area.name}`);
     try {
       const data = await research(area);
-      const claims = claimsFor(area.name, data);
-      const supported = await factCheck(area.name, claims);
-      const keep = (e: GuideEntry) => twoSources(e) && supported.has(e.id);
-      const items = data.items.filter(keep), secrets = data.secrets.filter(keep), enemies = data.enemies.filter(keep), shops = data.shops.filter(keep);
-      // Overview and tips are general advice: one real source plus the fact-check is enough.
-      const tips = data.tips.filter((t) => (t.sources || []).length >= 1 && supported.has(t.id)).map((t) => t.text!).slice(0, 6);
-      const overviewOk = data.overview && (data.overview.sources || []).length >= 1 && supported.has(data.overview.id);
-      const kept = items.length + secrets.length + enemies.length + shops.length;
+      // Details two different real websites already back are verified: no second search needed. Only details with
+      // exactly one real source go to the fact-check, and pass only if it confirms them. Details with none are dropped.
       const all = [...data.items, ...data.secrets, ...data.enemies, ...data.shops];
-      const singleSource = all.filter((e) => !twoSources(e)).length;
-      const rejected = claims.length - supported.size;
-      const heldReason = kept < 3 ? 'too few details confirmed by two real sources' : claims.length && rejected / claims.length > 0.4 ? 'too many details failed the fact-check' : '';
+      const oneSource = (e: GuideEntry) => (e.sources || []).length === 1;
+      const toCheck = claimsFor(area.name, {
+        overview: null,
+        items: data.items.filter(oneSource), secrets: data.secrets.filter(oneSource),
+        enemies: data.enemies.filter(oneSource), shops: data.shops.filter(oneSource), tips: [],
+      });
+      const supported = toCheck.length ? await factCheck(area.name, toCheck) : new Set<string>();
+      const keep = (e: GuideEntry) => twoSources(e) || (oneSource(e) && supported.has(e.id));
+      const items = data.items.filter(keep), secrets = data.secrets.filter(keep), enemies = data.enemies.filter(keep), shops = data.shops.filter(keep);
+      // Overview and tips are general advice: one real source is enough.
+      const tips = data.tips.filter((t) => (t.sources || []).length >= 1).map((t) => t.text!).slice(0, 6);
+      const overviewOk = data.overview && (data.overview.sources || []).length >= 1;
+      const kept = items.length + secrets.length + enemies.length + shops.length;
+      const singleSource = all.filter((e) => oneSource(e) && !supported.has(e.id)).length;
+      const unsourced = all.filter((e) => !(e.sources || []).length).length;
+      const claims = toCheck;
+      const rejected = toCheck.length - supported.size;
+      const heldReason = kept < 3 ? 'too few confirmed details' : all.length && (rejected + unsourced) / all.length > 0.5 ? 'too many details had no real sources or failed the fact-check' : '';
       const usedSources = [...new Set([...items, ...secrets, ...enemies, ...shops].flatMap((e) => e.sources || []))];
       const page: GuideArea = {
         name: area.name,
@@ -242,7 +272,7 @@ async function main() {
       await ref.set(page);
       if (heldReason) held++;
       else built++;
-      console.log(`  ${page.status}: ${kept} details kept (two real sources + fact-check), ${singleSource} dropped for fewer than two real sources, ${rejected} failed the fact-check${heldReason ? ` (${heldReason})` : ''}`);
+      console.log(`  ${page.status}: ${kept} details kept, ${unsourced} dropped (no real source), ${toCheck.length} fact-checked (${rejected} failed)${heldReason ? ` (${heldReason})` : ''}`);
       // Only details that passed both checks go into the game knowledge base, filed under this area.
       if (!heldReason) {
         const facts = [
@@ -276,7 +306,7 @@ async function main() {
     }
   }
   await guideRef.set({ game, title: `${game} guide`, areas: order, updatedAt: Date.now() }, { merge: true });
-  console.log(`Done: ${built} page(s) ${autoPublish ? 'published' : 'saved as drafts'}, ${held} held back, ${searches} searches used.`);
+  console.log(`Done: ${built} page(s) ${autoPublish ? 'published' : 'saved as drafts'}, ${held} held back, ${searches} searches used, estimated AI cost ≈ $${dollars.toFixed(2)}${unpriced ? ` (plus ${unpriced} call(s) on a model without a known rate)` : ''}. Searches are free up to 5,000 a month, then $14 per 1,000.`);
   console.log('Next: npx tsx scripts/guides/publish.ts --drafts   (builds the pages into Marketing_Website_Files so you can look them over)');
   setTimeout(() => process.exit(0), 4000); // let the last database writes finish
 }
