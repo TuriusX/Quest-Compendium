@@ -6,8 +6,8 @@
  *            --redo           rebuild areas that already exist
  *            --area "Name | when in the story"   build just this one page (no area list step), e.g.
  *                             --area "Kefka's Tower: Final Battle | the summit gauntlet against Kefka"
- *            --quick          fast and cheap: written from the AI's own knowledge with no searches. Pages are labeled
- *                             "not yet fact-checked", add nothing to the knowledge base, and never replace a checked
+ *            --quick          fast and cheap: written from the AI's own knowledge with no searches. Pages are marked
+ *                             unchecked in the data, add nothing to the knowledge base, and never replace a checked
  *                             page; a normal (checked) run later upgrades them.
  *
  * For each area: research with Google Search (a step that runs no searches is retried once, then fails, so nothing
@@ -250,7 +250,7 @@ async function factCheck(areaName: string, claims: Claim[]): Promise<Set<string>
 const twoSources = (e: GuideEntry) => (e.sources || []).length >= 2;
 
 // ---- quick mode: from the AI's own knowledge, no searches ----
-// Minutes and pennies per game. Pages are labeled "not yet fact-checked", never feed the game knowledge base (so live
+// Minutes and pennies per game. Pages are marked unchecked in the data, never feed the game knowledge base (so live
 // answers only ever use checked facts), and never replace a checked page. A normal run later checks and upgrades them.
 async function plain(prompt: string, label: string, model: string): Promise<string> {
   const res: any = await ai.models.generateContent({
@@ -346,7 +346,7 @@ async function mainQuick() {
     }
   }
   await guideRef.set({ game, title: `${game} guide`, areas: order, updatedAt: Date.now() }, { merge: true });
-  console.log(`Done: ${built} quick page(s) ${autoPublish ? 'published' : 'saved as drafts'} (labeled "not yet fact-checked"), ${held} held back, ${skipped} skipped, estimated AI cost ≈ $${dollars.toFixed(2)}${unpriced ? ` (plus ${unpriced} call(s) on a model without a known rate)` : ''}. No searches used, nothing added to the knowledge base.`);
+  console.log(`Done: ${built} quick page(s) ${autoPublish ? 'published' : 'saved as drafts'}, ${held} held back, ${skipped} skipped, estimated AI cost ≈ $${dollars.toFixed(2)}${unpriced ? ` (plus ${unpriced} call(s) on a model without a known rate)` : ''}. No searches used, nothing added to the knowledge base.`);
   console.log('Next: npx tsx scripts/guides/publish.ts   (then upload Marketing_Website_Files to Netlify)');
   setTimeout(() => process.exit(0), 3000);
 }
