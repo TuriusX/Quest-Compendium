@@ -16,7 +16,7 @@
  * searches and an estimated AI cost. A search cap stops the run before it
  * spends more than you allow; it's separate from players' search budget.
  */
-import { db, gemini, MODEL, gameKey, arg, searchesIn, visitName, resolveArea, type GuideArea, type GuideEntry } from './common';
+import { db, gemini, MODEL, gameKey, arg, searchesIn, visitName, resolveArea, normalizeVisits, type GuideArea, type GuideEntry } from './common';
 import { getGameFacts, saveGameFacts, recordMonthly } from '../../searchGuard';
 import { estimateCost } from '../../usage';
 import { ThinkingLevel } from '@google/genai';
@@ -119,12 +119,18 @@ const RULES =
  * The area list, shared by normal and quick runs. Revisits count as their own areas: a place the player comes back to
  * in a clearly different state (another world, era or chapter) gets its own page, "Narshe (World of Ruin)".
  */
-const outlinePrompt = (extra: string) =>
+const outlinePrompt = (extra: string, existing: { name: string; story: string }[]) =>
   `List the areas a player visits in ${part} of the video game "${game}", in story order, up to ${maxAreas} areas. ` +
   'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ' +
   'If the player comes back to a place later in a clearly different state (a different world, era or chapter, with ' +
   'new items, people or events), list that visit as its own area and name the world, era or chapter in the third field ' +
-  '(for example "World of Ruin"). Leave the third field empty for a first visit and for a return in the same state. ' +
+  '(for example "World of Ruin"). Leave the third field empty for a first visit (including a place that only exists in ' +
+  'a later world) and for a return in the same state. ' +
+  (existing.length
+    ? 'The guide already has pages for these visits (name: when). If an area in your list is the same visit as one of ' +
+      'them, write exactly that name and leave the third field empty; a later visit to one of these places is a revisit:\n' +
+      existing.map((e) => `- ${e.name}: ${e.story}`).join('\n') + '\n'
+    : '') +
   `${extra} Reply with one line per area, exactly: AREA: name as the game calls it | a few words on when in the story ` +
   'this visit happens | world, era or chapter of a revisit, or empty';
 
@@ -145,8 +151,8 @@ const visitNote = (name: string) => {
   return m ? ` This page is only about the visit during ${m[1]}: cover what's there then, not on earlier visits.` : '';
 };
 
-async function outline(): Promise<{ name: string; story: string }[]> {
-  const ask = (model: string) => grounded(outlinePrompt(RULES), 'outline', true, model);
+async function outline(existing: { name: string; story: string }[]): Promise<{ name: string; story: string }[]> {
+  const ask = (model: string) => grounded(outlinePrompt(RULES, existing), 'outline', true, model);
   let text = '';
   try {
     text = (await ask(LITE_MODEL)).text;
@@ -248,8 +254,8 @@ async function plain(prompt: string, label: string, model: string): Promise<stri
   return res?.text || '';
 }
 
-async function quickOutline(): Promise<{ name: string; story: string }[]> {
-  const prompt = outlinePrompt("Only list areas you're confident about.");
+async function quickOutline(existing: { name: string; story: string }[]): Promise<{ name: string; story: string }[]> {
+  const prompt = outlinePrompt("Only list areas you're confident about.", existing);
   let list: { name: string; story: string }[] = [];
   try {
     list = parseOutline(await plain(prompt, 'outline', LITE_MODEL));
@@ -280,12 +286,13 @@ async function mainQuick() {
   console.log(`Quick guide (from the AI's knowledge, no searches): ${game} (${part}), up to ${maxAreas} areas${autoPublish ? ', publishing' : ', as drafts'}`);
   const key = gameKey(game!);
   const guideRef = db().collection('guides').doc(key);
-  const areas = await quickOutline();
-  if (!areas.length) throw new Error('could not work out the list of areas');
-  console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
   const info = (await guideRef.get()).data() || {};
   const order: { slug: string; name: string; story: string }[] = [...(info.areas || [])];
   const aliases: Record<string, string> = info.aliases || {};
+  // The AI sees the existing pages (so it reuses their names); a suffix on a place with no earlier visit is dropped.
+  const areas = normalizeVisits(await quickOutline(order), order, aliases);
+  if (!areas.length) throw new Error('could not work out the list of areas');
+  console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
   let built = 0, held = 0, skipped = 0;
   for (const found of areas) {
     // Same page as an existing one under a slightly different name (or a merged/renamed page): use that page.
@@ -339,12 +346,13 @@ async function main() {
   const key = gameKey(game!);
   const guideRef = db().collection('guides').doc(key);
   await getGameFacts(game); // load what the knowledge base already knows, so new facts add confirmations
-  const areas = await outline();
-  if (!areas.length) throw new Error('could not work out the list of areas');
-  console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
   const info = (await guideRef.get()).data() || {};
   const order: { slug: string; name: string; story: string }[] = [...(info.areas || [])];
   const aliases: Record<string, string> = info.aliases || {};
+  // The AI sees the existing pages (so it reuses their names); a suffix on a place with no earlier visit is dropped.
+  const areas = normalizeVisits(await outline(order), order, aliases);
+  if (!areas.length) throw new Error('could not work out the list of areas');
+  console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
   let built = 0, held = 0;
 
   for (const found of areas) {

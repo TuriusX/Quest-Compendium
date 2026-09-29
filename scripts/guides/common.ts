@@ -70,6 +70,30 @@ export function resolveArea(
   return same ? { slug: same.slug, name: same.name } : { slug: s, name };
 }
 
+const baseName = (name: string) => name.replace(/\s*\([^)]*\)\s*$/, '').trim();
+
+/**
+ * Tidy a new area list against the guide: a "(World of Ruin)" suffix only marks a revisit, so it's dropped when the
+ * place has no earlier visit (no existing page for it and not listed earlier without the suffix). Names that already
+ * match a page (exactly, loosely or through an alias) are left alone, so they reuse that page.
+ */
+export function normalizeVisits<T extends { name: string }>(
+  areas: T[],
+  order: { slug: string; name: string }[],
+  aliases: Record<string, string> = {},
+): T[] {
+  const known = (n: string) => {
+    const r = resolveArea(n, order, aliases);
+    return order.some((o) => o.slug === r.slug);
+  };
+  return areas.map((a, i) => {
+    const base = baseName(a.name);
+    if (base === a.name || known(a.name)) return a;
+    const earlierVisit = known(base) || areas.slice(0, i).some((b) => looseKey(b.name) === looseKey(base));
+    return earlierVisit ? a : { ...a, name: base };
+  });
+}
+
 export function arg(name: string, fallback?: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
   if (i < 0) return fallback;
