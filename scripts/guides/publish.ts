@@ -57,8 +57,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
   ${opts.draft ? '<div class="bg-amber-500/15 border-b border-amber-500/30 text-amber-300 text-sm text-center py-2">DRAFT preview: not public yet</div>' : ''}
   <main class="max-w-4xl mx-auto px-6 py-10">${opts.body}</main>
   <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
-    Guides are researched and written with AI. Checked pages are verified against multiple sources; pages marked
-    "not yet fact-checked" are written from what's widely known about the game and will be checked over time. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
+    Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
 </body>
@@ -97,7 +96,6 @@ function areaBody(game: string, a: GuideArea, prev?: { slug: string; name: strin
     <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="${up}guides/index.html">Guides</a> / <a class="hover:text-white" href="../index.html">${esc(game)}</a></p>
     <h1 class="text-3xl font-bold text-white">${esc(a.name)}</h1>
     <p class="text-zinc-400 mt-1">${esc(game)} guide${a.story ? ` · ${esc(a.story)}` : ''}</p>
-    ${a.verified === false ? `<div class="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">AI-written from what's widely known about this game. It hasn't been fact-checked yet, so double-check anything important.</div>` : ''}
     ${a.overview ? `<p class="mt-6 text-zinc-300 leading-relaxed">${esc(a.overview)}</p>` : ''}
     ${section('Items', items)}${section('Secrets', secrets)}${section('Enemies', enemies)}${section('Shops and people', shops)}${section('Tips', tips)}
     ${cta(up, game)}
@@ -147,7 +145,7 @@ async function main() {
     const list = visible
       .map((o) => {
         const a = byslug.get(o.slug)!;
-        return `<li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="${esc(o.slug)}/index.html">${esc(a.name)}</a>${a.status !== 'published' ? ' <span class="text-amber-400 text-xs">DRAFT</span>' : ''}${a.verified === false ? ' <span class="text-zinc-500 text-xs">not yet fact-checked</span>' : ''}<div class="text-sm text-zinc-500">${esc(a.story)}</div></li>`;
+        return `<li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="${esc(o.slug)}/index.html">${esc(a.name)}</a>${a.status !== 'published' ? ' <span class="text-amber-400 text-xs">DRAFT</span>' : ''}<div class="text-sm text-zinc-500">${esc(a.story)}</div></li>`;
       })
       .join('');
     fs.writeFileSync(
