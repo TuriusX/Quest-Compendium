@@ -35,6 +35,41 @@ export const gameKey = (game: string) =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);
 
+/**
+ * A revisit (the same place in a later world, era or chapter) is its own page: "Narshe (World of Ruin)", address
+ * narshe-world-of-ruin. The first visit keeps the plain name.
+ */
+export const visitName = (name: string, revisit?: string) => {
+  const r = String(revisit || '').trim().replace(/^\(|\)$/g, '').trim();
+  const base = name.trim();
+  if (!r || /^(none|n\/a|-|first visit)$/i.test(r) || base.toLowerCase().includes(`(${r.toLowerCase()})`)) return base;
+  return `${base} (${r})`;
+};
+
+/** Loose key for spotting the same place under slightly different names ("Returner Hideout" vs "Returners' Hideout"). */
+export const looseKey = (name: string) =>
+  slug(name)
+    .split('-')
+    .filter((w) => w && w !== 'the')
+    .map((w) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w))
+    .join('-');
+
+/**
+ * Which page an area name belongs to: an alias saved on the guide (a merged or renamed page), else an existing page
+ * with the same loose name, else a new page.
+ */
+export function resolveArea(
+  name: string,
+  order: { slug: string; name: string }[],
+  aliases: Record<string, string> = {},
+): { slug: string; name: string } {
+  const s = slug(name);
+  const target = aliases[s];
+  if (target) return { slug: target, name: order.find((o) => o.slug === target)?.name || name };
+  const same = order.find((o) => o.slug === s) || order.find((o) => looseKey(o.name) === looseKey(name));
+  return same ? { slug: same.slug, name: same.name } : { slug: s, name };
+}
+
 export function arg(name: string, fallback?: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
   if (i < 0) return fallback;

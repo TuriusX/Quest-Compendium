@@ -16,7 +16,7 @@
  * searches and an estimated AI cost. A search cap stops the run before it
  * spends more than you allow; it's separate from players' search budget.
  */
-import { db, gemini, MODEL, slug, gameKey, arg, searchesIn, type GuideArea, type GuideEntry } from './common';
+import { db, gemini, MODEL, gameKey, arg, searchesIn, visitName, resolveArea, type GuideArea, type GuideEntry } from './common';
 import { getGameFacts, saveGameFacts, recordMonthly } from '../../searchGuard';
 import { estimateCost } from '../../usage';
 import { ThinkingLevel } from '@google/genai';
@@ -115,15 +115,38 @@ const RULES =
   'Search the web for this; don\'t answer from memory. Write everything in your own words, never copying sentences ' +
   'from websites. Only include details you found in your searches. Use the names the game itself uses.';
 
+/**
+ * The area list, shared by normal and quick runs. Revisits count as their own areas: a place the player comes back to
+ * in a clearly different state (another world, era or chapter) gets its own page, "Narshe (World of Ruin)".
+ */
+const outlinePrompt = (extra: string) =>
+  `List the areas a player visits in ${part} of the video game "${game}", in story order, up to ${maxAreas} areas. ` +
+  'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ' +
+  'If the player comes back to a place later in a clearly different state (a different world, era or chapter, with ' +
+  'new items, people or events), list that visit as its own area and name the world, era or chapter in the third field ' +
+  '(for example "World of Ruin"). Leave the third field empty for a first visit and for a return in the same state. ' +
+  `${extra} Reply with one line per area, exactly: AREA: name as the game calls it | a few words on when in the story ` +
+  'this visit happens | world, era or chapter of a revisit, or empty';
+
+function parseOutline(text: string): { name: string; story: string }[] {
+  const seen = new Set<string>();
+  return text
+    .split('\n')
+    .map((l) => l.match(/^\s*[-*]?\s*AREA:\s*(.+?)\s*\|\s*([^|]*?)\s*(?:\|\s*(.*?)\s*)?$/i))
+    .filter(Boolean)
+    .map((m) => ({ name: visitName(m![1], m![3]).slice(0, 100), story: m![2].trim().slice(0, 120) }))
+    .filter((a) => a.name && !seen.has(a.name.toLowerCase()) && seen.add(a.name.toLowerCase()))
+    .slice(0, maxAreas);
+}
+
+/** Tells the research step which visit a revisit page is about. */
+const visitNote = (name: string) => {
+  const m = name.match(/\(([^)]+)\)\s*$/);
+  return m ? ` This page is only about the visit during ${m[1]}: cover what's there then, not on earlier visits.` : '';
+};
+
 async function outline(): Promise<{ name: string; story: string }[]> {
-  const ask = (model: string) => grounded(
-    `List the areas a player visits in ${part} of the video game "${game}", in story order, up to ${maxAreas} areas. ` +
-      'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ' +
-      `${RULES} Reply with one line per area, exactly: AREA: name as the game calls it | a few words on when in the story this visit happens`,
-    'outline',
-    true,
-    model,
-  );
+  const ask = (model: string) => grounded(outlinePrompt(RULES), 'outline', true, model);
   let text = '';
   try {
     text = (await ask(LITE_MODEL)).text;
@@ -132,13 +155,7 @@ async function outline(): Promise<{ name: string; story: string }[]> {
     console.log(`  (the cheaper model couldn't do the area list: ${String(e?.message).slice(0, 80)}; using the main model)`);
   }
   if (!/AREA:/i.test(text)) text = (await ask(MODEL)).text;
-  return text
-    .split('\n')
-    .map((l) => l.match(/^\s*[-*]?\s*AREA:\s*(.+?)\s*\|\s*(.*)$/i))
-    .filter(Boolean)
-    .map((m) => ({ name: m![1].trim().slice(0, 80), story: m![2].trim().slice(0, 120) }))
-    .filter((a) => a.name)
-    .slice(0, maxAreas);
+  return parseOutline(text);
 }
 
 type Parsed = { overview: GuideEntry | null; items: GuideEntry[]; secrets: GuideEntry[]; enemies: GuideEntry[]; shops: GuideEntry[]; tips: GuideEntry[] };
@@ -146,7 +163,7 @@ type Parsed = { overview: GuideEntry | null; items: GuideEntry[]; secrets: Guide
 /** Research an area. The reply is one detail per line, so Google's grounding data can be matched to each detail. */
 async function research(area: { name: string; story: string }): Promise<Parsed> {
   const { text, response } = await grounded(
-    `Research the area "${area.name}" in the video game "${game}" (${area.story}). ${RULES}\n` +
+    `Research the area "${area.name}" in the video game "${game}" (${area.story}).${visitNote(area.name)} ${RULES}\n` +
       'Reply with one detail per line, using exactly these formats (leave out anything you didn\'t find):\n' +
       'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
       'ITEM: item name | exactly where in this area | missable: yes or no\n' +
@@ -232,30 +249,19 @@ async function plain(prompt: string, label: string, model: string): Promise<stri
 }
 
 async function quickOutline(): Promise<{ name: string; story: string }[]> {
-  const prompt =
-    `List the areas a player visits in ${part} of the video game "${game}", in story order, up to ${maxAreas} areas. ` +
-    'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ' +
-    "Only list areas you're confident about. Reply with one line per area, exactly: AREA: name as the game calls it | a few words on when in the story this visit happens";
-  const parse = (text: string) =>
-    text
-      .split('\n')
-      .map((l) => l.match(/^\s*[-*]?\s*AREA:\s*(.+?)\s*\|\s*(.*)$/i))
-      .filter(Boolean)
-      .map((m) => ({ name: m![1].trim().slice(0, 80), story: m![2].trim().slice(0, 120) }))
-      .filter((a) => a.name)
-      .slice(0, maxAreas);
+  const prompt = outlinePrompt("Only list areas you're confident about.");
   let list: { name: string; story: string }[] = [];
   try {
-    list = parse(await plain(prompt, 'outline', LITE_MODEL));
+    list = parseOutline(await plain(prompt, 'outline', LITE_MODEL));
   } catch (e: any) {
     console.log(`  (the cheaper model couldn't do the area list: ${String(e?.message).slice(0, 80)}; using the main model)`);
   }
-  return list.length ? list : parse(await plain(prompt, 'outline', MODEL));
+  return list.length ? list : parseOutline(await plain(prompt, 'outline', MODEL));
 }
 
 async function quickArea(area: { name: string; story: string }): Promise<Parsed> {
   const text = await plain(
-    `Write guide notes for the area "${area.name}" in the video game "${game}" (${area.story}), from what you know. ` +
+    `Write guide notes for the area "${area.name}" in the video game "${game}" (${area.story}), from what you know.${visitNote(area.name)} ` +
       "Only include details you're confident about; leave out anything you're unsure of. Write in your own words. " +
       'Reply with one detail per line, using exactly these formats:\n' +
       'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
@@ -277,10 +283,14 @@ async function mainQuick() {
   const areas = await quickOutline();
   if (!areas.length) throw new Error('could not work out the list of areas');
   console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
-  const order: { slug: string; name: string; story: string }[] = [...((await guideRef.get()).data()?.areas || [])];
+  const info = (await guideRef.get()).data() || {};
+  const order: { slug: string; name: string; story: string }[] = [...(info.areas || [])];
+  const aliases: Record<string, string> = info.aliases || {};
   let built = 0, held = 0, skipped = 0;
-  for (const area of areas) {
-    const s = slug(area.name);
+  for (const found of areas) {
+    // Same page as an existing one under a slightly different name (or a merged/renamed page): use that page.
+    const { slug: s, name } = resolveArea(found.name, order, aliases);
+    const area = { ...found, name };
     if (!order.some((o) => o.slug === s)) order.push({ slug: s, name: area.name, story: area.story });
     const ref = guideRef.collection('areas').doc(s);
     const existing = await ref.get();
@@ -332,12 +342,16 @@ async function main() {
   const areas = await outline();
   if (!areas.length) throw new Error('could not work out the list of areas');
   console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
-  const existing = (await guideRef.get()).data()?.areas || [];
-  const order: { slug: string; name: string; story: string }[] = [...existing];
+  const info = (await guideRef.get()).data() || {};
+  const order: { slug: string; name: string; story: string }[] = [...(info.areas || [])];
+  const aliases: Record<string, string> = info.aliases || {};
   let built = 0, held = 0;
 
-  for (const [i, area] of areas.entries()) {
-    const s = slug(area.name);
+  for (const found of areas) {
+    // Same page as an existing one under a slightly different name (or a merged/renamed page): use that page. A revisit
+    // ("Narshe (World of Ruin)") has its own name, so it gets its own page instead of being skipped as already built.
+    const { slug: s, name } = resolveArea(found.name, order, aliases);
+    const area = { ...found, name };
     if (!order.some((o) => o.slug === s)) order.push({ slug: s, name: area.name, story: area.story });
     const ref = guideRef.collection('areas').doc(s);
     if (!redo && (await ref.get()).exists) {
