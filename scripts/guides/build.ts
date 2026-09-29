@@ -18,7 +18,7 @@
  * searches and an estimated AI cost. A search cap stops the run before it
  * spends more than you allow; it's separate from players' search budget.
  */
-import { db, gemini, MODEL, gameKey, arg, searchesIn, visitName, resolveArea, normalizeVisits, type GuideArea, type GuideEntry } from './common';
+import { db, gemini, MODEL, gameKey, arg, searchesIn, visitName, cleanAreaName, resolveArea, normalizeVisits, type GuideArea, type GuideEntry } from './common';
 import { getGameFacts, saveGameFacts, recordMonthly } from '../../searchGuard';
 import { estimateCost } from '../../usage';
 import { ThinkingLevel } from '@google/genai';
@@ -150,7 +150,8 @@ function parseOutline(text: string): { name: string; story: string }[] {
     .split('\n')
     .map((l) => l.match(/^\s*[-*]?\s*AREA:\s*(.+?)\s*\|\s*([^|]*?)\s*(?:\|\s*(.*?)\s*)?$/i))
     .filter(Boolean)
-    .map((m) => ({ name: visitName(m![1], m![3]).slice(0, 100), story: m![2].trim().slice(0, 120) }))
+    // Clean the place name (no description after a colon, no cut-off brackets), then the full visit name the same way.
+    .map((m) => ({ name: cleanAreaName(visitName(cleanAreaName(m![1]), m![3]), 100), story: m![2].trim().slice(0, 120) }))
     .filter((a) => a.name && !seen.has(a.name.toLowerCase()) && seen.add(a.name.toLowerCase()))
     .slice(0, maxAreas);
 }

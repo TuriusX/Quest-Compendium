@@ -50,6 +50,20 @@ export const visitName = (name: string, revisit?: string) => {
   return `${base} (${r})`;
 };
 
+/**
+ * Tidy an area name from the AI's list: drop a description after a colon ("Kaer Morhen: Defending the fortress"),
+ * shorten at a word boundary, and never leave an unclosed bracket (a cut-off "(Battle of Kaer" is removed).
+ */
+export function cleanAreaName(raw: string, max = 80): string {
+  let n = String(raw || '').replace(/\s+/g, ' ').trim();
+  const colon = n.search(/:\s/);
+  if (colon > 0) n = n.slice(0, colon).trim();
+  if (n.length > max) n = (/\s/.test(n[max]) ? n.slice(0, max) : n.slice(0, max).replace(/\s+\S*$/, '')).trim();
+  while ((n.match(/\(/g) || []).length > (n.match(/\)/g) || []).length) n = n.slice(0, n.lastIndexOf('(')).trim();
+  while ((n.match(/\)/g) || []).length > (n.match(/\(/g) || []).length) n = n.replace(/\)(?!.*\))/, '').trim();
+  return n.replace(/[\s,;:–-]+$/, '').trim();
+}
+
 /** Loose key for spotting the same place under slightly different names ("Returner Hideout" vs "Returners' Hideout"). */
 export const looseKey = (name: string) =>
   slug(name)
