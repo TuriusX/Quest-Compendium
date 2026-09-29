@@ -89,7 +89,9 @@ export function normalizeVisits<T extends { name: string }>(
   return areas.map((a, i) => {
     const base = baseName(a.name);
     if (base === a.name || known(a.name)) return a;
-    const earlierVisit = known(base) || areas.slice(0, i).some((b) => looseKey(b.name) === looseKey(base));
+    // Compare with the base names of earlier entries too: "Sun Keep (600 A.D.)" after "Sun Keep (65,000,000 B.C.)" is a
+    // later visit to the same place, so it keeps its suffix (and gets its own page).
+    const earlierVisit = known(base) || areas.slice(0, i).some((b) => looseKey(baseName(b.name)) === looseKey(base));
     return earlierVisit ? a : { ...a, name: base };
   });
 }
