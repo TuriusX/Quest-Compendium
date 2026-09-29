@@ -4,6 +4,8 @@
  *   npx tsx scripts/guides/build.ts --game "Final Fantasy VI" --part "the opening chapter" --areas 10 --max-searches 150
  *   options: --auto-publish   publish pages that pass the checks straight away (instead of saving them as drafts)
  *            --redo           rebuild areas that already exist
+ *            --area "Name | when in the story"   build just this one page (no area list step), e.g.
+ *                             --area "Kefka's Tower: Final Battle | the summit gauntlet against Kefka"
  *            --quick          fast and cheap: written from the AI's own knowledge with no searches. Pages are labeled
  *                             "not yet fact-checked", add nothing to the knowledge base, and never replace a checked
  *                             page; a normal (checked) run later upgrades them.
@@ -28,8 +30,16 @@ const maxSearches = Math.max(10, Number(arg('max-searches', '150')));
 const autoPublish = arg('auto-publish') === 'true';
 const redo = arg('redo') === 'true';
 const quick = arg('quick') === 'true';
+/** --area "Name | when in the story": build exactly this page, skipping the area list (and its search). */
+const oneArea = (() => {
+  const v = arg('area');
+  if (!v || v === 'true') return null;
+  const [name, story] = v.split('|').map((x) => x.trim());
+  // No "when" given: only use --part if it was passed (its default, "the beginning of the game", would mislead research).
+  return name ? [{ name: name.slice(0, 100), story: (story || (process.argv.includes('--part') ? part : '') || '').slice(0, 120) }] : null;
+})();
 if (!game) {
-  console.log('Usage: npx tsx scripts/guides/build.ts --game "Game title" [--part "the opening chapter"] [--areas 10] [--max-searches 150] [--auto-publish] [--redo]');
+  console.log('Usage: npx tsx scripts/guides/build.ts --game "Game title" [--part "the opening chapter"] [--areas 10] [--max-searches 150] [--auto-publish] [--redo] [--quick] [--area "Name | when"]');
   process.exit(1);
 }
 
@@ -169,7 +179,7 @@ type Parsed = { overview: GuideEntry | null; items: GuideEntry[]; secrets: Guide
 /** Research an area. The reply is one detail per line, so Google's grounding data can be matched to each detail. */
 async function research(area: { name: string; story: string }): Promise<Parsed> {
   const { text, response } = await grounded(
-    `Research the area "${area.name}" in the video game "${game}" (${area.story}).${visitNote(area.name)} ${RULES}\n` +
+    `Research the area "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}.${visitNote(area.name)} ${RULES}\n` +
       'Reply with one detail per line, using exactly these formats (leave out anything you didn\'t find):\n' +
       'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
       'ITEM: item name | exactly where in this area | missable: yes or no\n' +
@@ -267,7 +277,7 @@ async function quickOutline(existing: { name: string; story: string }[]): Promis
 
 async function quickArea(area: { name: string; story: string }): Promise<Parsed> {
   const text = await plain(
-    `Write guide notes for the area "${area.name}" in the video game "${game}" (${area.story}), from what you know.${visitNote(area.name)} ` +
+    `Write guide notes for the area "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}, from what you know.${visitNote(area.name)} ` +
       "Only include details you're confident about; leave out anything you're unsure of. Write in your own words. " +
       'Reply with one detail per line, using exactly these formats:\n' +
       'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
@@ -290,7 +300,7 @@ async function mainQuick() {
   const order: { slug: string; name: string; story: string }[] = [...(info.areas || [])];
   const aliases: Record<string, string> = info.aliases || {};
   // The AI sees the existing pages (so it reuses their names); a suffix on a place with no earlier visit is dropped.
-  const areas = normalizeVisits(await quickOutline(order), order, aliases);
+  const areas = oneArea || normalizeVisits(await quickOutline(order), order, aliases);
   if (!areas.length) throw new Error('could not work out the list of areas');
   console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
   let built = 0, held = 0, skipped = 0;
@@ -350,7 +360,7 @@ async function main() {
   const order: { slug: string; name: string; story: string }[] = [...(info.areas || [])];
   const aliases: Record<string, string> = info.aliases || {};
   // The AI sees the existing pages (so it reuses their names); a suffix on a place with no earlier visit is dropped.
-  const areas = normalizeVisits(await outline(order), order, aliases);
+  const areas = oneArea || normalizeVisits(await outline(order), order, aliases);
   if (!areas.length) throw new Error('could not work out the list of areas');
   console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
   let built = 0, held = 0;
