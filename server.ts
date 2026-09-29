@@ -19,6 +19,7 @@ import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
+import { registerGuidesApi } from './guidesApi';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
@@ -305,6 +306,8 @@ async function startServer() {
 
   // The Deck's web search runs Google searches too, so it shares the monthly search budget.
   registerWebSearch(app, { requireAuth, getGeminiClient, searchBudget: { allowed: monthlyBudgetOk, record: recordMonthly } });
+  // Published guides as JSON for the Steam Deck plugin, which shows them natively (public, read-only).
+  registerGuidesApi(app);
 
   // "Known here": what the game knowledge base already knows about the player's confirmed place. Straight from the
   // database, no AI call, so it never costs a question.
