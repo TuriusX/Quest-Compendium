@@ -1319,7 +1319,16 @@ export default function App() {
           // as unconfirmed and never overwrite what the player confirmed.
           let place = t.place || settings.gameProgress?.[gameProgressKey(t)];
           const g = aiMessage.place;
+          // Same place with more or less detail ("South Figaro" vs "South Figaro, Relic Shop") counts as the same.
+          const samePlace = (a?: string, b?: string) => {
+            const x = (a || '').trim().toLowerCase(), y = (b || '').trim().toLowerCase();
+            return !!x && !!y && (x === y || x.startsWith(`${y},`) || y.startsWith(`${x},`));
+          };
           if (g && !place?.confirmed) place = { ...place, name: g.name, confirmed: false };
+          // The player moved on (the answer is about a different place than the confirmed one): switch to the new place,
+          // unconfirmed, so "Known here" follows them and new facts aren't filed under the old place. The story point
+          // usually carries over.
+          else if (g && place?.confirmed && !samePlace(g.name, place.name)) place = { ...place, name: g.name, confirmed: false };
           if (g?.story && place && !place.storyConfirmed) place = { ...place, story: g.story, storyConfirmed: false };
           return { ...t, messages: [...t.messages, aiMessage], lastActive: nowAi, ...(place ? { place } : {}) };
         });

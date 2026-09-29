@@ -1437,7 +1437,14 @@ percentages:
       // the AI can report facts from memory even when it searched for something else.
       const factsSaved = saveGameFacts(effectiveGame?.name, factsBackedBySearch(factsParsed.facts, groundedSeen), {
         searched: searchesUsed > 0,
-        place: place?.confirmed ? place.name : placeParsed.place?.sure ? placeParsed.place.name : undefined,
+        // The confirmed place only counts while the player is still there: if this answer is about a different place,
+        // the player has moved on, and facts go under the new place only if something on screen settled it.
+        place: (() => {
+          const a = (place?.name || '').toLowerCase(), b = (placeParsed.place?.name || '').toLowerCase();
+          const same = !b || a === b || a.startsWith(`${b},`) || b.startsWith(`${a},`);
+          if (place?.confirmed && same) return place.name;
+          return placeParsed.place?.sure ? placeParsed.place.name : undefined;
+        })(),
         story: story?.confirmed ? story.text : placeParsed.place?.storySure ? placeParsed.place.story : undefined,
         sources: searchSourcesSeen,
       });

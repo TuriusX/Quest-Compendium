@@ -1235,7 +1235,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {/* What the Compendium already knows about the confirmed place (free, from the game knowledge base) */}
       <KnownHere
         game={activeTab.activeSteamGame?.name || activeTab.name}
-        place={activeTab.place?.confirmed ? activeTab.place.name : undefined}
+        place={activeTab.place?.name || undefined}
         story={activeTab.place?.storyConfirmed ? activeTab.place.story : undefined}
         refreshKey={activeTab.messages.length}
       />
