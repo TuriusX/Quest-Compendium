@@ -103,6 +103,54 @@ function areaBody(game: string, a: GuideArea, prev?: { slug: string; name: strin
     ${nav}`;
 }
 
+/**
+ * The homepage's "Free guides" section, between the QC-GUIDES markers in Marketing_Website_Files/index.html: a tile per
+ * game with published pages, rewritten on every run so it grows with the guides. Draft-only games are left out.
+ */
+function updateHomepage(games: { key: string; game: string; published: number }[]) {
+  const file = path.join(OUT, 'index.html');
+  if (!fs.existsSync(file)) return;
+  const html = fs.readFileSync(file, 'utf8');
+  const nl = html.includes('\r\n') ? '\r\n' : '\n';
+  const start = '<!-- QC-GUIDES:START -->';
+  const end = '<!-- QC-GUIDES:END -->';
+  const a = html.indexOf(start);
+  const b = html.indexOf(end);
+  if (a < 0 || b < a) {
+    console.log('Homepage guides section not found (no QC-GUIDES markers); skipped.');
+    return;
+  }
+  const tiles = games
+    .slice()
+    .sort((x, y) => y.published - x.published)
+    .slice(0, 8)
+    .map(
+      (g) =>
+        `        <a href="guides/${esc(g.key)}/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors">` +
+        `<div class="text-white font-bold leading-snug">${esc(g.game)}</div>` +
+        `<div class="text-sm text-zinc-400 mt-1">${g.published} area${g.published === 1 ? '' : 's'}</div></a>`,
+    )
+    .join(nl);
+  const block = games.length
+    ? [
+        start,
+        '      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">',
+        '        <div>',
+        '          <h2 class="text-2xl sm:text-3xl font-bold text-white">Free guides: what not to miss</h2>',
+        '          <p class="text-zinc-400 mt-2 max-w-2xl">Area-by-area checklists of items, secrets, missables and enemy weaknesses, so you never walk past the good stuff.</p>',
+        '        </div>',
+        '        <a href="guides/index.html" class="text-[#a87ffb] hover:text-white font-semibold whitespace-nowrap">See all guides &rarr;</a>',
+        '      </div>',
+        '      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">',
+        tiles,
+        '      </div>',
+        end,
+      ].join(nl)
+    : `${start}${nl}${end}`;
+  fs.writeFileSync(file, html.slice(0, a) + block + html.slice(b + end.length));
+  console.log(`Homepage guides section updated: ${Math.min(games.length, 8)} game(s) shown.`);
+}
+
 async function main() {
   const guides = await db().collection('guides').get();
   if (approve) {
@@ -114,7 +162,7 @@ async function main() {
   // Start clean, so pages from an earlier preview (drafts) never get uploaded by accident.
   fs.rmSync(path.join(OUT, 'guides'), { recursive: true, force: true });
   const sitemap: string[] = [`${SITE}/`, `${SITE}/guides/`];
-  const games: { key: string; game: string; count: number }[] = [];
+  const games: { key: string; game: string; count: number; published: number }[] = [];
   const show = (s: string) => s === 'published' || (withDrafts && s === 'draft');
 
   for (const g of guides.docs) {
@@ -125,7 +173,7 @@ async function main() {
     const byslug = new Map(snap.docs.map((d) => [d.id, d.data() as GuideArea]));
     const visible = order.filter((o) => byslug.has(o.slug) && show(byslug.get(o.slug)!.status));
     if (!visible.length) continue;
-    games.push({ key: g.id, game, count: visible.length });
+    games.push({ key: g.id, game, count: visible.length, published: visible.filter((o) => byslug.get(o.slug)!.status === 'published').length });
     const dir = path.join(OUT, 'guides', g.id);
     fs.mkdirSync(dir, { recursive: true });
     visible.forEach((o, i) => {
@@ -182,6 +230,7 @@ async function main() {
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemap.map((u) => `  <url><loc>${u}</loc></url>`).join('\n')}\n</urlset>\n`,
   );
   fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`);
+  updateHomepage(games.filter((g) => g.published > 0));
   console.log(`Built ${games.reduce((n, g) => n + g.count, 0)} guide page(s) for ${games.length} game(s)${withDrafts ? ' (drafts included, marked DRAFT and hidden from search)' : ''}.`);
   console.log(`Open ${path.join(OUT, 'guides', 'index.html')} in your browser to look them over.`);
   process.exit(0);
