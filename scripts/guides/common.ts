@@ -88,6 +88,8 @@ export type GuideArea = {
   tips: string[];
   sources: string[];
   status: 'draft' | 'published' | 'held';
+  /** false = a quick page, written from the AI's own knowledge and not yet fact-checked. Missing = checked (older pages). */
+  verified?: boolean;
   checks: { claims: number; supported: number; rejected: number; singleSource: number };
   heldReason?: string;
   updatedAt: number;

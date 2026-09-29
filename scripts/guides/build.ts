@@ -4,6 +4,9 @@
  *   npx tsx scripts/guides/build.ts --game "Final Fantasy VI" --part "the opening chapter" --areas 10 --max-searches 150
  *   options: --auto-publish   publish pages that pass the checks straight away (instead of saving them as drafts)
  *            --redo           rebuild areas that already exist
+ *            --quick          fast and cheap: written from the AI's own knowledge with no searches. Pages are labeled
+ *                             "not yet fact-checked", add nothing to the knowledge base, and never replace a checked
+ *                             page; a normal (checked) run later upgrades them.
  *
  * For each area: research with Google Search (a step that runs no searches is retried once, then fails, so nothing
  * comes from the model's memory) -> keep only details that at least two different websites back, judged from Google's
@@ -24,6 +27,7 @@ const maxAreas = Math.max(1, Math.min(40, Number(arg('areas', '10'))));
 const maxSearches = Math.max(10, Number(arg('max-searches', '150')));
 const autoPublish = arg('auto-publish') === 'true';
 const redo = arg('redo') === 'true';
+const quick = arg('quick') === 'true';
 if (!game) {
   console.log('Usage: npx tsx scripts/guides/build.ts --game "Game title" [--part "the opening chapter"] [--areas 10] [--max-searches 150] [--auto-publish] [--redo]');
   process.exit(1);
@@ -152,14 +156,18 @@ async function research(area: { name: string; story: string }): Promise<Parsed> 
       'TIP: short practical tip',
     `research ${area.name}`,
   );
-  const real = realSourcesByLine(text, response);
+  return parseDetails(text, realSourcesByLine(text, response));
+}
+
+/** Read the one-detail-per-line reply. `real` = the websites backing each line (empty lists in quick mode). */
+function parseDetails(text: string, real: Set<string>[]): Parsed {
   const out: Parsed = { overview: null, items: [], secrets: [], enemies: [], shops: [], tips: [] };
   let n = 0;
   text.split('\n').forEach((line, k) => {
     const m = line.match(/^\s*[-*]?\s*(OVERVIEW|ITEM|SECRET|ENEMY|SHOP|TIP):\s*(.+)$/i);
     if (!m) return;
     const f = m[2].split('|').map((x) => x.trim());
-    const sources = [...real[k]];
+    const sources = [...(real[k] || [])];
     const id = `x${n++}`;
     switch (m[1].toUpperCase()) {
       case 'OVERVIEW': out.overview = { id, text: m[2].trim(), sources }; break;
@@ -207,7 +215,116 @@ async function factCheck(areaName: string, claims: Claim[]): Promise<Set<string>
 /** Two-source rule on real search data: at least two different websites back this detail. */
 const twoSources = (e: GuideEntry) => (e.sources || []).length >= 2;
 
+// ---- quick mode: from the AI's own knowledge, no searches ----
+// Minutes and pennies per game. Pages are labeled "not yet fact-checked", never feed the game knowledge base (so live
+// answers only ever use checked facts), and never replace a checked page. A normal run later checks and upgrades them.
+async function plain(prompt: string, label: string, model: string): Promise<string> {
+  const res: any = await ai.models.generateContent({
+    model,
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: { temperature: 0.2, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+  });
+  const cost = estimateCost(model, res);
+  if (cost === null) unpriced++;
+  else dollars += cost;
+  console.log(`  [${label}]${cost !== null ? ` ≈ $${cost.toFixed(4)}` : ''} (run total ≈ $${dollars.toFixed(3)})`);
+  return res?.text || '';
+}
+
+async function quickOutline(): Promise<{ name: string; story: string }[]> {
+  const prompt =
+    `List the areas a player visits in ${part} of the video game "${game}", in story order, up to ${maxAreas} areas. ` +
+    'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ' +
+    "Only list areas you're confident about. Reply with one line per area, exactly: AREA: name as the game calls it | a few words on when in the story this visit happens";
+  const parse = (text: string) =>
+    text
+      .split('\n')
+      .map((l) => l.match(/^\s*[-*]?\s*AREA:\s*(.+?)\s*\|\s*(.*)$/i))
+      .filter(Boolean)
+      .map((m) => ({ name: m![1].trim().slice(0, 80), story: m![2].trim().slice(0, 120) }))
+      .filter((a) => a.name)
+      .slice(0, maxAreas);
+  let list: { name: string; story: string }[] = [];
+  try {
+    list = parse(await plain(prompt, 'outline', LITE_MODEL));
+  } catch (e: any) {
+    console.log(`  (the cheaper model couldn't do the area list: ${String(e?.message).slice(0, 80)}; using the main model)`);
+  }
+  return list.length ? list : parse(await plain(prompt, 'outline', MODEL));
+}
+
+async function quickArea(area: { name: string; story: string }): Promise<Parsed> {
+  const text = await plain(
+    `Write guide notes for the area "${area.name}" in the video game "${game}" (${area.story}), from what you know. ` +
+      "Only include details you're confident about; leave out anything you're unsure of. Write in your own words. " +
+      'Reply with one detail per line, using exactly these formats:\n' +
+      'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
+      'ITEM: item name | exactly where in this area | missable: yes or no\n' +
+      'SECRET: hidden thing and how to find it\n' +
+      'ENEMY: enemy name | weakness | what can be stolen | short note\n' +
+      'SHOP: shop or NPC name | what they sell or offer\n' +
+      'TIP: short practical tip',
+    `write ${area.name}`,
+    MODEL,
+  );
+  return parseDetails(text, []);
+}
+
+async function mainQuick() {
+  console.log(`Quick guide (from the AI's knowledge, no searches): ${game} (${part}), up to ${maxAreas} areas${autoPublish ? ', publishing' : ', as drafts'}`);
+  const key = gameKey(game!);
+  const guideRef = db().collection('guides').doc(key);
+  const areas = await quickOutline();
+  if (!areas.length) throw new Error('could not work out the list of areas');
+  console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
+  const order: { slug: string; name: string; story: string }[] = [...((await guideRef.get()).data()?.areas || [])];
+  let built = 0, held = 0, skipped = 0;
+  for (const area of areas) {
+    const s = slug(area.name);
+    if (!order.some((o) => o.slug === s)) order.push({ slug: s, name: area.name, story: area.story });
+    const ref = guideRef.collection('areas').doc(s);
+    const existing = await ref.get();
+    if (existing.exists && (existing.data()?.verified !== false || !redo)) {
+      skipped++;
+      console.log(`- ${area.name}: already has a page${existing.data()?.verified !== false ? ' (checked pages are never replaced by quick ones)' : ' (use --redo to rewrite)'}`);
+      continue;
+    }
+    console.log(`- ${area.name}`);
+    try {
+      const d = await quickArea(area);
+      const kept = d.items.length + d.secrets.length + d.enemies.length + d.shops.length;
+      const heldReason = kept < 3 ? 'too few details' : '';
+      const page: GuideArea = {
+        name: area.name,
+        slug: s,
+        order: order.findIndex((o) => o.slug === s),
+        story: area.story,
+        overview: d.overview?.text || '',
+        items: d.items, secrets: d.secrets, enemies: d.enemies, shops: d.shops,
+        tips: d.tips.map((t) => t.text!).slice(0, 6),
+        sources: [],
+        status: heldReason ? 'held' : autoPublish ? 'published' : 'draft',
+        verified: false,
+        checks: { claims: 0, supported: 0, rejected: 0, singleSource: 0 },
+        ...(heldReason ? { heldReason } : {}),
+        updatedAt: Date.now(),
+      };
+      await ref.set(page);
+      if (heldReason) held++;
+      else built++;
+      console.log(`  ${page.status}: ${kept} details${heldReason ? ` (${heldReason})` : ''}`);
+    } catch (e: any) {
+      console.warn(`  failed: ${e?.message}`);
+    }
+  }
+  await guideRef.set({ game, title: `${game} guide`, areas: order, updatedAt: Date.now() }, { merge: true });
+  console.log(`Done: ${built} quick page(s) ${autoPublish ? 'published' : 'saved as drafts'} (labeled "not yet fact-checked"), ${held} held back, ${skipped} skipped, estimated AI cost ≈ $${dollars.toFixed(2)}${unpriced ? ` (plus ${unpriced} call(s) on a model without a known rate)` : ''}. No searches used, nothing added to the knowledge base.`);
+  console.log('Next: npx tsx scripts/guides/publish.ts   (then upload Marketing_Website_Files to Netlify)');
+  setTimeout(() => process.exit(0), 3000);
+}
+
 async function main() {
+  if (quick) return mainQuick();
   console.log(`Building guide: ${game} (${part}), up to ${maxAreas} areas, search cap ${maxSearches}${autoPublish ? ', auto-publish' : ', as drafts'}`);
   const key = gameKey(game!);
   const guideRef = db().collection('guides').doc(key);
@@ -265,6 +382,7 @@ async function main() {
         items, secrets, enemies, shops, tips,
         sources: usedSources.slice(0, 8),
         status: heldReason ? 'held' : autoPublish ? 'published' : 'draft',
+        verified: true,
         checks: { claims: claims.length, supported: supported.size, rejected, singleSource },
         ...(heldReason ? { heldReason } : {}),
         updatedAt: Date.now(),
