@@ -34,6 +34,9 @@ function page(opts: { title: string; description: string; depth: number; canonic
   <meta property="og:title" content="${esc(opts.title)}">
   <meta property="og:description" content="${esc(opts.description)}">
   <meta property="og:image" content="${SITE}/icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="${up}favicon-192.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="${up}favicon-96.png">
+  <link rel="icon" href="${up}favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="icon" type="image/svg+xml" href="${up}icon.svg">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
