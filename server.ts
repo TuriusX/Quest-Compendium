@@ -19,7 +19,7 @@ import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
-import { registerGuidesApi } from './guidesApi';
+import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPanel } from './guidesApi';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
@@ -325,7 +325,12 @@ async function startServer() {
         .sort((a, b) => (b.confirmations || 1) - (a.confirmations || 1) || b.at - a.at)
         .slice(0, 30)
         .map((f) => ({ subject: f.subject, fact: f.fact, kind: f.kind, story: f.story || '', confirmations: f.confirmations || 1, disputed: !!f.disputed }));
-      res.json({ facts });
+      // Plus the guide page for this place, if there is one, as a separate "From the guide" list (lines already covered
+      // by a verified fact are left out).
+      const pg = await guidePageFor(game, placeName);
+      const have = new Set(facts.map((f) => f.subject.toLowerCase()));
+      const guide = pg ? guideLinesForPanel(pg).filter((l) => !have.has(l.subject.toLowerCase())).slice(0, 20) : [];
+      res.json({ facts, ...(guide.length ? { guide, guideName: pg!.name } : {}) });
     } catch (e: any) {
       console.warn('[facts] known-here failed:', e?.message);
       res.json({ facts: [] });
@@ -1096,6 +1101,9 @@ percentages:
         place: place?.name,
       });
       if (knownFacts) systemInstruction += `\n\n${knownFacts}`;
+      // The guide page for where the player is: background notes for this answer only (never saved as facts).
+      const guidePage = await guidePageFor(effectiveGame?.name, place?.name);
+      if (guidePage) systemInstruction += `\n\n${guideNotesForPrompt(guidePage)}`;
       if (!searchOk) {
         systemInstruction += `\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. Don't mention search limits to the player.`;
       }

@@ -25,11 +25,14 @@ const KIND_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
 export function KnownHere({ game, place, story, refreshKey }: { game?: string; place?: string; story?: string; refreshKey: number }) {
   const t = useT();
   const [facts, setFacts] = useState<KnownFact[]>([]);
+  // The guide page for this place (if the game has a guide), shown as its own list below the verified facts.
+  const [guide, setGuide] = useState<{ kind: string; subject: string; fact: string }[]>([]);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (!game || !place) {
       setFacts([]);
+      setGuide([]);
       return;
     }
     let cancelled = false;
@@ -44,7 +47,10 @@ export function KnownHere({ game, place, story, refreshKey }: { game?: string; p
           body: JSON.stringify({ game, place }),
         });
         const data = res.ok ? await res.json() : { facts: [] };
-        if (!cancelled) setFacts(Array.isArray(data.facts) ? data.facts : []);
+        if (!cancelled) {
+          setFacts(Array.isArray(data.facts) ? data.facts : []);
+          setGuide(Array.isArray(data.guide) ? data.guide : []);
+        }
       } catch {
         /* the panel just stays as it was */
       }
@@ -70,13 +76,13 @@ export function KnownHere({ game, place, story, refreshKey }: { game?: string; p
         <span className="font-semibold text-zinc-100">{t('here.title')}</span>
         <span className="truncate text-zinc-400">· {place}</span>
         <span className="ml-auto flex items-center gap-1.5 text-zinc-400">
-          {facts.length ? facts.length : t('here.nothingYet')}
+          {facts.length + guide.length ? facts.length + guide.length : t('here.nothingYet')}
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
         </span>
       </button>
       {open && (
         <div className="mt-2 mb-1 max-h-56 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-2.5">
-          {!facts.length && <p className="text-[12px] leading-snug text-zinc-400">{t('here.empty')}</p>}
+          {!facts.length && !guide.length && <p className="text-[12px] leading-snug text-zinc-400">{t('here.empty')}</p>}
           <ul className="space-y-2">
             {facts.map((f, i) => {
               const Icon = KIND_ICONS[f.kind] || BookOpen;
@@ -93,7 +99,26 @@ export function KnownHere({ game, place, story, refreshKey }: { game?: string; p
               );
             })}
           </ul>
-          {facts.length > 0 && <div className="mt-2 pt-2 border-t border-white/5 text-[11px] text-zinc-500">{t('here.free')}</div>}
+          {guide.length > 0 && (
+            <>
+              <div className={`${facts.length ? 'mt-3 pt-2 border-t border-white/5' : ''} mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500`}>{t('here.fromGuide')}</div>
+              <ul className="space-y-2">
+                {guide.map((g, i) => {
+                  const Icon = KIND_ICONS[g.kind] || BookOpen;
+                  return (
+                    <li key={i} className="flex items-start gap-2 text-[12px] leading-snug">
+                      <Icon className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-zinc-500" aria-hidden="true" />
+                      <span className="min-w-0">
+                        <span className="font-semibold text-zinc-200">{g.subject}</span>
+                        {g.fact && g.fact !== g.subject && <span className="text-zinc-400">: {g.fact}</span>}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+          {facts.length + guide.length > 0 && <div className="mt-2 pt-2 border-t border-white/5 text-[11px] text-zinc-500">{t('here.free')}</div>}
         </div>
       )}
     </div>

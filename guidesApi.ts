@@ -131,3 +131,88 @@ export function registerGuidesApi(app: Express): void {
     }
   });
 }
+
+// ---- the guide page for where the player is (used by answers and "Known here") ----
+
+const norm = (x: string) => x.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9,()]+/g, ' ').replace(/\s+/g, ' ').trim();
+const loose = (x: string) =>
+  norm(x)
+    .replace(/[(),]/g, ' ')
+    .split(' ')
+    .filter((w) => w && w !== 'the')
+    .map((w) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w))
+    .join(' ');
+
+export type GuidePageForPlace = {
+  name: string;
+  verified: boolean;
+  overview: string;
+  items: any[]; secrets: any[]; enemies: any[]; shops: any[]; tips: string[];
+  sections: { title: string; check: boolean; entries: { id: string; text: string }[] }[];
+};
+
+/**
+ * The published guide page for a place in a game, matched by name: exact first, then with extra detail on either side
+ * ("South Figaro" vs "South Figaro, Relic Shop"), then loosely ("Returner Hideout" vs "Returners' Hideout").
+ */
+export async function guidePageFor(game: string | undefined, place: string | undefined): Promise<GuidePageForPlace | null> {
+  if (!game || !place) return null;
+  try {
+    const key = gameKey(game);
+    const g = await gameAreas(key);
+    if (!g) return null;
+    const p = norm(place);
+    const area =
+      g.areas.find((a: any) => norm(a.name) === p) ||
+      g.areas.find((a: any) => p.startsWith(`${norm(a.name)},`) || norm(a.name).startsWith(`${p},`)) ||
+      g.areas.find((a: any) => loose(a.name) === loose(place) || loose(place.split(',')[0]) === loose(a.name));
+    if (!area) return null;
+    return await cached(`page:${key}:${area.slug}`, async () => {
+      const doc = await getFirestore().collection('guides').doc(key).collection('areas').doc(area.slug).get();
+      const a: any = doc.exists ? doc.data() : null;
+      if (!a || a.status !== 'published') return null;
+      return {
+        name: String(a.name || area.name),
+        verified: a.verified !== false,
+        overview: String(a.overview || ''),
+        items: a.items || [], secrets: a.secrets || [], enemies: a.enemies || [], shops: a.shops || [],
+        tips: Array.isArray(a.tips) ? a.tips : [],
+        sections: Array.isArray(a.sections) ? a.sections : [],
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
+const blankish = (v: unknown) =>
+  !String(v ?? '').trim() ||
+  /^(none|nothing|no|n\/?a|-+|—|unknown|not applicable|nothing to steal|cannot be stolen|can't be stolen|not stealable|no weakness(es)?|none known)$/.test(String(v).trim().toLowerCase().replace(/[.!]+$/, ''));
+
+/** The page as short notes for the AI, kept to a sensible size. */
+export function guideNotesForPrompt(pg: GuidePageForPlace): string {
+  const lines: string[] = [];
+  if (pg.overview) lines.push(pg.overview);
+  for (const x of pg.sections) for (const e of x.entries.slice(0, 8)) lines.push(`${x.title}: ${e.text}`);
+  for (const e of pg.items.slice(0, 15)) lines.push(`Item: ${e.name}${!blankish(e.where) ? ` (${e.where})` : ''}${e.missable ? ' [missable]' : ''}`);
+  for (const e of pg.secrets.slice(0, 8)) lines.push(`Secret: ${e.text}`);
+  for (const e of pg.enemies.slice(0, 10))
+    lines.push(`Enemy: ${e.name}${!blankish(e.weakness) ? `, weak to ${e.weakness}` : ''}${!blankish(e.steal) ? `, steal/drop ${e.steal}` : ''}${!blankish(e.notes) ? ` (${e.notes})` : ''}`);
+  for (const e of pg.shops.slice(0, 6)) lines.push(`Shop/NPC: ${e.name}${!blankish(e.sells) ? `: ${e.sells}` : ''}`);
+  for (const t of pg.tips.slice(0, 5)) lines.push(`Tip: ${t}`);
+  const body = lines.map((l) => `- ${l}`).join('\n').slice(0, 2400);
+  return pg.verified
+    ? `[GUIDE NOTES FOR ${pg.name} (from the Quest Compendium guide, checked against sources): use these]\n${body}`
+    : `[GUIDE NOTES FOR ${pg.name} (from the Quest Compendium guide, written from general knowledge and not independently checked): ` +
+        'use them for general guidance about this place (what is here, what is easy to miss), but verify exact numbers ' +
+        '(weaknesses, stats, prices) before stating them, and trust what is actually on screen over these notes]\n' + body;
+}
+
+/** "From the guide" lines for the Known here panel. */
+export function guideLinesForPanel(pg: GuidePageForPlace): { kind: string; subject: string; fact: string }[] {
+  const out: { kind: string; subject: string; fact: string }[] = [];
+  for (const x of pg.sections.filter((s) => s.check)) for (const e of x.entries.slice(0, 6)) out.push({ kind: 'missable', subject: x.title, fact: e.text });
+  for (const e of pg.items.slice(0, 12)) out.push({ kind: e.missable ? 'missable' : 'item', subject: String(e.name || ''), fact: blankish(e.where) ? '' : String(e.where) });
+  for (const e of pg.secrets.slice(0, 6)) out.push({ kind: 'secret', subject: String(e.text || '').split(/[.:]/)[0].slice(0, 50), fact: String(e.text || '') });
+  return out.filter((l) => l.subject);
+}
