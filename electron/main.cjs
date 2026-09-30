@@ -507,7 +507,13 @@ app.whenReady().then(() => {
   try {
     const { ElectronBlocker } = require('@ghostery/adblocker-electron');
   const fetch = require('cross-fetch');
-  ElectronBlocker.fromPrebuiltAdsAndTracking(fetch).then((blocker) => {
+  // Filter lists are cached on disk, so ads stay blocked even when the list download fails (offline, slow network).
+  const fsp = require('fs').promises;
+  ElectronBlocker.fromPrebuiltAdsAndTracking(fetch, {
+    path: path.join(app.getPath('userData'), 'adblocker-engine.bin'),
+    read: fsp.readFile,
+    write: fsp.writeFile,
+  }).then((blocker) => {
     // blocker.enableBlockingInSession(session.defaultSession); // Removed to prevent double IPC registration crash
     blocker.enableBlockingInSession(session.fromPartition('persist:browser_session'));
     console.log("Adblocker enabled for browser sessions");
