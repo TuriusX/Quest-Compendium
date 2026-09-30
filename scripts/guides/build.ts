@@ -8,6 +8,8 @@
  *                             --area "Kefka's Tower: Final Battle | the summit gauntlet against Kefka"
  *            --layout area|regions|chapters|calendar   how the guide is organized (see common.ts). Normally left out:
  *                             a new guide picks one automatically, and later runs reuse the game's saved layout.
+ *            --group NAME     put this run's pages in a named section, e.g. an expansion: --group "Hearts of Stone"
+ *                             (the website and apps show a heading per section; see set-groups.ts for existing pages)
  *            --upgrade        check a game's existing quick pages the careful way, one by one (no new area list).
  *                             A page that passes is replaced by the checked version and its details go into the
  *                             knowledge base; one that doesn't pass keeps its quick page (confirmed details are still
@@ -43,6 +45,11 @@ const quick = arg('quick') === 'true';
 const layoutArg = arg('layout');
 const restructure = arg('restructure') === 'true';
 const upgrade = arg('upgrade') === 'true';
+/** --group "Hearts of Stone": the section this run's pages belong to (an expansion or DLC), shown as a heading. */
+const groupArg = (() => {
+  const g = arg('group');
+  return g && g !== 'true' ? g.trim().slice(0, 40) : undefined;
+})();
 const retryFailed = arg('retry-failed') === 'true';
 /** The guide's structure for this run (set in main from --layout, the saved layout, or an automatic pick). */
 let layout: Layout = 'area';
@@ -427,7 +434,7 @@ async function mainQuick() {
   const aliases: Record<string, string> = restructure ? {} : info.aliases || {};
   // The AI sees the existing pages (so it reuses their names); a suffix on a place with no earlier visit is dropped.
   const listed = oneArea || (await quickOutline(order));
-  const areas = placeBased() ? normalizeVisits(listed, order, aliases) : listed;
+  const areas = (placeBased() ? normalizeVisits(listed, order, aliases) : listed).map((a) => (groupArg ? { ...a, group: groupArg } : a));
   if (!areas.length) throw new Error('could not work out the list of areas');
   console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
   let built = 0, held = 0, skipped = 0;
@@ -517,6 +524,7 @@ async function main() {
   } else {
     const listed = oneArea || (await outline(order));
     areas = placeBased() ? normalizeVisits(listed, order, aliases) : listed;
+    if (groupArg) areas = areas.map((a) => ({ ...a, group: groupArg }));
   }
   if (!areas.length) throw new Error('could not work out the list of areas');
   console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
