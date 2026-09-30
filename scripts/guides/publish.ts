@@ -104,6 +104,16 @@ function areaBody(game: string, a: GuideArea, prev?: { slug: string; name: strin
     <h1 class="text-3xl font-bold text-white">${esc(a.name)}</h1>
     <p class="text-zinc-400 mt-1">${esc(game)} guide${a.story ? ` · ${esc(a.story)}` : ''}</p>
     ${a.overview ? `<p class="mt-6 text-zinc-300 leading-relaxed">${esc(a.overview)}</p>` : ''}
+    ${(a.sections || [])
+      .map((x) =>
+        section(
+          x.title,
+          x.check
+            ? checklist(x.entries as any, (e: any) => esc(e.text))
+            : `<ul class="list-disc pl-5 space-y-1">${x.entries.map((e) => `<li>${esc(e.text)}</li>`).join('')}</ul>`,
+        ),
+      )
+      .join('')}
     ${section('Items', items)}${section('Secrets', secrets)}${section('Enemies', enemies)}${section('Shops and people', shops)}${section('Tips', tips)}
     ${cta(up, game)}
     ${a.sources.length ? `<p class="text-xs text-zinc-500">Sources checked: ${a.sources.map(esc).join(', ')}</p>` : ''}
@@ -197,12 +207,19 @@ async function main() {
       );
       if (!draft) sitemap.push(`${SITE}/guides/${g.id}/${o.slug}/`);
     });
-    const list = visible
-      .map((o) => {
-        const a = byslug.get(o.slug)!;
-        return `<li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="${esc(o.slug)}/index.html">${esc(a.name)}</a>${a.status !== 'published' ? ' <span class="text-amber-400 text-xs">DRAFT</span>' : ''}<div class="text-sm text-zinc-500">${esc(a.story)}</div></li>`;
-      })
-      .join('');
+    const row = (o: { slug: string }) => {
+      const a = byslug.get(o.slug)!;
+      return `<li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="${esc(o.slug)}/index.html">${esc(a.name)}</a>${a.status !== 'published' ? ' <span class="text-amber-400 text-xs">DRAFT</span>' : ''}<div class="text-sm text-zinc-500">${esc(a.story)}</div></li>`;
+    };
+    // Chapter and calendar guides group their pages (by character, or calendar vs reference), in order of appearance.
+    const groupOf = (o: any) => String(o.group || byslug.get(o.slug)?.group || '');
+    const groups = [...new Set(visible.map(groupOf))];
+    const list =
+      groups.length > 1 || (groups.length === 1 && groups[0])
+        ? groups
+            .map((g) => `<li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">${esc(g || 'More')}</h2><ul>${visible.filter((o) => groupOf(o) === g).map(row).join('')}</ul></li>`)
+            .join('')
+        : visible.map(row).join('');
     fs.writeFileSync(
       path.join(dir, 'index.html'),
       page({

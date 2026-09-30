@@ -6,6 +6,10 @@
  *            --redo           rebuild areas that already exist
  *            --area "Name | when in the story"   build just this one page (no area list step), e.g.
  *                             --area "Kefka's Tower: Final Battle | the summit gauntlet against Kefka"
+ *            --layout area|regions|chapters|calendar   how the guide is organized (see common.ts). Normally left out:
+ *                             a new guide picks one automatically, and later runs reuse the game's saved layout.
+ *            --restructure    rebuild the game's guide with a new layout: the new pages replace the old list, and
+ *                             old pages not in it are held back (never deleted)
  *            --quick          fast and cheap: written from the AI's own knowledge with no searches. Pages are marked
  *                             unchecked in the data, add nothing to the knowledge base, and never replace a checked
  *                             page; a normal (checked) run later upgrades them.
@@ -18,7 +22,7 @@
  * searches and an estimated AI cost. A search cap stops the run before it
  * spends more than you allow; it's separate from players' search budget.
  */
-import { db, gemini, MODEL, gameKey, arg, searchesIn, visitName, cleanAreaName, resolveArea, normalizeVisits, type GuideArea, type GuideEntry } from './common';
+import { db, gemini, MODEL, gameKey, arg, searchesIn, visitName, cleanAreaName, resolveArea, normalizeVisits, isLayout, type GuideArea, type GuideEntry, type GuideSection, type Layout } from './common';
 import { getGameFacts, saveGameFacts, recordMonthly } from '../../searchGuard';
 import { estimateCost } from '../../usage';
 import { ThinkingLevel } from '@google/genai';
@@ -30,8 +34,13 @@ const maxSearches = Math.max(10, Number(arg('max-searches', '150')));
 const autoPublish = arg('auto-publish') === 'true';
 const redo = arg('redo') === 'true';
 const quick = arg('quick') === 'true';
+const layoutArg = arg('layout');
+const restructure = arg('restructure') === 'true';
+/** The guide's structure for this run (set in main from --layout, the saved layout, or an automatic pick). */
+let layout: Layout = 'area';
+const placeBased = () => layout === 'area' || layout === 'regions';
 /** --area "Name | when in the story": build exactly this page, skipping the area list (and its search). */
-const oneArea = (() => {
+const oneArea = ((): { name: string; story: string; group?: string }[] | null => {
   const v = arg('area');
   if (!v || v === 'true') return null;
   const [name, story] = v.split('|').map((x) => x.trim());
@@ -129,9 +138,31 @@ const RULES =
  * The area list, shared by normal and quick runs. Revisits count as their own areas: a place the player comes back to
  * in a clearly different state (another world, era or chapter) gets its own page, "Narshe (World of Ruin)".
  */
+const UNIT: Record<Layout, string> = {
+  area: 'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ',
+  regions: 'An area is a region, city, settlement or major location (a dungeon, fortress or landmark) worth its own guide page. ',
+  chapters: '',
+  calendar: '',
+};
+
 const outlinePrompt = (extra: string, existing: { name: string; story: string }[]) =>
+  layout === 'chapters'
+    ? `List the guide pages for ${part} of the video game "${game}", up to ${maxAreas} pages. Each page is one character's ` +
+      'story chapter, named like "Olberic, Chapter 1", in a sensible play order. Also add a short reference page for each ' +
+      'main town or region the characters share, named by the place. ' +
+      (existing.length ? `The guide already has these pages; reuse a name exactly for the same page:\n${existing.map((e) => `- ${e.name}`).join('\n')}\n` : '') +
+      `${extra} Reply with one line per page, exactly: AREA: page name | a few words on what happens | the character's name for a chapter page, or Places for a place page`
+    : layout === 'calendar'
+      ? `List the guide pages for ${part} of the video game "${game}", up to ${maxAreas} pages. Most pages are stretches of the ` +
+        'in-game calendar, usually one month or the period up to a deadline, named like "April" or "May: Kamoshida\'s Palace", ' +
+        'in calendar order. Also add a few reference pages: one per dungeon, and one for social links or confidants, named by topic. ' +
+        (existing.length ? `The guide already has these pages; reuse a name exactly for the same page:\n${existing.map((e) => `- ${e.name}`).join('\n')}\n` : '') +
+        `${extra} Reply with one line per page, exactly: AREA: page name | a few words on what happens | Calendar for a calendar page, or Reference for a reference page`
+      : placeOutline(extra, existing);
+
+const placeOutline = (extra: string, existing: { name: string; story: string }[]) =>
   `List the areas a player visits in ${part} of the video game "${game}", in story order, up to ${maxAreas} areas. ` +
-  'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ' +
+  UNIT[layout] +
   'If the player comes back to a place later in a clearly different state (a different world, era or chapter, with ' +
   'new items, people or events), list that visit as its own area and name the world, era or chapter in the third field ' +
   '(for example "World of Ruin"). Leave the third field empty for a first visit (including a place that only exists in ' +
@@ -144,25 +175,32 @@ const outlinePrompt = (extra: string, existing: { name: string; story: string }[
   `${extra} Reply with one line per area, exactly: AREA: name as the game calls it | a few words on when in the story ` +
   'this visit happens | world, era or chapter of a revisit, or empty';
 
-function parseOutline(text: string): { name: string; story: string }[] {
+function parseOutline(text: string): { name: string; story: string; group?: string }[] {
   const seen = new Set<string>();
   return text
     .split('\n')
     .map((l) => l.match(/^\s*[-*]?\s*AREA:\s*(.+?)\s*\|\s*([^|]*?)\s*(?:\|\s*(.*?)\s*)?$/i))
     .filter(Boolean)
-    // Clean the place name (no description after a colon, no cut-off brackets), then the full visit name the same way.
-    .map((m) => ({ name: cleanAreaName(visitName(cleanAreaName(m![1]), m![3]), 100), story: m![2].trim().slice(0, 120) }))
+    // Place-based guides: clean the place name, then the full visit name the same way. Chapter and calendar guides:
+    // the third field is the page's group (a character, "Calendar", "Reference"), and page names keep their colon
+    // ("May: Kamoshida's Palace").
+    .map((m) =>
+      placeBased()
+        ? { name: cleanAreaName(visitName(cleanAreaName(m![1]), m![3]), 100), story: m![2].trim().slice(0, 120) }
+        : { name: m![1].trim().replace(/\s+/g, ' ').slice(0, 100), story: m![2].trim().slice(0, 120), group: (m![3] || '').trim().slice(0, 40) || undefined },
+    )
     .filter((a) => a.name && !seen.has(a.name.toLowerCase()) && seen.add(a.name.toLowerCase()))
     .slice(0, maxAreas);
 }
 
 /** Tells the research step which visit a revisit page is about. */
 const visitNote = (name: string) => {
+  if (!placeBased()) return '';
   const m = name.match(/\(([^)]+)\)\s*$/);
   return m ? ` This page is only about the visit during ${m[1]}: cover what's there then, not on earlier visits.` : '';
 };
 
-async function outline(existing: { name: string; story: string }[]): Promise<{ name: string; story: string }[]> {
+async function outline(existing: { name: string; story: string }[]): Promise<{ name: string; story: string; group?: string }[]> {
   const ask = (model: string) => grounded(outlinePrompt(RULES, existing), 'outline', true, model);
   let text = '';
   try {
@@ -175,19 +213,47 @@ async function outline(existing: { name: string; story: string }[]): Promise<{ n
   return parseOutline(text);
 }
 
-type Parsed = { overview: GuideEntry | null; items: GuideEntry[]; secrets: GuideEntry[]; enemies: GuideEntry[]; shops: GuideEntry[]; tips: GuideEntry[] };
+type Parsed = {
+  overview: GuideEntry | null; items: GuideEntry[]; secrets: GuideEntry[]; enemies: GuideEntry[]; shops: GuideEntry[]; tips: GuideEntry[];
+  /** Structure-specific details: DEADLINE, MISSABLE, ACTIVITY, LINK lines. */
+  extra: Record<string, GuideEntry[]>;
+};
+
+/** What a page is about, in words the writing prompt can use. */
+const pageKind = () => (layout === 'chapters' ? 'guide page (a character chapter or a shared place)' : layout === 'calendar' ? 'guide page (a stretch of the calendar, or a reference topic)' : 'area');
+
+/** The detail lines a page can have. Calendar and chapter guides add the lines that matter for how they're played. */
+const detailFormats = () =>
+  'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
+  (layout === 'calendar'
+    ? 'DEADLINE: a deadline in this period and what must be done by then\n' +
+      'MISSABLE: an event, choice, item or social link step that can be missed in this period, and how not to miss it\n' +
+      'LINK: social link or confidant name | how to start or advance it now\n' +
+      'ACTIVITY: a worthwhile thing to do on free days or evenings in this period\n'
+    : layout === 'chapters'
+      ? 'MISSABLE: an event, choice or item in this chapter that can be missed, and how not to miss it\n'
+      : '') +
+  'ITEM: item name | exactly where | missable: yes or no\n' +
+  'SECRET: hidden thing and how to find it\n' +
+  'ENEMY: enemy name | weakness (empty if it has none or the game has no weaknesses) | what can be stolen, or a notable drop (only if the game has stealing or drops worth noting; otherwise empty) | short note\n' +
+  'SHOP: shop or NPC name | what they sell or offer\n' +
+  'TIP: short practical tip';
+
+/** Structure-specific sections for the page, from the extra detail lines. */
+function sectionsFrom(extra: Record<string, GuideEntry[]>, keep: (e: GuideEntry) => boolean): GuideSection[] {
+  const make = (key: string, title: string, check: boolean): GuideSection | null => {
+    const entries = (extra[key] || []).filter(keep).map((e) => ({ id: e.id, text: e.name ? `${e.name}: ${e.text || ''}`.replace(/: $/, '') : e.text || '' })).filter((e) => e.text);
+    return entries.length ? { title, check, entries } : null;
+  };
+  return [make('DEADLINE', 'Deadlines', false), make('MISSABLE', 'Don\'t miss', true), make('LINK', 'Social links', true), make('ACTIVITY', 'Worth doing', false)].filter(Boolean) as GuideSection[];
+}
 
 /** Research an area. The reply is one detail per line, so Google's grounding data can be matched to each detail. */
-async function research(area: { name: string; story: string }): Promise<Parsed> {
+async function research(area: { name: string; story: string; group?: string }): Promise<Parsed> {
   const { text, response } = await grounded(
-    `Research the area "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}.${visitNote(area.name)} ${RULES}\n` +
+    `Research the ${pageKind()} "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}.${visitNote(area.name)} ${RULES}\n` +
       'Reply with one detail per line, using exactly these formats (leave out anything you didn\'t find):\n' +
-      'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
-      'ITEM: item name | exactly where in this area | missable: yes or no\n' +
-      'SECRET: hidden thing and how to find it\n' +
-      'ENEMY: enemy name | weakness (empty if it has none or the game has no weaknesses) | what can be stolen, or a notable drop (only if the game has stealing or drops worth noting; otherwise empty) | short note\n' +
-      'SHOP: shop or NPC name | what they sell or offer\n' +
-      'TIP: short practical tip',
+      detailFormats(),
     `research ${area.name}`,
   );
   return parseDetails(text, realSourcesByLine(text, response));
@@ -195,10 +261,10 @@ async function research(area: { name: string; story: string }): Promise<Parsed> 
 
 /** Read the one-detail-per-line reply. `real` = the websites backing each line (empty lists in quick mode). */
 function parseDetails(text: string, real: Set<string>[]): Parsed {
-  const out: Parsed = { overview: null, items: [], secrets: [], enemies: [], shops: [], tips: [] };
+  const out: Parsed = { overview: null, items: [], secrets: [], enemies: [], shops: [], tips: [], extra: {} };
   let n = 0;
   text.split('\n').forEach((line, k) => {
-    const m = line.match(/^\s*[-*]?\s*(OVERVIEW|ITEM|SECRET|ENEMY|SHOP|TIP):\s*(.+)$/i);
+    const m = line.match(/^\s*[-*]?\s*(OVERVIEW|ITEM|SECRET|ENEMY|SHOP|TIP|DEADLINE|MISSABLE|LINK|ACTIVITY):\s*(.+)$/i);
     if (!m) return;
     const f = m[2].split('|').map((x) => x.trim());
     const sources = [...(real[k] || [])];
@@ -210,6 +276,8 @@ function parseDetails(text: string, real: Set<string>[]): Parsed {
       case 'ENEMY': out.enemies.push({ id, name: f[0], weakness: f[1] || '', steal: f[2] || '', notes: f[3] || '', sources }); break;
       case 'SHOP': out.shops.push({ id, name: f[0], sells: f[1] || '', sources }); break;
       case 'TIP': out.tips.push({ id, text: m[2].trim(), sources }); break;
+      case 'LINK': (out.extra.LINK ||= []).push({ id, name: f[0], text: f.slice(1).join(' | '), sources }); break;
+      default: (out.extra[m[1].toUpperCase()] ||= []).push({ id, text: m[2].trim(), sources });
     }
   });
   return out;
@@ -249,6 +317,51 @@ async function factCheck(areaName: string, claims: Claim[]): Promise<Set<string>
 /** Two-source rule on real search data: at least two different websites back this detail. */
 const twoSources = (e: GuideEntry) => (e.sources || []).length >= 2;
 
+// ---- guide structure ----
+
+/** The layout for this run: --layout if given, else the game's saved layout, else an automatic pick. */
+async function pickLayout(info: any): Promise<Layout> {
+  if (isLayout(layoutArg)) return layoutArg;
+  if (isLayout(info.layout)) return info.layout;
+  try {
+    const answer = await plain(
+      `How should a player's guide for the video game "${game}" be organized? Reply with one word:\n` +
+        'area: the player moves from place to place (towns and dungeons in story order), like most RPGs and adventures\n' +
+        'regions: an open world, best split by region and major location\n' +
+        'chapters: the story is split between several characters\' separate chapters, played in any order\n' +
+        'calendar: the game runs on an in-game calendar with deadlines and free days',
+      'structure',
+      LITE_MODEL,
+    );
+    const word = (answer.toLowerCase().match(/\b(area|regions|chapters|calendar)\b/) || [])[1];
+    if (isLayout(word)) {
+      console.log(`  structure: ${word}`);
+      return word;
+    }
+  } catch {
+    /* fall back below */
+  }
+  return 'area';
+}
+
+/** Save the page list and layout; after --restructure, hold back old pages that aren't in the new list. */
+async function finishGuide(guideRef: any, order: { slug: string }[], previous: { slug: string; name: string }[]) {
+  await guideRef.set({ game, title: `${game} guide`, areas: order, layout, updatedAt: Date.now() }, { merge: true });
+  if (!restructure) return;
+  const keep = new Set(order.map((o) => o.slug));
+  let retired = 0;
+  for (const p of previous) {
+    if (keep.has(p.slug)) continue;
+    const ref = guideRef.collection('areas').doc(p.slug);
+    const doc = await ref.get();
+    if (doc.exists && doc.data()?.status !== 'held') {
+      await ref.update({ status: 'held', heldReason: 'replaced by the new guide structure', updatedAt: Date.now() });
+      retired++;
+    }
+  }
+  console.log(`Restructured to "${layout}": ${retired} old page(s) held back (not deleted).`);
+}
+
 // ---- quick mode: from the AI's own knowledge, no searches ----
 // Minutes and pennies per game. Pages are marked unchecked in the data, never feed the game knowledge base (so live
 // answers only ever use checked facts), and never replace a checked page. A normal run later checks and upgrades them.
@@ -265,9 +378,9 @@ async function plain(prompt: string, label: string, model: string): Promise<stri
   return res?.text || '';
 }
 
-async function quickOutline(existing: { name: string; story: string }[]): Promise<{ name: string; story: string }[]> {
-  const prompt = outlinePrompt("Only list areas you're confident about.", existing);
-  let list: { name: string; story: string }[] = [];
+async function quickOutline(existing: { name: string; story: string }[]): Promise<{ name: string; story: string; group?: string }[]> {
+  const prompt = outlinePrompt("Only list what you're confident about.", existing);
+  let list: { name: string; story: string; group?: string }[] = [];
   try {
     list = parseOutline(await plain(prompt, 'outline', LITE_MODEL));
   } catch (e: any) {
@@ -276,17 +389,12 @@ async function quickOutline(existing: { name: string; story: string }[]): Promis
   return list.length ? list : parseOutline(await plain(prompt, 'outline', MODEL));
 }
 
-async function quickArea(area: { name: string; story: string }): Promise<Parsed> {
+async function quickArea(area: { name: string; story: string; group?: string }): Promise<Parsed> {
   const text = await plain(
-    `Write guide notes for the area "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}, from what you know.${visitNote(area.name)} ` +
+    `Write guide notes for the ${pageKind()} "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}, from what you know.${visitNote(area.name)} ` +
       "Only include details you're confident about; leave out anything you're unsure of. Write in your own words. " +
       'Reply with one detail per line, using exactly these formats:\n' +
-      'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
-      'ITEM: item name | exactly where in this area | missable: yes or no\n' +
-      'SECRET: hidden thing and how to find it\n' +
-      'ENEMY: enemy name | weakness (empty if it has none or the game has no weaknesses) | what can be stolen, or a notable drop (only if the game has stealing or drops worth noting; otherwise empty) | short note\n' +
-      'SHOP: shop or NPC name | what they sell or offer\n' +
-      'TIP: short practical tip',
+      detailFormats(),
     `write ${area.name}`,
     MODEL,
   );
@@ -298,10 +406,14 @@ async function mainQuick() {
   const key = gameKey(game!);
   const guideRef = db().collection('guides').doc(key);
   const info = (await guideRef.get()).data() || {};
-  const order: { slug: string; name: string; story: string }[] = [...(info.areas || [])];
-  const aliases: Record<string, string> = info.aliases || {};
+  layout = await pickLayout(info);
+  const previous: { slug: string; name: string; story: string; group?: string }[] = [...(info.areas || [])];
+  // --restructure starts a fresh page list in the new layout; old pages not in it are held back at the end.
+  const order: { slug: string; name: string; story: string; group?: string }[] = restructure ? [] : [...previous];
+  const aliases: Record<string, string> = restructure ? {} : info.aliases || {};
   // The AI sees the existing pages (so it reuses their names); a suffix on a place with no earlier visit is dropped.
-  const areas = oneArea || normalizeVisits(await quickOutline(order), order, aliases);
+  const listed = oneArea || (await quickOutline(order));
+  const areas = placeBased() ? normalizeVisits(listed, order, aliases) : listed;
   if (!areas.length) throw new Error('could not work out the list of areas');
   console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
   let built = 0, held = 0, skipped = 0;
@@ -309,10 +421,10 @@ async function mainQuick() {
     // Same page as an existing one under a slightly different name (or a merged/renamed page): use that page.
     const { slug: s, name } = resolveArea(found.name, order, aliases);
     const area = { ...found, name };
-    if (!order.some((o) => o.slug === s)) order.push({ slug: s, name: area.name, story: area.story });
+    if (!order.some((o) => o.slug === s)) order.push({ slug: s, name: area.name, story: area.story, ...(area.group ? { group: area.group } : {}) });
     const ref = guideRef.collection('areas').doc(s);
     const existing = await ref.get();
-    if (existing.exists && (existing.data()?.verified !== false || !redo)) {
+    if (existing.exists && (existing.data()?.verified !== false || !(redo || restructure))) {
       skipped++;
       console.log(`- ${area.name}: already has a page${existing.data()?.verified !== false ? ' (checked pages are never replaced by quick ones)' : ' (use --redo to rewrite)'}`);
       continue;
@@ -320,7 +432,8 @@ async function mainQuick() {
     console.log(`- ${area.name}`);
     try {
       const d = await quickArea(area);
-      const kept = d.items.length + d.secrets.length + d.enemies.length + d.shops.length;
+      const sections = sectionsFrom(d.extra, () => true);
+      const kept = d.items.length + d.secrets.length + d.enemies.length + d.shops.length + sections.reduce((n, x) => n + x.entries.length, 0);
       const heldReason = kept < 3 ? 'too few details' : '';
       const page: GuideArea = {
         name: area.name,
@@ -330,6 +443,8 @@ async function mainQuick() {
         overview: d.overview?.text || '',
         items: d.items, secrets: d.secrets, enemies: d.enemies, shops: d.shops,
         tips: d.tips.map((t) => t.text!).slice(0, 6),
+        ...(sections.length ? { sections } : {}),
+        ...(area.group ? { group: area.group } : {}),
         sources: [],
         status: heldReason ? 'held' : autoPublish ? 'published' : 'draft',
         verified: false,
@@ -345,7 +460,7 @@ async function mainQuick() {
       console.warn(`  failed: ${e?.message}`);
     }
   }
-  await guideRef.set({ game, title: `${game} guide`, areas: order, updatedAt: Date.now() }, { merge: true });
+  await finishGuide(guideRef, order, previous);
   console.log(`Done: ${built} quick page(s) ${autoPublish ? 'published' : 'saved as drafts'}, ${held} held back, ${skipped} skipped, estimated AI cost ≈ $${dollars.toFixed(2)}${unpriced ? ` (plus ${unpriced} call(s) on a model without a known rate)` : ''}. No searches used, nothing added to the knowledge base.`);
   console.log('Next: npx tsx scripts/guides/publish.ts   (then upload Marketing_Website_Files to Netlify)');
   setTimeout(() => process.exit(0), 3000);
@@ -358,10 +473,13 @@ async function main() {
   const guideRef = db().collection('guides').doc(key);
   await getGameFacts(game); // load what the knowledge base already knows, so new facts add confirmations
   const info = (await guideRef.get()).data() || {};
-  const order: { slug: string; name: string; story: string }[] = [...(info.areas || [])];
-  const aliases: Record<string, string> = info.aliases || {};
+  layout = await pickLayout(info);
+  const previous: { slug: string; name: string; story: string; group?: string }[] = [...(info.areas || [])];
+  const order: { slug: string; name: string; story: string; group?: string }[] = restructure ? [] : [...previous];
+  const aliases: Record<string, string> = restructure ? {} : info.aliases || {};
   // The AI sees the existing pages (so it reuses their names); a suffix on a place with no earlier visit is dropped.
-  const areas = oneArea || normalizeVisits(await outline(order), order, aliases);
+  const listed = oneArea || (await outline(order));
+  const areas = placeBased() ? normalizeVisits(listed, order, aliases) : listed;
   if (!areas.length) throw new Error('could not work out the list of areas');
   console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
   let built = 0, held = 0;
@@ -371,9 +489,9 @@ async function main() {
     // ("Narshe (World of Ruin)") has its own name, so it gets its own page instead of being skipped as already built.
     const { slug: s, name } = resolveArea(found.name, order, aliases);
     const area = { ...found, name };
-    if (!order.some((o) => o.slug === s)) order.push({ slug: s, name: area.name, story: area.story });
+    if (!order.some((o) => o.slug === s)) order.push({ slug: s, name: area.name, story: area.story, ...(area.group ? { group: area.group } : {}) });
     const ref = guideRef.collection('areas').doc(s);
-    if (!redo && (await ref.get()).exists) {
+    if (!(redo || restructure) && (await ref.get()).exists) {
       console.log(`- ${area.name}: already built (use --redo to rebuild)`);
       continue;
     }
@@ -391,7 +509,7 @@ async function main() {
       const toCheck = claimsFor(area.name, {
         overview: null,
         items: data.items.filter(oneSource), secrets: data.secrets.filter(oneSource),
-        enemies: data.enemies.filter(oneSource), shops: data.shops.filter(oneSource), tips: [],
+        enemies: data.enemies.filter(oneSource), shops: data.shops.filter(oneSource), tips: [], extra: {},
       });
       const supported = toCheck.length ? await factCheck(area.name, toCheck) : new Set<string>();
       const keep = (e: GuideEntry) => twoSources(e) || (oneSource(e) && supported.has(e.id));
@@ -399,7 +517,8 @@ async function main() {
       // Overview and tips are general advice: one real source is enough.
       const tips = data.tips.filter((t) => (t.sources || []).length >= 1).map((t) => t.text!).slice(0, 6);
       const overviewOk = data.overview && (data.overview.sources || []).length >= 1;
-      const kept = items.length + secrets.length + enemies.length + shops.length;
+      const sections = sectionsFrom(data.extra, (e) => (e.sources || []).length >= 1);
+      const kept = items.length + secrets.length + enemies.length + shops.length + sections.reduce((n, x) => n + x.entries.length, 0);
       const singleSource = all.filter((e) => oneSource(e) && !supported.has(e.id)).length;
       const unsourced = all.filter((e) => !(e.sources || []).length).length;
       const claims = toCheck;
@@ -413,6 +532,8 @@ async function main() {
         story: area.story,
         overview: overviewOk ? String(data.overview!.text || '') : '',
         items, secrets, enemies, shops, tips,
+        ...(sections.length ? { sections } : {}),
+        ...(area.group ? { group: area.group } : {}),
         sources: usedSources.slice(0, 8),
         status: heldReason ? 'held' : autoPublish ? 'published' : 'draft',
         verified: true,
@@ -456,7 +577,7 @@ async function main() {
       console.warn(`  failed: ${e?.message}`);
     }
   }
-  await guideRef.set({ game, title: `${game} guide`, areas: order, updatedAt: Date.now() }, { merge: true });
+  await finishGuide(guideRef, order, previous);
   console.log(`Done: ${built} page(s) ${autoPublish ? 'published' : 'saved as drafts'}, ${held} held back, ${searches} searches used, estimated AI cost ≈ $${dollars.toFixed(2)}${unpriced ? ` (plus ${unpriced} call(s) on a model without a known rate)` : ''}. Searches are free up to 5,000 a month, then $14 per 1,000.`);
   console.log('Next: npx tsx scripts/guides/publish.ts --drafts   (builds the pages into Marketing_Website_Files so you can look them over)');
   setTimeout(() => process.exit(0), 4000); // let the last database writes finish

@@ -39,8 +39,13 @@ async function gameAreas(key: string) {
     const order: { slug: string; name: string; story?: string }[] = Array.isArray(info.areas) ? info.areas : [];
     const areas = order
       .filter((o) => published.has(o.slug))
-      .map((o) => ({ slug: o.slug, name: String(published.get(o.slug)?.name || o.name), story: String(published.get(o.slug)?.story || o.story || '') }));
-    return areas.length ? { key, game: String(info.game || key), areas } : null;
+      .map((o: any) => ({
+        slug: o.slug,
+        name: String(published.get(o.slug)?.name || o.name),
+        story: String(published.get(o.slug)?.story || o.story || ''),
+        group: String(o.group || published.get(o.slug)?.group || ''),
+      }));
+    return areas.length ? { key, game: String(info.game || key), layout: String(info.layout || 'area'), areas } : null;
   });
 }
 
@@ -113,6 +118,10 @@ export function registerGuidesApi(app: Express): void {
           key, slug, name: a.name, story: a.story || '', overview: a.overview || '',
           items: clean(a.items), secrets: clean(a.secrets), enemies: clean(a.enemies), shops: clean(a.shops),
           tips: Array.isArray(a.tips) ? a.tips : [],
+          // Structure-specific sections (a calendar page's deadlines, missable events, social links, activities).
+          sections: Array.isArray(a.sections)
+            ? a.sections.map((x: any) => ({ title: String(x.title || ''), check: !!x.check, entries: (x.entries || []).map((e: any) => ({ id: String(e.id), text: String(e.text || '') })) }))
+            : [],
         };
       });
       if (!page) return res.status(404).json({ error: 'This page isn\'t available.' });

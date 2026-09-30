@@ -167,6 +167,10 @@ export type GuideArea = {
   tips: string[];
   sources: string[];
   status: 'draft' | 'published' | 'held';
+  /** How the game's guide is organized, and which group this page is in (a character, "Calendar", "Reference"). */
+  group?: string;
+  /** Extra sections some structures use (a calendar page's deadlines, missable events, social links, activities). */
+  sections?: GuideSection[];
   /** false = a quick page, written from the AI's own knowledge and not yet fact-checked. Missing = checked (older pages). */
   verified?: boolean;
   checks: { claims: number; supported: number; rejected: number; singleSource: number };
@@ -186,3 +190,17 @@ export function cleanEntry<T extends Record<string, any>>(e: T): T {
   for (const k of ['weakness', 'steal', 'notes', 'where', 'sells']) if (k in out && blankish(out[k])) delete out[k];
   return out as T;
 }
+
+/**
+ * How a game's guide is organized. Different games are played differently, so their guides are split differently:
+ *   area      place to place (towns, dungeons): most RPGs and adventures
+ *   regions   open worlds: regions, cities and major locations
+ *   chapters  character-based stories (Octopath Traveler): a page per character chapter, grouped by character,
+ *             plus short reference pages for shared places
+ *   calendar  calendar-driven games (Persona): a page per month or deadline stretch, plus reference pages
+ */
+export const LAYOUTS = ['area', 'regions', 'chapters', 'calendar'] as const;
+export type Layout = (typeof LAYOUTS)[number];
+export const isLayout = (v: unknown): v is Layout => (LAYOUTS as readonly string[]).includes(String(v));
+
+export type GuideSection = { title: string; check: boolean; entries: { id: string; text: string }[] };
