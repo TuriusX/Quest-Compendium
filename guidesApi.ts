@@ -44,6 +44,12 @@ async function gameAreas(key: string) {
         name: String(published.get(o.slug)?.name || o.name),
         story: String(published.get(o.slug)?.story || o.story || ''),
         group: String(o.group || published.get(o.slug)?.group || ''),
+        // How many checklist entries the page has (items, secrets and checklist sections), for progress like "3/8".
+        total: (() => {
+          const d: any = published.get(o.slug) || {};
+          const sec = (Array.isArray(d.sections) ? d.sections : []).filter((x: any) => x?.check).reduce((n: number, x: any) => n + (x.entries || []).length, 0);
+          return (d.items || []).length + (d.secrets || []).length + sec;
+        })(),
       }));
     return areas.length ? { key, game: String(info.game || key), layout: String(info.layout || 'area'), areas } : null;
   });
