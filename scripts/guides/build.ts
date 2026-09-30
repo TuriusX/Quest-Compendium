@@ -8,6 +8,10 @@
  *                             --area "Kefka's Tower: Final Battle | the summit gauntlet against Kefka"
  *            --layout area|regions|chapters|calendar   how the guide is organized (see common.ts). Normally left out:
  *                             a new guide picks one automatically, and later runs reuse the game's saved layout.
+ *            --upgrade        check a game's existing quick pages the careful way, one by one (no new area list).
+ *                             A page that passes is replaced by the checked version and its details go into the
+ *                             knowledge base; one that doesn't pass keeps its quick page (confirmed details are still
+ *                             saved). Stops at the search cap; run again to continue where it left off.
  *            --restructure    rebuild the game's guide with a new layout: the new pages replace the old list, and
  *                             old pages not in it are held back (never deleted)
  *            --quick          fast and cheap: written from the AI's own knowledge with no searches. Pages are marked
@@ -36,6 +40,7 @@ const redo = arg('redo') === 'true';
 const quick = arg('quick') === 'true';
 const layoutArg = arg('layout');
 const restructure = arg('restructure') === 'true';
+const upgrade = arg('upgrade') === 'true';
 /** The guide's structure for this run (set in main from --layout, the saved layout, or an automatic pick). */
 let layout: Layout = 'area';
 const placeBased = () => layout === 'area' || layout === 'regions';
@@ -484,8 +489,24 @@ async function main() {
   const order: { slug: string; name: string; story: string; group?: string }[] = restructure ? [] : [...previous];
   const aliases: Record<string, string> = restructure ? {} : info.aliases || {};
   // The AI sees the existing pages (so it reuses their names); a suffix on a place with no earlier visit is dropped.
-  const listed = oneArea || (await outline(order));
-  const areas = placeBased() ? normalizeVisits(listed, order, aliases) : listed;
+  // --upgrade: no area list step; the game's published quick pages, in guide order.
+  let areas: { name: string; story: string; group?: string }[];
+  if (upgrade) {
+    areas = [];
+    for (const o of order) {
+      const d = (await guideRef.collection('areas').doc(o.slug).get()).data();
+      if (d && d.verified === false && d.status === 'published') areas.push({ name: d.name || o.name, story: d.story || o.story || '', ...(d.group || o.group ? { group: d.group || o.group } : {}) });
+    }
+    if (!areas.length) {
+      console.log('Nothing to upgrade: every published page for this game is already checked.');
+      setTimeout(() => process.exit(0), 1000);
+      return;
+    }
+    console.log(`Upgrading ${areas.length} quick page(s) to checked pages (search cap ${maxSearches}).`);
+  } else {
+    const listed = oneArea || (await outline(order));
+    areas = placeBased() ? normalizeVisits(listed, order, aliases) : listed;
+  }
   if (!areas.length) throw new Error('could not work out the list of areas');
   console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
   let built = 0, held = 0;
@@ -498,7 +519,7 @@ async function main() {
     if (!order.some((o) => o.slug === s)) order.push({ slug: s, name: area.name, story: area.story, ...(area.group ? { group: area.group } : {}) });
     const ref = guideRef.collection('areas').doc(s);
     const before = await ref.get();
-    if (!(redo || restructure) && before.exists && !retired(before)) {
+    if (!(redo || restructure || upgrade) && before.exists && !retired(before)) {
       console.log(`- ${area.name}: already built (use --redo to rebuild)`);
       continue;
     }
@@ -542,18 +563,25 @@ async function main() {
         ...(sections.length ? { sections } : {}),
         ...(area.group ? { group: area.group } : {}),
         sources: usedSources.slice(0, 8),
-        status: heldReason ? 'held' : autoPublish ? 'published' : 'draft',
+        status: heldReason ? 'held' : autoPublish || upgrade ? 'published' : 'draft',
         verified: true,
         checks: { claims: claims.length, supported: supported.size, rejected, singleSource },
         ...(heldReason ? { heldReason } : {}),
         updatedAt: Date.now(),
       };
-      await ref.set(page);
-      if (heldReason) held++;
-      else built++;
-      console.log(`  ${page.status}: ${kept} details kept, ${unsourced} dropped (no real source), ${toCheck.length} fact-checked (${rejected} failed)${heldReason ? ` (${heldReason})` : ''}`);
-      // Only details that passed both checks go into the game knowledge base, filed under this area.
-      if (!heldReason) {
+      // Upgrading: a page that doesn't pass keeps its quick version on the site (nothing disappears).
+      if (upgrade && heldReason) {
+        held++;
+        console.log(`  kept the quick page: ${kept} details confirmed, not enough for a checked page (${heldReason})`);
+      } else {
+        await ref.set(page);
+        if (heldReason) held++;
+        else built++;
+        console.log(`  ${page.status}: ${kept} details kept, ${unsourced} dropped (no real source), ${toCheck.length} fact-checked (${rejected} failed)${heldReason ? ` (${heldReason})` : ''}`);
+      }
+      // Only details that passed the checks go into the game knowledge base, filed under this area (when upgrading,
+      // confirmed details are saved even if the page itself stays quick).
+      if (!heldReason || upgrade) {
         const facts = [
           ...items.map((e) => ({ subject: e.name!, kind: e.missable ? 'missable' : 'item', fact: e.where! })),
           ...secrets.map((e) => ({ subject: (e.text || '').split(/[.:]/)[0].slice(0, 60), kind: 'secret', fact: e.text! })),
@@ -575,7 +603,13 @@ async function main() {
         break;
       }
       if (String(e?.message).startsWith('no-search')) {
-        // The model wouldn't search: nothing from memory is allowed through, so the page is held back.
+        // The model wouldn't search: nothing from memory is allowed through, so the page is held back (when upgrading,
+        // the quick page simply stays as it is).
+        if (upgrade) {
+          held++;
+          console.log('  kept the quick page: the check ran no searches');
+          continue;
+        }
         await ref.set({ name: area.name, slug: s, order: order.findIndex((o) => o.slug === s), story: area.story, overview: '', items: [], secrets: [], enemies: [], shops: [], tips: [], sources: [], status: 'held', heldReason: 'research ran no searches', checks: { claims: 0, supported: 0, rejected: 0, singleSource: 0 }, updatedAt: Date.now() });
         held++;
         console.log('  held: the research ran no searches, so nothing could be verified');
