@@ -20,7 +20,45 @@ const approve = arg('approve');
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean }) {
+type AreaLink = { slug: string; name: string; story?: string; group?: string; total: number };
+
+/** Checklist entries on a page (items, secrets and checklist sections), for progress like "3/8". */
+const totalOf = (a: GuideArea) =>
+  a.items.length + a.secrets.length + (a.sections || []).filter((x) => x.check).reduce((n, x) => n + x.entries.length, 0);
+
+/**
+ * Small script for guide pages: remembers ticked items and the last page per game in the visitor's browser, keeps the
+ * progress counts up to date, and fills in "Continue where you left off". Nothing is sent anywhere.
+ */
+const SCRIPT = `
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'\u2713':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();`;
+
+function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string }) {
   const up = '../'.repeat(opts.depth);
   return `<!doctype html>
 <html lang="en">
@@ -44,80 +82,145 @@ function page(opts: { title: string; description: string; depth: number; canonic
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen"${opts.guide ? ` data-guide="${esc(opts.guide)}"` : ''}${opts.area ? ` data-area="${esc(opts.area)}"` : ''}>
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="${up}index.html" class="flex items-center gap-2 font-bold text-white"><img src="${up}icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="${up}index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="${up}icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="${up}guides/index.html" class="hover:text-white">Guides</a>
         <a href="${up}index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   ${opts.draft ? '<div class="bg-amber-500/15 border-b border-amber-500/30 text-amber-300 text-sm text-center py-2">DRAFT preview: not public yet</div>' : ''}
-  <main class="max-w-4xl mx-auto px-6 py-10">${opts.body}</main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8">${opts.body}</main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>${SCRIPT}</script>
 </body>
 </html>
 `;
 }
 
 const cta = (up: string, game: string) => `
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in ${esc(game)}?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="${up}index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
   </div>`;
 
-function section(title: string, rows: string) {
-  return rows ? `<section class="mt-8"><h2 class="text-xl font-bold text-white mb-3">${esc(title)}</h2>${rows}</section>` : '';
-}
-const checklist = (list: GuideEntry[], line: (e: GuideEntry) => string) =>
-  list.length
-    ? `<ul class="space-y-2">${list.map((e) => `<li class="flex gap-3 items-start"><input type="checkbox" class="qc-check mt-1" aria-label="Got it"><span>${line(e)}</span></li>`).join('')}</ul>`
-    : '';
+const ICON = {
+  items: '<svg class="w-4 h-4 text-[#a87ffb]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9Z"/><path d="M11 3 8 9l4 13 4-13-3-6"/><path d="M2 9h20"/></svg>',
+  secrets: '<svg class="w-4 h-4 text-[#a87ffb]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 15.5A2 2 0 0 0 8.5 14.1l-6.1-1.6a.5.5 0 0 1 0-1l6.1-1.6A2 2 0 0 0 9.9 8.5l1.6-6.1a.5.5 0 0 1 1 0l1.6 6.1a2 2 0 0 0 1.4 1.4l6.1 1.6a.5.5 0 0 1 0 1l-6.1 1.6a2 2 0 0 0-1.4 1.4l-1.6 6.1a.5.5 0 0 1-1 0z"/></svg>',
+  enemies: '<svg class="w-4 h-4 text-[#a87ffb]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><path d="M8 20v2h8v-2"/><path d="M16 20a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20"/></svg>',
+  shops: '<svg class="w-4 h-4 text-[#a87ffb]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
+  tips: '<svg class="w-4 h-4 text-[#a87ffb]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>',
+  list: '<svg class="w-4 h-4 text-[#a87ffb]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>',
+  warn: '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+  caret: '<svg class="qc-caret w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+};
 
-function areaBody(game: string, a: GuideArea, prev?: { slug: string; name: string }, next?: { slug: string; name: string }) {
+const checkRow = (id: string, html: string) =>
+  `<label class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer" data-check="${esc(id)}"><input type="checkbox" aria-label="Got it"><span class="text-sm leading-snug text-zinc-300">${html}</span></label>`;
+
+/** A folding section: the header shows its progress; content stays in the page for search engines. */
+function fold(title: string, icon: string, body: string, opts: { ids?: string[]; open?: boolean } = {}) {
+  if (!body) return '';
+  return `<details class="qc-fold mt-3"${opts.open ? ' open' : ''}>
+    <summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10">${ICON.caret}${icon}<h2 class="flex-1 text-sm sm:text-base font-bold text-white">${esc(title)}</h2>${opts.ids?.length ? `<span class="text-xs text-zinc-500" data-count="${esc(opts.ids.join(','))}">0/${opts.ids.length}</span>` : ''}</summary>
+    <div class="mt-2">${body}</div>
+  </details>`;
+}
+
+/** The area list: the sidebar on area pages and the main list on a game's page. */
+function areaList(gameKey: string, areas: AreaLink[], current: string | null, base: string) {
+  let lastGroup = '';
+  return areas
+    .map((a) => {
+      const head = a.group && a.group !== lastGroup ? `<li class="pt-4 pb-1 px-2 text-[11px] font-bold uppercase tracking-wide text-zinc-500">${esc(a.group)}</li>` : '';
+      lastGroup = a.group || lastGroup;
+      const here = a.slug === current;
+      return `${head}<li><a href="${base}${esc(a.slug)}/index.html" data-area-link="${esc(a.slug)}" data-name="${esc(a.name)}" class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm ${
+        here ? 'bg-[#a87ffb]/15 text-white font-semibold border border-[#a87ffb]/30' : 'text-zinc-300 hover:bg-white/[0.05] hover:text-white border border-transparent'
+      }"><span class="flex-1 min-w-0 truncate">${esc(a.name)}</span><span data-progress="${esc(gameKey)}|${esc(a.slug)}|${a.total}"></span></a></li>`;
+    })
+    .join('');
+}
+
+function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[], prev?: AreaLink, next?: AreaLink) {
   const up = '../../../';
-  const items = checklist(a.items, (e) => `<strong class="text-white">${esc(e.name)}</strong>${e.missable ? ' <span class="text-amber-400 text-xs font-bold">MISSABLE</span>' : ''}: ${esc(e.where)}`);
-  const secrets = checklist(a.secrets, (e) => esc(e.text));
-  // Columns only for what this game actually has (no "Steal" column for a game without stealing).
-  const foes = a.enemies.map(cleanEntry);
-  const hasWeak = foes.some((e) => e.weakness), hasSteal = foes.some((e) => e.steal), hasNotes = foes.some((e) => e.notes);
-  const cell = (v?: string) => `<td class="py-2 pr-4">${esc(v || '')}</td>`;
-  const enemies = foes.length
-    ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-zinc-400"><th class="py-2 pr-4">Enemy</th>${hasWeak ? '<th class="py-2 pr-4">Weakness</th>' : ''}${hasSteal ? '<th class="py-2 pr-4">Steal / drop</th>' : ''}${hasNotes ? '<th class="py-2">Notes</th>' : ''}</tr></thead><tbody>${foes
-        .map((e) => `<tr class="border-t border-white/5"><td class="py-2 pr-4 text-white font-semibold">${esc(e.name)}</td>${hasWeak ? cell(e.weakness) : ''}${hasSteal ? cell(e.steal) : ''}${hasNotes ? cell(e.notes) : ''}</tr>`)
-        .join('')}</tbody></table></div>`
+  const items = a.items.map(cleanEntry);
+  const miss = items.filter((e) => e.missable);
+  const rest = items.filter((e) => !e.missable);
+  const missSec = (a.sections || []).filter((x) => x.check && /miss/i.test(x.title));
+  const otherSec = (a.sections || []).filter((x) => !missSec.includes(x));
+  const itemHtml = (e: GuideEntry) => `<strong class="text-white">${esc(e.name)}</strong>${e.where ? `<span class="text-zinc-400">: ${esc(e.where)}</span>` : ''}`;
+  const missIds = [...miss.map((e) => e.id), ...missSec.flatMap((x) => x.entries.map((e) => e.id))];
+  const dontMiss = missIds.length
+    ? `<section class="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
+        <h2 class="flex items-center gap-2 px-1 pb-1 text-base font-bold text-amber-200">${ICON.warn} Don't miss <span class="text-xs font-normal text-amber-200/70" data-count="${esc(missIds.join(','))}">0/${missIds.length}</span></h2>
+        ${miss.map((e) => checkRow(e.id, itemHtml(e))).join('')}${missSec.flatMap((x) => x.entries.map((e) => checkRow(e.id, esc(e.text)))).join('')}
+      </section>`
     : '';
-  const shops = a.shops.length ? `<ul class="space-y-2">${a.shops.map((e) => `<li><strong class="text-white">${esc(e.name)}</strong>: ${esc(e.sells)}</li>`).join('')}</ul>` : '';
-  const tips = a.tips.length ? `<ul class="list-disc pl-5 space-y-1">${a.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '';
-  const nav = `<div class="mt-10 flex justify-between gap-4 text-sm">${prev ? `<a class="text-[#a87ffb] hover:text-white" href="../${esc(prev.slug)}/index.html">&larr; ${esc(prev.name)}</a>` : '<span></span>'}${next ? `<a class="text-[#a87ffb] hover:text-white" href="../${esc(next.slug)}/index.html">${esc(next.name)} &rarr;</a>` : ''}</div>`;
+  const foes = a.enemies.map(cleanEntry);
+  const chip = (label: string, v?: string) => (v ? `<span class="inline-flex items-center gap-1 rounded-md bg-white/[0.05] px-2 py-0.5 text-xs text-zinc-300"><span class="text-zinc-500">${label}</span> ${esc(v)}</span>` : '');
+  const enemies = foes.length
+    ? `<div class="grid sm:grid-cols-2 gap-2">${foes
+        .map((e) => `<div class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white text-sm">${esc(e.name)}</div><div class="mt-1.5 flex flex-wrap gap-1.5">${chip('Weak to', e.weakness)}${chip('Steal / drop', e.steal)}</div>${e.notes ? `<p class="mt-1.5 text-xs text-zinc-400">${esc(e.notes)}</p>` : ''}</div>`)
+        .join('')}</div>`
+    : '';
+  const shops = a.shops.length ? `<ul class="space-y-1.5 px-3">${a.shops.map(cleanEntry).map((e) => `<li class="text-sm"><strong class="text-white">${esc(e.name)}</strong>${e.sells ? `<span class="text-zinc-400">: ${esc(e.sells)}</span>` : ''}</li>`).join('')}</ul>` : '';
+  const tips = a.tips.length ? `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${a.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '';
+  const navCard = (x: AreaLink | undefined, dir: 'prev' | 'next') =>
+    x
+      ? `<a href="../${esc(x.slug)}/index.html" class="flex-1 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/40 hover:bg-white/[0.06] px-4 py-3 ${dir === 'next' ? 'text-right' : ''}"><div class="text-[11px] uppercase tracking-wide text-zinc-500">${dir === 'prev' ? '&larr; Previous' : 'Next &rarr;'}</div><div class="text-sm font-semibold text-white truncate">${esc(x.name)}</div></a>`
+      : '<span class="flex-1"></span>';
+  const sidebar = `<nav aria-label="${esc(game)} areas" class="qc-scroll">${`<a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>`}<ul class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
+
   return `
-    <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="${up}guides/index.html">Guides</a> / <a class="hover:text-white" href="../index.html">${esc(game)}</a></p>
-    <h1 class="text-3xl font-bold text-white">${esc(a.name)}</h1>
-    <p class="text-zinc-400 mt-1">${esc(game)} guide${a.story ? ` · ${esc(a.story)}` : ''}</p>
-    ${a.overview ? `<p class="mt-6 text-zinc-300 leading-relaxed">${esc(a.overview)}</p>` : ''}
-    ${(a.sections || [])
-      .map((x) =>
-        section(
-          x.title,
-          x.check
-            ? checklist(x.entries as any, (e: any) => esc(e.text))
-            : `<ul class="list-disc pl-5 space-y-1">${x.entries.map((e) => `<li>${esc(e.text)}</li>`).join('')}</ul>`,
-        ),
-      )
-      .join('')}
-    ${section('Items', items)}${section('Secrets', secrets)}${section('Enemies', enemies)}${section('Shops and people', shops)}${section('Tips', tips)}
-    ${cta(up, game)}
-    ${a.sources.length ? `<p class="text-xs text-zinc-500">Sources checked: ${a.sources.map(esc).join(', ')}</p>` : ''}
-    ${nav}`;
+  <div class="lg:grid lg:grid-cols-[16rem_1fr] lg:gap-8">
+    <aside class="hidden lg:block"><div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto qc-scroll pr-1">${sidebar}</div></aside>
+    <article class="min-w-0 max-w-3xl">
+      <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="${up}guides/index.html">Guides</a> / <a class="hover:text-white" href="../index.html">${esc(game)}</a></p>
+      <h1 class="text-3xl font-bold text-white leading-tight">${esc(a.name)}</h1>
+      <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
+        <span>${esc(game)} guide${a.story ? ` · ${esc(a.story)}` : ''}</span>
+        ${a.verified !== false ? '<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; Checked against sources</span>' : ''}
+      </div>
+      <details class="qc-fold lg:hidden mt-4"><summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white">${ICON.caret} All areas in this guide</summary><div class="mt-2 max-h-80 overflow-y-auto qc-scroll">${sidebar}</div></details>
+      ${a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${esc(a.overview)}</p>` : ''}
+      ${dontMiss}
+      ${otherSec
+        .map((x) =>
+          fold(x.title, ICON.list, x.check ? x.entries.map((e) => checkRow(e.id, esc(e.text))).join('') : `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${x.entries.map((e) => `<li>${esc(e.text)}</li>`).join('')}</ul>`, {
+            ids: x.check ? x.entries.map((e) => e.id) : undefined,
+            open: true,
+          }),
+        )
+        .join('')}
+      ${fold('Items', ICON.items, rest.map((e) => checkRow(e.id, itemHtml(e))).join(''), { ids: rest.map((e) => e.id), open: true })}
+      ${fold('Secrets', ICON.secrets, a.secrets.map((e) => checkRow(e.id, esc(e.text))).join(''), { ids: a.secrets.map((e) => e.id), open: true })}
+      ${fold('Enemies', ICON.enemies, enemies)}
+      ${fold('Shops and people', ICON.shops, shops)}
+      ${fold('Tips', ICON.tips, tips, { open: true })}
+      ${prev || next ? `<div class="mt-8 flex gap-3">${navCard(prev, 'prev')}${navCard(next, 'next')}</div>` : ''}
+      ${cta(up, game)}
+      ${a.sources.length ? `<p class="mt-6 text-xs text-zinc-500">Sources checked: ${a.sources.map(esc).join(', ')}</p>` : ''}
+    </article>
+  </div>`;
 }
 
 /**
@@ -193,6 +296,11 @@ async function main() {
     games.push({ key: g.id, game, count: visible.length, published: visible.filter((o) => byslug.get(o.slug)!.status === 'published').length });
     const dir = path.join(OUT, 'guides', g.id);
     fs.mkdirSync(dir, { recursive: true });
+    const groupOf = (o: any) => String(o.group || byslug.get(o.slug)?.group || '');
+    const links: AreaLink[] = visible.map((o: any) => {
+      const a = byslug.get(o.slug)!;
+      return { slug: o.slug, name: a.name, story: a.story, group: groupOf(o) || undefined, total: totalOf(a) };
+    });
     visible.forEach((o, i) => {
       const a = byslug.get(o.slug)!;
       const draft = a.status !== 'published';
@@ -203,23 +311,26 @@ async function main() {
       const description = `${game} ${a.name} guide: ${a.items.length} items${a.secrets.length ? `, ${a.secrets.length} secrets` : ''}${a.enemies.length ? `, enemy weaknesses` : ''}. ${firsts ? `Includes ${firsts}.` : ''}`.slice(0, 158);
       fs.writeFileSync(
         path.join(adir, 'index.html'),
-        page({ title, description, depth: 3, canonical: `${SITE}/guides/${g.id}/${o.slug}/`, body: areaBody(game, a, visible[i - 1], visible[i + 1]), draft }),
+        page({ title, description, depth: 3, canonical: `${SITE}/guides/${g.id}/${o.slug}/`, body: areaBody(game, g.id, a, links, links[i - 1], links[i + 1]), draft, guide: g.id, area: o.slug }),
       );
       if (!draft) sitemap.push(`${SITE}/guides/${g.id}/${o.slug}/`);
     });
-    const row = (o: { slug: string }) => {
-      const a = byslug.get(o.slug)!;
-      return `<li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="${esc(o.slug)}/index.html">${esc(a.name)}</a>${a.status !== 'published' ? ' <span class="text-amber-400 text-xs">DRAFT</span>' : ''}<div class="text-sm text-zinc-500">${esc(a.story)}</div></li>`;
-    };
-    // Chapter and calendar guides group their pages (by character, or calendar vs reference), in order of appearance.
-    const groupOf = (o: any) => String(o.group || byslug.get(o.slug)?.group || '');
-    const groups = [...new Set(visible.map(groupOf))];
-    const list =
-      groups.length > 1 || (groups.length === 1 && groups[0])
-        ? groups
-            .map((g) => `<li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">${esc(g || 'More')}</h2><ul>${visible.filter((o) => groupOf(o) === g).map(row).join('')}</ul></li>`)
-            .join('')
-        : visible.map(row).join('');
+    const checked = visible.filter((o) => byslug.get(o.slug)!.verified !== false).length;
+    const totalChecks = links.reduce((n, l) => n + l.total, 0);
+    const missables = visible.reduce((n, o) => n + byslug.get(o.slug)!.items.filter((e) => e.missable).length, 0);
+    const stat = (v: number | string, label: string) => `<div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">${v}</div><div class="text-xs text-zinc-500">${label}</div></div>`;
+    let lastGroup = '';
+    const rows = links
+      .map((l) => {
+        const head = l.group && l.group !== lastGroup ? `<h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">${esc(l.group)}</h2>` : '';
+        lastGroup = l.group || lastGroup;
+        return `${head}<a href="${esc(l.slug)}/index.html" data-area-link="${esc(l.slug)}" data-name="${esc(l.name)}" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(l.name)}</span>${l.story ? `<span class="block text-sm text-zinc-500 truncate">${esc(l.story)}</span>` : ''}</span>
+          <span data-progress="${esc(g.id)}|${esc(l.slug)}|${l.total}"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a>`;
+      })
+      .join('');
     fs.writeFileSync(
       path.join(dir, 'index.html'),
       page({
@@ -227,7 +338,16 @@ async function main() {
         description: `Area-by-area ${game} guide with item checklists, secrets, missables and enemy weaknesses.`,
         depth: 2,
         canonical: `${SITE}/guides/${g.id}/`,
-        body: `<p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">${esc(game)} guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul>${list}</ul>${cta('../../', game)}`,
+        guide: g.id,
+        body: `<div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">${esc(game)} guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, 'areas')}${stat(totalChecks, 'things to find')}${stat(missables, 'missables flagged')}${checked ? stat(checked === links.length ? 'All' : checked, 'pages checked against sources') : ''}</div>
+          <a hidden data-continue="${esc(g.id)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6">${rows}</div>
+          ${cta('../../', game)}
+        </div>`,
         draft: visible.some((o) => byslug.get(o.slug)!.status !== 'published'),
       }),
     );
@@ -242,9 +362,16 @@ async function main() {
       description: 'Game guides with item checklists, secrets, missables and enemy weaknesses, area by area.',
       depth: 1,
       canonical: `${SITE}/guides/`,
-      body: `<h1 class="text-3xl font-bold text-white">Game guides</h1><p class="text-zinc-400 mt-2 mb-6">Area-by-area guides with checklists, secrets and enemy weaknesses.</p>${
+      body: `<h1 class="text-3xl font-bold text-white">Game guides</h1><p class="text-zinc-400 mt-2 mb-6 max-w-2xl">Area-by-area checklists of items, secrets and missables, plus enemy weaknesses, for ${games.length} games.</p>${
         games.length
-          ? `<ul>${games.map((g) => `<li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="${esc(g.key)}/index.html">${esc(g.game)}</a> <span class="text-sm text-zinc-500">${g.count} area${g.count === 1 ? '' : 's'}</span></li>`).join('')}</ul>`
+          ? `<div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">${games
+              .slice()
+              .sort((x, y) => x.game.localeCompare(y.game))
+              .map(
+                (g) =>
+                  `<a href="${esc(g.key)}/index.html" class="block rounded-2xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50 hover:bg-white/[0.06] p-5"><div class="font-bold text-white leading-snug">${esc(g.game)}</div><div class="mt-1 text-sm text-zinc-400">${g.count} area${g.count === 1 ? '' : 's'}</div></a>`,
+              )
+              .join('')}</div>`
           : '<p class="text-zinc-500">The first guides are on their way.</p>'
       }`,
     }),
