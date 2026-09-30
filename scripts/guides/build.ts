@@ -151,13 +151,15 @@ const outlinePrompt = (extra: string, existing: { name: string; story: string }[
       'story chapter, named like "Olberic, Chapter 1", in a sensible play order. Also add a short reference page for each ' +
       'main town or region the characters share, named by the place. ' +
       (existing.length ? `The guide already has these pages; reuse a name exactly for the same page:\n${existing.map((e) => `- ${e.name}`).join('\n')}\n` : '') +
-      `${extra} Reply with one line per page, exactly: AREA: page name | a few words on what happens | the character's name for a chapter page, or Places for a place page`
+      `${extra} Reply with one line per page, exactly: AREA: page name | a few words on what happens | the character's name for a chapter page, or Places for a place page. ` +
+      'Every line starts with the word AREA: itself, never a region or other label.'
     : layout === 'calendar'
       ? `List the guide pages for ${part} of the video game "${game}", up to ${maxAreas} pages. Most pages are stretches of the ` +
         'in-game calendar, usually one month or the period up to a deadline, named like "April" or "May: Kamoshida\'s Palace", ' +
         'in calendar order. Also add a few reference pages: one per dungeon, and one for social links or confidants, named by topic. ' +
         (existing.length ? `The guide already has these pages; reuse a name exactly for the same page:\n${existing.map((e) => `- ${e.name}`).join('\n')}\n` : '') +
-        `${extra} Reply with one line per page, exactly: AREA: page name | a few words on what happens | Calendar for a calendar page, or Reference for a reference page`
+        `${extra} Reply with one line per page, exactly: AREA: page name | a few words on what happens | Calendar for a calendar page, or Reference for a reference page. ` +
+        'Every line starts with the word AREA: itself, never a month or other label.'
       : placeOutline(extra, existing);
 
 const placeOutline = (extra: string, existing: { name: string; story: string }[]) =>
@@ -344,6 +346,10 @@ async function pickLayout(info: any): Promise<Layout> {
   return 'area';
 }
 
+/** Why an old page was held back by --restructure. A later part that lists the page again rebuilds it. */
+const RETIRED = 'replaced by the new guide structure';
+const retired = (doc: any) => doc.exists && doc.data()?.status === 'held' && doc.data()?.heldReason === RETIRED;
+
 /** Save the page list and layout; after --restructure, hold back old pages that aren't in the new list. */
 async function finishGuide(guideRef: any, order: { slug: string }[], previous: { slug: string; name: string }[]) {
   await guideRef.set({ game, title: `${game} guide`, areas: order, layout, updatedAt: Date.now() }, { merge: true });
@@ -355,7 +361,7 @@ async function finishGuide(guideRef: any, order: { slug: string }[], previous: {
     const ref = guideRef.collection('areas').doc(p.slug);
     const doc = await ref.get();
     if (doc.exists && doc.data()?.status !== 'held') {
-      await ref.update({ status: 'held', heldReason: 'replaced by the new guide structure', updatedAt: Date.now() });
+      await ref.update({ status: 'held', heldReason: RETIRED, updatedAt: Date.now() });
       retired++;
     }
   }
@@ -424,7 +430,7 @@ async function mainQuick() {
     if (!order.some((o) => o.slug === s)) order.push({ slug: s, name: area.name, story: area.story, ...(area.group ? { group: area.group } : {}) });
     const ref = guideRef.collection('areas').doc(s);
     const existing = await ref.get();
-    if (existing.exists && (existing.data()?.verified !== false || !(redo || restructure))) {
+    if (existing.exists && (existing.data()?.verified !== false || !(redo || restructure || retired(existing)))) {
       skipped++;
       console.log(`- ${area.name}: already has a page${existing.data()?.verified !== false ? ' (checked pages are never replaced by quick ones)' : ' (use --redo to rewrite)'}`);
       continue;
@@ -491,7 +497,8 @@ async function main() {
     const area = { ...found, name };
     if (!order.some((o) => o.slug === s)) order.push({ slug: s, name: area.name, story: area.story, ...(area.group ? { group: area.group } : {}) });
     const ref = guideRef.collection('areas').doc(s);
-    if (!(redo || restructure) && (await ref.get()).exists) {
+    const before = await ref.get();
+    if (!(redo || restructure) && before.exists && !retired(before)) {
       console.log(`- ${area.name}: already built (use --redo to rebuild)`);
       continue;
     }
