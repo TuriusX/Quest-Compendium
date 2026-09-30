@@ -41,6 +41,7 @@ import { useT } from '../i18n';
 import { QuestLogo } from './QuestLogo';
 import { PlaceBar } from './PlaceBar';
 import { KnownHere } from './KnownHere';
+import { QcGuidesView } from './QcGuidesView';
 import { GlainIcon } from './GlainIcon';
 
 /** Quick follow-ups offered under the latest answer (sent as a normal question, in the user's language). */
@@ -98,6 +99,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const t = useT();
   const [inputQuestion, setInputQuestion] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  // Ask (the conversation) or Guide (the game's guide, open at where you are). The question box works in both; asking
+  // switches back to the answer. The guide stays loaded once opened, so switching back and forth keeps your place.
+  const [mode, setModeState] = useState<'ask' | 'guide'>(() => {
+    try {
+      return localStorage.getItem('qc-main-mode') === 'guide' ? 'guide' : 'ask';
+    } catch {
+      return 'ask';
+    }
+  });
+  const [guideLoaded, setGuideLoaded] = useState(mode === 'guide');
+  const setMode = (m: 'ask' | 'guide') => {
+    setModeState(m);
+    if (m === 'guide') setGuideLoaded(true);
+    try {
+      localStorage.setItem('qc-main-mode', m);
+    } catch {}
+  };
+  // Ctrl+G switches between Ask and Guide.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        setMode(mode === 'guide' ? 'ask' : 'guide');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mode]);
   const [preferredModel, setPreferredModel] = useState<'pro' | 'flash'>('pro');
   const attachedImageRef = useRef<string | null>(null);
 
@@ -425,6 +454,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const handleSubmit = async (e?: React.FormEvent, overrideText?: string, overrideImage?: string) => {
     if (e) e.preventDefault();
     if (isLoading) return;
+    if (mode === 'guide') setMode('ask'); // show the answer
 
     // In electron, we auto-capture if no image is attached
     const isElectron = !!(typeof window !== 'undefined' && (window as any).electronAPI);
@@ -816,11 +846,44 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               {[activeGame?.name || activeTab.activeSteamGame?.name, t('chat.personaLabel', { name: t(`chat.persona.${aiMode}`) })].filter(Boolean).join(' · ')}
             </span>
           </div>
-          {questionCount > 0 && (
-            <span className="text-[10px] font-mono uppercase text-zinc-500 flex-shrink-0">
-              {t(questionCount === 1 ? 'chat.q1' : 'chat.qN', { n: questionCount })}
-            </span>
-          )}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {mode === 'ask' && questionCount > 0 && (
+              <span className="hidden sm:inline text-[10px] font-mono uppercase text-zinc-500">
+                {t(questionCount === 1 ? 'chat.q1' : 'chat.qN', { n: questionCount })}
+              </span>
+            )}
+            {/* Ask | Guide */}
+            <div role="tablist" aria-label={t('main.modeLabel')} className="flex items-center p-0.5 rounded-lg bg-black/40 border border-white/10" title={t('main.modeHint')}>
+              {(['ask', 'guide'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === m}
+                  onClick={() => setMode(m)}
+                  className={`h-7 px-3 rounded-md text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    mode === m ? 'bg-[var(--accent-dim)] text-white border border-[var(--accent-border)]' : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
+                  }`}
+                >
+                  {m === 'ask' ? <QuestLogo size={16} compact /> : <BookOpen className="w-3.5 h-3.5 text-[var(--accent-color)]" />}
+                  {t(m === 'ask' ? 'main.ask' : 'main.guide')}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab && guideLoaded && (
+        <div className={mode === 'guide' ? 'flex-1 flex flex-col min-h-0' : 'hidden'}>
+          <QcGuidesView
+            gameName={activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name}
+            place={activeTab.place?.name || undefined}
+            onAsk={(q) => {
+              setMode('ask');
+              handleSubmit(undefined, q);
+            }}
+          />
         </div>
       )}
 
@@ -828,7 +891,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       <div 
         ref={chatContainerRef}
         data-qc-scroll
-        className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6"
+        className={`flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 ${activeTab && mode === 'guide' ? 'hidden' : ''}`}
       >
         {(!activeTab?.messages || activeTab.messages.length === 0) ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-4 sm:p-8 max-w-2xl mx-auto select-none my-auto">
@@ -1233,12 +1296,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       </div>
 
       {/* What the Compendium already knows about the confirmed place (free, from the game knowledge base) */}
-      <KnownHere
-        game={activeTab.activeSteamGame?.name || activeTab.name}
-        place={activeTab.place?.name || undefined}
-        story={activeTab.place?.storyConfirmed ? activeTab.place.story : undefined}
-        refreshKey={activeTab.messages.length}
-      />
+      {mode === 'ask' && (
+        <KnownHere
+          game={activeTab.activeSteamGame?.name || activeTab.name}
+          place={activeTab.place?.name || undefined}
+          story={activeTab.place?.storyConfirmed ? activeTab.place.story : undefined}
+          refreshKey={activeTab.messages.length}
+          onOpenGuide={() => setMode('guide')}
+        />
+      )}
 
       {/* Screenshot Upload / Attached Thumbnail Preview Bar */}
       {attachedImage && (

@@ -22,17 +22,19 @@ const KIND_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
  * "nothing yet" until something is learned); open it to see the list. Refreshes when the place changes and after
  * each answer (answers can teach it new facts).
  */
-export function KnownHere({ game, place, story, refreshKey }: { game?: string; place?: string; story?: string; refreshKey: number }) {
+export function KnownHere({ game, place, story, refreshKey, onOpenGuide }: { game?: string; place?: string; story?: string; refreshKey: number; onOpenGuide?: () => void }) {
   const t = useT();
   const [facts, setFacts] = useState<KnownFact[]>([]);
   // The guide page for this place (if the game has a guide), shown as its own list below the verified facts.
   const [guide, setGuide] = useState<{ kind: string; subject: string; fact: string }[]>([]);
+  const [guideName, setGuideName] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (!game || !place) {
       setFacts([]);
       setGuide([]);
+      setGuideName(null);
       return;
     }
     let cancelled = false;
@@ -50,6 +52,7 @@ export function KnownHere({ game, place, story, refreshKey }: { game?: string; p
         if (!cancelled) {
           setFacts(Array.isArray(data.facts) ? data.facts : []);
           setGuide(Array.isArray(data.guide) ? data.guide : []);
+          setGuideName(typeof data.guideName === 'string' ? data.guideName : null);
         }
       } catch {
         /* the panel just stays as it was */
@@ -66,11 +69,12 @@ export function KnownHere({ game, place, story, refreshKey }: { game?: string; p
 
   return (
     <div className="px-3 sm:px-4 pt-2 bg-[#0a0b10]/90 border-t border-white/[0.08]">
+      <div className="flex items-center gap-1.5">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="w-full flex items-center gap-2 px-3 h-8 rounded-lg bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 text-[12px] text-zinc-300 transition-colors cursor-pointer"
+        className="flex-1 min-w-0 flex items-center gap-2 px-3 h-8 rounded-lg bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 text-[12px] text-zinc-300 transition-colors cursor-pointer"
       >
         <BookOpen className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-color)]" aria-hidden="true" />
         <span className="font-semibold text-zinc-100">{t('here.title')}</span>
@@ -80,6 +84,16 @@ export function KnownHere({ game, place, story, refreshKey }: { game?: string; p
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
         </span>
       </button>
+      {guideName && onOpenGuide && (
+        <button
+          type="button"
+          onClick={onOpenGuide}
+          className="h-8 px-3 rounded-lg bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[12px] font-semibold text-zinc-100 hover:brightness-125 transition cursor-pointer flex-shrink-0"
+        >
+          {t('here.openGuide')}
+        </button>
+      )}
+      </div>
       {open && (
         <div className="mt-2 mb-1 max-h-56 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-2.5">
           {!facts.length && !guide.length && <p className="text-[12px] leading-snug text-zinc-400">{t('here.empty')}</p>}
