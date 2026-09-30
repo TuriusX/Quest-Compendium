@@ -11,7 +11,9 @@
  *            --upgrade        check a game's existing quick pages the careful way, one by one (no new area list).
  *                             A page that passes is replaced by the checked version and its details go into the
  *                             knowledge base; one that doesn't pass keeps its quick page (confirmed details are still
- *                             saved). Stops at the search cap; run again to continue where it left off.
+ *                             saved) and is marked upgradeTried, so later --upgrade runs skip it. Stops at the search
+ *                             cap; run again to continue with the pages not yet attempted.
+ *            --retry-failed   with --upgrade: also try again the pages an earlier upgrade couldn't confirm
  *            --restructure    rebuild the game's guide with a new layout: the new pages replace the old list, and
  *                             old pages not in it are held back (never deleted)
  *            --quick          fast and cheap: written from the AI's own knowledge with no searches. Pages are marked
@@ -41,6 +43,7 @@ const quick = arg('quick') === 'true';
 const layoutArg = arg('layout');
 const restructure = arg('restructure') === 'true';
 const upgrade = arg('upgrade') === 'true';
+const retryFailed = arg('retry-failed') === 'true';
 /** The guide's structure for this run (set in main from --layout, the saved layout, or an automatic pick). */
 let layout: Layout = 'area';
 const placeBased = () => layout === 'area' || layout === 'regions';
@@ -493,16 +496,24 @@ async function main() {
   let areas: { name: string; story: string; group?: string }[];
   if (upgrade) {
     areas = [];
+    let tried = 0;
     for (const o of order) {
       const d = (await guideRef.collection('areas').doc(o.slug).get()).data();
-      if (d && d.verified === false && d.status === 'published') areas.push({ name: d.name || o.name, story: d.story || o.story || '', ...(d.group || o.group ? { group: d.group || o.group } : {}) });
+      if (!d || d.verified !== false || d.status !== 'published') continue;
+      // Pages an earlier upgrade couldn't confirm are skipped unless --retry-failed.
+      if (d.upgradeTried && !retryFailed) {
+        tried++;
+        continue;
+      }
+      areas.push({ name: d.name || o.name, story: d.story || o.story || '', ...(d.group || o.group ? { group: d.group || o.group } : {}) });
     }
+    const triedNote = tried ? ` ${tried} page(s) an earlier upgrade couldn't confirm were skipped (use --retry-failed to try them again).` : '';
     if (!areas.length) {
-      console.log('Nothing to upgrade: every published page for this game is already checked.');
+      console.log(`Nothing to upgrade: no published quick pages left to try for this game.${triedNote}`);
       setTimeout(() => process.exit(0), 1000);
       return;
     }
-    console.log(`Upgrading ${areas.length} quick page(s) to checked pages (search cap ${maxSearches}).`);
+    console.log(`Upgrading ${areas.length} quick page(s) to checked pages (search cap ${maxSearches}).${triedNote}`);
   } else {
     const listed = oneArea || (await outline(order));
     areas = placeBased() ? normalizeVisits(listed, order, aliases) : listed;
@@ -572,6 +583,7 @@ async function main() {
       // Upgrading: a page that doesn't pass keeps its quick version on the site (nothing disappears).
       if (upgrade && heldReason) {
         held++;
+        await ref.update({ upgradeTried: new Date().toISOString() });
         console.log(`  kept the quick page: ${kept} details confirmed, not enough for a checked page (${heldReason})`);
       } else {
         await ref.set(page);
@@ -607,6 +619,7 @@ async function main() {
         // the quick page simply stays as it is).
         if (upgrade) {
           held++;
+          await ref.update({ upgradeTried: new Date().toISOString() });
           console.log('  kept the quick page: the check ran no searches');
           continue;
         }
@@ -619,6 +632,12 @@ async function main() {
     }
   }
   await finishGuide(guideRef, order, previous);
+  if (upgrade) {
+    console.log(`Done: ${built} page(s) upgraded to checked, ${held} kept as quick pages, ${searches} searches used, estimated AI cost ≈ $${dollars.toFixed(2)}${unpriced ? ` (plus ${unpriced} call(s) on a model without a known rate)` : ''}. Searches are free up to 5,000 a month, then $14 per 1,000.`);
+    console.log('Next: npx tsx scripts/guides/publish.ts   (then upload Marketing_Website_Files to Netlify)');
+    setTimeout(() => process.exit(0), 4000);
+    return;
+  }
   console.log(`Done: ${built} page(s) ${autoPublish ? 'published' : 'saved as drafts'}, ${held} held back, ${searches} searches used, estimated AI cost ≈ $${dollars.toFixed(2)}${unpriced ? ` (plus ${unpriced} call(s) on a model without a known rate)` : ''}. Searches are free up to 5,000 a month, then $14 per 1,000.`);
   console.log('Next: npx tsx scripts/guides/publish.ts --drafts   (builds the pages into Marketing_Website_Files so you can look them over)');
   setTimeout(() => process.exit(0), 4000); // let the last database writes finish
