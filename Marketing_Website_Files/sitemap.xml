@@ -168,7 +168,12 @@
   <url><loc>https://questcompendium.com/guides/dark-souls-iii/untended-graves/</loc></url>
   <url><loc>https://questcompendium.com/guides/dark-souls-iii/archdragon-peak/</loc></url>
   <url><loc>https://questcompendium.com/guides/dark-souls-iii/painted-world-of-ariandel/</loc></url>
+  <url><loc>https://questcompendium.com/guides/dark-souls-iii/snowy-mountain-pass/</loc></url>
+  <url><loc>https://questcompendium.com/guides/dark-souls-iii/depths-of-the-painting/</loc></url>
+  <url><loc>https://questcompendium.com/guides/dark-souls-iii/friedes-boss-arena/</loc></url>
   <url><loc>https://questcompendium.com/guides/dark-souls-iii/the-ringed-city/</loc></url>
+  <url><loc>https://questcompendium.com/guides/dark-souls-iii/the-dreg-heap/</loc></url>
+  <url><loc>https://questcompendium.com/guides/dark-souls-iii/filianores-rest/</loc></url>
   <url><loc>https://questcompendium.com/guides/dark-souls-iii/</loc></url>
   <url><loc>https://questcompendium.com/guides/dark-souls-remastered/northern-undead-asylum/</loc></url>
   <url><loc>https://questcompendium.com/guides/dark-souls-remastered/firelink-shrine/</loc></url>
@@ -387,7 +392,6 @@
   <url><loc>https://questcompendium.com/guides/elden-ring/miquellas-haligtree/</loc></url>
   <url><loc>https://questcompendium.com/guides/elden-ring/elphael-brace-of-the-haligtree/</loc></url>
   <url><loc>https://questcompendium.com/guides/elden-ring/crumbling-farum-azula/</loc></url>
-  <url><loc>https://questcompendium.com/guides/elden-ring/leyndell-ashen-capital-leyndell-ashen-capital/</loc></url>
   <url><loc>https://questcompendium.com/guides/elden-ring/elden-throne/</loc></url>
   <url><loc>https://questcompendium.com/guides/elden-ring/gravesite-plain/</loc></url>
   <url><loc>https://questcompendium.com/guides/elden-ring/belurat-tower-settlement/</loc></url>
@@ -444,9 +448,32 @@
   <url><loc>https://questcompendium.com/guides/fallout-4/croup-manor/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-4/kingsport-lighthouse/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-4/nahant-oceanological-society/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/wattz-consumer-electronics/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/fort-hagen-satellite-array/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/general-atomics-factory/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/robobrain-assembly-plant/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/the-mechanists-lair/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-4/far-harbor/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/acadia/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/nucleus/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/echo-lake-lumber/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/brookes-head-lighthouse/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/cranberry-island/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/vim-pop-factory/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/grand-hotel/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/northwood-ridge-quarry/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-4/vault-88/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-4/nuka-world/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/nuka-world-transit-center/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/nuka-town-usa/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/galactic-zone/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/dry-rock-gulch/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/kiddie-kingdom/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/safari-adventure/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/world-of-refreshment/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/nuka-world-power-plant/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/bradberton-overlook/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-4/nuka-cade/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-4/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-new-vegas/goodsprings/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-new-vegas/primm/</loc></url>
@@ -491,9 +518,28 @@
   <url><loc>https://questcompendium.com/guides/fallout-new-vegas/the-thorn/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-new-vegas/westside/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-new-vegas/sierra-madre/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/sierra-madre-casino/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/sierra-madre-villa/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/salida-del-sol/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/puesta-del-sol/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/sierra-madre-vault/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-new-vegas/zion-canyon/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/northern-passage/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/angel-cave/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/sorrows-camp/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/dead-horses-camp/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-new-vegas/big-mt/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/the-sink/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/the-think-tank/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/x-8-research-center/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/x-22-botanical-garden/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/x-13-research-facility/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/higgs-village/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-new-vegas/the-divide/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/hopeville/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/ashton-silo/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/sunken-office-complex/</loc></url>
+  <url><loc>https://questcompendium.com/guides/fallout-new-vegas/couriers-mile/</loc></url>
   <url><loc>https://questcompendium.com/guides/fallout-new-vegas/</loc></url>
   <url><loc>https://questcompendium.com/guides/final-fantasy-iv/baron-castle/</loc></url>
   <url><loc>https://questcompendium.com/guides/final-fantasy-iv/baron-town/</loc></url>
@@ -1371,6 +1417,11 @@
   <url><loc>https://questcompendium.com/guides/the-elder-scrolls-v-skyrim-special-edition/skuldafn-temple/</loc></url>
   <url><loc>https://questcompendium.com/guides/the-elder-scrolls-v-skyrim-special-edition/fort-dawnguard/</loc></url>
   <url><loc>https://questcompendium.com/guides/the-elder-scrolls-v-skyrim-special-edition/castle-volkihar/</loc></url>
+  <url><loc>https://questcompendium.com/guides/the-elder-scrolls-v-skyrim-special-edition/dimhollow-crypt/</loc></url>
+  <url><loc>https://questcompendium.com/guides/the-elder-scrolls-v-skyrim-special-edition/volkihar-ruins/</loc></url>
+  <url><loc>https://questcompendium.com/guides/the-elder-scrolls-v-skyrim-special-edition/ancestor-glade/</loc></url>
+  <url><loc>https://questcompendium.com/guides/the-elder-scrolls-v-skyrim-special-edition/forgotten-vale/</loc></url>
+  <url><loc>https://questcompendium.com/guides/the-elder-scrolls-v-skyrim-special-edition/inner-sanctum/</loc></url>
   <url><loc>https://questcompendium.com/guides/the-elder-scrolls-v-skyrim-special-edition/raven-rock/</loc></url>
   <url><loc>https://questcompendium.com/guides/the-elder-scrolls-v-skyrim-special-edition/apocrypha/</loc></url>
   <url><loc>https://questcompendium.com/guides/the-elder-scrolls-v-skyrim-special-edition/tel-mithryn/</loc></url>
