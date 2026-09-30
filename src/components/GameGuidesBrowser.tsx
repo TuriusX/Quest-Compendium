@@ -19,16 +19,22 @@ import {
 import { BrowserTab, FavoriteBookmark, SteamGameData } from '../types';
 import { DEFAULT_BOOKMARKS } from '../data/mockGames';
 import { playBlipSound } from '../utils/audio';
+import { QcGuidesView } from './QcGuidesView';
 
 interface GameGuidesBrowserProps {
   activeGame: SteamGameData | null;
   soundEnabled: boolean;
+  /** Where the player is (from the current compendium), so our guide can open at that area. */
+  place?: string;
 }
 
 export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
   activeGame,
   soundEnabled,
+  place,
 }) => {
+  // The first tab is always Quest Compendium's own guides, read natively (no web page). It's open by default.
+  const [qcActive, setQcActive] = useState(true);
   const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent.toLowerCase());
   const FrameComponent = isElectron ? 'webview' : 'iframe';
 
@@ -109,6 +115,7 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
 
   const handleAddTab = () => {
     playBlipSound(soundEnabled);
+    setQcActive(false);
     const newId = `btab-${Date.now()}`;
     const defaultUrl = activeGame 
       ? `https://steamcommunity.com/app/${activeGame.appId}/guides/` 
@@ -148,13 +155,29 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
     <div className="flex-1 flex flex-col h-full bg-[#0a0b10] overflow-hidden">
       {/* Browser Tab Strip */}
       <div className="px-3 pt-2 bg-black/70 border-b border-white/[0.08] flex items-center gap-1.5 overflow-x-auto select-none">
+        <button
+          type="button"
+          onClick={() => {
+            playBlipSound(soundEnabled);
+            setQcActive(true);
+          }}
+          className={`px-3 py-1.5 rounded-t-xl border-t border-x text-xs flex items-center gap-2 cursor-pointer flex-shrink-0 transition-all ${
+            qcActive
+              ? 'bg-[#12131c] border-white/20 text-white font-medium shadow-[0_-2px_10px_rgba(0,0,0,0.5)]'
+              : 'bg-black/40 border-transparent text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
+          }`}
+        >
+          <BookOpen className="w-3.5 h-3.5 text-[var(--accent-color)] flex-shrink-0" />
+          <span className="text-[11px] font-sans">Quest Compendium</span>
+        </button>
         {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
+          const isActive = !qcActive && tab.id === activeTabId;
           return (
             <div
               key={tab.id}
               onClick={() => {
                 playBlipSound(soundEnabled);
+                setQcActive(false);
                 setActiveTabId(tab.id);
                 setInputUrl(tab.url);
               }}
@@ -187,8 +210,10 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
         </button>
       </div>
 
+      {qcActive && <QcGuidesView gameName={activeGame?.name} place={place} />}
+
       {/* Navigation Controls & URL Bar */}
-      <div className="p-2.5 bg-black/40 border-b border-white/[0.08] flex items-center gap-2 relative">
+      <div className={`p-2.5 bg-black/40 border-b border-white/[0.08] flex items-center gap-2 relative ${qcActive ? 'hidden' : ''}`}>
         <button
           onClick={() => {
             if (!activeTab) return;
@@ -288,8 +313,8 @@ export const GameGuidesBrowser: React.FC<GameGuidesBrowserProps> = ({
 
 
 
-      {/* Web Frame View */}
-      <div className="flex-1 relative bg-black overflow-hidden flex items-center justify-center">
+      {/* Web Frame View (kept mounted while the guide tab is open, so web pages don't reload) */}
+      <div className={`flex-1 relative bg-black overflow-hidden flex items-center justify-center ${qcActive ? 'hidden' : ''}`}>
         {!activeTab && (
           <div className="flex flex-col items-center gap-4 text-zinc-600">
             <Globe className="w-12 h-12 opacity-20" />

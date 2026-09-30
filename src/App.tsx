@@ -1689,6 +1689,7 @@ export default function App() {
               <GameGuidesBrowser
                 activeGame={activeGame}
                 soundEnabled={settings.soundEnabled}
+                place={activeTab?.place?.name}
               />
             ) : tabs.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center bg-[#07070b] crt-grid p-4 sm:p-6 overflow-y-auto">
