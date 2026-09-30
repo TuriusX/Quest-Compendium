@@ -20,29 +20,132 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="the-legend-of-zelda-a-link-to-the-past">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">The Legend of Zelda: A Link to the Past guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hyrule-castle/index.html">Hyrule Castle</a><div class="text-sm text-zinc-500">First infiltration</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sanctuary/index.html">Sanctuary</a><div class="text-sm text-zinc-500">Escorting Zelda</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="kakariko-village/index.html">Kakariko Village</a><div class="text-sm text-zinc-500">Searching for Sahasrahla</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="eastern-palace/index.html">Eastern Palace</a><div class="text-sm text-zinc-500">First dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="desert-palace/index.html">Desert Palace</a><div class="text-sm text-zinc-500">Second dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="tower-of-hera/index.html">Tower of Hera</a><div class="text-sm text-zinc-500">Third dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="agahnims-tower/index.html">Agahnim&#39;s Tower</a><div class="text-sm text-zinc-500">Final Light World dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="palace-of-darkness/index.html">Palace of Darkness</a><div class="text-sm text-zinc-500">First Dark World dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="swamp-palace/index.html">Swamp Palace</a><div class="text-sm text-zinc-500">Second Dark World dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="skull-woods/index.html">Skull Woods</a><div class="text-sm text-zinc-500">Third Dark World dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="thieves-town/index.html">Thieves&#39; Town</a><div class="text-sm text-zinc-500">Fourth Dark World dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ice-palace/index.html">Ice Palace</a><div class="text-sm text-zinc-500">Fifth Dark World dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="misery-mire/index.html">Misery Mire</a><div class="text-sm text-zinc-500">Sixth Dark World dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="turtle-rock/index.html">Turtle Rock</a><div class="text-sm text-zinc-500">Seventh Dark World dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ganons-tower/index.html">Ganon&#39;s Tower</a><div class="text-sm text-zinc-500">Final Dark World dungeon</div></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">The Legend of Zelda: A Link to the Past guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">15</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">72</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">0</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="the-legend-of-zelda-a-link-to-the-past" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><a href="hyrule-castle/index.html" data-area-link="hyrule-castle" data-name="Hyrule Castle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hyrule Castle</span><span class="block text-sm text-zinc-500 truncate">First infiltration</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|hyrule-castle|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sanctuary/index.html" data-area-link="sanctuary" data-name="Sanctuary" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sanctuary</span><span class="block text-sm text-zinc-500 truncate">Escorting Zelda</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|sanctuary|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="kakariko-village/index.html" data-area-link="kakariko-village" data-name="Kakariko Village" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kakariko Village</span><span class="block text-sm text-zinc-500 truncate">Searching for Sahasrahla</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|kakariko-village|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="eastern-palace/index.html" data-area-link="eastern-palace" data-name="Eastern Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Eastern Palace</span><span class="block text-sm text-zinc-500 truncate">First dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|eastern-palace|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="desert-palace/index.html" data-area-link="desert-palace" data-name="Desert Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Desert Palace</span><span class="block text-sm text-zinc-500 truncate">Second dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|desert-palace|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="tower-of-hera/index.html" data-area-link="tower-of-hera" data-name="Tower of Hera" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tower of Hera</span><span class="block text-sm text-zinc-500 truncate">Third dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|tower-of-hera|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="agahnims-tower/index.html" data-area-link="agahnims-tower" data-name="Agahnim&#39;s Tower" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Agahnim&#39;s Tower</span><span class="block text-sm text-zinc-500 truncate">Final Light World dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|agahnims-tower|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="palace-of-darkness/index.html" data-area-link="palace-of-darkness" data-name="Palace of Darkness" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Palace of Darkness</span><span class="block text-sm text-zinc-500 truncate">First Dark World dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|palace-of-darkness|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="swamp-palace/index.html" data-area-link="swamp-palace" data-name="Swamp Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Swamp Palace</span><span class="block text-sm text-zinc-500 truncate">Second Dark World dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|swamp-palace|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="skull-woods/index.html" data-area-link="skull-woods" data-name="Skull Woods" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Skull Woods</span><span class="block text-sm text-zinc-500 truncate">Third Dark World dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|skull-woods|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="thieves-town/index.html" data-area-link="thieves-town" data-name="Thieves&#39; Town" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Thieves&#39; Town</span><span class="block text-sm text-zinc-500 truncate">Fourth Dark World dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|thieves-town|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ice-palace/index.html" data-area-link="ice-palace" data-name="Ice Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ice Palace</span><span class="block text-sm text-zinc-500 truncate">Fifth Dark World dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|ice-palace|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="misery-mire/index.html" data-area-link="misery-mire" data-name="Misery Mire" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Misery Mire</span><span class="block text-sm text-zinc-500 truncate">Sixth Dark World dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|misery-mire|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="turtle-rock/index.html" data-area-link="turtle-rock" data-name="Turtle Rock" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Turtle Rock</span><span class="block text-sm text-zinc-500 truncate">Seventh Dark World dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|turtle-rock|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ganons-tower/index.html" data-area-link="ganons-tower" data-name="Ganon&#39;s Tower" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ganon&#39;s Tower</span><span class="block text-sm text-zinc-500 truncate">Final Dark World dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-a-link-to-the-past|ganons-tower|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in The Legend of Zelda: A Link to the Past?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

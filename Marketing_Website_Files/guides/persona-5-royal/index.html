@@ -20,29 +20,160 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="persona-5-royal">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">Persona 5 Royal guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Calendar</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="april/index.html">April</a><div class="text-sm text-zinc-500">Introduction to Shujin Academy and the first Palace</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="may/index.html">May</a><div class="text-sm text-zinc-500">Kamoshida&#39;s Palace deadline and the start of the Phantom Thieves</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="june/index.html">June</a><div class="text-sm text-zinc-500">Madarame&#39;s Palace and the introduction of Yusuke</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="july/index.html">July</a><div class="text-sm text-zinc-500">Kaneshiro&#39;s Palace and the Shibuya underworld</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="august/index.html">August</a><div class="text-sm text-zinc-500">Summer vacation, beach trip, and Futaba&#39;s Palace</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="september/index.html">September</a><div class="text-sm text-zinc-500">Okumura&#39;s Palace and the rise of the Phantom Thieves&#39; fame</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="october/index.html">October</a><div class="text-sm text-zinc-500">Sae Niijima&#39;s Palace and the school festival</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="november/index.html">November</a><div class="text-sm text-zinc-500">The Casino heist and the betrayal</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="december/index.html">December</a><div class="text-sm text-zinc-500">The final confrontation and the path to the true ending</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="january/index.html">January</a><div class="text-sm text-zinc-500">The third semester and Maruki&#39;s reality</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="february/index.html">February</a><div class="text-sm text-zinc-500">The final days of the third semester</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="march/index.html">March</a><div class="text-sm text-zinc-500">The conclusion of the Phantom Thieves&#39; journey</div></li></ul></li><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Reference</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="kamoshidas-palace/index.html">Kamoshida&#39;s Palace</a><div class="text-sm text-zinc-500">Strategy for the Castle of Lust dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="madarames-palace/index.html">Madarame&#39;s Palace</a><div class="text-sm text-zinc-500">Strategy for the Museum of Vanity dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="kaneshiros-palace/index.html">Kaneshiro&#39;s Palace</a><div class="text-sm text-zinc-500">Strategy for the Bank of Gluttony dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="futabas-palace/index.html">Futaba&#39;s Palace</a><div class="text-sm text-zinc-500">Strategy for the Pyramid of Wrath dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="okumuras-palace/index.html">Okumura&#39;s Palace</a><div class="text-sm text-zinc-500">Strategy for the Spaceport of Greed dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="confidants/index.html">Confidants</a><div class="text-sm text-zinc-500">Guide to social links, perks, and availability</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="niijimas-palace/index.html">Niijima&#39;s Palace</a><div class="text-sm text-zinc-500">Strategy for the Casino dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="shidos-palace/index.html">Shido&#39;s Palace</a><div class="text-sm text-zinc-500">Strategy for the Cruise Ship dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mementos/index.html">Mementos</a><div class="text-sm text-zinc-500">Strategy for the depths of the collective unconscious</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="marukis-palace/index.html">Maruki&#39;s Palace</a><div class="text-sm text-zinc-500">Strategy for the final dungeon</div></li></ul></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">Persona 5 Royal guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">22</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">135</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">10</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="persona-5-royal" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Calendar</h2><a href="april/index.html" data-area-link="april" data-name="April" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">April</span><span class="block text-sm text-zinc-500 truncate">Introduction to Shujin Academy and the first Palace</span></span>
+          <span data-progress="persona-5-royal|april|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="may/index.html" data-area-link="may" data-name="May" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">May</span><span class="block text-sm text-zinc-500 truncate">Kamoshida&#39;s Palace deadline and the start of the Phantom Thieves</span></span>
+          <span data-progress="persona-5-royal|may|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="june/index.html" data-area-link="june" data-name="June" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">June</span><span class="block text-sm text-zinc-500 truncate">Madarame&#39;s Palace and the introduction of Yusuke</span></span>
+          <span data-progress="persona-5-royal|june|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="july/index.html" data-area-link="july" data-name="July" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">July</span><span class="block text-sm text-zinc-500 truncate">Kaneshiro&#39;s Palace and the Shibuya underworld</span></span>
+          <span data-progress="persona-5-royal|july|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="august/index.html" data-area-link="august" data-name="August" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">August</span><span class="block text-sm text-zinc-500 truncate">Summer vacation, beach trip, and Futaba&#39;s Palace</span></span>
+          <span data-progress="persona-5-royal|august|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="september/index.html" data-area-link="september" data-name="September" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">September</span><span class="block text-sm text-zinc-500 truncate">Okumura&#39;s Palace and the rise of the Phantom Thieves&#39; fame</span></span>
+          <span data-progress="persona-5-royal|september|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Reference</h2><a href="kamoshidas-palace/index.html" data-area-link="kamoshidas-palace" data-name="Kamoshida&#39;s Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kamoshida&#39;s Palace</span><span class="block text-sm text-zinc-500 truncate">Strategy for the Castle of Lust dungeon</span></span>
+          <span data-progress="persona-5-royal|kamoshidas-palace|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="madarames-palace/index.html" data-area-link="madarames-palace" data-name="Madarame&#39;s Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Madarame&#39;s Palace</span><span class="block text-sm text-zinc-500 truncate">Strategy for the Museum of Vanity dungeon</span></span>
+          <span data-progress="persona-5-royal|madarames-palace|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="kaneshiros-palace/index.html" data-area-link="kaneshiros-palace" data-name="Kaneshiro&#39;s Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kaneshiro&#39;s Palace</span><span class="block text-sm text-zinc-500 truncate">Strategy for the Bank of Gluttony dungeon</span></span>
+          <span data-progress="persona-5-royal|kaneshiros-palace|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="futabas-palace/index.html" data-area-link="futabas-palace" data-name="Futaba&#39;s Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Futaba&#39;s Palace</span><span class="block text-sm text-zinc-500 truncate">Strategy for the Pyramid of Wrath dungeon</span></span>
+          <span data-progress="persona-5-royal|futabas-palace|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="okumuras-palace/index.html" data-area-link="okumuras-palace" data-name="Okumura&#39;s Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Okumura&#39;s Palace</span><span class="block text-sm text-zinc-500 truncate">Strategy for the Spaceport of Greed dungeon</span></span>
+          <span data-progress="persona-5-royal|okumuras-palace|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="confidants/index.html" data-area-link="confidants" data-name="Confidants" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Confidants</span><span class="block text-sm text-zinc-500 truncate">Guide to social links, perks, and availability</span></span>
+          <span data-progress="persona-5-royal|confidants|14"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Calendar</h2><a href="october/index.html" data-area-link="october" data-name="October" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">October</span><span class="block text-sm text-zinc-500 truncate">Sae Niijima&#39;s Palace and the school festival</span></span>
+          <span data-progress="persona-5-royal|october|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="november/index.html" data-area-link="november" data-name="November" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">November</span><span class="block text-sm text-zinc-500 truncate">The Casino heist and the betrayal</span></span>
+          <span data-progress="persona-5-royal|november|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="december/index.html" data-area-link="december" data-name="December" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">December</span><span class="block text-sm text-zinc-500 truncate">The final confrontation and the path to the true ending</span></span>
+          <span data-progress="persona-5-royal|december|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="january/index.html" data-area-link="january" data-name="January" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">January</span><span class="block text-sm text-zinc-500 truncate">The third semester and Maruki&#39;s reality</span></span>
+          <span data-progress="persona-5-royal|january|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="february/index.html" data-area-link="february" data-name="February" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">February</span><span class="block text-sm text-zinc-500 truncate">The final days of the third semester</span></span>
+          <span data-progress="persona-5-royal|february|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="march/index.html" data-area-link="march" data-name="March" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">March</span><span class="block text-sm text-zinc-500 truncate">The conclusion of the Phantom Thieves&#39; journey</span></span>
+          <span data-progress="persona-5-royal|march|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Reference</h2><a href="niijimas-palace/index.html" data-area-link="niijimas-palace" data-name="Niijima&#39;s Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Niijima&#39;s Palace</span><span class="block text-sm text-zinc-500 truncate">Strategy for the Casino dungeon</span></span>
+          <span data-progress="persona-5-royal|niijimas-palace|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="shidos-palace/index.html" data-area-link="shidos-palace" data-name="Shido&#39;s Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Shido&#39;s Palace</span><span class="block text-sm text-zinc-500 truncate">Strategy for the Cruise Ship dungeon</span></span>
+          <span data-progress="persona-5-royal|shidos-palace|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mementos/index.html" data-area-link="mementos" data-name="Mementos" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mementos</span><span class="block text-sm text-zinc-500 truncate">Strategy for the depths of the collective unconscious</span></span>
+          <span data-progress="persona-5-royal|mementos|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="marukis-palace/index.html" data-area-link="marukis-palace" data-name="Maruki&#39;s Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Maruki&#39;s Palace</span><span class="block text-sm text-zinc-500 truncate">Strategy for the final dungeon</span></span>
+          <span data-progress="persona-5-royal|marukis-palace|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in Persona 5 Royal?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

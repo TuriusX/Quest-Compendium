@@ -20,29 +20,256 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="fallout-new-vegas">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">Fallout: New Vegas guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="goodsprings/index.html">Goodsprings</a><div class="text-sm text-zinc-500">Starting the game</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="primm/index.html">Primm</a><div class="text-sm text-zinc-500">Shortly after leaving Goodsprings</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mojave-outpost/index.html">Mojave Outpost</a><div class="text-sm text-zinc-500">Traveling south from Primm</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="nipton/index.html">Nipton</a><div class="text-sm text-zinc-500">Traveling east from Mojave Outpost</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="novac/index.html">Novac</a><div class="text-sm text-zinc-500">Traveling north from Nipton</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="helios-one/index.html">Helios One</a><div class="text-sm text-zinc-500">Traveling north from Novac</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="boulder-city/index.html">Boulder City</a><div class="text-sm text-zinc-500">Traveling north from Helios One</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="camp-mccarran/index.html">Camp McCarran</a><div class="text-sm text-zinc-500">Arriving in the New Vegas area</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="freeside/index.html">Freeside</a><div class="text-sm text-zinc-500">Entering the city outskirts</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lucky-38/index.html">Lucky 38</a><div class="text-sm text-zinc-500">Meeting Mr. House</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="nellis-air-force-base/index.html">Nellis Air Force Base</a><div class="text-sm text-zinc-500">Seeking the Boomers</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="red-rock-canyon/index.html">Red Rock Canyon</a><div class="text-sm text-zinc-500">Seeking the Great Khans</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="jacobstown/index.html">Jacobstown</a><div class="text-sm text-zinc-500">Seeking the Super Mutants</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hoover-dam/index.html">Hoover Dam</a><div class="text-sm text-zinc-500">Visiting the dam exterior</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="the-strip-post-house-activation/index.html">The Strip (Post-House activation)</a><div class="text-sm text-zinc-500">Returning to the Strip</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lucky-38-post-house-activation/index.html">Lucky 38 (Post-House activation)</a><div class="text-sm text-zinc-500">Returning to the Lucky 38</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="vault-22/index.html">Vault 22</a><div class="text-sm text-zinc-500">Exploring the wasteland</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="black-mountain/index.html">Black Mountain</a><div class="text-sm text-zinc-500">Seeking the Super Mutants</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="vault-11/index.html">Vault 11</a><div class="text-sm text-zinc-500">Exploring the wasteland</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cottonwood-cove/index.html">Cottonwood Cove</a><div class="text-sm text-zinc-500">Traveling to the Legion camp</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="the-fort/index.html">The Fort</a><div class="text-sm text-zinc-500">Meeting Caesar</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sierra-madre/index.html">Sierra Madre</a><div class="text-sm text-zinc-500">Starting Dead Money DLC</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="zion-canyon/index.html">Zion Canyon</a><div class="text-sm text-zinc-500">Starting Honest Hearts DLC</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="big-mt/index.html">Big MT</a><div class="text-sm text-zinc-500">Starting Old World Blues DLC</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="the-divide/index.html">The Divide</a><div class="text-sm text-zinc-500">Starting Lonesome Road DLC</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sloan/index.html">Sloan</a><div class="text-sm text-zinc-500">Traveling north from Primm</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="searchlight-airport/index.html">Searchlight Airport</a><div class="text-sm text-zinc-500">Exploring the eastern wastes</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="camp-searchlight/index.html">Camp Searchlight</a><div class="text-sm text-zinc-500">Exploring the eastern wastes</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="vault-3/index.html">Vault 3</a><div class="text-sm text-zinc-500">Investigating the Fiends</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="vault-19/index.html">Vault 19</a><div class="text-sm text-zinc-500">Exploring the wasteland</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="vault-34/index.html">Vault 34</a><div class="text-sm text-zinc-500">Exploring the wasteland</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hidden-valley/index.html">Hidden Valley</a><div class="text-sm text-zinc-500">Seeking the Brotherhood of Steel</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="repconn-headquarters/index.html">REPCONN Headquarters</a><div class="text-sm text-zinc-500">Exploring the wasteland</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="repconn-test-site/index.html">REPCONN Test Site</a><div class="text-sm text-zinc-500">Exploring the wasteland</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="camp-golf/index.html">Camp Golf</a><div class="text-sm text-zinc-500">Exploring the Lake Mead area</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="bitter-springs/index.html">Bitter Springs</a><div class="text-sm text-zinc-500">Exploring the northeast</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gibson-scrap-yard/index.html">Gibson Scrap Yard</a><div class="text-sm text-zinc-500">Traveling north from Novac</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sunset-sarsaparilla-headquarters/index.html">Sunset Sarsaparilla Headquarters</a><div class="text-sm text-zinc-500">Exploring the wasteland</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="silver-peak-mine/index.html">Silver Peak Mine</a><div class="text-sm text-zinc-500">Exploring the northern mountains</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ranger-station-charlie/index.html">Ranger Station Charlie</a><div class="text-sm text-zinc-500">Exploring the eastern wastes</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ranger-station-delta/index.html">Ranger Station Delta</a><div class="text-sm text-zinc-500">Exploring the eastern wastes</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ranger-station-golf/index.html">Ranger Station Golf</a><div class="text-sm text-zinc-500">Exploring the Lake Mead area</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="camp-forlorn-hope/index.html">Camp Forlorn Hope</a><div class="text-sm text-zinc-500">Exploring the eastern wastes</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="nelson/index.html">Nelson</a><div class="text-sm text-zinc-500">Exploring the eastern wastes</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="the-thorn/index.html">The Thorn</a><div class="text-sm text-zinc-500">Exploring the Westside area</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="westside/index.html">Westside</a><div class="text-sm text-zinc-500">Exploring the outskirts of New Vegas</div></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">Fallout: New Vegas guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">46</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">166</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">13</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="fallout-new-vegas" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><a href="goodsprings/index.html" data-area-link="goodsprings" data-name="Goodsprings" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Goodsprings</span><span class="block text-sm text-zinc-500 truncate">Starting the game</span></span>
+          <span data-progress="fallout-new-vegas|goodsprings|11"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="primm/index.html" data-area-link="primm" data-name="Primm" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Primm</span><span class="block text-sm text-zinc-500 truncate">Shortly after leaving Goodsprings</span></span>
+          <span data-progress="fallout-new-vegas|primm|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mojave-outpost/index.html" data-area-link="mojave-outpost" data-name="Mojave Outpost" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mojave Outpost</span><span class="block text-sm text-zinc-500 truncate">Traveling south from Primm</span></span>
+          <span data-progress="fallout-new-vegas|mojave-outpost|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="nipton/index.html" data-area-link="nipton" data-name="Nipton" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Nipton</span><span class="block text-sm text-zinc-500 truncate">Traveling east from Mojave Outpost</span></span>
+          <span data-progress="fallout-new-vegas|nipton|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="novac/index.html" data-area-link="novac" data-name="Novac" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Novac</span><span class="block text-sm text-zinc-500 truncate">Traveling north from Nipton</span></span>
+          <span data-progress="fallout-new-vegas|novac|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="helios-one/index.html" data-area-link="helios-one" data-name="Helios One" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Helios One</span><span class="block text-sm text-zinc-500 truncate">Traveling north from Novac</span></span>
+          <span data-progress="fallout-new-vegas|helios-one|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="boulder-city/index.html" data-area-link="boulder-city" data-name="Boulder City" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Boulder City</span><span class="block text-sm text-zinc-500 truncate">Traveling north from Helios One</span></span>
+          <span data-progress="fallout-new-vegas|boulder-city|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="camp-mccarran/index.html" data-area-link="camp-mccarran" data-name="Camp McCarran" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Camp McCarran</span><span class="block text-sm text-zinc-500 truncate">Arriving in the New Vegas area</span></span>
+          <span data-progress="fallout-new-vegas|camp-mccarran|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="freeside/index.html" data-area-link="freeside" data-name="Freeside" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Freeside</span><span class="block text-sm text-zinc-500 truncate">Entering the city outskirts</span></span>
+          <span data-progress="fallout-new-vegas|freeside|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lucky-38/index.html" data-area-link="lucky-38" data-name="Lucky 38" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lucky 38</span><span class="block text-sm text-zinc-500 truncate">Meeting Mr. House</span></span>
+          <span data-progress="fallout-new-vegas|lucky-38|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="nellis-air-force-base/index.html" data-area-link="nellis-air-force-base" data-name="Nellis Air Force Base" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Nellis Air Force Base</span><span class="block text-sm text-zinc-500 truncate">Seeking the Boomers</span></span>
+          <span data-progress="fallout-new-vegas|nellis-air-force-base|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="red-rock-canyon/index.html" data-area-link="red-rock-canyon" data-name="Red Rock Canyon" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Red Rock Canyon</span><span class="block text-sm text-zinc-500 truncate">Seeking the Great Khans</span></span>
+          <span data-progress="fallout-new-vegas|red-rock-canyon|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="jacobstown/index.html" data-area-link="jacobstown" data-name="Jacobstown" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Jacobstown</span><span class="block text-sm text-zinc-500 truncate">Seeking the Super Mutants</span></span>
+          <span data-progress="fallout-new-vegas|jacobstown|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hoover-dam/index.html" data-area-link="hoover-dam" data-name="Hoover Dam" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hoover Dam</span><span class="block text-sm text-zinc-500 truncate">Visiting the dam exterior</span></span>
+          <span data-progress="fallout-new-vegas|hoover-dam|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="the-strip-post-house-activation/index.html" data-area-link="the-strip-post-house-activation" data-name="The Strip (Post-House activation)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Strip (Post-House activation)</span><span class="block text-sm text-zinc-500 truncate">Returning to the Strip</span></span>
+          <span data-progress="fallout-new-vegas|the-strip-post-house-activation|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lucky-38-post-house-activation/index.html" data-area-link="lucky-38-post-house-activation" data-name="Lucky 38 (Post-House activation)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lucky 38 (Post-House activation)</span><span class="block text-sm text-zinc-500 truncate">Returning to the Lucky 38</span></span>
+          <span data-progress="fallout-new-vegas|lucky-38-post-house-activation|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="vault-22/index.html" data-area-link="vault-22" data-name="Vault 22" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Vault 22</span><span class="block text-sm text-zinc-500 truncate">Exploring the wasteland</span></span>
+          <span data-progress="fallout-new-vegas|vault-22|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="black-mountain/index.html" data-area-link="black-mountain" data-name="Black Mountain" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Black Mountain</span><span class="block text-sm text-zinc-500 truncate">Seeking the Super Mutants</span></span>
+          <span data-progress="fallout-new-vegas|black-mountain|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="vault-11/index.html" data-area-link="vault-11" data-name="Vault 11" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Vault 11</span><span class="block text-sm text-zinc-500 truncate">Exploring the wasteland</span></span>
+          <span data-progress="fallout-new-vegas|vault-11|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cottonwood-cove/index.html" data-area-link="cottonwood-cove" data-name="Cottonwood Cove" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cottonwood Cove</span><span class="block text-sm text-zinc-500 truncate">Traveling to the Legion camp</span></span>
+          <span data-progress="fallout-new-vegas|cottonwood-cove|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="the-fort/index.html" data-area-link="the-fort" data-name="The Fort" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Fort</span><span class="block text-sm text-zinc-500 truncate">Meeting Caesar</span></span>
+          <span data-progress="fallout-new-vegas|the-fort|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sierra-madre/index.html" data-area-link="sierra-madre" data-name="Sierra Madre" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sierra Madre</span><span class="block text-sm text-zinc-500 truncate">Starting Dead Money DLC</span></span>
+          <span data-progress="fallout-new-vegas|sierra-madre|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="zion-canyon/index.html" data-area-link="zion-canyon" data-name="Zion Canyon" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Zion Canyon</span><span class="block text-sm text-zinc-500 truncate">Starting Honest Hearts DLC</span></span>
+          <span data-progress="fallout-new-vegas|zion-canyon|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="big-mt/index.html" data-area-link="big-mt" data-name="Big MT" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Big MT</span><span class="block text-sm text-zinc-500 truncate">Starting Old World Blues DLC</span></span>
+          <span data-progress="fallout-new-vegas|big-mt|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="the-divide/index.html" data-area-link="the-divide" data-name="The Divide" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Divide</span><span class="block text-sm text-zinc-500 truncate">Starting Lonesome Road DLC</span></span>
+          <span data-progress="fallout-new-vegas|the-divide|10"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sloan/index.html" data-area-link="sloan" data-name="Sloan" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sloan</span><span class="block text-sm text-zinc-500 truncate">Traveling north from Primm</span></span>
+          <span data-progress="fallout-new-vegas|sloan|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="searchlight-airport/index.html" data-area-link="searchlight-airport" data-name="Searchlight Airport" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Searchlight Airport</span><span class="block text-sm text-zinc-500 truncate">Exploring the eastern wastes</span></span>
+          <span data-progress="fallout-new-vegas|searchlight-airport|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="camp-searchlight/index.html" data-area-link="camp-searchlight" data-name="Camp Searchlight" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Camp Searchlight</span><span class="block text-sm text-zinc-500 truncate">Exploring the eastern wastes</span></span>
+          <span data-progress="fallout-new-vegas|camp-searchlight|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="vault-3/index.html" data-area-link="vault-3" data-name="Vault 3" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Vault 3</span><span class="block text-sm text-zinc-500 truncate">Investigating the Fiends</span></span>
+          <span data-progress="fallout-new-vegas|vault-3|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="vault-19/index.html" data-area-link="vault-19" data-name="Vault 19" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Vault 19</span><span class="block text-sm text-zinc-500 truncate">Exploring the wasteland</span></span>
+          <span data-progress="fallout-new-vegas|vault-19|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="vault-34/index.html" data-area-link="vault-34" data-name="Vault 34" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Vault 34</span><span class="block text-sm text-zinc-500 truncate">Exploring the wasteland</span></span>
+          <span data-progress="fallout-new-vegas|vault-34|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hidden-valley/index.html" data-area-link="hidden-valley" data-name="Hidden Valley" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hidden Valley</span><span class="block text-sm text-zinc-500 truncate">Seeking the Brotherhood of Steel</span></span>
+          <span data-progress="fallout-new-vegas|hidden-valley|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="repconn-headquarters/index.html" data-area-link="repconn-headquarters" data-name="REPCONN Headquarters" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">REPCONN Headquarters</span><span class="block text-sm text-zinc-500 truncate">Exploring the wasteland</span></span>
+          <span data-progress="fallout-new-vegas|repconn-headquarters|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="repconn-test-site/index.html" data-area-link="repconn-test-site" data-name="REPCONN Test Site" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">REPCONN Test Site</span><span class="block text-sm text-zinc-500 truncate">Exploring the wasteland</span></span>
+          <span data-progress="fallout-new-vegas|repconn-test-site|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="camp-golf/index.html" data-area-link="camp-golf" data-name="Camp Golf" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Camp Golf</span><span class="block text-sm text-zinc-500 truncate">Exploring the Lake Mead area</span></span>
+          <span data-progress="fallout-new-vegas|camp-golf|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="bitter-springs/index.html" data-area-link="bitter-springs" data-name="Bitter Springs" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Bitter Springs</span><span class="block text-sm text-zinc-500 truncate">Exploring the northeast</span></span>
+          <span data-progress="fallout-new-vegas|bitter-springs|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gibson-scrap-yard/index.html" data-area-link="gibson-scrap-yard" data-name="Gibson Scrap Yard" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gibson Scrap Yard</span><span class="block text-sm text-zinc-500 truncate">Traveling north from Novac</span></span>
+          <span data-progress="fallout-new-vegas|gibson-scrap-yard|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sunset-sarsaparilla-headquarters/index.html" data-area-link="sunset-sarsaparilla-headquarters" data-name="Sunset Sarsaparilla Headquarters" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sunset Sarsaparilla Headquarters</span><span class="block text-sm text-zinc-500 truncate">Exploring the wasteland</span></span>
+          <span data-progress="fallout-new-vegas|sunset-sarsaparilla-headquarters|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="silver-peak-mine/index.html" data-area-link="silver-peak-mine" data-name="Silver Peak Mine" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Silver Peak Mine</span><span class="block text-sm text-zinc-500 truncate">Exploring the northern mountains</span></span>
+          <span data-progress="fallout-new-vegas|silver-peak-mine|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ranger-station-charlie/index.html" data-area-link="ranger-station-charlie" data-name="Ranger Station Charlie" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ranger Station Charlie</span><span class="block text-sm text-zinc-500 truncate">Exploring the eastern wastes</span></span>
+          <span data-progress="fallout-new-vegas|ranger-station-charlie|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ranger-station-delta/index.html" data-area-link="ranger-station-delta" data-name="Ranger Station Delta" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ranger Station Delta</span><span class="block text-sm text-zinc-500 truncate">Exploring the eastern wastes</span></span>
+          <span data-progress="fallout-new-vegas|ranger-station-delta|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ranger-station-golf/index.html" data-area-link="ranger-station-golf" data-name="Ranger Station Golf" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ranger Station Golf</span><span class="block text-sm text-zinc-500 truncate">Exploring the Lake Mead area</span></span>
+          <span data-progress="fallout-new-vegas|ranger-station-golf|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="camp-forlorn-hope/index.html" data-area-link="camp-forlorn-hope" data-name="Camp Forlorn Hope" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Camp Forlorn Hope</span><span class="block text-sm text-zinc-500 truncate">Exploring the eastern wastes</span></span>
+          <span data-progress="fallout-new-vegas|camp-forlorn-hope|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="nelson/index.html" data-area-link="nelson" data-name="Nelson" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Nelson</span><span class="block text-sm text-zinc-500 truncate">Exploring the eastern wastes</span></span>
+          <span data-progress="fallout-new-vegas|nelson|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="the-thorn/index.html" data-area-link="the-thorn" data-name="The Thorn" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Thorn</span><span class="block text-sm text-zinc-500 truncate">Exploring the Westside area</span></span>
+          <span data-progress="fallout-new-vegas|the-thorn|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="westside/index.html" data-area-link="westside" data-name="Westside" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Westside</span><span class="block text-sm text-zinc-500 truncate">Exploring the outskirts of New Vegas</span></span>
+          <span data-progress="fallout-new-vegas|westside|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in Fallout: New Vegas?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

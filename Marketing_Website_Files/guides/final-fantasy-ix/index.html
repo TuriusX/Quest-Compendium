@@ -20,29 +20,272 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="final-fantasy-ix">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">FINAL FANTASY IX guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="alexandria-castle/index.html">Alexandria Castle</a><div class="text-sm text-zinc-500">The opening play and kidnapping plot</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="alexandria/index.html">Alexandria</a><div class="text-sm text-zinc-500">Exploring the town before the play</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="prima-vista/index.html">Prima Vista</a><div class="text-sm text-zinc-500">The airship crash in Evil Forest</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="evil-forest/index.html">Evil Forest</a><div class="text-sm text-zinc-500">The party&#39;s first journey and petrification</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ice-cavern/index.html">Ice Cavern</a><div class="text-sm text-zinc-500">Traveling toward the Mist Continent</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="dali/index.html">Dali</a><div class="text-sm text-zinc-500">The village with the chocobo farm and underground factory</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="dali-underground/index.html">Dali Underground</a><div class="text-sm text-zinc-500">Investigating the black mage production</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lindblum/index.html">Lindblum</a><div class="text-sm text-zinc-500">Arriving at the Grand Castle and city</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lindblum-castle/index.html">Lindblum Castle</a><div class="text-sm text-zinc-500">Meeting Regent Cid and the Festival of the Hunt</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="dragons-gate/index.html">Dragon&#39;s Gate</a><div class="text-sm text-zinc-500">Departing Lindblum for Gizamaluke&#39;s Grotto</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="qus-marsh/index.html">Qu&#39;s Marsh</a><div class="text-sm text-zinc-500">Meeting Quina on the way to Gizamaluke</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gizamalukes-grotto/index.html">Gizamaluke&#39;s Grotto</a><div class="text-sm text-zinc-500">The path blocked by the Gizamaluke</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="south-gate/index.html">South Gate</a><div class="text-sm text-zinc-500">Passing through the gate toward Burmecia</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="burmecia/index.html">Burmecia</a><div class="text-sm text-zinc-500">The rain-soaked city under attack</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cleyra-settlement/index.html">Cleyra Settlement</a><div class="text-sm text-zinc-500">The tree-city under attack</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cleyra-trunk/index.html">Cleyra Trunk</a><div class="text-sm text-zinc-500">Climbing the giant tree</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="alexandria-disc-2/index.html">Alexandria (Disc 2)</a><div class="text-sm text-zinc-500">The city under attack by the Eidolons</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="alexandria-castle-disc-2/index.html">Alexandria Castle (Disc 2)</a><div class="text-sm text-zinc-500">The rescue mission for Dagger</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="pinnacle-rocks/index.html">Pinnacle Rocks</a><div class="text-sm text-zinc-500">Meeting Ramuh</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lindblum-disc-2/index.html">Lindblum (Disc 2)</a><div class="text-sm text-zinc-500">Returning after the destruction</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="fossil-roo/index.html">Fossil Roo</a><div class="text-sm text-zinc-500">The underground path to the Outer Continent</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="conde-petie/index.html">Conde Petie</a><div class="text-sm text-zinc-500">The village of the dwarves</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mountain-path/index.html">Mountain Path</a><div class="text-sm text-zinc-500">The path to Madain Sari</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="madain-sari/index.html">Madain Sari</a><div class="text-sm text-zinc-500">The summoner&#39;s village</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="iifa-tree/index.html">Iifa Tree</a><div class="text-sm text-zinc-500">The source of the Mist</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="alexandria-disc-3/index.html">Alexandria (Disc 3)</a><div class="text-sm text-zinc-500">The city after the destruction</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="alexandria-castle-disc-3/index.html">Alexandria Castle (Disc 3)</a><div class="text-sm text-zinc-500">The coronation and subsequent attack</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="treno/index.html">Treno</a><div class="text-sm text-zinc-500">The card tournament</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lindblum-disc-3/index.html">Lindblum (Disc 3)</a><div class="text-sm text-zinc-500">The strategy meeting</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="desert-palace/index.html">Desert Palace</a><div class="text-sm text-zinc-500">The trap set by Kuja</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="oeilvert/index.html">Oeilvert</a><div class="text-sm text-zinc-500">The ancient ruins</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="esto-gaza/index.html">Esto Gaza</a><div class="text-sm text-zinc-500">The path to Mount Gulug</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mount-gulug/index.html">Mount Gulug</a><div class="text-sm text-zinc-500">The underground volcano</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ipsens-castle/index.html">Ipsen&#39;s Castle</a><div class="text-sm text-zinc-500">The castle where items are inverted</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="terra/index.html">Terra</a><div class="text-sm text-zinc-500">The planet of the Genomes</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="bran-bal/index.html">Bran Bal</a><div class="text-sm text-zinc-500">The village of the Genomes</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="pandemonium/index.html">Pandemonium</a><div class="text-sm text-zinc-500">The final dungeon on Terra</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="alexandria-castle-disc-3-disc-4/index.html">Alexandria Castle (Disc 3) (Disc 4)</a><div class="text-sm text-zinc-500">Returning to the castle after Terra</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lindblum-disc-3-disc-4/index.html">Lindblum (Disc 3) (Disc 4)</a><div class="text-sm text-zinc-500">Returning for the strategy meeting</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="black-mage-village/index.html">Black Mage Village</a><div class="text-sm text-zinc-500">Visiting the village to find the black mages</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="memoria/index.html">Memoria</a><div class="text-sm text-zinc-500">The memory-filled path to the Crystal World</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="crystal-world/index.html">Crystal World</a><div class="text-sm text-zinc-500">The final area before the end of the game</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="chocobos-paradise/index.html">Chocobo&#39;s Paradise</a><div class="text-sm text-zinc-500">The optional hidden island for Chocobo Hot &amp; Cold</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="daguerreo/index.html">Daguerreo</a><div class="text-sm text-zinc-500">The optional hidden library and synthesis shop</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="quans-dwelling/index.html">Quan&#39;s Dwelling</a><div class="text-sm text-zinc-500">The optional cave near Treno</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="treno-disc-4/index.html">Treno (Disc 4)</a><div class="text-sm text-zinc-500">Visiting for the final card tournament and synthesis</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="alexandria-disc-4/index.html">Alexandria (Disc 4)</a><div class="text-sm text-zinc-500">Visiting the town after the events of the game</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lindblum-disc-4/index.html">Lindblum (Disc 4)</a><div class="text-sm text-zinc-500">Visiting the city after the events of the game</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="madain-sari-disc-4/index.html">Madain Sari (Disc 4)</a><div class="text-sm text-zinc-500">Visiting the village for Eiko&#39;s story</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mount-gulug-disc-4/index.html">Mount Gulug (Disc 4)</a><div class="text-sm text-zinc-500">Visiting the optional area for the Mognet quest</div></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">FINAL FANTASY IX guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">50</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">260</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">123</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="final-fantasy-ix" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><a href="alexandria-castle/index.html" data-area-link="alexandria-castle" data-name="Alexandria Castle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Alexandria Castle</span><span class="block text-sm text-zinc-500 truncate">The opening play and kidnapping plot</span></span>
+          <span data-progress="final-fantasy-ix|alexandria-castle|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="alexandria/index.html" data-area-link="alexandria" data-name="Alexandria" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Alexandria</span><span class="block text-sm text-zinc-500 truncate">Exploring the town before the play</span></span>
+          <span data-progress="final-fantasy-ix|alexandria|10"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="prima-vista/index.html" data-area-link="prima-vista" data-name="Prima Vista" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Prima Vista</span><span class="block text-sm text-zinc-500 truncate">The airship crash in Evil Forest</span></span>
+          <span data-progress="final-fantasy-ix|prima-vista|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="evil-forest/index.html" data-area-link="evil-forest" data-name="Evil Forest" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Evil Forest</span><span class="block text-sm text-zinc-500 truncate">The party&#39;s first journey and petrification</span></span>
+          <span data-progress="final-fantasy-ix|evil-forest|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ice-cavern/index.html" data-area-link="ice-cavern" data-name="Ice Cavern" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ice Cavern</span><span class="block text-sm text-zinc-500 truncate">Traveling toward the Mist Continent</span></span>
+          <span data-progress="final-fantasy-ix|ice-cavern|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="dali/index.html" data-area-link="dali" data-name="Dali" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dali</span><span class="block text-sm text-zinc-500 truncate">The village with the chocobo farm and underground factory</span></span>
+          <span data-progress="final-fantasy-ix|dali|11"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="dali-underground/index.html" data-area-link="dali-underground" data-name="Dali Underground" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dali Underground</span><span class="block text-sm text-zinc-500 truncate">Investigating the black mage production</span></span>
+          <span data-progress="final-fantasy-ix|dali-underground|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lindblum/index.html" data-area-link="lindblum" data-name="Lindblum" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lindblum</span><span class="block text-sm text-zinc-500 truncate">Arriving at the Grand Castle and city</span></span>
+          <span data-progress="final-fantasy-ix|lindblum|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lindblum-castle/index.html" data-area-link="lindblum-castle" data-name="Lindblum Castle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lindblum Castle</span><span class="block text-sm text-zinc-500 truncate">Meeting Regent Cid and the Festival of the Hunt</span></span>
+          <span data-progress="final-fantasy-ix|lindblum-castle|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="dragons-gate/index.html" data-area-link="dragons-gate" data-name="Dragon&#39;s Gate" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dragon&#39;s Gate</span><span class="block text-sm text-zinc-500 truncate">Departing Lindblum for Gizamaluke&#39;s Grotto</span></span>
+          <span data-progress="final-fantasy-ix|dragons-gate|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="qus-marsh/index.html" data-area-link="qus-marsh" data-name="Qu&#39;s Marsh" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Qu&#39;s Marsh</span><span class="block text-sm text-zinc-500 truncate">Meeting Quina on the way to Gizamaluke</span></span>
+          <span data-progress="final-fantasy-ix|qus-marsh|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gizamalukes-grotto/index.html" data-area-link="gizamalukes-grotto" data-name="Gizamaluke&#39;s Grotto" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gizamaluke&#39;s Grotto</span><span class="block text-sm text-zinc-500 truncate">The path blocked by the Gizamaluke</span></span>
+          <span data-progress="final-fantasy-ix|gizamalukes-grotto|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="south-gate/index.html" data-area-link="south-gate" data-name="South Gate" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">South Gate</span><span class="block text-sm text-zinc-500 truncate">Passing through the gate toward Burmecia</span></span>
+          <span data-progress="final-fantasy-ix|south-gate|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="burmecia/index.html" data-area-link="burmecia" data-name="Burmecia" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Burmecia</span><span class="block text-sm text-zinc-500 truncate">The rain-soaked city under attack</span></span>
+          <span data-progress="final-fantasy-ix|burmecia|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cleyra-settlement/index.html" data-area-link="cleyra-settlement" data-name="Cleyra Settlement" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cleyra Settlement</span><span class="block text-sm text-zinc-500 truncate">The tree-city under attack</span></span>
+          <span data-progress="final-fantasy-ix|cleyra-settlement|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cleyra-trunk/index.html" data-area-link="cleyra-trunk" data-name="Cleyra Trunk" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cleyra Trunk</span><span class="block text-sm text-zinc-500 truncate">Climbing the giant tree</span></span>
+          <span data-progress="final-fantasy-ix|cleyra-trunk|12"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="alexandria-disc-2/index.html" data-area-link="alexandria-disc-2" data-name="Alexandria (Disc 2)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Alexandria (Disc 2)</span><span class="block text-sm text-zinc-500 truncate">The city under attack by the Eidolons</span></span>
+          <span data-progress="final-fantasy-ix|alexandria-disc-2|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="alexandria-castle-disc-2/index.html" data-area-link="alexandria-castle-disc-2" data-name="Alexandria Castle (Disc 2)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Alexandria Castle (Disc 2)</span><span class="block text-sm text-zinc-500 truncate">The rescue mission for Dagger</span></span>
+          <span data-progress="final-fantasy-ix|alexandria-castle-disc-2|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="pinnacle-rocks/index.html" data-area-link="pinnacle-rocks" data-name="Pinnacle Rocks" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Pinnacle Rocks</span><span class="block text-sm text-zinc-500 truncate">Meeting Ramuh</span></span>
+          <span data-progress="final-fantasy-ix|pinnacle-rocks|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lindblum-disc-2/index.html" data-area-link="lindblum-disc-2" data-name="Lindblum (Disc 2)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lindblum (Disc 2)</span><span class="block text-sm text-zinc-500 truncate">Returning after the destruction</span></span>
+          <span data-progress="final-fantasy-ix|lindblum-disc-2|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="fossil-roo/index.html" data-area-link="fossil-roo" data-name="Fossil Roo" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Fossil Roo</span><span class="block text-sm text-zinc-500 truncate">The underground path to the Outer Continent</span></span>
+          <span data-progress="final-fantasy-ix|fossil-roo|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="conde-petie/index.html" data-area-link="conde-petie" data-name="Conde Petie" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Conde Petie</span><span class="block text-sm text-zinc-500 truncate">The village of the dwarves</span></span>
+          <span data-progress="final-fantasy-ix|conde-petie|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mountain-path/index.html" data-area-link="mountain-path" data-name="Mountain Path" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mountain Path</span><span class="block text-sm text-zinc-500 truncate">The path to Madain Sari</span></span>
+          <span data-progress="final-fantasy-ix|mountain-path|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="madain-sari/index.html" data-area-link="madain-sari" data-name="Madain Sari" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Madain Sari</span><span class="block text-sm text-zinc-500 truncate">The summoner&#39;s village</span></span>
+          <span data-progress="final-fantasy-ix|madain-sari|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="iifa-tree/index.html" data-area-link="iifa-tree" data-name="Iifa Tree" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Iifa Tree</span><span class="block text-sm text-zinc-500 truncate">The source of the Mist</span></span>
+          <span data-progress="final-fantasy-ix|iifa-tree|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="alexandria-disc-3/index.html" data-area-link="alexandria-disc-3" data-name="Alexandria (Disc 3)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Alexandria (Disc 3)</span><span class="block text-sm text-zinc-500 truncate">The city after the destruction</span></span>
+          <span data-progress="final-fantasy-ix|alexandria-disc-3|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="alexandria-castle-disc-3/index.html" data-area-link="alexandria-castle-disc-3" data-name="Alexandria Castle (Disc 3)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Alexandria Castle (Disc 3)</span><span class="block text-sm text-zinc-500 truncate">The coronation and subsequent attack</span></span>
+          <span data-progress="final-fantasy-ix|alexandria-castle-disc-3|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="treno/index.html" data-area-link="treno" data-name="Treno" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Treno</span><span class="block text-sm text-zinc-500 truncate">The card tournament</span></span>
+          <span data-progress="final-fantasy-ix|treno|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lindblum-disc-3/index.html" data-area-link="lindblum-disc-3" data-name="Lindblum (Disc 3)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lindblum (Disc 3)</span><span class="block text-sm text-zinc-500 truncate">The strategy meeting</span></span>
+          <span data-progress="final-fantasy-ix|lindblum-disc-3|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="desert-palace/index.html" data-area-link="desert-palace" data-name="Desert Palace" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Desert Palace</span><span class="block text-sm text-zinc-500 truncate">The trap set by Kuja</span></span>
+          <span data-progress="final-fantasy-ix|desert-palace|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="oeilvert/index.html" data-area-link="oeilvert" data-name="Oeilvert" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Oeilvert</span><span class="block text-sm text-zinc-500 truncate">The ancient ruins</span></span>
+          <span data-progress="final-fantasy-ix|oeilvert|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="esto-gaza/index.html" data-area-link="esto-gaza" data-name="Esto Gaza" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Esto Gaza</span><span class="block text-sm text-zinc-500 truncate">The path to Mount Gulug</span></span>
+          <span data-progress="final-fantasy-ix|esto-gaza|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mount-gulug/index.html" data-area-link="mount-gulug" data-name="Mount Gulug" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mount Gulug</span><span class="block text-sm text-zinc-500 truncate">The underground volcano</span></span>
+          <span data-progress="final-fantasy-ix|mount-gulug|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ipsens-castle/index.html" data-area-link="ipsens-castle" data-name="Ipsen&#39;s Castle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ipsen&#39;s Castle</span><span class="block text-sm text-zinc-500 truncate">The castle where items are inverted</span></span>
+          <span data-progress="final-fantasy-ix|ipsens-castle|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="terra/index.html" data-area-link="terra" data-name="Terra" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Terra</span><span class="block text-sm text-zinc-500 truncate">The planet of the Genomes</span></span>
+          <span data-progress="final-fantasy-ix|terra|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="bran-bal/index.html" data-area-link="bran-bal" data-name="Bran Bal" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Bran Bal</span><span class="block text-sm text-zinc-500 truncate">The village of the Genomes</span></span>
+          <span data-progress="final-fantasy-ix|bran-bal|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="pandemonium/index.html" data-area-link="pandemonium" data-name="Pandemonium" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Pandemonium</span><span class="block text-sm text-zinc-500 truncate">The final dungeon on Terra</span></span>
+          <span data-progress="final-fantasy-ix|pandemonium|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="alexandria-castle-disc-3-disc-4/index.html" data-area-link="alexandria-castle-disc-3-disc-4" data-name="Alexandria Castle (Disc 3) (Disc 4)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Alexandria Castle (Disc 3) (Disc 4)</span><span class="block text-sm text-zinc-500 truncate">Returning to the castle after Terra</span></span>
+          <span data-progress="final-fantasy-ix|alexandria-castle-disc-3-disc-4|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lindblum-disc-3-disc-4/index.html" data-area-link="lindblum-disc-3-disc-4" data-name="Lindblum (Disc 3) (Disc 4)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lindblum (Disc 3) (Disc 4)</span><span class="block text-sm text-zinc-500 truncate">Returning for the strategy meeting</span></span>
+          <span data-progress="final-fantasy-ix|lindblum-disc-3-disc-4|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="black-mage-village/index.html" data-area-link="black-mage-village" data-name="Black Mage Village" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Black Mage Village</span><span class="block text-sm text-zinc-500 truncate">Visiting the village to find the black mages</span></span>
+          <span data-progress="final-fantasy-ix|black-mage-village|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="memoria/index.html" data-area-link="memoria" data-name="Memoria" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Memoria</span><span class="block text-sm text-zinc-500 truncate">The memory-filled path to the Crystal World</span></span>
+          <span data-progress="final-fantasy-ix|memoria|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="crystal-world/index.html" data-area-link="crystal-world" data-name="Crystal World" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Crystal World</span><span class="block text-sm text-zinc-500 truncate">The final area before the end of the game</span></span>
+          <span data-progress="final-fantasy-ix|crystal-world|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="chocobos-paradise/index.html" data-area-link="chocobos-paradise" data-name="Chocobo&#39;s Paradise" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chocobo&#39;s Paradise</span><span class="block text-sm text-zinc-500 truncate">The optional hidden island for Chocobo Hot &amp; Cold</span></span>
+          <span data-progress="final-fantasy-ix|chocobos-paradise|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="daguerreo/index.html" data-area-link="daguerreo" data-name="Daguerreo" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Daguerreo</span><span class="block text-sm text-zinc-500 truncate">The optional hidden library and synthesis shop</span></span>
+          <span data-progress="final-fantasy-ix|daguerreo|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="quans-dwelling/index.html" data-area-link="quans-dwelling" data-name="Quan&#39;s Dwelling" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Quan&#39;s Dwelling</span><span class="block text-sm text-zinc-500 truncate">The optional cave near Treno</span></span>
+          <span data-progress="final-fantasy-ix|quans-dwelling|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="treno-disc-4/index.html" data-area-link="treno-disc-4" data-name="Treno (Disc 4)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Treno (Disc 4)</span><span class="block text-sm text-zinc-500 truncate">Visiting for the final card tournament and synthesis</span></span>
+          <span data-progress="final-fantasy-ix|treno-disc-4|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="alexandria-disc-4/index.html" data-area-link="alexandria-disc-4" data-name="Alexandria (Disc 4)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Alexandria (Disc 4)</span><span class="block text-sm text-zinc-500 truncate">Visiting the town after the events of the game</span></span>
+          <span data-progress="final-fantasy-ix|alexandria-disc-4|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lindblum-disc-4/index.html" data-area-link="lindblum-disc-4" data-name="Lindblum (Disc 4)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lindblum (Disc 4)</span><span class="block text-sm text-zinc-500 truncate">Visiting the city after the events of the game</span></span>
+          <span data-progress="final-fantasy-ix|lindblum-disc-4|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="madain-sari-disc-4/index.html" data-area-link="madain-sari-disc-4" data-name="Madain Sari (Disc 4)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Madain Sari (Disc 4)</span><span class="block text-sm text-zinc-500 truncate">Visiting the village for Eiko&#39;s story</span></span>
+          <span data-progress="final-fantasy-ix|madain-sari-disc-4|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mount-gulug-disc-4/index.html" data-area-link="mount-gulug-disc-4" data-name="Mount Gulug (Disc 4)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mount Gulug (Disc 4)</span><span class="block text-sm text-zinc-500 truncate">Visiting the optional area for the Mognet quest</span></span>
+          <span data-progress="final-fantasy-ix|mount-gulug-disc-4|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in FINAL FANTASY IX?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

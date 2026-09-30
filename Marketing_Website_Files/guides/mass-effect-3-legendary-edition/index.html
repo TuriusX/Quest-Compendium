@@ -20,29 +20,156 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="mass-effect-3-legendary-edition">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">Mass Effect 3 (Legendary Edition) guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="earth/index.html">Earth</a><div class="text-sm text-zinc-500">Prologue</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mars/index.html">Mars</a><div class="text-sm text-zinc-500">Immediately following the prologue</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="the-citadel/index.html">The Citadel</a><div class="text-sm text-zinc-500">First visit after Mars</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="normandy-sr-2/index.html">Normandy SR-2</a><div class="text-sm text-zinc-500">Throughout the game</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="menae/index.html">Menae</a><div class="text-sm text-zinc-500">First major mission after the Citadel</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="surkesh/index.html">Sur&#39;Kesh</a><div class="text-sm text-zinc-500">Following the mission on Menae</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="tuchanka/index.html">Tuchanka</a><div class="text-sm text-zinc-500">Following the mission on Sur&#39;Kesh</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="grissom-academy/index.html">Grissom Academy</a><div class="text-sm text-zinc-500">Optional mission after the Citadel</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="arrae/index.html">Arrae</a><div class="text-sm text-zinc-500">Optional mission after the Citadel</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="tuchanka-bomb-site/index.html">Tuchanka (Bomb Site)</a><div class="text-sm text-zinc-500">Bomb mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="perseus-veil/index.html">Perseus Veil</a><div class="text-sm text-zinc-500">Geth Dreadnought mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="rannoch/index.html">Rannoch</a><div class="text-sm text-zinc-500">Following the Geth Dreadnought mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lesuss/index.html">Lesuss</a><div class="text-sm text-zinc-500">Monastery mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="kallini/index.html">Kallini</a><div class="text-sm text-zinc-500">Ardat-Yakshi Monastery mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="benning/index.html">Benning</a><div class="text-sm text-zinc-500">Optional mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="dekuuna/index.html">Dekuuna</a><div class="text-sm text-zinc-500">Optional mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="utukku/index.html">Utukku</a><div class="text-sm text-zinc-500">Rachni mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="thessia/index.html">Thessia</a><div class="text-sm text-zinc-500">Following the Rannoch arc</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="horizon/index.html">Horizon</a><div class="text-sm text-zinc-500">Following the Thessia mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cerberus-headquarters/index.html">Cerberus Headquarters</a><div class="text-sm text-zinc-500">Following the Horizon mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="london/index.html">London</a><div class="text-sm text-zinc-500">Final mission</div></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">Mass Effect 3 (Legendary Edition) guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">21</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">89</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">78</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="mass-effect-3-legendary-edition" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><a href="earth/index.html" data-area-link="earth" data-name="Earth" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Earth</span><span class="block text-sm text-zinc-500 truncate">Prologue</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|earth|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mars/index.html" data-area-link="mars" data-name="Mars" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mars</span><span class="block text-sm text-zinc-500 truncate">Immediately following the prologue</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|mars|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="the-citadel/index.html" data-area-link="the-citadel" data-name="The Citadel" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Citadel</span><span class="block text-sm text-zinc-500 truncate">First visit after Mars</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|the-citadel|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="normandy-sr-2/index.html" data-area-link="normandy-sr-2" data-name="Normandy SR-2" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Normandy SR-2</span><span class="block text-sm text-zinc-500 truncate">Throughout the game</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|normandy-sr-2|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="menae/index.html" data-area-link="menae" data-name="Menae" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Menae</span><span class="block text-sm text-zinc-500 truncate">First major mission after the Citadel</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|menae|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="surkesh/index.html" data-area-link="surkesh" data-name="Sur&#39;Kesh" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sur&#39;Kesh</span><span class="block text-sm text-zinc-500 truncate">Following the mission on Menae</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|surkesh|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="tuchanka/index.html" data-area-link="tuchanka" data-name="Tuchanka" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tuchanka</span><span class="block text-sm text-zinc-500 truncate">Following the mission on Sur&#39;Kesh</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|tuchanka|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="grissom-academy/index.html" data-area-link="grissom-academy" data-name="Grissom Academy" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Grissom Academy</span><span class="block text-sm text-zinc-500 truncate">Optional mission after the Citadel</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|grissom-academy|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="arrae/index.html" data-area-link="arrae" data-name="Arrae" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Arrae</span><span class="block text-sm text-zinc-500 truncate">Optional mission after the Citadel</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|arrae|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="tuchanka-bomb-site/index.html" data-area-link="tuchanka-bomb-site" data-name="Tuchanka (Bomb Site)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tuchanka (Bomb Site)</span><span class="block text-sm text-zinc-500 truncate">Bomb mission</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|tuchanka-bomb-site|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="perseus-veil/index.html" data-area-link="perseus-veil" data-name="Perseus Veil" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Perseus Veil</span><span class="block text-sm text-zinc-500 truncate">Geth Dreadnought mission</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|perseus-veil|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="rannoch/index.html" data-area-link="rannoch" data-name="Rannoch" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Rannoch</span><span class="block text-sm text-zinc-500 truncate">Following the Geth Dreadnought mission</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|rannoch|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lesuss/index.html" data-area-link="lesuss" data-name="Lesuss" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lesuss</span><span class="block text-sm text-zinc-500 truncate">Monastery mission</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|lesuss|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="kallini/index.html" data-area-link="kallini" data-name="Kallini" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kallini</span><span class="block text-sm text-zinc-500 truncate">Ardat-Yakshi Monastery mission</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|kallini|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="benning/index.html" data-area-link="benning" data-name="Benning" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Benning</span><span class="block text-sm text-zinc-500 truncate">Optional mission</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|benning|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="dekuuna/index.html" data-area-link="dekuuna" data-name="Dekuuna" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dekuuna</span><span class="block text-sm text-zinc-500 truncate">Optional mission</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|dekuuna|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="utukku/index.html" data-area-link="utukku" data-name="Utukku" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Utukku</span><span class="block text-sm text-zinc-500 truncate">Rachni mission</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|utukku|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="thessia/index.html" data-area-link="thessia" data-name="Thessia" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Thessia</span><span class="block text-sm text-zinc-500 truncate">Following the Rannoch arc</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|thessia|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="horizon/index.html" data-area-link="horizon" data-name="Horizon" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Horizon</span><span class="block text-sm text-zinc-500 truncate">Following the Thessia mission</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|horizon|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cerberus-headquarters/index.html" data-area-link="cerberus-headquarters" data-name="Cerberus Headquarters" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cerberus Headquarters</span><span class="block text-sm text-zinc-500 truncate">Following the Horizon mission</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|cerberus-headquarters|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="london/index.html" data-area-link="london" data-name="London" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">London</span><span class="block text-sm text-zinc-500 truncate">Final mission</span></span>
+          <span data-progress="mass-effect-3-legendary-edition|london|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in Mass Effect 3 (Legendary Edition)?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

@@ -20,29 +20,236 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="divinity-original-sin-2-definitive-edition">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">Divinity: Original Sin 2 - Definitive Edition guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="the-hold/index.html">The Hold</a><div class="text-sm text-zinc-500">Prologue on the ship</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="fort-joy-beach/index.html">Fort Joy Beach</a><div class="text-sm text-zinc-500">Arrival on the island</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="fort-joy-ghetto/index.html">Fort Joy Ghetto</a><div class="text-sm text-zinc-500">Exploring the prison camp</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="fort-joy-prison/index.html">Fort Joy Prison</a><div class="text-sm text-zinc-500">Entering the dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="fort-joy/index.html">Fort Joy</a><div class="text-sm text-zinc-500">The fort interior after escaping the ghetto</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hollow-marshes/index.html">Hollow Marshes</a><div class="text-sm text-zinc-500">The wilderness outside the fort</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="braccus-rexs-tower/index.html">Braccus Rex&#39;s Tower</a><div class="text-sm text-zinc-500">Exploring the wizard&#39;s ruins</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gargoyles-maze/index.html">Gargoyle&#39;s Maze</a><div class="text-sm text-zinc-500">The cursed labyrinth</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="dark-cave/index.html">Dark Cave</a><div class="text-sm text-zinc-500">The cave near the beach</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sanctuary-of-amadia/index.html">Sanctuary of Amadia</a><div class="text-sm text-zinc-500">The hidden refuge</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="wreckers-cave/index.html">Wrecker&#39;s Cave</a><div class="text-sm text-zinc-500">The spider-infested cavern</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="abandoned-camp/index.html">Abandoned Camp</a><div class="text-sm text-zinc-500">The area near the Wrecker&#39;s Cave</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="the-lady-vengeance/index.html">The Lady Vengeance</a><div class="text-sm text-zinc-500">Boarding the ship to leave the island</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="reapers-coast/index.html">Reaper&#39;s Coast</a><div class="text-sm text-zinc-500">Exploring the main region</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="driftwood/index.html">Driftwood</a><div class="text-sm text-zinc-500">Entering the town</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="driftwood-arena/index.html">Driftwood Arena</a><div class="text-sm text-zinc-500">Fighting in the underground pit</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="driftwood-tavern-cellar/index.html">Driftwood Tavern Cellar</a><div class="text-sm text-zinc-500">Investigating the basement</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="morduss-house-cellar/index.html">Mordus&#39;s House Cellar</a><div class="text-sm text-zinc-500">Exploring the hidden cave</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cloisterwood/index.html">Cloisterwood</a><div class="text-sm text-zinc-500">Exploring the forest area</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="temple-of-rhalic/index.html">Temple of Rhalic</a><div class="text-sm text-zinc-500">Visiting the shrine</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="stonegarden/index.html">Stonegarden</a><div class="text-sm text-zinc-500">Exploring the graveyard</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="rykers-mansion/index.html">Ryker&#39;s Mansion</a><div class="text-sm text-zinc-500">Visiting the necromancer&#39;s home</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="blackpits/index.html">Blackpits</a><div class="text-sm text-zinc-500">Exploring the industrial area</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="blackpits-mines/index.html">Blackpits Mines</a><div class="text-sm text-zinc-500">Entering the excavation site</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="paradise-downs/index.html">Paradise Downs</a><div class="text-sm text-zinc-500">Exploring the cursed fields</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="bloodmoon-island/index.html">Bloodmoon Island</a><div class="text-sm text-zinc-500">Crossing to the forbidden island</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sawmill/index.html">Sawmill</a><div class="text-sm text-zinc-500">Infiltrating the Lone Wolves&#39; base</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="elf-camp/index.html">Elf Camp</a><div class="text-sm text-zinc-500">Visiting the Saheila&#39;s location</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="paladin-bridgehead/index.html">Paladin Bridgehead</a><div class="text-sm text-zinc-500">Crossing the bridge</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="the-lady-vengeance-act-2-revisit/index.html">The Lady Vengeance (Act 2 Revisit)</a><div class="text-sm text-zinc-500">Returning to the ship</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="the-lady-vengeance-act-3/index.html">The Lady Vengeance (Act 3)</a><div class="text-sm text-zinc-500">Arriving at the Nameless Isle</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="nameless-isle/index.html">Nameless Isle</a><div class="text-sm text-zinc-500">Exploring the island</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="academy/index.html">Academy</a><div class="text-sm text-zinc-500">Entering the central temple</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="the-arena-of-the-one/index.html">The Arena of the One</a><div class="text-sm text-zinc-500">Fighting for divinity</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="the-lady-vengeance-act-4/index.html">The Lady Vengeance (Act 4)</a><div class="text-sm text-zinc-500">Leaving the Nameless Isle</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="arx/index.html">Arx</a><div class="text-sm text-zinc-500">Arriving at the city</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="arx-prison/index.html">Arx Prison</a><div class="text-sm text-zinc-500">Entering the dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="magister-barracks/index.html">Magister Barracks</a><div class="text-sm text-zinc-500">Exploring the headquarters</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="consulate/index.html">Consulate</a><div class="text-sm text-zinc-500">Visiting the embassy</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="school/index.html">School</a><div class="text-sm text-zinc-500">Investigating the schoolhouse</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cathedral/index.html">Cathedral</a><div class="text-sm text-zinc-500">Entering the final sanctuary</div></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">Divinity: Original Sin 2 - Definitive Edition guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">41</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">147</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">49</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="divinity-original-sin-2-definitive-edition" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><a href="the-hold/index.html" data-area-link="the-hold" data-name="The Hold" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Hold</span><span class="block text-sm text-zinc-500 truncate">Prologue on the ship</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|the-hold|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="fort-joy-beach/index.html" data-area-link="fort-joy-beach" data-name="Fort Joy Beach" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Fort Joy Beach</span><span class="block text-sm text-zinc-500 truncate">Arrival on the island</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|fort-joy-beach|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="fort-joy-ghetto/index.html" data-area-link="fort-joy-ghetto" data-name="Fort Joy Ghetto" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Fort Joy Ghetto</span><span class="block text-sm text-zinc-500 truncate">Exploring the prison camp</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|fort-joy-ghetto|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="fort-joy-prison/index.html" data-area-link="fort-joy-prison" data-name="Fort Joy Prison" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Fort Joy Prison</span><span class="block text-sm text-zinc-500 truncate">Entering the dungeon</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|fort-joy-prison|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="fort-joy/index.html" data-area-link="fort-joy" data-name="Fort Joy" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Fort Joy</span><span class="block text-sm text-zinc-500 truncate">The fort interior after escaping the ghetto</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|fort-joy|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hollow-marshes/index.html" data-area-link="hollow-marshes" data-name="Hollow Marshes" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hollow Marshes</span><span class="block text-sm text-zinc-500 truncate">The wilderness outside the fort</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|hollow-marshes|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="braccus-rexs-tower/index.html" data-area-link="braccus-rexs-tower" data-name="Braccus Rex&#39;s Tower" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Braccus Rex&#39;s Tower</span><span class="block text-sm text-zinc-500 truncate">Exploring the wizard&#39;s ruins</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|braccus-rexs-tower|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gargoyles-maze/index.html" data-area-link="gargoyles-maze" data-name="Gargoyle&#39;s Maze" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gargoyle&#39;s Maze</span><span class="block text-sm text-zinc-500 truncate">The cursed labyrinth</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|gargoyles-maze|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="dark-cave/index.html" data-area-link="dark-cave" data-name="Dark Cave" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dark Cave</span><span class="block text-sm text-zinc-500 truncate">The cave near the beach</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|dark-cave|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sanctuary-of-amadia/index.html" data-area-link="sanctuary-of-amadia" data-name="Sanctuary of Amadia" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sanctuary of Amadia</span><span class="block text-sm text-zinc-500 truncate">The hidden refuge</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|sanctuary-of-amadia|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="wreckers-cave/index.html" data-area-link="wreckers-cave" data-name="Wrecker&#39;s Cave" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Wrecker&#39;s Cave</span><span class="block text-sm text-zinc-500 truncate">The spider-infested cavern</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|wreckers-cave|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="abandoned-camp/index.html" data-area-link="abandoned-camp" data-name="Abandoned Camp" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Abandoned Camp</span><span class="block text-sm text-zinc-500 truncate">The area near the Wrecker&#39;s Cave</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|abandoned-camp|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="the-lady-vengeance/index.html" data-area-link="the-lady-vengeance" data-name="The Lady Vengeance" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Lady Vengeance</span><span class="block text-sm text-zinc-500 truncate">Boarding the ship to leave the island</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|the-lady-vengeance|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="reapers-coast/index.html" data-area-link="reapers-coast" data-name="Reaper&#39;s Coast" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Reaper&#39;s Coast</span><span class="block text-sm text-zinc-500 truncate">Exploring the main region</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|reapers-coast|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="driftwood/index.html" data-area-link="driftwood" data-name="Driftwood" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Driftwood</span><span class="block text-sm text-zinc-500 truncate">Entering the town</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|driftwood|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="driftwood-arena/index.html" data-area-link="driftwood-arena" data-name="Driftwood Arena" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Driftwood Arena</span><span class="block text-sm text-zinc-500 truncate">Fighting in the underground pit</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|driftwood-arena|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="driftwood-tavern-cellar/index.html" data-area-link="driftwood-tavern-cellar" data-name="Driftwood Tavern Cellar" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Driftwood Tavern Cellar</span><span class="block text-sm text-zinc-500 truncate">Investigating the basement</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|driftwood-tavern-cellar|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="morduss-house-cellar/index.html" data-area-link="morduss-house-cellar" data-name="Mordus&#39;s House Cellar" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mordus&#39;s House Cellar</span><span class="block text-sm text-zinc-500 truncate">Exploring the hidden cave</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|morduss-house-cellar|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cloisterwood/index.html" data-area-link="cloisterwood" data-name="Cloisterwood" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cloisterwood</span><span class="block text-sm text-zinc-500 truncate">Exploring the forest area</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|cloisterwood|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="temple-of-rhalic/index.html" data-area-link="temple-of-rhalic" data-name="Temple of Rhalic" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Temple of Rhalic</span><span class="block text-sm text-zinc-500 truncate">Visiting the shrine</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|temple-of-rhalic|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="stonegarden/index.html" data-area-link="stonegarden" data-name="Stonegarden" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Stonegarden</span><span class="block text-sm text-zinc-500 truncate">Exploring the graveyard</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|stonegarden|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="rykers-mansion/index.html" data-area-link="rykers-mansion" data-name="Ryker&#39;s Mansion" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ryker&#39;s Mansion</span><span class="block text-sm text-zinc-500 truncate">Visiting the necromancer&#39;s home</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|rykers-mansion|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="blackpits/index.html" data-area-link="blackpits" data-name="Blackpits" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Blackpits</span><span class="block text-sm text-zinc-500 truncate">Exploring the industrial area</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|blackpits|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="blackpits-mines/index.html" data-area-link="blackpits-mines" data-name="Blackpits Mines" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Blackpits Mines</span><span class="block text-sm text-zinc-500 truncate">Entering the excavation site</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|blackpits-mines|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="paradise-downs/index.html" data-area-link="paradise-downs" data-name="Paradise Downs" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Paradise Downs</span><span class="block text-sm text-zinc-500 truncate">Exploring the cursed fields</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|paradise-downs|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="bloodmoon-island/index.html" data-area-link="bloodmoon-island" data-name="Bloodmoon Island" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Bloodmoon Island</span><span class="block text-sm text-zinc-500 truncate">Crossing to the forbidden island</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|bloodmoon-island|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sawmill/index.html" data-area-link="sawmill" data-name="Sawmill" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sawmill</span><span class="block text-sm text-zinc-500 truncate">Infiltrating the Lone Wolves&#39; base</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|sawmill|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="elf-camp/index.html" data-area-link="elf-camp" data-name="Elf Camp" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Elf Camp</span><span class="block text-sm text-zinc-500 truncate">Visiting the Saheila&#39;s location</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|elf-camp|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="paladin-bridgehead/index.html" data-area-link="paladin-bridgehead" data-name="Paladin Bridgehead" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Paladin Bridgehead</span><span class="block text-sm text-zinc-500 truncate">Crossing the bridge</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|paladin-bridgehead|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="the-lady-vengeance-act-2-revisit/index.html" data-area-link="the-lady-vengeance-act-2-revisit" data-name="The Lady Vengeance (Act 2 Revisit)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Lady Vengeance (Act 2 Revisit)</span><span class="block text-sm text-zinc-500 truncate">Returning to the ship</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|the-lady-vengeance-act-2-revisit|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="the-lady-vengeance-act-3/index.html" data-area-link="the-lady-vengeance-act-3" data-name="The Lady Vengeance (Act 3)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Lady Vengeance (Act 3)</span><span class="block text-sm text-zinc-500 truncate">Arriving at the Nameless Isle</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|the-lady-vengeance-act-3|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="nameless-isle/index.html" data-area-link="nameless-isle" data-name="Nameless Isle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Nameless Isle</span><span class="block text-sm text-zinc-500 truncate">Exploring the island</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|nameless-isle|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="academy/index.html" data-area-link="academy" data-name="Academy" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Academy</span><span class="block text-sm text-zinc-500 truncate">Entering the central temple</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|academy|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="the-arena-of-the-one/index.html" data-area-link="the-arena-of-the-one" data-name="The Arena of the One" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Arena of the One</span><span class="block text-sm text-zinc-500 truncate">Fighting for divinity</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|the-arena-of-the-one|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="the-lady-vengeance-act-4/index.html" data-area-link="the-lady-vengeance-act-4" data-name="The Lady Vengeance (Act 4)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Lady Vengeance (Act 4)</span><span class="block text-sm text-zinc-500 truncate">Leaving the Nameless Isle</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|the-lady-vengeance-act-4|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="arx/index.html" data-area-link="arx" data-name="Arx" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Arx</span><span class="block text-sm text-zinc-500 truncate">Arriving at the city</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|arx|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="arx-prison/index.html" data-area-link="arx-prison" data-name="Arx Prison" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Arx Prison</span><span class="block text-sm text-zinc-500 truncate">Entering the dungeon</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|arx-prison|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="magister-barracks/index.html" data-area-link="magister-barracks" data-name="Magister Barracks" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Magister Barracks</span><span class="block text-sm text-zinc-500 truncate">Exploring the headquarters</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|magister-barracks|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="consulate/index.html" data-area-link="consulate" data-name="Consulate" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Consulate</span><span class="block text-sm text-zinc-500 truncate">Visiting the embassy</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|consulate|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="school/index.html" data-area-link="school" data-name="School" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">School</span><span class="block text-sm text-zinc-500 truncate">Investigating the schoolhouse</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|school|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cathedral/index.html" data-area-link="cathedral" data-name="Cathedral" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cathedral</span><span class="block text-sm text-zinc-500 truncate">Entering the final sanctuary</span></span>
+          <span data-progress="divinity-original-sin-2-definitive-edition|cathedral|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in Divinity: Original Sin 2 - Definitive Edition?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

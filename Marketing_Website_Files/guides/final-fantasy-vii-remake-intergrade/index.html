@@ -20,29 +20,208 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="final-fantasy-vii-remake-intergrade">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">FINAL FANTASY VII REMAKE INTERGRADE guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mako-reactor-1/index.html">Mako Reactor 1</a><div class="text-sm text-zinc-500">Chapter 1</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-1-station/index.html">Sector 1 Station</a><div class="text-sm text-zinc-500">Chapter 1</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-1-slums/index.html">Sector 1 Slums</a><div class="text-sm text-zinc-500">Chapter 2</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-8/index.html">Sector 8</a><div class="text-sm text-zinc-500">Chapter 2</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-slums/index.html">Sector 7 Slums</a><div class="text-sm text-zinc-500">Chapter 3</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-undercity/index.html">Sector 7 Undercity</a><div class="text-sm text-zinc-500">Chapter 3</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-undercity-chapter-4/index.html">Sector 7 Undercity (Chapter 4)</a><div class="text-sm text-zinc-500">Chapter 4</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-plate/index.html">Sector 7 Plate</a><div class="text-sm text-zinc-500">Chapter 4</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-5-station/index.html">Sector 5 Station</a><div class="text-sm text-zinc-500">Chapter 5</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-5-undercity/index.html">Sector 5 Undercity</a><div class="text-sm text-zinc-500">Chapter 5</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-5-slums/index.html">Sector 5 Slums</a><div class="text-sm text-zinc-500">Chapter 8</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-5-undercity-chapter-8/index.html">Sector 5 Undercity (Chapter 8)</a><div class="text-sm text-zinc-500">Chapter 8</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-6-slums/index.html">Sector 6 Slums</a><div class="text-sm text-zinc-500">Chapter 9</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="wall-market/index.html">Wall Market</a><div class="text-sm text-zinc-500">Chapter 9</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="corneo-colosseum/index.html">Corneo Colosseum</a><div class="text-sm text-zinc-500">Chapter 9</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-6-undercity/index.html">Sector 6 Undercity</a><div class="text-sm text-zinc-500">Chapter 9</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-6-slums-chapter-10/index.html">Sector 6 Slums (Chapter 10)</a><div class="text-sm text-zinc-500">Chapter 10</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-sewers/index.html">Sector 7 Sewers</a><div class="text-sm text-zinc-500">Chapter 10</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="train-graveyard/index.html">Train Graveyard</a><div class="text-sm text-zinc-500">Chapter 11</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-slums-chapter-12/index.html">Sector 7 Slums (Chapter 12)</a><div class="text-sm text-zinc-500">Chapter 12</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-pillar/index.html">Sector 7 Pillar</a><div class="text-sm text-zinc-500">Chapter 12</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-undercity-chapter-12/index.html">Sector 7 Undercity (Chapter 12)</a><div class="text-sm text-zinc-500">Chapter 12</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="underground-test-site/index.html">Underground Test Site</a><div class="text-sm text-zinc-500">Chapter 13</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-5-undercity-chapter-13/index.html">Sector 5 Undercity (Chapter 13)</a><div class="text-sm text-zinc-500">Chapter 13</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-5-slums-chapter-14/index.html">Sector 5 Slums (Chapter 14)</a><div class="text-sm text-zinc-500">Chapter 14</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-6-undercity-chapter-14/index.html">Sector 6 Undercity (Chapter 14)</a><div class="text-sm text-zinc-500">Chapter 14</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="wall-market-chapter-14/index.html">Wall Market (Chapter 14)</a><div class="text-sm text-zinc-500">Chapter 14</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="corneo-colosseum-chapter-14/index.html">Corneo Colosseum (Chapter 14)</a><div class="text-sm text-zinc-500">Chapter 14</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-slums-chapter-14/index.html">Sector 7 Slums (Chapter 14)</a><div class="text-sm text-zinc-500">Chapter 14</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-undercity-chapter-14/index.html">Sector 7 Undercity (Chapter 14)</a><div class="text-sm text-zinc-500">Chapter 14</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="shinra-building/index.html">Shinra Building</a><div class="text-sm text-zinc-500">Chapter 16</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="highway/index.html">Highway</a><div class="text-sm text-zinc-500">Chapter 18</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-slums-intermission/index.html">Sector 7 Slums (INTERmission)</a><div class="text-sm text-zinc-500">INTERmission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="shinra-building-intermission/index.html">Shinra Building (INTERmission)</a><div class="text-sm text-zinc-500">INTERmission</div></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">FINAL FANTASY VII REMAKE INTERGRADE guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">34</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">123</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">21</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="final-fantasy-vii-remake-intergrade" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><a href="mako-reactor-1/index.html" data-area-link="mako-reactor-1" data-name="Mako Reactor 1" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mako Reactor 1</span><span class="block text-sm text-zinc-500 truncate">Chapter 1</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|mako-reactor-1|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-1-station/index.html" data-area-link="sector-1-station" data-name="Sector 1 Station" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 1 Station</span><span class="block text-sm text-zinc-500 truncate">Chapter 1</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-1-station|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-1-slums/index.html" data-area-link="sector-1-slums" data-name="Sector 1 Slums" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 1 Slums</span><span class="block text-sm text-zinc-500 truncate">Chapter 2</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-1-slums|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-8/index.html" data-area-link="sector-8" data-name="Sector 8" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 8</span><span class="block text-sm text-zinc-500 truncate">Chapter 2</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-8|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-slums/index.html" data-area-link="sector-7-slums" data-name="Sector 7 Slums" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Slums</span><span class="block text-sm text-zinc-500 truncate">Chapter 3</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-7-slums|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-undercity/index.html" data-area-link="sector-7-undercity" data-name="Sector 7 Undercity" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Undercity</span><span class="block text-sm text-zinc-500 truncate">Chapter 3</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-7-undercity|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-undercity-chapter-4/index.html" data-area-link="sector-7-undercity-chapter-4" data-name="Sector 7 Undercity (Chapter 4)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Undercity (Chapter 4)</span><span class="block text-sm text-zinc-500 truncate">Chapter 4</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-7-undercity-chapter-4|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-plate/index.html" data-area-link="sector-7-plate" data-name="Sector 7 Plate" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Plate</span><span class="block text-sm text-zinc-500 truncate">Chapter 4</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-7-plate|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-5-station/index.html" data-area-link="sector-5-station" data-name="Sector 5 Station" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 5 Station</span><span class="block text-sm text-zinc-500 truncate">Chapter 5</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-5-station|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-5-undercity/index.html" data-area-link="sector-5-undercity" data-name="Sector 5 Undercity" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 5 Undercity</span><span class="block text-sm text-zinc-500 truncate">Chapter 5</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-5-undercity|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-5-slums/index.html" data-area-link="sector-5-slums" data-name="Sector 5 Slums" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 5 Slums</span><span class="block text-sm text-zinc-500 truncate">Chapter 8</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-5-slums|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-5-undercity-chapter-8/index.html" data-area-link="sector-5-undercity-chapter-8" data-name="Sector 5 Undercity (Chapter 8)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 5 Undercity (Chapter 8)</span><span class="block text-sm text-zinc-500 truncate">Chapter 8</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-5-undercity-chapter-8|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-6-slums/index.html" data-area-link="sector-6-slums" data-name="Sector 6 Slums" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 6 Slums</span><span class="block text-sm text-zinc-500 truncate">Chapter 9</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-6-slums|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="wall-market/index.html" data-area-link="wall-market" data-name="Wall Market" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Wall Market</span><span class="block text-sm text-zinc-500 truncate">Chapter 9</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|wall-market|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="corneo-colosseum/index.html" data-area-link="corneo-colosseum" data-name="Corneo Colosseum" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Corneo Colosseum</span><span class="block text-sm text-zinc-500 truncate">Chapter 9</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|corneo-colosseum|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-6-undercity/index.html" data-area-link="sector-6-undercity" data-name="Sector 6 Undercity" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 6 Undercity</span><span class="block text-sm text-zinc-500 truncate">Chapter 9</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-6-undercity|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-6-slums-chapter-10/index.html" data-area-link="sector-6-slums-chapter-10" data-name="Sector 6 Slums (Chapter 10)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 6 Slums (Chapter 10)</span><span class="block text-sm text-zinc-500 truncate">Chapter 10</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-6-slums-chapter-10|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-sewers/index.html" data-area-link="sector-7-sewers" data-name="Sector 7 Sewers" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Sewers</span><span class="block text-sm text-zinc-500 truncate">Chapter 10</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-7-sewers|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="train-graveyard/index.html" data-area-link="train-graveyard" data-name="Train Graveyard" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Train Graveyard</span><span class="block text-sm text-zinc-500 truncate">Chapter 11</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|train-graveyard|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-slums-chapter-12/index.html" data-area-link="sector-7-slums-chapter-12" data-name="Sector 7 Slums (Chapter 12)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Slums (Chapter 12)</span><span class="block text-sm text-zinc-500 truncate">Chapter 12</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-7-slums-chapter-12|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-pillar/index.html" data-area-link="sector-7-pillar" data-name="Sector 7 Pillar" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Pillar</span><span class="block text-sm text-zinc-500 truncate">Chapter 12</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-7-pillar|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-undercity-chapter-12/index.html" data-area-link="sector-7-undercity-chapter-12" data-name="Sector 7 Undercity (Chapter 12)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Undercity (Chapter 12)</span><span class="block text-sm text-zinc-500 truncate">Chapter 12</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-7-undercity-chapter-12|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="underground-test-site/index.html" data-area-link="underground-test-site" data-name="Underground Test Site" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Underground Test Site</span><span class="block text-sm text-zinc-500 truncate">Chapter 13</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|underground-test-site|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-5-undercity-chapter-13/index.html" data-area-link="sector-5-undercity-chapter-13" data-name="Sector 5 Undercity (Chapter 13)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 5 Undercity (Chapter 13)</span><span class="block text-sm text-zinc-500 truncate">Chapter 13</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-5-undercity-chapter-13|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-5-slums-chapter-14/index.html" data-area-link="sector-5-slums-chapter-14" data-name="Sector 5 Slums (Chapter 14)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 5 Slums (Chapter 14)</span><span class="block text-sm text-zinc-500 truncate">Chapter 14</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-5-slums-chapter-14|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-6-undercity-chapter-14/index.html" data-area-link="sector-6-undercity-chapter-14" data-name="Sector 6 Undercity (Chapter 14)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 6 Undercity (Chapter 14)</span><span class="block text-sm text-zinc-500 truncate">Chapter 14</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-6-undercity-chapter-14|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="wall-market-chapter-14/index.html" data-area-link="wall-market-chapter-14" data-name="Wall Market (Chapter 14)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Wall Market (Chapter 14)</span><span class="block text-sm text-zinc-500 truncate">Chapter 14</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|wall-market-chapter-14|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="corneo-colosseum-chapter-14/index.html" data-area-link="corneo-colosseum-chapter-14" data-name="Corneo Colosseum (Chapter 14)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Corneo Colosseum (Chapter 14)</span><span class="block text-sm text-zinc-500 truncate">Chapter 14</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|corneo-colosseum-chapter-14|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-slums-chapter-14/index.html" data-area-link="sector-7-slums-chapter-14" data-name="Sector 7 Slums (Chapter 14)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Slums (Chapter 14)</span><span class="block text-sm text-zinc-500 truncate">Chapter 14</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-7-slums-chapter-14|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-undercity-chapter-14/index.html" data-area-link="sector-7-undercity-chapter-14" data-name="Sector 7 Undercity (Chapter 14)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Undercity (Chapter 14)</span><span class="block text-sm text-zinc-500 truncate">Chapter 14</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-7-undercity-chapter-14|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="shinra-building/index.html" data-area-link="shinra-building" data-name="Shinra Building" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Shinra Building</span><span class="block text-sm text-zinc-500 truncate">Chapter 16</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|shinra-building|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="highway/index.html" data-area-link="highway" data-name="Highway" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Highway</span><span class="block text-sm text-zinc-500 truncate">Chapter 18</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|highway|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-slums-intermission/index.html" data-area-link="sector-7-slums-intermission" data-name="Sector 7 Slums (INTERmission)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Slums (INTERmission)</span><span class="block text-sm text-zinc-500 truncate">INTERmission</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|sector-7-slums-intermission|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="shinra-building-intermission/index.html" data-area-link="shinra-building-intermission" data-name="Shinra Building (INTERmission)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Shinra Building (INTERmission)</span><span class="block text-sm text-zinc-500 truncate">INTERmission</span></span>
+          <span data-progress="final-fantasy-vii-remake-intergrade|shinra-building-intermission|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in FINAL FANTASY VII REMAKE INTERGRADE?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

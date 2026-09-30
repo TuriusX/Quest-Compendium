@@ -20,29 +20,268 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="final-fantasy-vii">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">FINAL FANTASY VII guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mako-reactor-1/index.html">Mako Reactor 1</a><div class="text-sm text-zinc-500">The opening mission to destroy the reactor</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-8/index.html">Sector 8</a><div class="text-sm text-zinc-500">Running through the streets after the reactor explosion</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-slums/index.html">Sector 7 Slums</a><div class="text-sm text-zinc-500">Returning to the 7th Heaven bar</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-slums-7th-heaven/index.html">Sector 7 Slums - 7th Heaven</a><div class="text-sm text-zinc-500">Meeting Tifa and planning the next mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-1-mako-reactor/index.html">Sector 1 Mako Reactor</a><div class="text-sm text-zinc-500">The second mission to bomb the reactor</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-5-slums/index.html">Sector 5 Slums</a><div class="text-sm text-zinc-500">Waking up in the church after falling from the plate</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-5-slums-aeriths-house/index.html">Sector 5 Slums - Aerith&#39;s House</a><div class="text-sm text-zinc-500">Meeting Aerith and staying the night</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="wall-market/index.html">Wall Market</a><div class="text-sm text-zinc-500">Searching for Tifa and infiltrating Don Corneo&#39;s mansion</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="don-corneos-mansion/index.html">Don Corneo&#39;s Mansion</a><div class="text-sm text-zinc-500">Rescuing Tifa and Aerith</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sector-7-plate-support/index.html">Sector 7 Plate Support</a><div class="text-sm text-zinc-500">Climbing the pillar to stop the Turks</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="shinra-building/index.html">Shinra Building</a><div class="text-sm text-zinc-500">Infiltrating the headquarters to rescue Aerith</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="midgar-highway/index.html">Midgar Highway</a><div class="text-sm text-zinc-500">The motorcycle escape sequence</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="kalm/index.html">Kalm</a><div class="text-sm text-zinc-500">After leaving Midgar</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="chocobo-farm/index.html">Chocobo Farm</a><div class="text-sm text-zinc-500">Searching for a way to cross the marsh</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mythril-mine/index.html">Mythril Mine</a><div class="text-sm text-zinc-500">Shortcut to Junon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="junon/index.html">Junon</a><div class="text-sm text-zinc-500">Searching for a way to cross the ocean</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cargo-ship/index.html">Cargo Ship</a><div class="text-sm text-zinc-500">Traveling to Costa del Sol</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="costa-del-sol/index.html">Costa del Sol</a><div class="text-sm text-zinc-500">Arriving on the new continent</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mt-corel/index.html">Mt. Corel</a><div class="text-sm text-zinc-500">Traveling toward the Gold Saucer</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="north-corel/index.html">North Corel</a><div class="text-sm text-zinc-500">Passing through on the way to the Gold Saucer</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gold-saucer/index.html">Gold Saucer</a><div class="text-sm text-zinc-500">Searching for Barret&#39;s past</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="corel-prison/index.html">Corel Prison</a><div class="text-sm text-zinc-500">Imprisoned after the Gold Saucer incident</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gongaga/index.html">Gongaga</a><div class="text-sm text-zinc-500">Visiting the reactor and Aerith&#39;s hometown</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cosmo-canyon/index.html">Cosmo Canyon</a><div class="text-sm text-zinc-500">Learning about the Planet and Red XIII&#39;s past</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cave-of-the-gi/index.html">Cave of the Gi</a><div class="text-sm text-zinc-500">Exploring the cave beneath Cosmo Canyon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="nibelheim/index.html">Nibelheim</a><div class="text-sm text-zinc-500">Investigating Cloud and Sephiroth&#39;s past</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mt-nibel/index.html">Mt. Nibel</a><div class="text-sm text-zinc-500">Traveling toward Rocket Town</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="rocket-town/index.html">Rocket Town</a><div class="text-sm text-zinc-500">Searching for the Tiny Bronco</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="wutai/index.html">Wutai</a><div class="text-sm text-zinc-500">Optional side quest area</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="temple-of-the-ancients/index.html">Temple of the Ancients</a><div class="text-sm text-zinc-500">Seeking the Black Materia</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="bone-village/index.html">Bone Village</a><div class="text-sm text-zinc-500">Searching for the path to the Sleeping Forest</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sleeping-forest/index.html">Sleeping Forest</a><div class="text-sm text-zinc-500">Path to the Forgotten Capital</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="forgotten-capital/index.html">Forgotten Capital</a><div class="text-sm text-zinc-500">Confronting Sephiroth and the end of Disc 1</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="junon-post-disc-1/index.html">Junon (Post-Disc 1)</a><div class="text-sm text-zinc-500">Returning to Junon to find the Highwind</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mideel/index.html">Mideel</a><div class="text-sm text-zinc-500">Seeking Cloud in the village</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="corel-reactor/index.html">Corel Reactor</a><div class="text-sm text-zinc-500">Stopping the Shinra train</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="fort-condor/index.html">Fort Condor</a><div class="text-sm text-zinc-500">Defending the Huge Materia</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="underwater-reactor/index.html">Underwater Reactor</a><div class="text-sm text-zinc-500">Retrieving the Huge Materia from the ocean floor</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="submarine-dock/index.html">Submarine Dock</a><div class="text-sm text-zinc-500">Stealing the Shinra submarine</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gelnika/index.html">Gelnika</a><div class="text-sm text-zinc-500">Exploring the crashed plane</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="rocket-town-post-disc-1/index.html">Rocket Town (Post-Disc 1)</a><div class="text-sm text-zinc-500">Attempting to stop the rocket launch</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cosmo-canyon-post-disc-1/index.html">Cosmo Canyon (Post-Disc 1)</a><div class="text-sm text-zinc-500">Observing the Planet&#39;s defense</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ancient-forest/index.html">Ancient Forest</a><div class="text-sm text-zinc-500">Optional forest near Cosmo Canyon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="northern-cave/index.html">Northern Cave</a><div class="text-sm text-zinc-500">The final descent to confront Sephiroth</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mideel-lifestream-incident/index.html">Mideel (Lifestream Incident)</a><div class="text-sm text-zinc-500">The village after the Lifestream event</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="midgar/index.html">Midgar</a><div class="text-sm text-zinc-500">Returning to infiltrate the city</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="shinra-building-sister-ray-era/index.html">Shinra Building (Sister Ray Era)</a><div class="text-sm text-zinc-500">Returning to the headquarters</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="midgar-underground/index.html">Midgar Underground</a><div class="text-sm text-zinc-500">The tunnels beneath the city</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="northern-cave-final-battle/index.html">Northern Cave (Final Battle)</a><div class="text-sm text-zinc-500">The final journey to the core</div></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">FINAL FANTASY VII guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">49</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">246</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">95</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="final-fantasy-vii" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><a href="mako-reactor-1/index.html" data-area-link="mako-reactor-1" data-name="Mako Reactor 1" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mako Reactor 1</span><span class="block text-sm text-zinc-500 truncate">The opening mission to destroy the reactor</span></span>
+          <span data-progress="final-fantasy-vii|mako-reactor-1|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-8/index.html" data-area-link="sector-8" data-name="Sector 8" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 8</span><span class="block text-sm text-zinc-500 truncate">Running through the streets after the reactor explosion</span></span>
+          <span data-progress="final-fantasy-vii|sector-8|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-slums/index.html" data-area-link="sector-7-slums" data-name="Sector 7 Slums" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Slums</span><span class="block text-sm text-zinc-500 truncate">Returning to the 7th Heaven bar</span></span>
+          <span data-progress="final-fantasy-vii|sector-7-slums|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-slums-7th-heaven/index.html" data-area-link="sector-7-slums-7th-heaven" data-name="Sector 7 Slums - 7th Heaven" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Slums - 7th Heaven</span><span class="block text-sm text-zinc-500 truncate">Meeting Tifa and planning the next mission</span></span>
+          <span data-progress="final-fantasy-vii|sector-7-slums-7th-heaven|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-1-mako-reactor/index.html" data-area-link="sector-1-mako-reactor" data-name="Sector 1 Mako Reactor" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 1 Mako Reactor</span><span class="block text-sm text-zinc-500 truncate">The second mission to bomb the reactor</span></span>
+          <span data-progress="final-fantasy-vii|sector-1-mako-reactor|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-5-slums/index.html" data-area-link="sector-5-slums" data-name="Sector 5 Slums" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 5 Slums</span><span class="block text-sm text-zinc-500 truncate">Waking up in the church after falling from the plate</span></span>
+          <span data-progress="final-fantasy-vii|sector-5-slums|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-5-slums-aeriths-house/index.html" data-area-link="sector-5-slums-aeriths-house" data-name="Sector 5 Slums - Aerith&#39;s House" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 5 Slums - Aerith&#39;s House</span><span class="block text-sm text-zinc-500 truncate">Meeting Aerith and staying the night</span></span>
+          <span data-progress="final-fantasy-vii|sector-5-slums-aeriths-house|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="wall-market/index.html" data-area-link="wall-market" data-name="Wall Market" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Wall Market</span><span class="block text-sm text-zinc-500 truncate">Searching for Tifa and infiltrating Don Corneo&#39;s mansion</span></span>
+          <span data-progress="final-fantasy-vii|wall-market|12"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="don-corneos-mansion/index.html" data-area-link="don-corneos-mansion" data-name="Don Corneo&#39;s Mansion" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Don Corneo&#39;s Mansion</span><span class="block text-sm text-zinc-500 truncate">Rescuing Tifa and Aerith</span></span>
+          <span data-progress="final-fantasy-vii|don-corneos-mansion|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sector-7-plate-support/index.html" data-area-link="sector-7-plate-support" data-name="Sector 7 Plate Support" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sector 7 Plate Support</span><span class="block text-sm text-zinc-500 truncate">Climbing the pillar to stop the Turks</span></span>
+          <span data-progress="final-fantasy-vii|sector-7-plate-support|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="shinra-building/index.html" data-area-link="shinra-building" data-name="Shinra Building" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Shinra Building</span><span class="block text-sm text-zinc-500 truncate">Infiltrating the headquarters to rescue Aerith</span></span>
+          <span data-progress="final-fantasy-vii|shinra-building|11"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="midgar-highway/index.html" data-area-link="midgar-highway" data-name="Midgar Highway" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Midgar Highway</span><span class="block text-sm text-zinc-500 truncate">The motorcycle escape sequence</span></span>
+          <span data-progress="final-fantasy-vii|midgar-highway|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="kalm/index.html" data-area-link="kalm" data-name="Kalm" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kalm</span><span class="block text-sm text-zinc-500 truncate">After leaving Midgar</span></span>
+          <span data-progress="final-fantasy-vii|kalm|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="chocobo-farm/index.html" data-area-link="chocobo-farm" data-name="Chocobo Farm" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chocobo Farm</span><span class="block text-sm text-zinc-500 truncate">Searching for a way to cross the marsh</span></span>
+          <span data-progress="final-fantasy-vii|chocobo-farm|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mythril-mine/index.html" data-area-link="mythril-mine" data-name="Mythril Mine" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mythril Mine</span><span class="block text-sm text-zinc-500 truncate">Shortcut to Junon</span></span>
+          <span data-progress="final-fantasy-vii|mythril-mine|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="junon/index.html" data-area-link="junon" data-name="Junon" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Junon</span><span class="block text-sm text-zinc-500 truncate">Searching for a way to cross the ocean</span></span>
+          <span data-progress="final-fantasy-vii|junon|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cargo-ship/index.html" data-area-link="cargo-ship" data-name="Cargo Ship" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cargo Ship</span><span class="block text-sm text-zinc-500 truncate">Traveling to Costa del Sol</span></span>
+          <span data-progress="final-fantasy-vii|cargo-ship|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="costa-del-sol/index.html" data-area-link="costa-del-sol" data-name="Costa del Sol" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Costa del Sol</span><span class="block text-sm text-zinc-500 truncate">Arriving on the new continent</span></span>
+          <span data-progress="final-fantasy-vii|costa-del-sol|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mt-corel/index.html" data-area-link="mt-corel" data-name="Mt. Corel" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mt. Corel</span><span class="block text-sm text-zinc-500 truncate">Traveling toward the Gold Saucer</span></span>
+          <span data-progress="final-fantasy-vii|mt-corel|10"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="north-corel/index.html" data-area-link="north-corel" data-name="North Corel" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">North Corel</span><span class="block text-sm text-zinc-500 truncate">Passing through on the way to the Gold Saucer</span></span>
+          <span data-progress="final-fantasy-vii|north-corel|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gold-saucer/index.html" data-area-link="gold-saucer" data-name="Gold Saucer" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gold Saucer</span><span class="block text-sm text-zinc-500 truncate">Searching for Barret&#39;s past</span></span>
+          <span data-progress="final-fantasy-vii|gold-saucer|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="corel-prison/index.html" data-area-link="corel-prison" data-name="Corel Prison" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Corel Prison</span><span class="block text-sm text-zinc-500 truncate">Imprisoned after the Gold Saucer incident</span></span>
+          <span data-progress="final-fantasy-vii|corel-prison|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gongaga/index.html" data-area-link="gongaga" data-name="Gongaga" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gongaga</span><span class="block text-sm text-zinc-500 truncate">Visiting the reactor and Aerith&#39;s hometown</span></span>
+          <span data-progress="final-fantasy-vii|gongaga|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cosmo-canyon/index.html" data-area-link="cosmo-canyon" data-name="Cosmo Canyon" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cosmo Canyon</span><span class="block text-sm text-zinc-500 truncate">Learning about the Planet and Red XIII&#39;s past</span></span>
+          <span data-progress="final-fantasy-vii|cosmo-canyon|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cave-of-the-gi/index.html" data-area-link="cave-of-the-gi" data-name="Cave of the Gi" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cave of the Gi</span><span class="block text-sm text-zinc-500 truncate">Exploring the cave beneath Cosmo Canyon</span></span>
+          <span data-progress="final-fantasy-vii|cave-of-the-gi|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="nibelheim/index.html" data-area-link="nibelheim" data-name="Nibelheim" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Nibelheim</span><span class="block text-sm text-zinc-500 truncate">Investigating Cloud and Sephiroth&#39;s past</span></span>
+          <span data-progress="final-fantasy-vii|nibelheim|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mt-nibel/index.html" data-area-link="mt-nibel" data-name="Mt. Nibel" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mt. Nibel</span><span class="block text-sm text-zinc-500 truncate">Traveling toward Rocket Town</span></span>
+          <span data-progress="final-fantasy-vii|mt-nibel|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="rocket-town/index.html" data-area-link="rocket-town" data-name="Rocket Town" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Rocket Town</span><span class="block text-sm text-zinc-500 truncate">Searching for the Tiny Bronco</span></span>
+          <span data-progress="final-fantasy-vii|rocket-town|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="wutai/index.html" data-area-link="wutai" data-name="Wutai" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Wutai</span><span class="block text-sm text-zinc-500 truncate">Optional side quest area</span></span>
+          <span data-progress="final-fantasy-vii|wutai|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="temple-of-the-ancients/index.html" data-area-link="temple-of-the-ancients" data-name="Temple of the Ancients" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Temple of the Ancients</span><span class="block text-sm text-zinc-500 truncate">Seeking the Black Materia</span></span>
+          <span data-progress="final-fantasy-vii|temple-of-the-ancients|15"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="bone-village/index.html" data-area-link="bone-village" data-name="Bone Village" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Bone Village</span><span class="block text-sm text-zinc-500 truncate">Searching for the path to the Sleeping Forest</span></span>
+          <span data-progress="final-fantasy-vii|bone-village|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sleeping-forest/index.html" data-area-link="sleeping-forest" data-name="Sleeping Forest" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sleeping Forest</span><span class="block text-sm text-zinc-500 truncate">Path to the Forgotten Capital</span></span>
+          <span data-progress="final-fantasy-vii|sleeping-forest|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="forgotten-capital/index.html" data-area-link="forgotten-capital" data-name="Forgotten Capital" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Forgotten Capital</span><span class="block text-sm text-zinc-500 truncate">Confronting Sephiroth and the end of Disc 1</span></span>
+          <span data-progress="final-fantasy-vii|forgotten-capital|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="junon-post-disc-1/index.html" data-area-link="junon-post-disc-1" data-name="Junon (Post-Disc 1)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Junon (Post-Disc 1)</span><span class="block text-sm text-zinc-500 truncate">Returning to Junon to find the Highwind</span></span>
+          <span data-progress="final-fantasy-vii|junon-post-disc-1|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mideel/index.html" data-area-link="mideel" data-name="Mideel" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mideel</span><span class="block text-sm text-zinc-500 truncate">Seeking Cloud in the village</span></span>
+          <span data-progress="final-fantasy-vii|mideel|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="corel-reactor/index.html" data-area-link="corel-reactor" data-name="Corel Reactor" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Corel Reactor</span><span class="block text-sm text-zinc-500 truncate">Stopping the Shinra train</span></span>
+          <span data-progress="final-fantasy-vii|corel-reactor|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="fort-condor/index.html" data-area-link="fort-condor" data-name="Fort Condor" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Fort Condor</span><span class="block text-sm text-zinc-500 truncate">Defending the Huge Materia</span></span>
+          <span data-progress="final-fantasy-vii|fort-condor|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="underwater-reactor/index.html" data-area-link="underwater-reactor" data-name="Underwater Reactor" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Underwater Reactor</span><span class="block text-sm text-zinc-500 truncate">Retrieving the Huge Materia from the ocean floor</span></span>
+          <span data-progress="final-fantasy-vii|underwater-reactor|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="submarine-dock/index.html" data-area-link="submarine-dock" data-name="Submarine Dock" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Submarine Dock</span><span class="block text-sm text-zinc-500 truncate">Stealing the Shinra submarine</span></span>
+          <span data-progress="final-fantasy-vii|submarine-dock|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gelnika/index.html" data-area-link="gelnika" data-name="Gelnika" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gelnika</span><span class="block text-sm text-zinc-500 truncate">Exploring the crashed plane</span></span>
+          <span data-progress="final-fantasy-vii|gelnika|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="rocket-town-post-disc-1/index.html" data-area-link="rocket-town-post-disc-1" data-name="Rocket Town (Post-Disc 1)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Rocket Town (Post-Disc 1)</span><span class="block text-sm text-zinc-500 truncate">Attempting to stop the rocket launch</span></span>
+          <span data-progress="final-fantasy-vii|rocket-town-post-disc-1|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cosmo-canyon-post-disc-1/index.html" data-area-link="cosmo-canyon-post-disc-1" data-name="Cosmo Canyon (Post-Disc 1)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cosmo Canyon (Post-Disc 1)</span><span class="block text-sm text-zinc-500 truncate">Observing the Planet&#39;s defense</span></span>
+          <span data-progress="final-fantasy-vii|cosmo-canyon-post-disc-1|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ancient-forest/index.html" data-area-link="ancient-forest" data-name="Ancient Forest" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ancient Forest</span><span class="block text-sm text-zinc-500 truncate">Optional forest near Cosmo Canyon</span></span>
+          <span data-progress="final-fantasy-vii|ancient-forest|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="northern-cave/index.html" data-area-link="northern-cave" data-name="Northern Cave" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Northern Cave</span><span class="block text-sm text-zinc-500 truncate">The final descent to confront Sephiroth</span></span>
+          <span data-progress="final-fantasy-vii|northern-cave|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mideel-lifestream-incident/index.html" data-area-link="mideel-lifestream-incident" data-name="Mideel (Lifestream Incident)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mideel (Lifestream Incident)</span><span class="block text-sm text-zinc-500 truncate">The village after the Lifestream event</span></span>
+          <span data-progress="final-fantasy-vii|mideel-lifestream-incident|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="midgar/index.html" data-area-link="midgar" data-name="Midgar" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Midgar</span><span class="block text-sm text-zinc-500 truncate">Returning to infiltrate the city</span></span>
+          <span data-progress="final-fantasy-vii|midgar|10"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="shinra-building-sister-ray-era/index.html" data-area-link="shinra-building-sister-ray-era" data-name="Shinra Building (Sister Ray Era)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Shinra Building (Sister Ray Era)</span><span class="block text-sm text-zinc-500 truncate">Returning to the headquarters</span></span>
+          <span data-progress="final-fantasy-vii|shinra-building-sister-ray-era|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="midgar-underground/index.html" data-area-link="midgar-underground" data-name="Midgar Underground" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Midgar Underground</span><span class="block text-sm text-zinc-500 truncate">The tunnels beneath the city</span></span>
+          <span data-progress="final-fantasy-vii|midgar-underground|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="northern-cave-final-battle/index.html" data-area-link="northern-cave-final-battle" data-name="Northern Cave (Final Battle)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Northern Cave (Final Battle)</span><span class="block text-sm text-zinc-500 truncate">The final journey to the core</span></span>
+          <span data-progress="final-fantasy-vii|northern-cave-final-battle|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in FINAL FANTASY VII?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

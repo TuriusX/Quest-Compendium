@@ -20,29 +20,216 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="final-fantasy-x-x-2-hd-remaster">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">FINAL FANTASY X/X-2 HD Remaster guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="zanarkand/index.html">Zanarkand</a><div class="text-sm text-zinc-500">The opening sequence and blitzball stadium</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="baaj-temple/index.html">Baaj Temple</a><div class="text-sm text-zinc-500">Tidus&#39;s first location after the attack</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="salvage-ship/index.html">Salvage Ship</a><div class="text-sm text-zinc-500">The Al Bhed ship where Tidus is rescued</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="underwater-ruins/index.html">Underwater Ruins</a><div class="text-sm text-zinc-500">The sunken ruins Tidus explores with Rikku</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="besaid-island/index.html">Besaid Island</a><div class="text-sm text-zinc-500">Tidus arrives on the beach and visits the village</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="s-s-liki/index.html">S.S. Liki</a><div class="text-sm text-zinc-500">The ship voyage from Besaid to Kilika</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="kilika-woods/index.html">Kilika Woods</a><div class="text-sm text-zinc-500">The path through the forest to the temple</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="s-s-winno/index.html">S.S. Winno</a><div class="text-sm text-zinc-500">The ship voyage from Kilika to Luca</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="luca/index.html">Luca</a><div class="text-sm text-zinc-500">The city hosting the Blitzball tournament</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="miihen-highroad/index.html">Mi&#39;ihen Highroad</a><div class="text-sm text-zinc-500">The long road leading north from Luca</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mushroom-rock-road/index.html">Mushroom Rock Road</a><div class="text-sm text-zinc-500">The operation against Sin</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="djose-highroad/index.html">Djose Highroad</a><div class="text-sm text-zinc-500">The path leading to Djose Temple</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="djose-temple/index.html">Djose Temple</a><div class="text-sm text-zinc-500">The temple and the Chamber of the Fayth</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="moonflow/index.html">Moonflow</a><div class="text-sm text-zinc-500">The river crossing with the shoopuf</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="guadosalam/index.html">Guadosalam</a><div class="text-sm text-zinc-500">The home of the Guado</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="thunder-plains/index.html">Thunder Plains</a><div class="text-sm text-zinc-500">The storm-ridden plains</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="macalania-woods/index.html">Macalania Woods</a><div class="text-sm text-zinc-500">The forest leading to the lake</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lake-macalania/index.html">Lake Macalania</a><div class="text-sm text-zinc-500">The frozen lake and travel agency</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="macalania-temple/index.html">Macalania Temple</a><div class="text-sm text-zinc-500">The temple and the confrontation with Seymour</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="bikanel-island/index.html">Bikanel Island</a><div class="text-sm text-zinc-500">The desert where the party is stranded</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="home/index.html">Home</a><div class="text-sm text-zinc-500">The Al Bhed base under attack</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="airship/index.html">Airship</a><div class="text-sm text-zinc-500">The party&#39;s base of operations</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="bevelle/index.html">Bevelle</a><div class="text-sm text-zinc-500">The capital city and temple</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="via-purifico/index.html">Via Purifico</a><div class="text-sm text-zinc-500">The underwater prison beneath Bevelle</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="calm-lands/index.html">Calm Lands</a><div class="text-sm text-zinc-500">The vast plains leading to Mt. Gagazet</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="remiem-temple/index.html">Remiem Temple</a><div class="text-sm text-zinc-500">The optional temple in the Calm Lands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cavern-of-the-stolen-fayth/index.html">Cavern of the Stolen Fayth</a><div class="text-sm text-zinc-500">The hidden cave in the Calm Lands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="mt-gagazet/index.html">Mt. Gagazet</a><div class="text-sm text-zinc-500">The mountain path leading to the summit</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gagazet-cave/index.html">Gagazet Cave</a><div class="text-sm text-zinc-500">The underwater cavern inside the mountain</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="zanarkand-ruins/index.html">Zanarkand Ruins</a><div class="text-sm text-zinc-500">The ruined city at the end of the pilgrimage</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="zanarkand-dome/index.html">Zanarkand Dome</a><div class="text-sm text-zinc-500">The interior of the dome and the final trial</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="omega-ruins/index.html">Omega Ruins</a><div class="text-sm text-zinc-500">Optional high-level dungeon found via Airship</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sin/index.html">Sin</a><div class="text-sm text-zinc-500">The exterior of Sin during the final assault</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sin-sea-of-sorrow/index.html">Sin: Sea of Sorrow</a><div class="text-sm text-zinc-500">The first interior area of Sin</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sin-city-of-dying-dreams/index.html">Sin: City of Dying Dreams</a><div class="text-sm text-zinc-500">The second interior area of Sin</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sin-the-nucleus/index.html">Sin: The Nucleus</a><div class="text-sm text-zinc-500">The final area inside Sin</div></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">FINAL FANTASY X/X-2 HD Remaster guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">36</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">215</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">32</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="final-fantasy-x-x-2-hd-remaster" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><a href="zanarkand/index.html" data-area-link="zanarkand" data-name="Zanarkand" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Zanarkand</span><span class="block text-sm text-zinc-500 truncate">The opening sequence and blitzball stadium</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|zanarkand|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="baaj-temple/index.html" data-area-link="baaj-temple" data-name="Baaj Temple" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Baaj Temple</span><span class="block text-sm text-zinc-500 truncate">Tidus&#39;s first location after the attack</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|baaj-temple|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="salvage-ship/index.html" data-area-link="salvage-ship" data-name="Salvage Ship" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Salvage Ship</span><span class="block text-sm text-zinc-500 truncate">The Al Bhed ship where Tidus is rescued</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|salvage-ship|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="underwater-ruins/index.html" data-area-link="underwater-ruins" data-name="Underwater Ruins" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Underwater Ruins</span><span class="block text-sm text-zinc-500 truncate">The sunken ruins Tidus explores with Rikku</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|underwater-ruins|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="besaid-island/index.html" data-area-link="besaid-island" data-name="Besaid Island" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Besaid Island</span><span class="block text-sm text-zinc-500 truncate">Tidus arrives on the beach and visits the village</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|besaid-island|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="s-s-liki/index.html" data-area-link="s-s-liki" data-name="S.S. Liki" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">S.S. Liki</span><span class="block text-sm text-zinc-500 truncate">The ship voyage from Besaid to Kilika</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|s-s-liki|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="kilika-woods/index.html" data-area-link="kilika-woods" data-name="Kilika Woods" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kilika Woods</span><span class="block text-sm text-zinc-500 truncate">The path through the forest to the temple</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|kilika-woods|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="s-s-winno/index.html" data-area-link="s-s-winno" data-name="S.S. Winno" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">S.S. Winno</span><span class="block text-sm text-zinc-500 truncate">The ship voyage from Kilika to Luca</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|s-s-winno|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="luca/index.html" data-area-link="luca" data-name="Luca" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Luca</span><span class="block text-sm text-zinc-500 truncate">The city hosting the Blitzball tournament</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|luca|13"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="miihen-highroad/index.html" data-area-link="miihen-highroad" data-name="Mi&#39;ihen Highroad" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mi&#39;ihen Highroad</span><span class="block text-sm text-zinc-500 truncate">The long road leading north from Luca</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|miihen-highroad|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mushroom-rock-road/index.html" data-area-link="mushroom-rock-road" data-name="Mushroom Rock Road" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mushroom Rock Road</span><span class="block text-sm text-zinc-500 truncate">The operation against Sin</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|mushroom-rock-road|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="djose-highroad/index.html" data-area-link="djose-highroad" data-name="Djose Highroad" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Djose Highroad</span><span class="block text-sm text-zinc-500 truncate">The path leading to Djose Temple</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|djose-highroad|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="djose-temple/index.html" data-area-link="djose-temple" data-name="Djose Temple" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Djose Temple</span><span class="block text-sm text-zinc-500 truncate">The temple and the Chamber of the Fayth</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|djose-temple|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="moonflow/index.html" data-area-link="moonflow" data-name="Moonflow" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Moonflow</span><span class="block text-sm text-zinc-500 truncate">The river crossing with the shoopuf</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|moonflow|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="guadosalam/index.html" data-area-link="guadosalam" data-name="Guadosalam" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Guadosalam</span><span class="block text-sm text-zinc-500 truncate">The home of the Guado</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|guadosalam|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="thunder-plains/index.html" data-area-link="thunder-plains" data-name="Thunder Plains" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Thunder Plains</span><span class="block text-sm text-zinc-500 truncate">The storm-ridden plains</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|thunder-plains|11"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="macalania-woods/index.html" data-area-link="macalania-woods" data-name="Macalania Woods" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Macalania Woods</span><span class="block text-sm text-zinc-500 truncate">The forest leading to the lake</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|macalania-woods|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lake-macalania/index.html" data-area-link="lake-macalania" data-name="Lake Macalania" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lake Macalania</span><span class="block text-sm text-zinc-500 truncate">The frozen lake and travel agency</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|lake-macalania|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="macalania-temple/index.html" data-area-link="macalania-temple" data-name="Macalania Temple" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Macalania Temple</span><span class="block text-sm text-zinc-500 truncate">The temple and the confrontation with Seymour</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|macalania-temple|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="bikanel-island/index.html" data-area-link="bikanel-island" data-name="Bikanel Island" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Bikanel Island</span><span class="block text-sm text-zinc-500 truncate">The desert where the party is stranded</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|bikanel-island|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="home/index.html" data-area-link="home" data-name="Home" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Home</span><span class="block text-sm text-zinc-500 truncate">The Al Bhed base under attack</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|home|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="airship/index.html" data-area-link="airship" data-name="Airship" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Airship</span><span class="block text-sm text-zinc-500 truncate">The party&#39;s base of operations</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|airship|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="bevelle/index.html" data-area-link="bevelle" data-name="Bevelle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Bevelle</span><span class="block text-sm text-zinc-500 truncate">The capital city and temple</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|bevelle|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="via-purifico/index.html" data-area-link="via-purifico" data-name="Via Purifico" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Via Purifico</span><span class="block text-sm text-zinc-500 truncate">The underwater prison beneath Bevelle</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|via-purifico|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="calm-lands/index.html" data-area-link="calm-lands" data-name="Calm Lands" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Calm Lands</span><span class="block text-sm text-zinc-500 truncate">The vast plains leading to Mt. Gagazet</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|calm-lands|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="remiem-temple/index.html" data-area-link="remiem-temple" data-name="Remiem Temple" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Remiem Temple</span><span class="block text-sm text-zinc-500 truncate">The optional temple in the Calm Lands</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|remiem-temple|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cavern-of-the-stolen-fayth/index.html" data-area-link="cavern-of-the-stolen-fayth" data-name="Cavern of the Stolen Fayth" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cavern of the Stolen Fayth</span><span class="block text-sm text-zinc-500 truncate">The hidden cave in the Calm Lands</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|cavern-of-the-stolen-fayth|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="mt-gagazet/index.html" data-area-link="mt-gagazet" data-name="Mt. Gagazet" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mt. Gagazet</span><span class="block text-sm text-zinc-500 truncate">The mountain path leading to the summit</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|mt-gagazet|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gagazet-cave/index.html" data-area-link="gagazet-cave" data-name="Gagazet Cave" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gagazet Cave</span><span class="block text-sm text-zinc-500 truncate">The underwater cavern inside the mountain</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|gagazet-cave|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="zanarkand-ruins/index.html" data-area-link="zanarkand-ruins" data-name="Zanarkand Ruins" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Zanarkand Ruins</span><span class="block text-sm text-zinc-500 truncate">The ruined city at the end of the pilgrimage</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|zanarkand-ruins|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="zanarkand-dome/index.html" data-area-link="zanarkand-dome" data-name="Zanarkand Dome" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Zanarkand Dome</span><span class="block text-sm text-zinc-500 truncate">The interior of the dome and the final trial</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|zanarkand-dome|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="omega-ruins/index.html" data-area-link="omega-ruins" data-name="Omega Ruins" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Omega Ruins</span><span class="block text-sm text-zinc-500 truncate">Optional high-level dungeon found via Airship</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|omega-ruins|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sin/index.html" data-area-link="sin" data-name="Sin" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sin</span><span class="block text-sm text-zinc-500 truncate">The exterior of Sin during the final assault</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|sin|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sin-sea-of-sorrow/index.html" data-area-link="sin-sea-of-sorrow" data-name="Sin: Sea of Sorrow" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sin: Sea of Sorrow</span><span class="block text-sm text-zinc-500 truncate">The first interior area of Sin</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|sin-sea-of-sorrow|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sin-city-of-dying-dreams/index.html" data-area-link="sin-city-of-dying-dreams" data-name="Sin: City of Dying Dreams" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sin: City of Dying Dreams</span><span class="block text-sm text-zinc-500 truncate">The second interior area of Sin</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|sin-city-of-dying-dreams|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sin-the-nucleus/index.html" data-area-link="sin-the-nucleus" data-name="Sin: The Nucleus" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sin: The Nucleus</span><span class="block text-sm text-zinc-500 truncate">The final area inside Sin</span></span>
+          <span data-progress="final-fantasy-x-x-2-hd-remaster|sin-the-nucleus|10"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in FINAL FANTASY X/X-2 HD Remaster?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

@@ -20,29 +20,228 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="final-fantasy-viii">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">FINAL FANTASY VIII guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="balamb-garden/index.html">Balamb Garden</a><div class="text-sm text-zinc-500">The game begins here</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="fire-cavern/index.html">Fire Cavern</a><div class="text-sm text-zinc-500">The SeeD field exam</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="balamb-town/index.html">Balamb Town</a><div class="text-sm text-zinc-500">Returning from the field exam</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="balamb/index.html">Balamb</a><div class="text-sm text-zinc-500">Boarding the train to Timber</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="timber/index.html">Timber</a><div class="text-sm text-zinc-500">The mission to kidnap President Deling</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="timber-forest/index.html">Timber Forest</a><div class="text-sm text-zinc-500">Escaping Timber after the mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="dollet/index.html">Dollet</a><div class="text-sm text-zinc-500">The SeeD field exam mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="dollet-communication-tower/index.html">Dollet - Communication Tower</a><div class="text-sm text-zinc-500">The SeeD field exam mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="galbadia-garden/index.html">Galbadia Garden</a><div class="text-sm text-zinc-500">Meeting with Headmaster Martine</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="deling-city/index.html">Deling City</a><div class="text-sm text-zinc-500">Arriving to assassinate the Sorceress</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sewers/index.html">Sewers</a><div class="text-sm text-zinc-500">Navigating to the parade route</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="tomb-of-the-unknown-king/index.html">Tomb of the Unknown King</a><div class="text-sm text-zinc-500">Optional quest during the Deling City mission</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="deling-city-parade-route/index.html">Deling City - Parade Route</a><div class="text-sm text-zinc-500">The assassination attempt</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="galbadia-prison/index.html">Galbadia Prison</a><div class="text-sm text-zinc-500">Imprisonment after the failed assassination</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="d-district-prison/index.html">D-District Prison</a><div class="text-sm text-zinc-500">Squall and team are imprisoned after the failed assassination</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="missile-base/index.html">Missile Base</a><div class="text-sm text-zinc-500">Squall&#39;s team infiltrates to stop the missiles</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hotel/index.html">Hotel</a><div class="text-sm text-zinc-500">Squall stays at the hotel during the liberation of Balamb</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="trabia-garden/index.html">Trabia Garden</a><div class="text-sm text-zinc-500">Squall visits the ruins of his childhood home</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="winhill/index.html">Winhill</a><div class="text-sm text-zinc-500">Laguna&#39;s flashback sequence</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="centra-excavation-site/index.html">Centra Excavation Site</a><div class="text-sm text-zinc-500">Laguna&#39;s flashback sequence</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="edeas-house/index.html">Edea&#39;s House</a><div class="text-sm text-zinc-500">Squall and team confront Edea</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="white-seed-ship/index.html">White SeeD Ship</a><div class="text-sm text-zinc-500">Squall searches for Rinoa</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="esthar-great-salt-lake/index.html">Esthar - Great Salt Lake</a><div class="text-sm text-zinc-500">Squall travels toward Esthar</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="esthar-city/index.html">Esthar - City</a><div class="text-sm text-zinc-500">Squall arrives in the futuristic city</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lunar-base/index.html">Lunar Base</a><div class="text-sm text-zinc-500">Squall and Rinoa arrive in space</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lunatic-pandora/index.html">Lunatic Pandora</a><div class="text-sm text-zinc-500">Squall&#39;s team infiltrates the structure</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="tears-point/index.html">Tears&#39; Point</a><div class="text-sm text-zinc-500">Optional visit to find the Rosetta Stone</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="deep-sea-research-center/index.html">Deep Sea Research Center</a><div class="text-sm text-zinc-500">Optional quest to find Bahamut and Eden</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="centra-ruins/index.html">Centra Ruins</a><div class="text-sm text-zinc-500">Optional quest to find Odin and Tonberry</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="shumi-village/index.html">Shumi Village</a><div class="text-sm text-zinc-500">Optional visit for the Shumi sidequest</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="obel-lake/index.html">Obel Lake</a><div class="text-sm text-zinc-500">Optional visit for the sidequest</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="trabia-garden-trabia-garden-squall-visits-the-ruins-of-his-childhood-home/index.html">Trabia Garden (Trabia Garden: Squall visits the ruins of his childhood home)</a><div class="text-sm text-zinc-500">Optional visit to find items</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="winhill-winhill-lagunas-flashback-sequence/index.html">Winhill (Winhill: Laguna&#39;s flashback sequence)</a><div class="text-sm text-zinc-500">Optional visit to find items</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="esthar-city-esthar-city-squall-arrives-in-the-futuristic-city/index.html">Esthar - City (Esthar - City: Squall arrives in the futuristic city)</a><div class="text-sm text-zinc-500">Optional visit to shop and play cards</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="balamb-town-balamb-town-returning-from-the-field-exam/index.html">Balamb Town (Balamb Town: Returning from the field exam)</a><div class="text-sm text-zinc-500">Optional visit to play cards</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="dollet-dollet-the-seed-field-exam-mission/index.html">Dollet (Dollet: The SeeD field exam mission)</a><div class="text-sm text-zinc-500">Optional visit to play cards</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="deling-city-deling-city-arriving-to-assassinate-the-sorceress/index.html">Deling City (Deling City: Arriving to assassinate the Sorceress)</a><div class="text-sm text-zinc-500">Optional visit to play cards</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="time-compression-field/index.html">Time Compression Field</a><div class="text-sm text-zinc-500">The party travels through the portal to the future</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ultimecias-castle/index.html">Ultimecia&#39;s Castle</a><div class="text-sm text-zinc-500">The final dungeon where the party confronts Ultimecia</div></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">FINAL FANTASY VIII guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">39</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">119</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">31</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="final-fantasy-viii" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><a href="balamb-garden/index.html" data-area-link="balamb-garden" data-name="Balamb Garden" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Balamb Garden</span><span class="block text-sm text-zinc-500 truncate">The game begins here</span></span>
+          <span data-progress="final-fantasy-viii|balamb-garden|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="fire-cavern/index.html" data-area-link="fire-cavern" data-name="Fire Cavern" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Fire Cavern</span><span class="block text-sm text-zinc-500 truncate">The SeeD field exam</span></span>
+          <span data-progress="final-fantasy-viii|fire-cavern|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="balamb-town/index.html" data-area-link="balamb-town" data-name="Balamb Town" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Balamb Town</span><span class="block text-sm text-zinc-500 truncate">Returning from the field exam</span></span>
+          <span data-progress="final-fantasy-viii|balamb-town|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="balamb/index.html" data-area-link="balamb" data-name="Balamb" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Balamb</span><span class="block text-sm text-zinc-500 truncate">Boarding the train to Timber</span></span>
+          <span data-progress="final-fantasy-viii|balamb|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="timber/index.html" data-area-link="timber" data-name="Timber" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Timber</span><span class="block text-sm text-zinc-500 truncate">The mission to kidnap President Deling</span></span>
+          <span data-progress="final-fantasy-viii|timber|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="timber-forest/index.html" data-area-link="timber-forest" data-name="Timber Forest" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Timber Forest</span><span class="block text-sm text-zinc-500 truncate">Escaping Timber after the mission</span></span>
+          <span data-progress="final-fantasy-viii|timber-forest|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="dollet/index.html" data-area-link="dollet" data-name="Dollet" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dollet</span><span class="block text-sm text-zinc-500 truncate">The SeeD field exam mission</span></span>
+          <span data-progress="final-fantasy-viii|dollet|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="dollet-communication-tower/index.html" data-area-link="dollet-communication-tower" data-name="Dollet - Communication Tower" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dollet - Communication Tower</span><span class="block text-sm text-zinc-500 truncate">The SeeD field exam mission</span></span>
+          <span data-progress="final-fantasy-viii|dollet-communication-tower|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="galbadia-garden/index.html" data-area-link="galbadia-garden" data-name="Galbadia Garden" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Galbadia Garden</span><span class="block text-sm text-zinc-500 truncate">Meeting with Headmaster Martine</span></span>
+          <span data-progress="final-fantasy-viii|galbadia-garden|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="deling-city/index.html" data-area-link="deling-city" data-name="Deling City" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Deling City</span><span class="block text-sm text-zinc-500 truncate">Arriving to assassinate the Sorceress</span></span>
+          <span data-progress="final-fantasy-viii|deling-city|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sewers/index.html" data-area-link="sewers" data-name="Sewers" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sewers</span><span class="block text-sm text-zinc-500 truncate">Navigating to the parade route</span></span>
+          <span data-progress="final-fantasy-viii|sewers|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="tomb-of-the-unknown-king/index.html" data-area-link="tomb-of-the-unknown-king" data-name="Tomb of the Unknown King" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tomb of the Unknown King</span><span class="block text-sm text-zinc-500 truncate">Optional quest during the Deling City mission</span></span>
+          <span data-progress="final-fantasy-viii|tomb-of-the-unknown-king|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="deling-city-parade-route/index.html" data-area-link="deling-city-parade-route" data-name="Deling City - Parade Route" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Deling City - Parade Route</span><span class="block text-sm text-zinc-500 truncate">The assassination attempt</span></span>
+          <span data-progress="final-fantasy-viii|deling-city-parade-route|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="galbadia-prison/index.html" data-area-link="galbadia-prison" data-name="Galbadia Prison" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Galbadia Prison</span><span class="block text-sm text-zinc-500 truncate">Imprisonment after the failed assassination</span></span>
+          <span data-progress="final-fantasy-viii|galbadia-prison|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="d-district-prison/index.html" data-area-link="d-district-prison" data-name="D-District Prison" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">D-District Prison</span><span class="block text-sm text-zinc-500 truncate">Squall and team are imprisoned after the failed assassination</span></span>
+          <span data-progress="final-fantasy-viii|d-district-prison|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="missile-base/index.html" data-area-link="missile-base" data-name="Missile Base" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Missile Base</span><span class="block text-sm text-zinc-500 truncate">Squall&#39;s team infiltrates to stop the missiles</span></span>
+          <span data-progress="final-fantasy-viii|missile-base|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hotel/index.html" data-area-link="hotel" data-name="Hotel" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hotel</span><span class="block text-sm text-zinc-500 truncate">Squall stays at the hotel during the liberation of Balamb</span></span>
+          <span data-progress="final-fantasy-viii|hotel|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="trabia-garden/index.html" data-area-link="trabia-garden" data-name="Trabia Garden" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Trabia Garden</span><span class="block text-sm text-zinc-500 truncate">Squall visits the ruins of his childhood home</span></span>
+          <span data-progress="final-fantasy-viii|trabia-garden|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="winhill/index.html" data-area-link="winhill" data-name="Winhill" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Winhill</span><span class="block text-sm text-zinc-500 truncate">Laguna&#39;s flashback sequence</span></span>
+          <span data-progress="final-fantasy-viii|winhill|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="centra-excavation-site/index.html" data-area-link="centra-excavation-site" data-name="Centra Excavation Site" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Centra Excavation Site</span><span class="block text-sm text-zinc-500 truncate">Laguna&#39;s flashback sequence</span></span>
+          <span data-progress="final-fantasy-viii|centra-excavation-site|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="edeas-house/index.html" data-area-link="edeas-house" data-name="Edea&#39;s House" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Edea&#39;s House</span><span class="block text-sm text-zinc-500 truncate">Squall and team confront Edea</span></span>
+          <span data-progress="final-fantasy-viii|edeas-house|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="white-seed-ship/index.html" data-area-link="white-seed-ship" data-name="White SeeD Ship" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">White SeeD Ship</span><span class="block text-sm text-zinc-500 truncate">Squall searches for Rinoa</span></span>
+          <span data-progress="final-fantasy-viii|white-seed-ship|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="esthar-great-salt-lake/index.html" data-area-link="esthar-great-salt-lake" data-name="Esthar - Great Salt Lake" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Esthar - Great Salt Lake</span><span class="block text-sm text-zinc-500 truncate">Squall travels toward Esthar</span></span>
+          <span data-progress="final-fantasy-viii|esthar-great-salt-lake|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="esthar-city/index.html" data-area-link="esthar-city" data-name="Esthar - City" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Esthar - City</span><span class="block text-sm text-zinc-500 truncate">Squall arrives in the futuristic city</span></span>
+          <span data-progress="final-fantasy-viii|esthar-city|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lunar-base/index.html" data-area-link="lunar-base" data-name="Lunar Base" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lunar Base</span><span class="block text-sm text-zinc-500 truncate">Squall and Rinoa arrive in space</span></span>
+          <span data-progress="final-fantasy-viii|lunar-base|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lunatic-pandora/index.html" data-area-link="lunatic-pandora" data-name="Lunatic Pandora" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lunatic Pandora</span><span class="block text-sm text-zinc-500 truncate">Squall&#39;s team infiltrates the structure</span></span>
+          <span data-progress="final-fantasy-viii|lunatic-pandora|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="tears-point/index.html" data-area-link="tears-point" data-name="Tears&#39; Point" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tears&#39; Point</span><span class="block text-sm text-zinc-500 truncate">Optional visit to find the Rosetta Stone</span></span>
+          <span data-progress="final-fantasy-viii|tears-point|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="deep-sea-research-center/index.html" data-area-link="deep-sea-research-center" data-name="Deep Sea Research Center" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Deep Sea Research Center</span><span class="block text-sm text-zinc-500 truncate">Optional quest to find Bahamut and Eden</span></span>
+          <span data-progress="final-fantasy-viii|deep-sea-research-center|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="centra-ruins/index.html" data-area-link="centra-ruins" data-name="Centra Ruins" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Centra Ruins</span><span class="block text-sm text-zinc-500 truncate">Optional quest to find Odin and Tonberry</span></span>
+          <span data-progress="final-fantasy-viii|centra-ruins|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="shumi-village/index.html" data-area-link="shumi-village" data-name="Shumi Village" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Shumi Village</span><span class="block text-sm text-zinc-500 truncate">Optional visit for the Shumi sidequest</span></span>
+          <span data-progress="final-fantasy-viii|shumi-village|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="obel-lake/index.html" data-area-link="obel-lake" data-name="Obel Lake" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Obel Lake</span><span class="block text-sm text-zinc-500 truncate">Optional visit for the sidequest</span></span>
+          <span data-progress="final-fantasy-viii|obel-lake|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="trabia-garden-trabia-garden-squall-visits-the-ruins-of-his-childhood-home/index.html" data-area-link="trabia-garden-trabia-garden-squall-visits-the-ruins-of-his-childhood-home" data-name="Trabia Garden (Trabia Garden: Squall visits the ruins of his childhood home)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Trabia Garden (Trabia Garden: Squall visits the ruins of his childhood home)</span><span class="block text-sm text-zinc-500 truncate">Optional visit to find items</span></span>
+          <span data-progress="final-fantasy-viii|trabia-garden-trabia-garden-squall-visits-the-ruins-of-his-childhood-home|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="winhill-winhill-lagunas-flashback-sequence/index.html" data-area-link="winhill-winhill-lagunas-flashback-sequence" data-name="Winhill (Winhill: Laguna&#39;s flashback sequence)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Winhill (Winhill: Laguna&#39;s flashback sequence)</span><span class="block text-sm text-zinc-500 truncate">Optional visit to find items</span></span>
+          <span data-progress="final-fantasy-viii|winhill-winhill-lagunas-flashback-sequence|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="esthar-city-esthar-city-squall-arrives-in-the-futuristic-city/index.html" data-area-link="esthar-city-esthar-city-squall-arrives-in-the-futuristic-city" data-name="Esthar - City (Esthar - City: Squall arrives in the futuristic city)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Esthar - City (Esthar - City: Squall arrives in the futuristic city)</span><span class="block text-sm text-zinc-500 truncate">Optional visit to shop and play cards</span></span>
+          <span data-progress="final-fantasy-viii|esthar-city-esthar-city-squall-arrives-in-the-futuristic-city|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="balamb-town-balamb-town-returning-from-the-field-exam/index.html" data-area-link="balamb-town-balamb-town-returning-from-the-field-exam" data-name="Balamb Town (Balamb Town: Returning from the field exam)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Balamb Town (Balamb Town: Returning from the field exam)</span><span class="block text-sm text-zinc-500 truncate">Optional visit to play cards</span></span>
+          <span data-progress="final-fantasy-viii|balamb-town-balamb-town-returning-from-the-field-exam|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="dollet-dollet-the-seed-field-exam-mission/index.html" data-area-link="dollet-dollet-the-seed-field-exam-mission" data-name="Dollet (Dollet: The SeeD field exam mission)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dollet (Dollet: The SeeD field exam mission)</span><span class="block text-sm text-zinc-500 truncate">Optional visit to play cards</span></span>
+          <span data-progress="final-fantasy-viii|dollet-dollet-the-seed-field-exam-mission|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="deling-city-deling-city-arriving-to-assassinate-the-sorceress/index.html" data-area-link="deling-city-deling-city-arriving-to-assassinate-the-sorceress" data-name="Deling City (Deling City: Arriving to assassinate the Sorceress)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Deling City (Deling City: Arriving to assassinate the Sorceress)</span><span class="block text-sm text-zinc-500 truncate">Optional visit to play cards</span></span>
+          <span data-progress="final-fantasy-viii|deling-city-deling-city-arriving-to-assassinate-the-sorceress|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="time-compression-field/index.html" data-area-link="time-compression-field" data-name="Time Compression Field" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Time Compression Field</span><span class="block text-sm text-zinc-500 truncate">The party travels through the portal to the future</span></span>
+          <span data-progress="final-fantasy-viii|time-compression-field|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ultimecias-castle/index.html" data-area-link="ultimecias-castle" data-name="Ultimecia&#39;s Castle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ultimecia&#39;s Castle</span><span class="block text-sm text-zinc-500 truncate">The final dungeon where the party confronts Ultimecia</span></span>
+          <span data-progress="final-fantasy-viii|ultimecias-castle|10"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in FINAL FANTASY VIII?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

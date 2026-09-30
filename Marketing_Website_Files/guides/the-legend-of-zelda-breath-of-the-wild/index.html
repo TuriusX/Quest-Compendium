@@ -20,29 +20,248 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="the-legend-of-zelda-breath-of-the-wild">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">The Legend of Zelda: Breath of the Wild guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="great-plateau/index.html">Great Plateau</a><div class="text-sm text-zinc-500">Beginning of the game</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="oman-au-shrine/index.html">Oman Au Shrine</a><div class="text-sm text-zinc-500">First trial on the Great Plateau</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ja-baij-shrine/index.html">Ja Baij Shrine</a><div class="text-sm text-zinc-500">Second trial on the Great Plateau</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="owa-daim-shrine/index.html">Owa Daim Shrine</a><div class="text-sm text-zinc-500">Third trial on the Great Plateau</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="keh-namut-shrine/index.html">Keh Namut Shrine</a><div class="text-sm text-zinc-500">Fourth trial on the Great Plateau</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="temple-of-time/index.html">Temple of Time</a><div class="text-sm text-zinc-500">Exploring the Great Plateau</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="dueling-peaks-tower-region/index.html">Dueling Peaks Tower Region</a><div class="text-sm text-zinc-500">Traveling to Kakariko Village</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="kakariko-village/index.html">Kakariko Village</a><div class="text-sm text-zinc-500">Meeting Impa</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hateno-village/index.html">Hateno Village</a><div class="text-sm text-zinc-500">Meeting Purah</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hateno-ancient-tech-lab/index.html">Hateno Ancient Tech Lab</a><div class="text-sm text-zinc-500">Upgrading the Sheikah Slate</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="central-tower-region/index.html">Central Tower Region</a><div class="text-sm text-zinc-500">Exploring the center of Hyrule</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hyrule-castle/index.html">Hyrule Castle</a><div class="text-sm text-zinc-500">Confronting Calamity Ganon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sanctum/index.html">Sanctum</a><div class="text-sm text-zinc-500">Final battle against Calamity Ganon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hyrule-castle-post-game/index.html">Hyrule Castle (Post-Game)</a><div class="text-sm text-zinc-500">Post-game exploration</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lanayru-tower-region/index.html">Lanayru Tower Region</a><div class="text-sm text-zinc-500">Traveling to Zora&#39;s Domain</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="zoras-domain/index.html">Zora&#39;s Domain</a><div class="text-sm text-zinc-500">Meeting King Dorephan</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="divine-beast-vah-ruta/index.html">Divine Beast Vah Ruta</a><div class="text-sm text-zinc-500">Boarding the beast</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="vah-ruta-interior/index.html">Vah Ruta Interior</a><div class="text-sm text-zinc-500">Clearing the dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="tabantha-tower-region/index.html">Tabantha Tower Region</a><div class="text-sm text-zinc-500">Traveling to Rito Village</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="rito-village/index.html">Rito Village</a><div class="text-sm text-zinc-500">Meeting Kaneli</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="divine-beast-vah-medoh/index.html">Divine Beast Vah Medoh</a><div class="text-sm text-zinc-500">Boarding the beast</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="vah-medoh-interior/index.html">Vah Medoh Interior</a><div class="text-sm text-zinc-500">Clearing the dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="eldin-tower-region/index.html">Eldin Tower Region</a><div class="text-sm text-zinc-500">Traveling to Goron City</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="goron-city/index.html">Goron City</a><div class="text-sm text-zinc-500">Meeting Bludo</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="divine-beast-vah-rudania/index.html">Divine Beast Vah Rudania</a><div class="text-sm text-zinc-500">Boarding the beast</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="vah-rudania-interior/index.html">Vah Rudania Interior</a><div class="text-sm text-zinc-500">Clearing the dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gerudo-tower-region/index.html">Gerudo Tower Region</a><div class="text-sm text-zinc-500">Traveling to Gerudo Town</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gerudo-town/index.html">Gerudo Town</a><div class="text-sm text-zinc-500">Meeting Riju</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="divine-beast-vah-naboris/index.html">Divine Beast Vah Naboris</a><div class="text-sm text-zinc-500">Boarding the beast</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="vah-naboris-interior/index.html">Vah Naboris Interior</a><div class="text-sm text-zinc-500">Clearing the dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="eventide-island/index.html">Eventide Island</a><div class="text-sm text-zinc-500">Optional challenge</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="death-mountain/index.html">Death Mountain</a><div class="text-sm text-zinc-500">Traveling to Goron City</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="great-hyrule-forest/index.html">Great Hyrule Forest</a><div class="text-sm text-zinc-500">Seeking the Master Sword</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="korok-forest/index.html">Korok Forest</a><div class="text-sm text-zinc-500">Meeting the Great Deku Tree</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lost-woods/index.html">Lost Woods</a><div class="text-sm text-zinc-500">Navigating to the Korok Forest</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="trial-of-the-sword/index.html">Trial of the Sword</a><div class="text-sm text-zinc-500">Beginning the trials</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="trial-of-the-sword-middle-trials/index.html">Trial of the Sword (Middle Trials)</a><div class="text-sm text-zinc-500">Continuing the trials</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="trial-of-the-sword-final-trials/index.html">Trial of the Sword (Final Trials)</a><div class="text-sm text-zinc-500">Completing the trials</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="akkala-tower-region/index.html">Akkala Tower Region</a><div class="text-sm text-zinc-500">Exploring the northeast</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="akkala-citadel/index.html">Akkala Citadel</a><div class="text-sm text-zinc-500">Investigating the ruins</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="tarrey-town/index.html">Tarrey Town</a><div class="text-sm text-zinc-500">Building the town</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="faron-tower-region/index.html">Faron Tower Region</a><div class="text-sm text-zinc-500">Exploring the south</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lurelin-village/index.html">Lurelin Village</a><div class="text-sm text-zinc-500">Visiting the coast</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hebra-tower-region/index.html">Hebra Tower Region</a><div class="text-sm text-zinc-500">Exploring the northwest</div></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">The Legend of Zelda: Breath of the Wild guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">44</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">217</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">41</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="the-legend-of-zelda-breath-of-the-wild" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><a href="great-plateau/index.html" data-area-link="great-plateau" data-name="Great Plateau" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Great Plateau</span><span class="block text-sm text-zinc-500 truncate">Beginning of the game</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|great-plateau|12"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="oman-au-shrine/index.html" data-area-link="oman-au-shrine" data-name="Oman Au Shrine" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Oman Au Shrine</span><span class="block text-sm text-zinc-500 truncate">First trial on the Great Plateau</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|oman-au-shrine|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ja-baij-shrine/index.html" data-area-link="ja-baij-shrine" data-name="Ja Baij Shrine" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ja Baij Shrine</span><span class="block text-sm text-zinc-500 truncate">Second trial on the Great Plateau</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|ja-baij-shrine|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="owa-daim-shrine/index.html" data-area-link="owa-daim-shrine" data-name="Owa Daim Shrine" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Owa Daim Shrine</span><span class="block text-sm text-zinc-500 truncate">Third trial on the Great Plateau</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|owa-daim-shrine|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="keh-namut-shrine/index.html" data-area-link="keh-namut-shrine" data-name="Keh Namut Shrine" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Keh Namut Shrine</span><span class="block text-sm text-zinc-500 truncate">Fourth trial on the Great Plateau</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|keh-namut-shrine|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="temple-of-time/index.html" data-area-link="temple-of-time" data-name="Temple of Time" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Temple of Time</span><span class="block text-sm text-zinc-500 truncate">Exploring the Great Plateau</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|temple-of-time|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="dueling-peaks-tower-region/index.html" data-area-link="dueling-peaks-tower-region" data-name="Dueling Peaks Tower Region" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dueling Peaks Tower Region</span><span class="block text-sm text-zinc-500 truncate">Traveling to Kakariko Village</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|dueling-peaks-tower-region|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="kakariko-village/index.html" data-area-link="kakariko-village" data-name="Kakariko Village" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kakariko Village</span><span class="block text-sm text-zinc-500 truncate">Meeting Impa</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|kakariko-village|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hateno-village/index.html" data-area-link="hateno-village" data-name="Hateno Village" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hateno Village</span><span class="block text-sm text-zinc-500 truncate">Meeting Purah</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|hateno-village|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hateno-ancient-tech-lab/index.html" data-area-link="hateno-ancient-tech-lab" data-name="Hateno Ancient Tech Lab" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hateno Ancient Tech Lab</span><span class="block text-sm text-zinc-500 truncate">Upgrading the Sheikah Slate</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|hateno-ancient-tech-lab|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="central-tower-region/index.html" data-area-link="central-tower-region" data-name="Central Tower Region" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Central Tower Region</span><span class="block text-sm text-zinc-500 truncate">Exploring the center of Hyrule</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|central-tower-region|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hyrule-castle/index.html" data-area-link="hyrule-castle" data-name="Hyrule Castle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hyrule Castle</span><span class="block text-sm text-zinc-500 truncate">Confronting Calamity Ganon</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|hyrule-castle|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sanctum/index.html" data-area-link="sanctum" data-name="Sanctum" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sanctum</span><span class="block text-sm text-zinc-500 truncate">Final battle against Calamity Ganon</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|sanctum|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hyrule-castle-post-game/index.html" data-area-link="hyrule-castle-post-game" data-name="Hyrule Castle (Post-Game)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hyrule Castle (Post-Game)</span><span class="block text-sm text-zinc-500 truncate">Post-game exploration</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|hyrule-castle-post-game|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lanayru-tower-region/index.html" data-area-link="lanayru-tower-region" data-name="Lanayru Tower Region" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lanayru Tower Region</span><span class="block text-sm text-zinc-500 truncate">Traveling to Zora&#39;s Domain</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|lanayru-tower-region|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="zoras-domain/index.html" data-area-link="zoras-domain" data-name="Zora&#39;s Domain" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Zora&#39;s Domain</span><span class="block text-sm text-zinc-500 truncate">Meeting King Dorephan</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|zoras-domain|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="divine-beast-vah-ruta/index.html" data-area-link="divine-beast-vah-ruta" data-name="Divine Beast Vah Ruta" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Divine Beast Vah Ruta</span><span class="block text-sm text-zinc-500 truncate">Boarding the beast</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|divine-beast-vah-ruta|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="vah-ruta-interior/index.html" data-area-link="vah-ruta-interior" data-name="Vah Ruta Interior" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Vah Ruta Interior</span><span class="block text-sm text-zinc-500 truncate">Clearing the dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|vah-ruta-interior|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="tabantha-tower-region/index.html" data-area-link="tabantha-tower-region" data-name="Tabantha Tower Region" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tabantha Tower Region</span><span class="block text-sm text-zinc-500 truncate">Traveling to Rito Village</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|tabantha-tower-region|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="rito-village/index.html" data-area-link="rito-village" data-name="Rito Village" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Rito Village</span><span class="block text-sm text-zinc-500 truncate">Meeting Kaneli</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|rito-village|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="divine-beast-vah-medoh/index.html" data-area-link="divine-beast-vah-medoh" data-name="Divine Beast Vah Medoh" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Divine Beast Vah Medoh</span><span class="block text-sm text-zinc-500 truncate">Boarding the beast</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|divine-beast-vah-medoh|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="vah-medoh-interior/index.html" data-area-link="vah-medoh-interior" data-name="Vah Medoh Interior" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Vah Medoh Interior</span><span class="block text-sm text-zinc-500 truncate">Clearing the dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|vah-medoh-interior|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="eldin-tower-region/index.html" data-area-link="eldin-tower-region" data-name="Eldin Tower Region" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Eldin Tower Region</span><span class="block text-sm text-zinc-500 truncate">Traveling to Goron City</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|eldin-tower-region|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="goron-city/index.html" data-area-link="goron-city" data-name="Goron City" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Goron City</span><span class="block text-sm text-zinc-500 truncate">Meeting Bludo</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|goron-city|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="divine-beast-vah-rudania/index.html" data-area-link="divine-beast-vah-rudania" data-name="Divine Beast Vah Rudania" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Divine Beast Vah Rudania</span><span class="block text-sm text-zinc-500 truncate">Boarding the beast</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|divine-beast-vah-rudania|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="vah-rudania-interior/index.html" data-area-link="vah-rudania-interior" data-name="Vah Rudania Interior" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Vah Rudania Interior</span><span class="block text-sm text-zinc-500 truncate">Clearing the dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|vah-rudania-interior|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gerudo-tower-region/index.html" data-area-link="gerudo-tower-region" data-name="Gerudo Tower Region" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gerudo Tower Region</span><span class="block text-sm text-zinc-500 truncate">Traveling to Gerudo Town</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|gerudo-tower-region|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gerudo-town/index.html" data-area-link="gerudo-town" data-name="Gerudo Town" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gerudo Town</span><span class="block text-sm text-zinc-500 truncate">Meeting Riju</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|gerudo-town|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="divine-beast-vah-naboris/index.html" data-area-link="divine-beast-vah-naboris" data-name="Divine Beast Vah Naboris" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Divine Beast Vah Naboris</span><span class="block text-sm text-zinc-500 truncate">Boarding the beast</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|divine-beast-vah-naboris|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="vah-naboris-interior/index.html" data-area-link="vah-naboris-interior" data-name="Vah Naboris Interior" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Vah Naboris Interior</span><span class="block text-sm text-zinc-500 truncate">Clearing the dungeon</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|vah-naboris-interior|13"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="eventide-island/index.html" data-area-link="eventide-island" data-name="Eventide Island" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Eventide Island</span><span class="block text-sm text-zinc-500 truncate">Optional challenge</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|eventide-island|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="death-mountain/index.html" data-area-link="death-mountain" data-name="Death Mountain" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Death Mountain</span><span class="block text-sm text-zinc-500 truncate">Traveling to Goron City</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|death-mountain|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="great-hyrule-forest/index.html" data-area-link="great-hyrule-forest" data-name="Great Hyrule Forest" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Great Hyrule Forest</span><span class="block text-sm text-zinc-500 truncate">Seeking the Master Sword</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|great-hyrule-forest|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="korok-forest/index.html" data-area-link="korok-forest" data-name="Korok Forest" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Korok Forest</span><span class="block text-sm text-zinc-500 truncate">Meeting the Great Deku Tree</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|korok-forest|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lost-woods/index.html" data-area-link="lost-woods" data-name="Lost Woods" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lost Woods</span><span class="block text-sm text-zinc-500 truncate">Navigating to the Korok Forest</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|lost-woods|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="trial-of-the-sword/index.html" data-area-link="trial-of-the-sword" data-name="Trial of the Sword" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Trial of the Sword</span><span class="block text-sm text-zinc-500 truncate">Beginning the trials</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|trial-of-the-sword|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="trial-of-the-sword-middle-trials/index.html" data-area-link="trial-of-the-sword-middle-trials" data-name="Trial of the Sword (Middle Trials)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Trial of the Sword (Middle Trials)</span><span class="block text-sm text-zinc-500 truncate">Continuing the trials</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|trial-of-the-sword-middle-trials|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="trial-of-the-sword-final-trials/index.html" data-area-link="trial-of-the-sword-final-trials" data-name="Trial of the Sword (Final Trials)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Trial of the Sword (Final Trials)</span><span class="block text-sm text-zinc-500 truncate">Completing the trials</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|trial-of-the-sword-final-trials|10"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="akkala-tower-region/index.html" data-area-link="akkala-tower-region" data-name="Akkala Tower Region" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Akkala Tower Region</span><span class="block text-sm text-zinc-500 truncate">Exploring the northeast</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|akkala-tower-region|12"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="akkala-citadel/index.html" data-area-link="akkala-citadel" data-name="Akkala Citadel" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Akkala Citadel</span><span class="block text-sm text-zinc-500 truncate">Investigating the ruins</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|akkala-citadel|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="tarrey-town/index.html" data-area-link="tarrey-town" data-name="Tarrey Town" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tarrey Town</span><span class="block text-sm text-zinc-500 truncate">Building the town</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|tarrey-town|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="faron-tower-region/index.html" data-area-link="faron-tower-region" data-name="Faron Tower Region" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Faron Tower Region</span><span class="block text-sm text-zinc-500 truncate">Exploring the south</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|faron-tower-region|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lurelin-village/index.html" data-area-link="lurelin-village" data-name="Lurelin Village" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lurelin Village</span><span class="block text-sm text-zinc-500 truncate">Visiting the coast</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|lurelin-village|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hebra-tower-region/index.html" data-area-link="hebra-tower-region" data-name="Hebra Tower Region" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hebra Tower Region</span><span class="block text-sm text-zinc-500 truncate">Exploring the northwest</span></span>
+          <span data-progress="the-legend-of-zelda-breath-of-the-wild|hebra-tower-region|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in The Legend of Zelda: Breath of the Wild?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

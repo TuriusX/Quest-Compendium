@@ -20,29 +20,200 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="the-legend-of-zelda-ocarina-of-time">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">The Legend of Zelda: Ocarina of Time guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="kokiri-forest/index.html">Kokiri Forest</a><div class="text-sm text-zinc-500">Starting the game and meeting the Great Deku Tree</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="inside-the-deku-tree/index.html">Inside the Deku Tree</a><div class="text-sm text-zinc-500">First dungeon to obtain the Kokiri&#39;s Emerald</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hyrule-field/index.html">Hyrule Field</a><div class="text-sm text-zinc-500">Traveling to Hyrule Castle</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hyrule-castle/index.html">Hyrule Castle</a><div class="text-sm text-zinc-500">Sneaking past guards to meet Princess Zelda</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lon-lon-ranch/index.html">Lon Lon Ranch</a><div class="text-sm text-zinc-500">Meeting Malon and learning Epona&#39;s Song</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="kakariko-village/index.html">Kakariko Village</a><div class="text-sm text-zinc-500">Visiting Impa to learn Zelda&#39;s Lullaby</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="death-mountain-trail/index.html">Death Mountain Trail</a><div class="text-sm text-zinc-500">Climbing the mountain to reach Goron City</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="goron-city/index.html">Goron City</a><div class="text-sm text-zinc-500">Meeting Darunia to get the Goron&#39;s Ruby</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="dodongos-cavern/index.html">Dodongo&#39;s Cavern</a><div class="text-sm text-zinc-500">Second dungeon to obtain the Goron&#39;s Ruby</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="zoras-river/index.html">Zora&#39;s River</a><div class="text-sm text-zinc-500">Traveling to Zora&#39;s Domain</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="zoras-domain/index.html">Zora&#39;s Domain</a><div class="text-sm text-zinc-500">Meeting King Zora to gain access to Zora&#39;s Fountain</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="zoras-fountain/index.html">Zora&#39;s Fountain</a><div class="text-sm text-zinc-500">Finding the Great Fairy and entering Jabu-Jabu&#39;s Belly</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="inside-jabu-jabus-belly/index.html">Inside Jabu-Jabu&#39;s Belly</a><div class="text-sm text-zinc-500">Third dungeon to obtain the Zora&#39;s Sapphire</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="temple-of-time/index.html">Temple of Time</a><div class="text-sm text-zinc-500">where Link draws the Master Sword and travels between childhood and adulthood</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="temple-of-time-adult-era/index.html">Temple of Time (Adult Era)</a><div class="text-sm text-zinc-500">Awakening as an adult and receiving the Master Sword</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="kokiri-forest-adult-era/index.html">Kokiri Forest (Adult Era)</a><div class="text-sm text-zinc-500">Returning to the forest to find it overrun by monsters</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="forest-temple/index.html">Forest Temple</a><div class="text-sm text-zinc-500">First adult dungeon to save the Forest Sage</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="kakariko-village-adult-era/index.html">Kakariko Village (Adult Era)</a><div class="text-sm text-zinc-500">Investigating the village after the Forest Temple</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="death-mountain-trail-adult-era/index.html">Death Mountain Trail (Adult Era)</a><div class="text-sm text-zinc-500">Ascending the mountain to find it erupting</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="goron-city-adult-era/index.html">Goron City (Adult Era)</a><div class="text-sm text-zinc-500">Finding the city abandoned and meeting the Goron child</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="fire-temple/index.html">Fire Temple</a><div class="text-sm text-zinc-500">Second adult dungeon to save the Fire Sage</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="zoras-domain-adult-era/index.html">Zora&#39;s Domain (Adult Era)</a><div class="text-sm text-zinc-500">Finding the domain frozen in ice</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="zoras-fountain-adult-era/index.html">Zora&#39;s Fountain (Adult Era)</a><div class="text-sm text-zinc-500">Finding the Great Fairy and the Ice Cavern</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ice-cavern/index.html">Ice Cavern</a><div class="text-sm text-zinc-500">Mini-dungeon to obtain the Iron Boots</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="lake-hylia/index.html">Lake Hylia</a><div class="text-sm text-zinc-500">Investigating the dried-up lake</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="water-temple/index.html">Water Temple</a><div class="text-sm text-zinc-500">Third adult dungeon to save the Water Sage</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="bottom-of-the-well/index.html">Bottom of the Well</a><div class="text-sm text-zinc-500">Mini-dungeon to obtain the Lens of Truth</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="shadow-temple/index.html">Shadow Temple</a><div class="text-sm text-zinc-500">Fourth adult dungeon to save the Shadow Sage</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gerudo-valley/index.html">Gerudo Valley</a><div class="text-sm text-zinc-500">Crossing the bridge to reach the desert</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gerudos-fortress/index.html">Gerudo&#39;s Fortress</a><div class="text-sm text-zinc-500">Rescuing the carpenters and gaining access to the desert</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="spirit-temple/index.html">Spirit Temple</a><div class="text-sm text-zinc-500">Fifth adult dungeon to save the Spirit Sage</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ganons-castle/index.html">Ganon&#39;s Castle</a><div class="text-sm text-zinc-500">Final dungeon to confront Ganondorf</div></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">The Legend of Zelda: Ocarina of Time guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">32</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">169</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">0</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="the-legend-of-zelda-ocarina-of-time" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><a href="kokiri-forest/index.html" data-area-link="kokiri-forest" data-name="Kokiri Forest" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kokiri Forest</span><span class="block text-sm text-zinc-500 truncate">Starting the game and meeting the Great Deku Tree</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|kokiri-forest|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="inside-the-deku-tree/index.html" data-area-link="inside-the-deku-tree" data-name="Inside the Deku Tree" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Inside the Deku Tree</span><span class="block text-sm text-zinc-500 truncate">First dungeon to obtain the Kokiri&#39;s Emerald</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|inside-the-deku-tree|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hyrule-field/index.html" data-area-link="hyrule-field" data-name="Hyrule Field" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hyrule Field</span><span class="block text-sm text-zinc-500 truncate">Traveling to Hyrule Castle</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|hyrule-field|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hyrule-castle/index.html" data-area-link="hyrule-castle" data-name="Hyrule Castle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hyrule Castle</span><span class="block text-sm text-zinc-500 truncate">Sneaking past guards to meet Princess Zelda</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|hyrule-castle|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lon-lon-ranch/index.html" data-area-link="lon-lon-ranch" data-name="Lon Lon Ranch" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lon Lon Ranch</span><span class="block text-sm text-zinc-500 truncate">Meeting Malon and learning Epona&#39;s Song</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|lon-lon-ranch|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="kakariko-village/index.html" data-area-link="kakariko-village" data-name="Kakariko Village" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kakariko Village</span><span class="block text-sm text-zinc-500 truncate">Visiting Impa to learn Zelda&#39;s Lullaby</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|kakariko-village|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="death-mountain-trail/index.html" data-area-link="death-mountain-trail" data-name="Death Mountain Trail" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Death Mountain Trail</span><span class="block text-sm text-zinc-500 truncate">Climbing the mountain to reach Goron City</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|death-mountain-trail|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="goron-city/index.html" data-area-link="goron-city" data-name="Goron City" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Goron City</span><span class="block text-sm text-zinc-500 truncate">Meeting Darunia to get the Goron&#39;s Ruby</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|goron-city|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="dodongos-cavern/index.html" data-area-link="dodongos-cavern" data-name="Dodongo&#39;s Cavern" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dodongo&#39;s Cavern</span><span class="block text-sm text-zinc-500 truncate">Second dungeon to obtain the Goron&#39;s Ruby</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|dodongos-cavern|10"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="zoras-river/index.html" data-area-link="zoras-river" data-name="Zora&#39;s River" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Zora&#39;s River</span><span class="block text-sm text-zinc-500 truncate">Traveling to Zora&#39;s Domain</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|zoras-river|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="zoras-domain/index.html" data-area-link="zoras-domain" data-name="Zora&#39;s Domain" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Zora&#39;s Domain</span><span class="block text-sm text-zinc-500 truncate">Meeting King Zora to gain access to Zora&#39;s Fountain</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|zoras-domain|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="zoras-fountain/index.html" data-area-link="zoras-fountain" data-name="Zora&#39;s Fountain" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Zora&#39;s Fountain</span><span class="block text-sm text-zinc-500 truncate">Finding the Great Fairy and entering Jabu-Jabu&#39;s Belly</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|zoras-fountain|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="inside-jabu-jabus-belly/index.html" data-area-link="inside-jabu-jabus-belly" data-name="Inside Jabu-Jabu&#39;s Belly" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Inside Jabu-Jabu&#39;s Belly</span><span class="block text-sm text-zinc-500 truncate">Third dungeon to obtain the Zora&#39;s Sapphire</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|inside-jabu-jabus-belly|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="temple-of-time/index.html" data-area-link="temple-of-time" data-name="Temple of Time" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Temple of Time</span><span class="block text-sm text-zinc-500 truncate">where Link draws the Master Sword and travels between childhood and adulthood</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|temple-of-time|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="temple-of-time-adult-era/index.html" data-area-link="temple-of-time-adult-era" data-name="Temple of Time (Adult Era)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Temple of Time (Adult Era)</span><span class="block text-sm text-zinc-500 truncate">Awakening as an adult and receiving the Master Sword</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|temple-of-time-adult-era|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="kokiri-forest-adult-era/index.html" data-area-link="kokiri-forest-adult-era" data-name="Kokiri Forest (Adult Era)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kokiri Forest (Adult Era)</span><span class="block text-sm text-zinc-500 truncate">Returning to the forest to find it overrun by monsters</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|kokiri-forest-adult-era|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="forest-temple/index.html" data-area-link="forest-temple" data-name="Forest Temple" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Forest Temple</span><span class="block text-sm text-zinc-500 truncate">First adult dungeon to save the Forest Sage</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|forest-temple|14"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="kakariko-village-adult-era/index.html" data-area-link="kakariko-village-adult-era" data-name="Kakariko Village (Adult Era)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kakariko Village (Adult Era)</span><span class="block text-sm text-zinc-500 truncate">Investigating the village after the Forest Temple</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|kakariko-village-adult-era|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="death-mountain-trail-adult-era/index.html" data-area-link="death-mountain-trail-adult-era" data-name="Death Mountain Trail (Adult Era)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Death Mountain Trail (Adult Era)</span><span class="block text-sm text-zinc-500 truncate">Ascending the mountain to find it erupting</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|death-mountain-trail-adult-era|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="goron-city-adult-era/index.html" data-area-link="goron-city-adult-era" data-name="Goron City (Adult Era)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Goron City (Adult Era)</span><span class="block text-sm text-zinc-500 truncate">Finding the city abandoned and meeting the Goron child</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|goron-city-adult-era|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="fire-temple/index.html" data-area-link="fire-temple" data-name="Fire Temple" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Fire Temple</span><span class="block text-sm text-zinc-500 truncate">Second adult dungeon to save the Fire Sage</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|fire-temple|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="zoras-domain-adult-era/index.html" data-area-link="zoras-domain-adult-era" data-name="Zora&#39;s Domain (Adult Era)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Zora&#39;s Domain (Adult Era)</span><span class="block text-sm text-zinc-500 truncate">Finding the domain frozen in ice</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|zoras-domain-adult-era|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="zoras-fountain-adult-era/index.html" data-area-link="zoras-fountain-adult-era" data-name="Zora&#39;s Fountain (Adult Era)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Zora&#39;s Fountain (Adult Era)</span><span class="block text-sm text-zinc-500 truncate">Finding the Great Fairy and the Ice Cavern</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|zoras-fountain-adult-era|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ice-cavern/index.html" data-area-link="ice-cavern" data-name="Ice Cavern" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ice Cavern</span><span class="block text-sm text-zinc-500 truncate">Mini-dungeon to obtain the Iron Boots</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|ice-cavern|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="lake-hylia/index.html" data-area-link="lake-hylia" data-name="Lake Hylia" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lake Hylia</span><span class="block text-sm text-zinc-500 truncate">Investigating the dried-up lake</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|lake-hylia|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="water-temple/index.html" data-area-link="water-temple" data-name="Water Temple" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Water Temple</span><span class="block text-sm text-zinc-500 truncate">Third adult dungeon to save the Water Sage</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|water-temple|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="bottom-of-the-well/index.html" data-area-link="bottom-of-the-well" data-name="Bottom of the Well" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Bottom of the Well</span><span class="block text-sm text-zinc-500 truncate">Mini-dungeon to obtain the Lens of Truth</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|bottom-of-the-well|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="shadow-temple/index.html" data-area-link="shadow-temple" data-name="Shadow Temple" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Shadow Temple</span><span class="block text-sm text-zinc-500 truncate">Fourth adult dungeon to save the Shadow Sage</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|shadow-temple|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gerudo-valley/index.html" data-area-link="gerudo-valley" data-name="Gerudo Valley" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gerudo Valley</span><span class="block text-sm text-zinc-500 truncate">Crossing the bridge to reach the desert</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|gerudo-valley|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gerudos-fortress/index.html" data-area-link="gerudos-fortress" data-name="Gerudo&#39;s Fortress" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gerudo&#39;s Fortress</span><span class="block text-sm text-zinc-500 truncate">Rescuing the carpenters and gaining access to the desert</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|gerudos-fortress|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="spirit-temple/index.html" data-area-link="spirit-temple" data-name="Spirit Temple" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Spirit Temple</span><span class="block text-sm text-zinc-500 truncate">Fifth adult dungeon to save the Spirit Sage</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|spirit-temple|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ganons-castle/index.html" data-area-link="ganons-castle" data-name="Ganon&#39;s Castle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ganon&#39;s Castle</span><span class="block text-sm text-zinc-500 truncate">Final dungeon to confront Ganondorf</span></span>
+          <span data-progress="the-legend-of-zelda-ocarina-of-time|ganons-castle|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in The Legend of Zelda: Ocarina of Time?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

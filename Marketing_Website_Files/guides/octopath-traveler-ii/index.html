@@ -20,29 +20,204 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="octopath-traveler-ii">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">OCTOPATH TRAVELER II guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Ochette</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ochette-chapter-1/index.html">Ochette, Chapter 1</a><div class="text-sm text-zinc-500">Ochette leaves Toto&#39;haha to hunt the legendary beasts</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ochette-chapter-4/index.html">Ochette, Chapter 4</a><div class="text-sm text-zinc-500">The final confrontation with the dark beast</div></li></ul></li><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Osvald</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="osvald-chapter-1/index.html">Osvald, Chapter 1</a><div class="text-sm text-zinc-500">Osvald escapes Frigit Isle prison to seek revenge</div></li></ul></li><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Partitio</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="partitio-chapter-1/index.html">Partitio, Chapter 1</a><div class="text-sm text-zinc-500">Partitio leaves Oresrush to end poverty</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="partitio-chapter-2/index.html">Partitio, Chapter 2</a><div class="text-sm text-zinc-500">Partitio heads to Sai to secure a steam engine</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="partitio-chapter-4/index.html">Partitio, Chapter 4</a><div class="text-sm text-zinc-500">Partitio auctions for the steam engine to end poverty</div></li></ul></li><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Agnea</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="agnea-chapter-1/index.html">Agnea, Chapter 1</a><div class="text-sm text-zinc-500">Agnea leaves Cropdale to become a star</div></li></ul></li><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Temenos</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="temenos-chapter-1/index.html">Temenos, Chapter 1</a><div class="text-sm text-zinc-500">Temenos investigates a murder in Flamechurch</div></li></ul></li><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Hikari</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hikari-chapter-1/index.html">Hikari, Chapter 1</a><div class="text-sm text-zinc-500">Hikari fights to reclaim his throne in Ku</div></li></ul></li><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Throne</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="throne-chapter-2/index.html">Throne, Chapter 2</a><div class="text-sm text-zinc-500">Throne hunts the Father and Mother in the New Delsta</div></li></ul></li><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Places</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="new-delsta/index.html">New Delsta</a><div class="text-sm text-zinc-500">The bustling, neon-lit capital of the Brightlands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="canalbrine/index.html">Canalbrine</a><div class="text-sm text-zinc-500">A coastal town serving as a major port</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="oresrush/index.html">Oresrush</a><div class="text-sm text-zinc-500">A dusty, industrious town in the Wildlands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="flamechurch/index.html">Flamechurch</a><div class="text-sm text-zinc-500">A holy city centered around the Sacred Flame</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="cropdale/index.html">Cropdale</a><div class="text-sm text-zinc-500">A peaceful, rural village in the Leaflands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="ku/index.html">Ku</a><div class="text-sm text-zinc-500">The fortified castle town of the Hinoeuma region</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="totohaha/index.html">Toto&#39;haha</a><div class="text-sm text-zinc-500">The tropical island home of the beastlings</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="conning-creek/index.html">Conning Creek</a><div class="text-sm text-zinc-500">A quiet harbor town in the Harborlands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="wellgrove/index.html">Wellgrove</a><div class="text-sm text-zinc-500">A wealthy, merchant-driven town in the Leaflands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="sai/index.html">Sai</a><div class="text-sm text-zinc-500">A desert city known for its trade and markets</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="stormhail/index.html">Stormhail</a><div class="text-sm text-zinc-500">A snowy, mountainous region in the Winterlands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="brightlands/index.html">Brightlands</a><div class="text-sm text-zinc-500">A region of bustling cities and theaters</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hinoeuma/index.html">Hinoeuma</a><div class="text-sm text-zinc-500">A desert land of merchants and trade</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="leaflands/index.html">Leaflands</a><div class="text-sm text-zinc-500">A lush area of forests and apothecaries</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="winterbloom/index.html">Winterbloom</a><div class="text-sm text-zinc-500">A snowy town in the Winterlands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gravell/index.html">Gravell</a><div class="text-sm text-zinc-500">A rugged town in the Wildlands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="montwise/index.html">Montwise</a><div class="text-sm text-zinc-500">A city of scholars and libraries</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="timberain/index.html">Timberain</a><div class="text-sm text-zinc-500">A castle town in the Leaflands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="clockbank/index.html">Clockbank</a><div class="text-sm text-zinc-500">An industrial city in the Brightlands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="nameless-village/index.html">Nameless Village</a><div class="text-sm text-zinc-500">A hidden settlement in the Wildlands</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="abandoned-village/index.html">Abandoned Village</a><div class="text-sm text-zinc-500">A desolate location in the Winterlands</div></li></ul></li><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Castti</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="castti-chapter-3/index.html">Castti, Chapter 3</a><div class="text-sm text-zinc-500">Castti uncovers the truth about the Eir&#39;s Apothecaries</div></li></ul></li><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Final Chapter</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="final-chapter/index.html">Final Chapter</a><div class="text-sm text-zinc-500">The eight travelers unite to face the ultimate evil</div></li></ul></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">OCTOPATH TRAVELER II guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">33</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">74</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">0</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="octopath-traveler-ii" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Ochette</h2><a href="ochette-chapter-1/index.html" data-area-link="ochette-chapter-1" data-name="Ochette, Chapter 1" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ochette, Chapter 1</span><span class="block text-sm text-zinc-500 truncate">Ochette leaves Toto&#39;haha to hunt the legendary beasts</span></span>
+          <span data-progress="octopath-traveler-ii|ochette-chapter-1|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Osvald</h2><a href="osvald-chapter-1/index.html" data-area-link="osvald-chapter-1" data-name="Osvald, Chapter 1" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Osvald, Chapter 1</span><span class="block text-sm text-zinc-500 truncate">Osvald escapes Frigit Isle prison to seek revenge</span></span>
+          <span data-progress="octopath-traveler-ii|osvald-chapter-1|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Partitio</h2><a href="partitio-chapter-1/index.html" data-area-link="partitio-chapter-1" data-name="Partitio, Chapter 1" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Partitio, Chapter 1</span><span class="block text-sm text-zinc-500 truncate">Partitio leaves Oresrush to end poverty</span></span>
+          <span data-progress="octopath-traveler-ii|partitio-chapter-1|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Agnea</h2><a href="agnea-chapter-1/index.html" data-area-link="agnea-chapter-1" data-name="Agnea, Chapter 1" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Agnea, Chapter 1</span><span class="block text-sm text-zinc-500 truncate">Agnea leaves Cropdale to become a star</span></span>
+          <span data-progress="octopath-traveler-ii|agnea-chapter-1|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Temenos</h2><a href="temenos-chapter-1/index.html" data-area-link="temenos-chapter-1" data-name="Temenos, Chapter 1" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Temenos, Chapter 1</span><span class="block text-sm text-zinc-500 truncate">Temenos investigates a murder in Flamechurch</span></span>
+          <span data-progress="octopath-traveler-ii|temenos-chapter-1|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Hikari</h2><a href="hikari-chapter-1/index.html" data-area-link="hikari-chapter-1" data-name="Hikari, Chapter 1" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hikari, Chapter 1</span><span class="block text-sm text-zinc-500 truncate">Hikari fights to reclaim his throne in Ku</span></span>
+          <span data-progress="octopath-traveler-ii|hikari-chapter-1|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Throne</h2><a href="throne-chapter-2/index.html" data-area-link="throne-chapter-2" data-name="Throne, Chapter 2" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Throne, Chapter 2</span><span class="block text-sm text-zinc-500 truncate">Throne hunts the Father and Mother in the New Delsta</span></span>
+          <span data-progress="octopath-traveler-ii|throne-chapter-2|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Partitio</h2><a href="partitio-chapter-2/index.html" data-area-link="partitio-chapter-2" data-name="Partitio, Chapter 2" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Partitio, Chapter 2</span><span class="block text-sm text-zinc-500 truncate">Partitio heads to Sai to secure a steam engine</span></span>
+          <span data-progress="octopath-traveler-ii|partitio-chapter-2|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Places</h2><a href="new-delsta/index.html" data-area-link="new-delsta" data-name="New Delsta" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">New Delsta</span><span class="block text-sm text-zinc-500 truncate">The bustling, neon-lit capital of the Brightlands</span></span>
+          <span data-progress="octopath-traveler-ii|new-delsta|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="canalbrine/index.html" data-area-link="canalbrine" data-name="Canalbrine" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Canalbrine</span><span class="block text-sm text-zinc-500 truncate">A coastal town serving as a major port</span></span>
+          <span data-progress="octopath-traveler-ii|canalbrine|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="oresrush/index.html" data-area-link="oresrush" data-name="Oresrush" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Oresrush</span><span class="block text-sm text-zinc-500 truncate">A dusty, industrious town in the Wildlands</span></span>
+          <span data-progress="octopath-traveler-ii|oresrush|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="flamechurch/index.html" data-area-link="flamechurch" data-name="Flamechurch" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Flamechurch</span><span class="block text-sm text-zinc-500 truncate">A holy city centered around the Sacred Flame</span></span>
+          <span data-progress="octopath-traveler-ii|flamechurch|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="cropdale/index.html" data-area-link="cropdale" data-name="Cropdale" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cropdale</span><span class="block text-sm text-zinc-500 truncate">A peaceful, rural village in the Leaflands</span></span>
+          <span data-progress="octopath-traveler-ii|cropdale|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="ku/index.html" data-area-link="ku" data-name="Ku" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ku</span><span class="block text-sm text-zinc-500 truncate">The fortified castle town of the Hinoeuma region</span></span>
+          <span data-progress="octopath-traveler-ii|ku|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="totohaha/index.html" data-area-link="totohaha" data-name="Toto&#39;haha" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Toto&#39;haha</span><span class="block text-sm text-zinc-500 truncate">The tropical island home of the beastlings</span></span>
+          <span data-progress="octopath-traveler-ii|totohaha|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="conning-creek/index.html" data-area-link="conning-creek" data-name="Conning Creek" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Conning Creek</span><span class="block text-sm text-zinc-500 truncate">A quiet harbor town in the Harborlands</span></span>
+          <span data-progress="octopath-traveler-ii|conning-creek|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="wellgrove/index.html" data-area-link="wellgrove" data-name="Wellgrove" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Wellgrove</span><span class="block text-sm text-zinc-500 truncate">A wealthy, merchant-driven town in the Leaflands</span></span>
+          <span data-progress="octopath-traveler-ii|wellgrove|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="sai/index.html" data-area-link="sai" data-name="Sai" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sai</span><span class="block text-sm text-zinc-500 truncate">A desert city known for its trade and markets</span></span>
+          <span data-progress="octopath-traveler-ii|sai|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="stormhail/index.html" data-area-link="stormhail" data-name="Stormhail" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Stormhail</span><span class="block text-sm text-zinc-500 truncate">A snowy, mountainous region in the Winterlands</span></span>
+          <span data-progress="octopath-traveler-ii|stormhail|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Ochette</h2><a href="ochette-chapter-4/index.html" data-area-link="ochette-chapter-4" data-name="Ochette, Chapter 4" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Ochette, Chapter 4</span><span class="block text-sm text-zinc-500 truncate">The final confrontation with the dark beast</span></span>
+          <span data-progress="octopath-traveler-ii|ochette-chapter-4|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Castti</h2><a href="castti-chapter-3/index.html" data-area-link="castti-chapter-3" data-name="Castti, Chapter 3" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Castti, Chapter 3</span><span class="block text-sm text-zinc-500 truncate">Castti uncovers the truth about the Eir&#39;s Apothecaries</span></span>
+          <span data-progress="octopath-traveler-ii|castti-chapter-3|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Partitio</h2><a href="partitio-chapter-4/index.html" data-area-link="partitio-chapter-4" data-name="Partitio, Chapter 4" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Partitio, Chapter 4</span><span class="block text-sm text-zinc-500 truncate">Partitio auctions for the steam engine to end poverty</span></span>
+          <span data-progress="octopath-traveler-ii|partitio-chapter-4|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Final Chapter</h2><a href="final-chapter/index.html" data-area-link="final-chapter" data-name="Final Chapter" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Final Chapter</span><span class="block text-sm text-zinc-500 truncate">The eight travelers unite to face the ultimate evil</span></span>
+          <span data-progress="octopath-traveler-ii|final-chapter|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Places</h2><a href="brightlands/index.html" data-area-link="brightlands" data-name="Brightlands" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Brightlands</span><span class="block text-sm text-zinc-500 truncate">A region of bustling cities and theaters</span></span>
+          <span data-progress="octopath-traveler-ii|brightlands|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hinoeuma/index.html" data-area-link="hinoeuma" data-name="Hinoeuma" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hinoeuma</span><span class="block text-sm text-zinc-500 truncate">A desert land of merchants and trade</span></span>
+          <span data-progress="octopath-traveler-ii|hinoeuma|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="leaflands/index.html" data-area-link="leaflands" data-name="Leaflands" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Leaflands</span><span class="block text-sm text-zinc-500 truncate">A lush area of forests and apothecaries</span></span>
+          <span data-progress="octopath-traveler-ii|leaflands|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="winterbloom/index.html" data-area-link="winterbloom" data-name="Winterbloom" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Winterbloom</span><span class="block text-sm text-zinc-500 truncate">A snowy town in the Winterlands</span></span>
+          <span data-progress="octopath-traveler-ii|winterbloom|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gravell/index.html" data-area-link="gravell" data-name="Gravell" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gravell</span><span class="block text-sm text-zinc-500 truncate">A rugged town in the Wildlands</span></span>
+          <span data-progress="octopath-traveler-ii|gravell|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="montwise/index.html" data-area-link="montwise" data-name="Montwise" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Montwise</span><span class="block text-sm text-zinc-500 truncate">A city of scholars and libraries</span></span>
+          <span data-progress="octopath-traveler-ii|montwise|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="timberain/index.html" data-area-link="timberain" data-name="Timberain" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Timberain</span><span class="block text-sm text-zinc-500 truncate">A castle town in the Leaflands</span></span>
+          <span data-progress="octopath-traveler-ii|timberain|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="clockbank/index.html" data-area-link="clockbank" data-name="Clockbank" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Clockbank</span><span class="block text-sm text-zinc-500 truncate">An industrial city in the Brightlands</span></span>
+          <span data-progress="octopath-traveler-ii|clockbank|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="nameless-village/index.html" data-area-link="nameless-village" data-name="Nameless Village" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Nameless Village</span><span class="block text-sm text-zinc-500 truncate">A hidden settlement in the Wildlands</span></span>
+          <span data-progress="octopath-traveler-ii|nameless-village|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="abandoned-village/index.html" data-area-link="abandoned-village" data-name="Abandoned Village" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Abandoned Village</span><span class="block text-sm text-zinc-500 truncate">A desolate location in the Winterlands</span></span>
+          <span data-progress="octopath-traveler-ii|abandoned-village|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in OCTOPATH TRAVELER II?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>

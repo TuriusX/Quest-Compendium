@@ -20,29 +20,196 @@
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
     .qc-pixel { image-rendering: pixelated; }
-    .qc-check { accent-color: #a87ffb; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" data-guide="persona-4-golden">
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-5 text-sm text-zinc-400">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="../../guides/index.html" class="hover:text-white">Guides</a>
         <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
       </div>
     </div>
   </nav>
   
-  <main class="max-w-4xl mx-auto px-6 py-10"><p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p><h1 class="text-3xl font-bold text-white">Persona 4 Golden guide</h1><p class="text-zinc-400 mt-2 mb-6">Every area in story order, with item checklists, secrets, missables and enemy weaknesses.</p><ul><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Calendar</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="april/index.html">April</a><div class="text-sm text-zinc-500">Introduction to Inaba, meeting Yosuke and Chie, and the first TV World entry</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="may-castle/index.html">May: Castle</a><div class="text-sm text-zinc-500">Investigating Yukiko&#39;s Castle and forming the Investigation Team</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="june-bathhouse/index.html">June: Bathhouse</a><div class="text-sm text-zinc-500">Rescuing Kanji Tatsumi from the Steamy Bathhouse</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="july-marukyu-striptease/index.html">July: Marukyu Striptease</a><div class="text-sm text-zinc-500">Investigating Rise Kujikawa and the Midnight Channel</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="august-void-quest/index.html">August: Void Quest</a><div class="text-sm text-zinc-500">Rescuing Mitsuo Kubo from the video game dungeon</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="september-secret-laboratory/index.html">September: Secret Laboratory</a><div class="text-sm text-zinc-500">Naoto&#39;s dungeon and school trip</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="october-secret-laboratory/index.html">October: Secret Laboratory</a><div class="text-sm text-zinc-500">Approaching midterms and saving Naoto</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="november-heaven/index.html">November: Heaven</a><div class="text-sm text-zinc-500">Nanako is kidnapped and rescued</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="december-magatsu-mandala/index.html">December: Magatsu Mandala</a><div class="text-sm text-zinc-500">Finding the culprit and confronting Adachi</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="january-ski-trip/index.html">January: Ski Trip</a><div class="text-sm text-zinc-500">Golden exclusive ski trip and winter events</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="february-hollow-forest/index.html">February: Hollow Forest</a><div class="text-sm text-zinc-500">Rescuing Marie from the Hollow Forest</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="march-true-ending/index.html">March: True Ending</a><div class="text-sm text-zinc-500">Farewell rounds and the final dungeon</div></li></ul></li><li class="pt-6"><h2 class="text-lg font-bold text-white mb-1">Reference</h2><ul><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="yukikos-castle/index.html">Yukiko&#39;s Castle</a><div class="text-sm text-zinc-500">Strategy guide for the first dungeon and Shadow Yukiko boss fight</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="steamy-bathhouse/index.html">Steamy Bathhouse</a><div class="text-sm text-zinc-500">Strategy guide for the second dungeon and Shadow Kanji boss fight</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="marukyu-striptease/index.html">Marukyu Striptease</a><div class="text-sm text-zinc-500">Strategy guide for the third dungeon and Shadow Rise boss fight</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="void-quest/index.html">Void Quest</a><div class="text-sm text-zinc-500">Strategy guide for the fourth dungeon and Shadow Mitsuo boss fight</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="social-links/index.html">Social Links</a><div class="text-sm text-zinc-500">Comprehensive guide to unlocking and ranking up all character relationships</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="part-time-jobs/index.html">Part-Time Jobs</a><div class="text-sm text-zinc-500">Guide to available jobs and their benefits for stats and money</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="fishing-and-bug-catching/index.html">Fishing and Bug Catching</a><div class="text-sm text-zinc-500">Guide to obtaining the fishing rod and catching rare fish</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="gardening/index.html">Gardening</a><div class="text-sm text-zinc-500">How to grow vegetables for healing items and SP recovery</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="bike-rides/index.html">Bike Rides</a><div class="text-sm text-zinc-500">Guide to unlocking special skills via scooter trips</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="quest-list/index.html">Quest List</a><div class="text-sm text-zinc-500">Walkthrough for all optional side quests given by NPCs</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="skill-cards/index.html">Skill Cards</a><div class="text-sm text-zinc-500">How to obtain and use cards to customize Persona abilities</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="velvet-room/index.html">Velvet Room</a><div class="text-sm text-zinc-500">Guide to fusion mechanics, including Triangle Fusion and Skill Inheritance</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="stats-and-social-qualities/index.html">Stats and Social Qualities</a><div class="text-sm text-zinc-500">How to raise Courage, Diligence, Knowledge, Expression, and Understanding</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="secret-laboratory/index.html">Secret Laboratory</a><div class="text-sm text-zinc-500">Dungeon details for Secret Laboratory</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="heaven/index.html">Heaven</a><div class="text-sm text-zinc-500">Dungeon details for Heaven</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="magatsu-inaba-and-magatsu-mandala/index.html">Magatsu Inaba and Magatsu Mandala</a><div class="text-sm text-zinc-500">Dungeon details for Magatsu Inaba</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="hollow-forest/index.html">Hollow Forest</a><div class="text-sm text-zinc-500">Dungeon details for Hollow Forest</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="yomotsu-hirasaka/index.html">Yomotsu Hirasaka</a><div class="text-sm text-zinc-500">Dungeon details for Yomotsu Hirasaka</div></li><li class="border-t border-white/5 py-3"><a class="text-white font-semibold hover:text-[#a87ffb]" href="endings-guide/index.html">Endings Guide</a><div class="text-sm text-zinc-500">How to achieve the Good True and Golden endings</div></li></ul></li></ul>
-  <div class="my-10 rounded-2xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 p-6">
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <h1 class="text-3xl font-bold text-white">Persona 4 Golden guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">31</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">160</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">6</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          <a hidden data-continue="persona-4-golden" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6"><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Calendar</h2><a href="april/index.html" data-area-link="april" data-name="April" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">April</span><span class="block text-sm text-zinc-500 truncate">Introduction to Inaba, meeting Yosuke and Chie, and the first TV World entry</span></span>
+          <span data-progress="persona-4-golden|april|9"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="may-castle/index.html" data-area-link="may-castle" data-name="May: Castle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">May: Castle</span><span class="block text-sm text-zinc-500 truncate">Investigating Yukiko&#39;s Castle and forming the Investigation Team</span></span>
+          <span data-progress="persona-4-golden|may-castle|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="june-bathhouse/index.html" data-area-link="june-bathhouse" data-name="June: Bathhouse" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">June: Bathhouse</span><span class="block text-sm text-zinc-500 truncate">Rescuing Kanji Tatsumi from the Steamy Bathhouse</span></span>
+          <span data-progress="persona-4-golden|june-bathhouse|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="july-marukyu-striptease/index.html" data-area-link="july-marukyu-striptease" data-name="July: Marukyu Striptease" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">July: Marukyu Striptease</span><span class="block text-sm text-zinc-500 truncate">Investigating Rise Kujikawa and the Midnight Channel</span></span>
+          <span data-progress="persona-4-golden|july-marukyu-striptease|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="august-void-quest/index.html" data-area-link="august-void-quest" data-name="August: Void Quest" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">August: Void Quest</span><span class="block text-sm text-zinc-500 truncate">Rescuing Mitsuo Kubo from the video game dungeon</span></span>
+          <span data-progress="persona-4-golden|august-void-quest|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Reference</h2><a href="yukikos-castle/index.html" data-area-link="yukikos-castle" data-name="Yukiko&#39;s Castle" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Yukiko&#39;s Castle</span><span class="block text-sm text-zinc-500 truncate">Strategy guide for the first dungeon and Shadow Yukiko boss fight</span></span>
+          <span data-progress="persona-4-golden|yukikos-castle|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="steamy-bathhouse/index.html" data-area-link="steamy-bathhouse" data-name="Steamy Bathhouse" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Steamy Bathhouse</span><span class="block text-sm text-zinc-500 truncate">Strategy guide for the second dungeon and Shadow Kanji boss fight</span></span>
+          <span data-progress="persona-4-golden|steamy-bathhouse|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="marukyu-striptease/index.html" data-area-link="marukyu-striptease" data-name="Marukyu Striptease" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Marukyu Striptease</span><span class="block text-sm text-zinc-500 truncate">Strategy guide for the third dungeon and Shadow Rise boss fight</span></span>
+          <span data-progress="persona-4-golden|marukyu-striptease|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="void-quest/index.html" data-area-link="void-quest" data-name="Void Quest" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Void Quest</span><span class="block text-sm text-zinc-500 truncate">Strategy guide for the fourth dungeon and Shadow Mitsuo boss fight</span></span>
+          <span data-progress="persona-4-golden|void-quest|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="social-links/index.html" data-area-link="social-links" data-name="Social Links" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Social Links</span><span class="block text-sm text-zinc-500 truncate">Comprehensive guide to unlocking and ranking up all character relationships</span></span>
+          <span data-progress="persona-4-golden|social-links|24"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="part-time-jobs/index.html" data-area-link="part-time-jobs" data-name="Part-Time Jobs" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Part-Time Jobs</span><span class="block text-sm text-zinc-500 truncate">Guide to available jobs and their benefits for stats and money</span></span>
+          <span data-progress="persona-4-golden|part-time-jobs|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="fishing-and-bug-catching/index.html" data-area-link="fishing-and-bug-catching" data-name="Fishing and Bug Catching" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Fishing and Bug Catching</span><span class="block text-sm text-zinc-500 truncate">Guide to obtaining the fishing rod and catching rare fish</span></span>
+          <span data-progress="persona-4-golden|fishing-and-bug-catching|16"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="gardening/index.html" data-area-link="gardening" data-name="Gardening" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Gardening</span><span class="block text-sm text-zinc-500 truncate">How to grow vegetables for healing items and SP recovery</span></span>
+          <span data-progress="persona-4-golden|gardening|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="bike-rides/index.html" data-area-link="bike-rides" data-name="Bike Rides" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Bike Rides</span><span class="block text-sm text-zinc-500 truncate">Guide to unlocking special skills via scooter trips</span></span>
+          <span data-progress="persona-4-golden|bike-rides|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="quest-list/index.html" data-area-link="quest-list" data-name="Quest List" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Quest List</span><span class="block text-sm text-zinc-500 truncate">Walkthrough for all optional side quests given by NPCs</span></span>
+          <span data-progress="persona-4-golden|quest-list|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="skill-cards/index.html" data-area-link="skill-cards" data-name="Skill Cards" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Skill Cards</span><span class="block text-sm text-zinc-500 truncate">How to obtain and use cards to customize Persona abilities</span></span>
+          <span data-progress="persona-4-golden|skill-cards|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="velvet-room/index.html" data-area-link="velvet-room" data-name="Velvet Room" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Velvet Room</span><span class="block text-sm text-zinc-500 truncate">Guide to fusion mechanics, including Triangle Fusion and Skill Inheritance</span></span>
+          <span data-progress="persona-4-golden|velvet-room|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="stats-and-social-qualities/index.html" data-area-link="stats-and-social-qualities" data-name="Stats and Social Qualities" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Stats and Social Qualities</span><span class="block text-sm text-zinc-500 truncate">How to raise Courage, Diligence, Knowledge, Expression, and Understanding</span></span>
+          <span data-progress="persona-4-golden|stats-and-social-qualities|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Calendar</h2><a href="september-secret-laboratory/index.html" data-area-link="september-secret-laboratory" data-name="September: Secret Laboratory" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">September: Secret Laboratory</span><span class="block text-sm text-zinc-500 truncate">Naoto&#39;s dungeon and school trip</span></span>
+          <span data-progress="persona-4-golden|september-secret-laboratory|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="october-secret-laboratory/index.html" data-area-link="october-secret-laboratory" data-name="October: Secret Laboratory" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">October: Secret Laboratory</span><span class="block text-sm text-zinc-500 truncate">Approaching midterms and saving Naoto</span></span>
+          <span data-progress="persona-4-golden|october-secret-laboratory|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="november-heaven/index.html" data-area-link="november-heaven" data-name="November: Heaven" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">November: Heaven</span><span class="block text-sm text-zinc-500 truncate">Nanako is kidnapped and rescued</span></span>
+          <span data-progress="persona-4-golden|november-heaven|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="december-magatsu-mandala/index.html" data-area-link="december-magatsu-mandala" data-name="December: Magatsu Mandala" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">December: Magatsu Mandala</span><span class="block text-sm text-zinc-500 truncate">Finding the culprit and confronting Adachi</span></span>
+          <span data-progress="persona-4-golden|december-magatsu-mandala|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="january-ski-trip/index.html" data-area-link="january-ski-trip" data-name="January: Ski Trip" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">January: Ski Trip</span><span class="block text-sm text-zinc-500 truncate">Golden exclusive ski trip and winter events</span></span>
+          <span data-progress="persona-4-golden|january-ski-trip|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="february-hollow-forest/index.html" data-area-link="february-hollow-forest" data-name="February: Hollow Forest" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">February: Hollow Forest</span><span class="block text-sm text-zinc-500 truncate">Rescuing Marie from the Hollow Forest</span></span>
+          <span data-progress="persona-4-golden|february-hollow-forest|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="march-true-ending/index.html" data-area-link="march-true-ending" data-name="March: True Ending" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">March: True Ending</span><span class="block text-sm text-zinc-500 truncate">Farewell rounds and the final dungeon</span></span>
+          <span data-progress="persona-4-golden|march-true-ending|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">Reference</h2><a href="secret-laboratory/index.html" data-area-link="secret-laboratory" data-name="Secret Laboratory" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Secret Laboratory</span><span class="block text-sm text-zinc-500 truncate">Dungeon details for Secret Laboratory</span></span>
+          <span data-progress="persona-4-golden|secret-laboratory|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="heaven/index.html" data-area-link="heaven" data-name="Heaven" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Heaven</span><span class="block text-sm text-zinc-500 truncate">Dungeon details for Heaven</span></span>
+          <span data-progress="persona-4-golden|heaven|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="magatsu-inaba-and-magatsu-mandala/index.html" data-area-link="magatsu-inaba-and-magatsu-mandala" data-name="Magatsu Inaba and Magatsu Mandala" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Magatsu Inaba and Magatsu Mandala</span><span class="block text-sm text-zinc-500 truncate">Dungeon details for Magatsu Inaba</span></span>
+          <span data-progress="persona-4-golden|magatsu-inaba-and-magatsu-mandala|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="hollow-forest/index.html" data-area-link="hollow-forest" data-name="Hollow Forest" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Hollow Forest</span><span class="block text-sm text-zinc-500 truncate">Dungeon details for Hollow Forest</span></span>
+          <span data-progress="persona-4-golden|hollow-forest|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="yomotsu-hirasaka/index.html" data-area-link="yomotsu-hirasaka" data-name="Yomotsu Hirasaka" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Yomotsu Hirasaka</span><span class="block text-sm text-zinc-500 truncate">Dungeon details for Yomotsu Hirasaka</span></span>
+          <span data-progress="persona-4-golden|yomotsu-hirasaka|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a href="endings-guide/index.html" data-area-link="endings-guide" data-name="Endings Guide" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Endings Guide</span><span class="block text-sm text-zinc-500 truncate">How to achieve the Good True and Golden endings</span></span>
+          <span data-progress="persona-4-golden|endings-guide|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in Persona 4 Golden?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play and answers questions about exactly where you are, with no alt-tabbing.</p>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
     <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
-  </div></main>
-  <footer class="max-w-4xl mx-auto px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
     Game names belong to their owners; this site isn't affiliated with any publisher.
   </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
 </body>
 </html>
