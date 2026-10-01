@@ -1,0 +1,7 @@
+# Builds the guide pipeline's job image from scripts/pipeline/Dockerfile (run from the repo root):
+#   gcloud builds submit --config scripts/pipeline/cloudbuild.yaml --project quest-compendium-1bccf .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', 'scripts/pipeline/Dockerfile', '-t', 'us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/guide-pipeline:latest', '.']
+images:
+  - us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/guide-pipeline:latest

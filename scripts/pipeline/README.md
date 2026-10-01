@@ -11,31 +11,41 @@ monthly budget, rebuilds the website, deploys it to Netlify, and posts a summary
 
 ## Run it in Google Cloud, once a day
 
-It runs as a Cloud Run **job** (a task that starts, works and stops) built from this repo, started daily by
-Cloud Scheduler.
+It runs as a Cloud Run **job** (a task that starts, works and stops) started daily by Cloud Scheduler. The job has
+its own image (`scripts/pipeline/Dockerfile`: the repo's scripts and website with production dependencies), because the
+server's image only holds the built app.
 
-1. Deploy the job (same project and region as the server). Give it the same `GEMINI_API_KEY` the server uses, plus
-   the Netlify and Discord settings:
+1. Build the job image (from the repo root):
 
-       gcloud run jobs deploy guide-pipeline --source . --region us-east1 --project quest-compendium-1bccf \
-         --command npx --args tsx,scripts/pipeline/run.ts \
+       gcloud builds submit --config scripts/pipeline/cloudbuild.yaml --project quest-compendium-1bccf .
+
+2. The keys live in Secret Manager (not in the job's plain settings): `gemini-api-key` (the same key the server uses),
+   `netlify-auth-token` and `discord-webhook-url`. The job's service account needs the Secret Accessor role on them.
+
+3. Deploy the job (same project and region as the server):
+
+       gcloud run jobs deploy guide-pipeline --image us-east1-docker.pkg.dev/quest-compendium-1bccf/cloud-run-source-deploy/guide-pipeline:latest \
+         --region us-east1 --project quest-compendium-1bccf \
          --task-timeout 3h --max-retries 0 --memory 2Gi \
-         --set-env-vars GEMINI_API_KEY=…,NETLIFY_AUTH_TOKEN=…,NETLIFY_SITE_ID=…,DISCORD_WEBHOOK_URL=…
+         --set-env-vars NETLIFY_SITE_ID=… \
+         --set-secrets GEMINI_API_KEY=gemini-api-key:latest,NETLIFY_AUTH_TOKEN=netlify-auth-token:latest,DISCORD_WEBHOOK_URL=discord-webhook-url:latest
 
-2. Schedule it daily (9:00 Central here), using a service account allowed to run Cloud Run jobs:
+4. Schedule it daily (9:00 Central here), using a service account allowed to run Cloud Run jobs:
 
        gcloud scheduler jobs create http guide-pipeline-daily --location us-east1 --project quest-compendium-1bccf \
          --schedule "0 9 * * *" --time-zone "America/Chicago" \
          --uri "https://run.googleapis.com/v2/projects/quest-compendium-1bccf/locations/us-east1/jobs/guide-pipeline:run" \
          --http-method POST --oauth-service-account-email <service-account-email>
 
-3. Run it once by hand to check: `gcloud run jobs execute guide-pipeline --region us-east1 --project quest-compendium-1bccf`
+5. Run it once by hand to check: `gcloud run jobs execute guide-pipeline --region us-east1 --project quest-compendium-1bccf`
 
 ## Things to know
 
 - **The website comes from the job's copy of this repo.** The job rebuilds the guide pages from Firestore, but the
-  homepage and other site files are whatever was in the repo when the job was last deployed. After changing the
-  website, redeploy the job (step 1) so it doesn't put an older homepage back.
+  homepage and other site files are whatever was in the repo when the job image was last built. After changing the
+  website, rebuild the image (step 1) and redeploy the job (step 3) so it doesn't put an older homepage back.
+- **Steam picks:** only RPG/adventure games with at least `PIPELINE_MIN_STEAM_REVIEWS` Steam reviews (default 2,000)
+  count, so small new games don't use up the month's searches.
 - **Budget:** `PIPELINE_MONTHLY_AI_DOLLARS` (default $10) and `PIPELINE_MONTHLY_SEARCHES` (default 1,500), and it always
   leaves `PIPELINE_PLAYER_RESERVE` (default 2,000) of the app's monthly searches for players. Change them with
   `gcloud run jobs update guide-pipeline --update-env-vars …`.

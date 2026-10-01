@@ -87,13 +87,15 @@ async function main() {
 
   // ---- 1. candidates ----
   const stats = (await db().collection('gameStats').get()).docs.map((d) => ({ key: d.id, ...(d.data() as any) }));
+  // A name gameKey can't turn into a key (no Latin letters or digits, e.g. a game listed only in Chinese) is skipped.
   const demand = stats
+    .filter((s) => s.game && gameKey(String(s.game)))
     .map((s) => ({ ...s, playerCount: Array.isArray(s.players) ? s.players.length : 0 }))
     .filter((s) => s.playerCount >= MIN_PLAYERS)
     .sort((a, b) => b.playerCount - a.playerCount || (b.questions || 0) - (a.questions || 0));
   let trending: { name: string; released: number; isNew: boolean }[] = [];
   try {
-    trending = await steamCandidates();
+    trending = (await steamCandidates()).filter((t) => gameKey(t.name));
   } catch (e: any) {
     console.warn(`Steam lists unavailable: ${e?.message}`);
   }
