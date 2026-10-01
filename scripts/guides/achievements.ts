@@ -32,12 +32,19 @@ const decode = (s: string) =>
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 async function findAppId(name: string): Promise<number | null> {
-  const r = await fetch(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(name)}&cc=us&l=english`);
-  if (!r.ok) return null;
-  const d: any = await r.json();
-  const items: any[] = d?.items || [];
+  const search = async (term: string): Promise<any[]> => {
+    const r = await fetch(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(term)}&cc=us&l=english`);
+    return r.ok ? ((await r.json()) as any)?.items || [] : [];
+  };
+  const items = await search(name);
   const exact = items.find((i) => norm(i.name) === norm(name));
-  return Number((exact || items[0])?.id) || null;
+  if (exact || items[0]) return Number((exact || items[0]).id) || null;
+  // Store names change ("The Witcher 3: Wild Hunt - Complete Edition" is now "… — Remastered"): try again without
+  // the edition after a dash, and only take a game whose name starts with that shorter name.
+  const short = name.split(/\s+[-–—]\s+/)[0].replace(/[™®]/g, '').trim();
+  if (!short || short === name) return null;
+  const hit = (await search(short)).find((i) => norm(i.name).startsWith(norm(short)));
+  return Number(hit?.id) || null;
 }
 
 /** Steam's public achievement list for a game (no key needed). */
@@ -66,7 +73,9 @@ async function main() {
   const list = await steamList(appId);
   if (!list.length) throw new Error(`Steam lists no achievements for app ${appId}`);
   console.log(`${game} (app ${appId}): ${list.length} achievements on Steam`);
-  const areas: { slug: string; name: string }[] = (info.areas || []).map((a: any) => ({ slug: a.slug, name: a.name }));
+  // Only published pages: an achievement linked to a held page would point at nothing.
+  const published = new Set((await guideRef.collection('areas').where('status', '==', 'published').get()).docs.map((d) => d.id));
+  const areas: { slug: string; name: string }[] = (info.areas || []).filter((a: any) => published.has(a.slug)).map((a: any) => ({ slug: a.slug, name: a.name }));
   const areaBySlugName = new Map(areas.map((a) => [norm(a.name), a]));
 
   const ai = gemini();
