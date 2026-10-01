@@ -5,7 +5,7 @@ import { getApiBaseUrl } from './api';
  * A game's achievement guide (how to get each achievement, whether it can be missed, the guide area it belongs to, and
  * a roadmap), from the guides feed. Shared by the achievements drawer and the Guide.
  */
-export type AchievementTip = { name: string; desc: string; rarity: number | null; icon: string; hidden: boolean; missable?: boolean; how?: string; area?: string; areaName?: string };
+export type AchievementTip = { name: string; englishName?: string; desc: string; rarity: number | null; icon: string; hidden: boolean; missable?: boolean; how?: string; area?: string; areaName?: string };
 export type AchievementGuide = {
   key: string;
   verified?: boolean;
@@ -14,30 +14,48 @@ export type AchievementGuide = {
 };
 
 export const achKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+/** Does a tip belong to this achievement? (By name, or by its English name when the guide is translated.) */
+export const tipMatches = (tip: AchievementTip, name: string) => achKey(tip.name) === achKey(name) || (!!tip.englishName && achKey(tip.englishName) === achKey(name));
 const cache = new Map<string, Promise<AchievementGuide | null>>();
-
-export function loadAchievementGuide(gameName: string): Promise<AchievementGuide | null> {
-  if (!cache.has(gameName)) {
-    const p = fetch(`${getApiBaseUrl()}/api/achievements?game=${encodeURIComponent(gameName)}`)
+const load = (url: string): Promise<AchievementGuide | null> => {
+  if (!cache.has(url)) {
+    const p = fetch(url)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => (d?.key && Array.isArray(d.list) ? (d as AchievementGuide) : null))
       .catch(() => null);
-    cache.set(gameName, p);
+    cache.set(url, p);
   }
-  return cache.get(gameName)!;
-}
+  return cache.get(url)!;
+};
+const langParam = (lang?: string) => (lang && lang !== 'en' ? `&lang=${lang}` : '');
 
-export function useAchievementGuide(gameName?: string | null): AchievementGuide | null {
+/** The achievement guide for a running game: by Steam app id first (renamed games still match), then by name. */
+export function useAchievementGuide(gameName?: string | null, appId?: number | null, lang?: string): AchievementGuide | null {
   const [g, setG] = useState<AchievementGuide | null>(null);
   useEffect(() => {
     setG(null);
-    if (!gameName) return;
+    if (!gameName && !appId) return;
     let alive = true;
-    loadAchievementGuide(gameName).then((d) => alive && setG(d));
+    load(`${getApiBaseUrl()}/api/achievements?game=${encodeURIComponent(gameName || '')}${appId ? `&appid=${appId}` : ''}${langParam(lang)}`).then((d) => alive && setG(d));
     return () => {
       alive = false;
     };
-  }, [gameName]);
+  }, [gameName, appId, lang]);
+  return g;
+}
+
+/** The achievement guide for a guide you're reading (by its key), whether or not that game is running. */
+export function useAchievementGuideByKey(key?: string | null, lang?: string): AchievementGuide | null {
+  const [g, setG] = useState<AchievementGuide | null>(null);
+  useEffect(() => {
+    setG(null);
+    if (!key) return;
+    let alive = true;
+    load(`${getApiBaseUrl()}/api/guides/${encodeURIComponent(key)}/achievements?x=1${langParam(lang)}`).then((d) => alive && setG(d));
+    return () => {
+      alive = false;
+    };
+  }, [key, lang]);
   return g;
 }
 

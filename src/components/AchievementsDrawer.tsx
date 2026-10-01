@@ -16,8 +16,8 @@ import {
 import { PixelMedal, PixelTrophy, useLofi } from './pixelArt';
 import { Achievement, SteamGameData } from '../types';
 import { playFanfareSound, playBlipSound } from '../utils/audio';
-import { useT } from '../i18n';
-import { achKey, openGuideArea, useAchievementGuide } from '../utils/achievementGuide';
+import { useLocale, useT } from '../i18n';
+import { openGuideArea, tipMatches, useAchievementGuide } from '../utils/achievementGuide';
 
 interface AchievementsDrawerProps {
   width: number;
@@ -43,8 +43,9 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [openTip, setOpenTip] = useState<string | null>(null);
   // How to get each achievement, which can be missed, and where (from the achievement guide, when the game has one).
-  const guide = useAchievementGuide(gameData?.name);
-  const tipFor = (name: string) => guide?.list.find((x) => achKey(x.name) === achKey(name));
+  const locale = useLocale();
+  const guide = useAchievementGuide(gameData?.name, gameData?.appId, locale);
+  const tipFor = (name: string) => guide?.list.find((x) => tipMatches(x, name));
   const hasMissables = !!guide?.list.some((x) => x.missable);
 
   const achievements = gameData?.achievements || [];

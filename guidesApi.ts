@@ -147,27 +147,51 @@ export function registerGuidesApi(app: Express): void {
   });
 
   // A game's achievement guide (scripts/guides/achievements.ts): Steam's list plus how to get each one, whether it's
-  // missable, the guide area it belongs to, and a roadmap. By guide key, or by game name for the apps.
+  // missable, the guide area it belongs to, and a roadmap. Found by guide key, by Steam app id (so a game Steam has
+  // renamed still matches), or by name; ?lang= merges a translation (translate-guide.ts) where one exists.
   const achievementsFor = (key: string) =>
     cached(`ach:${key}`, async () => {
       const d = await getFirestore().collection('guides').doc(key).collection('achievements').doc('main').get();
       return d.exists ? d.data() : null;
     });
+  const keyForAppId = (appId: number) =>
+    cached(`appid:${appId}`, async () => {
+      const q = await getFirestore().collection('guides').where('appId', '==', appId).limit(1).get();
+      return q.empty ? null : q.docs[0].id;
+    });
+  /** The achievement guide in a language: official names and descriptions from Steam, tips and roadmap translated. */
+  const localizeAch = (data: any, t: any) => {
+    const tr = t?.achievements;
+    if (!tr) return data;
+    const items = tr.items || {};
+    return {
+      ...data,
+      list: (data.list || []).map((a: any) => {
+        const x = items[a.name] || {};
+        return { ...a, name: x.name || a.name, desc: x.desc ?? a.desc, how: x.how || a.how, areaName: x.areaName || a.areaName, englishName: a.name };
+      }),
+      roadmap: tr.roadmap ? { ...data.roadmap, ...tr.roadmap } : data.roadmap,
+    };
+  };
+  const sendAch = async (res: any, key: string | null, lang: string, notFound404: boolean) => {
+    const data = key ? await achievementsFor(key) : null;
+    if (!data) return notFound404 ? res.status(404).json({ error: 'No achievement guide for this game yet.' }) : send(res, { key: null });
+    send(res, { key, ...localizeAch(data, await translation(key!, lang)) });
+  };
   app.get('/api/achievements', async (req, res) => {
     try {
+      const appId = Number(req.query.appid) || 0;
       const name = String(req.query.game ?? '').trim().slice(0, 160);
-      const data = name ? await achievementsFor(gameKey(name)) : null;
-      send(res, data ? { key: gameKey(name), ...data } : { key: null });
+      let key = appId ? await keyForAppId(appId) : null;
+      if (!key && name && (await achievementsFor(gameKey(name)))) key = gameKey(name);
+      await sendAch(res, key, langOf(req.query.lang), false);
     } catch (e) {
       fail(res, e);
     }
   });
   app.get('/api/guides/:key/achievements', async (req, res) => {
     try {
-      const key = gameKey(String(req.params.key));
-      const data = await achievementsFor(key);
-      if (!data) return res.status(404).json({ error: 'No achievement guide for this game yet.' });
-      send(res, { key, ...data });
+      await sendAch(res, gameKey(String(req.params.key)), langOf(req.query.lang), true);
     } catch (e) {
       fail(res, e);
     }

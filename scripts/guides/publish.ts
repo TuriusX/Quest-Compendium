@@ -34,6 +34,18 @@ const ui = (k: string, vars: Record<string, string | number> = {}) => {
 };
 const langPath = (code: string) => (code === 'en' ? '' : `${code}/`);
 
+/** The achievement guide with a translation merged in: Steam's official names, translated tips and roadmap. */
+function localizeAch(ach: any, t: any) {
+  const tr = t?.achievements;
+  if (!ach || !tr) return null;
+  const items = tr.items || {};
+  return {
+    ...ach,
+    list: (ach.list || []).map((a: any) => ({ ...a, ...(items[a.name]?.name ? { name: items[a.name].name } : {}), desc: items[a.name]?.desc ?? a.desc, how: items[a.name]?.how || a.how })),
+    roadmap: tr.roadmap ? { ...(ach.roadmap || {}), ...tr.roadmap } : ach.roadmap,
+  };
+}
+
 /** A page with its translation merged in (ids, flags and order stay from the original). */
 function localize(a: GuideArea, t?: any): GuideArea {
   if (!t) return a;
@@ -435,6 +447,9 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   const dir = path.join(OUT, LP, 'guides', key);
   fs.mkdirSync(dir, { recursive: true });
   const extra = LANG === 'en' ? 0 : 1; // the language folder adds a level
+  // The achievement guide in this language (English, or a translation from translate-guide.ts).
+  const achHere = LANG === 'en' ? ach : localizeAch(ach, t);
+  const achLangs = ach ? langs.filter((c) => c === 'en' || allTr[c]?.achievements) : [];
   const pageOf = (slug: string) => localize(byslug.get(slug)!, t?.areas?.[slug]);
   const groupName = (g: string) => (g && t?.groups?.[g]) || g;
   const groupOf = (o: any) => String(o.group || byslug.get(o.slug)?.group || '');
@@ -465,7 +480,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
         description,
         depth: 3 + extra,
         canonical: `${SITE}/${LP}guides/${key}/${o.slug}/`,
-        body: areaBody(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra), LANG === 'en' && ach ? (ach.list || []).filter((x: any) => x.area === o.slug) : []),
+        body: areaBody(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra), achHere ? (achHere.list || []).filter((x: any) => x.area === o.slug) : []),
         draft,
         guide: key,
         area: o.slug,
@@ -506,7 +521,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           <h1 class="text-3xl font-bold text-white">${esc(ui('gameH1', { game: gameName }))}</h1>
           <p class="text-zinc-400 mt-2">${esc(ui('gameIntro'))}</p>
           <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, ui('statAreas'))}${stat(totalChecks, ui('statThings'))}${stat(missables, ui('statMissables'))}${checked ? stat(checked === links.length ? ui('statAll') : checked, ui('statChecked')) : ''}</div>
-          ${LANG === 'en' && ach ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${(ach.list || []).length} · ${(ach.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
+          ${achHere ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${(achHere.list || []).length} · ${(achHere.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
           <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
           <input type="search" data-filter="#qc-area-rows" data-empty="#qc-area-empty" placeholder="${esc(ui('searchAreas'))}" class="mt-6 w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
           <div id="qc-area-rows" class="mt-3">${rows}</div>
@@ -517,11 +532,11 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
     }),
   );
   if (visible.some((o) => byslug.get(o.slug)!.status === 'published')) sitemap.push(`${SITE}/${LP}guides/${key}/`);
-  if (LANG === 'en' && ach?.list?.length) renderAchievements(key, gameName, ach, links, sitemap);
+  if (achHere?.list?.length) renderAchievements(key, gameName, achHere, links, sitemap, achLangs);
 }
 
 /** The achievement guide page: roadmap, then every achievement (missable first), with ticks saved in the browser. */
-function renderAchievements(key: string, gameName: string, ach: any, links: AreaLink[], sitemap: string[]) {
+function renderAchievements(key: string, gameName: string, ach: any, links: AreaLink[], sitemap: string[], langs: string[] = ['en']) {
   const dir = path.join(OUT, LP, 'guides', key, 'achievements');
   fs.mkdirSync(dir, { recursive: true });
   const list: any[] = ach.list.slice().sort((x: any, y: any) => Number(!!y.missable) - Number(!!x.missable) || (y.rarity ?? 0) - (x.rarity ?? 0));
@@ -541,10 +556,12 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
     page({
       title: ui('achTitle', { game: gameName, n: list.length }),
       description: ui('achDesc', { game: gameName, n: list.length }).slice(0, 158),
-      depth: 3,
-      canonical: `${SITE}/guides/${key}/achievements/`,
+      depth: LANG === 'en' ? 3 : 4,
+      canonical: `${SITE}/${LP}guides/${key}/achievements/`,
       guide: key,
       area: 'achievements',
+      langs,
+      path: `guides/${key}/achievements/`,
       body: `<div class="max-w-3xl">
         <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a></p>
         <h1 class="text-3xl font-bold text-white">${esc(ui('achH1', { game: gameName }))}</h1>
@@ -556,11 +573,11 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
         <input type="search" data-filter="#qc-ach-rows" data-empty="#qc-ach-empty" placeholder="${esc(ui('searchAch'))}" class="w-full mb-2 px-4 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
         <div id="qc-ach-rows">${list.map(row).join('')}</div>
         <p id="qc-ach-empty" hidden class="mt-3 text-sm text-zinc-500">${esc(ui('noMatches'))}</p>
-        ${cta('../../../', gameName)}
+        ${cta(LANG === 'en' ? '../../../' : '../../../../', gameName)}
       </div>`,
     }),
   );
-  sitemap.push(`${SITE}/guides/${key}/achievements/`);
+  sitemap.push(`${SITE}/${LP}guides/${key}/achievements/`);
 }
 
 /** The guides page: Popular and New rows, then every game with search, sorting and an A–Z bar. */

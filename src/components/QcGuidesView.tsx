@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Check, ChevronDown, ChevronRight, ArrowLeft, Gem, Skull, Sparkles, TriangleAlert, MapPin, Play, MessageCircleQuestion } from './icons';
 import { getApiBaseUrl } from '../utils/api';
 import { useLocale, useT } from '../i18n';
-import { achKey, useAchievementGuide } from '../utils/achievementGuide';
+import { tipMatches, useAchievementGuideByKey, type AchievementGuide } from '../utils/achievementGuide';
 import type { Achievement } from '../types';
 
 /**
@@ -22,7 +22,7 @@ type Page = {
   items: Entry[]; secrets: Entry[]; enemies: Entry[]; shops: Entry[]; tips: string[];
   sections?: { title: string; check: boolean; entries: { id: string; text: string }[] }[];
 };
-type View = { view: 'games' } | { view: 'game'; key: string; game?: string } | { view: 'area'; key: string; slug: string; game?: string };
+type View = { view: 'games' } | { view: 'game'; key: string; game?: string } | { view: 'area'; key: string; slug: string; game?: string } | { view: 'ach'; key: string; game?: string };
 
 const cache = new Map<string, Promise<any>>();
 // The guide's language follows the app's (a translated guide where one exists, English otherwise).
@@ -113,7 +113,9 @@ export function QcGuidesView({
   useEffect(() => {
     if (openRequest?.slug && guide) openArea(guide.key, openRequest.slug, guide.game);
   }, [openRequest?.n, guide?.key]);
-  const achGuide = useAchievementGuide(gameName);
+  // The achievement guide of whichever game's guide is open (by the guide itself, so renamed games still match).
+  const viewKey = view.view === 'games' ? guide?.key : view.key;
+  const achGuide = useAchievementGuideByKey(viewKey, guideLang);
 
   // The player moved on: offer a jump to their new area instead of moving the page they're reading.
   const hereArea = useMemo(() => (guide && place ? guide.areas.find((a) => samePlace(a.name, place)) : undefined), [guide, place]);
@@ -150,7 +152,22 @@ export function QcGuidesView({
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4">
           {view.view === 'games' && <GamesList current={guide?.key} onPick={(g) => go({ view: 'game', key: g.key, game: g.game })} />}
           {view.view === 'game' && (
-            <AreaList key={view.key} gameKey={view.key} here={hereArea?.slug} onPick={(a, game) => go({ view: 'area', key: view.key, slug: a.slug, game })} />
+            <AreaList
+              key={view.key}
+              gameKey={view.key}
+              here={hereArea?.slug}
+              onPick={(a, game) => go({ view: 'area', key: view.key, slug: a.slug, game })}
+              ach={achGuide && achGuide.key === view.key ? achGuide : null}
+              achievements={achievements}
+              onAchievements={() => go({ view: 'ach', key: view.key, game: view.game })}
+            />
+          )}
+          {view.view === 'ach' && achGuide && achGuide.key === view.key && (
+            <AchievementsPage
+              ach={achGuide}
+              achievements={achievements}
+              onArea={(slug) => go({ view: 'area', key: view.key, slug, game: view.game })}
+            />
           )}
           {view.view === 'area' && (
             <AreaPage
@@ -232,7 +249,21 @@ function GamesList({ current, onPick }: { current?: string; onPick: (g: Game) =>
   );
 }
 
-function AreaList({ gameKey, here, onPick }: { gameKey: string; here?: string; onPick: (a: Area, game: string) => void }) {
+function AreaList({
+  gameKey,
+  here,
+  onPick,
+  ach,
+  achievements = [],
+  onAchievements,
+}: {
+  gameKey: string;
+  here?: string;
+  onPick: (a: Area, game: string) => void;
+  ach?: AchievementGuide | null;
+  achievements?: Achievement[];
+  onAchievements?: () => void;
+}) {
   const t = useT();
   const s = useApi<{ game: string; areas: Area[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
   const [q, setQ] = useState('');
@@ -264,6 +295,21 @@ function AreaList({ gameKey, here, onPick }: { gameKey: string; here?: string; o
     <div className="space-y-2">
       <SearchBox value={q} onChange={setQ} placeholder={t('qcg.searchAreas')} />
       {!areas.length && <Note>{t('qcg.noMatches')}</Note>}
+      {!needle && ach && onAchievements && (
+        <button type="button" className={`${rowCls} !border-amber-500/30 !bg-amber-500/[0.07] hover:!bg-amber-500/[0.12]`} onClick={onAchievements}>
+          <Sparkles className="w-4 h-4 text-amber-300 flex-shrink-0" />
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold text-zinc-100">{t('ach.guideTitle')}</span>
+            <span className="block text-xs text-zinc-400">
+              {achievements.length
+                ? t('ach.progress', { done: ach.list.filter((x) => achievements.find((a) => a.unlocked && tipMatches(x, a.name))).length, total: ach.list.length })
+                : t('ach.count', { n: ach.list.length })}
+              {ach.list.some((x) => x.missable) ? ` · ${ach.list.filter((x) => x.missable).length} ${t('ach.missable').toLowerCase()}` : ''}
+            </span>
+          </span>
+          <ChevronRight className="w-4 h-4 text-zinc-500" />
+        </button>
+      )}
       {!needle && (hereA || cont) && (
         <div className="space-y-2 pb-2">
           {hereA && jump(hereA, <MapPin className="w-4 h-4 text-[var(--accent-color)] flex-shrink-0" />, t('qcg.whereYouAre'))}
@@ -439,7 +485,7 @@ function AreaPage({
               .slice()
               .sort((a, b) => Number(!!b.missable) - Number(!!a.missable))
               .map((a) => {
-                const mine = achievements.find((x) => achKey(x.name) === achKey(a.name));
+                const mine = achievements.find((x) => tipMatches(a as any, x.name));
                 return (
                   <div key={a.name} className={`px-3 py-2 rounded-lg bg-white/[0.03] text-sm ${mine?.unlocked ? 'opacity-60' : ''}`}>
                     <div className="flex items-center gap-2">
@@ -451,9 +497,9 @@ function AreaPage({
                 );
               })}
           </div>,
-          achHere.length ? achHere.filter((a) => achievements.find((x) => achKey(x.name) === achKey(a.name))?.unlocked).length : undefined,
+          achHere.length ? achHere.filter((a) => achievements.find((x) => tipMatches(a as any, x.name))?.unlocked).length : undefined,
           achHere.length,
-          achHere.some((a) => a.missable && !achievements.find((x) => achKey(x.name) === achKey(a.name))?.unlocked),
+          achHere.some((a) => a.missable && !achievements.find((x) => tipMatches(a as any, x.name))?.unlocked),
         )}
       {otherSec.map((x) =>
         fold(
@@ -536,3 +582,111 @@ function AreaPage({
 }
 
 const ListIcon = () => <Check className="w-4 h-4 text-[var(--accent-color)]" />;
+
+/** A game's achievement guide: roadmap, points of no return, then every achievement with its tip (missable first). */
+function AchievementsPage({ ach, achievements = [], onArea }: { ach: AchievementGuide; achievements?: Achievement[]; onArea: (slug: string) => void }) {
+  const t = useT();
+  const [onlyMissable, setOnlyMissable] = useState(false);
+  const [q, setQ] = useState('');
+  const [reveal, setReveal] = useState<Set<string>>(new Set());
+  const r = ach.roadmap || {};
+  const mine = (name: string, tipName: string) => achievements.find((a) => tipMatches({ name: tipName, englishName: name } as any, a.name) || tipMatches({ name, englishName: tipName } as any, a.name));
+  const list = ach.list
+    .slice()
+    .sort((x, y) => Number(!!y.missable) - Number(!!x.missable) || (y.rarity ?? 0) - (x.rarity ?? 0))
+    .filter((x) => !onlyMissable || x.missable)
+    .filter((x) => !q.trim() || fold(`${x.name} ${x.hidden ? '' : x.desc} ${x.areaName || ''}`).includes(fold(q.trim())));
+  const stat = (v: string | undefined, label: string) =>
+    v ? (
+      <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10">
+        <div className="text-base font-bold text-white leading-tight">{v}</div>
+        <div className="text-[11px] text-zinc-500 mt-0.5">{label}</div>
+      </div>
+    ) : null;
+  const unlocked = achievements.length ? ach.list.filter((x) => mine(x.englishName || x.name, x.name)?.unlocked).length : null;
+  return (
+    <div>
+      <h2 className="text-xl font-bold text-white leading-tight">{t('ach.guideTitle')}</h2>
+      {unlocked !== null && <p className="text-xs text-zinc-500 mt-1">{t('ach.progress', { done: unlocked, total: ach.list.length })}</p>}
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        {stat(r.time, t('ach.rmTime'))}
+        {stat(r.difficulty, t('ach.rmDifficulty'))}
+        {stat(r.playthroughs, t('ach.rmPlaythroughs'))}
+        {stat(String(ach.list.filter((x) => x.missable).length), t('ach.rmMissables'))}
+      </div>
+      {!!r.noReturn?.length && (
+        <section className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
+          <h3 className="flex items-center gap-2 text-sm font-bold text-amber-200">
+            <TriangleAlert className="w-4 h-4" />
+            {t('ach.rmNoReturn')}
+          </h3>
+          <ul className="mt-1.5 space-y-1 text-sm text-zinc-200">
+            {r.noReturn.map((n, i) => (
+              <li key={i}>
+                <span className="font-semibold text-white">{n.point}</span>: {n.lost}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {!!r.steps?.length && (
+        <section className="mt-4">
+          <h3 className="text-sm font-bold text-white mb-1.5">{t('ach.rmSteps')}</h3>
+          <ol className="space-y-1.5">
+            {r.steps.map((st, i) => (
+              <li key={i} className="flex gap-2 text-sm leading-snug text-zinc-300">
+                <span className="flex-shrink-0 w-5 h-5 rounded-md bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[10px] font-bold text-white flex items-center justify-center">{i + 1}</span>
+                <span>{st}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+      <div className="mt-6 flex items-center gap-2">
+        <div className="flex-1">
+          <SearchBox value={q} onChange={setQ} placeholder={t('ach.search')} />
+        </div>
+        {ach.list.some((x) => x.missable) && (
+          <button
+            type="button"
+            onClick={() => setOnlyMissable((v) => !v)}
+            aria-pressed={onlyMissable}
+            className={`mb-3 h-9 px-3 rounded-xl border text-xs font-semibold cursor-pointer ${onlyMissable ? 'bg-amber-500/20 border-amber-500/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-zinc-300 hover:bg-white/[0.08]'}`}
+          >
+            {t('ach.filter.missable')}
+          </button>
+        )}
+      </div>
+      {!list.length && <Note>{t('qcg.noMatches')}</Note>}
+      <div className="space-y-1.5">
+        {list.map((x) => {
+          const m = mine(x.englishName || x.name, x.name);
+          const hiddenTip = x.hidden && !reveal.has(x.name);
+          return (
+            <div key={x.name} className={`px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/5 ${m?.unlocked ? 'opacity-60' : ''}`}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-semibold text-zinc-100">{m?.unlocked ? '✓ ' : ''}{x.name}</span>
+                {x.missable && !m?.unlocked && <span className="text-[10px] font-bold uppercase text-amber-300">{t('ach.missable')}</span>}
+                {x.rarity != null && <span className="text-[11px] text-zinc-500">{x.rarity}%</span>}
+              </div>
+              {!x.hidden && x.desc && <p className="text-xs text-zinc-400 mt-0.5">{x.desc}</p>}
+              {x.how &&
+                (hiddenTip ? (
+                  <button type="button" onClick={() => setReveal((p) => new Set(p).add(x.name))} className="mt-1 text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer">
+                    {t('ach.reveal')}
+                  </button>
+                ) : (
+                  <p className="text-sm text-zinc-300 mt-1">{x.how}</p>
+                ))}
+              {x.area && (
+                <button type="button" onClick={() => onArea(x.area!)} className="mt-1 text-xs font-semibold text-[var(--accent-color)] hover:brightness-125 cursor-pointer">
+                  {t('ach.inGuide', { area: x.areaName || x.area })} →
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

@@ -270,3 +270,31 @@ export type Layout = (typeof LAYOUTS)[number];
 export const isLayout = (v: unknown): v is Layout => (LAYOUTS as readonly string[]).includes(String(v));
 
 export type GuideSection = { title: string; check: boolean; entries: { id: string; text: string }[] };
+
+/** Steam's language names for its pages (official translations of achievement names and descriptions). */
+export const STEAM_LANG: Record<string, string> = {
+  en: 'english', es: 'latam', pt: 'brazilian', de: 'german', fr: 'french', ru: 'russian', ja: 'japanese', ko: 'koreana', zh: 'schinese',
+};
+
+/** A game's public achievement list from Steam in one language: name, description, icon and % of players. */
+export async function steamAchievements(appId: number, lang = 'en'): Promise<{ name: string; desc: string; icon: string; rarity: number | null }[]> {
+  const l = STEAM_LANG[lang] || 'english';
+  const r = await fetch(`https://steamcommunity.com/stats/${appId}/achievements/?l=${l}`, { headers: { Cookie: `Steam_Language=${l}` } });
+  if (!r.ok) throw new Error(`Steam returned ${r.status}`);
+  const html = await r.text();
+  const decode = (x: string) =>
+    x.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+  return html
+    .split('class="achieveRow')
+    .slice(1)
+    .map((row) => {
+      const pct = Number((row.match(/achievePercent">\s*([\d.,]+)%/) || [])[1]?.replace(',', '.') ?? 'NaN');
+      return {
+        name: decode((row.match(/<h3>([\s\S]*?)<\/h3>/) || [])[1] || ''),
+        desc: decode((row.match(/<h5>([\s\S]*?)<\/h5>/) || [])[1] || ''),
+        icon: (row.match(/<img src="([^"]+)"/) || [])[1] || '',
+        rarity: Number.isFinite(pct) ? pct : null,
+      };
+    })
+    .filter((a) => a.name);
+}

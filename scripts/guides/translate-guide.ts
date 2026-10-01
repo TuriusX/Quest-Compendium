@@ -9,11 +9,12 @@
  * items, enemies and characters when the game was released in it. The page names are translated first into a glossary
  * that every page must use, so a place has the same name on every page that mentions it. Translations are saved in Firestore at
  * guides/{game}/i18n/{lang}; checklist ids stay the same, so ticks carry over between languages. Re-running only
- * translates pages added or changed since the last run. Then run publish.ts to build the translated pages; the apps
+ * translates pages added or changed since the last run. A game's achievement guide is translated too: official
+ * achievement names and descriptions from Steam in that language, and the tips and roadmap translated. Then run publish.ts to build the translated pages; the apps
  * show them automatically.
  */
 import { ThinkingLevel } from '@google/genai';
-import { db, gemini, MODEL, gameKey, arg, type GuideArea } from './common';
+import { db, gemini, MODEL, gameKey, arg, steamAchievements, type GuideArea } from './common';
 
 const LANGS: Record<string, string> = {
   es: 'Spanish (Latin American, neutral)', pt: 'Brazilian Portuguese', de: 'German', fr: 'French', ru: 'Russian',
@@ -168,7 +169,48 @@ async function main() {
     // Remove translations of pages that are no longer published.
     const live = new Set(pages.map((p) => p.slug));
     for (const s of Object.keys(areas)) if (!live.has(s)) delete areas[s];
-    await trRef.set({ lang, areas, groups: groupNames, glossary, updatedAt: Date.now() });
+    // The achievement guide, if the game has one: official names and descriptions from Steam in this language,
+    // tips and roadmap translated (place names from the glossary). Redone only when the achievement guide changed.
+    let achievements = existing.achievements || null;
+    if (info.hasAchievements) {
+      try {
+        const ach = (await ref.collection('achievements').doc('main').get()).data();
+        if (ach?.list?.length && (redo || !achievements || (achievements.src || 0) < (ach.updatedAt || 0))) {
+          const official: { name: string; desc: string; icon: string }[] = await steamAchievements(Number(ach.appId), lang).catch(() => []);
+          const byIcon = new Map<string, { name: string; desc: string }>(official.map((o) => [o.icon, o] as [string, { name: string; desc: string }]));
+          const items: Record<string, { name?: string; desc?: string; how?: string; areaName?: string }> = {};
+          const withTips = (ach.list as any[]).filter((a) => a.how);
+          for (let i = 0; i < withTips.length; i += 40) {
+            const batch = Object.fromEntries(withTips.slice(i, i + 40).map((a: any) => [a.name, a.how]));
+            try {
+              const tr = await call(`${RULES(lang)} These are tips for unlocking achievements. Reply with a JSON object with the same keys and the translated tips as values.\n${JSON.stringify(batch)}`);
+              for (const [k, v] of Object.entries(tr || {})) if (typeof v === 'string' && batch[k]) items[k] = { ...(items[k] || {}), how: v };
+            } catch {
+              /* these tips stay in English */
+            }
+          }
+          for (const a of ach.list as any[]) {
+            const o = byIcon.get(a.icon);
+            const areaName = a.area ? areas[a.area]?.name : undefined;
+            if (o || areaName) items[a.name] = { ...(items[a.name] || {}), ...(o ? { name: o.name, desc: o.desc } : {}), ...(areaName ? { areaName } : {}) };
+          }
+          let roadmap = null;
+          if (ach.roadmap) {
+            try {
+              const r = await call(`${RULES(lang)} This is a roadmap to 100% achievements. Reply with the same JSON object, translated.\n${JSON.stringify({ time: ach.roadmap.time, difficulty: ach.roadmap.difficulty, playthroughs: ach.roadmap.playthroughs, steps: ach.roadmap.steps || [], noReturn: ach.roadmap.noReturn || [] })}`);
+              if (r && Array.isArray(r.steps)) roadmap = r;
+            } catch {
+              /* the roadmap stays in English */
+            }
+          }
+          achievements = { items, roadmap, src: ach.updatedAt || Date.now() };
+          console.log(`${lang}: achievement guide translated (${Object.values(items).filter((x) => x.how).length} tips, ${official.length ? 'official names from Steam' : 'names in English: Steam had no list in this language'})`);
+        }
+      } catch (e: any) {
+        console.warn(`  achievement guide not translated: ${e?.message}`);
+      }
+    }
+    await trRef.set({ lang, areas, groups: groupNames, glossary, ...(achievements ? { achievements } : {}), updatedAt: Date.now() });
     await ref.set({ languages: [...new Set([...(info.languages || []), lang])] }, { merge: true });
     console.log(`${lang}: ${done} translated, ${failed} left in English, ${Object.keys(areas).length} pages available in this language.`);
   }
