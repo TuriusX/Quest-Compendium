@@ -332,6 +332,47 @@ const HOME_GUIDES: Record<string, { h: string; p: string; all: string; areas: (n
 };
 
 /**
+ * The version under the homepage's download buttons ("Version 0.4.0 beta, 64-bit Windows…") follows package.json, in
+ * the English page and every language version. The paragraph is found by its tag; only the number inside it changes.
+ * The site translation cache (scripts/i18n/site/<lang>.json) is updated the same way, so translate-site.ts doesn't
+ * see "new" text and translate it again.
+ */
+function updateVersion() {
+  const version = String(JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8')).version || '');
+  if (!/^\d+\.\d+\.\d+$/.test(version)) return;
+  const LINE = /(<p class="text-sm text-zinc-500 mt-4">[^<]*?)\b\d+\.\d+\.\d+\b/;
+  let pages = 0;
+  for (const code of Object.keys(HOME_GUIDES)) {
+    const file = code === 'en' ? path.join(OUT, 'index.html') : path.join(OUT, code, 'index.html');
+    if (!fs.existsSync(file)) continue;
+    const html = fs.readFileSync(file, 'utf8');
+    const next = html.replace(LINE, `$1${version}`);
+    if (next !== html) fs.writeFileSync(file, next);
+    if (LINE.test(html)) pages++;
+  }
+  // The cache's English key and its translation, for the same line.
+  const cacheDir = path.resolve('scripts/i18n/site');
+  if (fs.existsSync(cacheDir)) {
+    for (const f of fs.readdirSync(cacheDir).filter((x) => x.endsWith('.json'))) {
+      const file = path.join(cacheDir, f);
+      const raw = fs.readFileSync(file, 'utf8');
+      const cache: Record<string, string> = JSON.parse(raw);
+      let changed = false;
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(cache)) {
+        if (/^Version \d+\.\d+\.\d+ beta, 64-bit Windows\./.test(k)) {
+          const nk = k.replace(/\d+\.\d+\.\d+/, version);
+          out[nk] = v.replace(/\b\d+\.\d+\.\d+\b/, version);
+          changed = changed || nk !== k;
+        } else out[k] = v;
+      }
+      if (changed) fs.writeFileSync(file, JSON.stringify(out, null, 2).replace(/\n/g, raw.includes('\r\n') ? '\r\n' : '\n'));
+    }
+  }
+  console.log(`Homepage version text: ${version} (${pages} page(s)).`);
+}
+
+/**
  * The homepage's "Free guides" section, between the QC-GUIDES markers: a tile per game with published pages,
  * rewritten on every run so it grows with the guides. Done for the English main page and every language version
  * (Marketing_Website_Files/<lang>/index.html, made by scripts/i18n/translate-site.ts), each in its own language.
@@ -646,6 +687,7 @@ async function main() {
   );
   fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`);
   updateHomepage(games.filter((g) => g.published > 0));
+  updateVersion();
   console.log(`Built ${games.reduce((n, g) => n + g.count, 0)} guide page(s) for ${games.length} game(s)${withDrafts ? ' (drafts included, marked DRAFT and hidden from search)' : ''}.`);
   console.log(`Open ${path.join(OUT, 'guides', 'index.html')} in your browser to look them over.`);
   process.exit(0);
