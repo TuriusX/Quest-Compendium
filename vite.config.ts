@@ -81,7 +81,9 @@ export default defineConfig(() => {
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // release/ (the installer build output) is never watched: on Windows a watch keeps its folders open, which made
+      // electron-builder's rename of release/win-unpacked.tmp fail while desktop:dev was running.
+      watch: process.env.DISABLE_HMR === 'true' ? null : { ignored: ['**/release', '**/release/**'] },
     },
   };
 });
