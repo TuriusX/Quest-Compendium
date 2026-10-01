@@ -8,7 +8,8 @@
  * Strict matching, so a game never gets someone else's art: the store name must match the guide's name (ignoring
  * ™, ® and punctuation), or start with it once an edition after a dash is dropped ("The Witcher 3: Wild Hunt -
  * Complete Edition" matches "The Witcher 3: Wild Hunt — Remastered"). Games not on Steam are marked noSteam, and the
- * website shows a placeholder tile for them. A wrong id can be fixed by hand: appId on the guide document in Firestore.
+ * website shows a placeholder tile for them. A wrong id can be fixed by hand: appId on the guide document in Firestore
+ * (then run this again to fetch its art).
  */
 import { db, arg } from './common';
 
@@ -21,6 +22,13 @@ async function search(term: string): Promise<{ id: number; name: string }[]> {
   if (!r.ok) return [];
   const items: any[] = ((await r.json()) as any)?.items || [];
   return items.map((i) => ({ id: Number(i.id), name: String(i.name || '') })).filter((i) => i.id);
+}
+
+/** The store's header art. Newer apps keep it under a hashed path, so the plain CDN url doesn't work for them. */
+async function headerArt(id: number): Promise<string> {
+  const r = await fetch(`https://store.steampowered.com/api/appdetails?appids=${id}&filters=basic`);
+  if (!r.ok) return '';
+  return String(((await r.json()) as any)?.[id]?.data?.header_image || '');
 }
 
 export async function steamIdFor(game: string): Promise<{ id: number; name: string } | null> {
@@ -39,6 +47,12 @@ async function main() {
     const info = g.data();
     const name = String(info.game || g.id);
     if (!redo && (info.appId || info.noSteam)) {
+      // Art for an id that has none yet (or was changed by hand).
+      if (info.appId && !String(info.art || '').includes(`/apps/${info.appId}/`)) {
+        const art = await headerArt(Number(info.appId)).catch(() => '');
+        console.log(`  ${name} (${info.appId}): art ${art || 'not found'}`);
+        if (!dry && art) await g.ref.set({ art }, { merge: true });
+      }
       skipped++;
       continue;
     }
@@ -46,7 +60,8 @@ async function main() {
     if (hit) {
       found++;
       console.log(`✓ ${name} → ${hit.id} (${hit.name})`);
-      if (!dry) await g.ref.set({ appId: hit.id, steamName: hit.name, noSteam: false }, { merge: true });
+      const art = await headerArt(hit.id).catch(() => '');
+      if (!dry) await g.ref.set({ appId: hit.id, steamName: hit.name, art, noSteam: false }, { merge: true });
     } else {
       missing++;
       console.log(`– ${name}: not found on Steam (placeholder tile)`);

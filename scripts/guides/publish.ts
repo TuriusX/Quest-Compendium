@@ -37,7 +37,9 @@ const langPath = (code: string) => (code === 'en' ? '' : `${code}/`);
 // ---- game art ----
 // Official store art, loaded straight from Steam's image servers (nothing is copied or hosted here). Games not on
 // Steam, or whose image fails to load, get a placeholder tile with the game's initials in the site's colors.
-const steamArt = (appId?: number) => (appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg` : '');
+// Newer store apps keep their art under a hashed path, so the url steam-ids.ts saved (art) wins when it's for this id.
+const ART = new Map<number, string>();
+const steamArt = (appId?: number) => (appId ? ART.get(appId) || `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg` : '');
 const initials = (game: string) =>
   game
     .replace(/[™®©]/g, '')
@@ -690,6 +692,7 @@ async function main() {
       players: playersBy.get(g.id) || 0, created: Number(info.createdAt || info.updatedAt || 0),
       appId: Number(info.appId) || undefined,
     });
+    if (info.appId && String(info.art || '').includes(`/apps/${info.appId}/`)) ART.set(Number(info.appId), String(info.art));
     for (const code of langs) {
       setLang(code);
       const t = trs[code];
