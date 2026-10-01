@@ -371,3 +371,33 @@ export function extractFacts(text: string): { text: string; facts: FactReport[] 
   });
   return { text: cleaned.replace(/\n{3,}/g, '\n\n').trim(), facts };
 }
+
+// ---- demand: which games (and languages) players ask about ----
+// gameStats/{game}: how many questions, roughly how many different players, and in which languages. The guide
+// pipeline (scripts/pipeline/run.ts) uses it to decide which games get guides, upgrades and translations.
+// Players are counted by a short one-way hash (no ids stored), capped at 200 per game.
+import crypto from 'crypto';
+export function recordGameDemand(game: string | undefined, userId: string, language: string): void {
+  if (!game) return;
+  const key = gameKey(game);
+  if (!key) return;
+  const d = db();
+  if (!d) return;
+  const who = crypto.createHash('sha256').update(`qc:${userId}`).digest('hex').slice(0, 12);
+  const lang = String(language || 'English').replace(/[^A-Za-z ]/g, '').slice(0, 40) || 'English';
+  const ref = d.collection('gameStats').doc(key);
+  d.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const cur = snap.data() || {};
+    const players: string[] = Array.isArray(cur.players) ? cur.players : [];
+    const langs: Record<string, number> = cur.languages || {};
+    langs[lang] = (langs[lang] || 0) + 1;
+    tx.set(ref, {
+      game: String(game).slice(0, 120),
+      questions: (cur.questions || 0) + 1,
+      players: players.includes(who) || players.length >= 200 ? players : [...players, who],
+      languages: langs,
+      lastAsked: Date.now(),
+    }, { merge: true });
+  }).catch(() => {});
+}

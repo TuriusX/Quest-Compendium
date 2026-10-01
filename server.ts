@@ -20,7 +20,7 @@ import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPanel } from './guidesApi';
-import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch } from './searchGuard';
+import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
  * Firestore security rules don't restrict. That's what lets the rules lock Premium and quota fields so that players
@@ -1450,6 +1450,7 @@ percentages:
       // screen. A guessed place would put facts in the wrong spot for everyone.
       // A fact only counts if its subject shows up in a part of the answer a search result actually backs up;
       // the AI can report facts from memory even when it searched for something else.
+      recordGameDemand(effectiveGame?.name, userId, language); // which games and languages players use (for the guide pipeline)
       const factsSaved = saveGameFacts(effectiveGame?.name, factsBackedBySearch(factsParsed.facts, groundedSeen), {
         searched: searchesUsed > 0,
         // The confirmed place only counts while the player is still there: if this answer is about a different place,
