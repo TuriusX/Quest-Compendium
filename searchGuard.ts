@@ -401,3 +401,30 @@ export function recordGameDemand(game: string | undefined, userId: string, langu
     }, { merge: true });
   }).catch(() => {});
 }
+
+// ---- daily activity: questions, players and guests, and which app ----
+// stats/{YYYY-MM-DD} (Central time): questions from signed-in players vs guests, how many different ones (counted by a
+// short one-way hash, nothing personal stored), and desktop / web / Deck. The guide pipeline's Discord summary shows it.
+export const statsDay = (t = Date.now()) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+export function recordDailyActivity(userId: string, isGuest: boolean, userAgent: string | undefined, appHeader = ''): void {
+  const d = db();
+  if (!d || !userId) return;
+  const who = crypto.createHash('sha256').update(`qc:${userId}`).digest('hex').slice(0, 12);
+  const ua = String(userAgent || '');
+  const app = /QuestCompendiumDeck/i.test(ua) ? 'deck' : appHeader === 'desktop' || /Electron/i.test(ua) ? 'desktop' : 'web';
+  const ref = d.collection('stats').doc(statsDay());
+  d.runTransaction(async (tx) => {
+    const cur = (await tx.get(ref)).data() || {};
+    const field = isGuest ? 'guests' : 'players';
+    const seen: string[] = Array.isArray(cur[field]) ? cur[field] : [];
+    const apps: Record<string, number> = cur.apps || {};
+    apps[app] = (apps[app] || 0) + 1;
+    tx.set(ref, {
+      questions: (cur.questions || 0) + 1,
+      [isGuest ? 'guestQuestions' : 'playerQuestions']: (cur[isGuest ? 'guestQuestions' : 'playerQuestions'] || 0) + 1,
+      [field]: seen.includes(who) || seen.length >= 1000 ? seen : [...seen, who],
+      apps,
+      updatedAt: Date.now(),
+    }, { merge: true });
+  }).catch(() => {});
+}

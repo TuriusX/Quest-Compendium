@@ -1163,6 +1163,8 @@ export default function App() {
         signal: controller.signal,
         headers: { 
           'Content-Type': 'application/json',
+          // Which app is asking (for the daily activity tally); the desktop app's browser identity looks like Chrome.
+          'X-QC-App': (window as any).electronAPI ? 'desktop' : 'web',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({

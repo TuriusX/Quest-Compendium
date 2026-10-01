@@ -16,6 +16,7 @@
  *        - translating guides of games players use into the languages they play in, then into the other languages
  *   3. Runs them with the existing scripts, inside the budget, then publishes the site and deploys it to Netlify.
  *   4. Posts a summary to Discord (if DISCORD_WEBHOOK_URL is set) and saves the month's totals in system/pipeline.
+ *      The summary starts with yesterday's activity: questions, signed-in players vs guests, which apps, and sign-ups.
  *
  * Settings (environment variables; all optional):
  *   PIPELINE_MONTHLY_AI_DOLLARS   AI spending cap per month (default 10)
@@ -33,6 +34,7 @@
  */
 import { spawnSync } from 'child_process';
 import { db, gameKey } from '../guides/common';
+import { getAuth } from 'firebase-admin/auth';
 import { deployToNetlify } from './netlify';
 import { steamCandidates } from './steam';
 
@@ -239,6 +241,30 @@ async function main() {
         report.push(`⚠️ Netlify deploy failed: ${e?.message}`);
       }
     } else if (p.ok) report.push('(Netlify settings missing, so the site was rebuilt but not deployed.)');
+  }
+
+  // ---- 5. yesterday's activity (stats/{day} from the server) and sign-ups (Firebase Auth) ----
+  try {
+    const day = new Date(Date.now() - 86_400_000).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+    const st: any = (await db().collection('stats').doc(day).get()).data() || {};
+    const players = Array.isArray(st.players) ? st.players.length : 0;
+    const guests = Array.isArray(st.guests) ? st.guests.length : 0;
+    const apps = Object.entries((st.apps || {}) as Record<string, number>)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k} ${v}`)
+      .join(', ');
+    let accounts = 0, newAccounts = 0, pageToken: string | undefined;
+    do {
+      const page = await getAuth().listUsers(1000, pageToken);
+      accounts += page.users.length;
+      newAccounts += page.users.filter((u) => Date.now() - Date.parse(u.metadata.creationTime) < 86_400_000).length;
+      pageToken = page.pageToken;
+    } while (pageToken);
+    report.unshift(
+      `📊 Yesterday: ${st.questions || 0} question(s) from ${players + guests} player(s) (${players} signed in, ${guests} guest${guests === 1 ? '' : 's'})${apps ? ` · ${apps}` : ''} · ${newAccounts} new sign-up(s), ${accounts} accounts in total`,
+    );
+  } catch (e: any) {
+    console.warn(`Activity summary skipped: ${e?.message}`);
   }
 
   state.lastRun = Date.now();
