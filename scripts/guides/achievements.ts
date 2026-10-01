@@ -109,20 +109,15 @@ async function main() {
     'difficulty requirements, collectibles or tasks you can still finish later, and anything you can still get in the ' +
     'post-game or in New Game+. When in doubt, answer no. ';
 
-  // How to get each one, 25 at a time.
-  for (let i = 0; i < list.length; i += 25) {
-    if (!quick && searches >= maxSearches) {
-      console.log('Search cap reached: the rest stay without tips for now (run again to finish).');
-      break;
-    }
-    const batch = list.slice(i, i + 25);
+  /** Ask how to get a batch of achievements, and fill in the ones the reply covers. */
+  const askBatch = async (batch: Ach[], label: string) => {
     const text = await call(
       `For the video game "${info.game || game}", explain how to unlock each of these Steam achievements. ${areaHint}${versionNote} ` +
         (quick ? 'Use what you know; leave a field empty if unsure. ' : 'Search the web; do not answer from memory. ') +
         `Write in your own words. ${MISSABLE}Reply with one line per achievement, exactly:\n` +
         'ACH: achievement name | missable: yes or no | the guide area where it happens, using an area name from the list above (or empty) | how to unlock it, in one or two short sentences\n' +
         batch.map((a) => `- ${a.name}: ${a.desc || '(hidden achievement)'}`).join('\n'),
-      `achievements ${i + 1}-${i + batch.length}`,
+      label,
     );
     for (const line of text.split('\n')) {
       const m = line.match(/^\s*[-*]?\s*ACH:\s*(.+?)\s*\|\s*missable:\s*(yes|no)\s*\|\s*([^|]*?)\s*\|\s*(.+)$/i);
@@ -137,6 +132,21 @@ async function main() {
         a.areaName = area.name;
       }
     }
+  };
+
+  // How to get each one, 25 at a time.
+  for (let i = 0; i < list.length; i += 25) {
+    if (!quick && searches >= maxSearches) {
+      console.log('Search cap reached: the rest stay without tips for now (run again to finish).');
+      break;
+    }
+    await askBatch(list.slice(i, i + 25), `achievements ${i + 1}-${Math.min(i + 25, list.length)}`);
+  }
+  // A long batch sometimes skips one (often a hidden achievement); those get one more, smaller try.
+  const skipped = list.filter((a) => !a.how);
+  if (skipped.length && skipped.length < list.length && (quick || searches < maxSearches)) {
+    console.log(`  ${skipped.length} without a tip after the first pass (${skipped.slice(0, 5).map((a) => a.name).join(', ')}): asking again`);
+    for (let i = 0; i < skipped.length; i += 10) await askBatch(skipped.slice(i, i + 10), `follow-up ${i + 1}-${Math.min(i + 10, skipped.length)}`);
   }
 
   // The roadmap.
