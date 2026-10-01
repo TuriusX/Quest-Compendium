@@ -63,6 +63,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   achLink: 'Achievement guide and roadmap',
   achHere: 'Achievements here',
   searchAch: 'Search achievements…',
+  imagesNote: 'Game images © their respective owners.',
   achAll: 'All achievements',
   achMissable: 'Missable',
   achRarity: '{n}% of players',

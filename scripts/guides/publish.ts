@@ -34,6 +34,28 @@ const ui = (k: string, vars: Record<string, string | number> = {}) => {
 };
 const langPath = (code: string) => (code === 'en' ? '' : `${code}/`);
 
+// ---- game art ----
+// Official store art, loaded straight from Steam's image servers (nothing is copied or hosted here). Games not on
+// Steam, or whose image fails to load, get a placeholder tile with the game's initials in the site's colors.
+const steamArt = (appId?: number) => (appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg` : '');
+const initials = (game: string) =>
+  game
+    .replace(/[™®©]/g, '')
+    .replace(/^(the|a|an)\s+/i, '')
+    .split(/[\s:–—-]+/)
+    .filter((w) => /^[A-Za-z0-9]/.test(w) && !/^(of|the|and|a|an|to|in|on|for)$/i.test(w))
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join('') || '?';
+/** The art for a game, at a fixed shape (Steam's header art is 460×215), with the placeholder underneath. */
+function artBox(game: string, appId: number | undefined, extra = '') {
+  const placeholder = `<div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">${esc(initials(game))}</span></div>`;
+  const img = appId
+    ? `<img src="${steamArt(appId)}" alt="${esc(game)}" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()">`
+    : '';
+  return `<div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] ${extra}">${placeholder}${img}</div>`;
+}
+
 /** The achievement guide with a translation merged in: Steam's official names, translated tips and roadmap. */
 function localizeAch(ach: any, t: any) {
   const tr = t?.achievements;
@@ -201,7 +223,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
   ${opts.draft ? '<div class="bg-amber-500/15 border-b border-amber-500/30 text-amber-300 text-sm text-center py-2">DRAFT preview: not public yet</div>' : ''}
   <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8">${opts.body}</main>
   <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
-    ${esc(ui('footer')).replace('{discord}', '<a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>')}
+    ${esc(ui('footer')).replace('{discord}', '<a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>')} ${esc(ui('imagesNote'))}
   </footer>
   <script>${SCRIPT}</script>
 </body>
@@ -389,7 +411,7 @@ function updateVersion() {
  * rewritten on every run so it grows with the guides. Done for the English main page and every language version
  * (Marketing_Website_Files/<lang>/index.html, made by scripts/i18n/translate-site.ts), each in its own language.
  */
-function updateHomepage(games: { key: string; game: string; published: number; langs?: string[] }[]) {
+function updateHomepage(games: { key: string; game: string; published: number; langs?: string[]; appId?: number }[]) {
   const pages = [{ code: 'en', file: path.join(OUT, 'index.html'), up: '' }].concat(
     Object.keys(HOME_GUIDES)
       .filter((c) => c !== 'en')
@@ -415,9 +437,10 @@ function updateHomepage(games: { key: string; game: string; published: number; l
       .slice(0, 8)
       .map(
         (g) =>
-          `        <a href="${g.langs?.includes(pg.code) && pg.code !== 'en' ? '' : pg.up}guides/${esc(g.key)}/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors">` +
-          `<div class="text-white font-bold leading-snug">${esc(g.game)}</div>` +
-          `<div class="text-sm text-zinc-400 mt-1">${esc(L.areas(g.published))}</div></a>`,
+          `        <a href="${g.langs?.includes(pg.code) && pg.code !== 'en' ? '' : pg.up}guides/${esc(g.key)}/index.html" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors">` +
+          artBox(g.game, g.appId) +
+          `<div class="p-4"><div class="text-white font-bold leading-snug">${esc(g.game)}</div>` +
+          `<div class="text-sm text-zinc-400 mt-1">${esc(L.areas(g.published))}</div></div></a>`,
       )
       .join(nl);
     const block = games.length
@@ -443,7 +466,7 @@ function updateHomepage(games: { key: string; game: string; published: number; l
 }
 
 /** One game's pages (area pages and the game page) in the current language (setLang). */
-function renderGame(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, t: any, langs: string[], sitemap: string[], allTr: Record<string, any> = {}, ach: any = null) {
+function renderGame(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, t: any, langs: string[], sitemap: string[], allTr: Record<string, any> = {}, ach: any = null, appId?: number) {
   const dir = path.join(OUT, LP, 'guides', key);
   fs.mkdirSync(dir, { recursive: true });
   const extra = LANG === 'en' ? 0 : 1; // the language folder adds a level
@@ -518,6 +541,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
       path: `guides/${key}/`,
       body: `<div class="max-w-3xl">
           <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">${esc(ui('navGuides'))}</a></p>
+          ${artBox(gameName, appId, 'rounded-2xl border border-white/10 mb-5')}
           <h1 class="text-3xl font-bold text-white">${esc(ui('gameH1', { game: gameName }))}</h1>
           <p class="text-zinc-400 mt-2">${esc(ui('gameIntro'))}</p>
           <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, ui('statAreas'))}${stat(totalChecks, ui('statThings'))}${stat(missables, ui('statMissables'))}${checked ? stat(checked === links.length ? ui('statAll') : checked, ui('statChecked')) : ''}</div>
@@ -581,12 +605,12 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
 }
 
 /** The guides page: Popular and New rows, then every game with search, sorting and an A–Z bar. */
-function indexBody(list: { key: string; game: string; count: number; players?: number; created?: number }[]) {
+function indexBody(list: { key: string; game: string; count: number; players?: number; created?: number; appId?: number }[]) {
   // Sorted and lettered without a leading "The"/"A" ("The Witcher 3" goes under W).
   const sortName = (n: string) => n.replace(/^(the|a|an)\s+/i, '').toLowerCase();
   const card = (g: (typeof list)[number], tags = true) => {
     const letter = (sortName(g.game).match(/[a-z0-9]/)?.[0] || '#').toUpperCase().replace(/[0-9]/, '#');
-    return `<a href="${esc(g.key)}/index.html"${tags ? ` data-search="${esc(g.game)}" data-name="${esc(sortName(g.game))}" data-popular="${g.players || 0}" data-new="${g.created || 0}" data-l="${letter}"` : ''} class="block rounded-2xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50 hover:bg-white/[0.06] p-5"><div class="font-bold text-white leading-snug">${esc(g.game)}</div><div class="mt-1 text-sm text-zinc-400">${esc(g.count === 1 ? ui('areasCountOne') : ui('areasCount', { n: g.count }))}</div></a>`;
+    return `<a href="${esc(g.key)}/index.html"${tags ? ` data-search="${esc(g.game)}" data-name="${esc(sortName(g.game))}" data-popular="${g.players || 0}" data-new="${g.created || 0}" data-l="${letter}"` : ''} class="block rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50 hover:bg-white/[0.06] transition-colors">${artBox(g.game, g.appId)}<div class="p-4"><div class="font-bold text-white leading-snug">${esc(g.game)}</div><div class="mt-1 text-sm text-zinc-400">${esc(g.count === 1 ? ui('areasCountOne') : ui('areasCount', { n: g.count }))}</div></div></a>`;
   };
   const az = list.slice().sort((x, y) => sortName(x.game).localeCompare(sortName(y.game)));
   // Mark the first game of each letter, for the A–Z bar.
@@ -615,7 +639,7 @@ function indexBody(list: { key: string; game: string; count: number; players?: n
       </label>
     </div>
     ${letters.length > 5 ? `<div data-hide-when-searching class="flex flex-wrap gap-1 mb-4">${letters.map((l) => `<button type="button" data-letter="${l}" class="w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-[#a87ffb]/20 text-sm text-zinc-300 hover:text-white">${l}</button>`).join('')}</div>` : ''}
-    <div data-games class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">${cards}</div>
+    <div data-games class="grid grid-cols-2 lg:grid-cols-4 gap-3">${cards}</div>
     <p id="qc-games-empty" hidden class="mt-3 text-sm text-zinc-500">${esc(ui('noMatches'))}</p>`;
 }
 
@@ -632,7 +656,7 @@ async function main() {
   const sitemap: string[] = [`${SITE}/`, `${SITE}/guides/`];
   // Language versions of the main page (made by scripts/i18n/translate-site.ts).
   for (const code of Object.keys(HOME_GUIDES)) if (code !== 'en' && fs.existsSync(path.join(OUT, code, 'index.html'))) sitemap.push(`${SITE}/${code}/`);
-  const games: { key: string; game: string; count: number; published: number; langs: string[]; players?: number; created?: number }[] = [];
+  const games: { key: string; game: string; count: number; published: number; langs: string[]; players?: number; created?: number; appId?: number }[] = [];
   // How many players use each game (gameStats, recorded by the server), for "Popular".
   const playersBy = new Map<string, number>();
   try {
@@ -664,13 +688,14 @@ async function main() {
       key: g.id, game: String(info.game || g.id), count: visible.length,
       published: visible.filter((o) => byslug.get(o.slug)!.status === 'published').length, langs,
       players: playersBy.get(g.id) || 0, created: Number(info.createdAt || info.updatedAt || 0),
+      appId: Number(info.appId) || undefined,
     });
     for (const code of langs) {
       setLang(code);
       const t = trs[code];
       // Drafts are English-only previews.
       const pages = code === 'en' ? visible : visible.filter((o) => byslug.get(o.slug)!.status === 'published');
-      renderGame(g.id, String(info.game || g.id), pages, byslug, t, langs, sitemap, trs, ach);
+      renderGame(g.id, String(info.game || g.id), pages, byslug, t, langs, sitemap, trs, ach, Number(info.appId) || undefined);
     }
     setLang('en');
   }

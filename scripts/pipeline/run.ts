@@ -231,6 +231,7 @@ async function main() {
 
   // ---- 4. publish and deploy ----
   if (changed && !DRY) {
+    runScript(['scripts/guides/steam-ids.ts']); // new guides get their Steam id (for game art); no AI, no cost
     const p = runScript(['scripts/guides/publish.ts']);
     report.push(p.ok ? '🌐 Website rebuilt.' : '⚠️ Rebuilding the website failed (see the job log).');
     if (p.ok && process.env.NETLIFY_AUTH_TOKEN && process.env.NETLIFY_SITE_ID) {
