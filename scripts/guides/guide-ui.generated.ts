@@ -46,7 +46,17 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "indexMore": "Weitere Guides auf Englisch",
     "areasCount": "{n} Gebiete",
     "areasCountOne": "1 Gebiet",
-    "none": "Die ersten Guides sind schon unterwegs."
+    "none": "Die ersten Guides sind schon unterwegs.",
+    "searchGames": "Spiele suchen…",
+    "searchAreas": "Gebiete und Items suchen…",
+    "sortAZ": "A–Z",
+    "sortPopular": "Beliebteste",
+    "sortNew": "Neueste",
+    "popular": "Beliebt",
+    "newGuides": "Neue Guides",
+    "allGames": "Alle Spiele",
+    "noMatches": "Keine Treffer für diese Suche.",
+    "sortLabel": "Sortieren"
   },
   es: {
     "navGuides": "Guías",
@@ -90,7 +100,17 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "indexMore": "Más guías en inglés",
     "areasCount": "{n} zonas",
     "areasCountOne": "1 zona",
-    "none": "Las primeras guías ya vienen en camino."
+    "none": "Las primeras guías ya vienen en camino.",
+    "searchGames": "Buscar juegos…",
+    "searchAreas": "Buscar zonas y objetos…",
+    "sortAZ": "A–Z",
+    "sortPopular": "Más populares",
+    "sortNew": "Más recientes",
+    "popular": "Populares",
+    "newGuides": "Nuevas guías",
+    "allGames": "Todos los juegos",
+    "noMatches": "No hay resultados para esa búsqueda.",
+    "sortLabel": "Ordenar"
   },
   fr: {
     "navGuides": "Guides",
@@ -134,7 +154,17 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "indexMore": "Plus de guides en anglais",
     "areasCount": "{n} zones",
     "areasCountOne": "1 zone",
-    "none": "Les premiers guides arrivent bientôt."
+    "none": "Les premiers guides arrivent bientôt.",
+    "searchGames": "Rechercher des jeux…",
+    "searchAreas": "Rechercher des zones et objets…",
+    "sortAZ": "A–Z",
+    "sortPopular": "Les plus populaires",
+    "sortNew": "Les plus récents",
+    "popular": "Populaires",
+    "newGuides": "Nouveaux guides",
+    "allGames": "Tous les jeux",
+    "noMatches": "Aucun résultat trouvé.",
+    "sortLabel": "Trier"
   },
   ja: {
     "navGuides": "攻略ガイド",
@@ -178,7 +208,17 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "indexMore": "英語版のガイドをもっと見る",
     "areasCount": "{n}エリア",
     "areasCountOne": "1エリア",
-    "none": "最初のガイドを準備中です。"
+    "none": "最初のガイドを準備中です。",
+    "searchGames": "ゲームを検索…",
+    "searchAreas": "エリアやアイテムを検索…",
+    "sortAZ": "五十音順",
+    "sortPopular": "人気順",
+    "sortNew": "新着順",
+    "popular": "人気",
+    "newGuides": "新着ガイド",
+    "allGames": "すべてのゲーム",
+    "noMatches": "一致する結果が見つかりませんでした。",
+    "sortLabel": "並び替え"
   },
   ko: {
     "navGuides": "공략",
@@ -222,7 +262,17 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "indexMore": "더 많은 영어 공략",
     "areasCount": "{n}개 구역",
     "areasCountOne": "1개 구역",
-    "none": "첫 번째 공략을 곧 공개할 예정입니다."
+    "none": "첫 번째 공략을 곧 공개할 예정입니다.",
+    "searchGames": "게임 검색…",
+    "searchAreas": "지역 및 아이템 검색…",
+    "sortAZ": "가나다순",
+    "sortPopular": "인기순",
+    "sortNew": "최신순",
+    "popular": "인기",
+    "newGuides": "새 가이드",
+    "allGames": "모든 게임",
+    "noMatches": "검색 결과가 없습니다.",
+    "sortLabel": "정렬"
   },
   pt: {
     "navGuides": "Guias",
@@ -266,7 +316,17 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "indexMore": "Mais guias em inglês",
     "areasCount": "{n} áreas",
     "areasCountOne": "1 área",
-    "none": "Os primeiros guias chegam em breve."
+    "none": "Os primeiros guias chegam em breve.",
+    "searchGames": "Buscar jogos…",
+    "searchAreas": "Buscar áreas e itens…",
+    "sortAZ": "A–Z",
+    "sortPopular": "Mais populares",
+    "sortNew": "Mais recentes",
+    "popular": "Populares",
+    "newGuides": "Novos guias",
+    "allGames": "Todos os jogos",
+    "noMatches": "Nenhum resultado encontrado.",
+    "sortLabel": "Ordenar"
   },
   ru: {
     "navGuides": "Гайды",
@@ -310,7 +370,17 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "indexMore": "Больше гайдов на английском",
     "areasCount": "Локаций: {n}",
     "areasCountOne": "1 локация",
-    "none": "Первые гайды уже готовятся к выходу."
+    "none": "Первые гайды уже готовятся к выходу.",
+    "searchGames": "Поиск игр…",
+    "searchAreas": "Поиск локаций и предметов…",
+    "sortAZ": "А–Я",
+    "sortPopular": "Популярные",
+    "sortNew": "Свежие",
+    "popular": "Популярное",
+    "newGuides": "Новые гайды",
+    "allGames": "Все игры",
+    "noMatches": "Ничего не нашлось.",
+    "sortLabel": "Сортировка"
   },
   zh: {
     "navGuides": "攻略",
@@ -354,6 +424,16 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "indexMore": "更多英文攻略",
     "areasCount": "{n} 个区域",
     "areasCountOne": "1 个区域",
-    "none": "首批攻略正在路上，敬请期待。"
+    "none": "首批攻略正在路上，敬请期待。",
+    "searchGames": "搜索游戏…",
+    "searchAreas": "搜索区域和物品…",
+    "sortAZ": "A–Z",
+    "sortPopular": "最受欢迎",
+    "sortNew": "最新",
+    "popular": "热门",
+    "newGuides": "最新攻略",
+    "allGames": "全部游戏",
+    "noMatches": "未找到匹配结果。",
+    "sortLabel": "排序"
   },
 };
