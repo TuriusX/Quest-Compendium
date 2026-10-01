@@ -30,7 +30,7 @@
  * searches and an estimated AI cost. A search cap stops the run before it
  * spends more than you allow; it's separate from players' search budget.
  */
-import { db, gemini, MODEL, gameKey, arg, searchesIn, visitName, cleanAreaName, resolveArea, normalizeVisits, isLayout, type GuideArea, type GuideEntry, type GuideSection, type Layout } from './common';
+import { db, gemini, MODEL, gameKey, arg, editionOf, editionNote, searchesIn, visitName, cleanAreaName, resolveArea, normalizeVisits, isLayout, type GuideArea, type GuideEntry, type GuideSection, type Layout } from './common';
 import { getGameFacts, saveGameFacts, recordMonthly } from '../../searchGuard';
 import { estimateCost } from '../../usage';
 import { ThinkingLevel } from '@google/genai';
@@ -145,9 +145,18 @@ function realSourcesByLine(text: string, response: any): Set<string>[] {
   return out;
 }
 
-const RULES =
+const BASE_RULES =
   'Search the web for this; don\'t answer from memory. Write everything in your own words, never copying sentences ' +
   'from websites. Only include details you found in your searches. Use the names the game itself uses.';
+/** For a remake or remaster: which version this is, and that details must be confirmed for it (set in main). */
+let EDITION = '';
+const RULES = () => BASE_RULES + EDITION;
+/** Works out (once per guide) whether the game is a remake or remaster, and returns the prompt note for it. */
+async function editionPrompt(guideRef: FirebaseFirestore.DocumentReference): Promise<string> {
+  const e = await editionOf(game!, guideRef);
+  if (e.remake) console.log(`  edition: the ${e.year ? `${e.year} ` : ''}${e.kind} of ${e.original || 'an earlier game'}${e.originalYear ? ` (${e.originalYear})` : ''}`);
+  return editionNote(e, game!);
+}
 
 /**
  * The area list, shared by normal and quick runs. Revisits count as their own areas: a place the player comes back to
@@ -218,7 +227,7 @@ const visitNote = (name: string) => {
 };
 
 async function outline(existing: { name: string; story: string }[]): Promise<{ name: string; story: string; group?: string }[]> {
-  const ask = (model: string) => grounded(outlinePrompt(RULES, existing), 'outline', true, model);
+  const ask = (model: string) => grounded(outlinePrompt(RULES(), existing), 'outline', true, model);
   let text = '';
   try {
     text = (await ask(LITE_MODEL)).text;
@@ -268,7 +277,7 @@ function sectionsFrom(extra: Record<string, GuideEntry[]>, keep: (e: GuideEntry)
 /** Research an area. The reply is one detail per line, so Google's grounding data can be matched to each detail. */
 async function research(area: { name: string; story: string; group?: string }): Promise<Parsed> {
   const { text, response } = await grounded(
-    `Research the ${pageKind()} "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}.${visitNote(area.name)} ${RULES}\n` +
+    `Research the ${pageKind()} "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}.${visitNote(area.name)} ${RULES()}\n` +
       'Reply with one detail per line, using exactly these formats (leave out anything you didn\'t find):\n' +
       detailFormats(),
     `research ${area.name}`,
@@ -401,7 +410,7 @@ async function plain(prompt: string, label: string, model: string): Promise<stri
 }
 
 async function quickOutline(existing: { name: string; story: string }[]): Promise<{ name: string; story: string; group?: string }[]> {
-  const prompt = outlinePrompt("Only list what you're confident about.", existing);
+  const prompt = outlinePrompt(`Only list what you're confident about.${EDITION}`, existing);
   let list: { name: string; story: string; group?: string }[] = [];
   try {
     list = parseOutline(await plain(prompt, 'outline', LITE_MODEL));
@@ -414,8 +423,8 @@ async function quickOutline(existing: { name: string; story: string }[]): Promis
 async function quickArea(area: { name: string; story: string; group?: string }): Promise<Parsed> {
   const text = await plain(
     `Write guide notes for the ${pageKind()} "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}, from what you know.${visitNote(area.name)} ` +
-      "Only include details you're confident about; leave out anything you're unsure of. Write in your own words. " +
-      'Reply with one detail per line, using exactly these formats:\n' +
+      "Only include details you're confident about; leave out anything you're unsure of. Write in your own words." +
+      `${EDITION} Reply with one detail per line, using exactly these formats:\n` +
       detailFormats(),
     `write ${area.name}`,
     MODEL,
@@ -429,6 +438,7 @@ async function mainQuick() {
   const guideRef = db().collection('guides').doc(key);
   const info = (await guideRef.get()).data() || {};
   layout = await pickLayout(info);
+  EDITION = await editionPrompt(guideRef);
   const previous: { slug: string; name: string; story: string; group?: string }[] = [...(info.areas || [])];
   // --restructure starts a fresh page list in the new layout; old pages not in it are held back at the end.
   const order: { slug: string; name: string; story: string; group?: string }[] = restructure ? [] : [...previous];
@@ -496,6 +506,7 @@ async function main() {
   await getGameFacts(game); // load what the knowledge base already knows, so new facts add confirmations
   const info = (await guideRef.get()).data() || {};
   layout = await pickLayout(info);
+  EDITION = await editionPrompt(guideRef);
   const previous: { slug: string; name: string; story: string; group?: string }[] = [...(info.areas || [])];
   const order: { slug: string; name: string; story: string; group?: string }[] = restructure ? [] : [...previous];
   const aliases: Record<string, string> = restructure ? {} : info.aliases || {};

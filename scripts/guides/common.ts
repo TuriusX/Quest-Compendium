@@ -20,6 +20,70 @@ export function gemini(): GoogleGenAI {
 
 export const MODEL = process.env.GUIDE_MODEL || process.env.MAIN_MODEL || 'gemini-3.8-flash';
 
+/** Whether a game is a remake or remaster of an earlier game, and the years of both (saved as guides/{game}.edition). */
+export type Edition = { checked: number; remake: boolean; kind?: 'remake' | 'remaster'; year?: number; original?: string; originalYear?: number };
+
+/**
+ * Work out once per guide whether the game is a remake or remaster. The release year and store description come from
+ * Steam (where a new remake usually says what it remakes, even when the AI doesn't know the game yet); the AI decides
+ * from that, with no web search, so quick mode stays search-free. Saved on the guide document and reused after that.
+ */
+export async function editionOf(game: string, guideRef: FirebaseFirestore.DocumentReference): Promise<Edition> {
+  const saved = (await guideRef.get()).data()?.edition as Edition | undefined;
+  if (saved?.checked) return saved;
+  let year: number | undefined, about = '';
+  try {
+    const items: any[] = (((await (await fetch(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(game)}&cc=us&l=english`)).json()) as any)?.items) || [];
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const hit = items.find((i) => norm(i.name) === norm(game)) || items[0];
+    if (hit) {
+      const d: any = ((await (await fetch(`https://store.steampowered.com/api/appdetails?appids=${hit.id}&filters=basic,release_date&cc=us&l=english`)).json()) as any)?.[hit.id]?.data;
+      year = Number((String(d?.release_date?.date || '').match(/(19|20)\d\d/) || [])[0]) || undefined;
+      about = String(d?.short_description || '').replace(/<[^>]+>/g, ' ').slice(0, 600);
+    }
+  } catch {
+    /* not on Steam (or Steam unreachable): the AI decides from what it knows */
+  }
+  let e: Edition = { checked: Date.now(), remake: false, ...(year ? { year } : {}) };
+  try {
+    const res: any = await gemini().models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: [{ text:
+        `Is the video game "${game}"${year ? ` (released ${year})` : ''} a remake or remaster of an earlier game?` +
+        (about ? ` Its store description: "${about}"` : '') +
+        '\nReply with these lines only:\nKIND: remake, remaster or neither\nYEAR: this version\'s release year\nORIGINAL: the earlier game it remakes or remasters (or empty)\nORIGINAL_YEAR: that game\'s release year (or empty)',
+      }] }],
+      config: { temperature: 0 },
+    });
+    const text = String(res?.text || '');
+    const get = (k: string) => (text.match(new RegExp(`^\\s*${k}:\\s*(.+)$`, 'im')) || [])[1]?.trim() || '';
+    const kind = get('KIND').toLowerCase();
+    if (kind === 'remake' || kind === 'remaster') {
+      e = {
+        checked: Date.now(), remake: true, kind,
+        year: year || Number((get('YEAR').match(/(19|20)\d\d/) || [])[0]) || undefined,
+        original: get('ORIGINAL').slice(0, 120) || undefined,
+        originalYear: Number((get('ORIGINAL_YEAR').match(/(19|20)\d\d/) || [])[0]) || undefined,
+      };
+    }
+  } catch {
+    return e; // not saved, so the next run asks again
+  }
+  await guideRef.set({ edition: JSON.parse(JSON.stringify(e)) }, { merge: true });
+  return e;
+}
+
+/** The prompt note for a remake or remaster (empty for other games). */
+export function editionNote(e: Edition | undefined, game: string): string {
+  if (!e?.remake) return '';
+  const what = `the ${e.year ? `${e.year} ` : ''}${e.kind || 'remake'}${e.original ? ` of ${e.original}${e.originalYear ? ` (${e.originalYear})` : ''}` : ' of an earlier game'}`;
+  return (
+    ` Important: "${game}" is ${what}. Only include details confirmed for this ${e.year ? `${e.year} ` : ''}version: item ` +
+    'locations, features, menus, systems and achievements often differ from the original. Do not use sources about the ' +
+    'original release for those unless they confirm this version is the same; leave out anything only confirmed for the original.'
+  );
+}
+
 /** Same key rules as the game knowledge base (searchGuard.ts), so guides and facts line up. */
 export const slug = (x: string, max = 80) =>
   x

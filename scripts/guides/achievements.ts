@@ -13,7 +13,7 @@
  * read it from there. Re-running replaces it.
  */
 import { ThinkingLevel } from '@google/genai';
-import { db, gemini, MODEL, gameKey, arg, searchesIn } from './common';
+import { db, gemini, MODEL, gameKey, arg, searchesIn, editionOf, editionNote } from './common';
 import { estimateCost } from '../../usage';
 import { recordMonthly } from '../../searchGuard';
 
@@ -97,6 +97,10 @@ async function main() {
     throw new Error(`${label}: the research ran no searches`);
   };
   const areaHint = areas.length ? `The guide's areas are: ${areas.map((a) => a.name).join(' | ')}. ` : '';
+  // A remake or remaster: tips and the roadmap must be for this version, not the original's achievements or features.
+  const edition = await editionOf(info.game || game!, guideRef);
+  if (edition.remake) console.log(`  edition: the ${edition.year ? `${edition.year} ` : ''}${edition.kind} of ${edition.original || 'an earlier game'}${edition.originalYear ? ` (${edition.originalYear})` : ''}`);
+  const versionNote = editionNote(edition, info.game || game!);
 
   // How to get each one, 25 at a time.
   for (let i = 0; i < list.length; i += 25) {
@@ -106,7 +110,7 @@ async function main() {
     }
     const batch = list.slice(i, i + 25);
     const text = await call(
-      `For the video game "${info.game || game}", explain how to unlock each of these Steam achievements. ${areaHint}` +
+      `For the video game "${info.game || game}", explain how to unlock each of these Steam achievements. ${areaHint}${versionNote} ` +
         (quick ? 'Use what you know; leave a field empty if unsure. ' : 'Search the web; do not answer from memory. ') +
         'Write in your own words. Reply with one line per achievement, exactly:\n' +
         'ACH: achievement name | missable: yes or no | the guide area where it happens, using an area name from the list above (or empty) | how to unlock it, in one or two short sentences\n' +
@@ -132,7 +136,7 @@ async function main() {
   let roadmap: any = null;
   try {
     const text = await call(
-      `Write a 100% achievement roadmap for the video game "${info.game || game}". ${areaHint}` +
+      `Write a 100% achievement roadmap for the video game "${info.game || game}". ${areaHint}${versionNote} ` +
         (quick ? '' : 'Search the web; do not answer from memory. ') +
         'Write in your own words. Reply with these lines only:\n' +
         'TIME: estimated hours to 100%\nDIFFICULTY: x/10\nPLAYTHROUGHS: number needed\nMISSABLES: how many achievements can be missed\n' +
