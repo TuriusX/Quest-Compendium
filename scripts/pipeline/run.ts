@@ -63,8 +63,10 @@ function runScript(args: string[]): { ok: boolean; searches: number; dollars: nu
   const out = `${r.stdout || ''}\n${r.stderr || ''}`;
   process.stdout.write(out.slice(-4000));
   const searches = Number((out.match(/(\d+) searches used/) || [])[1] || 0);
-  const dollars = Number((out.match(/cost ≈ \$([\d.]+)/i) || [])[1] || 0);
-  const summary = (out.match(/^Done[^\n]*$/m) || [''])[0].slice(0, 300);
+  // The number ends at its last digit ("≈ $0.178." must not read as "0.178.", which would make the total NaN).
+  const dollars = Number((out.match(/cost ≈ \$(\d+(?:\.\d+)?)/i) || [])[1] || 0);
+  // The script's "Done" line, without the "Done." prefix and its "Next: …" hint.
+  const summary = (out.match(/^Done[^\n]*$/m) || [''])[0].replace(/^Done[.:]?\s*/, '').replace(/\s*Next:.*$/, '').slice(0, 300);
   return { ok: r.status === 0, searches, dollars, summary };
 }
 
@@ -78,6 +80,9 @@ async function main() {
   const stateRef = db().collection('system').doc('pipeline');
   const state: any = (await stateRef.get()).data() || {};
   if (state.month !== month) Object.assign(state, { month, dollars: 0, searches: 0 });
+  // A total that isn't a number (an earlier bad read) would switch the budget check off, so it counts as 0.
+  if (!Number.isFinite(state.dollars)) state.dollars = 0;
+  if (!Number.isFinite(state.searches)) state.searches = 0;
   const enabled = state.enabled !== false && process.env.PIPELINE_ENABLED !== 'false';
   const report: string[] = [];
   if (!enabled) {
@@ -207,7 +212,7 @@ async function main() {
     aiRoom -= r.dollars;
     changed = changed || r.ok;
     done++;
-    report.push(`${r.ok ? '✅' : '⚠️'} ${a.kind} **${a.game}**${a.lang ? ` → ${a.lang}` : ''}: ${a.why}. ${r.summary ? r.summary.replace(/^Done:?\s*/, '') : r.ok ? '' : 'failed (see the job log)'}`.trim());
+    report.push(`${r.ok ? '✅' : '⚠️'} ${a.kind} **${a.game}**${a.lang ? ` → ${a.lang}` : ''}: ${a.why}. ${r.summary || (r.ok ? '' : 'failed (see the job log)')}`.trim());
     guideCache.delete(g.key);
   }
   if (!done) report.push('Nothing to do within the budget this run.');
