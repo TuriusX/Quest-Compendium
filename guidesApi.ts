@@ -6,6 +6,7 @@
  *   GET /api/guides/find?game=NAME     the guide for a game, matched by name (e.g. the running Steam game)
  *   GET /api/guides/:key               one game's areas in story order: { key, game, areas: [{ slug, name, story }] }
  *   GET /api/guides/:key/:slug         one area page: overview, items, secrets, enemies, shops, tips
+ *   add ?lang=pt (es, pt, de, fr, ru, ja, ko, zh) to get a translated guide where one exists (English otherwise)
  */
 import type { Express } from 'express';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -55,6 +56,53 @@ async function gameAreas(key: string) {
   });
 }
 
+// ---- translations (scripts/guides/translate-guide.ts saves them at guides/{game}/i18n/{lang}) ----
+const LANGS = new Set(['es', 'pt', 'de', 'fr', 'ru', 'ja', 'ko', 'zh']);
+const langOf = (q: unknown) => {
+  const l = String(q ?? '').toLowerCase().split(/[-_]/)[0];
+  return LANGS.has(l) ? l : '';
+};
+async function translation(key: string, lang: string): Promise<any | null> {
+  if (!lang) return null;
+  return cached(`tr:${key}:${lang}`, async () => {
+    const d = await getFirestore().collection('guides').doc(key).collection('i18n').doc(lang).get();
+    return d.exists ? d.data() : null;
+  });
+}
+/** A game's area list in a language: page names, story notes and section headings translated where available. */
+function localizeAreas(g: any, t: any) {
+  if (!g || !t) return g;
+  return {
+    ...g,
+    areas: g.areas.map((a: any) => {
+      const x = t.areas?.[a.slug];
+      return { ...a, name: x?.name || a.name, story: x?.story ?? a.story, group: (a.group && t.groups?.[a.group]) || a.group };
+    }),
+  };
+}
+/** An area page in a language (ids, flags and order stay from the original). */
+function localizePage(p: any, t: any) {
+  const x = t?.areas?.[p.slug];
+  if (!x) return p;
+  const merge = (list: any[], tl: any[] | undefined) => list.map((e) => ({ ...e, ...Object.fromEntries(Object.entries((tl || []).find((y: any) => y?.id === e.id) || {}).filter(([k, v]) => k !== 'id' && typeof v === 'string' && v.trim())) }));
+  return {
+    ...p,
+    name: x.name || p.name,
+    story: x.story ?? p.story,
+    overview: x.overview || p.overview,
+    items: merge(p.items, x.items),
+    secrets: merge(p.secrets, x.secrets),
+    enemies: merge(p.enemies, x.enemies),
+    shops: merge(p.shops, x.shops),
+    tips: Array.isArray(x.tips) && x.tips.length === p.tips.length ? x.tips : p.tips,
+    sections: p.sections.map((sec: any, i: number) => ({
+      ...sec,
+      title: x.sections?.[i]?.title || sec.title,
+      entries: merge(sec.entries, x.sections?.[i]?.entries),
+    })),
+  };
+}
+
 export function registerGuidesApi(app: Express): void {
   const send = (res: any, data: any) => {
     res.set('Cache-Control', 'public, max-age=300');
@@ -86,7 +134,7 @@ export function registerGuidesApi(app: Express): void {
     try {
       const name = String(req.query.game ?? '').trim().slice(0, 160);
       const g = name ? await gameAreas(gameKey(name)) : null;
-      send(res, g || { key: null });
+      send(res, g ? localizeAreas(g, await translation(g.key, langOf(req.query.lang))) : { key: null });
     } catch (e) {
       fail(res, e);
     }
@@ -96,7 +144,7 @@ export function registerGuidesApi(app: Express): void {
     try {
       const g = await gameAreas(gameKey(String(req.params.key)));
       if (!g) return res.status(404).json({ error: 'No guide for this game yet.' });
-      send(res, g);
+      send(res, localizeAreas(g, await translation(g.key, langOf(req.query.lang))));
     } catch (e) {
       fail(res, e);
     }
@@ -131,7 +179,7 @@ export function registerGuidesApi(app: Express): void {
         };
       });
       if (!page) return res.status(404).json({ error: 'This page isn\'t available.' });
-      send(res, page);
+      send(res, localizePage(page, await translation(key, langOf(req.query.lang))));
     } catch (e) {
       fail(res, e);
     }

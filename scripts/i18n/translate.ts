@@ -3,6 +3,7 @@
  *
  *   npx tsx scripts/i18n/translate.ts --target app
  *   npx tsx scripts/i18n/translate.ts --target decky --decky ../Quest-Compendium-Decky
+ *   npx tsx scripts/i18n/translate.ts --target guide-ui      (the website guide pages' headings and labels)
  *   options: --only de,fr   just these languages      --redo   retranslate everything (not just missing keys)
  *
  * Reads the English strings (and the hand-written Spanish/Portuguese, which are kept as they are), translates every
@@ -56,7 +57,13 @@ async function main() {
   let hand: Record<string, Record<string, string>> = {};
   let outFile: string;
   let product: string;
-  if (target === 'decky') {
+  if (target === 'guide-ui') {
+    const mod: any = await import(pathToFileURL(path.resolve('scripts/guides/guide-ui.ts')).href);
+    source = mod.SOURCE_STRINGS;
+    hand = {};
+    outFile = path.resolve('scripts/guides/guide-ui.generated.ts');
+    product = 'the game guide pages on the Quest Compendium website (headings, buttons and labels on area-by-area game guides)';
+  } else if (target === 'decky') {
     const root = path.resolve(arg('decky', '../Quest-Compendium-Decky')!);
     const mod: any = await import(pathToFileURL(path.join(root, 'src', 'i18n.ts')).href);
     source = mod.SOURCE_STRINGS;

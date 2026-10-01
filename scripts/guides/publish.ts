@@ -11,6 +11,51 @@
 import fs from 'fs';
 import path from 'path';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
+import { GUIDE_UI_EN } from './guide-ui';
+import { GENERATED as GUIDE_UI_GEN } from './guide-ui.generated';
+
+// ---- languages ----
+// English pages live at /guides/…; a game translated with translate-guide.ts also gets /<lang>/guides/… pages, with
+// the page's own words (headings, buttons) from guide-ui.ts / guide-ui.generated.ts.
+const LANG_TAG: Record<string, string> = { en: 'en', es: 'es', pt: 'pt-BR', de: 'de', fr: 'fr', ru: 'ru', ja: 'ja', ko: 'ko', zh: 'zh-CN' };
+const LANG_LABEL: Record<string, string> = { en: 'English', es: 'Español', pt: 'Português', de: 'Deutsch', fr: 'Français', ru: 'Русский', ja: '日本語', ko: '한국어', zh: '简体中文' };
+let LANG = 'en';
+let LP = ''; // the language folder for links ("" or "pt/")
+let U: Record<string, string> = GUIDE_UI_EN;
+function setLang(l: string) {
+  LANG = l;
+  LP = l === 'en' ? '' : `${l}/`;
+  U = { ...GUIDE_UI_EN, ...(GUIDE_UI_GEN[l] || {}) };
+}
+const ui = (k: string, vars: Record<string, string | number> = {}) => {
+  let s = U[k] ?? GUIDE_UI_EN[k] ?? k;
+  for (const [n, v] of Object.entries(vars)) s = s.split(`{${n}}`).join(String(v));
+  return s;
+};
+const langPath = (code: string) => (code === 'en' ? '' : `${code}/`);
+
+/** A page with its translation merged in (ids, flags and order stay from the original). */
+function localize(a: GuideArea, t?: any): GuideArea {
+  if (!t) return a;
+  const merge = (list: any[], tl: any[] | undefined) => list.map((e) => ({ ...e, ...((tl || []).find((x: any) => x?.id === e.id) || {}), id: e.id, missable: e.missable }));
+  return {
+    ...a,
+    name: t.name || a.name,
+    story: t.story ?? a.story,
+    overview: t.overview ?? a.overview,
+    items: merge(a.items, t.items),
+    secrets: merge(a.secrets, t.secrets),
+    enemies: merge(a.enemies, t.enemies),
+    shops: merge(a.shops, t.shops),
+    tips: Array.isArray(t.tips) && t.tips.length === (a.tips || []).length ? t.tips : a.tips,
+    sections: (a.sections || []).map((x, i) => ({
+      ...x,
+      orig: x.title, // kept for recognizing the "Don't miss" section
+      title: t.sections?.[i]?.title || x.title,
+      entries: x.entries.map((e) => ({ ...e, ...((t.sections?.[i]?.entries || []).find((y: any) => y?.id === e.id) || {}), id: e.id })),
+    })) as any,
+  };
+}
 
 const SITE = 'https://questcompendium.com';
 const OUT = path.resolve('Marketing_Website_Files');
@@ -58,16 +103,25 @@ const SCRIPT = `
     if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
 })();`;
 
-function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string }) {
+function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string }) {
   const up = '../'.repeat(opts.depth);
+  // Other languages of this same page: a menu in the top bar and hreflang tags for search engines.
+  const langs = opts.langs && opts.langs.length > 1 && opts.path !== undefined ? opts.langs : [];
+  const hreflang = langs.map((c) => `<link rel="alternate" hreflang="${LANG_TAG[c]}" href="${SITE}/${langPath(c)}${opts.path}">`).join('\n  ');
+  const menu = langs.length
+    ? `<details class="relative"><summary class="list-none cursor-pointer select-none hover:text-white" aria-label="${esc(ui('language'))}">${esc(LANG_LABEL[LANG])} &#9662;</summary><div class="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-[#0c0d14] p-1 shadow-xl z-50">${langs
+        .map((c) => `<a href="${up}${langPath(c)}${opts.path}index.html" hreflang="${LANG_TAG[c]}" lang="${LANG_TAG[c]}" class="block px-3 py-1.5 rounded-lg ${c === LANG ? 'text-white bg-white/10' : 'text-zinc-300 hover:bg-white/5 hover:text-white'}">${esc(LANG_LABEL[c])}</a>`)
+        .join('')}</div></details>`
+    : '';
   return `<!doctype html>
-<html lang="en">
+<html lang="${LANG_TAG[LANG]}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(opts.title)}</title>
   <meta name="description" content="${esc(opts.description)}">
   <link rel="canonical" href="${esc(opts.canonical)}">
+  ${hreflang}
   ${opts.draft ? '<meta name="robots" content="noindex">' : ''}
   <meta property="og:title" content="${esc(opts.title)}">
   <meta property="og:description" content="${esc(opts.description)}">
@@ -96,18 +150,18 @@ function page(opts: { title: string; description: string; depth: number; canonic
 <body class="min-h-screen"${opts.guide ? ` data-guide="${esc(opts.guide)}"` : ''}${opts.area ? ` data-area="${esc(opts.area)}"` : ''}>
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
     <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
-      <a href="${up}index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="${up}icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <a href="${up}${LP}index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="${up}icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
       <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
-        <a href="${up}guides/index.html" class="hover:text-white">Guides</a>
-        <a href="${up}index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
+        <a href="${up}${LP}guides/index.html" class="hover:text-white">${esc(ui('navGuides'))}</a>
+        <a href="${up}${LP}index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('navGetApp'))}</a>
+        ${menu}
       </div>
     </div>
   </nav>
   ${opts.draft ? '<div class="bg-amber-500/15 border-b border-amber-500/30 text-amber-300 text-sm text-center py-2">DRAFT preview: not public yet</div>' : ''}
   <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8">${opts.body}</main>
   <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
-    Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>.
-    Game names belong to their owners; this site isn't affiliated with any publisher.
+    ${esc(ui('footer')).replace('{discord}', '<a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>')}
   </footer>
   <script>${SCRIPT}</script>
 </body>
@@ -117,9 +171,9 @@ function page(opts: { title: string; description: string; depth: number; canonic
 
 const cta = (up: string, game: string) => `
   <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
-    <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in ${esc(game)}?</h2>
-    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
-    <a href="${up}index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
+    <h2 class="text-lg font-bold text-white mb-1">${esc(ui('ctaTitle', { game }))}</h2>
+    <p class="text-zinc-300 text-sm mb-4">${esc(ui('ctaBody'))}</p>
+    <a href="${up}${LP}index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">${esc(ui('ctaButton'))}</a>
   </div>`;
 
 const ICON = {
@@ -134,7 +188,7 @@ const ICON = {
 };
 
 const checkRow = (id: string, html: string) =>
-  `<label class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer" data-check="${esc(id)}"><input type="checkbox" aria-label="Got it"><span class="text-sm leading-snug text-zinc-300">${html}</span></label>`;
+  `<label class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer" data-check="${esc(id)}"><input type="checkbox" aria-label="${esc(ui('gotIt'))}"><span class="text-sm leading-snug text-zinc-300">${html}</span></label>`;
 
 /** A folding section: the header shows its progress; content stays in the page for search engines. */
 function fold(title: string, icon: string, body: string, opts: { ids?: string[]; open?: boolean } = {}) {
@@ -160,18 +214,17 @@ function areaList(gameKey: string, areas: AreaLink[], current: string | null, ba
     .join('');
 }
 
-function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[], prev?: AreaLink, next?: AreaLink) {
-  const up = '../../../';
+function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[], prev?: AreaLink, next?: AreaLink, up = '../../../') {
   const items = a.items.map(cleanEntry);
   const miss = items.filter((e) => e.missable);
   const rest = items.filter((e) => !e.missable);
-  const missSec = (a.sections || []).filter((x) => x.check && /miss/i.test(x.title));
+  const missSec = (a.sections || []).filter((x: any) => x.check && /miss/i.test(x.orig || x.title));
   const otherSec = (a.sections || []).filter((x) => !missSec.includes(x));
   const itemHtml = (e: GuideEntry) => `<strong class="text-white">${esc(e.name)}</strong>${e.where ? `<span class="text-zinc-400">: ${esc(e.where)}</span>` : ''}`;
   const missIds = [...miss.map((e) => e.id), ...missSec.flatMap((x) => x.entries.map((e) => e.id))];
   const dontMiss = missIds.length
     ? `<section class="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
-        <h2 class="flex items-center gap-2 px-1 pb-1 text-base font-bold text-amber-200">${ICON.warn} Don't miss <span class="text-xs font-normal text-amber-200/70" data-count="${esc(missIds.join(','))}">0/${missIds.length}</span></h2>
+        <h2 class="flex items-center gap-2 px-1 pb-1 text-base font-bold text-amber-200">${ICON.warn} ${esc(ui('dontMiss'))} <span class="text-xs font-normal text-amber-200/70" data-count="${esc(missIds.join(','))}">0/${missIds.length}</span></h2>
         ${miss.map((e) => checkRow(e.id, itemHtml(e))).join('')}${missSec.flatMap((x) => x.entries.map((e) => checkRow(e.id, esc(e.text)))).join('')}
       </section>`
     : '';
@@ -179,14 +232,14 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const chip = (label: string, v?: string) => (v ? `<span class="inline-flex items-center gap-1 rounded-md bg-white/[0.05] px-2 py-0.5 text-xs text-zinc-300"><span class="text-zinc-500">${label}</span> ${esc(v)}</span>` : '');
   const enemies = foes.length
     ? `<div class="grid sm:grid-cols-2 gap-2">${foes
-        .map((e) => `<div class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white text-sm">${esc(e.name)}</div><div class="mt-1.5 flex flex-wrap gap-1.5">${chip('Weak to', e.weakness)}${chip('Steal / drop', e.steal)}</div>${e.notes ? `<p class="mt-1.5 text-xs text-zinc-400">${esc(e.notes)}</p>` : ''}</div>`)
+        .map((e) => `<div class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white text-sm">${esc(e.name)}</div><div class="mt-1.5 flex flex-wrap gap-1.5">${chip(ui('weakTo'), e.weakness)}${chip(ui('stealDrop'), e.steal)}</div>${e.notes ? `<p class="mt-1.5 text-xs text-zinc-400">${esc(e.notes)}</p>` : ''}</div>`)
         .join('')}</div>`
     : '';
   const shops = a.shops.length ? `<ul class="space-y-1.5 px-3">${a.shops.map(cleanEntry).map((e) => `<li class="text-sm"><strong class="text-white">${esc(e.name)}</strong>${e.sells ? `<span class="text-zinc-400">: ${esc(e.sells)}</span>` : ''}</li>`).join('')}</ul>` : '';
   const tips = a.tips.length ? `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${a.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '';
   const navCard = (x: AreaLink | undefined, dir: 'prev' | 'next') =>
     x
-      ? `<a href="../${esc(x.slug)}/index.html" class="flex-1 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/40 hover:bg-white/[0.06] px-4 py-3 ${dir === 'next' ? 'text-right' : ''}"><div class="text-[11px] uppercase tracking-wide text-zinc-500">${dir === 'prev' ? '&larr; Previous' : 'Next &rarr;'}</div><div class="text-sm font-semibold text-white truncate">${esc(x.name)}</div></a>`
+      ? `<a href="../${esc(x.slug)}/index.html" class="flex-1 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/40 hover:bg-white/[0.06] px-4 py-3 ${dir === 'next' ? 'text-right' : ''}"><div class="text-[11px] uppercase tracking-wide text-zinc-500">${dir === 'prev' ? `&larr; ${esc(ui('previous'))}` : `${esc(ui('next'))} &rarr;`}</div><div class="text-sm font-semibold text-white truncate">${esc(x.name)}</div></a>`
       : '<span class="flex-1"></span>';
   const sidebar = `<nav aria-label="${esc(game)} areas" class="qc-scroll">${`<a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>`}<ul class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
 
@@ -194,13 +247,13 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   <div class="lg:grid lg:grid-cols-[16rem_1fr] lg:gap-8">
     <aside class="hidden lg:block"><div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto qc-scroll pr-1">${sidebar}</div></aside>
     <article class="min-w-0 max-w-3xl">
-      <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="${up}guides/index.html">Guides</a> / <a class="hover:text-white" href="../index.html">${esc(game)}</a></p>
+      <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="${up}${LP}guides/index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(game)}</a></p>
       <h1 class="text-3xl font-bold text-white leading-tight">${esc(a.name)}</h1>
       <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
-        <span>${esc(game)} guide${a.story ? ` · ${esc(a.story)}` : ''}</span>
-        ${a.verified !== false ? '<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; Checked against sources</span>' : ''}
+        <span>${esc(ui('guideOf', { game }))}${a.story ? ` · ${esc(a.story)}` : ''}</span>
+        ${a.verified !== false ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))}</span>` : ''}
       </div>
-      <details class="qc-fold lg:hidden mt-4"><summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white">${ICON.caret} All areas in this guide</summary><div class="mt-2 max-h-80 overflow-y-auto qc-scroll">${sidebar}</div></details>
+      <details class="qc-fold lg:hidden mt-4"><summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white">${ICON.caret} ${esc(ui('allAreas'))}</summary><div class="mt-2 max-h-80 overflow-y-auto qc-scroll">${sidebar}</div></details>
       ${a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${esc(a.overview)}</p>` : ''}
       ${dontMiss}
       ${otherSec
@@ -211,14 +264,14 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
           }),
         )
         .join('')}
-      ${fold('Items', ICON.items, rest.map((e) => checkRow(e.id, itemHtml(e))).join(''), { ids: rest.map((e) => e.id), open: true })}
-      ${fold('Secrets', ICON.secrets, a.secrets.map((e) => checkRow(e.id, esc(e.text))).join(''), { ids: a.secrets.map((e) => e.id), open: true })}
-      ${fold('Enemies', ICON.enemies, enemies)}
-      ${fold('Shops and people', ICON.shops, shops)}
-      ${fold('Tips', ICON.tips, tips, { open: true })}
+      ${fold(ui('items'), ICON.items, rest.map((e) => checkRow(e.id, itemHtml(e))).join(''), { ids: rest.map((e) => e.id), open: true })}
+      ${fold(ui('secrets'), ICON.secrets, a.secrets.map((e) => checkRow(e.id, esc(e.text))).join(''), { ids: a.secrets.map((e) => e.id), open: true })}
+      ${fold(ui('enemies'), ICON.enemies, enemies)}
+      ${fold(ui('shops'), ICON.shops, shops)}
+      ${fold(ui('tips'), ICON.tips, tips, { open: true })}
       ${prev || next ? `<div class="mt-8 flex gap-3">${navCard(prev, 'prev')}${navCard(next, 'next')}</div>` : ''}
       ${cta(up, game)}
-      ${a.sources.length ? `<p class="mt-6 text-xs text-zinc-500">Sources checked: ${a.sources.map(esc).join(', ')}</p>` : ''}
+      ${a.sources.length ? `<p class="mt-6 text-xs text-zinc-500">${esc(ui('sourcesChecked', { list: a.sources.join(', ') }))}</p>` : ''}
     </article>
   </div>`;
 }
@@ -253,7 +306,7 @@ const HOME_GUIDES: Record<string, { h: string; p: string; all: string; areas: (n
  * rewritten on every run so it grows with the guides. Done for the English main page and every language version
  * (Marketing_Website_Files/<lang>/index.html, made by scripts/i18n/translate-site.ts), each in its own language.
  */
-function updateHomepage(games: { key: string; game: string; published: number }[]) {
+function updateHomepage(games: { key: string; game: string; published: number; langs?: string[] }[]) {
   const pages = [{ code: 'en', file: path.join(OUT, 'index.html'), up: '' }].concat(
     Object.keys(HOME_GUIDES)
       .filter((c) => c !== 'en')
@@ -279,7 +332,7 @@ function updateHomepage(games: { key: string; game: string; published: number }[
       .slice(0, 8)
       .map(
         (g) =>
-          `        <a href="${pg.up}guides/${esc(g.key)}/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors">` +
+          `        <a href="${g.langs?.includes(pg.code) && pg.code !== 'en' ? '' : pg.up}guides/${esc(g.key)}/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors">` +
           `<div class="text-white font-bold leading-snug">${esc(g.game)}</div>` +
           `<div class="text-sm text-zinc-400 mt-1">${esc(L.areas(g.published))}</div></a>`,
       )
@@ -292,7 +345,7 @@ function updateHomepage(games: { key: string; game: string; published: number }[
           `          <h2 class="text-2xl sm:text-3xl font-bold text-white">${esc(L.h)}</h2>`,
           `          <p class="text-zinc-400 mt-2 max-w-2xl">${esc(L.p)}</p>`,
           '        </div>',
-          `        <a href="${pg.up}guides/index.html" class="text-[#a87ffb] hover:text-white font-semibold whitespace-nowrap">${esc(L.all)} &rarr;</a>`,
+          `        <a href="${games.some((g) => g.langs?.includes(pg.code)) && pg.code !== 'en' ? '' : pg.up}guides/index.html" class="text-[#a87ffb] hover:text-white font-semibold whitespace-nowrap">${esc(L.all)} &rarr;</a>`,
           '      </div>',
           '      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">',
           tiles,
@@ -304,6 +357,92 @@ function updateHomepage(games: { key: string; game: string; published: number }[
     done++;
   }
   console.log(`Homepage guides section updated on ${done} page(s): ${Math.min(games.length, 8)} game(s) shown.`);
+}
+
+/** One game's pages (area pages and the game page) in the current language (setLang). */
+function renderGame(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, t: any, langs: string[], sitemap: string[], allTr: Record<string, any> = {}) {
+  const dir = path.join(OUT, LP, 'guides', key);
+  fs.mkdirSync(dir, { recursive: true });
+  const extra = LANG === 'en' ? 0 : 1; // the language folder adds a level
+  const pageOf = (slug: string) => localize(byslug.get(slug)!, t?.areas?.[slug]);
+  const groupName = (g: string) => (g && t?.groups?.[g]) || g;
+  const groupOf = (o: any) => String(o.group || byslug.get(o.slug)?.group || '');
+  const links: AreaLink[] = visible.map((o: any) => {
+    const a = pageOf(o.slug);
+    return { slug: o.slug, name: a.name, story: a.story, group: groupName(groupOf(o)) || undefined, total: totalOf(a) };
+  });
+  // Only languages that have this page (an untranslated page is English-only).
+  const pageLangs = (slug: string) => langs.filter((c) => c === 'en' || allTr[c]?.areas?.[slug]);
+  visible.forEach((o, i) => {
+    const a = pageOf(o.slug);
+    const draft = a.status !== 'published';
+    const adir = path.join(dir, o.slug);
+    fs.mkdirSync(adir, { recursive: true });
+    let title: string, description: string;
+    if (LANG === 'en') {
+      title = `${a.name} – ${gameName} Guide: Items, Secrets & Enemies | Quest Compendium`;
+      const firsts = [...a.items.map((e) => e.name), ...a.secrets.map(() => 'secrets')].filter(Boolean).slice(0, 4).join(', ');
+      description = `${gameName} ${a.name} guide: ${a.items.length} items${a.secrets.length ? `, ${a.secrets.length} secrets` : ''}${a.enemies.length ? `, enemy weaknesses` : ''}. ${firsts ? `Includes ${firsts}.` : ''}`.slice(0, 158);
+    } else {
+      title = ui('areaTitle', { area: a.name, game: gameName });
+      description = ui('areaDesc', { area: a.name, game: gameName }).slice(0, 158);
+    }
+    fs.writeFileSync(
+      path.join(adir, 'index.html'),
+      page({
+        title,
+        description,
+        depth: 3 + extra,
+        canonical: `${SITE}/${LP}guides/${key}/${o.slug}/`,
+        body: areaBody(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra)),
+        draft,
+        guide: key,
+        area: o.slug,
+        langs: pageLangs(o.slug),
+        path: `guides/${key}/${o.slug}/`,
+      }),
+    );
+    if (!draft) sitemap.push(`${SITE}/${LP}guides/${key}/${o.slug}/`);
+  });
+  const checked = visible.filter((o) => byslug.get(o.slug)!.verified !== false).length;
+  const totalChecks = links.reduce((n, l) => n + l.total, 0);
+  const missables = visible.reduce((n, o) => n + byslug.get(o.slug)!.items.filter((e) => e.missable).length, 0);
+  const stat = (v: number | string, label: string) => `<div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">${v}</div><div class="text-xs text-zinc-500">${esc(label)}</div></div>`;
+  let lastGroup = '';
+  const rows = links
+    .map((l) => {
+      const head = l.group && l.group !== lastGroup ? `<h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">${esc(l.group)}</h2>` : '';
+      lastGroup = l.group || lastGroup;
+      return `${head}<a href="${esc(l.slug)}/index.html" data-area-link="${esc(l.slug)}" data-name="${esc(l.name)}" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(l.name)}</span>${l.story ? `<span class="block text-sm text-zinc-500 truncate">${esc(l.story)}</span>` : ''}</span>
+          <span data-progress="${esc(key)}|${esc(l.slug)}|${l.total}"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a>`;
+    })
+    .join('');
+  fs.writeFileSync(
+    path.join(dir, 'index.html'),
+    page({
+      title: ui('gameTitle', { game: gameName }),
+      description: ui('gameDesc', { game: gameName }),
+      depth: 2 + extra,
+      canonical: `${SITE}/${LP}guides/${key}/`,
+      guide: key,
+      langs,
+      path: `guides/${key}/`,
+      body: `<div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">${esc(ui('navGuides'))}</a></p>
+          <h1 class="text-3xl font-bold text-white">${esc(ui('gameH1', { game: gameName }))}</h1>
+          <p class="text-zinc-400 mt-2">${esc(ui('gameIntro'))}</p>
+          <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, ui('statAreas'))}${stat(totalChecks, ui('statThings'))}${stat(missables, ui('statMissables'))}${checked ? stat(checked === links.length ? ui('statAll') : checked, ui('statChecked')) : ''}</div>
+          <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <div class="mt-6">${rows}</div>
+          ${cta('../'.repeat(2 + extra), gameName)}
+        </div>`,
+      draft: visible.some((o) => byslug.get(o.slug)!.status !== 'published'),
+    }),
+  );
+  if (visible.some((o) => byslug.get(o.slug)!.status === 'published')) sitemap.push(`${SITE}/${LP}guides/${key}/`);
 }
 
 async function main() {
@@ -319,100 +458,69 @@ async function main() {
   const sitemap: string[] = [`${SITE}/`, `${SITE}/guides/`];
   // Language versions of the main page (made by scripts/i18n/translate-site.ts).
   for (const code of Object.keys(HOME_GUIDES)) if (code !== 'en' && fs.existsSync(path.join(OUT, code, 'index.html'))) sitemap.push(`${SITE}/${code}/`);
-  const games: { key: string; game: string; count: number; published: number }[] = [];
+  const games: { key: string; game: string; count: number; published: number; langs: string[] }[] = [];
   const show = (s: string) => s === 'published' || (withDrafts && s === 'draft');
+  // Translated guides are rebuilt from scratch too.
+  for (const code of Object.keys(LANG_TAG)) if (code !== 'en') fs.rmSync(path.join(OUT, code, 'guides'), { recursive: true, force: true });
 
   for (const g of guides.docs) {
     const info = g.data();
-    const game = String(info.game || g.id);
     const order: { slug: string; name: string }[] = info.areas || [];
     const snap = await g.ref.collection('areas').get();
     const byslug = new Map(snap.docs.map((d) => [d.id, d.data() as GuideArea]));
     const visible = order.filter((o) => byslug.has(o.slug) && show(byslug.get(o.slug)!.status));
     if (!visible.length) continue;
-    games.push({ key: g.id, game, count: visible.length, published: visible.filter((o) => byslug.get(o.slug)!.status === 'published').length });
-    const dir = path.join(OUT, 'guides', g.id);
-    fs.mkdirSync(dir, { recursive: true });
-    const groupOf = (o: any) => String(o.group || byslug.get(o.slug)?.group || '');
-    const links: AreaLink[] = visible.map((o: any) => {
-      const a = byslug.get(o.slug)!;
-      return { slug: o.slug, name: a.name, story: a.story, group: groupOf(o) || undefined, total: totalOf(a) };
-    });
-    visible.forEach((o, i) => {
-      const a = byslug.get(o.slug)!;
-      const draft = a.status !== 'published';
-      const adir = path.join(dir, o.slug);
-      fs.mkdirSync(adir, { recursive: true });
-      const title = `${a.name} – ${game} Guide: Items, Secrets & Enemies | Quest Compendium`;
-      const firsts = [...a.items.map((e) => e.name), ...a.secrets.map(() => 'secrets')].filter(Boolean).slice(0, 4).join(', ');
-      const description = `${game} ${a.name} guide: ${a.items.length} items${a.secrets.length ? `, ${a.secrets.length} secrets` : ''}${a.enemies.length ? `, enemy weaknesses` : ''}. ${firsts ? `Includes ${firsts}.` : ''}`.slice(0, 158);
-      fs.writeFileSync(
-        path.join(adir, 'index.html'),
-        page({ title, description, depth: 3, canonical: `${SITE}/guides/${g.id}/${o.slug}/`, body: areaBody(game, g.id, a, links, links[i - 1], links[i + 1]), draft, guide: g.id, area: o.slug }),
-      );
-      if (!draft) sitemap.push(`${SITE}/guides/${g.id}/${o.slug}/`);
-    });
-    const checked = visible.filter((o) => byslug.get(o.slug)!.verified !== false).length;
-    const totalChecks = links.reduce((n, l) => n + l.total, 0);
-    const missables = visible.reduce((n, o) => n + byslug.get(o.slug)!.items.filter((e) => e.missable).length, 0);
-    const stat = (v: number | string, label: string) => `<div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">${v}</div><div class="text-xs text-zinc-500">${label}</div></div>`;
-    let lastGroup = '';
-    const rows = links
-      .map((l) => {
-        const head = l.group && l.group !== lastGroup ? `<h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">${esc(l.group)}</h2>` : '';
-        lastGroup = l.group || lastGroup;
-        return `${head}<a href="${esc(l.slug)}/index.html" data-area-link="${esc(l.slug)}" data-name="${esc(l.name)}" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
-          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(l.name)}</span>${l.story ? `<span class="block text-sm text-zinc-500 truncate">${esc(l.story)}</span>` : ''}</span>
-          <span data-progress="${esc(g.id)}|${esc(l.slug)}|${l.total}"></span>
-          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a>`;
-      })
-      .join('');
-    fs.writeFileSync(
-      path.join(dir, 'index.html'),
-      page({
-        title: `${game} Guide and Walkthrough | Quest Compendium`,
-        description: `Area-by-area ${game} guide with item checklists, secrets, missables and enemy weaknesses.`,
-        depth: 2,
-        canonical: `${SITE}/guides/${g.id}/`,
-        guide: g.id,
-        body: `<div class="max-w-3xl">
-          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
-          <h1 class="text-3xl font-bold text-white">${esc(game)} guide</h1>
-          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
-          <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, 'areas')}${stat(totalChecks, 'things to find')}${stat(missables, 'missables flagged')}${checked ? stat(checked === links.length ? 'All' : checked, 'pages checked against sources') : ''}</div>
-          <a hidden data-continue="${esc(g.id)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
-          <div class="mt-6">${rows}</div>
-          ${cta('../../', game)}
-        </div>`,
-        draft: visible.some((o) => byslug.get(o.slug)!.status !== 'published'),
-      }),
-    );
-    if (visible.some((o) => byslug.get(o.slug)!.status === 'published')) sitemap.push(`${SITE}/guides/${g.id}/`);
+    // Languages this game's guide is translated into (translate-guide.ts), published pages only.
+    const trs: Record<string, any> = {};
+    for (const code of Array.isArray(info.languages) ? info.languages : []) {
+      if (!LANG_TAG[code] || code === 'en') continue;
+      const t = (await g.ref.collection('i18n').doc(code).get()).data();
+      if (t?.areas && Object.keys(t.areas).length) trs[code] = t;
+    }
+    const langs = ['en', ...Object.keys(trs)];
+    games.push({ key: g.id, game: String(info.game || g.id), count: visible.length, published: visible.filter((o) => byslug.get(o.slug)!.status === 'published').length, langs });
+    for (const code of langs) {
+      setLang(code);
+      const t = trs[code];
+      // Drafts are English-only previews.
+      const pages = code === 'en' ? visible : visible.filter((o) => byslug.get(o.slug)!.status === 'published');
+      renderGame(g.id, String(info.game || g.id), pages, byslug, t, langs, sitemap, trs);
+    }
+    setLang('en');
   }
 
-  fs.mkdirSync(path.join(OUT, 'guides'), { recursive: true });
-  fs.writeFileSync(
-    path.join(OUT, 'guides', 'index.html'),
-    page({
-      title: 'Game Guides and Walkthroughs | Quest Compendium',
-      description: 'Game guides with item checklists, secrets, missables and enemy weaknesses, area by area.',
-      depth: 1,
-      canonical: `${SITE}/guides/`,
-      body: `<h1 class="text-3xl font-bold text-white">Game guides</h1><p class="text-zinc-400 mt-2 mb-6 max-w-2xl">Area-by-area checklists of items, secrets and missables, plus enemy weaknesses, for ${games.length} games.</p>${
-        games.length
-          ? `<div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">${games
-              .slice()
-              .sort((x, y) => x.game.localeCompare(y.game))
-              .map(
-                (g) =>
-                  `<a href="${esc(g.key)}/index.html" class="block rounded-2xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50 hover:bg-white/[0.06] p-5"><div class="font-bold text-white leading-snug">${esc(g.game)}</div><div class="mt-1 text-sm text-zinc-400">${g.count} area${g.count === 1 ? '' : 's'}</div></a>`,
-              )
-              .join('')}</div>`
-          : '<p class="text-zinc-500">The first guides are on their way.</p>'
-      }`,
-    }),
-  );
+  for (const code of Object.keys(LANG_TAG)) {
+    const list = games.filter((g) => g.langs.includes(code));
+    if (!list.length) continue;
+    setLang(code);
+    const base = path.join(OUT, langPath(code), 'guides');
+    fs.mkdirSync(base, { recursive: true });
+    const depth = code === 'en' ? 1 : 2;
+    const langsWithGuides = Object.keys(LANG_TAG).filter((c) => games.some((g) => g.langs.includes(c)));
+    fs.writeFileSync(
+      path.join(base, 'index.html'),
+      page({
+        title: ui('indexTitle'),
+        description: ui('indexDesc'),
+        depth,
+        canonical: `${SITE}/${langPath(code)}guides/`,
+        langs: langsWithGuides,
+        path: 'guides/',
+        body: `<h1 class="text-3xl font-bold text-white">${esc(ui('indexH1'))}</h1><p class="text-zinc-400 mt-2 mb-6 max-w-2xl">${esc(ui('indexIntro', { n: list.length }))}</p>${
+          `<div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">${list
+            .slice()
+            .sort((x, y) => x.game.localeCompare(y.game))
+            .map(
+              (g) =>
+                `<a href="${esc(g.key)}/index.html" class="block rounded-2xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50 hover:bg-white/[0.06] p-5"><div class="font-bold text-white leading-snug">${esc(g.game)}</div><div class="mt-1 text-sm text-zinc-400">${esc(g.count === 1 ? ui('areasCountOne') : ui('areasCount', { n: g.count }))}</div></a>`,
+            )
+            .join('')}</div>`
+        }${code !== 'en' && list.length < games.length ? `<p class="mt-8"><a href="../../guides/index.html" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('indexMore'))} &rarr;</a></p>` : ''}`,
+      }),
+    );
+    if (code !== 'en') sitemap.push(`${SITE}/${code}/guides/`);
+  }
+  setLang('en');
   fs.writeFileSync(
     path.join(OUT, 'sitemap.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemap.map((u) => `  <url><loc>${u}</loc></url>`).join('\n')}\n</urlset>\n`,

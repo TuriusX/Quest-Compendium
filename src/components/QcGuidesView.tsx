@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Check, ChevronDown, ChevronRight, ArrowLeft, Gem, Skull, Sparkles, TriangleAlert, MapPin, Play, MessageCircleQuestion } from './icons';
 import { getApiBaseUrl } from '../utils/api';
-import { useT } from '../i18n';
+import { useLocale, useT } from '../i18n';
 
 /**
  * Quest Compendium's own guides, read natively in the app: all games -> a game's areas -> an area page.
@@ -23,7 +23,11 @@ type Page = {
 type View = { view: 'games' } | { view: 'game'; key: string; game?: string } | { view: 'area'; key: string; slug: string; game?: string };
 
 const cache = new Map<string, Promise<any>>();
-const api = (path: string): Promise<any> => {
+// The guide's language follows the app's (a translated guide where one exists, English otherwise).
+let guideLang = 'en';
+const withLang = (path: string) => (guideLang === 'en' || path === '/api/guides' ? path : `${path}${path.includes('?') ? '&' : '?'}lang=${guideLang}`);
+const api = (rawPath: string): Promise<any> => {
+  const path = withLang(rawPath);
   if (!cache.has(path)) {
     const p = fetch(`${getApiBaseUrl()}${path}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
     p.catch(() => cache.delete(path));
@@ -61,6 +65,7 @@ const readDone = (key: string, slug: string) => {
 
 export function QcGuidesView({ gameName, place, onAsk }: { gameName?: string; place?: string; onAsk?: (question: string) => void }) {
   const t = useT();
+  guideLang = useLocale();
   const [stack, setStack] = useState<View[]>([{ view: 'games' }]);
   const [guide, setGuide] = useState<{ key: string; game: string; areas: Area[] } | null>(null);
   const view = stack[stack.length - 1];
@@ -87,7 +92,7 @@ export function QcGuidesView({ gameName, place, onAsk }: { gameName?: string; pl
     return () => {
       alive = false;
     };
-  }, [gameName]);
+  }, [gameName, guideLang]);
 
   // The player moved on: offer a jump to their new area instead of moving the page they're reading.
   const hereArea = useMemo(() => (guide && place ? guide.areas.find((a) => samePlace(a.name, place)) : undefined), [guide, place]);
@@ -151,7 +156,7 @@ function useApi<T>(path: string) {
     return () => {
       alive = false;
     };
-  }, [path]);
+  }, [path, guideLang]);
   return s;
 }
 

@@ -1,0 +1,51 @@
+/**
+ * The website guide pages' own words (headings, buttons, labels), in English. Other languages are AI translations
+ * in guide-ui.generated.ts, made with `npx tsx scripts/i18n/translate.ts --target guide-ui`. Guide content itself is
+ * translated per game with scripts/guides/translate-guide.ts.
+ */
+export const GUIDE_UI_EN: Record<string, string> = {
+  navGuides: 'Guides',
+  navGetApp: 'Get the app',
+  language: 'Language',
+  footer: 'Guides are written with AI help. Spot a mistake? Tell us on {discord}. Game names belong to their owners; this site isn\'t affiliated with any publisher.',
+  ctaTitle: 'Stuck somewhere in {game}?',
+  ctaBody: 'Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.',
+  ctaButton: 'Get live help while you play',
+  gotIt: 'Got it',
+  weakTo: 'Weak to',
+  stealDrop: 'Steal / drop',
+  previous: 'Previous',
+  next: 'Next',
+  dontMiss: "Don't miss",
+  items: 'Items',
+  secrets: 'Secrets',
+  enemies: 'Enemies',
+  shops: 'Shops and people',
+  tips: 'Tips',
+  sourcesChecked: 'Sources checked: {list}',
+  guideOf: '{game} guide',
+  checkedBadge: 'Checked against sources',
+  allAreas: 'All areas in this guide',
+  areaTitle: '{area} – {game} Guide: Items, Secrets & Enemies | Quest Compendium',
+  areaDesc: '{game} {area} guide: items, secrets, missables and enemy weaknesses.',
+  gameTitle: '{game} Guide and Walkthrough | Quest Compendium',
+  gameDesc: 'Area-by-area {game} guide with item checklists, secrets, missables and enemy weaknesses.',
+  gameH1: '{game} guide',
+  gameIntro: 'Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.',
+  statAreas: 'areas',
+  statThings: 'things to find',
+  statMissables: 'missables flagged',
+  statChecked: 'pages checked against sources',
+  statAll: 'All',
+  continue: 'Continue where you left off',
+  indexTitle: 'Game Guides and Walkthroughs | Quest Compendium',
+  indexDesc: 'Game guides with item checklists, secrets, missables and enemy weaknesses, area by area.',
+  indexH1: 'Game guides',
+  indexIntro: 'Area-by-area checklists of items, secrets and missables, plus enemy weaknesses, for {n} games.',
+  indexMore: 'More guides in English',
+  areasCount: '{n} areas',
+  areasCountOne: '1 area',
+  none: 'The first guides are on their way.',
+};
+export const SOURCE_STRINGS = GUIDE_UI_EN;
+export const HAND_WRITTEN = {};
