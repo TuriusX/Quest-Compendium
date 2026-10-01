@@ -6,7 +6,8 @@
  *
  * Every published page is translated (overview, items, secrets, enemies, shops, tips and calendar sections), plus the
  * page names, story notes and section headings. The AI uses the game's official names in that language for places,
- * items, enemies and characters when the game was released in it. Translations are saved in Firestore at
+ * items, enemies and characters when the game was released in it. The page names are translated first into a glossary
+ * that every page must use, so a place has the same name on every page that mentions it. Translations are saved in Firestore at
  * guides/{game}/i18n/{lang}; checklist ids stay the same, so ticks carry over between languages. Re-running only
  * translates pages added or changed since the last run. Then run publish.ts to build the translated pages; the apps
  * show them automatically.
@@ -95,17 +96,52 @@ async function main() {
     const areas: Record<string, Tr> = { ...(existing.areas || {}) };
     const todo = pages.filter((p) => !areas[p.slug] || (areas[p.slug].src || 0) < (p.updatedAt || 0));
     console.log(`${lang}: ${pages.length} published pages, ${todo.length} to translate`);
-    let done = 0, failed = 0;
+
+    // Glossary first: every page name translated once, so a place has the same name on every page that mentions it.
+    const glossary: Record<string, string> = { ...(existing.glossary || {}) };
+    const newNames = [...new Set(pages.map((p) => p.name))].filter((n) => !glossary[n]);
+    for (let i = 0; i < newNames.length; i += 80) {
+      const batch = newNames.slice(i, i + 80);
+      try {
+        const arr = await call(
+          `${RULES(lang)} These are the names of places in the guide. Reply with a JSON array of their names in ${LANGS[lang]}, ` +
+            `same order (keep a name as it is where the official ${LANGS[lang]} version does).\n${JSON.stringify(batch)}`,
+        );
+        if (Array.isArray(arr) && arr.length === batch.length) batch.forEach((n, k) => typeof arr[k] === 'string' && arr[k].trim() && (glossary[n] = arr[k].trim()));
+      } catch {
+        /* pages are still translated, just without these names fixed in advance */
+      }
+    }
+    console.log(`  glossary: ${Object.keys(glossary).length} place names`);
+    /** Places this page mentions (other than itself) whose glossary name is missing from the translation. */
+    const nameMisses = (p: GuideArea, tr: any) => {
+      const { name: _n, ...enRest } = source(p);
+      const { name: _t, ...trRest } = tr;
+      const en = JSON.stringify(enRest), out = JSON.stringify(trRest);
+      return Object.entries(glossary).filter(([e, t]) => e !== p.name && e !== t && en.includes(e) && !out.includes(t)).map(([e]) => e);
+    };
+
+    let done = 0, failed = 0, inconsistent = 0;
     for (const p of todo) {
       const src = source(p);
+      const used = Object.fromEntries(Object.entries(glossary).filter(([e]) => e === p.name || JSON.stringify(src).includes(e)));
+      const names = Object.keys(used).length
+        ? ` Use exactly these ${LANGS[lang]} names for the guide's places, wherever they appear: ${JSON.stringify(used)}.`
+        : '';
       let ok = false;
       for (let attempt = 0; attempt < 2 && !ok; attempt++) {
         try {
-          const tr = await call(`${RULES(lang)}\n${JSON.stringify(src)}`);
-          if (sameShape(src, tr)) {
-            areas[p.slug] = { ...tr, src: p.updatedAt || Date.now() };
-            ok = true;
+          const tr = await call(`${RULES(lang)}${names}\n${JSON.stringify(src)}`);
+          if (!sameShape(src, tr)) continue;
+          const misses = nameMisses(p, tr);
+          // A name mismatch gets one retry; on the last try the page is kept and the mismatch reported.
+          if (misses.length && attempt === 0) continue;
+          if (misses.length) {
+            inconsistent++;
+            console.warn(`  ${p.name}: doesn't use the glossary name for ${misses.join(', ')}`);
           }
+          areas[p.slug] = { ...tr, name: glossary[p.name] || tr.name, src: p.updatedAt || Date.now() };
+          ok = true;
         } catch (e: any) {
           if (attempt) console.warn(`  ${p.name}: ${e?.message}`);
         }
@@ -117,6 +153,7 @@ async function main() {
       }
       if ((done + failed) % 10 === 0) console.log(`  ${done + failed}/${todo.length}`);
     }
+    if (inconsistent) console.log(`  ${inconsistent} page(s) kept with a place name that differs from the glossary (listed above).`);
     // Section headings (an expansion, a character, "Calendar").
     let groupNames: Record<string, string> = { ...(existing.groups || {}) };
     const newGroups = groups.filter((g) => !groupNames[g]);
@@ -131,7 +168,7 @@ async function main() {
     // Remove translations of pages that are no longer published.
     const live = new Set(pages.map((p) => p.slug));
     for (const s of Object.keys(areas)) if (!live.has(s)) delete areas[s];
-    await trRef.set({ lang, areas, groups: groupNames, updatedAt: Date.now() });
+    await trRef.set({ lang, areas, groups: groupNames, glossary, updatedAt: Date.now() });
     await ref.set({ languages: [...new Set([...(info.languages || []), lang])] }, { merge: true });
     console.log(`${lang}: ${done} translated, ${failed} left in English, ${Object.keys(areas).length} pages available in this language.`);
   }
