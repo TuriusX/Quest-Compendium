@@ -26,14 +26,16 @@ async function fetchFullAchievementDetails(appId, steamId) {
     // Check if it's a numeric 64-bit ID or a vanity URL
     let url = '';
     const cacheBuster = `_t=${Date.now()}`;
+    // Always English (l=english plus Steam's language cookie): the achievement guide's tips are matched by English name,
+    // and Steam otherwise answers in whatever language it picks for the request.
     if (/^\d{17}$/.test(steamId)) {
-      url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1&${cacheBuster}`;
+      url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1&l=english&${cacheBuster}`;
     } else {
-      url = `https://steamcommunity.com/id/${steamId}/stats/${appId}/?xml=1&${cacheBuster}`;
+      url = `https://steamcommunity.com/id/${steamId}/stats/${appId}/?xml=1&l=english&${cacheBuster}`;
     }
 
     const profileRes = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', Cookie: 'Steam_Language=english', 'Accept-Language': 'en-US,en;q=0.9' }
     });
     
     if (!profileRes.ok) return null;

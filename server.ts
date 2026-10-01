@@ -732,14 +732,15 @@ async function startServer() {
 
     let url = '';
     // Check if it's a numeric 64-bit ID or a vanity URL
+    // Always English (l=english plus Steam's language cookie): the achievement guide's tips are matched by English name.
     if (/^\d{17}$/.test(steamId)) {
-      url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1`;
+      url = `https://steamcommunity.com/profiles/${steamId}/stats/${appId}/?xml=1&l=english`;
     } else {
-      url = `https://steamcommunity.com/id/${steamId}/stats/${appId}/?xml=1`;
+      url = `https://steamcommunity.com/id/${steamId}/stats/${appId}/?xml=1&l=english`;
     }
 
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: { Cookie: 'Steam_Language=english', 'Accept-Language': 'en-US,en;q=0.9' } });
       if (!response.ok) {
         return res.status(500).json({ error: 'Failed to fetch Steam profile XML' });
       }

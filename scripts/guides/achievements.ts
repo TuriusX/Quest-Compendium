@@ -49,7 +49,10 @@ async function findAppId(name: string): Promise<number | null> {
 
 /** Steam's public achievement list for a game (no key needed). */
 async function steamList(appId: number): Promise<Ach[]> {
-  const r = await fetch(`https://steamcommunity.com/stats/${appId}/achievements/?l=english`);
+  // Always English: Steam otherwise picks the language from the request (browser language or its language cookie).
+  const r = await fetch(`https://steamcommunity.com/stats/${appId}/achievements/?l=english`, {
+    headers: { Cookie: 'Steam_Language=english', 'Accept-Language': 'en-US,en;q=0.9' },
+  });
   if (!r.ok) throw new Error(`Steam returned ${r.status} for the achievement list`);
   const html = await r.text();
   const rows = html.split('class="achieveRow').slice(1);
@@ -114,7 +117,7 @@ async function main() {
     const text = await call(
       `For the video game "${info.game || game}", explain how to unlock each of these Steam achievements. ${areaHint}${versionNote} ` +
         (quick ? 'Use what you know; leave a field empty if unsure. ' : 'Search the web; do not answer from memory. ') +
-        `Write in your own words. ${MISSABLE}Reply with one line per achievement, exactly:\n` +
+        `Write everything in English, in your own words. ${MISSABLE}Reply with one line per achievement, exactly:\n` +
         'ACH: achievement name | missable: yes or no | the guide area where it happens, using an area name from the list above (or empty) | how to unlock it, in one or two short sentences\n' +
         batch.map((a) => `- ${a.name}: ${a.desc || '(hidden achievement)'}`).join('\n'),
       label,
@@ -155,7 +158,7 @@ async function main() {
     const text = await call(
       `Write a 100% achievement roadmap for the video game "${info.game || game}". ${areaHint}${versionNote} ` +
         (quick ? '' : 'Search the web; do not answer from memory. ') +
-        `Write in your own words. ${MISSABLE}Reply with these lines only:\n` +
+        `Write everything in English, in your own words. ${MISSABLE}Reply with these lines only:\n` +
         'TIME: estimated hours to 100%\nDIFFICULTY: x/10\nPLAYTHROUGHS: number needed\n' +
         'STEP: one step of the recommended order (several STEP lines, in order)\n' +
         'NORETURN: a point of no return | what becomes permanently impossible after it (several lines allowed)',
