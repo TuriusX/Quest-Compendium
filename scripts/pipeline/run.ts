@@ -12,6 +12,7 @@
  *        - a guide for a trending new release (careful mode, since the AI doesn't know new games)
  *        - a second pass on new-release guides 3+ weeks later, when wikis have filled in
  *        - upgrading quick pages of games players use to checked pages
+ *        - an achievement guide and roadmap for games players use and the featured guides
  *        - translating guides of games players use into the languages they play in, then into the other languages
  *   3. Runs them with the existing scripts, inside the budget, then publishes the site and deploys it to Netlify.
  *   4. Posts a summary to Discord (if DISCORD_WEBHOOK_URL is set) and saves the month's totals in system/pipeline.
@@ -54,7 +55,7 @@ const FEATURED = (process.env.PIPELINE_FEATURED ||
   .map((s) => s.trim())
   .filter(Boolean);
 
-type Action = { kind: 'build' | 'build-checked' | 'revisit' | 'upgrade' | 'translate'; game: string; key: string; lang?: string; searches: number; why: string };
+type Action = { kind: 'build' | 'build-checked' | 'revisit' | 'upgrade' | 'translate' | 'achievements'; game: string; key: string; lang?: string; searches: number; why: string };
 
 /** Run one of the guide scripts and read what it spent from its summary line. */
 function runScript(args: string[]): { ok: boolean; searches: number; dollars: number; summary: string } {
@@ -118,7 +119,7 @@ async function main() {
       published = snap.size;
       quick = snap.docs.filter((d) => d.data().verified === false && !d.data().upgradeTried).length;
     }
-    const g = { key, info, published, quick, languages: (info?.languages || []) as string[], pipeline: info?.pipeline || {} };
+    const g = { key, info, published, quick, languages: (info?.languages || []) as string[], pipeline: info?.pipeline || {}, hasAch: !!info?.hasAchievements };
     guideCache.set(key, g);
     return g;
   };
@@ -150,6 +151,11 @@ async function main() {
   for (const s of demand) {
     const g = await guideInfo(s.game);
     if (g.quick > 0) add({ kind: 'upgrade', game: s.game, key: g.key, searches: Math.min(400, g.quick * 6), why: `${s.playerCount} players use it; ${g.quick} quick pages to check` });
+  }
+  // Achievement guides: games players use first, then the featured guides (a few dozen searches each).
+  for (const name of [...demand.map((d) => d.game), ...FEATURED]) {
+    const g = await guideInfo(name);
+    if (g.published && !g.hasAch && !g.pipeline.achTried) add({ kind: 'achievements', game: g.info?.game || name, key: g.key, searches: 60, why: 'an achievement guide and roadmap' });
   }
   for (const s of demand) {
     const g = await guideInfo(s.game);
@@ -203,6 +209,10 @@ async function main() {
       await guideRef.set({ pipeline: { ...g.pipeline, newRelease: g.pipeline.newRelease || a.kind === 'build-checked', builtAt: g.pipeline.builtAt || Date.now(), ...(a.kind === 'revisit' ? { revisited: Date.now() } : {}) } }, { merge: true });
     } else if (a.kind === 'upgrade') {
       r = runScript(['scripts/guides/build.ts', '--game', a.game, '--upgrade', '--max-searches', String(Math.min(a.searches, Math.max(50, searchRoom)))]);
+    } else if (a.kind === 'achievements') {
+      r = runScript(['scripts/guides/achievements.ts', '--game', a.game, '--max-searches', String(Math.min(120, Math.max(30, searchRoom)))]);
+      // Not every game has Steam achievements; don't keep retrying one that failed.
+      if (!r.ok) await guideRef.set({ pipeline: { ...g.pipeline, achTried: Date.now() } }, { merge: true });
     } else if (a.kind === 'translate') {
       r = runScript(['scripts/guides/translate-guide.ts', '--game', a.game, '--lang', a.lang!]);
     }

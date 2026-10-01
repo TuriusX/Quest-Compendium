@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Check, ChevronDown, ChevronRight, ArrowLeft, Gem, Skull, Sparkles, TriangleAlert, MapPin, Play, MessageCircleQuestion } from './icons';
 import { getApiBaseUrl } from '../utils/api';
 import { useLocale, useT } from '../i18n';
+import { achKey, useAchievementGuide } from '../utils/achievementGuide';
+import type { Achievement } from '../types';
 
 /**
  * Quest Compendium's own guides, read natively in the app: all games -> a game's areas -> an area page.
@@ -63,7 +65,21 @@ const readDone = (key: string, slug: string) => {
   }
 };
 
-export function QcGuidesView({ gameName, place, onAsk }: { gameName?: string; place?: string; onAsk?: (question: string) => void }) {
+export function QcGuidesView({
+  gameName,
+  place,
+  onAsk,
+  openRequest,
+  achievements,
+}: {
+  gameName?: string;
+  place?: string;
+  onAsk?: (question: string) => void;
+  /** Open this area (from the achievements drawer's "In the guide"). */
+  openRequest?: { slug: string; n: number } | null;
+  /** The player's Steam achievements (unlocked or not), for "Achievements here". */
+  achievements?: Achievement[];
+}) {
   const t = useT();
   guideLang = useLocale();
   const [stack, setStack] = useState<View[]>([{ view: 'games' }]);
@@ -93,6 +109,11 @@ export function QcGuidesView({ gameName, place, onAsk }: { gameName?: string; pl
       alive = false;
     };
   }, [gameName, guideLang]);
+
+  useEffect(() => {
+    if (openRequest?.slug && guide) openArea(guide.key, openRequest.slug, guide.game);
+  }, [openRequest?.n, guide?.key]);
+  const achGuide = useAchievementGuide(gameName);
 
   // The player moved on: offer a jump to their new area instead of moving the page they're reading.
   const hereArea = useMemo(() => (guide && place ? guide.areas.find((a) => samePlace(a.name, place)) : undefined), [guide, place]);
@@ -137,6 +158,8 @@ export function QcGuidesView({ gameName, place, onAsk }: { gameName?: string; pl
               gameKey={view.key}
               slug={view.slug}
               onAsk={onAsk}
+              achHere={achGuide && achGuide.key === view.key ? achGuide.list.filter((a) => a.area === view.slug) : []}
+              achievements={achievements}
               onGo={(a) => setStack((s) => [...s.slice(0, -1), { view: 'area', key: view.key, slug: a.slug, game: view.game }])}
             />
           )}
@@ -265,7 +288,21 @@ function AreaList({ gameKey, here, onPick }: { gameKey: string; here?: string; o
   );
 }
 
-function AreaPage({ gameKey, slug, onGo, onAsk }: { gameKey: string; slug: string; onGo: (a: Area) => void; onAsk?: (q: string) => void }) {
+function AreaPage({
+  gameKey,
+  slug,
+  onGo,
+  onAsk,
+  achHere = [],
+  achievements = [],
+}: {
+  gameKey: string;
+  slug: string;
+  onGo: (a: Area) => void;
+  onAsk?: (q: string) => void;
+  achHere?: { name: string; desc: string; missable?: boolean; how?: string; icon?: string }[];
+  achievements?: Achievement[];
+}) {
   const t = useT();
   const s = useApi<Page>(`/api/guides/${encodeURIComponent(gameKey)}/${encodeURIComponent(slug)}`);
   const order = useApi<{ areas: Area[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
@@ -392,6 +429,32 @@ function AreaPage({ gameKey, slug, onGo, onAsk }: { gameKey: string; slug: strin
         </section>
       )}
 
+      {achHere.length > 0 &&
+        fold(
+          'achievements',
+          t('qcg.achHere'),
+          <Sparkles className="w-4 h-4 text-[var(--accent-color)]" />,
+          <div className="space-y-1.5">
+            {achHere
+              .slice()
+              .sort((a, b) => Number(!!b.missable) - Number(!!a.missable))
+              .map((a) => {
+                const mine = achievements.find((x) => achKey(x.name) === achKey(a.name));
+                return (
+                  <div key={a.name} className={`px-3 py-2 rounded-lg bg-white/[0.03] text-sm ${mine?.unlocked ? 'opacity-60' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-zinc-100">{mine?.unlocked ? '✓ ' : ''}{a.name}</span>
+                      {a.missable && !mine?.unlocked && <span className="text-[10px] font-bold uppercase text-amber-300">{t('ach.missable')}</span>}
+                    </div>
+                    {a.how && <p className="text-xs text-zinc-400 mt-0.5">{a.how}</p>}
+                  </div>
+                );
+              })}
+          </div>,
+          achHere.length ? achHere.filter((a) => achievements.find((x) => achKey(x.name) === achKey(a.name))?.unlocked).length : undefined,
+          achHere.length,
+          achHere.some((a) => a.missable && !achievements.find((x) => achKey(x.name) === achKey(a.name))?.unlocked),
+        )}
       {otherSec.map((x) =>
         fold(
           `s:${x.title}`,

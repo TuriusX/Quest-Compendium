@@ -116,6 +116,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       localStorage.setItem('qc-main-mode', m);
     } catch {}
   };
+  // "In the guide" from the achievements drawer: switch to the Guide at that area.
+  const [guideOpenReq, setGuideOpenReq] = useState<{ slug: string; n: number } | null>(null);
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const slug = (e as CustomEvent).detail?.slug;
+      if (!slug) return;
+      setMode('guide');
+      setGuideOpenReq({ slug, n: Date.now() });
+    };
+    window.addEventListener('qc-open-guide', onOpen);
+    return () => window.removeEventListener('qc-open-guide', onOpen);
+  }, []);
   // Ctrl+G switches between Ask and Guide.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -879,6 +891,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <QcGuidesView
             gameName={activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name}
             place={activeTab.place?.name || undefined}
+            openRequest={guideOpenReq}
+            achievements={activeGame?.achievements}
             onAsk={(q) => {
               setMode('ask');
               handleSubmit(undefined, q);

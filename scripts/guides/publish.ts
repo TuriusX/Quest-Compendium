@@ -242,7 +242,7 @@ function areaList(gameKey: string, areas: AreaLink[], current: string | null, ba
     .join('');
 }
 
-function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[], prev?: AreaLink, next?: AreaLink, up = '../../../') {
+function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[], prev?: AreaLink, next?: AreaLink, up = '../../../', achs: any[] = []) {
   const items = a.items.map(cleanEntry);
   const miss = items.filter((e) => e.missable);
   const rest = items.filter((e) => !e.missable);
@@ -293,6 +293,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
           }),
         )
         .join('')}
+      ${achs.length ? fold(ui('achHere'), ICON.list, achs.slice().sort((x, y) => Number(!!y.missable) - Number(!!x.missable)).map((x) => `<div class="px-3 py-2 text-sm text-zinc-300"><strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${x.how ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.how)}</span>` : ''}</div>`).join('') + `<p class="px-3 pt-1 text-xs"><a class="text-[#a87ffb] hover:text-white" href="../achievements/index.html">${esc(ui('achLink'))} &rarr;</a></p>`, { open: achs.some((x) => x.missable) }) : ''}
       ${fold(ui('items'), ICON.items, rest.map((e) => checkRow(e.id, itemHtml(e))).join(''), { ids: rest.map((e) => e.id), open: true })}
       ${fold(ui('secrets'), ICON.secrets, a.secrets.map((e) => checkRow(e.id, esc(e.text))).join(''), { ids: a.secrets.map((e) => e.id), open: true })}
       ${fold(ui('enemies'), ICON.enemies, enemies)}
@@ -389,7 +390,7 @@ function updateHomepage(games: { key: string; game: string; published: number; l
 }
 
 /** One game's pages (area pages and the game page) in the current language (setLang). */
-function renderGame(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, t: any, langs: string[], sitemap: string[], allTr: Record<string, any> = {}) {
+function renderGame(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, t: any, langs: string[], sitemap: string[], allTr: Record<string, any> = {}, ach: any = null) {
   const dir = path.join(OUT, LP, 'guides', key);
   fs.mkdirSync(dir, { recursive: true });
   const extra = LANG === 'en' ? 0 : 1; // the language folder adds a level
@@ -423,7 +424,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
         description,
         depth: 3 + extra,
         canonical: `${SITE}/${LP}guides/${key}/${o.slug}/`,
-        body: areaBody(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra)),
+        body: areaBody(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra), LANG === 'en' && ach ? (ach.list || []).filter((x: any) => x.area === o.slug) : []),
         draft,
         guide: key,
         area: o.slug,
@@ -464,6 +465,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           <h1 class="text-3xl font-bold text-white">${esc(ui('gameH1', { game: gameName }))}</h1>
           <p class="text-zinc-400 mt-2">${esc(ui('gameIntro'))}</p>
           <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, ui('statAreas'))}${stat(totalChecks, ui('statThings'))}${stat(missables, ui('statMissables'))}${checked ? stat(checked === links.length ? ui('statAll') : checked, ui('statChecked')) : ''}</div>
+          ${LANG === 'en' && ach ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${(ach.list || []).length} · ${(ach.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
           <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
           <input type="search" data-filter="#qc-area-rows" data-empty="#qc-area-empty" placeholder="${esc(ui('searchAreas'))}" class="mt-6 w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
           <div id="qc-area-rows" class="mt-3">${rows}</div>
@@ -474,6 +476,50 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
     }),
   );
   if (visible.some((o) => byslug.get(o.slug)!.status === 'published')) sitemap.push(`${SITE}/${LP}guides/${key}/`);
+  if (LANG === 'en' && ach?.list?.length) renderAchievements(key, gameName, ach, links, sitemap);
+}
+
+/** The achievement guide page: roadmap, then every achievement (missable first), with ticks saved in the browser. */
+function renderAchievements(key: string, gameName: string, ach: any, links: AreaLink[], sitemap: string[]) {
+  const dir = path.join(OUT, LP, 'guides', key, 'achievements');
+  fs.mkdirSync(dir, { recursive: true });
+  const list: any[] = ach.list.slice().sort((x: any, y: any) => Number(!!y.missable) - Number(!!x.missable) || (y.rarity ?? 0) - (x.rarity ?? 0));
+  const r = ach.roadmap || {};
+  const stat = (v: string, label: string) => (v ? `<div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-lg font-bold text-white">${esc(v)}</div><div class="text-xs text-zinc-500">${esc(label)}</div></div>` : '');
+  const areaName = (slug?: string) => links.find((l) => l.slug === slug)?.name;
+  const row = (x: any) => {
+    const where = x.area && areaName(x.area) ? `<a class="text-[#a87ffb] hover:text-white" href="../${esc(x.area)}/index.html">${esc(ui('achInArea', { area: areaName(x.area)! }))}</a>` : '';
+    const body = `<strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${x.rarity != null ? ` <span class="text-zinc-500 text-xs">${esc(ui('achRarity', { n: x.rarity }))}</span>` : ''}
+      ${x.hidden && !x.how ? '' : x.desc ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.desc)}</span>` : ''}
+      ${x.how ? (x.hidden ? `<details class="mt-1"><summary class="cursor-pointer text-xs text-zinc-500">${esc(ui('achHidden'))}</summary><span class="block text-zinc-300 text-sm mt-1">${esc(x.how)}</span></details>` : `<span class="block text-zinc-300 text-sm mt-1">${esc(x.how)}</span>`) : ''}
+      ${where ? `<span class="block text-xs mt-1">${where}</span>` : ''}`;
+    return `<div data-search="${esc(`${x.name} ${x.hidden ? '' : x.desc || ''} ${areaName(x.area) || ''}`)}">${checkRow(`ach:${x.name}`, body)}</div>`;
+  };
+  fs.writeFileSync(
+    path.join(dir, 'index.html'),
+    page({
+      title: ui('achTitle', { game: gameName, n: list.length }),
+      description: ui('achDesc', { game: gameName, n: list.length }).slice(0, 158),
+      depth: 3,
+      canonical: `${SITE}/guides/${key}/achievements/`,
+      guide: key,
+      area: 'achievements',
+      body: `<div class="max-w-3xl">
+        <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a></p>
+        <h1 class="text-3xl font-bold text-white">${esc(ui('achH1', { game: gameName }))}</h1>
+        <p class="text-zinc-400 mt-2">${esc(ui('achIntro'))}</p>
+        <div class="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">${stat(r.time, ui('rmTime'))}${stat(r.difficulty, ui('rmDifficulty'))}${stat(r.playthroughs, ui('rmPlaythroughs'))}${stat(String(list.filter((x) => x.missable).length || r.missables || ''), ui('rmMissables'))}</div>
+        ${r.noReturn?.length ? `<section class="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-4"><h2 class="flex items-center gap-2 text-base font-bold text-amber-200">${ICON.warn} ${esc(ui('rmNoReturn'))}</h2><ul class="mt-2 space-y-1.5 text-sm text-zinc-200">${r.noReturn.map((n: any) => `<li><strong class="text-white">${esc(n.point)}</strong>: ${esc(n.lost)}</li>`).join('')}</ul></section>` : ''}
+        ${r.steps?.length ? fold(ui('rmSteps'), ICON.list, `<ol class="list-decimal pl-8 space-y-1.5 text-sm text-zinc-300">${r.steps.map((st: string) => `<li>${esc(st)}</li>`).join('')}</ol>`, { open: true }) : ''}
+        <h2 class="mt-8 mb-2 text-lg font-bold text-white">${esc(ui('achAll'))} <span class="text-sm font-normal text-zinc-500" data-count="${esc(list.map((x) => `ach:${x.name}`).join(','))}">0/${list.length}</span></h2>
+        <input type="search" data-filter="#qc-ach-rows" data-empty="#qc-ach-empty" placeholder="${esc(ui('searchAch'))}" class="w-full mb-2 px-4 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
+        <div id="qc-ach-rows">${list.map(row).join('')}</div>
+        <p id="qc-ach-empty" hidden class="mt-3 text-sm text-zinc-500">${esc(ui('noMatches'))}</p>
+        ${cta('../../../', gameName)}
+      </div>`,
+    }),
+  );
+  sitemap.push(`${SITE}/guides/${key}/achievements/`);
 }
 
 /** The guides page: Popular and New rows, then every game with search, sorting and an A–Z bar. */
@@ -555,6 +601,7 @@ async function main() {
       if (t?.areas && Object.keys(t.areas).length) trs[code] = t;
     }
     const langs = ['en', ...Object.keys(trs)];
+    const ach = info.hasAchievements ? (await g.ref.collection('achievements').doc('main').get()).data() || null : null;
     games.push({
       key: g.id, game: String(info.game || g.id), count: visible.length,
       published: visible.filter((o) => byslug.get(o.slug)!.status === 'published').length, langs,
@@ -565,7 +612,7 @@ async function main() {
       const t = trs[code];
       // Drafts are English-only previews.
       const pages = code === 'en' ? visible : visible.filter((o) => byslug.get(o.slug)!.status === 'published');
-      renderGame(g.id, String(info.game || g.id), pages, byslug, t, langs, sitemap, trs);
+      renderGame(g.id, String(info.game || g.id), pages, byslug, t, langs, sitemap, trs, ach);
     }
     setLang('en');
   }

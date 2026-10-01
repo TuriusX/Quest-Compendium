@@ -17,6 +17,7 @@ import { PixelMedal, PixelTrophy, useLofi } from './pixelArt';
 import { Achievement, SteamGameData } from '../types';
 import { playFanfareSound, playBlipSound } from '../utils/audio';
 import { useT } from '../i18n';
+import { achKey, openGuideArea, useAchievementGuide } from '../utils/achievementGuide';
 
 interface AchievementsDrawerProps {
   width: number;
@@ -37,9 +38,14 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
 }) => {
   const t = useT();
   const lofi = useLofi();
-  const [activeView, setActiveView] = useState<'medals' | 'patches'>('medals');
-  const [filter, setFilter] = useState<'all' | 'locked' | 'unlocked' | 'rare'>('all');
+  const [activeView, setActiveView] = useState<'medals' | 'roadmap' | 'patches'>('medals');
+  const [filter, setFilter] = useState<'all' | 'locked' | 'unlocked' | 'rare' | 'missable'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [openTip, setOpenTip] = useState<string | null>(null);
+  // How to get each achievement, which can be missed, and where (from the achievement guide, when the game has one).
+  const guide = useAchievementGuide(gameData?.name);
+  const tipFor = (name: string) => guide?.list.find((x) => achKey(x.name) === achKey(name));
+  const hasMissables = !!guide?.list.some((x) => x.missable);
 
   const achievements = gameData?.achievements || [];
   const patchNotes = gameData?.patchNotes || [];
@@ -60,6 +66,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
       filter === 'all' ? true :
       filter === 'unlocked' ? a.unlocked :
       filter === 'locked' ? !a.unlocked :
+      filter === 'missable' ? !!tipFor(a.name)?.missable && !a.unlocked :
       isRare;
 
     const matchesSearch = 
@@ -145,6 +152,17 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
           <Trophy className="w-3.5 h-3.5 text-amber-400" />
           <span>{t('ach.tabAch', { n: totalCount })}</span>
         </button>
+        {guide?.roadmap && (
+          <button
+            onClick={() => setActiveView('roadmap')}
+            className={`flex-1 py-1.5 px-2 rounded-t-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeView === 'roadmap' ? 'bg-white/[0.08] text-white border-t border-x border-white/10' : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5 text-[var(--accent-color)]" />
+            <span>{t('ach.roadmap')}</span>
+          </button>
+        )}
         <button
           onClick={() => setActiveView('patches')}
           className={`flex-1 py-1.5 px-2 rounded-t-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
@@ -222,7 +240,7 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
           {/* Filter Tabs & Search */}
           <div className="p-3 space-y-2 border-b border-white/[0.08] bg-black/20 flex-shrink-0">
             <div className="flex gap-1">
-              {(['all', 'unlocked', 'locked', 'rare'] as const).map((mode) => (
+              {(['all', 'unlocked', 'locked', 'rare', ...(hasMissables ? (['missable'] as const) : [])] as const).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => {
@@ -262,10 +280,13 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
             ) : (
               filtered.map((ach) => {
                 const isRare = (ach.rarity || 0) < 10;
+                const tip = tipFor(ach.name);
+                const open = openTip === ach.apiname;
 
                 return (
                   <div
                     key={ach.apiname}
+                    onClick={() => tip?.how && setOpenTip(open ? null : ach.apiname)}
                     className={`group rounded-xl border p-3 flex items-start gap-3 transition-all ${
                       ach.unlocked
                         ? isRare 
@@ -309,6 +330,29 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
                       <p className="text-[11px] text-zinc-400 leading-relaxed line-clamp-2">
                         {ach.description}
                       </p>
+                      {tip?.missable && !ach.unlocked && (
+                        <span className="inline-block mt-1 text-[9.5px] font-bold uppercase tracking-wide text-amber-300 bg-amber-500/15 border border-amber-500/30 rounded px-1.5 py-0.5">
+                          {t('ach.missable')}
+                        </span>
+                      )}
+                      {tip?.how && !open && <div className="mt-1 text-[10px] text-[var(--accent-color)]">{t('ach.howTo')} ▸</div>}
+                      {tip?.how && open && (
+                        <div className="mt-1.5 p-2 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] leading-relaxed text-zinc-200">
+                          {tip.how}
+                          {tip.area && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openGuideArea(tip.area!);
+                              }}
+                              className="block mt-1.5 text-[10.5px] font-semibold text-[var(--accent-color)] hover:brightness-125 cursor-pointer"
+                            >
+                              {t('ach.inGuide', { area: tip.areaName || tip.area })} →
+                            </button>
+                          )}
+                        </div>
+                      )}
 
                       {ach.unlocked && ach.unlockDate && (
                         <div className="mt-1 text-[9.5px] font-mono text-zinc-400 flex items-center gap-1">
@@ -323,6 +367,48 @@ export const AchievementsDrawer: React.FC<AchievementsDrawerProps> = ({
             )}
           </div>
         </>
+      ) : activeView === 'roadmap' && guide?.roadmap ? (
+        /* Roadmap to 100% (from the achievement guide) */
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              [t('ach.rmTime'), guide.roadmap.time],
+              [t('ach.rmDifficulty'), guide.roadmap.difficulty],
+              [t('ach.rmPlaythroughs'), guide.roadmap.playthroughs],
+              [t('ach.rmMissables'), guide.roadmap.missables],
+            ]
+              .filter(([, v]) => v)
+              .map(([label, v]) => (
+                <div key={label} className="p-2.5 rounded-xl bg-white/[0.03] border border-white/10">
+                  <div className="text-sm font-bold text-white leading-tight">{v}</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">{label}</div>
+                </div>
+              ))}
+          </div>
+          {!!guide.roadmap.noReturn?.length && (
+            <div className="p-2.5 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] space-y-1.5">
+              <div className="text-xs font-bold text-amber-200">⚠ {t('ach.rmNoReturn')}</div>
+              {guide.roadmap.noReturn.map((n, i) => (
+                <div key={i} className="text-[11px] leading-snug text-zinc-200">
+                  <span className="font-semibold text-white">{n.point}</span>: {n.lost}
+                </div>
+              ))}
+            </div>
+          )}
+          {!!guide.roadmap.steps?.length && (
+            <div>
+              <div className="text-xs font-bold text-white mb-1.5">{t('ach.rmSteps')}</div>
+              <ol className="space-y-1.5">
+                {guide.roadmap.steps.map((s, i) => (
+                  <li key={i} className="flex gap-2 text-[11px] leading-snug text-zinc-300">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-md bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[10px] font-bold text-white flex items-center justify-center">{i + 1}</span>
+                    <span>{s}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
       ) : (
         /* Patch Notes & Updates View */
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5">

@@ -6,6 +6,7 @@
  *   GET /api/guides/find?game=NAME     the guide for a game, matched by name (e.g. the running Steam game)
  *   GET /api/guides/:key               one game's areas in story order: { key, game, areas: [{ slug, name, story }] }
  *   GET /api/guides/:key/:slug         one area page: overview, items, secrets, enemies, shops, tips
+ *   GET /api/guides/:key/achievements  the achievement guide (or /api/achievements?game=NAME)
  *   add ?lang=pt (es, pt, de, fr, ru, ja, ko, zh) to get a translated guide where one exists (English otherwise)
  */
 import type { Express } from 'express';
@@ -140,6 +141,33 @@ export function registerGuidesApi(app: Express): void {
       const name = String(req.query.game ?? '').trim().slice(0, 160);
       const g = name ? await gameAreas(gameKey(name)) : null;
       send(res, g ? localizeAreas(g, await translation(g.key, langOf(req.query.lang))) : { key: null });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
+  // A game's achievement guide (scripts/guides/achievements.ts): Steam's list plus how to get each one, whether it's
+  // missable, the guide area it belongs to, and a roadmap. By guide key, or by game name for the apps.
+  const achievementsFor = (key: string) =>
+    cached(`ach:${key}`, async () => {
+      const d = await getFirestore().collection('guides').doc(key).collection('achievements').doc('main').get();
+      return d.exists ? d.data() : null;
+    });
+  app.get('/api/achievements', async (req, res) => {
+    try {
+      const name = String(req.query.game ?? '').trim().slice(0, 160);
+      const data = name ? await achievementsFor(gameKey(name)) : null;
+      send(res, data ? { key: gameKey(name), ...data } : { key: null });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+  app.get('/api/guides/:key/achievements', async (req, res) => {
+    try {
+      const key = gameKey(String(req.params.key));
+      const data = await achievementsFor(key);
+      if (!data) return res.status(404).json({ error: 'No achievement guide for this game yet.' });
+      send(res, { key, ...data });
     } catch (e) {
       fail(res, e);
     }
