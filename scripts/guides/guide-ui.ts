@@ -46,6 +46,16 @@ export const GUIDE_UI_EN: Record<string, string> = {
   areasCount: '{n} areas',
   areasCountOne: '1 area',
   none: 'The first guides are on their way.',
+  searchGames: 'Search games…',
+  searchAreas: 'Search areas and items…',
+  sortAZ: 'A–Z',
+  sortPopular: 'Most popular',
+  sortNew: 'Newest',
+  popular: 'Popular',
+  newGuides: 'New guides',
+  allGames: 'All games',
+  noMatches: 'Nothing matches that search.',
+  sortLabel: 'Sort',
 };
 export const SOURCE_STRINGS = GUIDE_UI_EN;
 export const HAND_WRITTEN = {};

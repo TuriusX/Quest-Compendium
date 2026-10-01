@@ -367,7 +367,8 @@ const retired = (doc: any) => doc.exists && doc.data()?.status === 'held' && doc
 
 /** Save the page list and layout; after --restructure, hold back old pages that aren't in the new list. */
 async function finishGuide(guideRef: any, order: { slug: string }[], previous: { slug: string; name: string }[]) {
-  await guideRef.set({ game, title: `${game} guide`, areas: order, layout, updatedAt: Date.now() }, { merge: true });
+  const had = (await guideRef.get()).data();
+  await guideRef.set({ game, title: `${game} guide`, areas: order, layout, updatedAt: Date.now(), ...(had?.createdAt ? {} : { createdAt: Date.now() }) }, { merge: true });
   if (!restructure) return;
   const keep = new Set(order.map((o) => o.slug));
   let retired = 0;

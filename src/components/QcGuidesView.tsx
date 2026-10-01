@@ -13,7 +13,7 @@ import { useLocale, useT } from '../i18n';
  * Ticks and the last page are saved on this computer. Every control is a button, so it works with a controller.
  */
 type Game = { key: string; game: string; areas: number };
-type Area = { slug: string; name: string; story: string; group?: string; total?: number };
+type Area = { slug: string; name: string; story: string; group?: string; total?: number; search?: string };
 type Entry = { id: string; name?: string; text?: string; where?: string; weakness?: string; steal?: string; sells?: string; notes?: string; missable?: boolean };
 type Page = {
   key: string; slug: string; name: string; story: string; overview: string;
@@ -160,6 +160,19 @@ function useApi<T>(path: string) {
   return s;
 }
 
+const fold = (x: string) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <input
+      type="search"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full mb-3 px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[var(--accent-border)]"
+    />
+  );
+}
+
 function Note({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-zinc-500 py-4">{children}</p>;
 }
@@ -170,11 +183,18 @@ const rowCls =
 function GamesList({ current, onPick }: { current?: string; onPick: (g: Game) => void }) {
   const t = useT();
   const s = useApi<{ games: Game[] }>('/api/guides');
+  const [q, setQ] = useState('');
   if (s.loading) return <Note>{t('qcg.loading')}</Note>;
   if (s.error || !s.data?.games?.length) return <Note>{t('qcg.none')}</Note>;
-  const games = s.data.games.slice().sort((a, b) => (a.key === current ? -1 : b.key === current ? 1 : 0));
+  const sortName = (n: string) => n.replace(/^(the|a|an)\s+/i, '').toLowerCase();
+  const games = s.data.games
+    .slice()
+    .sort((a, b) => (a.key === current ? -1 : b.key === current ? 1 : sortName(a.game).localeCompare(sortName(b.game))))
+    .filter((g) => !q.trim() || fold(g.game).includes(fold(q.trim())));
   return (
     <div className="space-y-2">
+      <SearchBox value={q} onChange={setQ} placeholder={t('qcg.searchGames')} />
+      {!games.length && <Note>{t('qcg.noMatches')}</Note>}
       {games.map((g) => (
         <button key={g.key} type="button" className={rowCls} onClick={() => onPick(g)}>
           <span className="flex-1 min-w-0">
@@ -192,9 +212,12 @@ function GamesList({ current, onPick }: { current?: string; onPick: (g: Game) =>
 function AreaList({ gameKey, here, onPick }: { gameKey: string; here?: string; onPick: (a: Area, game: string) => void }) {
   const t = useT();
   const s = useApi<{ game: string; areas: Area[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
+  const [q, setQ] = useState('');
   if (s.loading) return <Note>{t('qcg.loading')}</Note>;
   if (s.error || !s.data) return <Note>{t('qcg.none')}</Note>;
-  const areas = s.data.areas;
+  const needle = fold(q.trim());
+  // Search by area name, story note, or anything on the page (items, secrets, enemies).
+  const areas = s.data.areas.filter((a) => !needle || fold(`${a.name} ${a.story} ${a.search || ''}`).includes(needle));
   const lastSlug = ls.get(`qc-guide-last:${gameKey}`);
   const cont = areas.find((a) => a.slug === lastSlug && a.slug !== here);
   const hereA = areas.find((a) => a.slug === here);
@@ -216,7 +239,9 @@ function AreaList({ gameKey, here, onPick }: { gameKey: string; here?: string; o
   );
   return (
     <div className="space-y-2">
-      {(hereA || cont) && (
+      <SearchBox value={q} onChange={setQ} placeholder={t('qcg.searchAreas')} />
+      {!areas.length && <Note>{t('qcg.noMatches')}</Note>}
+      {!needle && (hereA || cont) && (
         <div className="space-y-2 pb-2">
           {hereA && jump(hereA, <MapPin className="w-4 h-4 text-[var(--accent-color)] flex-shrink-0" />, t('qcg.whereYouAre'))}
           {cont && jump(cont, <Play className="w-4 h-4 text-[var(--accent-color)] flex-shrink-0" />, t('qcg.continue'))}

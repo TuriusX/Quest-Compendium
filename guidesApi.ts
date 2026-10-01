@@ -45,6 +45,11 @@ async function gameAreas(key: string) {
         name: String(published.get(o.slug)?.name || o.name),
         story: String(published.get(o.slug)?.story || o.story || ''),
         group: String(o.group || published.get(o.slug)?.group || ''),
+        // Words to find the page by in the apps' search boxes: its item, secret and enemy names.
+        search: (() => {
+          const d: any = published.get(o.slug) || {};
+          return [...(d.items || []).map((e: any) => e.name), ...(d.secrets || []).map((e: any) => e.text), ...(d.enemies || []).map((e: any) => e.name)].filter(Boolean).join(' ').slice(0, 600);
+        })(),
         // How many checklist entries the page has (items, secrets and checklist sections), for progress like "3/8".
         total: (() => {
           const d: any = published.get(o.slug) || {};

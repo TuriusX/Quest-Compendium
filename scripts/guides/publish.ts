@@ -65,7 +65,10 @@ const approve = arg('approve');
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-type AreaLink = { slug: string; name: string; story?: string; group?: string; total: number };
+type AreaLink = { slug: string; name: string; story?: string; group?: string; total: number; search?: string };
+
+/** Words to find a page by: its item and secret names (so searching "Viper" finds the area with that gear). */
+const searchWords = (a: GuideArea) => [...a.items.map((e) => e.name), ...a.secrets.map((e) => e.text), ...a.enemies.map((e) => e.name)].filter(Boolean).join(' ').slice(0, 600);
 
 /** Checklist entries on a page (items, secrets and checklist sections), for progress like "3/8". */
 const totalOf = (a: GuideArea) =>
@@ -97,6 +100,31 @@ const SCRIPT = `
     el.textContent=n>=t?'\u2713':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
   });};
   progress();
+  // Search boxes: hide entries that don't match, and section headings left with nothing under them.
+  var norm=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');};
+  document.querySelectorAll('[data-filter]').forEach(function(inp){
+    var list=document.querySelector(inp.getAttribute('data-filter')), empty=document.querySelector(inp.getAttribute('data-empty')||'#_');
+    if(!list) return;
+    inp.addEventListener('input',function(){
+      var q=norm(inp.value.trim()), shown=0;
+      list.querySelectorAll('[data-search]').forEach(function(el){var ok=!q||norm(el.getAttribute('data-search')).indexOf(q)>=0; el.hidden=!ok; if(ok) shown++;});
+      list.querySelectorAll('[data-head]').forEach(function(h){var g=h.getAttribute('data-head'),any=false;list.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){if(!el.hidden)any=true;});h.hidden=!any;});
+      document.querySelectorAll('[data-hide-when-searching]').forEach(function(el){el.hidden=!!q;});
+      if(empty) empty.hidden=shown>0;
+    });
+  });
+  // Sorting and the A–Z bar on the guides page.
+  var grid=document.querySelector('[data-games]');
+  var sortSel=document.querySelector('[data-sort]');
+  if(grid&&sortSel){sortSel.addEventListener('change',function(){
+    var k=sortSel.value, cards=Array.prototype.slice.call(grid.children);
+    cards.sort(function(a,b){ if(k==='az') return a.getAttribute('data-name').localeCompare(b.getAttribute('data-name')); return (+b.getAttribute('data-'+k))-(+a.getAttribute('data-'+k)) || a.getAttribute('data-name').localeCompare(b.getAttribute('data-name')); });
+    cards.forEach(function(c){grid.appendChild(c);});
+  });}
+  document.querySelectorAll('[data-letter]').forEach(function(btn){btn.addEventListener('click',function(){
+    if(sortSel&&sortSel.value!=='az'){sortSel.value='az';sortSel.dispatchEvent(new Event('change'));}
+    var L=btn.getAttribute('data-letter'), t=grid&&grid.querySelector('[data-first="'+L+'"]'); if(t) t.scrollIntoView({behavior:'smooth',block:'center'});
+  });});
   var c=document.querySelector('[data-continue]');
   if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
     var a=s&&document.querySelector('[data-area-link="'+s+'"]');
@@ -204,10 +232,10 @@ function areaList(gameKey: string, areas: AreaLink[], current: string | null, ba
   let lastGroup = '';
   return areas
     .map((a) => {
-      const head = a.group && a.group !== lastGroup ? `<li class="pt-4 pb-1 px-2 text-[11px] font-bold uppercase tracking-wide text-zinc-500">${esc(a.group)}</li>` : '';
+      const head = a.group && a.group !== lastGroup ? `<li data-head="${esc(a.group)}" class="pt-4 pb-1 px-2 text-[11px] font-bold uppercase tracking-wide text-zinc-500">${esc(a.group)}</li>` : '';
       lastGroup = a.group || lastGroup;
       const here = a.slug === current;
-      return `${head}<li><a href="${base}${esc(a.slug)}/index.html" data-area-link="${esc(a.slug)}" data-name="${esc(a.name)}" class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm ${
+      return `${head}<li data-search="${esc(`${a.name} ${a.search || ''}`)}"${a.group ? ` data-group="${esc(a.group)}"` : ''}><a href="${base}${esc(a.slug)}/index.html" data-area-link="${esc(a.slug)}" data-name="${esc(a.name)}" class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm ${
         here ? 'bg-[#a87ffb]/15 text-white font-semibold border border-[#a87ffb]/30' : 'text-zinc-300 hover:bg-white/[0.05] hover:text-white border border-transparent'
       }"><span class="flex-1 min-w-0 truncate">${esc(a.name)}</span><span data-progress="${esc(gameKey)}|${esc(a.slug)}|${a.total}"></span></a></li>`;
     })
@@ -241,11 +269,12 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     x
       ? `<a href="../${esc(x.slug)}/index.html" class="flex-1 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/40 hover:bg-white/[0.06] px-4 py-3 ${dir === 'next' ? 'text-right' : ''}"><div class="text-[11px] uppercase tracking-wide text-zinc-500">${dir === 'prev' ? `&larr; ${esc(ui('previous'))}` : `${esc(ui('next'))} &rarr;`}</div><div class="text-sm font-semibold text-white truncate">${esc(x.name)}</div></a>`
       : '<span class="flex-1"></span>';
-  const sidebar = `<nav aria-label="${esc(game)} areas" class="qc-scroll">${`<a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>`}<ul class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
+  const box = (id: string) => `<input type="search" data-filter="#${id}" placeholder="${esc(ui('searchAreas'))}" class="w-full mb-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">`;
+  const sidebar = (id: string) => `<nav aria-label="${esc(game)}" class="qc-scroll">${`<a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>`}${box(id)}<ul id="${id}" class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
 
   return `
   <div class="lg:grid lg:grid-cols-[16rem_1fr] lg:gap-8">
-    <aside class="hidden lg:block"><div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto qc-scroll pr-1">${sidebar}</div></aside>
+    <aside class="hidden lg:block"><div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto qc-scroll pr-1">${sidebar('qc-areas-side')}</div></aside>
     <article class="min-w-0 max-w-3xl">
       <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="${up}${LP}guides/index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(game)}</a></p>
       <h1 class="text-3xl font-bold text-white leading-tight">${esc(a.name)}</h1>
@@ -253,7 +282,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         <span>${esc(ui('guideOf', { game }))}${a.story ? ` · ${esc(a.story)}` : ''}</span>
         ${a.verified !== false ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))}</span>` : ''}
       </div>
-      <details class="qc-fold lg:hidden mt-4"><summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white">${ICON.caret} ${esc(ui('allAreas'))}</summary><div class="mt-2 max-h-80 overflow-y-auto qc-scroll">${sidebar}</div></details>
+      <details class="qc-fold lg:hidden mt-4"><summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white">${ICON.caret} ${esc(ui('allAreas'))}</summary><div class="mt-2 max-h-80 overflow-y-auto qc-scroll">${sidebar('qc-areas-mobile')}</div></details>
       ${a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${esc(a.overview)}</p>` : ''}
       ${dontMiss}
       ${otherSec
@@ -369,7 +398,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   const groupOf = (o: any) => String(o.group || byslug.get(o.slug)?.group || '');
   const links: AreaLink[] = visible.map((o: any) => {
     const a = pageOf(o.slug);
-    return { slug: o.slug, name: a.name, story: a.story, group: groupName(groupOf(o)) || undefined, total: totalOf(a) };
+    return { slug: o.slug, name: a.name, story: a.story, group: groupName(groupOf(o)) || undefined, total: totalOf(a), search: searchWords(a) };
   });
   // Only languages that have this page (an untranslated page is English-only).
   const pageLangs = (slug: string) => langs.filter((c) => c === 'en' || allTr[c]?.areas?.[slug]);
@@ -411,9 +440,9 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   let lastGroup = '';
   const rows = links
     .map((l) => {
-      const head = l.group && l.group !== lastGroup ? `<h2 class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">${esc(l.group)}</h2>` : '';
+      const head = l.group && l.group !== lastGroup ? `<h2 data-head="${esc(l.group)}" class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">${esc(l.group)}</h2>` : '';
       lastGroup = l.group || lastGroup;
-      return `${head}<a href="${esc(l.slug)}/index.html" data-area-link="${esc(l.slug)}" data-name="${esc(l.name)}" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+      return `${head}<a data-search="${esc(`${l.name} ${l.story || ''} ${l.search || ''}`)}"${l.group ? ` data-group="${esc(l.group)}"` : ''} href="${esc(l.slug)}/index.html" data-area-link="${esc(l.slug)}" data-name="${esc(l.name)}" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(l.name)}</span>${l.story ? `<span class="block text-sm text-zinc-500 truncate">${esc(l.story)}</span>` : ''}</span>
           <span data-progress="${esc(key)}|${esc(l.slug)}|${l.total}"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
@@ -436,13 +465,54 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           <p class="text-zinc-400 mt-2">${esc(ui('gameIntro'))}</p>
           <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, ui('statAreas'))}${stat(totalChecks, ui('statThings'))}${stat(missables, ui('statMissables'))}${checked ? stat(checked === links.length ? ui('statAll') : checked, ui('statChecked')) : ''}</div>
           <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
-          <div class="mt-6">${rows}</div>
+          <input type="search" data-filter="#qc-area-rows" data-empty="#qc-area-empty" placeholder="${esc(ui('searchAreas'))}" class="mt-6 w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
+          <div id="qc-area-rows" class="mt-3">${rows}</div>
+          <p id="qc-area-empty" hidden class="mt-3 text-sm text-zinc-500">${esc(ui('noMatches'))}</p>
           ${cta('../'.repeat(2 + extra), gameName)}
         </div>`,
       draft: visible.some((o) => byslug.get(o.slug)!.status !== 'published'),
     }),
   );
   if (visible.some((o) => byslug.get(o.slug)!.status === 'published')) sitemap.push(`${SITE}/${LP}guides/${key}/`);
+}
+
+/** The guides page: Popular and New rows, then every game with search, sorting and an A–Z bar. */
+function indexBody(list: { key: string; game: string; count: number; players?: number; created?: number }[]) {
+  // Sorted and lettered without a leading "The"/"A" ("The Witcher 3" goes under W).
+  const sortName = (n: string) => n.replace(/^(the|a|an)\s+/i, '').toLowerCase();
+  const card = (g: (typeof list)[number], tags = true) => {
+    const letter = (sortName(g.game).match(/[a-z0-9]/)?.[0] || '#').toUpperCase().replace(/[0-9]/, '#');
+    return `<a href="${esc(g.key)}/index.html"${tags ? ` data-search="${esc(g.game)}" data-name="${esc(sortName(g.game))}" data-popular="${g.players || 0}" data-new="${g.created || 0}" data-l="${letter}"` : ''} class="block rounded-2xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50 hover:bg-white/[0.06] p-5"><div class="font-bold text-white leading-snug">${esc(g.game)}</div><div class="mt-1 text-sm text-zinc-400">${esc(g.count === 1 ? ui('areasCountOne') : ui('areasCount', { n: g.count }))}</div></a>`;
+  };
+  const az = list.slice().sort((x, y) => sortName(x.game).localeCompare(sortName(y.game)));
+  // Mark the first game of each letter, for the A–Z bar.
+  const seen = new Set<string>();
+  const cards = az
+    .map((g) => {
+      const html = card(g);
+      const l = html.match(/data-l="([^"]+)"/)![1];
+      if (seen.has(l)) return html;
+      seen.add(l);
+      return html.replace(' data-l=', ` data-first="${l}" data-l=`);
+    })
+    .join('');
+  const popular = list.filter((g) => (g.players || 0) > 0).sort((a, b) => (b.players || 0) - (a.players || 0)).slice(0, 4);
+  const fresh = list.slice().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 4);
+  const row = (title: string, items: typeof list) =>
+    items.length ? `<section data-hide-when-searching class="mb-8"><h2 class="text-lg font-bold text-white mb-3">${esc(title)}</h2><div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">${items.map((g) => card(g, false)).join('')}</div></section>` : '';
+  const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].filter((l) => seen.has(l));
+  return `<h1 class="text-3xl font-bold text-white">${esc(ui('indexH1'))}</h1><p class="text-zinc-400 mt-2 mb-6 max-w-2xl">${esc(ui('indexIntro', { n: list.length }))}</p>
+    ${list.length > 8 ? row(ui('popular'), popular) + row(ui('newGuides'), fresh) : ''}
+    <div class="flex flex-col sm:flex-row gap-3 sm:items-center mb-3">
+      <h2 class="text-lg font-bold text-white sm:mr-auto">${esc(ui('allGames'))}</h2>
+      <input type="search" data-filter="[data-games]" data-empty="#qc-games-empty" placeholder="${esc(ui('searchGames'))}" class="sm:w-72 px-4 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
+      <label class="flex items-center gap-2 text-sm text-zinc-400">${esc(ui('sortLabel'))}
+        <select data-sort class="px-3 py-2 rounded-xl bg-[#0c0d14] border border-white/10 text-white"><option value="az">${esc(ui('sortAZ'))}</option>${popular.length ? `<option value="popular">${esc(ui('sortPopular'))}</option>` : ''}<option value="new">${esc(ui('sortNew'))}</option></select>
+      </label>
+    </div>
+    ${letters.length > 5 ? `<div data-hide-when-searching class="flex flex-wrap gap-1 mb-4">${letters.map((l) => `<button type="button" data-letter="${l}" class="w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-[#a87ffb]/20 text-sm text-zinc-300 hover:text-white">${l}</button>`).join('')}</div>` : ''}
+    <div data-games class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">${cards}</div>
+    <p id="qc-games-empty" hidden class="mt-3 text-sm text-zinc-500">${esc(ui('noMatches'))}</p>`;
 }
 
 async function main() {
@@ -458,7 +528,14 @@ async function main() {
   const sitemap: string[] = [`${SITE}/`, `${SITE}/guides/`];
   // Language versions of the main page (made by scripts/i18n/translate-site.ts).
   for (const code of Object.keys(HOME_GUIDES)) if (code !== 'en' && fs.existsSync(path.join(OUT, code, 'index.html'))) sitemap.push(`${SITE}/${code}/`);
-  const games: { key: string; game: string; count: number; published: number; langs: string[] }[] = [];
+  const games: { key: string; game: string; count: number; published: number; langs: string[]; players?: number; created?: number }[] = [];
+  // How many players use each game (gameStats, recorded by the server), for "Popular".
+  const playersBy = new Map<string, number>();
+  try {
+    for (const d of (await db().collection('gameStats').get()).docs) playersBy.set(d.id, Array.isArray(d.data().players) ? d.data().players.length : 0);
+  } catch {
+    /* no popularity data */
+  }
   const show = (s: string) => s === 'published' || (withDrafts && s === 'draft');
   // Translated guides are rebuilt from scratch too.
   for (const code of Object.keys(LANG_TAG)) if (code !== 'en') fs.rmSync(path.join(OUT, code, 'guides'), { recursive: true, force: true });
@@ -478,7 +555,11 @@ async function main() {
       if (t?.areas && Object.keys(t.areas).length) trs[code] = t;
     }
     const langs = ['en', ...Object.keys(trs)];
-    games.push({ key: g.id, game: String(info.game || g.id), count: visible.length, published: visible.filter((o) => byslug.get(o.slug)!.status === 'published').length, langs });
+    games.push({
+      key: g.id, game: String(info.game || g.id), count: visible.length,
+      published: visible.filter((o) => byslug.get(o.slug)!.status === 'published').length, langs,
+      players: playersBy.get(g.id) || 0, created: Number(info.createdAt || info.updatedAt || 0),
+    });
     for (const code of langs) {
       setLang(code);
       const t = trs[code];
@@ -506,16 +587,7 @@ async function main() {
         canonical: `${SITE}/${langPath(code)}guides/`,
         langs: langsWithGuides,
         path: 'guides/',
-        body: `<h1 class="text-3xl font-bold text-white">${esc(ui('indexH1'))}</h1><p class="text-zinc-400 mt-2 mb-6 max-w-2xl">${esc(ui('indexIntro', { n: list.length }))}</p>${
-          `<div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">${list
-            .slice()
-            .sort((x, y) => x.game.localeCompare(y.game))
-            .map(
-              (g) =>
-                `<a href="${esc(g.key)}/index.html" class="block rounded-2xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50 hover:bg-white/[0.06] p-5"><div class="font-bold text-white leading-snug">${esc(g.game)}</div><div class="mt-1 text-sm text-zinc-400">${esc(g.count === 1 ? ui('areasCountOne') : ui('areasCount', { n: g.count }))}</div></a>`,
-            )
-            .join('')}</div>`
-        }${code !== 'en' && list.length < games.length ? `<p class="mt-8"><a href="../../guides/index.html" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('indexMore'))} &rarr;</a></p>` : ''}`,
+        body: `${indexBody(list)}${code !== 'en' && list.length < games.length ? `<p class="mt-8"><a href="../../guides/index.html" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('indexMore'))} &rarr;</a></p>` : ''}`,
       }),
     );
     if (code !== 'en') sitemap.push(`${SITE}/${code}/guides/`);
