@@ -102,6 +102,13 @@ async function main() {
   if (edition.remake) console.log(`  edition: the ${edition.year ? `${edition.year} ` : ''}${edition.kind} of ${edition.original || 'an earlier game'}${edition.originalYear ? ` (${edition.originalYear})` : ''}`);
   const versionNote = editionNote(edition, info.game || game!);
 
+  // What counts as missable, the same for every game.
+  const MISSABLE =
+    'Missable means only this: the achievement becomes permanently impossible in that playthrough after a specific point ' +
+    'in the story (a quest that closes, an area you can never return to, a one-time choice). These are NOT missable: ' +
+    'difficulty requirements, collectibles or tasks you can still finish later, and anything you can still get in the ' +
+    'post-game or in New Game+. When in doubt, answer no. ';
+
   // How to get each one, 25 at a time.
   for (let i = 0; i < list.length; i += 25) {
     if (!quick && searches >= maxSearches) {
@@ -112,7 +119,7 @@ async function main() {
     const text = await call(
       `For the video game "${info.game || game}", explain how to unlock each of these Steam achievements. ${areaHint}${versionNote} ` +
         (quick ? 'Use what you know; leave a field empty if unsure. ' : 'Search the web; do not answer from memory. ') +
-        'Write in your own words. Reply with one line per achievement, exactly:\n' +
+        `Write in your own words. ${MISSABLE}Reply with one line per achievement, exactly:\n` +
         'ACH: achievement name | missable: yes or no | the guide area where it happens, using an area name from the list above (or empty) | how to unlock it, in one or two short sentences\n' +
         batch.map((a) => `- ${a.name}: ${a.desc || '(hidden achievement)'}`).join('\n'),
       `achievements ${i + 1}-${i + batch.length}`,
@@ -138,15 +145,16 @@ async function main() {
     const text = await call(
       `Write a 100% achievement roadmap for the video game "${info.game || game}". ${areaHint}${versionNote} ` +
         (quick ? '' : 'Search the web; do not answer from memory. ') +
-        'Write in your own words. Reply with these lines only:\n' +
-        'TIME: estimated hours to 100%\nDIFFICULTY: x/10\nPLAYTHROUGHS: number needed\nMISSABLES: how many achievements can be missed\n' +
+        `Write in your own words. ${MISSABLE}Reply with these lines only:\n` +
+        'TIME: estimated hours to 100%\nDIFFICULTY: x/10\nPLAYTHROUGHS: number needed\n' +
         'STEP: one step of the recommended order (several STEP lines, in order)\n' +
-        'NORETURN: a point of no return | what can no longer be done after it (several lines allowed)',
+        'NORETURN: a point of no return | what becomes permanently impossible after it (several lines allowed)',
       'roadmap',
     );
     const get = (k: string) => (text.match(new RegExp(`^\\s*${k}:\\s*(.+)$`, 'im')) || [])[1]?.trim() || '';
     roadmap = {
-      time: get('TIME'), difficulty: get('DIFFICULTY'), playthroughs: get('PLAYTHROUGHS'), missables: get('MISSABLES'),
+      // The missable count is the list's own, so the roadmap and the list always agree.
+      time: get('TIME'), difficulty: get('DIFFICULTY'), playthroughs: get('PLAYTHROUGHS'), missables: String(list.filter((a) => a.missable).length),
       steps: [...text.matchAll(/^\s*STEP:\s*(.+)$/gim)].map((m) => m[1].trim()).slice(0, 15),
       noReturn: [...text.matchAll(/^\s*NORETURN:\s*(.+?)\s*\|\s*(.+)$/gim)].map((m) => ({ point: m[1].trim(), lost: m[2].trim() })).slice(0, 10),
     };
