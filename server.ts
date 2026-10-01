@@ -881,8 +881,12 @@ async function startServer() {
         activeGame,
         achievements,
         news,
-        language = 'English'
+        language: languageRaw = 'English'
       } = req.body;
+      // Only languages the apps offer (the name goes into the AI's instructions, so nothing else is let through).
+      const language = ['English', 'Spanish', 'Brazilian Portuguese', 'German', 'French', 'Russian', 'Japanese', 'Korean', 'Simplified Chinese'].includes(String(languageRaw))
+        ? String(languageRaw)
+        : 'English';
 
       // One seamless mode: Gemini 3.8 Flash with adaptive thinking (it thinks briefly on easy questions and longer on
       // hard ones, up to a medium allowance). Free players get Flash-Lite after the beta. Backstop: Flash-Lite.

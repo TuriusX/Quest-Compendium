@@ -1,34 +1,48 @@
 /**
  * Interface translations for Quest Compendium.
  *
- * - The chosen language lives in settings.language ('en' | 'es' | 'pt'); App mirrors it onto <html lang>,
+ * - The chosen language lives in settings.language (see LOCALES); App mirrors it onto <html lang>,
  *   and every component reads it through useT(). Missing keys fall back to English, then to the key itself.
  * - The same setting is sent to the server with each question, so the AI also answers in that language.
- * - To add a language: add it to LOCALES, add a dictionary below, and translate as many keys as you like.
+ * - To add a language: add it to LOCALES, then run `npx tsx scripts/i18n/translate.ts --target app`, which
+ *   translates every key into locales.generated.ts (English, Spanish and Portuguese below are hand-written; the
+ *   others are AI translations). Lookup order: hand-written, then generated, then English, then the key itself.
  */
 import { useSyncExternalStore } from 'react';
+import { GENERATED } from './locales.generated';
 
-export type Locale = 'en' | 'es' | 'pt';
+export type Locale = 'en' | 'es' | 'pt' | 'de' | 'fr' | 'ru' | 'ja' | 'ko' | 'zh';
 
 export const LOCALES: { id: Locale; label: string; htmlLang: string; aiName: string }[] = [
   { id: 'en', label: 'English', htmlLang: 'en', aiName: 'English' },
   { id: 'es', label: 'Español', htmlLang: 'es', aiName: 'Spanish' },
   { id: 'pt', label: 'Português (Brasil)', htmlLang: 'pt-BR', aiName: 'Brazilian Portuguese' },
+  { id: 'de', label: 'Deutsch', htmlLang: 'de', aiName: 'German' },
+  { id: 'fr', label: 'Français', htmlLang: 'fr', aiName: 'French' },
+  { id: 'ru', label: 'Русский', htmlLang: 'ru', aiName: 'Russian' },
+  { id: 'ja', label: '日本語', htmlLang: 'ja', aiName: 'Japanese' },
+  { id: 'ko', label: '한국어', htmlLang: 'ko', aiName: 'Korean' },
+  { id: 'zh', label: '简体中文', htmlLang: 'zh-CN', aiName: 'Simplified Chinese' },
 ];
+const IDS = LOCALES.map((l) => l.id);
+/** "pt-BR" / "zh-CN" / "ja" -> the app's language code, or null. */
+const fromTag = (tag: string): Locale | null => {
+  const p = tag.toLowerCase().split(/[-_]/)[0];
+  return (IDS as string[]).includes(p) ? (p as Locale) : null;
+};
 
 /** Best guess from the browser / system language. */
 export function detectLocale(): Locale {
   if (typeof navigator === 'undefined') return 'en';
-  const langs = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en']).map((l) => l.toLowerCase());
+  const langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en'];
   for (const l of langs) {
-    if (l.startsWith('es')) return 'es';
-    if (l.startsWith('pt')) return 'pt';
-    if (l.startsWith('en')) return 'en';
+    const id = fromTag(l);
+    if (id) return id;
   }
   return 'en';
 }
 
-export const normalizeLocale = (l: unknown): Locale => (l === 'es' || l === 'pt' || l === 'en' ? l : detectLocale());
+export const normalizeLocale = (l: unknown): Locale => ((IDS as unknown[]).includes(l) ? (l as Locale) : detectLocale());
 
 /** The language name the server puts in the AI's instructions ("Respond entirely in …"). */
 export const aiLanguageName = (l: unknown): string => LOCALES.find((x) => x.id === normalizeLocale(l))!.aiName;
@@ -1245,18 +1259,21 @@ const pt: Dict = {
   'auth.err.generic': 'Não foi possível entrar com o Google. Tente de novo ou continue como convidado.',
 };
 
-const DICTS: Record<Locale, Dict> = { en, es, pt };
+const DICTS: Record<Locale, Dict> = { en, es, pt, de: {}, fr: {}, ru: {}, ja: {}, ko: {}, zh: {} };
+
+/** For the translation script: the English source and the hand-written dictionaries. */
+export const SOURCE_STRINGS = en;
+export const HAND_WRITTEN: Partial<Record<Locale, Dict>> = { es, pt };
 
 // ---- Runtime --------------------------------------------------------------------------------------------------
 const currentLocale = (): Locale => {
   if (typeof document === 'undefined') return 'en';
-  const l = (document.documentElement.lang || 'en').toLowerCase();
-  return l.startsWith('es') ? 'es' : l.startsWith('pt') ? 'pt' : 'en';
+  return fromTag(document.documentElement.lang || 'en') || 'en';
 };
 
 /** Translate outside React (e.g. text saved into a new tab). Uses the current <html lang>. */
 export function translate(key: string, vars?: Record<string, string | number>, locale: Locale = currentLocale()): string {
-  let s = DICTS[locale][key] ?? en[key] ?? key;
+  let s = DICTS[locale][key] ?? GENERATED[locale]?.[key] ?? en[key] ?? key;
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
   return s;
 }

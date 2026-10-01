@@ -227,48 +227,83 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
  * The homepage's "Free guides" section, between the QC-GUIDES markers in Marketing_Website_Files/index.html: a tile per
  * game with published pages, rewritten on every run so it grows with the guides. Draft-only games are left out.
  */
+/** The homepage guides section's own words, per language version of the main page. */
+const HOME_GUIDES: Record<string, { h: string; p: string; all: string; areas: (n: number) => string }> = {
+  en: { h: 'Free guides: what not to miss', p: 'Area-by-area checklists of items, secrets, missables and enemy weaknesses, so you never walk past the good stuff.', all: 'See all guides', areas: (n) => `${n} area${n === 1 ? '' : 's'}` },
+  es: { h: 'Guías gratis: lo que no te puedes perder', p: 'Listas por zona de objetos, secretos, cosas que se pueden perder y debilidades de enemigos, para que nunca pases de largo lo bueno.', all: 'Ver todas las guías', areas: (n) => `${n} ${n === 1 ? 'zona' : 'zonas'}` },
+  pt: { h: 'Guias grátis: o que não perder', p: 'Listas por área de itens, segredos, perdíveis e fraquezas dos inimigos, para você nunca passar batido pelo que importa.', all: 'Ver todos os guias', areas: (n) => `${n} ${n === 1 ? 'área' : 'áreas'}` },
+  de: { h: 'Kostenlose Guides: Was du nicht verpassen solltest', p: 'Checklisten für jedes Gebiet mit Gegenständen, Geheimnissen, verpassbaren Dingen und Gegnerschwächen, damit dir nichts Gutes entgeht.', all: 'Alle Guides ansehen', areas: (n) => `${n} ${n === 1 ? 'Gebiet' : 'Gebiete'}` },
+  fr: { h: 'Guides gratuits : ce qu’il ne faut pas manquer', p: 'Des listes zone par zone d’objets, de secrets, d’éléments manquables et de faiblesses des ennemis, pour ne jamais passer à côté de l’essentiel.', all: 'Voir tous les guides', areas: (n) => `${n} ${n === 1 ? 'zone' : 'zones'}` },
+  ru: {
+    h: 'Бесплатные гайды: что нельзя пропустить',
+    p: 'Чек-листы по локациям: предметы, секреты, то, что легко пропустить, и слабости врагов, чтобы вы ничего не упустили.',
+    all: 'Все гайды',
+    areas: (n) => {
+      const m10 = n % 10, m100 = n % 100;
+      return `${n} ${m10 === 1 && m100 !== 11 ? 'локация' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? 'локации' : 'локаций'}`;
+    },
+  },
+  ja: { h: '無料ガイド：見逃せないもの', p: 'エリアごとのアイテム、秘密、取り逃し要素、敵の弱点をチェックリストで。大事なものを見逃しません。', all: 'すべてのガイドを見る', areas: (n) => `${n}エリア` },
+  ko: { h: '무료 가이드: 놓치면 안 되는 것들', p: '지역별 아이템, 비밀, 놓치기 쉬운 요소, 적의 약점 체크리스트로 중요한 것을 놓치지 마세요.', all: '모든 가이드 보기', areas: (n) => `${n}개 지역` },
+  zh: { h: '免费攻略：不容错过的内容', p: '按区域整理的物品、秘密、可错过要素和敌人弱点清单，让你不再错过任何好东西。', all: '查看全部攻略', areas: (n) => `${n} 个区域` },
+};
+
+/**
+ * The homepage's "Free guides" section, between the QC-GUIDES markers: a tile per game with published pages,
+ * rewritten on every run so it grows with the guides. Done for the English main page and every language version
+ * (Marketing_Website_Files/<lang>/index.html, made by scripts/i18n/translate-site.ts), each in its own language.
+ */
 function updateHomepage(games: { key: string; game: string; published: number }[]) {
-  const file = path.join(OUT, 'index.html');
-  if (!fs.existsSync(file)) return;
-  const html = fs.readFileSync(file, 'utf8');
-  const nl = html.includes('\r\n') ? '\r\n' : '\n';
-  const start = '<!-- QC-GUIDES:START -->';
-  const end = '<!-- QC-GUIDES:END -->';
-  const a = html.indexOf(start);
-  const b = html.indexOf(end);
-  if (a < 0 || b < a) {
-    console.log('Homepage guides section not found (no QC-GUIDES markers); skipped.');
-    return;
+  const pages = [{ code: 'en', file: path.join(OUT, 'index.html'), up: '' }].concat(
+    Object.keys(HOME_GUIDES)
+      .filter((c) => c !== 'en')
+      .map((c) => ({ code: c, file: path.join(OUT, c, 'index.html'), up: '../' })),
+  );
+  let done = 0;
+  for (const pg of pages) {
+    if (!fs.existsSync(pg.file)) continue;
+    const L = HOME_GUIDES[pg.code];
+    const html = fs.readFileSync(pg.file, 'utf8');
+    const nl = html.includes('\r\n') ? '\r\n' : '\n';
+    const start = '<!-- QC-GUIDES:START -->';
+    const end = '<!-- QC-GUIDES:END -->';
+    const a = html.indexOf(start);
+    const b = html.indexOf(end);
+    if (a < 0 || b < a) {
+      console.log(`Homepage guides section not found in ${path.relative(OUT, pg.file)} (no QC-GUIDES markers); skipped.`);
+      continue;
+    }
+    const tiles = games
+      .slice()
+      .sort((x, y) => y.published - x.published)
+      .slice(0, 8)
+      .map(
+        (g) =>
+          `        <a href="${pg.up}guides/${esc(g.key)}/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors">` +
+          `<div class="text-white font-bold leading-snug">${esc(g.game)}</div>` +
+          `<div class="text-sm text-zinc-400 mt-1">${esc(L.areas(g.published))}</div></a>`,
+      )
+      .join(nl);
+    const block = games.length
+      ? [
+          start,
+          '      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">',
+          '        <div>',
+          `          <h2 class="text-2xl sm:text-3xl font-bold text-white">${esc(L.h)}</h2>`,
+          `          <p class="text-zinc-400 mt-2 max-w-2xl">${esc(L.p)}</p>`,
+          '        </div>',
+          `        <a href="${pg.up}guides/index.html" class="text-[#a87ffb] hover:text-white font-semibold whitespace-nowrap">${esc(L.all)} &rarr;</a>`,
+          '      </div>',
+          '      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">',
+          tiles,
+          '      </div>',
+          end,
+        ].join(nl)
+      : `${start}${nl}${end}`;
+    fs.writeFileSync(pg.file, html.slice(0, a) + block + html.slice(b + end.length));
+    done++;
   }
-  const tiles = games
-    .slice()
-    .sort((x, y) => y.published - x.published)
-    .slice(0, 8)
-    .map(
-      (g) =>
-        `        <a href="guides/${esc(g.key)}/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors">` +
-        `<div class="text-white font-bold leading-snug">${esc(g.game)}</div>` +
-        `<div class="text-sm text-zinc-400 mt-1">${g.published} area${g.published === 1 ? '' : 's'}</div></a>`,
-    )
-    .join(nl);
-  const block = games.length
-    ? [
-        start,
-        '      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">',
-        '        <div>',
-        '          <h2 class="text-2xl sm:text-3xl font-bold text-white">Free guides: what not to miss</h2>',
-        '          <p class="text-zinc-400 mt-2 max-w-2xl">Area-by-area checklists of items, secrets, missables and enemy weaknesses, so you never walk past the good stuff.</p>',
-        '        </div>',
-        '        <a href="guides/index.html" class="text-[#a87ffb] hover:text-white font-semibold whitespace-nowrap">See all guides &rarr;</a>',
-        '      </div>',
-        '      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">',
-        tiles,
-        '      </div>',
-        end,
-      ].join(nl)
-    : `${start}${nl}${end}`;
-  fs.writeFileSync(file, html.slice(0, a) + block + html.slice(b + end.length));
-  console.log(`Homepage guides section updated: ${Math.min(games.length, 8)} game(s) shown.`);
+  console.log(`Homepage guides section updated on ${done} page(s): ${Math.min(games.length, 8)} game(s) shown.`);
 }
 
 async function main() {
@@ -282,6 +317,8 @@ async function main() {
   // Start clean, so pages from an earlier preview (drafts) never get uploaded by accident.
   fs.rmSync(path.join(OUT, 'guides'), { recursive: true, force: true });
   const sitemap: string[] = [`${SITE}/`, `${SITE}/guides/`];
+  // Language versions of the main page (made by scripts/i18n/translate-site.ts).
+  for (const code of Object.keys(HOME_GUIDES)) if (code !== 'en' && fs.existsSync(path.join(OUT, code, 'index.html'))) sitemap.push(`${SITE}/${code}/`);
   const games: { key: string; game: string; count: number; published: number }[] = [];
   const show = (s: string) => s === 'published' || (withDrafts && s === 'draft');
 
