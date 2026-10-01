@@ -22,7 +22,7 @@
     "itch:zip": "npm run build && python3 -c \"import zipfile, os; z = zipfile.ZipFile('quest-compendium-itch.zip', 'w', zipfile.ZIP_DEFLATED); [z.write(os.path.join(r, f), os.path.relpath(os.path.join(r, f), 'dist')) for r, d, files in os.walk('dist') for f in files if not f.startswith('server.cjs')]; z.close(); print('Built quest-compendium-itch.zip')\""
   },
   "dependencies": {
-    "@ghostery/adblocker-electron": "^2.18.2",
+    "@ghostery/adblocker-electron": "2.9.0",
     "@google/genai": "^2.21.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
