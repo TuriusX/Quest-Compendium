@@ -41,6 +41,10 @@ export const SITE_LANGS: { code: string; tag: string; label: string; name: strin
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 const hasWords = (s: string) => /\p{L}{2,}/u.test(s);
+const has = (map: Record<string, string>, k: string) => Object.prototype.hasOwnProperty.call(map, k);
+/** Write a file with the line endings it already has (or the given default for a new file). */
+const eolOf = (file: string, fallback = '\n') => (fs.existsSync(file) ? (fs.readFileSync(file, 'utf8').includes('\r\n') ? '\r\n' : '\n') : fallback);
+const withEol = (s: string, eol: string) => s.replace(/\r?\n/g, eol);
 
 /** Split the page into parts that may be translated and parts that must stay exactly as they are. */
 function segments(html: string): { text: string; locked: boolean }[] {
@@ -80,10 +84,30 @@ export function collect(html: string): Set<string> {
   return found;
 }
 
+/**
+ * Texts that sit right next to an inline element in a sentence ("Press" <kbd>Ctrl + V</kbd> "to paste"). Some languages
+ * need no words on one side of it, so an empty translation is fine for these.
+ */
+export function fragments(html: string): Set<string> {
+  const found = new Set<string>();
+  const INLINE = /^<\/?(kbd|strong|em|b|a|code)\b/i;
+  for (const seg of segments(html)) {
+    if (seg.locked) continue;
+    for (const m of seg.text.matchAll(TEXT_RE)) {
+      const t = decode(m[1]).trim();
+      if (!hasWords(t)) continue;
+      const before = seg.text.slice(seg.text.lastIndexOf('<', m.index!), m.index! + 1);
+      const after = seg.text.slice(m.index! + m[0].length - 1, seg.text.indexOf('>', m.index! + m[0].length - 1) + 1);
+      if ((before.startsWith('</') && INLINE.test(before)) || (!after.startsWith('</') && INLINE.test(after))) found.add(t);
+    }
+  }
+  return found;
+}
+
 export function applyMap(html: string, map: Record<string, string>): string {
   const swap = (raw: string) => {
     const t = decode(raw).trim();
-    if (!map[t]) return raw;
+    if (!has(map, t)) return raw;
     const lead = raw.match(/^\s*/)![0], trail = raw.match(/\s*$/)![0];
     return lead + esc(map[t]) + trail;
   };
@@ -138,18 +162,20 @@ async function main() {
   let src = fs.readFileSync(srcFile, 'utf8');
   if (!src.includes('QC-LANGS:START') || !src.includes('QC-HREFLANG:START')) throw new Error('index.html is missing the QC-LANGS / QC-HREFLANG markers');
 
-  // The English page gets the menu and hreflang tags too.
-  src = setBlock(setBlock(src, 'LANGS', langMenu('en', 0)), 'HREFLANG', hreflang());
+  // The English page gets the menu and hreflang tags too. Every page keeps the English page's line endings.
+  const eol = eolOf(srcFile);
+  src = withEol(setBlock(setBlock(src, 'LANGS', langMenu('en', 0)), 'HREFLANG', hreflang()), eol);
   fs.writeFileSync(srcFile, src);
 
   const strings = [...collect(src)];
+  const frag = fragments(src);
   fs.mkdirSync(CACHE, { recursive: true });
   let dollars = 0;
   for (const lang of SITE_LANGS.filter((l) => l.code !== 'en')) {
     if (onlyArg.length && !onlyArg.includes(lang.code)) continue;
     const cacheFile = path.join(CACHE, `${lang.code}.json`);
     const cache: Record<string, string> = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, 'utf8')) : {};
-    const todo = strings.filter((s) => !cache[s]);
+    const todo = strings.filter((s) => !has(cache, s));
     console.log(`${lang.code}: ${strings.length} texts, ${todo.length} to translate`);
     for (let i = 0; i < todo.length; i += 40) {
       const batch = todo.slice(i, i + 40);
@@ -157,7 +183,9 @@ async function main() {
         `Translate these texts from the website of Quest Compendium (an AI game guide app) into ${lang.name}. Reply with a ` +
         'JSON array of the translations, in the same order and the same number of items. Keep product and platform names ' +
         '(Quest Compendium, Steam, Steam Deck, Windows, Discord, Decky Loader, Gemini, Google, Premium), prices and ' +
-        'keyboard keys as they are. Natural, friendly marketing tone for gamers; keep headings short.\n' +
+        'keyboard keys as they are. Natural, friendly marketing tone for gamers; keep headings short. Some texts are the ' +
+        'parts of one sentence split around a keyboard key or bold words: translate them so the sentence reads naturally ' +
+        'in that order, and use an empty string for a part the language doesn\'t need.\n' +
         JSON.stringify(batch);
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
@@ -171,7 +199,7 @@ async function main() {
           const arr = JSON.parse(String(res?.text || '[]').replace(/```json|```/g, '').trim());
           if (!Array.isArray(arr) || arr.length !== batch.length) throw new Error('wrong number of translations');
           batch.forEach((s, k) => {
-            if (typeof arr[k] === 'string' && arr[k].trim()) cache[s] = arr[k].trim();
+            if (typeof arr[k] === 'string' && (arr[k].trim() || frag.has(s))) cache[s] = arr[k].trim();
           });
           break;
         } catch (e: any) {
@@ -179,15 +207,16 @@ async function main() {
         }
       }
     }
-    fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2));
+    fs.writeFileSync(cacheFile, withEol(JSON.stringify(cache, null, 2), eolOf(cacheFile)));
     let page = applyMap(src, cache);
     page = rebase(page)
       .replace(/<html lang="[^"]*"/, `<html lang="${lang.tag}"`)
       .replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${SITE}/${lang.code}/$2`)
       .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${SITE}/${lang.code}/$2`);
     page = setBlock(setBlock(page, 'LANGS', langMenu(lang.code, 1)), 'HREFLANG', hreflang());
-    fs.mkdirSync(path.join(ROOT, lang.code), { recursive: true });
-    fs.writeFileSync(path.join(ROOT, lang.code, 'index.html'), page);
+    const out = path.join(ROOT, lang.code, 'index.html');
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, withEol(page, eolOf(out, eol)));
     console.log(`  wrote ${lang.code}/index.html`);
   }
   console.log(`Done. Estimated cost ≈ $${dollars.toFixed(3)}. Next: npx tsx scripts/guides/publish.ts (fills each version's guides section).`);

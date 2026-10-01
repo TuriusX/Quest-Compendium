@@ -38,6 +38,13 @@ const LANGS: Record<string, string> = {
 };
 
 const placeholders = (s: string) => (s.match(/\{[a-zA-Z0-9_]+\}/g) || []).sort().join(',');
+/**
+ * Keys ending in Pre/Post are the two halves of a sentence split around a key or value ("Press" [Ctrl + V] "to paste…").
+ * Some languages put all the words on one side, so an empty translation is fine for these.
+ */
+const isFragment = (key: string) => /(Pre|Post)$/.test(key);
+/** Write a file with the line endings it already has (CRLF in a Windows checkout); new files get LF. */
+const eolOf = (file: string) => (fs.existsSync(file) && fs.readFileSync(file, 'utf8').includes('\r\n') ? '\r\n' : '\n');
 
 async function main() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -90,7 +97,9 @@ async function main() {
         'placeholder in curly braces exactly as it is (like {n}, {game}, {keys}); keep product names (Quest Compendium, ' +
         'Steam, Steam Deck, Discord, Gemini, Google, Premium) and keyboard keys (Ctrl, Shift, Alt) as they are; keep ' +
         'emoji and symbols; use natural, friendly wording a gamer would expect in this language, and keep labels about ' +
-        'as short as the English.\n' +
+        'as short as the English. Keys ending in Pre and Post are the words before and after a keyboard key or value in ' +
+        'one sentence: translate them so the sentence reads naturally in that order, and use an empty string for a part ' +
+        'the language doesn\'t need.\n' +
         JSON.stringify(batch);
       let parsed: Record<string, string> = {};
       for (let attempt = 0; attempt < 2 && !Object.keys(parsed).length; attempt++) {
@@ -110,7 +119,7 @@ async function main() {
       let ok = 0;
       for (const [k, v] of Object.entries(batch)) {
         const tr = parsed[k];
-        if (typeof tr === 'string' && tr.trim() && placeholders(tr) === placeholders(v)) {
+        if (typeof tr === 'string' && (tr.trim() || isFragment(k)) && placeholders(tr) === placeholders(v)) {
           have[k] = tr;
           ok++;
         }
@@ -124,9 +133,10 @@ async function main() {
     .sort()
     .map((code) => `  ${code}: ${JSON.stringify(out[code], null, 2).replace(/\n/g, '\n  ')},`)
     .join('\n');
+  const eol = eolOf(outFile);
   fs.writeFileSync(
     outFile,
-    `/**\n * AI translations of the interface, written by scripts/i18n/translate.ts in the Quest Compendium repo (run it again\n * after adding English strings or a language). Used after the hand-written dictionaries; anything missing falls back\n * to English.\n */\nexport const GENERATED: Record<string, Record<string, string>> = {\n${body}\n};\n`,
+    `/**\n * AI translations of the interface, written by scripts/i18n/translate.ts in the Quest Compendium repo (run it again\n * after adding English strings or a language). Used after the hand-written dictionaries; anything missing falls back\n * to English.\n */\nexport const GENERATED: Record<string, Record<string, string>> = {\n${body}\n};\n`.replace(/\n/g, eol),
   );
   console.log(`Wrote ${outFile}. Estimated cost ≈ $${dollars.toFixed(3)}.`);
 }
