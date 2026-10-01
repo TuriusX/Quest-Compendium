@@ -282,8 +282,10 @@ export async function steamAchievements(appId: number, lang = 'en'): Promise<{ n
   const r = await fetch(`https://steamcommunity.com/stats/${appId}/achievements/?l=${l}`, { headers: { Cookie: `Steam_Language=${l}` } });
   if (!r.ok) throw new Error(`Steam returned ${r.status}`);
   const html = await r.text();
+  // Windows-1252 control bytes Steam sometimes sends as characters: 0x85 is "…"; the rest of that range is dropped.
   const decode = (x: string) =>
-    x.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+    x.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/\u0085/g, '…').replace(/[\u0080-\u009f]/g, '').replace(/\s+/g, ' ').trim();
   return html
     .split('class="achieveRow')
     .slice(1)

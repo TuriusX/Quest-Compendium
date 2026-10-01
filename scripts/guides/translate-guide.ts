@@ -179,16 +179,31 @@ async function main() {
           const official: { name: string; desc: string; icon: string }[] = await steamAchievements(Number(ach.appId), lang).catch(() => []);
           const byIcon = new Map<string, { name: string; desc: string }>(official.map((o) => [o.icon, o] as [string, { name: string; desc: string }]));
           const items: Record<string, { name?: string; desc?: string; how?: string; areaName?: string }> = {};
-          const withTips = (ach.list as any[]).filter((a) => a.how);
-          for (let i = 0; i < withTips.length; i += 40) {
-            const batch = Object.fromEntries(withTips.slice(i, i + 40).map((a: any) => [a.name, a.how]));
+          // The guide's place names (from the glossary) that the text mentions, so tips use the same names as the guide.
+          const placeNames = (text: string) => {
+            const used = Object.fromEntries(Object.entries(glossary).filter(([en, loc]) => en !== loc && text.includes(en)));
+            return Object.keys(used).length ? ` Use exactly these ${LANGS[lang]} names for the guide's places: ${JSON.stringify(used)}.` : '';
+          };
+          const tipBatch = async (list: any[]) => {
+            const batch = Object.fromEntries(list.map((a: any) => [a.name, a.how]));
             try {
-              const tr = await call(`${RULES(lang)} These are tips for unlocking achievements. Reply with a JSON object with the same keys and the translated tips as values.\n${JSON.stringify(batch)}`);
-              for (const [k, v] of Object.entries(tr || {})) if (typeof v === 'string' && batch[k]) items[k] = { ...(items[k] || {}), how: v };
+              const tr = await call(`${RULES(lang)}${placeNames(JSON.stringify(batch))} These are tips for unlocking achievements. Reply with a JSON object with the same keys and the translated tips as values.\n${JSON.stringify(batch)}`);
+              // Matched while ignoring invisible characters and spacing (the AI doesn't always repeat a name exactly).
+              const loose = (s: string) => s.replace(/[\u0000-\u001f\u0080-\u009f…]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+              const byLoose = new Map(Object.keys(batch).map((k) => [loose(k), k]));
+              for (const [k, v] of Object.entries(tr || {})) {
+                const key = batch[k] ? k : byLoose.get(loose(k));
+                if (typeof v === 'string' && key) items[key] = { ...(items[key] || {}), how: v };
+              }
             } catch {
               /* these tips stay in English */
             }
-          }
+          };
+          const withTips = (ach.list as any[]).filter((a) => a.how);
+          for (let i = 0; i < withTips.length; i += 40) await tipBatch(withTips.slice(i, i + 40));
+          // A long batch sometimes drops one; those get one more, smaller try.
+          const missed = withTips.filter((a) => !items[a.name]?.how);
+          if (missed.length) await tipBatch(missed);
           for (const a of ach.list as any[]) {
             const o = byIcon.get(a.icon);
             const areaName = a.area ? areas[a.area]?.name : undefined;
@@ -197,7 +212,8 @@ async function main() {
           let roadmap = null;
           if (ach.roadmap) {
             try {
-              const r = await call(`${RULES(lang)} This is a roadmap to 100% achievements. Reply with the same JSON object, translated.\n${JSON.stringify({ time: ach.roadmap.time, difficulty: ach.roadmap.difficulty, playthroughs: ach.roadmap.playthroughs, steps: ach.roadmap.steps || [], noReturn: ach.roadmap.noReturn || [] })}`);
+              const src = JSON.stringify({ time: ach.roadmap.time, difficulty: ach.roadmap.difficulty, playthroughs: ach.roadmap.playthroughs, steps: ach.roadmap.steps || [], noReturn: ach.roadmap.noReturn || [] });
+              const r = await call(`${RULES(lang)}${placeNames(src)} This is a roadmap to 100% achievements. Reply with the same JSON object, translated.\n${src}`);
               if (r && Array.isArray(r.steps)) roadmap = r;
             } catch {
               /* the roadmap stays in English */

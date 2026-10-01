@@ -27,8 +27,11 @@ if (!game) {
 
 type Ach = { name: string; desc: string; rarity: number | null; icon: string; hidden: boolean; missable?: boolean; how?: string; area?: string; areaName?: string };
 
+// Steam sometimes sends Windows-1252 control bytes as characters: 0x85 is "…" ("That Is the Evilest Thing…"); the rest
+// of that range is dropped.
 const decode = (s: string) =>
-  s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+  s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\u0085/g, '…').replace(/[\u0080-\u009f]/g, '').replace(/\s+/g, ' ').trim();
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 async function findAppId(name: string): Promise<number | null> {
