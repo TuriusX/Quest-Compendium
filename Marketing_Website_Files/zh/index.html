@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quest Compendium：适用于 PC、网页与 Steam Deck 的 AI 游戏攻略悬浮窗</title>
+  <meta name="description" content="Quest Compendium 是一款能实时识别游戏画面、结合当前情境为你答疑解惑的 AI 游戏向导。无需切出游戏，即可通过 Windows 悬浮窗、网页浏览器或 Steam Deck 获取防剧透提示和 Boss 战技巧。免费试用。">
+  <link rel="canonical" href="https://questcompendium.com/zh/">
+  <!-- QC-HREFLANG:START -->
+  <link rel="alternate" hreflang="en" href="https://questcompendium.com/">
+  <link rel="alternate" hreflang="es" href="https://questcompendium.com/es/">
+  <link rel="alternate" hreflang="pt-BR" href="https://questcompendium.com/pt/">
+  <link rel="alternate" hreflang="de" href="https://questcompendium.com/de/">
+  <link rel="alternate" hreflang="fr" href="https://questcompendium.com/fr/">
+  <link rel="alternate" hreflang="ru" href="https://questcompendium.com/ru/">
+  <link rel="alternate" hreflang="ja" href="https://questcompendium.com/ja/">
+  <link rel="alternate" hreflang="ko" href="https://questcompendium.com/ko/">
+  <link rel="alternate" hreflang="zh-CN" href="https://questcompendium.com/zh/">
+  <link rel="alternate" hreflang="x-default" href="https://questcompendium.com/">
+  <!-- QC-HREFLANG:END -->
+  <meta name="theme-color" content="#07070a">
+  <!-- Plain PNG and ICO icons first: Google's search results only use a square favicon in a size it accepts (a multiple of 48 px). -->
+  <link rel="icon" type="image/png" sizes="192x192" href="../favicon-192.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="../favicon-96.png">
+  <link rel="icon" href="../favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="../icon.svg">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Quest Compendium">
+  <meta property="og:url" content="https://questcompendium.com/zh/">
+  <meta property="og:title" content="Quest Compendium：适用于 PC、网页与 Steam Deck 的 AI 游戏向导">
+  <meta property="og:description" content="能看懂你游戏画面的 AI 向导。无需离开游戏，即刻获取线索、Boss 攻略和防剧透指引。免费试用。">
+  <meta property="og:image" content="https://questcompendium.com/icon.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@QuestCompend">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body {
+      background-color: #07070a;
+      color: #e4e4e7;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+    }
+    html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid #a87ffb; outline-offset: 3px; border-radius: 6px; }
+
+    .qc-pixel { image-rendering: pixelated; }
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] .qc-chevron { transform: rotate(180deg); }
+  </style>
+</head>
+<body id="top" class="antialiased pb-12">
+
+  <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 bg-[#a87ffb] text-black font-bold px-4 py-2 rounded-full">跳转到主要内容</a>
+
+  <!-- Top navigation -->
+  <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5" aria-label="首页">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
+      <a href="#top" class="flex items-center gap-2 font-bold text-white">
+        <img src="../icon.svg" alt="" class="w-8 h-8 qc-pixel">
+        <span>Quest Compendium</span>
+      </a>
+      <div class="hidden md:flex items-center gap-6 text-sm text-zinc-400">
+        <a href="#download" class="hover:text-white transition-colors">下载</a>
+        <a href="#markers" class="hover:text-white transition-colors">标记功能</a>
+        <a href="#steam-deck" class="hover:text-white transition-colors">Steam Deck</a>
+        <a href="../guides/index.html" class="hover:text-white transition-colors">攻略指南</a>
+        <a href="#pricing" class="hover:text-white transition-colors">价格方案</a>
+        <a href="#community" class="hover:text-white transition-colors">社区</a>
+        <a href="#faq" class="hover:text-white transition-colors">常见问题</a>
+      </div>
+      <!-- QC-LANGS:START -->
+      <details class="relative">
+        <summary class="list-none cursor-pointer flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white select-none" aria-label="Language">
+          <i data-lucide="globe" class="w-4 h-4"></i><span>简体中文</span>
+        </summary>
+        <div class="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-[#0c0d14] p-1 shadow-xl z-50">
+          <a href="../index.html" hreflang="en" lang="en" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">English</a>
+          <a href="../es/index.html" hreflang="es" lang="es" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">Español</a>
+          <a href="../pt/index.html" hreflang="pt-BR" lang="pt-BR" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">Português</a>
+          <a href="../de/index.html" hreflang="de" lang="de" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">Deutsch</a>
+          <a href="../fr/index.html" hreflang="fr" lang="fr" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">Français</a>
+          <a href="../ru/index.html" hreflang="ru" lang="ru" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">Русский</a>
+          <a href="../ja/index.html" hreflang="ja" lang="ja" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">日本語</a>
+          <a href="../ko/index.html" hreflang="ko" lang="ko" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">한국어</a>
+          <a href="../zh/index.html" hreflang="zh-CN" lang="zh-CN" class="block px-3 py-1.5 rounded-lg text-sm text-white bg-white/10">简体中文</a>
+        </div>
+      </details>
+      <!-- QC-LANGS:END -->
+    </div>
+  </nav>
+
+  <main id="main">
+
+    <!-- Header / Hero -->
+    <header class="max-w-4xl mx-auto px-6 pt-16 pb-12 text-center">
+      <img src="../logo.svg" alt="Quest Compendium 标志：一本饰有发光 Glain 宝石的像素风魔法书" class="w-24 h-24 mx-auto mb-6 drop-shadow-[0_0_30px_rgba(168,127,251,0.4)]" style="image-rendering: pixelated;">
+
+      <h1 class="text-4xl sm:text-5xl font-bold text-white mb-4 tracking-tight">Quest Compendium</h1>
+      <p class="text-lg sm:text-xl text-zinc-400 mb-3 max-w-2xl mx-auto">
+        能实时看懂你游戏画面的 AI 向导。无需切出游戏，轻松获取过关线索、Boss 打法与沉浸式剧情指引。
+      </p>
+      <p class="text-sm text-zinc-500 mb-8">支持 Windows 悬浮窗、任意浏览器网页端，以及 Steam Deck 插件</p>
+
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-8 py-3 rounded-full hover:bg-white transition-colors shadow-lg text-lg w-full sm:w-auto">
+          <i data-lucide="download" class="w-5 h-5"></i>
+          下载 Windows 版
+        </a>
+        <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+          <i data-lucide="external-link" class="w-5 h-5"></i>
+          启动网页端
+        </a>
+        <a href="#steam-deck" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+          <i data-lucide="gamepad-2" class="w-5 h-5"></i>
+          获取 Steam Deck 版
+        </a>
+      </div>
+      <p class="text-sm text-zinc-500 mt-4">版本 0.3.6 beta，适用于 64 位 Windows。免费试用：每天可提问 10 次，无需信用卡。</p>
+    </header>
+
+    <!-- Download options -->
+    <section id="download" class="max-w-6xl mx-auto px-6 py-12">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white text-center mb-3">获取 Quest Compendium</h2>
+      <p class="text-zinc-400 text-center mb-10">随心选择你的游玩方式，一个账号畅行三大平台。</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col">
+          <i data-lucide="monitor" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Windows 悬浮窗</h3>
+          <p class="text-zinc-400 text-base mb-6">完整体验：支持始终置顶悬浮窗、屏幕高亮标记、手柄操作、通关随手记、Steam 集成以及语音朗读。</p>
+          <div class="mt-auto">
+            <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-6 py-2.5 rounded-full hover:bg-white transition-colors w-full">
+              <i data-lucide="download" class="w-4 h-4"></i> 下载安装程序
+            </a>
+            <p class="text-sm text-zinc-500 mt-3">GitHub 最新发布版。Microsoft Store 版本即将上线。</p>
+            <a href="#faq-smartscreen" class="text-sm text-[#a87ffb] hover:text-white transition-colors">Windows 弹出安全提示？</a>
+          </div>
+        </div>
+
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col">
+          <i data-lucide="globe" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">网页版</h3>
+          <p class="text-zinc-400 text-base mb-6">无需安装任何软件。可在副屏、手机或游戏旁的浏览器标签页中使用。支持以访客身份体验，登录即可同步笔记。</p>
+          <div class="mt-auto">
+            <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-2.5 rounded-full hover:bg-white/20 transition-colors w-full">
+              <i data-lucide="external-link" class="w-4 h-4"></i> 启动网页端
+            </a>
+            <p class="text-sm text-zinc-500 mt-3">适配所有现代浏览器。</p>
+          </div>
+        </div>
+
+        <div id="steam-deck" class="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col">
+          <i data-lucide="gamepad-2" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Steam Deck 插件</h3>
+          <p class="text-zinc-400 text-base mb-4">基于 Decky Loader 的快捷插件。呼出快捷访问菜单，点击诸如“我卡关了”等预设，即可获得完美契合当前战况的解答。针对画面的解答会直接在截屏中标注重点，攻略还能在游戏时保持悬浮显示。</p>
+          <ol class="text-zinc-400 text-sm space-y-2 mb-4 list-decimal list-inside">
+            <li>安装 <a href="https://decky.xyz" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Decky Loader</a></li>
+            <li>在 Decky 的设置中，开启 <strong class="text-white">开发者模式</strong></li>
+            <li>打开 <strong class="text-white">开发者</strong>，选择 <strong class="text-white">通过 URL 安装插件</strong> 并输入：</li>
+          </ol>
+          <code class="block text-xs bg-black/40 border border-white/10 rounded-lg p-3 text-zinc-300 break-all select-all mb-3">https://github.com/TuriusX/Quest-Compendium-Decky/releases/latest/download/quest-compendium-decky.zip</code>
+          <p class="text-sm text-zinc-500 mt-auto">尚未上架 Decky 商店，需手动安装。 <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub 源代码</a></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- On-screen markers: an early feature, described honestly -->
+    <section id="markers" class="max-w-6xl mx-auto px-6 py-12">
+      <div class="bg-white/5 border border-white/10 rounded-2xl p-6 sm:p-8">
+        <p class="inline-flex items-center gap-2 text-sm font-bold text-[#a87ffb] bg-[#a87ffb]/10 border border-[#a87ffb]/30 rounded-full px-3 py-1 mb-4"><i data-lucide="flask-conical" class="w-4 h-4"></i> 抢先体验功能（Windows 客户端）</p>
+        <h2 class="text-2xl sm:text-3xl font-bold text-white mb-3">屏幕标记</h2>
+        <p class="text-zinc-400 mb-8 max-w-3xl">当回答涉及屏幕上的具体内容时，Windows 客户端可以在游戏对应位置放置带编号的小标记，与回答中的清单一一对应。标记功能刚刚上线，仍在不断优化中，目前的体验如下：</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h3 class="text-lg font-bold text-white mb-3">表现出色</h3>
+            <ul class="space-y-3">
+              <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span class="text-zinc-300">2D 和固定视角的游​​戏，如经典 RPG 和俯视视角冒险游戏</span></li>
+              <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span class="text-zinc-300">移动时标记会留在原地，穿过门或切换场景时会淡出</span></li>
+              <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span class="text-zinc-300">勾选清单中的项目后，对应的标记就会消失</span></li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-white mb-3">仍在优化</h3>
+            <ul class="space-y-3">
+              <li class="flex gap-3"><i data-lucide="info" class="w-5 h-5 text-zinc-500 shrink-0 mt-0.5"></i><span class="text-zinc-400">在 3D 游戏中，静止站立时会生成标记，转动视角后标记会淡出</span></li>
+              <li class="flex gap-3"><i data-lucide="info" class="w-5 h-5 text-zinc-500 shrink-0 mt-0.5"></i><span class="text-zinc-400">标记有时可能会稍有偏差，或名称指代过于笼统</span></li>
+              <li class="flex gap-3"><i data-lucide="info" class="w-5 h-5 text-zinc-500 shrink-0 mt-0.5"></i><span class="text-zinc-400">在网页版和 Steam Deck 上，标记会直接显示在回答附带的截图中</span></li>
+            </ul>
+          </div>
+        </div>
+        <p class="text-sm text-zinc-500 mt-8">发现标记在某款游戏中表现异常？欢迎前往 <a href="https://discord.gg/WxdgNMXWyg" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Discord</a>告诉我们；每一条反馈都对我们至关重要。</p>
+      </div>
+    </section>
+
+    <!-- What's new -->
+    <section id="whats-new" class="max-w-6xl mx-auto px-6 pb-12">
+      <div class="border border-white/10 rounded-2xl p-6 sm:p-8">
+        <h2 class="text-xl font-bold text-white mb-4">近期更新</h2>
+        <ul class="space-y-2 text-zinc-400">
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.6:</strong> 攻略一目了然：在应用顶部轻松切换“提问”与“攻略”（Ctrl+G）。攻略会自动定位到你当前所在的区域，实时展示清单进度，优先提示易错过的要素，还能一键询问任一物品详情</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.5:</strong> “当前已知”面板免费展示 Compendium 对你当前位置已掌握的信息；一键即可确认所在位置；本网站还提供了数十款游戏的完整攻略</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.4:</strong> 标记带有简短说明及对应图标，在屏幕上更加稳定；一键向应用告知游戏进度；精准查询敌人弱点；新增“帮我打这场战斗”按钮</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.3:</strong> 每日提问次数现已采用主题色的品牌 Logo 宝石展示</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.2:</strong> 全新像素风格 Logo</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.1:</strong> 3D 游戏中的标记会在转动视角时淡出，并在退出游戏时自动关闭；视觉更清爽，性能占用更低</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="max-w-6xl mx-auto px-6 py-12">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white text-center mb-3">全能覆盖层，所需尽在此处</h2>
+      <p class="text-zinc-400 text-center mb-10">专为硬核玩家打造，获取攻略不破沉浸感。</p>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="layers" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">无缝桌面覆盖层</h3>
+          <p class="text-zinc-400 text-base">平整贴靠屏幕边缘或在游戏旁悬浮展示，提供复古像素风（也可选用经典外观）。</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="brain" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">情境感知 AI</h3>
+          <p class="text-zinc-400 text-base">由 Gemini 强力驱动，可精准识别正在运行的游戏、分析屏幕截图，并针对复杂问题深入推演，始终奉上详尽解答。</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="drama" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">角色扮演与极限流模式</h3>
+          <p class="text-zinc-400 text-base">攻略风格由你决定。选择“极限流”获取纯粹的数值与机制，或选择“角色扮演”获取融入世界观、绝不剧透的巧妙提示。</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="gamepad" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">手柄支持</h3>
+          <p class="text-zinc-400 text-base">无需放下手柄，即可随时唤起覆盖层、选择快捷问题，并使用屏幕虚拟键盘输入。</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="notebook-pen" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">通关随手记</h3>
+          <p class="text-zinc-400 text-base">常驻便签板，随手记录密码锁代号、解密线索和任务目标。一键即可将任意回答保存至笔记。</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="trophy" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Steam 深度整合与游戏指南</h3>
+          <p class="text-zinc-400 text-base">自动检测正在运行的 Steam 游戏，追踪成就进度，并在游戏旁同步打开专属攻略。</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="volume-2" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">语音旁白</h3>
+          <p class="text-zinc-400 text-base">支持语音朗读答案，视线无需离开游戏画面。提供免费内置语音或 Premium Gemini 语音。</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="languages" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">英语、西班牙语与葡萄牙语</h3>
+          <p class="text-zinc-400 text-base">应用界面和攻略答案均支持你的语言，覆盖全平台。</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="cloud" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">一个账号，全端通用</h3>
+          <p class="text-zinc-400 text-base">一次登录，你的图鉴和笔记即可在 Windows、网页版与 Steam Deck 间实时同步。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="max-w-4xl mx-auto px-6 py-12">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white text-center mb-3">运作方式</h2>
+      <p class="text-zinc-400 text-center mb-10">只需三步，轻松脱困。</p>
+      <ol class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <li class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <span class="inline-flex w-9 h-9 items-center justify-center rounded-full bg-[#a87ffb] text-black font-bold mb-4">1</span>
+          <h3 class="text-lg font-bold text-white mb-2">畅玩游戏</h3>
+          <p class="text-zinc-400 text-base">Quest Compendium 可悬浮于游戏之上、置于副屏，或直接整合进 Steam Deck 的快捷访问菜单中。</p>
+        </li>
+        <li class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <span class="inline-flex w-9 h-9 items-center justify-center rounded-full bg-[#a87ffb] text-black font-bold mb-4">2</span>
+          <h3 class="text-lg font-bold text-white mb-2">提问或获取提示</h3>
+          <p class="text-zinc-400 text-base">输入问题、按下快捷键，或直接点击“我卡关了”等快速提示。支持抓取屏幕画面，让 AI 与你所见相同。</p>
+        </li>
+        <li class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <span class="inline-flex w-9 h-9 items-center justify-center rounded-full bg-[#a87ffb] text-black font-bold mb-4">3</span>
+          <h3 class="text-lg font-bold text-white mb-2">屏幕即刻显示答案</h3>
+          <p class="text-zinc-400 text-base">提供详尽解答，支持标准模式、极限收益（Min-Max）模式以及防剧透的角色扮演模式；附带探索清单，Windows 端还支持在目标点位标记屏幕位置。</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- Guides: filled in automatically by scripts/guides/publish.ts on every run (don't edit between the markers) -->
+    <section id="guides" class="max-w-6xl mx-auto px-6 py-12">
+<!-- QC-GUIDES:START -->
+      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+        <div>
+          <h2 class="text-2xl sm:text-3xl font-bold text-white">免费攻略：不容错过的内容</h2>
+          <p class="text-zinc-400 mt-2 max-w-2xl">按区域整理的物品、秘密、可错过要素和敌人弱点清单，让你不再错过任何好东西。</p>
+        </div>
+        <a href="../guides/index.html" class="text-[#a87ffb] hover:text-white font-semibold whitespace-nowrap">查看全部攻略 &rarr;</a>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <a href="../guides/the-witcher-3-wild-hunt-complete-edition/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">The Witcher 3: Wild Hunt - Complete Edition</div><div class="text-sm text-zinc-400 mt-1">70 个区域</div></a>
+        <a href="../guides/fallout-new-vegas/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">Fallout: New Vegas</div><div class="text-sm text-zinc-400 mt-1">65 个区域</div></a>
+        <a href="../guides/fallout-4/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">Fallout 4</div><div class="text-sm text-zinc-400 mt-1">62 个区域</div></a>
+        <a href="../guides/the-elder-scrolls-v-skyrim-special-edition/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">The Elder Scrolls V: Skyrim Special Edition</div><div class="text-sm text-zinc-400 mt-1">61 个区域</div></a>
+        <a href="../guides/baldur-s-gate-3/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">Baldur&#39;s Gate 3</div><div class="text-sm text-zinc-400 mt-1">59 个区域</div></a>
+        <a href="../guides/final-fantasy-vi/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">FINAL FANTASY VI</div><div class="text-sm text-zinc-400 mt-1">55 个区域</div></a>
+        <a href="../guides/dragon-quest-xi-s-echoes-of-an-elusive-age-definitive-edition/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">DRAGON QUEST® XI S: Echoes of an Elusive Age™ - Definitive Edition</div><div class="text-sm text-zinc-400 mt-1">52 个区域</div></a>
+        <a href="../guides/elden-ring/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">ELDEN RING</div><div class="text-sm text-zinc-400 mt-1">50 个区域</div></a>
+      </div>
+<!-- QC-GUIDES:END -->
+    </section>
+
+    <!-- Pricing -->
+    <section id="pricing" class="max-w-4xl mx-auto px-6 py-12">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white text-center mb-10">进阶级游戏伴侣体验</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-8">
+          <h3 class="text-xl font-bold text-white mb-1">免费版</h3>
+          <p class="text-zinc-400 mb-6">先试后买，无需信用卡。</p>
+          <ul class="space-y-3 text-zinc-300">
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">每天 10 次提问</strong>，支持截图提问</span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>适用于 Windows、网页版与 Steam Deck</span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>免费内置旁白语音</span></li>
+          </ul>
+        </div>
+        <div class="bg-[#a87ffb]/10 border border-[#a87ffb]/40 rounded-2xl p-8">
+          <h3 class="text-xl font-bold text-white mb-1">Premium <span class="text-[#a87ffb]">$4.99/月</span></h3>
+          <p class="text-zinc-400 mb-6">专为硬核玩家打造，解锁完整指南体验。</p>
+          <ul class="space-y-3 text-zinc-300">
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">每天 60 次提问</strong></span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>屏幕画面标记（抢先体验功能，Windows）</span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>Premium Gemini 旁白语音</span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>一份订阅，畅享 Windows、网页版与 Steam Deck</span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="text-center text-zinc-400 mt-6"><strong class="text-white">Beta 测试期间，所有玩家均可免费体验全部功能。</strong> 随时在应用内升级。</p>
+    </section>
+
+    <!-- Community -->
+    <section id="community" class="max-w-4xl mx-auto px-6 py-12 text-center">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white mb-3">加入社区</h2>
+      <p class="text-zinc-400 mb-8">关注开发动态，分享你的探索发现，告诉我们你期待的新功能。</p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a id="discord-link" href="#" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-6 py-3 rounded-full hover:bg-white transition-colors w-full sm:w-auto">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18.2 18.2 0 0 0-5.6 0L8.6 3a19.5 19.5 0 0 0-4.9 1.5C.6 9.1-.3 13.6.1 18.1a19.7 19.7 0 0 0 6 3l1.3-2a12.8 12.8 0 0 1-2-1l.5-.4a14 14 0 0 0 12.2 0l.5.4c-.6.4-1.3.7-2 1l1.3 2a19.6 19.6 0 0 0 6-3c.5-5.2-.9-9.7-3.6-13.7ZM8 15.3c-1.2 0-2.2-1.1-2.2-2.5S6.8 10.3 8 10.3s2.2 1.1 2.2 2.5-1 2.5-2.2 2.5Zm8 0c-1.2 0-2.2-1.1-2.2-2.5s1-2.5 2.2-2.5 2.2 1.1 2.2 2.5-1 2.5-2.2 2.5Z"/></svg>
+          加入 Discord
+        </a>
+        <a href="https://www.youtube.com/@questcompendium" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-3 rounded-full hover:bg-white/20 transition-colors w-full sm:w-auto">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8ZM9.6 15.6V8.4l6.3 3.6-6.3 3.6Z"/></svg>
+          YouTube
+        </a>
+        <a href="https://x.com/QuestCompend" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-3 rounded-full hover:bg-white/20 transition-colors w-full sm:w-auto">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.2 2.3h3.4l-7.4 8.4L23 21.7h-6.8l-5.3-6.9-6.1 6.9H1.4l7.9-9L.9 2.3h7l4.8 6.3 5.5-6.3Zm-1.2 17.4h1.9L7 4.2H5l12 15.5Z"/></svg>
+          关注 X
+        </a>
+      </div>
+      <p class="text-sm text-zinc-500 mt-4">YouTube <a href="https://www.youtube.com/@questcompendium" target="_blank" rel="noopener noreferrer" class="text-zinc-300 hover:text-white">@questcompendium</a> 以及 X <a href="https://x.com/QuestCompend" target="_blank" rel="noopener noreferrer" class="text-zinc-300 hover:text-white">@QuestCompend</a></p>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="max-w-3xl mx-auto px-6 py-12">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white text-center mb-10">常见问题</h2>
+      <div class="space-y-3">
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">Quest Compendium 是免费的吗？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">你可以免费试用，每天享 10 次提问，无需信用卡。Premium 为 $4.99/月，每天提供 60 次提问，并解锁屏幕标记和 Gemini 语音等高级功能。Beta 测试期间，所有玩家均可免费体验全部功能。详情请见 <a href="#pricing" class="text-[#a87ffb] hover:text-white">价格方案</a>.</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">什么是屏幕标记？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">当你就屏幕上的内容提问时（比如道具在哪里或该锁定哪个敌人），Windows 版应用会直接在游戏画面的对应位置画上带数字的标签。这还是一项早期功能：在 2D 和固定视角游戏中效果最好，人物走动时标记会留在原位，切换场景时淡出；在 3D 游戏中，标记会在你静止时标出，转动视角后便会淡出。而在网页版和 Steam Deck 上，标记则会直接标在回答附带的截图中。</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">支持哪些游戏？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">只要能在屏幕上显示的游戏都支持。Quest Compendium 能识别你当前玩的游戏并分析截图。它对热门游戏最为了解，不过和所有 AI 一样偶尔也会犯错，关键操作记得核对一下哦。</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">会被反作弊系统封号吗？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">Quest Compendium 是作为独立窗口悬浮在游戏上方运行的，使用的是常规屏幕截图功能。它既不修改游戏文件，也不向游戏注入代码。话虽如此，部分竞技类网游对画面叠加层或截图软件有限制，我们无法保证兼容所有的反作弊系统。如果不确定，建议查看该游戏的规则，或者仅在单机游戏中使用。</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">它会发送哪些数据？发送到哪里？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">提问时，应用会将你的问题、游戏名称以及截图（如果有）发送到 Quest Compendium 服务器，随后转交给 Google 的 Gemini AI 生成回答。如果你登录了账号，笔记和进度还会同步到云端。详情请参阅 <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">隐私政策</a>.</p>
+        </details>
+        <details id="faq-smartscreen" class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">Windows 提示“Windows 已保护你的电脑”，安全吗？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">Quest Compendium 是独立开发者打造的新应用，直接安装包目前尚未进行代码签名，因此 Windows SmartScreen 会弹出警告。如果你信任该软件，请点击 <strong class="text-white">更多信息</strong>，然后点击 <strong class="text-white">仍要运行</strong>。源码已在 <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub</a>上开源。Microsoft Store 版本正在筹备中，届时将不再出现此提示。</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">需要 Steam 账号吗？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">不需要。绑定 Steam 是可选的。绑定后，Quest Compendium 可以自动识别你正在玩的游戏、同步游戏库并追踪成就。</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">如何在 Steam Deck 上安装？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">它是一个 Decky Loader 插件，可以通过 Decky 开发者设置中的链接进行安装。按照上文 <a href="#steam-deck" class="text-[#a87ffb] hover:text-white">Steam Deck 板块</a> 中的步骤操作即可。</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">如何反馈 Bug 或提出功能建议？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">你可以使用应用设置中的“Beta 反馈”按钮， <span class="qc-discord-mention">来我们的 <a href="#community" class="text-[#a87ffb] hover:text-white">Discord</a>, </span>打个招呼，或发送邮件至 <a href="mailto:hello@questcompendium.com" class="text-[#a87ffb] hover:text-white">hello@questcompendium.com</a>.</p>
+        </details>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="max-w-4xl mx-auto px-6 pt-12 text-center text-sm text-zinc-500 border-t border-white/5">
+    <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mb-6">
+      <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">GitHub：Windows 版应用</a>
+      <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">GitHub：Steam Deck 插件</a>
+      <a href="https://www.youtube.com/@questcompendium" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">YouTube</a>
+      <a href="https://x.com/QuestCompend" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">X</a>
+      <a id="discord-footer" href="#" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">Discord</a>
+      <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">隐私政策</a>
+    </div>
+    <p class="mb-2">由 Google Gemini 提供技术支持。Quest Compendium 是一个独立项目，与 Valve、Steam、Microsoft 或 Google 无任何从属或认可关系。</p>
+    <p>&amp;copy; 2026 Quest Compendium</p>
+  </footer>
+
+  <script>
+    // Discord invite link: paste your invite (like https://discord.gg/abc123) between the quotes.
+    // Until it's filled in, the Discord buttons stay hidden so the page never shows a broken link.
+    const DISCORD_INVITE = "https://discord.gg/WxdgNMXWyg";
+
+    const discordLinks = [document.getElementById("discord-link"), document.getElementById("discord-footer")];
+    if (DISCORD_INVITE.startsWith("https://")) {
+      discordLinks.forEach((a) => { a.href = DISCORD_INVITE; });
+    } else {
+      discordLinks.forEach((a) => { a.style.display = "none"; });
+      document.querySelectorAll(".qc-discord-mention").forEach((el) => { el.style.display = "none"; });
+    }
+    lucide.createIcons();
+  </script>
+</body>
+</html>

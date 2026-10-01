@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quest Compendium: overlay de guía de juegos con IA para PC, web y Steam Deck</title>
+  <meta name="description" content="Quest Compendium es una guía de juegos con IA que ve tu pantalla y responde según el contexto de tu partida. Pistas, consejos para jefes y ayuda sin spoilers en un overlay para Windows, en tu navegador o en Steam Deck. Pruébalo gratis.">
+  <link rel="canonical" href="https://questcompendium.com/es/">
+  <!-- QC-HREFLANG:START -->
+  <link rel="alternate" hreflang="en" href="https://questcompendium.com/">
+  <link rel="alternate" hreflang="es" href="https://questcompendium.com/es/">
+  <link rel="alternate" hreflang="pt-BR" href="https://questcompendium.com/pt/">
+  <link rel="alternate" hreflang="de" href="https://questcompendium.com/de/">
+  <link rel="alternate" hreflang="fr" href="https://questcompendium.com/fr/">
+  <link rel="alternate" hreflang="ru" href="https://questcompendium.com/ru/">
+  <link rel="alternate" hreflang="ja" href="https://questcompendium.com/ja/">
+  <link rel="alternate" hreflang="ko" href="https://questcompendium.com/ko/">
+  <link rel="alternate" hreflang="zh-CN" href="https://questcompendium.com/zh/">
+  <link rel="alternate" hreflang="x-default" href="https://questcompendium.com/">
+  <!-- QC-HREFLANG:END -->
+  <meta name="theme-color" content="#07070a">
+  <!-- Plain PNG and ICO icons first: Google's search results only use a square favicon in a size it accepts (a multiple of 48 px). -->
+  <link rel="icon" type="image/png" sizes="192x192" href="../favicon-192.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="../favicon-96.png">
+  <link rel="icon" href="../favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="../icon.svg">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Quest Compendium">
+  <meta property="og:url" content="https://questcompendium.com/es/">
+  <meta property="og:title" content="Quest Compendium: guía de juegos con IA para PC, web y Steam Deck">
+  <meta property="og:description" content="Una guía de juegos con IA que ve tu pantalla y sabe lo que estás mirando. Pistas, consejos para jefes y ayuda sin spoilers sin salir de tu partida. Pruébalo gratis.">
+  <meta property="og:image" content="https://questcompendium.com/icon.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@QuestCompend">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body {
+      background-color: #07070a;
+      color: #e4e4e7;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+    }
+    html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid #a87ffb; outline-offset: 3px; border-radius: 6px; }
+
+    .qc-pixel { image-rendering: pixelated; }
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] .qc-chevron { transform: rotate(180deg); }
+  </style>
+</head>
+<body id="top" class="antialiased pb-12">
+
+  <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 bg-[#a87ffb] text-black font-bold px-4 py-2 rounded-full">Saltar al contenido</a>
+
+  <!-- Top navigation -->
+  <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5" aria-label="Inicio">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
+      <a href="#top" class="flex items-center gap-2 font-bold text-white">
+        <img src="../icon.svg" alt="" class="w-8 h-8 qc-pixel">
+        <span>Quest Compendium</span>
+      </a>
+      <div class="hidden md:flex items-center gap-6 text-sm text-zinc-400">
+        <a href="#download" class="hover:text-white transition-colors">Descargar</a>
+        <a href="#markers" class="hover:text-white transition-colors">Marcadores</a>
+        <a href="#steam-deck" class="hover:text-white transition-colors">Steam Deck</a>
+        <a href="../guides/index.html" class="hover:text-white transition-colors">Guías</a>
+        <a href="#pricing" class="hover:text-white transition-colors">Precios</a>
+        <a href="#community" class="hover:text-white transition-colors">Comunidad</a>
+        <a href="#faq" class="hover:text-white transition-colors">Preguntas frecuentes</a>
+      </div>
+      <!-- QC-LANGS:START -->
+      <details class="relative">
+        <summary class="list-none cursor-pointer flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white select-none" aria-label="Language">
+          <i data-lucide="globe" class="w-4 h-4"></i><span>Español</span>
+        </summary>
+        <div class="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-[#0c0d14] p-1 shadow-xl z-50">
+          <a href="../index.html" hreflang="en" lang="en" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">English</a>
+          <a href="../es/index.html" hreflang="es" lang="es" class="block px-3 py-1.5 rounded-lg text-sm text-white bg-white/10">Español</a>
+          <a href="../pt/index.html" hreflang="pt-BR" lang="pt-BR" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">Português</a>
+          <a href="../de/index.html" hreflang="de" lang="de" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">Deutsch</a>
+          <a href="../fr/index.html" hreflang="fr" lang="fr" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">Français</a>
+          <a href="../ru/index.html" hreflang="ru" lang="ru" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">Русский</a>
+          <a href="../ja/index.html" hreflang="ja" lang="ja" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">日本語</a>
+          <a href="../ko/index.html" hreflang="ko" lang="ko" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">한국어</a>
+          <a href="../zh/index.html" hreflang="zh-CN" lang="zh-CN" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">简体中文</a>
+        </div>
+      </details>
+      <!-- QC-LANGS:END -->
+    </div>
+  </nav>
+
+  <main id="main">
+
+    <!-- Header / Hero -->
+    <header class="max-w-4xl mx-auto px-6 pt-16 pb-12 text-center">
+      <img src="../logo.svg" alt="Logo de Quest Compendium: un libro de hechizos en pixel art con una piedra Glain brillante" class="w-24 h-24 mx-auto mb-6 drop-shadow-[0_0_30px_rgba(168,127,251,0.4)]" style="image-rendering: pixelated;">
+
+      <h1 class="text-4xl sm:text-5xl font-bold text-white mb-4 tracking-tight">Quest Compendium</h1>
+      <p class="text-lg sm:text-xl text-zinc-400 mb-3 max-w-2xl mx-auto">
+        Una guía de juegos con IA que ve tu pantalla y sabe lo que estás mirando. Obtén pistas, consejos para jefes y ayuda integrada a la historia sin salir de tu partida.
+      </p>
+      <p class="text-sm text-zinc-500 mb-8">Overlay para Windows, app web para cualquier navegador y un plugin para Steam Deck</p>
+
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-8 py-3 rounded-full hover:bg-white transition-colors shadow-lg text-lg w-full sm:w-auto">
+          <i data-lucide="download" class="w-5 h-5"></i>
+          Descargar para Windows
+        </a>
+        <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+          <i data-lucide="external-link" class="w-5 h-5"></i>
+          Abrir app web
+        </a>
+        <a href="#steam-deck" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+          <i data-lucide="gamepad-2" class="w-5 h-5"></i>
+          Consíguelo para Steam Deck
+        </a>
+      </div>
+      <p class="text-sm text-zinc-500 mt-4">Versión 0.3.6 beta, Windows de 64 bits. Pruébalo gratis: 10 preguntas al día, sin tarjeta de crédito.</p>
+    </header>
+
+    <!-- Download options -->
+    <section id="download" class="max-w-6xl mx-auto px-6 py-12">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white text-center mb-3">Obtén Quest Compendium</h2>
+      <p class="text-zinc-400 text-center mb-10">Elige cómo jugar. Una sola cuenta funciona en las tres plataformas.</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col">
+          <i data-lucide="monitor" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Overlay para Windows</h3>
+          <p class="text-zinc-400 text-base mb-6">La experiencia completa: un overlay siempre visible con marcadores en pantalla, soporte para controles, bloc de notas de partida, integración con Steam y narración.</p>
+          <div class="mt-auto">
+            <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-6 py-2.5 rounded-full hover:bg-white transition-colors w-full">
+              <i data-lucide="download" class="w-4 h-4"></i> Descargar instalador
+            </a>
+            <p class="text-sm text-zinc-500 mt-3">Última versión en GitHub. Muy pronto en la Microsoft Store.</p>
+            <a href="#faq-smartscreen" class="text-sm text-[#a87ffb] hover:text-white transition-colors">¿Windows muestra una advertencia?</a>
+          </div>
+        </div>
+
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col">
+          <i data-lucide="globe" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">App web</h3>
+          <p class="text-zinc-400 text-base mb-6">No necesitas instalar nada. Úsala en una segunda pantalla, en tu teléfono o en una pestaña del navegador junto a tu juego. Pruébala como invitado o inicia sesión para sincronizar tus notas.</p>
+          <div class="mt-auto">
+            <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-2.5 rounded-full hover:bg-white/20 transition-colors w-full">
+              <i data-lucide="external-link" class="w-4 h-4"></i> Abrir app web
+            </a>
+            <p class="text-sm text-zinc-500 mt-3">Funciona en cualquier navegador moderno.</p>
+          </div>
+        </div>
+
+        <div id="steam-deck" class="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col">
+          <i data-lucide="gamepad-2" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Plugin para Steam Deck</h3>
+          <p class="text-zinc-400 text-base mb-4">Un plugin de Decky Loader. Abre el menú de acceso rápido, toca un ajuste predeterminado como &quot;Estoy atascado&quot; y obtén una respuesta que se adapte a tu juego. Las respuestas sobre tu pantalla destacan las zonas clave en tu captura, y la guía puede quedarse abierta mientras juegas.</p>
+          <ol class="text-zinc-400 text-sm space-y-2 mb-4 list-decimal list-inside">
+            <li>Instalar <a href="https://decky.xyz" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Decky Loader</a></li>
+            <li>En los ajustes de Decky, activa el <strong class="text-white">Modo de desarrollador</strong></li>
+            <li>Abre <strong class="text-white">Desarrollador</strong>, selecciona <strong class="text-white">Instalar plugin desde URL</strong> e ingresa:</li>
+          </ol>
+          <code class="block text-xs bg-black/40 border border-white/10 rounded-lg p-3 text-zinc-300 break-all select-all mb-3">https://github.com/TuriusX/Quest-Compendium-Decky/releases/latest/download/quest-compendium-decky.zip</code>
+          <p class="text-sm text-zinc-500 mt-auto">Aún no está en la tienda de Decky, por lo que se instala manualmente. <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Código fuente en GitHub</a></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- On-screen markers: an early feature, described honestly -->
+    <section id="markers" class="max-w-6xl mx-auto px-6 py-12">
+      <div class="bg-white/5 border border-white/10 rounded-2xl p-6 sm:p-8">
+        <p class="inline-flex items-center gap-2 text-sm font-bold text-[#a87ffb] bg-[#a87ffb]/10 border border-[#a87ffb]/30 rounded-full px-3 py-1 mb-4"><i data-lucide="flask-conical" class="w-4 h-4"></i> Función anticipada, app de Windows</p>
+        <h2 class="text-2xl sm:text-3xl font-bold text-white mb-3">Marcadores en pantalla</h2>
+        <p class="text-zinc-400 mb-8 max-w-3xl">Cuando una respuesta trata sobre algo en tu pantalla, la app de Windows puede colocar pequeñas etiquetas numeradas sobre esos puntos en tu juego, vinculadas a una lista de verificación en la respuesta. Los marcadores son completamente nuevos y siguen mejorando, así que esto es lo que puedes esperar hoy.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h3 class="text-lg font-bold text-white mb-3">Funciona bien</h3>
+            <ul class="space-y-3">
+              <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span class="text-zinc-300">Juegos 2D y con cámara fija, como RPGs clásicos y aventuras cenitales</span></li>
+              <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span class="text-zinc-300">Los marcadores se quedan en su lugar mientras caminas y desaparecen cuando cruzas una puerta o cambia la escena</span></li>
+              <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span class="text-zinc-300">Marca los elementos en la lista de verificación y sus marcadores desaparecerán</span></li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-white mb-3">Aún mejorando</h3>
+            <ul class="space-y-3">
+              <li class="flex gap-3"><i data-lucide="info" class="w-5 h-5 text-zinc-500 shrink-0 mt-0.5"></i><span class="text-zinc-400">En juegos 3D, los marcadores se colocan mientras estás quieto y se desvanecen al girar la cámara</span></li>
+              <li class="flex gap-3"><i data-lucide="info" class="w-5 h-5 text-zinc-500 shrink-0 mt-0.5"></i><span class="text-zinc-400">En ocasiones, un marcador puede quedar un poco desviado o nombrar algo de forma muy general</span></li>
+              <li class="flex gap-3"><i data-lucide="info" class="w-5 h-5 text-zinc-500 shrink-0 mt-0.5"></i><span class="text-zinc-400">En la app web y en Steam Deck, los puntos se marcan en la captura de pantalla dentro de la respuesta</span></li>
+            </ul>
+          </div>
+        </div>
+        <p class="text-sm text-zinc-500 mt-8">¿Encontraste un juego donde no funcionan bien? Cuéntanos en <a href="https://discord.gg/WxdgNMXWyg" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Discord</a>; cada reporte ayuda.</p>
+      </div>
+    </section>
+
+    <!-- What's new -->
+    <section id="whats-new" class="max-w-6xl mx-auto px-6 pb-12">
+      <div class="border border-white/10 rounded-2xl p-6 sm:p-8">
+        <h2 class="text-xl font-bold text-white mb-4">Actualizaciones recientes</h2>
+        <ul class="space-y-2 text-zinc-400">
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.6:</strong> la guía es la protagonista: alterna entre Preguntar y Guía en la parte superior de la app (Ctrl+G). La guía se abre en la zona donde estás, muestra el progreso de tu lista, destaca primero lo que podrías perderte y te permite preguntar sobre cualquier elemento con un solo clic</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.5:</strong> un panel de &quot;Conocido aquí&quot; muestra lo que el Compendium ya sabe sobre tu ubicación, gratis; un toque confirma dónde estás; y guías para decenas de juegos en este sitio web</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.4:</strong> los marcadores muestran una breve nota y un ícono de lo que es cada cosa, y se mantienen estables en pantalla; la app te pregunta dónde estás en el juego con un toque; las debilidades de los enemigos se consultan para mayor precisión; y un nuevo botón de &quot;Ayúdame con esta pelea&quot;</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.3:</strong> tu contador diario de preguntas muestra la piedra de nuestro logo, con el color de tu tema</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.2:</strong> un nuevo logo pixel-art</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.1:</strong> los marcadores en juegos 3D se desvanecen al girar la cámara, se cierran cuando cierras tu juego, lucen más limpios y consumen menos recursos</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="max-w-6xl mx-auto px-6 py-12">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white text-center mb-3">Todo lo que necesitas en un solo overlay</h2>
+      <p class="text-zinc-400 text-center mb-10">Diseñado para gamers dedicados que quieren ayuda sin romper la inmersión.</p>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="layers" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Overlay de escritorio fluido</h3>
+          <p class="text-zinc-400 text-base">Se acopla a la perfección a los bordes de tu pantalla o flota junto a tu juego, con un estilo pixel lo-fi (o clásico, si lo prefieres).</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="brain" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">IA con contexto del juego</h3>
+          <p class="text-zinc-400 text-base">Impulsada por Gemini, reconoce el juego que estás jugando, lee tus capturas de pantalla y se toma más tiempo para pensar cuando la pregunta lo requiere. Respuestas siempre completas.</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="drama" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Modos Roleplay y Min-Max</h3>
+          <p class="text-zinc-400 text-base">Elige cómo quieres que te ayude. Usa Min-Max para estadísticas puras, o Roleplay para pistas acordes al lore que no te arruinen la historia.</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="gamepad" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Soporte para control</h3>
+          <p class="text-zinc-400 text-base">Abre el overlay, elige preguntas rápidas y escribe con un teclado en pantalla sin soltar tu control.</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="notebook-pen" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Bloc de notas de tu partida</h3>
+          <p class="text-zinc-400 text-base">Un bloc persistente para códigos de cerraduras, pistas de acertijos y objetivos de misiones. Guarda cualquier respuesta en tus notas con un solo clic.</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="trophy" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Integración con Steam y guías</h3>
+          <p class="text-zinc-400 text-base">Detecta el juego que estás jugando en Steam, rastrea logros y abre guías junto a tu juego.</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="volume-2" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Narración</h3>
+          <p class="text-zinc-400 text-base">Escucha las respuestas en voz alta para no perderte nada de la acción, con una voz integrada gratuita o voces premium de Gemini.</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="languages" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Inglés, español y portugués</h3>
+          <p class="text-zinc-400 text-base">La app y sus respuestas se adaptan a tu idioma, en cualquier plataforma.</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="cloud" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">Una sola cuenta para todo</h3>
+          <p class="text-zinc-400 text-base">Inicia sesión una vez y lleva tus compendios y notas contigo en Windows, la app web y Steam Deck.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="max-w-4xl mx-auto px-6 py-12">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white text-center mb-3">Cómo funciona</h2>
+      <p class="text-zinc-400 text-center mb-10">De estar atascado a avanzar en tres simples pasos.</p>
+      <ol class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <li class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <span class="inline-flex w-9 h-9 items-center justify-center rounded-full bg-[#a87ffb] text-black font-bold mb-4">1</span>
+          <h3 class="text-lg font-bold text-white mb-2">Juega a tu manera</h3>
+          <p class="text-zinc-400 text-base">Quest Compendium se superpone a tu juego, se coloca a un lado en una segunda pantalla o vive en el menú de acceso rápido de tu Deck.</p>
+        </li>
+        <li class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <span class="inline-flex w-9 h-9 items-center justify-center rounded-full bg-[#a87ffb] text-black font-bold mb-4">2</span>
+          <h3 class="text-lg font-bold text-white mb-2">Pregunta o pide una pista</h3>
+          <p class="text-zinc-400 text-base">Escribe tu duda, presiona un atajo o usa un comando rápido como &quot;Estoy atascado&quot;. Puedes incluir tu pantalla para que la IA vea lo mismo que tú.</p>
+        </li>
+        <li class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <span class="inline-flex w-9 h-9 items-center justify-center rounded-full bg-[#a87ffb] text-black font-bold mb-4">3</span>
+          <h3 class="text-lg font-bold text-white mb-2">Mira la respuesta en pantalla</h3>
+          <p class="text-zinc-400 text-base">Obtén una respuesta detallada en modo Estándar, Min-Max o Roleplay (sin spoilers), con una lista de verificación y, en Windows, marcadores directos en tu pantalla.</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- Guides: filled in automatically by scripts/guides/publish.ts on every run (don't edit between the markers) -->
+    <section id="guides" class="max-w-6xl mx-auto px-6 py-12">
+<!-- QC-GUIDES:START -->
+      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+        <div>
+          <h2 class="text-2xl sm:text-3xl font-bold text-white">Guías gratis: lo que no te puedes perder</h2>
+          <p class="text-zinc-400 mt-2 max-w-2xl">Listas por zona de objetos, secretos, cosas que se pueden perder y debilidades de enemigos, para que nunca pases de largo lo bueno.</p>
+        </div>
+        <a href="../guides/index.html" class="text-[#a87ffb] hover:text-white font-semibold whitespace-nowrap">Ver todas las guías &rarr;</a>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <a href="../guides/the-witcher-3-wild-hunt-complete-edition/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">The Witcher 3: Wild Hunt - Complete Edition</div><div class="text-sm text-zinc-400 mt-1">70 zonas</div></a>
+        <a href="../guides/fallout-new-vegas/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">Fallout: New Vegas</div><div class="text-sm text-zinc-400 mt-1">65 zonas</div></a>
+        <a href="../guides/fallout-4/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">Fallout 4</div><div class="text-sm text-zinc-400 mt-1">62 zonas</div></a>
+        <a href="../guides/the-elder-scrolls-v-skyrim-special-edition/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">The Elder Scrolls V: Skyrim Special Edition</div><div class="text-sm text-zinc-400 mt-1">61 zonas</div></a>
+        <a href="../guides/baldur-s-gate-3/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">Baldur&#39;s Gate 3</div><div class="text-sm text-zinc-400 mt-1">59 zonas</div></a>
+        <a href="../guides/final-fantasy-vi/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">FINAL FANTASY VI</div><div class="text-sm text-zinc-400 mt-1">55 zonas</div></a>
+        <a href="../guides/dragon-quest-xi-s-echoes-of-an-elusive-age-definitive-edition/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">DRAGON QUEST® XI S: Echoes of an Elusive Age™ - Definitive Edition</div><div class="text-sm text-zinc-400 mt-1">52 zonas</div></a>
+        <a href="../guides/elden-ring/index.html" class="block rounded-2xl border border-white/10 bg-white/5 p-5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="text-white font-bold leading-snug">ELDEN RING</div><div class="text-sm text-zinc-400 mt-1">50 zonas</div></a>
+      </div>
+<!-- QC-GUIDES:END -->
+    </section>
+
+    <!-- Pricing -->
+    <section id="pricing" class="max-w-4xl mx-auto px-6 py-12">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white text-center mb-10">Una experiencia premium a tu lado</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-8">
+          <h3 class="text-xl font-bold text-white mb-1">Gratis</h3>
+          <p class="text-zinc-400 mb-6">Pruébalo antes de comprar, sin tarjeta de crédito.</p>
+          <ul class="space-y-3 text-zinc-300">
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">10 preguntas al día</strong>, con capturas de pantalla</span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>Funciona en Windows, la app web y Steam Deck</span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>Voz de narración integrada gratuita</span></li>
+          </ul>
+        </div>
+        <div class="bg-[#a87ffb]/10 border border-[#a87ffb]/40 rounded-2xl p-8">
+          <h3 class="text-xl font-bold text-white mb-1">Premium <span class="text-[#a87ffb]">$4.99/mes</span></h3>
+          <p class="text-zinc-400 mb-6">Para gamers dedicados que buscan el compendio definitivo.</p>
+          <ul class="space-y-3 text-zinc-300">
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">60 preguntas al día</strong></span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>Marcadores en pantalla (función preliminar, Windows)</span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>Voces de narración premium de Gemini</span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>Una sola suscripción para Windows, web y Steam Deck</span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="text-center text-zinc-400 mt-6"><strong class="text-white">Durante la beta, todos los jugadores tienen acceso a todas las funciones.</strong> Mejora tu plan en cualquier momento desde la app.</p>
+    </section>
+
+    <!-- Community -->
+    <section id="community" class="max-w-4xl mx-auto px-6 py-12 text-center">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white mb-3">Únete a la comunidad</h2>
+      <p class="text-zinc-400 mb-8">Sigue el desarrollo, comparte lo que descubriste con el compendio y dinos qué deberíamos crear después.</p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a id="discord-link" href="#" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-6 py-3 rounded-full hover:bg-white transition-colors w-full sm:w-auto">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18.2 18.2 0 0 0-5.6 0L8.6 3a19.5 19.5 0 0 0-4.9 1.5C.6 9.1-.3 13.6.1 18.1a19.7 19.7 0 0 0 6 3l1.3-2a12.8 12.8 0 0 1-2-1l.5-.4a14 14 0 0 0 12.2 0l.5.4c-.6.4-1.3.7-2 1l1.3 2a19.6 19.6 0 0 0 6-3c.5-5.2-.9-9.7-3.6-13.7ZM8 15.3c-1.2 0-2.2-1.1-2.2-2.5S6.8 10.3 8 10.3s2.2 1.1 2.2 2.5-1 2.5-2.2 2.5Zm8 0c-1.2 0-2.2-1.1-2.2-2.5s1-2.5 2.2-2.5 2.2 1.1 2.2 2.5-1 2.5-2.2 2.5Z"/></svg>
+          Únete al Discord
+        </a>
+        <a href="https://www.youtube.com/@questcompendium" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-3 rounded-full hover:bg-white/20 transition-colors w-full sm:w-auto">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8ZM9.6 15.6V8.4l6.3 3.6-6.3 3.6Z"/></svg>
+          YouTube
+        </a>
+        <a href="https://x.com/QuestCompend" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-3 rounded-full hover:bg-white/20 transition-colors w-full sm:w-auto">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.2 2.3h3.4l-7.4 8.4L23 21.7h-6.8l-5.3-6.9-6.1 6.9H1.4l7.9-9L.9 2.3h7l4.8 6.3 5.5-6.3Zm-1.2 17.4h1.9L7 4.2H5l12 15.5Z"/></svg>
+          Síguenos en X
+        </a>
+      </div>
+      <p class="text-sm text-zinc-500 mt-4">YouTube <a href="https://www.youtube.com/@questcompendium" target="_blank" rel="noopener noreferrer" class="text-zinc-300 hover:text-white">@questcompendium</a> y en X <a href="https://x.com/QuestCompend" target="_blank" rel="noopener noreferrer" class="text-zinc-300 hover:text-white">@QuestCompend</a></p>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="max-w-3xl mx-auto px-6 py-12">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white text-center mb-10">Preguntas frecuentes</h2>
+      <div class="space-y-3">
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">¿Quest Compendium es gratis?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">Puedes probarlo gratis con 10 preguntas al día, sin tarjeta de crédito. Premium cuesta $4.99/mes para 60 preguntas al día más funciones exclusivas como marcadores en pantalla y voces de Gemini. Durante la beta, todos tienen acceso a todas las funciones. Ver <a href="#pricing" class="text-[#a87ffb] hover:text-white">Precios</a>.</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">¿Qué son los marcadores en pantalla?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">Cuando preguntas sobre algo en tu pantalla, como dónde están los objetos o a qué enemigo atacar, la app de Windows coloca etiquetas numeradas justo sobre esos puntos en tu juego. Es una función en fase inicial: funciona mejor en juegos 2D y con cámara fija, donde se mantienen en su lugar mientras caminas y desaparecen cuando cambia la escena. En juegos 3D, se colocan mientras estás quieto y se desvanecen al girar la cámara. En la app web y en Steam Deck, los puntos se marcan directamente sobre la captura de pantalla en la respuesta.</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">¿Con qué juegos funciona?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">Con cualquier juego que puedas poner en pantalla. Quest Compendium reconoce a qué estás jugando y puede analizar capturas de pantalla. Conoce mejor los juegos populares y, como cualquier IA, a veces puede equivocarse, así que verifica cualquier detalle crítico.</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">¿Puede hacer que me banee el anti-cheat?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">Quest Compendium se ejecuta en su propia ventana sobre tu juego y usa la captura de pantalla estándar. No modifica archivos del juego ni inyecta código. Dicho esto, algunos juegos competitivos online restringen las superposiciones (overlays) o la captura de pantalla, y no podemos responder por todos los sistemas anti-cheat. Si tienes dudas, revisa las reglas de tu juego o úsalo solo en juegos de un solo jugador.</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">¿Qué datos envía y a dónde?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">Cuando haces una pregunta, la app envía tu duda, el nombre del juego y, si incluyes una, la captura de pantalla al servidor de Quest Compendium, que se los pasa a la IA Gemini de Google para redactar la respuesta. Si inicias sesión, tus notas y progreso se sincronizan en la nube. Tienes todos los detalles en la <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">política de privacidad</a>.</p>
+        </details>
+        <details id="faq-smartscreen" class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">Windows dice &quot;Windows protegió su PC&quot;. ¿Es seguro?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">Quest Compendium es una app nueva de un desarrollador independiente y el instalador directo aún no cuenta con firma de código, por lo que Windows SmartScreen muestra una advertencia. Si estás de acuerdo, haz clic en <strong class="text-white">Más información</strong>, y luego en <strong class="text-white">Ejecutar de todas formas</strong>. El código fuente es público en <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub</a>. Ya estamos trabajando en una versión para la Microsoft Store que no mostrará esta advertencia.</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">¿Necesito una cuenta de Steam?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">No. Vincular Steam es opcional. Te permite detectar tu juego activo, sincronizar tu biblioteca y rastrear logros de forma automática.</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">¿Cómo lo instalo en Steam Deck?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">Es un plugin de Decky Loader que se instala desde un enlace en los ajustes de desarrollador de Decky. Sigue los pasos en la <a href="#steam-deck" class="text-[#a87ffb] hover:text-white">sección de Steam Deck</a> de arriba.</p>
+        </details>
+        <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <summary class="flex items-center justify-between gap-4 font-bold text-white">¿Dónde puedo reportar un error o sugerir funciones?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
+          <p class="text-zinc-400 mt-3">Usa el botón Beta Feedback en los ajustes de la app, <span class="qc-discord-mention">pasa a saludar en nuestro <a href="#community" class="text-[#a87ffb] hover:text-white">Discord</a>, </span>o escribe a <a href="mailto:hello@questcompendium.com" class="text-[#a87ffb] hover:text-white">hello@questcompendium.com</a>.</p>
+        </details>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="max-w-4xl mx-auto px-6 pt-12 text-center text-sm text-zinc-500 border-t border-white/5">
+    <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mb-6">
+      <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">GitHub: App de Windows</a>
+      <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">GitHub: Plugin de Steam Deck</a>
+      <a href="https://www.youtube.com/@questcompendium" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">YouTube</a>
+      <a href="https://x.com/QuestCompend" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">X</a>
+      <a id="discord-footer" href="#" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">Discord</a>
+      <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">Política de privacidad</a>
+    </div>
+    <p class="mb-2">Desarrollado con Google Gemini. Quest Compendium es un proyecto independiente y no está afiliado ni respaldado por Valve, Steam, Microsoft o Google.</p>
+    <p>&amp;copy; 2026 Quest Compendium</p>
+  </footer>
+
+  <script>
+    // Discord invite link: paste your invite (like https://discord.gg/abc123) between the quotes.
+    // Until it's filled in, the Discord buttons stay hidden so the page never shows a broken link.
+    const DISCORD_INVITE = "https://discord.gg/WxdgNMXWyg";
+
+    const discordLinks = [document.getElementById("discord-link"), document.getElementById("discord-footer")];
+    if (DISCORD_INVITE.startsWith("https://")) {
+      discordLinks.forEach((a) => { a.href = DISCORD_INVITE; });
+    } else {
+      discordLinks.forEach((a) => { a.style.display = "none"; });
+      document.querySelectorAll(".qc-discord-mention").forEach((el) => { el.style.display = "none"; });
+    }
+    lucide.createIcons();
+  </script>
+</body>
+</html>
