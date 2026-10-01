@@ -50,91 +50,93 @@
           <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
           <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">21</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">89</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">78</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
           <a hidden data-continue="mass-effect-3-legendary-edition" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
-          <div class="mt-6"><a href="earth/index.html" data-area-link="earth" data-name="Earth" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <input type="search" data-filter="#qc-area-rows" data-empty="#qc-area-empty" placeholder="Search areas and items…" class="mt-6 w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
+          <div id="qc-area-rows" class="mt-3"><a data-search="Earth Prologue M-8 Avenger M-3 Predator Med-Kit Thermal Clips Cannibal Husk" href="earth/index.html" data-area-link="earth" data-name="Earth" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Earth</span><span class="block text-sm text-zinc-500 truncate">Prologue</span></span>
           <span data-progress="mass-effect-3-legendary-edition|earth|4"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="mars/index.html" data-area-link="mars" data-name="Mars" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Mars Immediately following the prologue M-23 Katana M-4 Shuriken M-15 Vindicator M-92 Mantis Kassa Fabrication Chestplate Shotgun High-Caliber Barrel Sniper Rifle Extended Barrel A locked decontamination room near the communications hub contains extra weapon mods and credits, accessible by clearing the environmental venting cycle through a nearby terminal console. Cerberus Assault Trooper Cerberus Centurion Cerberus Guardian Dr. Eva Coré" href="mars/index.html" data-area-link="mars" data-name="Mars" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Mars</span><span class="block text-sm text-zinc-500 truncate">Immediately following the prologue</span></span>
           <span data-progress="mass-effect-3-legendary-edition|mars|8"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="the-citadel/index.html" data-area-link="the-citadel" data-name="The Citadel" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="The Citadel First visit after Mars M-8 Avenger" href="the-citadel/index.html" data-area-link="the-citadel" data-name="The Citadel" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">The Citadel</span><span class="block text-sm text-zinc-500 truncate">First visit after Mars</span></span>
           <span data-progress="mass-effect-3-legendary-edition|the-citadel|1"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="normandy-sr-2/index.html" data-area-link="normandy-sr-2" data-name="Normandy SR-2" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Normandy SR-2 Throughout the game Space Hamster Model Ship: Alliance Cruiser Model Ship: Destiny Ascension Model Ship: Geth Cruiser Reclaiming the Space Hamster from the Engineering lower sub-deck requires Shepard to chase it on foot and quickly interact with it as it darts across the floor; once caught, it can be displayed in the Captain&#39;s Cabin." href="normandy-sr-2/index.html" data-area-link="normandy-sr-2" data-name="Normandy SR-2" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Normandy SR-2</span><span class="block text-sm text-zinc-500 truncate">Throughout the game</span></span>
           <span data-progress="mass-effect-3-legendary-edition|normandy-sr-2|5"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="menae/index.html" data-area-link="menae" data-name="Menae" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Menae First major mission after the Citadel M-27 Scimitar M-97 Viper Pistol Piercing Mod Sniper Rifle Spare Ammo Mod Assault Rifle Piercing Mod Armax Arsenal Shoulder Guard Cannibal Marauder Husk Brute Harvester" href="menae/index.html" data-area-link="menae" data-name="Menae" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Menae</span><span class="block text-sm text-zinc-500 truncate">First major mission after the Citadel</span></span>
           <span data-progress="mass-effect-3-legendary-edition|menae|6"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="surkesh/index.html" data-area-link="surkesh" data-name="Sur&#39;Kesh" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Sur&#39;Kesh Following the mission on Menae Pistol High-Caliber Barrel Shotgun Spare Ammo Assault Rifle Extended Barrel Scorpion Sentry Interface Armax Arsenal Gauntlets Assault Trooper Centurion Combat Engineer Cerberus Turret Nemesis Atlas Mech" href="surkesh/index.html" data-area-link="surkesh" data-name="Sur&#39;Kesh" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Sur&#39;Kesh</span><span class="block text-sm text-zinc-500 truncate">Following the mission on Menae</span></span>
           <span data-progress="mass-effect-3-legendary-edition|surkesh|6"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="tuchanka/index.html" data-area-link="tuchanka" data-name="Tuchanka" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Tuchanka Following the mission on Sur&#39;Kesh Death Mask Pistol Magazine Upgrade Shotgun Smart Choke Graal Spike Thrower Renegade cure sabotage choice | Agree to Dalatrass Linron&#39;s secret offer prior to the mission and actively prevent Mordin from dispersing the cure via dialogue or force at the Shroud control console Cannibal Marauder Husk Ravager Brute" href="tuchanka/index.html" data-area-link="tuchanka" data-name="Tuchanka" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tuchanka</span><span class="block text-sm text-zinc-500 truncate">Following the mission on Sur&#39;Kesh</span></span>
           <span data-progress="mass-effect-3-legendary-edition|tuchanka|5"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="grissom-academy/index.html" data-area-link="grissom-academy" data-name="Grissom Academy" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Grissom Academy Optional mission after the Citadel M-96 Mattock M-22 Eviscerator Serrice Council Chestplate Asari Tech Armor Upgrade Assault Trooper Centurion Guardian Engineer Atlas Mech" href="grissom-academy/index.html" data-area-link="grissom-academy" data-name="Grissom Academy" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Grissom Academy</span><span class="block text-sm text-zinc-500 truncate">Optional mission after the Citadel</span></span>
           <span data-progress="mass-effect-3-legendary-edition|grissom-academy|4"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="arrae/index.html" data-area-link="arrae" data-name="Arrae" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Arrae Optional mission after the Citadel M-25 Hornet Shotgun High-Caliber Barrel Sniper Rifle Piercing Mod Pistol Piercing Mod Assault Trooper Centurion Combat Engineer Nemesis Phantom" href="arrae/index.html" data-area-link="arrae" data-name="Arrae" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Arrae</span><span class="block text-sm text-zinc-500 truncate">Optional mission after the Citadel</span></span>
           <span data-progress="mass-effect-3-legendary-edition|arrae|4"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="tuchanka-bomb-site/index.html" data-area-link="tuchanka-bomb-site" data-name="Tuchanka (Bomb Site)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Tuchanka (Bomb Site) Bomb mission Armax Arsenal Gauntlets Shotgun Smart Choke Sniper Rifle Concentration Module Assault Trooper Centurion Combat Engineer Sentry Turret Nemesis Atlas Mech" href="tuchanka-bomb-site/index.html" data-area-link="tuchanka-bomb-site" data-name="Tuchanka (Bomb Site)" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tuchanka (Bomb Site)</span><span class="block text-sm text-zinc-500 truncate">Bomb mission</span></span>
           <span data-progress="mass-effect-3-legendary-edition|tuchanka-bomb-site|3"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="perseus-veil/index.html" data-area-link="perseus-veil" data-name="Perseus Veil" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Perseus Veil Geth Dreadnought mission Arc Pistol Geth Pulse Rifle Shotgun Smart Choke Sniper Rifle Enhanced Scope Geth Trooper Geth Rocket Trooper Geth Hunter Geth Prime" href="perseus-veil/index.html" data-area-link="perseus-veil" data-name="Perseus Veil" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Perseus Veil</span><span class="block text-sm text-zinc-500 truncate">Geth Dreadnought mission</span></span>
           <span data-progress="mass-effect-3-legendary-edition|perseus-veil|4"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="rannoch/index.html" data-area-link="rannoch" data-name="Rannoch" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Rannoch Following the Geth Dreadnought mission Geth Plasma Shotgun Reaper Code Fragment Kassa Fabrication Chestplate Geth Trooper Geth Rocket Trooper Geth Pyro Geth Prime Reaper Destroyer" href="rannoch/index.html" data-area-link="rannoch" data-name="Rannoch" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Rannoch</span><span class="block text-sm text-zinc-500 truncate">Following the Geth Dreadnought mission</span></span>
           <span data-progress="mass-effect-3-legendary-edition|rannoch|3"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="lesuss/index.html" data-area-link="lesuss" data-name="Lesuss" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Lesuss Monastery mission Assault Rifle Precision Scope Pistol Magazine Upgrade Sniper Rifle Spare Thermal Clip Disciple shotgun Cannibal Marauder Husk Banshee" href="lesuss/index.html" data-area-link="lesuss" data-name="Lesuss" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Lesuss</span><span class="block text-sm text-zinc-500 truncate">Monastery mission</span></span>
           <span data-progress="mass-effect-3-legendary-edition|lesuss|4"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="kallini/index.html" data-area-link="kallini" data-name="Kallini" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Kallini Ardat-Yakshi Monastery mission Pistol Melee Stunner Assault Rifle Precision Scope Sniper Rifle Spare Thermal Clip Shotgun Shredder Mod Disciple (Shotgun) Asari Widow Commendation Banshee Cannibal Marauder Husk" href="kallini/index.html" data-area-link="kallini" data-name="Kallini" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kallini</span><span class="block text-sm text-zinc-500 truncate">Ardat-Yakshi Monastery mission</span></span>
           <span data-progress="mass-effect-3-legendary-edition|kallini|6"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="benning/index.html" data-area-link="benning" data-name="Benning" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Benning Optional mission M-25 Hornet Pistol Caliber Compression System Shotgun High-Caliber Barrel Cerberus Turret Control Schematics Assault Trooper Centurion Combat Engineer Nemesis" href="benning/index.html" data-area-link="benning" data-name="Benning" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Benning</span><span class="block text-sm text-zinc-500 truncate">Optional mission</span></span>
           <span data-progress="mass-effect-3-legendary-edition|benning|4"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="dekuuna/index.html" data-area-link="dekuuna" data-name="Dekuuna" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Dekuuna Optional mission Elcor Flotilla War Asset Code of the Ancients War Asset Scanning Dekuuna&#39;s moon Oltan reveals the Code of the Ancients, an Elcor relic required to complete the mission Dekuuna: Code of the Ancients on the Citadel. Reaper patrol ship" href="dekuuna/index.html" data-area-link="dekuuna" data-name="Dekuuna" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dekuuna</span><span class="block text-sm text-zinc-500 truncate">Optional mission</span></span>
           <span data-progress="mass-effect-3-legendary-edition|dekuuna|3"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="utukku/index.html" data-area-link="utukku" data-name="Utukku" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Utukku Rachni mission Ariake Technologies Custom Armor (Shoulder) Shotgun High-Caliber Barrel Pistol Piercing Mod Reaper Black Market Technology Cannibal Marauder Ravager Swarmer Barrier Engine" href="utukku/index.html" data-area-link="utukku" data-name="Utukku" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Utukku</span><span class="block text-sm text-zinc-500 truncate">Rachni mission</span></span>
           <span data-progress="mass-effect-3-legendary-edition|utukku|4"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="thessia/index.html" data-area-link="thessia" data-name="Thessia" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Thessia Following the Rannoch arc M-98 Widow Asari Command Console Umbra Visor Banshee Brute Marauder Ravager Kai Leng" href="thessia/index.html" data-area-link="thessia" data-name="Thessia" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Thessia</span><span class="block text-sm text-zinc-500 truncate">Following the Rannoch arc</span></span>
           <span data-progress="mass-effect-3-legendary-edition|thessia|3"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="horizon/index.html" data-area-link="horizon" data-name="Horizon" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Horizon Following the Thessia mission M-12 Locust M-99 Saber Pistol Power Magnifier Shotgun Blade Attachment Brute Banshee Ravager Marauder Husk Phantom" href="horizon/index.html" data-area-link="horizon" data-name="Horizon" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Horizon</span><span class="block text-sm text-zinc-500 truncate">Following the Thessia mission</span></span>
           <span data-progress="mass-effect-3-legendary-edition|horizon|4"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="cerberus-headquarters/index.html" data-area-link="cerberus-headquarters" data-name="Cerberus Headquarters" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="Cerberus Headquarters Following the Horizon mission M-37 Falcon Delumcore Master Conduit Serrice Council Greaves Pathfinder Goggles Cerberus Centurion Cerberus Nemesis Cerberus Phantom Cerberus Atlas Kai Leng" href="cerberus-headquarters/index.html" data-area-link="cerberus-headquarters" data-name="Cerberus Headquarters" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Cerberus Headquarters</span><span class="block text-sm text-zinc-500 truncate">Following the Horizon mission</span></span>
           <span data-progress="mass-effect-3-legendary-edition|cerberus-headquarters|4"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a><a href="london/index.html" data-area-link="london" data-name="London" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+        </a><a data-search="London Final mission M-98 Widow M-12 Locust M-27 Scimitar M-99 Saber Cannibal Marauder Ravager Brute Banshee Harvester" href="london/index.html" data-area-link="london" data-name="London" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">London</span><span class="block text-sm text-zinc-500 truncate">Final mission</span></span>
           <span data-progress="mass-effect-3-legendary-edition|london|4"></span>
           <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </a></div>
+          <p id="qc-area-empty" hidden class="mt-3 text-sm text-zinc-500">Nothing matches that search.</p>
           
   <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in Mass Effect 3 (Legendary Edition)?</h2>
@@ -167,6 +169,31 @@
     el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
   });};
   progress();
+  // Search boxes: hide entries that don't match, and section headings left with nothing under them.
+  var norm=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');};
+  document.querySelectorAll('[data-filter]').forEach(function(inp){
+    var list=document.querySelector(inp.getAttribute('data-filter')), empty=document.querySelector(inp.getAttribute('data-empty')||'#_');
+    if(!list) return;
+    inp.addEventListener('input',function(){
+      var q=norm(inp.value.trim()), shown=0;
+      list.querySelectorAll('[data-search]').forEach(function(el){var ok=!q||norm(el.getAttribute('data-search')).indexOf(q)>=0; el.hidden=!ok; if(ok) shown++;});
+      list.querySelectorAll('[data-head]').forEach(function(h){var g=h.getAttribute('data-head'),any=false;list.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){if(!el.hidden)any=true;});h.hidden=!any;});
+      document.querySelectorAll('[data-hide-when-searching]').forEach(function(el){el.hidden=!!q;});
+      if(empty) empty.hidden=shown>0;
+    });
+  });
+  // Sorting and the A–Z bar on the guides page.
+  var grid=document.querySelector('[data-games]');
+  var sortSel=document.querySelector('[data-sort]');
+  if(grid&&sortSel){sortSel.addEventListener('change',function(){
+    var k=sortSel.value, cards=Array.prototype.slice.call(grid.children);
+    cards.sort(function(a,b){ if(k==='az') return a.getAttribute('data-name').localeCompare(b.getAttribute('data-name')); return (+b.getAttribute('data-'+k))-(+a.getAttribute('data-'+k)) || a.getAttribute('data-name').localeCompare(b.getAttribute('data-name')); });
+    cards.forEach(function(c){grid.appendChild(c);});
+  });}
+  document.querySelectorAll('[data-letter]').forEach(function(btn){btn.addEventListener('click',function(){
+    if(sortSel&&sortSel.value!=='az'){sortSel.value='az';sortSel.dispatchEvent(new Event('change'));}
+    var L=btn.getAttribute('data-letter'), t=grid&&grid.querySelector('[data-first="'+L+'"]'); if(t) t.scrollIntoView({behavior:'smooth',block:'center'});
+  });});
   var c=document.querySelector('[data-continue]');
   if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
     var a=s&&document.querySelector('[data-area-link="'+s+'"]');
