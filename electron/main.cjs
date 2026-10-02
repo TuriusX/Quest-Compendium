@@ -677,8 +677,9 @@ app.whenReady().then(() => {
       console.error("Failed to register autoScreenshotShortcut", err);
     }
 
-    // unregisterAll() above also dropped the tracker's hotkey.
-    tracker.registerHotkey();
+    // The objectives tracker's open shortcut (Settings; '' = none, missing = the default Ctrl+G). unregisterAll()
+    // above dropped it, so this registers it again if the tracker is on screen.
+    tracker.registerHotkey(typeof shortcuts.trackerShortcut === 'string' ? shortcuts.trackerShortcut : 'CommandOrControl+G');
   });
 
   app.on('activate', () => {

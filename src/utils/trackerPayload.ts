@@ -19,7 +19,7 @@ export type TrackerPayload = { data: TrackerData; gameKey: string };
 
 /** The tracker page's words (electron/tracker.html), from the "tracker.*" translations. */
 const LABEL_KEYS = [
-  'title', 'confirm', 'missable', 'hint', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size',
+  'title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size',
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>

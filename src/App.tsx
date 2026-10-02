@@ -53,6 +53,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   hideAppShortcut: 'CmdOrCtrl+Shift+H',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
+  trackerShortcut: 'CmdOrCtrl+G',
   enableThematicBanners: false,
   uiStyle: 'lofi',
   language: detectLocale(),
@@ -474,12 +475,15 @@ export default function App() {
         hideAppShortcut: settings.hideAppShortcut,
         voiceInputShortcut: settings.voiceInputShortcut,
         autoScreenshotShortcut: settings.autoScreenshotShortcut,
+        // '' = none; missing (settings saved before this existed) = the default.
+        trackerShortcut: typeof settings.trackerShortcut === 'string' ? settings.trackerShortcut : 'CmdOrCtrl+G',
       });
     }
   }, [
     settings.hideAppShortcut, 
     settings.voiceInputShortcut,
-    settings.autoScreenshotShortcut
+    settings.autoScreenshotShortcut,
+    settings.trackerShortcut
   ]);
 
   // Controller: tell the desktop app which chord shows / hides the overlay.

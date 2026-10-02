@@ -26,7 +26,8 @@ let inRecordings = true; // follows the markers' "show in recordings" setting (c
 let scale = 1; // the app's UI scale (Settings)
 let store = null;   // per-game settings, loaded once
 let storeFile = '';
-let hotkey = 'CommandOrControl+G';
+let hotkey = 'CommandOrControl+G'; // the open shortcut (Settings), or null for none
+let registeredKey = null; // what this module actually holds right now
 let saveTimer = null;
 const MARGIN = 0;
 
@@ -131,7 +132,7 @@ function cleanData(data) {
 }
 
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
-const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone'];
+const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -163,7 +164,7 @@ async function show(data, gameKey) {
     patchSettings(current.gameKey, { x: null, y: null });
     s = settingsFor(current.gameKey);
   }
-  js(`window.qcTrackerShow(${JSON.stringify(clean)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale })})`);
+  js(`window.qcTrackerShow(${JSON.stringify(clean)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: hotkeyLabel() })})`);
   if (fresh && Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
   // Shown when the panel hides; while the panel is open it waits hidden with the new data.
   if (deps.isPanelOpen && deps.isPanelOpen()) suspended = true;
@@ -243,15 +244,39 @@ function setScale(n) {
   js(`window.qcTrackerSettings(${JSON.stringify({ scale })})`);
 }
 
+/** The shortcut as the page shows it ("Ctrl+G"), or '' when there's none. */
+const hotkeyLabel = () =>
+  hotkey ? hotkey.replace(/\b(CommandOrControl|CmdOrCtrl)\b/g, process.platform === 'darwin' ? 'Cmd' : 'Ctrl') : '';
+
+/** Only ever let go of the key this module registered (another shortcut may use the same keys). */
 function unregisterHotkey() {
-  try { if (deps && deps.globalShortcut.isRegistered(hotkey)) deps.globalShortcut.unregister(hotkey); } catch { /* not registered */ }
+  try { if (deps && registeredKey) deps.globalShortcut.unregister(registeredKey); } catch { /* not registered */ }
+  registeredKey = null;
 }
 
+/**
+ * Hold the open shortcut while the tracker is on screen. With an accelerator: that's the shortcut from now on
+ * (Settings); null or '' means none. With no argument: (re)register the current one (after the panel hides, or after
+ * update-shortcuts unregistered everything).
+ */
 function registerHotkey(accelerator) {
-  if (accelerator) hotkey = accelerator;
-  if (!alive() || suspended) return;
+  if (accelerator !== undefined) {
+    const next = typeof accelerator === 'string' && accelerator.trim() ? accelerator.trim() : null;
+    if (next !== hotkey) {
+      unregisterHotkey();
+      hotkey = next;
+      js(`window.qcTrackerSettings(${JSON.stringify({ keys: hotkeyLabel() })})`);
+    }
+  }
+  // update-shortcuts calls globalShortcut.unregisterAll() first: whatever we held is gone.
+  if (registeredKey && !deps.globalShortcut.isRegistered(registeredKey)) registeredKey = null;
+  if (!hotkey || !alive() || suspended || registeredKey) return;
   try {
-    if (!deps.globalShortcut.isRegistered(hotkey)) deps.globalShortcut.register(hotkey, openPanel);
+    if (deps.globalShortcut.isRegistered(hotkey)) {
+      console.warn(`[tracker] ${hotkey} is already used by another shortcut; the tracker won't take it`);
+      return;
+    }
+    if (deps.globalShortcut.register(hotkey, openPanel)) registeredKey = hotkey;
   } catch (err) { console.warn('[tracker] hotkey failed:', err && err.message); }
 }
 

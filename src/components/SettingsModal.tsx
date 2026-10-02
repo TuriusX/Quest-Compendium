@@ -52,13 +52,18 @@ const DEFAULT_SHORTCUTS = {
   hideAppShortcut: 'CmdOrCtrl+Shift+H',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
+  trackerShortcut: 'CmdOrCtrl+G',
 };
 
 const ShortcutInput: React.FC<{
   value: string;
   onChange: (value: string) => void;
   label: string;
-}> = ({ value, onChange, label }) => {
+  /** A line under the field saying what the shortcut does. */
+  help?: string;
+  /** Lets the shortcut be turned off (set to none). */
+  onClear?: () => void;
+}> = ({ value, onChange, label, help, onClear }) => {
   const t = useT();
   const [isRecording, setIsRecording] = useState(false);
 
@@ -133,6 +138,20 @@ const ShortcutInput: React.FC<{
           t('set.sc.none')
         )}
       </button>
+      {(help || (onClear && value)) && (
+        <div className="flex items-start justify-between gap-3 mt-1">
+          {help && <p className="text-[11px] text-zinc-500 leading-relaxed">{help}</p>}
+          {onClear && value && !isRecording && (
+            <button
+              type="button"
+              onClick={onClear}
+              className="ml-auto flex-shrink-0 text-[11px] text-zinc-400 hover:text-white underline-offset-2 hover:underline cursor-pointer"
+            >
+              {t('set.sc.clear')}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -653,6 +672,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       label={tr('set.sc.shot')}
                       value={settings.autoScreenshotShortcut || 'CmdOrCtrl+Shift+S'}
                       onChange={(val) => onUpdateSettings({ autoScreenshotShortcut: val })}
+                    />
+                    <ShortcutInput
+                      label={tr('set.sc.tracker')}
+                      help={tr('set.sc.trackerHelp')}
+                      value={typeof settings.trackerShortcut === 'string' ? settings.trackerShortcut : 'CmdOrCtrl+G'}
+                      onChange={(val) => onUpdateSettings({ trackerShortcut: val })}
+                      onClear={() => onUpdateSettings({ trackerShortcut: '' })}
                     />
                     <div className="flex items-center justify-between gap-3 pt-1">
                       <p className="text-[11px] text-zinc-500 leading-relaxed">

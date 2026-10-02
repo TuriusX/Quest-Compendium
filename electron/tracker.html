@@ -161,6 +161,7 @@
     peekFrom: null,               // the view to fold back to after a peek
     size: 'medium', alpha: 100, backdrop: false, edge: 'right',
     scale: 1,                     // the app's UI scale (Settings), applied on top of the text size
+    keys: 'Ctrl+G',               // the open shortcut as shown ('' = none)
   };
   let peekTimer = null, hintTimer = null;
 
@@ -172,7 +173,7 @@
     headHint: 'Click: open the Compendium here. Drag: move.', placeHint: 'Click to confirm this is where you are',
     confirmHint: 'Confirm where you are', collapse: 'Collapse to one line', open: 'Open', away: 'Send to the screen edge',
     size: 'Text size', alpha: 'Transparency', backdrop: 'Soft dark backdrop', tabHint: 'Bring the objectives back',
-    itemTodo: 'Click: collected', itemDone: 'Click: not collected yet',
+    itemTodo: 'Click: collected', itemDone: 'Click: not collected yet', hintNoKeys: 'Click the title to open the Compendium',
   };
   const L = (k, vars) => {
     const own = state.data && state.data.labels && state.data.labels[k];
@@ -192,8 +193,10 @@
     $('alphaWrap').title = L('alpha');
     $('bBackdrop').title = L('backdrop');
     tab.title = L('tabHint');
+    // The open shortcut from Settings (state.keys), or a hint without one when it's cleared.
+    if (!state.keys) { $('hint').textContent = L('hintNoKeys'); return; }
     const [before, after] = L('hint').split('{keys}');
-    $('hint').innerHTML = after === undefined ? esc(before) : `${esc(before)}<kbd>Ctrl+G</kbd>${esc(after)}`;
+    $('hint').innerHTML = after === undefined ? esc(before) : `${esc(before)}<kbd>${esc(state.keys)}</kbd>${esc(after)}`;
   }
 
   function render() {
@@ -357,6 +360,7 @@
   window.qcTrackerSettings = (s) => {
     Object.assign(state, s);
     if (s && 'scale' in s) lastSize = ''; // a new UI scale: always report the new size to the app
+    if (s && 'keys' in s && state.data) applyLabels();
     applyView();
   };
   window.qcTrackerPeek = peek;
