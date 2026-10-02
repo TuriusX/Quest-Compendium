@@ -14,7 +14,7 @@ import type { Achievement } from '../types';
  *   - "Ask" on any item or area hands a ready-made question to the Compendium
  * Ticks and the last page are saved on this computer. Every control is a button, so it works with a controller.
  */
-type Game = { key: string; game: string; areas: number };
+type Game = { key: string; game: string; areas: number; art?: string };
 type Area = { slug: string; name: string; story: string; group?: string; total?: number; search?: string };
 type Entry = { id: string; name?: string; text?: string; where?: string; weakness?: string; steal?: string; sells?: string; notes?: string; missable?: boolean };
 type Page = {
@@ -201,6 +201,30 @@ function useApi<T>(path: string) {
 }
 
 const fold = (x: string) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+/** Initials for games without art (the same placeholder as the website). */
+const initialsOf = (game: string) =>
+  game
+    .replace(/[™®©]/g, '')
+    .replace(/^(the|a|an)\s+/i, '')
+    .split(/[\s:–—-]+/)
+    .filter((w) => /^[A-Za-z0-9]/.test(w) && !/^(of|the|and|a|an|to|in|on|for)$/i.test(w))
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join('') || '?';
+
+/** A game's store art at Steam's header shape (460×215), with a placeholder underneath if there's none or it fails. */
+function GameArt({ game, art, className = '' }: { game: string; art?: string; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className={`relative aspect-[460/215] overflow-hidden bg-[#0c0d14] ${className}`}>
+      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[var(--accent-dim)] via-[#1a1530] to-[#0c0d14]">
+        <span className="font-bold text-white/80 tracking-wide text-base">{initialsOf(game)}</span>
+      </div>
+      {art && !failed && <img src={art} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} className="absolute inset-0 w-full h-full object-cover" />}
+    </div>
+  );
+}
+
 function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
     <input
@@ -237,6 +261,7 @@ function GamesList({ current, onPick }: { current?: string; onPick: (g: Game) =>
       {!games.length && <Note>{t('qcg.noMatches')}</Note>}
       {games.map((g) => (
         <button key={g.key} type="button" className={rowCls} onClick={() => onPick(g)}>
+          <GameArt game={g.game} art={g.art} className="w-24 flex-shrink-0 rounded-lg" />
           <span className="flex-1 min-w-0">
             <span className="block text-sm font-semibold text-zinc-100 truncate">{g.game}</span>
             <span className="block text-xs text-zinc-500">{t('qcg.areas', { n: g.areas })}</span>
@@ -265,7 +290,7 @@ function AreaList({
   onAchievements?: () => void;
 }) {
   const t = useT();
-  const s = useApi<{ game: string; areas: Area[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
+  const s = useApi<{ game: string; areas: Area[]; art?: string }>(`/api/guides/${encodeURIComponent(gameKey)}`);
   const [q, setQ] = useState('');
   if (s.loading) return <Note>{t('qcg.loading')}</Note>;
   if (s.error || !s.data) return <Note>{t('qcg.none')}</Note>;
@@ -293,6 +318,7 @@ function AreaList({
   );
   return (
     <div className="space-y-2">
+      {!needle && <GameArt game={s.data.game} art={s.data.art} className="rounded-xl border border-white/10 mb-1" />}
       <SearchBox value={q} onChange={setQ} placeholder={t('qcg.searchAreas')} />
       {!areas.length && <Note>{t('qcg.noMatches')}</Note>}
       {!needle && ach && onAchievements && (

@@ -58,7 +58,9 @@ async function gameAreas(key: string) {
           return (d.items || []).length + (d.secrets || []).length + sec;
         })(),
       }));
-    return areas.length ? { key, game: String(info.game || key), layout: String(info.layout || 'area'), areas } : null;
+    // The game's art: the saved store art (scripts/guides/steam-ids.ts), or Steam's standard header for its app id.
+    const art = String(info.art || '') || (info.appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${info.appId}/header.jpg` : '');
+    return areas.length ? { key, game: String(info.game || key), layout: String(info.layout || 'area'), art, areas } : null;
   });
 }
 
@@ -123,10 +125,10 @@ export function registerGuidesApi(app: Express): void {
     try {
       const list = await cached('list', async () => {
         const docs = await getFirestore().collection('guides').get();
-        const out: { key: string; game: string; areas: number }[] = [];
+        const out: { key: string; game: string; areas: number; art?: string }[] = [];
         for (const d of docs.docs) {
           const g = await gameAreas(d.id);
-          if (g) out.push({ key: g.key, game: g.game, areas: g.areas.length });
+          if (g) out.push({ key: g.key, game: g.game, areas: g.areas.length, art: g.art });
         }
         return out.sort((a, b) => a.game.localeCompare(b.game));
       });
