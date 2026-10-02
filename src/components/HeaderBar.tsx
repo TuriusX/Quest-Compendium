@@ -48,6 +48,8 @@ interface HeaderBarProps {
   soundEnabled: boolean;
   isDocked: boolean;
   onToggleDock: () => void;
+  /** Desktop: hide the panel; the objectives tracker shows the latest answer's markers over the game. */
+  onMinimize?: () => void;
   theme: ColorTheme;
   onSync?: () => Promise<boolean>;
 }
@@ -73,6 +75,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   soundEnabled,
   isDocked,
   onToggleDock,
+  onMinimize,
   theme,
   onSync,
 }) => {
@@ -311,6 +314,18 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <>
             {/* Vertical Divider */}
             <div className="h-4 w-[1px] bg-white/10 mx-0.5 hidden sm:block" />
+
+            {onMinimize && (
+              <button
+                style={{ WebkitAppRegion: "no-drag" } as any}
+                onClick={onMinimize}
+                title={t('header.minimizeHint')}
+                aria-label={t('header.minimize')}
+                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+              >
+                <Minimize2 className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Close Button */}
             <button

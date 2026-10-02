@@ -35,7 +35,8 @@ import { recordTombstone } from './hooks/tabMerge';
 import pixelSceneUrl from './pixel-scene.png';
 import { LOCALES, aiLanguageName, applyLocale, detectLocale, translate, useT } from './i18n';
 import { ControllerLayer } from './components/ControllerLayer';
-import { rememberAreaFind, setPointersActive } from './components/pointerStore';
+import { markersActiveFor, rememberAreaFind, setPointersActive } from './components/pointerStore';
+import { buildTrackerPayload, trackedMessage, trackerGameKey } from './utils/trackerPayload';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -503,6 +504,87 @@ export default function App() {
         t.messages.some((m) => m.id === msgId) ? { ...t, messages: t.messages.map((m) => (m.id === msgId ? fn(m) : m)), lastActive: Date.now() } : t,
       ),
     );
+
+  /** The player picked or confirmed where they are (under an answer, or on the objectives tracker). */
+  const handleSetPlace = (name: string) => {
+    if (!activeTab) return;
+    const next = { ...(activeTab.place || {}), name, confirmed: true };
+    setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));
+    rememberGameProgress(activeTab, next);
+  };
+
+  // ---- The objectives tracker: the panel's minimized state (desktop, electron/tracker.cjs) ----
+  // It follows the latest finished answer with markers in the active game tab, or the one picked with "Track on screen"
+  // until a newer answer arrives. Hiding the panel shows it; opening the panel hides it (main.cjs).
+  const [trackerPickId, setTrackerPickId] = useState<string | null>(null);
+  const trackerPickRef = useRef<string | null>(null);
+  const pickTracked = (id: string | null) => {
+    trackerPickRef.current = id;
+    setTrackerPickId(id);
+  };
+  const trackerAccent = (THEME_STYLES[settings.theme] || THEME_STYLES.purple).color;
+  const trackerKeyOfGame = trackerGameKey(activeTab, activeTab?.activeSteamGame || globalActiveGame);
+  const trackerMsg = trackedMessage(activeTab, trackerPickId);
+  const trackerPayload = trackerMsg ? buildTrackerPayload(trackerMsg, trackerAccent, trackerKeyOfGame, activeTab) : null;
+  const trackerCtx = useRef({ tab: activeTab, accent: trackerAccent, gameKey: trackerKeyOfGame });
+  trackerCtx.current = { tab: activeTab, accent: trackerAccent, gameKey: trackerKeyOfGame };
+  const latestTrackedId = trackedMessage(activeTab)?.id;
+  // A newer answer with markers takes over from the one picked with "Track on screen".
+  useEffect(() => {
+    if (trackerPickRef.current) pickTracked(null);
+  }, [latestTrackedId]);
+  // Hiding the panel (any route) shows the tracker; with no answer to track, nothing happens.
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    api?.onPanelHidden?.(() => {
+      const { tab, accent, gameKey } = trackerCtx.current;
+      const msg = trackedMessage(tab, trackerPickRef.current);
+      if (!msg) return;
+      const p = buildTrackerPayload(msg, accent, gameKey, tab);
+      api.showObjectivesTracker?.(p.data, p.gameKey);
+    });
+  }, []);
+  // Kept current while the panel is open: ticks, the place, a newer answer.
+  const trackerJson = trackerPayload ? JSON.stringify(trackerPayload.data) : '';
+  useEffect(() => {
+    if (trackerPayload) (window as any).electronAPI?.updateObjectivesTracker?.(trackerPayload.data);
+  }, [trackerJson]);
+  // A different game tab (or the game closing, handled in main.cjs) puts the tracker away.
+  const firstTabRef = useRef(true);
+  useEffect(() => {
+    if (firstTabRef.current) {
+      firstTabRef.current = false;
+      return;
+    }
+    pickTracked(null);
+    (window as any).electronAPI?.hideObjectivesTracker?.();
+  }, [activeTabId]);
+  // Ticks and the place confirmed on the tracker, handled like the checklist and PlaceBar do.
+  const trackerEventRef = useRef<(e: any) => void>(() => {});
+  trackerEventRef.current = (e: any) => {
+    if (!e || typeof e.id !== 'string') return;
+    const api = (window as any).electronAPI;
+    if (e.type === 'done' && Number.isInteger(e.index)) {
+      const msg = tabs.flatMap((t) => t.messages).find((m) => m.id === e.id);
+      if (!msg?.points?.length || e.index < 0 || e.index >= msg.points.length) return;
+      const done = msg.donePoints ?? [];
+      const next = e.done ? [...new Set([...done, e.index])].sort((x, y) => x - y) : done.filter((d) => d !== e.index);
+      updateMessageById(e.id, (m) => ({ ...m, donePoints: next }));
+      if (next.length >= msg.points.length) api?.hideScreenPointers?.();
+      else if (markersActiveFor(e.id)) api?.setPointersHidden?.(e.id, next);
+    } else if (e.type === 'confirm-place' && typeof e.name === 'string' && e.name.trim()) {
+      updateMessageById(e.id, (m) => ({ ...m, placeChosen: e.name }));
+      handleSetPlace(e.name);
+    }
+  };
+  useEffect(() => {
+    (window as any).electronAPI?.onTrackerEvent?.((e: any) => trackerEventRef.current(e));
+  }, []);
+  /** "Track on screen" under an answer: that answer goes on the tracker and the panel hides. */
+  const handleTrackOnScreen = (msgId: string) => {
+    pickTracked(msgId);
+    (window as any).electronAPI?.toggleSlide?.();
+  };
 
   /**
    * Precision pass: crop a zoomed-in square around each marked spot and ask the fast model to pinpoint the exact
@@ -1307,18 +1389,6 @@ export default function App() {
           hidden: [],
           watchNearby: !!aiMessage.nearby?.length,
         });
-        // TODO stage 2: temporary hook so the objectives tracker shows over the game before the chat is wired up.
-        const trackerGame = activeTab.activeSteamGame || globalActiveGame;
-        (window as any).electronAPI?.showObjectivesTracker?.(
-          {
-            id: aiMessage.id,
-            accent,
-            quest: (aiMessage.text.split('\n').find((l) => l.trim()) || '').slice(0, 100),
-            place: aiMessage.place ? { name: aiMessage.place.name, story: aiMessage.place.story, sure: aiMessage.place.sure } : undefined,
-            objectives: aiMessage.points.map((p, i) => ({ label: p.label, where: p.where, done: aiMessage.donePoints?.includes(i) })),
-          },
-          String(trackerGame?.appId ?? trackerGame?.name ?? ''),
-        );
       }
       // Precision pass: zoom in on each marked spot so markers land on the exact object (free, rate-limited).
       if (aiMessage.points?.length && imageBase64) {
@@ -1600,6 +1670,7 @@ export default function App() {
               (window as any).electronAPI.setDockPosition(newPos);
             }
           }}
+          onMinimize={isDesktop ? () => (window as any).electronAPI?.toggleSlide?.() : undefined}
           theme={settings.theme}
           onSync={syncDiagnostics?.triggerSyncNow}
         />
@@ -1835,11 +1906,8 @@ export default function App() {
                 onAppendToNotes={handleAppendToNotes}
                 markerLifetime={settings.markerLifetime ?? 120}
                 onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
-                onSetPlace={(name) => {
-                  const next = { ...(activeTab.place || {}), name, confirmed: true };
-                  setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));
-                  rememberGameProgress(activeTab, next);
-                }}
+                onSetPlace={handleSetPlace}
+                onTrackOnScreen={isDesktop ? handleTrackOnScreen : undefined}
                 onSetStory={(story) => {
                   const next = { name: activeTab.place?.name || '', confirmed: !!activeTab.place?.confirmed, ...(activeTab.place || {}), story, storyConfirmed: true };
                   setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));

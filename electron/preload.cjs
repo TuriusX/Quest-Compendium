@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateObjectivesTracker: (patch) => ipcRenderer.send('tracker-update', patch),
   hideObjectivesTracker: () => ipcRenderer.send('tracker-hide'),
   peekObjectivesTracker: () => ipcRenderer.send('tracker-peek'),
+  // The panel was hidden (any route): the app shows the objectives tracker for the latest answer.
+  onPanelHidden: (callback) => { ipcRenderer.removeAllListeners('panel-hidden'); ipcRenderer.on('panel-hidden', () => callback()); },
   onTrackerEvent: (callback) => { ipcRenderer.removeAllListeners('tracker-event'); ipcRenderer.on('tracker-event', (event, p) => callback(p)); },
   setPointersHidden: (id, hidden) => ipcRenderer.send('pointers-hidden', { id, hidden }),
   highlightPointer: (id, index) => ipcRenderer.send('pointers-highlight', { id, index }),

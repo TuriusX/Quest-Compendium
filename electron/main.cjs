@@ -294,6 +294,8 @@ const LOCATE_MIN_INTERVAL_MS = 4000;
 const LOCATE_MAX_PER_SESSION = 20;
 let markerLifetimeMs = 120000; // how long markers stay on screen (0 = until hidden or the scene changes)
 let currentDockPosition = "top-right";
+let panelAnchored = false; // the panel was opened at the objectives tracker, not at its dock
+let undockedSpot = null; // an undocked panel's own spot, put back after it was opened at the tracker
 let animationInterval = null;
 
 function getDockCoords(isHidden = false) {
@@ -361,6 +363,8 @@ function animateWindow(targetX, targetY, durationMs = 200) {
 
 async function slideIn(opts = {}) {
   if (!mainWindow) return;
+  // The objectives tracker is the panel's minimized state: it waits hidden while the panel is open.
+  tracker.hideTemporarily();
   if (!isAppVisible) {
     if (opts.snapshot) {
       openSnapshot = { image: opts.snapshot, session: overlaySession + 1 };
@@ -394,10 +398,39 @@ async function slideIn(opts = {}) {
   // macOS equivalent
   app.focus({ steal: true });
   
-  if (currentDockPosition !== 'undocked') {
+  if (opts.at && !panelAnchored && currentDockPosition === 'undocked') {
+    const b = mainWindow.getBounds();
+    undockedSpot = { x: b.x, y: b.y };
+  }
+  panelAnchored = !!opts.at;
+  if (opts.at) {
+    // Opened from the objectives tracker: right where it is (the dock position stays as it was).
+    if (animationInterval) clearInterval(animationInterval);
+    const b = mainWindow.getBounds();
+    mainWindow.setBounds({ x: opts.at.x, y: opts.at.y, width: b.width, height: b.height });
+  } else if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(false);
     animateWindow(coords.x, coords.y, 150);
   }
+}
+
+/**
+ * Ctrl+G or a click on the objectives tracker: open the panel at the tracker, its dock-side corner on the tracker's
+ * (top-right for a right dock, bottom-left for a bottom-left dock...), when the tracker sits on the dock's side and the
+ * panel fits there whole. Otherwise the panel opens at its dock as usual.
+ */
+function openPanelAtTracker(t) {
+  if (!mainWindow || mainWindow.isDestroyed() || isAppVisible) return;
+  const wa = screen.getDisplayMatching(t).workArea;
+  const { width: w, height: h } = mainWindow.getBounds();
+  const undocked = currentDockPosition === 'undocked';
+  const right = currentDockPosition.endsWith('right');
+  const bottom = currentDockPosition.startsWith('bottom');
+  const trackerOnRight = t.x + t.width / 2 > wa.x + wa.width / 2;
+  const x = right ? t.x + t.width - w : t.x;
+  const y = bottom ? t.y + t.height - h : t.y;
+  const fits = x >= wa.x && y >= wa.y && x + w <= wa.x + wa.width && y + h <= wa.y + wa.height;
+  slideIn((undocked || right === trackerOnRight) && fits ? { at: { x, y } } : {});
 }
 
 function slideOut() {
@@ -409,10 +442,23 @@ function slideOut() {
   openSnapshot = null; // the snapshot only lives for one visit
   if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(true);
-    animateWindow(coords.x, coords.y, 150);
+    if (panelAnchored) {
+      // Opened at the tracker: go straight back to the dock edge rather than sliding across the screen.
+      if (animationInterval) clearInterval(animationInterval);
+      const b = mainWindow.getBounds();
+      mainWindow.setBounds({ x: coords.x, y: coords.y, width: b.width, height: b.height });
+    } else {
+      animateWindow(coords.x, coords.y, 150);
+    }
   } else {
     mainWindow.hide(); // if undocked, just hide it
+    if (panelAnchored && undockedSpot) mainWindow.setPosition(undockedSpot.x, undockedSpot.y);
   }
+  panelAnchored = false;
+  undockedSpot = null;
+  // The panel's minimized state: the objectives tracker comes back (or the app shows it for the latest answer).
+  tracker.restore();
+  if (!mainWindow.isDestroyed()) mainWindow.webContents.send('panel-hidden');
 }
 
 function createWindow() {
@@ -543,7 +589,12 @@ app.whenReady().then(() => {
   }
 
   // The objectives tracker drawn over the game (electron/tracker.cjs).
-  tracker.init({ app, ipcMain, screen, globalShortcut, getMainWindow: () => mainWindow });
+  tracker.init({
+    app, ipcMain, screen, globalShortcut,
+    getMainWindow: () => mainWindow,
+    isPanelOpen: () => isAppVisible,
+    onOpenPanel: (bounds) => openPanelAtTracker(bounds),
+  });
 
   // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
   // overlay with the controller while it's visible. See controller.cjs.

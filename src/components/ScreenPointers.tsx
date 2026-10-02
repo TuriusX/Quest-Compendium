@@ -91,6 +91,7 @@ export function AnnotatedShot({
   removed,
   compact = false,
   referenced,
+  onTrack,
 }: {
   msgId: string;
   imageUrl?: string;
@@ -111,6 +112,8 @@ export function AnnotatedShot({
   compact?: boolean;
   /** With compact: markers the answer text already mentions; only the others get listed. */
   referenced?: Set<number>;
+  /** Desktop: show these objectives in the on-screen tracker (the panel hides, the tracker takes its place). */
+  onTrack?: () => void;
 }) {
   const t = useT();
   const [large, setLarge] = useState(false);
@@ -156,6 +159,16 @@ export function AnnotatedShot({
             >
               {t('chat.hideAll')}
             </button>
+            {onTrack && (
+              <button
+                type="button"
+                onClick={onTrack}
+                title={t('chat.trackHint')}
+                className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] font-semibold text-zinc-300 hover:text-white hover:border-[var(--accent-border)] transition-colors cursor-pointer"
+              >
+                {t('chat.track')}
+              </button>
+            )}
             {onChangeLifetime && (
               <label className="flex items-center gap-1 text-[11px] text-zinc-400">
                 <span>{t('chat.keep')}</span>

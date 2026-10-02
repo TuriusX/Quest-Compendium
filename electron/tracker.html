@@ -107,7 +107,7 @@
 </head>
 <body>
 <div id="tracker" class="in">
-  <div class="head" id="head" title="Click: open or collapse. Drag: move.">
+  <div class="head" id="head" title="Click: open the Compendium here. Drag: move.">
     <span class="title" id="title">Objectives</span>
     <span class="count" id="count"></span>
     <span class="chev">▾</span>
@@ -123,7 +123,7 @@
     <ol id="list"></ol>
   </div>
   <div class="warn off" id="warn"></div>
-  <div class="hint" id="hint"><kbd>Ctrl+G</kbd> opens · click header to collapse</div>
+  <div class="hint" id="hint"><kbd>Ctrl+G</kbd> or click the title: open the Compendium</div>
   <div class="ctl" id="ctl">
     <span class="btn" id="bConfirm" title="Confirm where you are"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span>
     <span class="btn" id="bCollapse" title="Collapse to one line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg></span>
@@ -255,7 +255,7 @@
     hintTimer = setTimeout(() => hint.classList.add('fade'), 4000);
   }
 
-  // Header: a click opens/collapses, a drag moves the whole tracker (the app moves the window).
+  // Header: a click opens the panel here (the app; peek in the demo), a drag moves the whole tracker.
   let drag = null;
   $('head').addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
@@ -277,6 +277,7 @@
     const was = drag; drag = null;
     if (!was) return;
     if (was.moved) send('drag-end', {});
+    else if (bridge && !demo) send('open-panel', {});
     else peek();
   });
   $('head').addEventListener('pointercancel', () => { drag = null; });

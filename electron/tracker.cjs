@@ -4,6 +4,10 @@
  * mouse is over the text, so the game keeps playing underneath. Position, view (full / collapsed / away), text size,
  * transparency and backdrop are remembered per game in userData/tracker.json.
  *
+ * It's the panel's minimized state: hidden (not closed) while the panel is open, back when the panel hides. Clicking
+ * its header or pressing Ctrl+G asks the app to open the panel (deps.onOpenPanel, with the tracker's bounds). The
+ * hotkey is only held while the tracker is actually showing, so Ctrl+G inside the panel stays Ask/Guide.
+ *
  * Wire it up from main.cjs:
  *   const tracker = require('./tracker.cjs');
  *   tracker.init({ app, ipcMain, screen, globalShortcut, getMainWindow: () => mainWindow });
@@ -16,6 +20,7 @@ const { BrowserWindow } = require('electron');
 let deps = null;
 let win = null;
 let current = null; // { data, gameKey }
+let suspended = false; // hidden while the panel is open (hideTemporarily / restore)
 let store = null;   // per-game settings, loaded once
 let storeFile = '';
 let hotkey = 'CommandOrControl+G';
@@ -81,6 +86,8 @@ function createWindow() {
     },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
+  // Never in the screenshots the app sends to the AI (or in recordings).
+  win.setContentProtection(true);
   win.setIgnoreMouseEvents(true, { forward: true });
   win.on('closed', () => { if (win) { win = null; current = null; } });
   win.webContents.on('console-message', (e, level, message) => {
@@ -90,13 +97,9 @@ function createWindow() {
   return new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
 }
 
-/**
- * Show (or replace) the tracker for an answer.
- * data: { id, title?, quest?, place?: {name, story, sure}, objectives: [{label, where?, done?, missable?}], warning?, accent? }
- */
-async function show(data, gameKey) {
-  if (!deps) throw new Error('tracker.init() first');
-  const clean = {
+/** What the page gets: only known fields, trimmed to length. */
+function cleanData(data) {
+  return {
     id: String((data && data.id) || ''),
     accent: /^#[0-9a-fA-F]{3,8}$/.test((data && data.accent) || '') ? data.accent : '#a87ffb',
     quest: String((data && data.quest) || '').slice(0, 120),
@@ -109,6 +112,15 @@ async function show(data, gameKey) {
       done: !!(o && o.done), missable: !!(o && o.missable),
     })).filter((o) => o.label),
   };
+}
+
+/**
+ * Show (or replace) the tracker for an answer.
+ * data: { id, title?, quest?, place?: {name, story, sure}, objectives: [{label, where?, done?, missable?}], warning?, accent? }
+ */
+async function show(data, gameKey) {
+  if (!deps) throw new Error('tracker.init() first');
+  const clean = cleanData(data);
   if (!clean.objectives.length && !clean.quest) { hide(); return false; }
   const fresh = !alive();
   if (fresh) await createWindow();
@@ -116,31 +128,59 @@ async function show(data, gameKey) {
   current = { data: clean, gameKey: gameKey || '_default' };
   const s = settingsFor(current.gameKey);
   js(`window.qcTrackerShow(${JSON.stringify(clean)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge })})`);
-  if (fresh) {
-    if (Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
-    win.showInactive();
-  }
+  if (fresh && Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
+  // Shown when the panel hides; while the panel is open it waits hidden with the new data.
+  if (deps.isPanelOpen && deps.isPanelOpen()) suspended = true;
+  else if (fresh || suspended || !win.isVisible()) { suspended = false; win.showInactive(); }
   registerHotkey();
   return true;
 }
 
+/** New data for the answer on show (or a newer answer): replaces what's shown, cleaned like show(). */
 function update(patch) {
   if (!alive() || !current) return;
-  Object.assign(current.data, patch || {});
-  js(`window.qcTrackerUpdate(${JSON.stringify(patch || {})})`);
+  current.data = cleanData({ ...current.data, ...(patch || {}) });
+  js(`window.qcTrackerShow(${JSON.stringify(current.data)})`);
 }
 
 function hide() {
   if (alive()) win.destroy();
-  win = null; current = null;
-  try { deps && deps.globalShortcut.unregister(hotkey); } catch { /* not registered */ }
+  win = null; current = null; suspended = false;
+  unregisterHotkey();
+}
+
+/** The panel opened: hide without losing anything. */
+function hideTemporarily() {
+  if (!alive()) return;
+  suspended = true;
+  win.hide();
+  unregisterHotkey();
+}
+
+/** The panel hid again: back at its own saved spot. */
+function restore() {
+  if (!alive() || !suspended) return;
+  suspended = false;
+  const s = settingsFor(current && current.gameKey);
+  if (s.view !== 'away' && Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
+  win.showInactive();
+  registerHotkey();
+}
+
+/** Header click or Ctrl+G: open the panel at the tracker. */
+function openPanel() {
+  if (alive() && deps.onOpenPanel) deps.onOpenPanel(win.getBounds());
+}
+
+function unregisterHotkey() {
+  try { if (deps && deps.globalShortcut.isRegistered(hotkey)) deps.globalShortcut.unregister(hotkey); } catch { /* not registered */ }
 }
 
 function registerHotkey(accelerator) {
   if (accelerator) hotkey = accelerator;
-  if (!alive()) return;
+  if (!alive() || suspended) return;
   try {
-    if (!deps.globalShortcut.isRegistered(hotkey)) deps.globalShortcut.register(hotkey, () => js('window.qcTrackerPeek()'));
+    if (!deps.globalShortcut.isRegistered(hotkey)) deps.globalShortcut.register(hotkey, openPanel);
   } catch (err) { console.warn('[tracker] hotkey failed:', err && err.message); }
 }
 
@@ -200,6 +240,9 @@ function onMessage(event, msg) {
       break;
     case 'peek':
       break;
+    case 'open-panel':
+      openPanel();
+      break;
     default:
       break;
   }
@@ -216,4 +259,4 @@ function init(d) {
   d.app.on('will-quit', hide);
 }
 
-module.exports = { init, show, update, hide, registerHotkey, isOpen: () => alive() };
+module.exports = { init, show, update, hide, hideTemporarily, restore, registerHotkey, isOpen: () => alive() };

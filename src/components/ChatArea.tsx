@@ -54,6 +54,8 @@ const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3', 'chat.fo
 interface ChatAreaProps {
   /** The screenshot shortcut from Settings, ready to show ("Ctrl + Shift + S"). */
   screenshotKeys?: string;
+  /** Desktop: show an answer's markers in the on-screen objectives tracker (hides the panel). */
+  onTrackOnScreen?: (msgId: string) => void;
   /** Desktop: how long markers stay on screen, in seconds (0 = always). */
   markerLifetime?: number;
   onChangeMarkerLifetime?: (seconds: number) => void;
@@ -87,6 +89,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   aiMode,
   activeGame,
   screenshotKeys,
+  onTrackOnScreen,
   soundEnabled,
   onAppendToNotes,
   onOpenScreenModal,
@@ -1089,6 +1092,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               removed={msg.removedMarkers}
                               compact={compact}
                               referenced={compact ? markerMentions(msg.text, points) : undefined}
+                              onTrack={compact && onTrackOnScreen ? () => onTrackOnScreen(msg.id) : undefined}
                               onHighlight={(i) => {
                                 if (isDesktopApp && markersActiveFor(msg.id)) api?.highlightPointer?.(msg.id, i);
                               }}

@@ -82,6 +82,8 @@ export { getRedirectResult, browserPopupRedirectResolver };
 export const logOut = async () => {
   try {
     if (typeof window !== 'undefined') {
+      // The objectives tracker shows this account's answers: put it away.
+      (window as any).electronAPI?.hideObjectivesTracker?.();
       localStorage.removeItem('quest_guest_session');
       window.dispatchEvent(new Event('quest_auth_change'));
     }
