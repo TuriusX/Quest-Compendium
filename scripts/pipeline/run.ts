@@ -24,6 +24,7 @@
  *   PIPELINE_PLAYER_RESERVE       searches always left for players under MONTHLY_SEARCH_CAP (default 2000)
  *   MONTHLY_SEARCH_CAP            the app's whole monthly search cap (default 5000; same setting as the server)
  *   PIPELINE_MAX_ACTIONS          actions per run (default 6)
+ *   PIPELINE_WISHLIST_SLOTS       of those, kept for wish-list guides while the wish list has games (default 2)
  *   PIPELINE_FEATURED_LANGS       languages for the featured guides before players ask (default es,pt)
  *   PIPELINE_MIN_PLAYERS          players before a game counts as in demand (default 3)
  *   PIPELINE_LANGS                languages to translate into (default es,pt,de,fr,ru,ja,ko,zh)
@@ -48,6 +49,7 @@ const SEARCH_CAP = env('PIPELINE_MONTHLY_SEARCHES', 1500);
 const RESERVE = env('PIPELINE_PLAYER_RESERVE', 2000);
 const APP_CAP = env('MONTHLY_SEARCH_CAP', 5000);
 const MAX_ACTIONS = env('PIPELINE_MAX_ACTIONS', 6); // most actions are cheap now (see the plan order below)
+const WISH_SLOTS = Math.min(env('PIPELINE_WISHLIST_SLOTS', 2), MAX_ACTIONS);
 const MIN_PLAYERS = env('PIPELINE_MIN_PLAYERS', 3);
 const LANGS = (process.env.PIPELINE_LANGS || 'es,pt,de,fr,ru,ja,ko,zh').split(',').map((s) => s.trim()).filter(Boolean);
 const LANG_BY_NAME: Record<string, string> = {
@@ -74,7 +76,7 @@ const FEATURED = (process.env.PIPELINE_FEATURED ||
   .map((s) => s.trim())
   .filter(Boolean);
 
-type Action = { kind: 'build' | 'build-checked' | 'revisit' | 'upgrade' | 'translate' | 'achievements'; game: string; key: string; lang?: string; searches: number; why: string };
+type Action = { kind: 'build' | 'build-checked' | 'revisit' | 'upgrade' | 'translate' | 'achievements'; game: string; key: string; lang?: string; searches: number; why: string; wish?: boolean };
 
 /** Run one of the guide scripts and read what it spent from its summary line. */
 function runScript(args: string[]): { ok: boolean; searches: number; dollars: number; summary: string } {
@@ -185,9 +187,9 @@ async function main() {
   const have = new Set(allGuides.map((d) => d.id));
   let wished = 0;
   for (const name of wishlist()) {
-    if (wished >= 2) break;
+    if (wished >= WISH_SLOTS) break;
     if (have.has(gameKey(name))) continue;
-    add({ kind: 'build', game: name, key: gameKey(name), searches: 0, why: 'from the wish list' });
+    add({ kind: 'build', game: name, key: gameKey(name), searches: 0, why: 'from the wish list', wish: true });
     wished++;
   }
   for (const s of demand) {
@@ -217,8 +219,13 @@ async function main() {
   let aiRoom = AI_CAP - (state.dollars || 0);
   console.log(`Budget: ${Math.max(0, searchRoom)} searches and $${Math.max(0, aiRoom).toFixed(2)} of AI left for the pipeline this month. ${plan.length} candidate action(s).`);
   let changed = false, done = 0;
+  // Wish-list guides have their own slots, so the long queue of achievement guides doesn't hold them back; slots the
+  // wish list can't fill (it ran out) go to everything else.
+  const otherSlots = MAX_ACTIONS - Math.min(WISH_SLOTS, plan.filter((a) => a.wish).length);
+  let others = 0;
   for (const a of plan) {
     if (done >= MAX_ACTIONS) break;
+    if (!a.wish && others >= otherSlots) continue;
     if (aiRoom < 0.25) {
       report.push('Stopped: the monthly AI budget is used up.');
       break;
@@ -228,6 +235,7 @@ async function main() {
     if (DRY) {
       report.push(`(dry run) would ${a.kind} ${a.game}${a.lang ? ` → ${a.lang}` : ''}: ${a.why}`);
       done++;
+      if (!a.wish) others++;
       continue;
     }
     let r = { ok: false, searches: 0, dollars: 0, summary: '' };
@@ -257,6 +265,7 @@ async function main() {
     aiRoom -= r.dollars;
     changed = changed || r.ok;
     done++;
+    if (!a.wish) others++;
     report.push(`${r.ok ? '✅' : '⚠️'} ${a.kind} **${a.game}**${a.lang ? ` → ${a.lang}` : ''}: ${a.why}. ${r.summary || (r.ok ? '' : 'failed (see the job log)')}`.trim());
     guideCache.delete(g.key);
   }
