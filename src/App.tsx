@@ -514,7 +514,7 @@ export default function App() {
   };
 
   // ---- The objectives tracker: the panel's minimized state (desktop, electron/tracker.cjs) ----
-  // It follows the latest finished answer with markers in the active game tab, or the one picked with "Track on screen"
+  // It follows the latest finished answer in the active game tab (markers or not), or the one picked with "Track on screen"
   // until a newer answer arrives. Hiding the panel shows it; opening the panel hides it (main.cjs).
   const [trackerPickId, setTrackerPickId] = useState<string | null>(null);
   const trackerPickRef = useRef<string | null>(null);
@@ -530,7 +530,7 @@ export default function App() {
   const trackerCtx = useRef({ tab: activeTab, accent: trackerAccent, gameKey: trackerKeyOfGame, labels: trackerWords });
   trackerCtx.current = { tab: activeTab, accent: trackerAccent, gameKey: trackerKeyOfGame, labels: trackerWords };
   const latestTrackedId = trackedMessage(activeTab)?.id;
-  // A newer answer with markers takes over from the one picked with "Track on screen".
+  // A newer finished answer takes over from the one picked with "Track on screen".
   useEffect(() => {
     if (trackerPickRef.current) pickTracked(null);
   }, [latestTrackedId]);
@@ -541,7 +541,7 @@ export default function App() {
       const { tab, accent, gameKey, labels } = trackerCtx.current;
       const msg = trackedMessage(tab, trackerPickRef.current);
       if (!msg) {
-        console.log('[panel] panel-hidden: no answer with markers in this tab, no tracker');
+        console.log('[panel] panel-hidden: no finished answer in this tab, no tracker');
         return;
       }
       const p = buildTrackerPayload(msg, accent, gameKey, tab, labels);

@@ -973,10 +973,6 @@ The <...> parts are placeholders: always write your own values. Never copy the p
 - Only point at things that are actually visible in the screenshot, and be precise. If nothing specific is worth pointing at, leave the block out entirely.
 - Never mention the block, coordinates or "pointers" in your answer text.
 
-When you add a <qc-points> block, also add one line naming what the player is doing right now, like a quest title in an RPG quest log:
-<qc-title>Short quest name</qc-title>
-- 2 to 6 words, at most 60 characters, in the player's language, title-style (for example "Loot the Sunken Crypt", "Find Duncan's Cabin"). No quotes, no ending punctuation, never a sentence about the answer itself.
-
 Accuracy: a wrong marker is worse than no marker. Players act on these, so:
 - Check before pinning: before you name a specific item in a specific container or spot, be certain. If you aren't, use Google Search to confirm it first (for example "<game> <area> <item> location"). If you still can't confirm which object it is, don't pin it: say where to look in your answer text instead.
 - Random loot: many containers roll random or level-scaled loot. For those, never list specific contents; say it's random and what it usually holds (for example a note like "Random loot, usually potions or gold"). Only name exact contents for a fixed, known placement.
@@ -989,6 +985,17 @@ If the player is asking about items, secrets or things to find, and you know of 
 - onThisMap: true ONLY if it is on the same map the player is on right now, so it would scroll into view just by walking around (no door, stairs, cave entrance or screen transition in between). false for anything inside a building, on another floor, in another room, or behind a transition.
 - Never list anything you already pointed at in <qc-points>: only other items.
 - Only list things you are confident about. Leave the block out when there are none, and never mention it in your answer text.`;
+      }
+
+      // A quest-log title on every in-game answer (the objectives tracker shows it), markers or not.
+      if (isGameContextAvailable) {
+        systemInstruction += `
+
+[QUEST TITLE]
+End every answer with one line naming what the player is doing right now, like a quest title in an RPG quest log:
+<qc-title>Short quest name</qc-title>
+- 2 to 6 words, at most 60 characters, in the player's language, title-style (for example "Loot the Sunken Crypt", "Find Duncan's Cabin"). No quotes, no ending punctuation, never a sentence about the answer itself.
+- Never mention the title line in your answer text.`;
       }
 
       systemInstruction += `
@@ -1438,10 +1445,10 @@ percentages:
       // On-screen pointers: pull the <qc-points> block out of the answer.
       const { text: answerText, points, nearby } = extractScreenPoints(responseText, Boolean(imageBase64));
       responseText = answerText;
-      // The quest-log title for the on-screen objectives tracker (only with markers).
+      // The quest-log title for the on-screen objectives tracker (any in-game answer, markers or not).
       const titleParsed = extractTitle(responseText);
       responseText = titleParsed.text;
-      const title = points.length ? titleParsed.title : '';
+      const title = titleParsed.title;
       // Where the AI thinks the player is: pull the <qc-place> line out of the answer.
       const placeParsed = extractPlace(responseText);
       responseText = placeParsed.text;

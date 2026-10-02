@@ -28,9 +28,14 @@ let store = null;   // per-game settings, loaded once
 let storeFile = '';
 let keys = 'CommandOrControl+Space'; // the show/hide shortcut, named in the hint ('' = none registered)
 let saveTimer = null;
+// Click-through except while the cursor is over the window. The main process hit-tests the cursor itself: on Windows,
+// setIgnoreMouseEvents(false) fires a mouseleave in the page, so page-driven enter/leave flipped straight back to
+// click-through (hover showed, clicks fell through to the game). pressed: a press started on the tracker (a header
+// drag or the transparency slider) keeps clicks on until it ends, even outside the window.
+let mouseOn = false, pressed = false, mouseTimer = null;
 const MARGIN = 0;
 
-const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: false, x: null, y: null, edge: 'right' };
+const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: true, x: null, y: null, edge: 'right' };
 
 function loadStore() {
   if (store) return store;
@@ -76,6 +81,31 @@ function placeWindow(view) {
   if (x !== b.x || y !== b.y) win.setPosition(Math.round(x), Math.round(y));
 }
 
+/**
+ * Where a new tracker opens (and where it goes back to when its saved spot is reset): the right edge, about a third
+ * of the way down, under where minimaps usually sit.
+ */
+const defaultSpot = (wa, width = 420) => ({ x: wa.x + wa.width - width - 20, y: wa.y + Math.round(wa.height * 0.35) });
+
+function setMouse(on) {
+  if (!alive() || on === mouseOn) return;
+  mouseOn = on;
+  win.setIgnoreMouseEvents(!on, { forward: true });
+}
+function startMouseWatch() {
+  clearInterval(mouseTimer);
+  mouseTimer = setInterval(() => {
+    if (!alive() || !win.isVisible()) { setMouse(false); return; }
+    if (pressed) { setMouse(true); return; }
+    const p = deps.screen.getCursorScreenPoint(), b = win.getBounds();
+    setMouse(p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height);
+  }, 40);
+}
+function stopMouseWatch() {
+  clearInterval(mouseTimer);
+  mouseTimer = null; mouseOn = false; pressed = false;
+}
+
 /** The screen a new tracker opens on: the one the last screenshot came from (the game's), else the cursor's. */
 function startDisplay() {
   const d = deps.getDisplay && deps.getDisplay();
@@ -84,9 +114,10 @@ function startDisplay() {
 
 function createWindow(disp) {
   const wa = disp.workArea;
-  // Top-right by default (the saved spot wins once the player has dragged it).
+  // The right edge, under the minimap, by default (the saved spot wins once the player has dragged it).
+  const spot = defaultSpot(wa);
   win = new BrowserWindow({
-    x: wa.x + wa.width - 440, y: wa.y + 24, width: 420, height: 300,
+    x: spot.x, y: spot.y, width: 420, height: 300,
     transparent: true, frame: false, resizable: false, movable: false, focusable: false,
     skipTaskbar: true, hasShadow: false, show: false, alwaysOnTop: true,
     webPreferences: {
@@ -102,13 +133,14 @@ function createWindow(disp) {
   const w = win;
   win.on('closed', () => {
     if (deps.onWindow) deps.onWindow(null);
-    if (win === w) { win = null; current = null; }
+    if (win === w) { win = null; current = null; stopMouseWatch(); }
   });
   if (deps.onWindow) deps.onWindow(win);
   win.webContents.on('console-message', (e, level, message) => {
     if (typeof message === 'string' && message.startsWith('[tracker]')) console.log(message);
   });
   win.loadFile(path.join(__dirname, 'tracker.html'));
+  startMouseWatch();
   return new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
 }
 
@@ -131,7 +163,7 @@ function cleanData(data) {
 }
 
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
-const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone'];
+const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'none'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -151,17 +183,19 @@ function onScreen(s, wa) {
 async function show(data, gameKey) {
   if (!deps) throw new Error('tracker.init() first');
   const clean = cleanData(data);
-  if (!clean.objectives.length && !clean.quest) { hide(); return false; }
+  if (!clean.objectives.length && !clean.quest && !clean.place) { hide(); return false; }
   const fresh = !alive();
   const disp = fresh ? startDisplay() : null;
   if (fresh) await createWindow(disp);
   if (!alive()) return false;
   current = { data: clean, gameKey: gameKey || '_default' };
   let s = settingsFor(current.gameKey);
-  // The saved spot is for this game; on a different screen now (another monitor), start top-right on this one.
+  // The saved spot is for this game; on a different screen now (another monitor), start at the default spot on this one.
   if (fresh && (Number.isFinite(s.x) || Number.isFinite(s.y)) && !onScreen(s, disp.workArea)) {
     patchSettings(current.gameKey, { x: null, y: null });
     s = settingsFor(current.gameKey);
+    const spot = defaultSpot(disp.workArea, win.getBounds().width);
+    win.setPosition(spot.x, spot.y);
   }
   js(`window.qcTrackerShow(${JSON.stringify(clean)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel() })})`);
   if (fresh && Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
@@ -171,16 +205,20 @@ async function show(data, gameKey) {
   return true;
 }
 
-/** New data for the answer on show (or a newer answer): replaces what's shown, cleaned like show(). */
+/**
+ * New data for the answer on show (or a newer answer): replaces what's shown entirely, cleaned like show(), so an
+ * answer without a place or objectives doesn't keep the previous answer's.
+ */
 function update(patch) {
   if (!alive() || !current) return;
-  current.data = cleanData({ ...current.data, ...(patch || {}) });
+  current.data = cleanData(patch || {});
   js(`window.qcTrackerShow(${JSON.stringify(current.data)})`);
 }
 
 function hide() {
   if (alive()) win.destroy();
   win = null; current = null; suspended = false; captureHidden = false;
+  stopMouseWatch();
 }
 
 /** The panel opened: hide without losing anything. */
@@ -261,8 +299,9 @@ function onMessage(event, msg) {
       placeWindow(msg.view);
       break;
     }
-    case 'mouse':
-      win.setIgnoreMouseEvents(!msg.over, { forward: true });
+    case 'press':
+      pressed = !!msg.down;
+      if (pressed) setMouse(true);
       break;
     case 'drag': {
       const b = win.getBounds();

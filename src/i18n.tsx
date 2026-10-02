@@ -165,6 +165,7 @@ const en: Dict = {
   "tracker.itemTodo": "Click: collected",
   "tracker.itemDone": "Click: not collected yet",
   "tracker.hintNoKeys": "Click the title to open the Compendium",
+  "tracker.none": "No objectives for this answer",
   'header.dock': 'Dock window',
   'header.undock': 'Undock window',
   // common
@@ -635,6 +636,7 @@ const es: Dict = {
   "tracker.itemTodo": "Clic: recogido",
   "tracker.itemDone": "Clic: aún no recogido",
   "tracker.hintNoKeys": "Haz clic en el título para abrir el Compendio",
+  "tracker.none": "Sin objetivos para esta respuesta",
   'header.dock': 'Acoplar ventana',
   'header.undock': 'Desacoplar ventana',
   'common.achievements': 'Logros',
@@ -1097,6 +1099,7 @@ const pt: Dict = {
   "tracker.itemTodo": "Clique: coletado",
   "tracker.itemDone": "Clique: ainda não coletado",
   "tracker.hintNoKeys": "Clique no título para abrir o Compêndio",
+  "tracker.none": "Sem objetivos para esta resposta",
   'header.dock': 'Fixar janela',
   'header.undock': 'Soltar janela',
   'common.achievements': 'Conquistas',
