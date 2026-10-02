@@ -1,0 +1,349 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Quest Compendium objectives</title>
+<style>
+  /* The objectives tracker: text drawn straight onto the game with a shadow, no card. Three states — full,
+     collapsed (one header line) and away (a small tab at the screen edge). Hovering shows the controls. */
+  :root {
+    --accent: #a87ffb;
+    --fs: 16px;            /* base text size: 14 / 16 / 19 (small / medium / large) */
+    --alpha: 1;            /* whole-tracker transparency, from the slider */
+    --ink: #f3eefc;
+    --dim: rgba(243, 238, 252, .55);
+    --done: rgba(243, 238, 252, .38);
+    --warn: #ffc14d;
+    --ok: #4ade80;
+    --shadow: 0 1px 2px rgba(0,0,0,.95), 0 0 6px rgba(0,0,0,.85), 0 2px 10px rgba(0,0,0,.6);
+  }
+  html, body { margin: 0; background: transparent; overflow: hidden; width: 100%; height: 100%;
+    font-family: 'Segoe UI', system-ui, sans-serif; font-size: var(--fs); color: var(--ink); user-select: none; }
+  body.demo { background: #2a3a2a url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="%2335553a"/><rect x="20" y="20" width="20" height="20" fill="%232e4a33"/><rect width="20" height="20" fill="%232e4a33"/></svg>'); }
+
+  #tracker { position: absolute; left: 4px; top: 4px; display: inline-block; opacity: var(--alpha);
+    text-shadow: var(--shadow); max-width: 26em; padding: .35em .6em .5em .6em; border-radius: .5em; }
+  /* The soft dark backdrop (optional, toggled in the controls): a gradient that fades out, so it reads as a
+     shade behind the text rather than a box. */
+  #tracker.backdrop { background: radial-gradient(ellipse at 20% 30%, rgba(10,8,18,.62), rgba(10,8,18,.42) 55%, rgba(10,8,18,0) 100%); }
+  #tracker.collapsed .body, #tracker.collapsed .warn, #tracker.collapsed .hint, #tracker.collapsed .place { display: none; }
+  #tracker.away { display: none; }
+
+  .head { display: flex; align-items: center; gap: .45em; cursor: pointer; line-height: 1.25; }
+  .head:hover .title { color: #fff; }
+  .title { font-weight: 800; font-size: 1.05em; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  .count { font-weight: 700; color: var(--dim); font-size: .9em; }
+  .chev { color: var(--dim); font-size: .8em; margin-left: .1em; transition: transform .15s steps(2); }
+  #tracker.collapsed .chev { transform: rotate(-90deg); }
+
+  .place { display: flex; align-items: center; gap: .4em; margin: .15em 0 .35em 0; font-size: .9em; color: var(--dim); cursor: pointer; line-height: 1.3; }
+  .place .pin { color: var(--accent); flex-shrink: 0; width: .95em; height: .95em; }
+  .place .name { color: var(--ink); font-weight: 600; }
+  .place .story { opacity: .85; }
+  .place .confirm { margin-left: .25em; font-size: .85em; font-weight: 700; color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 999px; padding: 0 .55em; line-height: 1.5; opacity: .9; transition: opacity .15s; }
+  .place:hover .confirm { opacity: 1; filter: brightness(1.2); }
+  .place.sure .confirm { display: none; }
+  .place.sure .tick { color: var(--ok); font-weight: 800; }
+  .place:not(.sure) .tick { display: none; }
+
+  .quest { font-weight: 700; font-size: 1.02em; line-height: 1.3; margin: .1em 0 .3em 0; color: #fff; }
+  ol { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; align-items: flex-start; gap: .5em; line-height: 1.35; margin: .2em 0; cursor: pointer; }
+  li:hover .obj { color: #fff; }
+  .badge { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 1.25em; height: 1.25em;
+    padding: 0 .3em; margin-top: .12em; border-radius: 2px; background: var(--accent); color: #16101f; font-size: .78em;
+    font-weight: 800; text-shadow: none; box-shadow: 0 0 0 1.5px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.6);
+    transition: background .2s steps(3), color .2s steps(3); }
+  .obj { font-weight: 500; }
+  .obj .where { color: var(--dim); font-weight: 400; }
+  li.done .badge { background: #6b6678; color: #e9e6f0; }
+  li.done .obj { color: var(--done); text-decoration: line-through; text-decoration-color: rgba(243,238,252,.35); }
+  li.done .where { display: none; }
+
+  .warn { display: flex; align-items: flex-start; gap: .4em; margin-top: .4em; font-size: .9em; color: var(--warn); font-weight: 600; line-height: 1.3; }
+  .warn svg { width: 1em; height: 1em; flex-shrink: 0; margin-top: .15em; }
+  .warn:empty, .warn.off { display: none; }
+
+  .hint { margin-top: .5em; font-size: .78em; color: var(--dim); letter-spacing: .04em; transition: opacity 1.2s ease; }
+  .hint.fade { opacity: 0; }
+  .hint kbd { font-family: inherit; font-weight: 700; color: var(--ink); }
+
+  /* Controls: hidden until the mouse is over the tracker. */
+  .ctl { display: flex; align-items: center; gap: .3em; margin-top: .45em; opacity: 0; pointer-events: none;
+    transition: opacity .15s steps(3); font-size: .8em; }
+  #tracker:hover .ctl, #tracker.pin .ctl { opacity: 1; pointer-events: auto; }
+  #tracker.collapsed .ctl { margin-top: .25em; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; width: 1.9em; height: 1.9em; border-radius: .3em;
+    background: rgba(16,12,28,.85); border: 1px solid rgba(255,255,255,.14); color: var(--ink); cursor: pointer; text-shadow: none; }
+  .btn:hover { border-color: var(--accent); color: #fff; }
+  .btn.on { border-color: var(--accent); background: var(--accent); color: #16101f; }
+  .btn svg { width: 1.05em; height: 1.05em; }
+  .btn.aa { font-weight: 800; font-size: .95em; letter-spacing: -.02em; width: auto; padding: 0 .5em; }
+  .sl { display: inline-flex; align-items: center; gap: .3em; background: rgba(16,12,28,.85); border: 1px solid rgba(255,255,255,.14);
+    border-radius: .3em; height: 1.9em; padding: 0 .5em; }
+  .sl svg { width: 1em; height: 1em; opacity: .8; }
+  input[type=range] { width: 5.5em; accent-color: var(--accent); cursor: pointer; margin: 0; }
+
+  /* Sent away: a small tab on the screen edge with the logo. Hovering slides a "bring back" label out of it. */
+  #tab { position: absolute; left: 0; top: 0; display: none; align-items: center; gap: .4em; height: 2.4em; padding: 0 .45em;
+    background: rgba(16,12,28,.9); border: 1.5px solid var(--accent); border-radius: .5em; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,.6); opacity: var(--alpha); }
+  #tab.right { border-right: 0; border-radius: .5em 0 0 .5em; }
+  #tab.left { border-left: 0; border-radius: 0 .5em .5em 0; flex-direction: row-reverse; }
+  body.away #tab { display: inline-flex; }
+  #tab svg.logo { width: 1.6em; height: 1.6em; image-rendering: pixelated; flex-shrink: 0; }
+  #tab .lbl { font-size: .8em; font-weight: 700; color: var(--ink); white-space: nowrap; max-width: 0; overflow: hidden; transition: max-width .2s steps(4); }
+  #tab:hover .lbl { max-width: 10em; }
+  #tab .n { position: absolute; top: -.5em; right: -.5em; min-width: 1.3em; height: 1.3em; border-radius: 2px; background: var(--accent);
+    color: #16101f; font-size: .7em; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  #tab.left .n { right: auto; left: -.5em; }
+
+  @keyframes pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: var(--alpha); transform: none; } }
+  #tracker.in { animation: pop .25s steps(3) both; }
+  body.demo #demo { position: fixed; right: 12px; bottom: 12px; font: 12px/1.4 'Segoe UI', system-ui; color: #fff; background: rgba(0,0,0,.6); padding: 8px 10px; border-radius: 6px; }
+  body:not(.demo) #demo { display: none; }
+</style>
+</head>
+<body>
+<div id="tracker" class="in">
+  <div class="head" id="head" title="Click: open or collapse. Drag: move.">
+    <span class="title" id="title">Objectives</span>
+    <span class="count" id="count"></span>
+    <span class="chev">▾</span>
+  </div>
+  <div class="place" id="place" title="Click to confirm this is where you are">
+    <svg class="pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+    <span><span class="name" id="placeName"></span><span class="story" id="placeStory"></span></span>
+    <span class="tick">✓</span>
+    <span class="confirm" id="placeConfirm">Confirm</span>
+  </div>
+  <div class="body">
+    <div class="quest" id="quest"></div>
+    <ol id="list"></ol>
+  </div>
+  <div class="warn off" id="warn"></div>
+  <div class="hint" id="hint"><kbd>Ctrl+G</kbd> opens · click header to collapse</div>
+  <div class="ctl" id="ctl">
+    <span class="btn" id="bConfirm" title="Confirm where you are"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span>
+    <span class="btn" id="bCollapse" title="Collapse to one line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg></span>
+    <span class="btn" id="bAway" title="Send to the screen edge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h12"/><path d="m13 6 6 6-6 6"/><path d="M21 4v16"/></svg></span>
+    <span class="btn aa" id="bSize" title="Text size">Aa</span>
+    <span class="sl" title="Transparency"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg><input type="range" id="alpha" min="30" max="100" value="100"></span>
+    <span class="btn" id="bBackdrop" title="Soft dark backdrop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18" opacity=".5"/></svg></span>
+  </div>
+</div>
+
+<div id="tab" class="right" title="Bring the objectives back">
+  <svg class="logo" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><g> <rect x="1" y="1" width="12" height="1" fill="#0b0916" /> <rect x="1" y="2" width="1" height="1" fill="#0b0916" /> <rect x="2" y="2" width="1" height="1" fill="#1c1635" /> <rect x="3" y="2" width="7" height="1" fill="#16112c" /> <rect x="10" y="2" width="2" height="1" fill="#f4c535" /> <rect x="12" y="2" width="1" height="1" fill="#0b0916" /> <rect x="13" y="2" width="1" height="1" fill="#d6cda4" /> <rect x="0" y="3" width="2" height="1" fill="#f4c535" /> <rect x="2" y="3" width="1" height="1" fill="#1c1635" /> <rect x="3" y="3" width="8" height="1" fill="#16112c" /> <rect x="11" y="3" width="1" height="1" fill="#f4c535" /> <rect x="12" y="3" width="1" height="1" fill="#0b0916" /> <rect x="13" y="3" width="1" height="1" fill="#a49a71" /> <rect x="1" y="4" width="1" height="1" fill="#0b0916" /> <rect x="2" y="4" width="1" height="1" fill="#1c1635" /> <rect x="3" y="4" width="9" height="1" fill="#16112c" /> <rect x="12" y="4" width="1" height="1" fill="#0b0916" /> <rect x="13" y="4" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="5" width="1" height="1" fill="#0b0916" /> <rect x="2" y="5" width="1" height="1" fill="#1c1635" /> <rect x="3" y="5" width="9" height="1" fill="#16112c" /> <rect x="12" y="5" width="1" height="1" fill="#0b0916" /> <rect x="13" y="5" width="1" height="1" fill="#a49a71" /> <rect x="1" y="6" width="1" height="1" fill="#0b0916" /> <rect x="2" y="6" width="1" height="1" fill="#1c1635" /> <rect x="3" y="6" width="3" height="1" fill="#16112c" /> <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="9" y="6" width="3" height="1" fill="#16112c" /> <rect x="12" y="6" width="1" height="1" fill="#0b0916" /> <rect x="13" y="6" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="7" width="1" height="1" fill="#0b0916" /> <rect x="2" y="7" width="1" height="1" fill="#1c1635" /> <rect x="3" y="7" width="2" height="1" fill="#16112c" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill="#16112c" /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="10" y="7" width="2" height="1" fill="#16112c" /> <rect x="12" y="7" width="1" height="1" fill="#0b0916" /> <rect x="13" y="7" width="1" height="1" fill="#a49a71" /> <rect x="1" y="8" width="1" height="1" fill="#0b0916" /> <rect x="2" y="8" width="1" height="1" fill="#1c1635" /> <rect x="3" y="8" width="2" height="1" fill="#16112c" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="3" height="1" fill="#16112c" /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="10" y="8" width="2" height="1" fill="#16112c" /> <rect x="12" y="8" width="1" height="1" fill="#0b0916" /> <rect x="13" y="8" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="9" width="1" height="1" fill="#0b0916" /> <rect x="2" y="9" width="1" height="1" fill="#1c1635" /> <rect x="3" y="9" width="2" height="1" fill="#16112c" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill="#16112c" /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="10" y="9" width="2" height="1" fill="#16112c" /> <rect x="12" y="9" width="1" height="1" fill="#0b0916" /> <rect x="13" y="9" width="1" height="1" fill="#a49a71" /> <rect x="1" y="10" width="1" height="1" fill="#0b0916" /> <rect x="2" y="10" width="1" height="1" fill="#1c1635" /> <rect x="3" y="10" width="3" height="1" fill="#16112c" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> <rect x="9" y="10" width="3" height="1" fill="#16112c" /> <rect x="12" y="10" width="1" height="1" fill="#0b0916" /> <rect x="13" y="10" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="11" width="1" height="1" fill="#0b0916" /> <rect x="2" y="11" width="1" height="1" fill="#1c1635" /> <rect x="3" y="11" width="9" height="1" fill="#16112c" /> <rect x="12" y="11" width="1" height="1" fill="#0b0916" /> <rect x="13" y="11" width="1" height="1" fill="#a49a71" /> <rect x="0" y="12" width="2" height="1" fill="#f4c535" /> <rect x="2" y="12" width="1" height="1" fill="#1c1635" /> <rect x="3" y="12" width="9" height="1" fill="#16112c" /> <rect x="12" y="12" width="1" height="1" fill="#0b0916" /> <rect x="13" y="12" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="13" width="1" height="1" fill="#0b0916" /> <rect x="2" y="13" width="1" height="1" fill="#1c1635" /> <rect x="3" y="13" width="8" height="1" fill="#16112c" /> <rect x="11" y="13" width="1" height="1" fill="#f4c535" /> <rect x="12" y="13" width="1" height="1" fill="#0b0916" /> <rect x="13" y="13" width="1" height="1" fill="#a49a71" /> <rect x="1" y="14" width="1" height="1" fill="#0b0916" /> <rect x="2" y="14" width="1" height="1" fill="#1c1635" /> <rect x="3" y="14" width="7" height="1" fill="#16112c" /> <rect x="10" y="14" width="2" height="1" fill="#f4c535" /> <rect x="12" y="14" width="1" height="1" fill="#0b0916" /> <rect x="13" y="14" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="15" width="13" height="1" fill="#0b0916" /> </g> <g > <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill=var(--accent) /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="1" height="1" fill=var(--accent) /> <rect x="7" y="8" width="1" height="1" fill=#ffffff /> <rect x="8" y="8" width="1" height="1" fill=var(--accent) /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill=var(--accent) /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> </g></svg>
+  <span class="lbl" id="tabLbl">Objectives</span>
+  <span class="n" id="tabN"></span>
+</div>
+
+<div id="demo">demo: <b>1/2/3</b> state · <b>G</b> peek · drag the header to move · <b>B</b> backdrop · <b>T</b> text size · click items/place</div>
+
+<script>
+  'use strict';
+  // Talks to the desktop app through window.qcTracker (electron/trackerPreload.cjs). Standalone in a browser
+  // (?demo=1) it runs with sample data so the look can be checked without the app.
+  const bridge = window.qcTracker || null;
+  const demo = !bridge || /[?&]demo=1/.test(location.search);
+  const $ = (id) => document.getElementById(id);
+  const tracker = $('tracker'), tab = $('tab'), list = $('list'), hint = $('hint');
+  const SIZES = { small: 14, medium: 16, large: 19 };
+  const PEEK_MS = 7000;
+
+  // What's on screen right now and how the player set it up (settings come from the app, per game).
+  const state = {
+    data: null,                   // { id, title, quest, place:{name,story,sure}, objectives:[{label,where,done,missable}], warning, accent }
+    view: 'full',                 // full | collapsed | away
+    peekFrom: null,               // the view to fold back to after a peek
+    size: 'medium', alpha: 100, backdrop: false, edge: 'right',
+  };
+  let peekTimer = null, hintTimer = null;
+
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const send = (type, payload) => { if (bridge) bridge.send({ type, ...payload }); else console.log('[tracker]', type, payload || ''); };
+
+  function render() {
+    const d = state.data; if (!d) return;
+    document.documentElement.style.setProperty('--accent', /^#[0-9a-f]{3,8}$/i.test(d.accent || '') ? d.accent : '#a87ffb');
+    const objs = d.objectives || [];
+    const done = objs.filter((o) => o.done).length;
+    $('count').textContent = objs.length ? `${done}/${objs.length}` : '';
+    $('tabN').textContent = objs.length ? `${objs.length - done}` : '';
+    $('tabN').style.display = objs.length - done > 0 ? '' : 'none';
+    $('quest').textContent = d.quest || '';
+    $('quest').style.display = d.quest ? '' : 'none';
+    const p = d.place || null;
+    $('place').style.display = p && p.name ? '' : 'none';
+    if (p) {
+      $('placeName').textContent = p.name || '';
+      $('placeStory').textContent = p.story ? ` · ${p.story}` : '';
+      $('place').classList.toggle('sure', !!p.sure);
+      $('bConfirm').classList.toggle('on', !!p.sure);
+    }
+    list.innerHTML = objs.map((o, i) => `<li class="${o.done ? 'done' : ''}" data-i="${i}" title="${o.done ? 'Click: not collected yet' : 'Click: collected'}">
+        <span class="badge">${o.done ? '✓' : i + 1}</span>
+        <span class="obj">${esc(o.label)}${o.where && !o.done ? ` <span class="where">— ${esc(o.where)}</span>` : ''}</span></li>`).join('');
+    const missable = objs.filter((o) => o.missable && !o.done).map((o) => o.label);
+    const warnText = d.warning || (missable.length ? `Missable: ${missable.join(', ')}` : '');
+    $('warn').classList.toggle('off', !warnText);
+    $('warn').innerHTML = warnText ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>${esc(warnText)}</span>` : '';
+    applyView();
+  }
+
+  function applyView() {
+    document.documentElement.style.setProperty('--fs', `${SIZES[state.size] || 16}px`);
+    document.documentElement.style.setProperty('--alpha', String(state.alpha / 100));
+    $('alpha').value = state.alpha;
+    tracker.classList.toggle('backdrop', state.backdrop);
+    $('bBackdrop').classList.toggle('on', state.backdrop);
+    $('bSize').textContent = state.size === 'small' ? 'aa' : state.size === 'large' ? 'AA' : 'Aa';
+    tracker.classList.toggle('collapsed', state.view === 'collapsed');
+    tracker.classList.toggle('away', state.view === 'away');
+    document.body.classList.toggle('away', state.view === 'away');
+    tab.className = state.edge === 'left' ? 'left' : 'right';
+    $('bCollapse').title = state.view === 'collapsed' ? 'Open' : 'Collapse to one line';
+    $('bCollapse').firstElementChild.style.transform = state.view === 'collapsed' ? 'rotate(180deg)' : '';
+    reportSize();
+  }
+
+  // The app sizes the window to the content, so a transparent window never sits over the game needlessly.
+  let lastSize = '';
+  function reportSize() {
+    requestAnimationFrame(() => {
+      const el = state.view === 'away' ? tab : tracker;
+      const r = el.getBoundingClientRect();
+      const w = Math.ceil(r.right + 6), h = Math.ceil(r.bottom + 6);
+      const key = `${w}x${h}:${state.view}`;
+      if (key === lastSize) return;
+      lastSize = key;
+      send('size', { width: w, height: h, view: state.view });
+    });
+  }
+
+  function setView(view, opts = {}) {
+    if (!opts.peek) { clearTimeout(peekTimer); state.peekFrom = null; }
+    state.view = view;
+    tracker.classList.remove('in'); void tracker.offsetWidth; tracker.classList.add('in');
+    applyView();
+    if (!opts.peek) send('view', { view });
+  }
+
+  // Ctrl+G or clicking the header: open the full tracker where it is, then fold back to how it was.
+  function peek() {
+    if (state.view === 'full' && !state.peekFrom) { setView('collapsed'); return; }
+    if (!state.peekFrom) state.peekFrom = state.view;
+    setView('full', { peek: true });
+    send('peek', { from: state.peekFrom });
+    armFold();
+  }
+  function armFold() {
+    clearTimeout(peekTimer);
+    if (!state.peekFrom) return;
+    peekTimer = setTimeout(() => {
+      if (tracker.matches(':hover')) { armFold(); return; } // still being looked at: wait
+      const back = state.peekFrom; state.peekFrom = null;
+      setView(back, { peek: true });
+    }, PEEK_MS);
+  }
+
+  function showHint() {
+    clearTimeout(hintTimer);
+    hint.classList.remove('fade');
+    hintTimer = setTimeout(() => hint.classList.add('fade'), 4000);
+  }
+
+  // Header: a click opens/collapses, a drag moves the whole tracker (the app moves the window).
+  let drag = null;
+  $('head').addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    drag = { x: e.screenX, y: e.screenY, moved: false };
+    $('head').setPointerCapture(e.pointerId);
+  });
+  $('head').addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.screenX - drag.x, dy = e.screenY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    drag.moved = true; drag.x = e.screenX; drag.y = e.screenY;
+    if (demo) { // no app to move the window: move the tracker inside the page instead
+      tracker.style.left = `${Math.max(0, tracker.offsetLeft + dx)}px`; tracker.style.top = `${Math.max(0, tracker.offsetTop + dy)}px`;
+      return;
+    }
+    send('drag', { dx, dy });
+  });
+  $('head').addEventListener('pointerup', (e) => {
+    const was = drag; drag = null;
+    if (!was) return;
+    if (was.moved) send('drag-end', {});
+    else peek();
+  });
+  $('head').addEventListener('pointercancel', () => { drag = null; });
+
+  list.addEventListener('click', (e) => {
+    const li = e.target.closest('li'); if (!li) return;
+    const i = Number(li.dataset.i); const o = state.data.objectives[i]; if (!o) return;
+    o.done = !o.done; render();
+    send('done', { id: state.data.id, index: i, done: o.done });
+  });
+  const confirmPlace = () => {
+    const p = state.data && state.data.place; if (!p || !p.name) return;
+    p.sure = true; render();
+    send('confirm-place', { id: state.data.id, name: p.name, story: p.story || '' });
+  };
+  $('place').addEventListener('click', confirmPlace);
+  $('bConfirm').addEventListener('click', confirmPlace);
+  $('bCollapse').addEventListener('click', () => setView(state.view === 'collapsed' ? 'full' : 'collapsed'));
+  $('bAway').addEventListener('click', () => setView('away'));
+  tab.addEventListener('click', () => setView('full'));
+  $('bSize').addEventListener('click', () => {
+    state.size = state.size === 'small' ? 'medium' : state.size === 'medium' ? 'large' : 'small';
+    applyView(); send('settings', { size: state.size });
+  });
+  $('alpha').addEventListener('input', () => { state.alpha = Number($('alpha').value); applyView(); });
+  $('alpha').addEventListener('change', () => send('settings', { alpha: state.alpha }));
+  $('bBackdrop').addEventListener('click', () => { state.backdrop = !state.backdrop; applyView(); send('settings', { backdrop: state.backdrop }); });
+
+  // Click-through everywhere except over the tracker: the app flips mouse handling on enter/leave.
+  for (const el of [tracker, tab]) {
+    el.addEventListener('mouseenter', () => send('mouse', { over: true }));
+    el.addEventListener('mouseleave', () => { send('mouse', { over: false }); if (state.peekFrom) armFold(); });
+  }
+
+  // Called by the app.
+  window.qcTrackerShow = (data, settings) => {
+    state.data = data;
+    if (settings) Object.assign(state, settings);
+    if (settings && settings.view) state.view = settings.view;
+    render(); showHint();
+  };
+  window.qcTrackerUpdate = (patch) => { if (state.data) Object.assign(state.data, patch); render(); };
+  window.qcTrackerSettings = (s) => { Object.assign(state, s); applyView(); };
+  window.qcTrackerPeek = peek;
+  window.qcTrackerEdge = (edge) => { state.edge = edge; applyView(); };
+  window.addEventListener('resize', reportSize);
+
+  if (demo) {
+    document.body.classList.add('demo');
+    tracker.style.left = `${Math.max(8, window.innerWidth - 440)}px`; tracker.style.top = '24px'; // top-right by default
+    window.qcTrackerShow({
+      id: 'demo', accent: '#a87ffb', quest: 'Find the Elder Scroll in the Dwemer ruins',
+      place: { name: 'Blackreach', story: 'Just after meeting Septimus', sure: false },
+      objectives: [
+        { label: 'Crimson Nirnroot', where: 'by the glowing mushrooms, left of the lift' },
+        { label: 'Falmer sword', where: 'on the dead Falmer near the bridge', done: true },
+        { label: 'Lexicon receptacle', where: 'inside the Tower of Mzark' },
+        { label: 'Attunement sphere', where: 'top of the stairs', missable: true },
+      ],
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '1') setView('full'); if (e.key === '2') setView('collapsed'); if (e.key === '3') setView('away');
+      if (e.key.toLowerCase() === 'g') peek();
+      if (e.key.toLowerCase() === 'b') $('bBackdrop').click();
+      if (e.key.toLowerCase() === 't') $('bSize').click();
+    });
+  }
+</script>
+</body>
+</html>

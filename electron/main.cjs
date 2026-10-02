@@ -97,6 +97,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { createControllerService } = require('./controller.cjs');
 const { createFocusHelper } = require('./focus.cjs');
+const tracker = require('./tracker.cjs');
 const focusHelper = createFocusHelper();
 const http = require('http');
 
@@ -541,6 +542,9 @@ app.whenReady().then(() => {
     createWindow();
   }
 
+  // The objectives tracker drawn over the game (electron/tracker.cjs).
+  tracker.init({ app, ipcMain, screen, globalShortcut, getMainWindow: () => mainWindow });
+
   // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
   // overlay with the controller while it's visible. See controller.cjs.
   controllerService = createControllerService({
@@ -613,6 +617,9 @@ app.whenReady().then(() => {
     } catch (err) {
       console.error("Failed to register autoScreenshotShortcut", err);
     }
+
+    // unregisterAll() above also dropped the tracker's hotkey.
+    tracker.registerHotkey();
   });
 
   app.on('activate', () => {
@@ -735,6 +742,8 @@ function processNewAppId(currentAppId) {
   if (currentAppId !== lastRunningAppId) {
     // The game closed or switched: markers belong to the old game's screen, so clear them.
     if (lastRunningAppId !== 0 && typeof closeScreenPointers === 'function') closeScreenPointers();
+    // ...and the objectives tracker with them.
+    if (lastRunningAppId !== 0) tracker.hide();
     lastRunningAppId = currentAppId;
     if (currentAppId === 0) {
       activeSteamGame = null;

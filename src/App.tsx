@@ -1307,6 +1307,18 @@ export default function App() {
           hidden: [],
           watchNearby: !!aiMessage.nearby?.length,
         });
+        // TODO stage 2: temporary hook so the objectives tracker shows over the game before the chat is wired up.
+        const trackerGame = activeTab.activeSteamGame || globalActiveGame;
+        (window as any).electronAPI?.showObjectivesTracker?.(
+          {
+            id: aiMessage.id,
+            accent,
+            quest: (aiMessage.text.split('\n').find((l) => l.trim()) || '').slice(0, 100),
+            place: aiMessage.place ? { name: aiMessage.place.name, story: aiMessage.place.story, sure: aiMessage.place.sure } : undefined,
+            objectives: aiMessage.points.map((p, i) => ({ label: p.label, where: p.where, done: aiMessage.donePoints?.includes(i) })),
+          },
+          String(trackerGame?.appId ?? trackerGame?.name ?? ''),
+        );
       }
       // Precision pass: zoom in on each marked spot so markers land on the exact object (free, rate-limited).
       if (aiMessage.points?.length && imageBase64) {

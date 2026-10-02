@@ -29,6 +29,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // On-screen pointers (markers drawn over the game)
   showScreenPointers: (points, accent, opts) => ipcRenderer.invoke('show-screen-pointers', { points, accent, opts }),
   hideScreenPointers: () => ipcRenderer.send('hide-screen-pointers'),
+  // The objectives tracker drawn over the game (electron/tracker.cjs).
+  showObjectivesTracker: (data, gameKey) => ipcRenderer.invoke('tracker-show', { data, gameKey }),
+  updateObjectivesTracker: (patch) => ipcRenderer.send('tracker-update', patch),
+  hideObjectivesTracker: () => ipcRenderer.send('tracker-hide'),
+  peekObjectivesTracker: () => ipcRenderer.send('tracker-peek'),
+  onTrackerEvent: (callback) => { ipcRenderer.removeAllListeners('tracker-event'); ipcRenderer.on('tracker-event', (event, p) => callback(p)); },
   setPointersHidden: (id, hidden) => ipcRenderer.send('pointers-hidden', { id, hidden }),
   highlightPointer: (id, index) => ipcRenderer.send('pointers-highlight', { id, index }),
   addPointers: (id, points, refImage, startIndex) => ipcRenderer.send('pointers-add', { id, points, refImage, startIndex }),
