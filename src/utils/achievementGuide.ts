@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getApiBaseUrl } from './api';
+import { nameKey, samePlace } from './placeName';
 
 /**
  * A game's achievement guide (how to get each achievement, whether it can be missed, the guide area it belongs to, and
@@ -13,9 +14,12 @@ export type AchievementGuide = {
   roadmap?: { time?: string; difficulty?: string; playthroughs?: string; missables?: string; steps?: string[]; noReturn?: { point: string; lost: string }[] } | null;
 };
 
-export const achKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+export const achKey = nameKey;
 /** Does a tip belong to this achievement? (By name, or by its English name when the guide is translated.) */
-export const tipMatches = (tip: AchievementTip, name: string) => achKey(tip.name) === achKey(name) || (!!tip.englishName && achKey(tip.englishName) === achKey(name));
+export const tipMatches = (tip: AchievementTip, name: string) => {
+  const k = achKey(name);
+  return !!k && (achKey(tip.name) === k || (!!tip.englishName && achKey(tip.englishName) === k));
+};
 const cache = new Map<string, Promise<AchievementGuide | null>>();
 const load = (url: string): Promise<AchievementGuide | null> => {
   if (!cache.has(url)) {
@@ -64,9 +68,4 @@ export function openGuideArea(slug: string) {
   window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug } }));
 }
 
-/** Same place, allowing extra detail on either side ("South Figaro" vs "South Figaro, Relic Shop"). */
-export function samePlace(a?: string | null, b?: string | null): boolean {
-  const n = (x: string) => x.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9,]+/g, ' ').trim();
-  const x = n(a || ''), y = n(b || '');
-  return !!x && !!y && (x === y || x.startsWith(`${y},`) || y.startsWith(`${x},`));
-}
+export { samePlace };

@@ -52,6 +52,8 @@ import { useLocale } from '../i18n';
 const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3', 'chat.follow4'];
 
 interface ChatAreaProps {
+  /** The screenshot shortcut from Settings, ready to show ("Ctrl + Shift + S"). */
+  screenshotKeys?: string;
   /** Desktop: how long markers stay on screen, in seconds (0 = always). */
   markerLifetime?: number;
   onChangeMarkerLifetime?: (seconds: number) => void;
@@ -84,6 +86,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   isLoading,
   aiMode,
   activeGame,
+  screenshotKeys,
   soundEnabled,
   onAppendToNotes,
   onOpenScreenModal,
@@ -948,7 +951,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
       )}
 
-      {activeTab && showTour && <Walkthrough isDesktop={isDesktopApp} onDone={() => setShowTour(false)} />}
+      {activeTab && showTour && <Walkthrough isDesktop={isDesktopApp} screenshotKeys={screenshotKeys} onDone={() => setShowTour(false)} />}
 
       {activeTab && guideLoaded && (
         <div className={mode === 'guide' ? 'flex-1 flex flex-col min-h-0' : 'hidden'}>

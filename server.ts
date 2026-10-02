@@ -20,6 +20,7 @@ import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPanel } from './guidesApi';
+import { samePlace } from './src/utils/placeName';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
@@ -314,14 +315,11 @@ async function startServer() {
   app.post('/api/facts/here', requireAuth, async (req, res) => {
     try {
       const game = String(req.body?.game ?? '').trim().slice(0, 120);
-      const placeName = String(req.body?.place ?? '').trim().slice(0, 80).toLowerCase();
+      const placeName = String(req.body?.place ?? '').trim().slice(0, 80);
       if (!game || !placeName) return res.json({ facts: [] });
       const facts = (await getGameFacts(game))
         // Same place, allowing for extra detail on either side ("Duncan's Cabin" vs "Duncan's Cabin, near South Figaro").
-        .filter((f) => {
-          const p = (f.place || '').toLowerCase();
-          return !!p && (p === placeName || placeName.startsWith(`${p},`) || p.startsWith(`${placeName},`));
-        })
+        .filter((f) => samePlace(f.place, placeName))
         .sort((a, b) => (b.confirmations || 1) - (a.confirmations || 1) || b.at - a.at)
         .slice(0, 30)
         .map((f) => ({ subject: f.subject, fact: f.fact, kind: f.kind, story: f.story || '', confirmations: f.confirmations || 1, disputed: !!f.disputed }));

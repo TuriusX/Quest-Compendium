@@ -11,6 +11,7 @@
  */
 import type { Express } from 'express';
 import { getFirestore } from 'firebase-admin/firestore';
+import { placeKey } from './src/utils/placeName';
 
 const TTL = 10 * 60_000;
 const cache = new Map<string, { at: number; data: any }>();
@@ -247,7 +248,7 @@ export function registerGuidesApi(app: Express): void {
 
 // ---- the guide page for where the player is (used by answers and "Known here") ----
 
-const norm = (x: string) => x.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9,()]+/g, ' ').replace(/\s+/g, ' ').trim();
+const norm = (x: string) => placeKey(x, ',()');
 const loose = (x: string) =>
   norm(x)
     .replace(/[(),]/g, ' ')

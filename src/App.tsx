@@ -29,6 +29,7 @@ import { db } from './lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
 import { playBlipSound } from './utils/audio';
+import { samePlace } from './utils/placeName';
 import { useCloudSync } from './hooks/useCloudSync';
 import { recordTombstone } from './hooks/tabMerge';
 import pixelSceneUrl from './pixel-scene.png';
@@ -1322,10 +1323,6 @@ export default function App() {
           let place = t.place || settings.gameProgress?.[gameProgressKey(t)];
           const g = aiMessage.place;
           // Same place with more or less detail ("South Figaro" vs "South Figaro, Relic Shop") counts as the same.
-          const samePlace = (a?: string, b?: string) => {
-            const x = (a || '').trim().toLowerCase(), y = (b || '').trim().toLowerCase();
-            return !!x && !!y && (x === y || x.startsWith(`${y},`) || y.startsWith(`${x},`));
-          };
           if (g && !place?.confirmed) place = { ...place, name: g.name, confirmed: false };
           // The player moved on (the answer is about a different place than the confirmed one): switch to the new place,
           // unconfirmed, so "Known here" follows them and new facts aren't filed under the old place. The story point
@@ -1821,6 +1818,7 @@ export default function App() {
                 isLoading={isLoadingAi}
                 aiMode={settings.aiMode}
                 activeGame={activeGame}
+                screenshotKeys={prettyShortcut(settings.autoScreenshotShortcut)}
                 soundEnabled={settings.soundEnabled}
                 onAppendToNotes={handleAppendToNotes}
                 markerLifetime={settings.markerLifetime ?? 120}

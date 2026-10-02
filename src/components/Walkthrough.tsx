@@ -5,7 +5,8 @@ import { QuestLogo } from './QuestLogo';
 
 /**
  * A 20-second first-run intro: the three things every new player needs to know (borderless window mode, the
- * screenshot hotkey, confirming where you are) plus Ask | Guide. Shown once per computer; "Skip" is always there.
+ * screenshot hotkey as set in Settings, confirming where you are) plus Ask | Guide. Shown once per computer; "Skip"
+ * is always there.
  */
 const KEY = 'qc-walkthrough-done';
 export const walkthroughDone = () => {
@@ -16,12 +17,12 @@ export const walkthroughDone = () => {
   }
 };
 
-export function Walkthrough({ isDesktop, onDone }: { isDesktop: boolean; onDone: () => void }) {
+export function Walkthrough({ isDesktop, screenshotKeys, onDone }: { isDesktop: boolean; screenshotKeys?: string; onDone: () => void }) {
   const t = useT();
   const [step, setStep] = useState(0);
   const steps = [
     { title: t('tour.1t'), body: t('tour.1b'), icon: '🖥️' },
-    { title: t('tour.2t'), body: isDesktop ? t('tour.2bDesktop') : t('tour.2bWeb'), icon: '📸' },
+    { title: t('tour.2t'), body: isDesktop ? t('tour.2bDesktop', { keys: screenshotKeys || 'Ctrl + Shift + S' }) : t('tour.2bWeb'), icon: '📸' },
     { title: t('tour.3t'), body: t('tour.3b'), icon: '📍' },
     { title: t('tour.4t'), body: t('tour.4b'), icon: '📖' },
   ];

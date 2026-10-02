@@ -3,6 +3,7 @@ import { BookOpen, Check, ChevronDown, ChevronRight, ArrowLeft, Gem, Skull, Spar
 import { getApiBaseUrl } from '../utils/api';
 import { useLocale, useT } from '../i18n';
 import { tipMatches, useAchievementGuideByKey, type AchievementGuide } from '../utils/achievementGuide';
+import { samePlace } from '../utils/placeName';
 import type { Achievement } from '../types';
 
 /**
@@ -36,11 +37,6 @@ const api = (rawPath: string): Promise<any> => {
     cache.set(path, p);
   }
   return cache.get(path)!;
-};
-const norm = (x: string) => x.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9,]+/g, ' ').trim();
-const samePlace = (a: string, b: string) => {
-  const x = norm(a), y = norm(b);
-  return !!x && !!y && (x === y || x.startsWith(`${y},`) || y.startsWith(`${x},`));
 };
 const ls = {
   get: (k: string) => {
