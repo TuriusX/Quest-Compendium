@@ -390,10 +390,13 @@ async function slideIn(opts = {}) {
   isAppVisible = true;
   mainWindow.show();
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
+  // Opened by a click on the tracker's title: the tracker has focus, so the game is the window it remembered (read
+  // before focusing the panel, which takes focus from the tracker).
+  const trackerGame = tracker.gameWindowIfFocused();
   mainWindow.focus();
   // Take focus from the game (Windows won't let a background app do this on its own when the overlay was
   // opened with a controller), so the game stops reacting to controller input while the overlay is open.
-  const previous = focusHelper.take(mainWindow);
+  const previous = focusHelper.take(mainWindow, trackerGame);
   if (previous) focusBeforeOverlay = previous;
   // macOS equivalent
   app.focus({ steal: true });
@@ -601,6 +604,8 @@ app.whenReady().then(() => {
     getMainWindow: () => mainWindow,
     isPanelOpen: () => isAppVisible,
     onOpenPanel: (bounds) => openPanelAtTracker(bounds),
+    // A click on the tracker focuses it; focus goes back to the game afterwards.
+    focusHelper,
     // A new tracker opens on the game's screen: the one the last screenshot came from.
     getDisplay: () => lastCaptureDisplay,
     // Processor share while it's open, next to the markers' (startPerfLog).

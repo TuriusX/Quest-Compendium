@@ -325,6 +325,16 @@
   });
   $('head').addEventListener('pointercancel', () => { drag = null; });
 
+  // A press or drag must never stay stuck (it would keep the app thinking the mouse is held): let go of it when new
+  // data arrives, when the window hides or loses focus, and when the header loses its pointer capture.
+  function releasePress() {
+    drag = null;
+    send('press', { down: false });
+  }
+  $('head').addEventListener('lostpointercapture', releasePress);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) releasePress(); });
+  window.addEventListener('blur', releasePress);
+
   list.addEventListener('click', (e) => {
     const li = e.target.closest('li'); if (!li) return;
     const i = Number(li.dataset.i); const o = state.data.objectives[i]; if (!o) return;
@@ -358,6 +368,7 @@
 
   // Called by the app.
   window.qcTrackerShow = (data, settings) => {
+    releasePress();
     state.data = data;
     if (settings) Object.assign(state, settings);
     if (settings && settings.view) state.view = settings.view;

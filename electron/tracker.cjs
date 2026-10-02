@@ -32,7 +32,12 @@ let saveTimer = null;
 // setIgnoreMouseEvents(false) fires a mouseleave in the page, so page-driven enter/leave flipped straight back to
 // click-through (hover showed, clicks fell through to the game). pressed: a press started on the tracker (a header
 // drag or the transparency slider) keeps clicks on until it ends, even outside the window.
+// mouseOn is null right after the window is shown again: Windows' real click-through state after a hide/show isn't
+// known, so the next tick of the watch applies it for real instead of trusting the last value.
 let mouseOn = false, pressed = false, mouseTimer = null;
+// The game's window, remembered when the cursor comes onto the tracker: a click on the tracker focuses it (it has to be
+// focusable for clicks to arrive), and focus goes straight back to the game when the click or drag ends.
+let gameWindow = null;
 const MARGIN = 0;
 
 const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: true, x: null, y: null, edge: 'right' };
@@ -88,9 +93,22 @@ function placeWindow(view) {
 const defaultSpot = (wa, width = 420) => ({ x: wa.x + wa.width - width - 20, y: wa.y + Math.round(wa.height * 0.35) });
 
 function setMouse(on) {
-  if (!alive() || on === mouseOn) return;
+  if (!alive() || (typeof mouseOn === 'boolean' && on === mouseOn)) return;
   mouseOn = on;
   win.setIgnoreMouseEvents(!on, { forward: true });
+  console.log(`[tracker] mouse ${on ? 'on' : 'off'}`);
+  if (on) {
+    const other = deps.focusHelper && deps.focusHelper.other();
+    if (other) gameWindow = other;
+  } else {
+    giveFocusBack();
+  }
+}
+
+/** After a click or drag on the tracker (which focused it), focus goes back to the game. */
+function giveFocusBack() {
+  if (!alive() || pressed || !win.isFocused() || !deps.focusHelper) return;
+  deps.focusHelper.restore(win, gameWindow);
 }
 function startMouseWatch() {
   clearInterval(mouseTimer);
@@ -106,6 +124,19 @@ function stopMouseWatch() {
   mouseTimer = null; mouseOn = false; pressed = false;
 }
 
+/**
+ * Just shown again (showInactive): re-apply the click-through state on the next tick of the mouse watch, and put the
+ * tracker back on top, above the panel window even if the panel was raised while it was open.
+ */
+function afterShow() {
+  if (!alive()) return;
+  mouseOn = null;
+  win.setAlwaysOnTop(true, 'screen-saver');
+  win.moveTop();
+}
+
+const overlaps = (a, b) => !!a && !!b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
 /** The screen a new tracker opens on: the one the last screenshot came from (the game's), else the cursor's. */
 function startDisplay() {
   const d = deps.getDisplay && deps.getDisplay();
@@ -118,7 +149,10 @@ function createWindow(disp) {
   const spot = defaultSpot(wa);
   win = new BrowserWindow({
     x: spot.x, y: spot.y, width: 420, height: 300,
-    transparent: true, frame: false, resizable: false, movable: false, focusable: false,
+    // Focusable: a non-focusable window loses the button-down of every click once the panel has been opened and
+    // hidden (only moves and button-ups arrived). It's always shown with showInactive, so it never takes focus by
+    // itself, and a click hands focus straight back to the game (giveFocusBack).
+    transparent: true, frame: false, resizable: false, movable: false, focusable: true,
     skipTaskbar: true, hasShadow: false, show: false, alwaysOnTop: true,
     webPreferences: {
       contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false,
@@ -201,7 +235,7 @@ async function show(data, gameKey) {
   if (fresh && Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
   // Shown when the panel hides; while the panel is open it waits hidden with the new data.
   if (deps.isPanelOpen && deps.isPanelOpen()) suspended = true;
-  else if (fresh || suspended || !win.isVisible()) { suspended = false; win.showInactive(); }
+  else if (fresh || suspended || !win.isVisible()) { suspended = false; win.showInactive(); afterShow(); }
   return true;
 }
 
@@ -217,7 +251,7 @@ function update(patch) {
 
 function hide() {
   if (alive()) win.destroy();
-  win = null; current = null; suspended = false; captureHidden = false;
+  win = null; current = null; suspended = false; captureHidden = false; pressed = false;
   stopMouseWatch();
 }
 
@@ -225,6 +259,7 @@ function hide() {
 function hideTemporarily() {
   if (!alive()) return;
   suspended = true;
+  pressed = false;
   win.hide();
 }
 
@@ -235,6 +270,15 @@ function restore() {
   const s = settingsFor(current && current.gameKey);
   if (s.view !== 'away' && Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
   win.showInactive();
+  afterShow();
+  // Once the panel has finished sliding back to its dock (150 ms), log where both are; the panel must not cover it.
+  setTimeout(() => {
+    if (!alive() || suspended) return;
+    const t = win.getBounds();
+    const m = deps.getMainWindow && deps.getMainWindow();
+    const p = m && !m.isDestroyed() ? m.getBounds() : null;
+    console.log(`[tracker] restored at ${t.x},${t.y} (${t.width}x${t.height}); panel at ${p ? `${p.x},${p.y} (${p.width}x${p.height})` : 'none'}${overlaps(t, p) ? ': the panel overlaps the tracker (the tracker is kept on top)' : ''}`);
+  }, 300);
 }
 
 /** Header click (or the controller's open button): open the panel at the tracker. */
@@ -249,13 +293,14 @@ function openPanel() {
 function hideForCapture() {
   if (!alive() || suspended || captureHidden || !win.isVisible()) return false;
   captureHidden = true;
+  pressed = false;
   win.hide();
   return true;
 }
 function showAfterCapture() {
   if (!captureHidden) return;
   captureHidden = false;
-  if (alive() && !suspended) win.showInactive();
+  if (alive() && !suspended) { win.showInactive(); afterShow(); }
 }
 
 /** Where the tracker is on screen, or null when it's closed or hidden (for the sticky markers' exclude list). */
@@ -302,6 +347,7 @@ function onMessage(event, msg) {
     case 'press':
       pressed = !!msg.down;
       if (pressed) setMouse(true);
+      else giveFocusBack();
       break;
     case 'drag': {
       const b = win.getBounds();
@@ -367,6 +413,8 @@ module.exports = {
   init, show, update, hide, hideTemporarily, restore, setKeys, hideForCapture, showAfterCapture, getBounds,
   setVisibleInRecordings, setScale, openPanel,
   isOpen: () => alive(),
+  /** The game's window when the tracker itself has focus (a click on its title opens the panel): the panel hands focus back there. */
+  gameWindowIfFocused: () => (alive() && win.isFocused() ? gameWindow : null),
   /** On screen right now (not hidden behind the open panel). */
   isShowing: () => alive() && !suspended && win.isVisible(),
 };
