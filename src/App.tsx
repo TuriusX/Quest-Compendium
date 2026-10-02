@@ -50,7 +50,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   steamId: '',
   ttsVoice: 'device', // the device's built-in voice (free); Gemini voices are an option
   customApiKey: '',
-  hideAppShortcut: 'CmdOrCtrl+Shift+H',
+  hideAppShortcut: 'CmdOrCtrl+Space',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
   trackerShortcut: 'CmdOrCtrl+G',
@@ -544,8 +544,12 @@ export default function App() {
     api?.onPanelHidden?.(() => {
       const { tab, accent, gameKey, labels } = trackerCtx.current;
       const msg = trackedMessage(tab, trackerPickRef.current);
-      if (!msg) return;
+      if (!msg) {
+        console.log('[panel] panel-hidden: no answer with markers in this tab, no tracker');
+        return;
+      }
       const p = buildTrackerPayload(msg, accent, gameKey, tab, labels);
+      console.log(`[panel] panel-hidden: showing the tracker for answer ${msg.id} (${p.data.objectives.length} objective(s), "${p.data.quest}")`);
       api.showObjectivesTracker?.(p.data, p.gameKey);
     });
   }, []);

@@ -458,7 +458,10 @@ function slideOut() {
   undockedSpot = null;
   // The panel's minimized state: the objectives tracker comes back (or the app shows it for the latest answer).
   tracker.restore();
-  if (!mainWindow.isDestroyed()) mainWindow.webContents.send('panel-hidden');
+  if (!mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('panel-hidden');
+    console.log('[panel] hidden: sent panel-hidden to the app');
+  }
 }
 
 function createWindow() {
@@ -487,6 +490,10 @@ function createWindow() {
   });
 
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
+  // The app's "[panel] ..." diagnostics go to the desktop:dev output too.
+  mainWindow.webContents.on('console-message', (event, level, message) => {
+    if (typeof message === 'string' && message.startsWith('[panel]')) console.log(message);
+  });
 
   // If the player clicks back into the game while the overlay stays open, the opening snapshot is stale:
   // the next question takes a fresh screenshot instead. (Focus changes right after opening are ignored.)
@@ -623,37 +630,28 @@ app.whenReady().then(() => {
     },
   });
 
-  // Register default hotkey
-  globalShortcut.register('CommandOrControl+Space', () => {
-    if (isAppVisible) {
-      slideOut();
-    } else {
-      slideIn();
-    }
-  });
+  // The show/hide shortcut (Settings: hideAppShortcut, default Ctrl+Space), the same toggle whether the game or the
+  // panel has focus. Registered here until the app sends its settings (update-shortcuts), then re-registered there.
+  const toggleFromShortcut = (keys) => {
+    console.log(`[panel] hide shortcut (${keys}): ${isAppVisible ? 'hiding' : 'showing'} the panel`);
+    if (isAppVisible) slideOut();
+    else slideIn();
+  };
+  const registerHideShortcut = (keys) => {
+    let ok = false;
+    try { ok = globalShortcut.register(keys, () => toggleFromShortcut(keys)); } catch (err) { console.error(`[panel] couldn't register ${keys}:`, err && err.message); }
+    if (!ok) console.warn(`[panel] ${keys} is taken (by another app or shortcut); the show/hide shortcut isn't set`);
+    return ok;
+  };
+  registerHideShortcut('CommandOrControl+Space');
 
   ipcMain.on('update-shortcuts', (event, shortcuts) => {
     globalShortcut.unregisterAll();
-    
-    // Always ensure a fallback shortcut exists
+
+    // Always ensure a show/hide shortcut exists: the player's, else Ctrl+Space.
     const hideAppCmd = shortcuts.hideAppShortcut || 'CommandOrControl+Space';
-    
-    try {
-      globalShortcut.register(hideAppCmd, () => {
-        if (isAppVisible) {
-          slideOut();
-        } else {
-          slideIn();
-        }
-      });
-    } catch (err) {
-      console.error("Failed to register hideAppShortcut", err);
-      try {
-        globalShortcut.register('CommandOrControl+Space', () => {
-          if (isAppVisible) slideOut(); else slideIn();
-        });
-      } catch(e) {}
-    }
+    if (!registerHideShortcut(hideAppCmd) && hideAppCmd !== 'CommandOrControl+Space') registerHideShortcut('CommandOrControl+Space');
+    console.log(`[panel] show/hide shortcut: ${hideAppCmd}`);
     
     const voiceCmd = shortcuts.voiceInputShortcut || 'CommandOrControl+Shift+V';
     try {

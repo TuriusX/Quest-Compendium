@@ -49,7 +49,7 @@ type TabId = 'appearance' | 'persona' | 'shortcuts' | 'connection' | 'account';
 const isMacPlatform = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
 
 const DEFAULT_SHORTCUTS = {
-  hideAppShortcut: 'CmdOrCtrl+Shift+H',
+  hideAppShortcut: 'CmdOrCtrl+Space',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
   trackerShortcut: 'CmdOrCtrl+G',
