@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
@@ -30,6 +30,7 @@ import {
   AlertTriangle,
   AlertCircle,
   BookOpen,
+  MapPin,
 } from './icons';
 import { AnnotatedShot, MarkerBadge, withMarkerBadges } from './ScreenPointers';
 import { areaFindsFor, markersActiveFor } from './pointerStore';
@@ -43,6 +44,9 @@ import { PlaceBar } from './PlaceBar';
 import { KnownHere } from './KnownHere';
 import { QcGuidesView } from './QcGuidesView';
 import { GlainIcon } from './GlainIcon';
+import { Walkthrough, walkthroughDone } from './Walkthrough';
+import { samePlace, tipMatches, useAchievementGuide } from '../utils/achievementGuide';
+import { useLocale } from '../i18n';
 
 /** Quick follow-ups offered under the latest answer (sent as a normal question, in the user's language). */
 const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3', 'chat.follow4'];
@@ -101,6 +105,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   // Ask (the conversation) or Guide (the game's guide, open at where you are). The question box works in both; asking
   // switches back to the answer. The guide stays loaded once opened, so switching back and forth keeps your place.
+  // The status strip: where you are, what's missable here (from the achievement guide, spoiler-safe), and the
+  // Ask/Guide switch. The missable nudge shows once per place and can be dismissed.
+  const localeNow = useLocale();
+  const achGuideHere = useAchievementGuide(activeGame?.name, activeGame?.appId, localeNow);
+  const placeNow = activeTab?.place?.name || '';
+  const missHere = useMemo(() => {
+    if (!achGuideHere || !placeNow) return [];
+    return achGuideHere.list.filter((a) => a.missable && a.areaName && samePlace(a.areaName, placeNow) && !activeGame?.achievements?.some((x) => x.unlocked && tipMatches(a, x.name)));
+  }, [achGuideHere, placeNow, activeGame?.achievements]);
+  const [nudgeDismissed, setNudgeDismissed] = useState<string>('');
+  const [showTour, setShowTour] = useState(() => !walkthroughDone());
   const [mode, setModeState] = useState<'ask' | 'guide'>(() => {
     try {
       return localStorage.getItem('qc-main-mode') === 'guide' ? 'guide' : 'ask';
@@ -885,6 +900,55 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         </div>
       )}
+
+      {activeTab && (
+        <div className="flex-shrink-0 border-b border-white/[0.06] bg-black/10">
+          {/* Status strip: the current moment at a glance */}
+          <div className="h-8 px-4 sm:px-6 flex items-center gap-2 text-[11px] text-zinc-300 min-w-0">
+            <MapPin className="w-3.5 h-3.5 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />
+            <span className={`truncate ${placeNow ? 'text-zinc-100 font-semibold' : 'text-zinc-500'}`}>{placeNow || t('strip.noPlace')}</span>
+            {placeNow && !activeTab.place?.confirmed && <span className="text-zinc-500 flex-shrink-0">· {t('strip.unconfirmed')}</span>}
+            {missHere.length > 0 && (
+              <button
+                type="button"
+                onClick={() => missHere[0].area && window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug: missHere[0].area } }))}
+                className="flex-shrink-0 flex items-center gap-1 px-1.5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-200 font-semibold hover:bg-amber-500/25 cursor-pointer"
+                title={t('strip.missableHint')}
+              >
+                ⚠ {t('strip.missable', { n: missHere.length })}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setMode(mode === 'ask' ? 'guide' : 'ask')}
+              className="ml-auto flex-shrink-0 text-[var(--accent-color)] hover:brightness-125 font-semibold cursor-pointer"
+            >
+              {mode === 'ask' ? t('strip.toGuide') : t('strip.toAsk')} →
+            </button>
+          </div>
+          {/* Spoiler-safe nudge: something missable here, shown once per place, no names unless you ask */}
+          {missHere.length > 0 && nudgeDismissed !== placeNow && mode === 'ask' && (
+            <div className="px-4 sm:px-6 pb-2 flex items-center gap-2 text-[12px] text-amber-100 animate-in fade-in slide-in-from-top-1 duration-200">
+              <span className="flex-1 min-w-0 truncate">⚠ {t('strip.nudge')}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setNudgeDismissed(placeNow);
+                  if (missHere[0].area) window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug: missHere[0].area } }));
+                }}
+                className="flex-shrink-0 h-6 px-2.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-100 font-semibold hover:bg-amber-500/30 cursor-pointer"
+              >
+                {t('strip.showMe')}
+              </button>
+              <button type="button" onClick={() => setNudgeDismissed(placeNow)} aria-label={t('strip.dismiss')} className="flex-shrink-0 h-6 w-6 rounded-md text-zinc-400 hover:text-white hover:bg-white/10 flex items-center justify-center cursor-pointer">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab && showTour && <Walkthrough isDesktop={isDesktopApp} onDone={() => setShowTour(false)} />}
 
       {activeTab && guideLoaded && (
         <div className={mode === 'guide' ? 'flex-1 flex flex-col min-h-0' : 'hidden'}>

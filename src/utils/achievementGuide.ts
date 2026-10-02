@@ -63,3 +63,10 @@ export function useAchievementGuideByKey(key?: string | null, lang?: string): Ac
 export function openGuideArea(slug: string) {
   window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug } }));
 }
+
+/** Same place, allowing extra detail on either side ("South Figaro" vs "South Figaro, Relic Shop"). */
+export function samePlace(a?: string | null, b?: string | null): boolean {
+  const n = (x: string) => x.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9,]+/g, ' ').trim();
+  const x = n(a || ''), y = n(b || '');
+  return !!x && !!y && (x === y || x.startsWith(`${y},`) || y.startsWith(`${x},`));
+}
