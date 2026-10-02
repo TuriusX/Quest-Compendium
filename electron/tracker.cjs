@@ -21,6 +21,9 @@ let deps = null;
 let win = null;
 let current = null; // { data, gameKey }
 let suspended = false; // hidden while the panel is open (hideTemporarily / restore)
+let captureHidden = false; // hidden for a moment while the app takes a screenshot for the AI
+let inRecordings = true; // follows the markers' "show in recordings" setting (content protection when off)
+let scale = 1; // the app's UI scale (Settings)
 let store = null;   // per-game settings, loaded once
 let storeFile = '';
 let hotkey = 'CommandOrControl+G';
@@ -73,8 +76,14 @@ function placeWindow(view) {
   if (x !== b.x || y !== b.y) win.setPosition(Math.round(x), Math.round(y));
 }
 
-function createWindow() {
-  const wa = display().workArea;
+/** The screen a new tracker opens on: the one the last screenshot came from (the game's), else the cursor's. */
+function startDisplay() {
+  const d = deps.getDisplay && deps.getDisplay();
+  return d || deps.screen.getDisplayNearestPoint(deps.screen.getCursorScreenPoint());
+}
+
+function createWindow(disp) {
+  const wa = disp.workArea;
   // Top-right by default (the saved spot wins once the player has dragged it).
   win = new BrowserWindow({
     x: wa.x + wa.width - 440, y: wa.y + 24, width: 420, height: 300,
@@ -86,10 +95,16 @@ function createWindow() {
     },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
-  // Never in the screenshots the app sends to the AI (or in recordings).
-  win.setContentProtection(true);
+  // Like the markers: in recordings (OBS, Game Bar) unless the player turned that off. The app's own screenshots for
+  // the AI never include it either way (hideForCapture).
+  win.setContentProtection(!inRecordings);
   win.setIgnoreMouseEvents(true, { forward: true });
-  win.on('closed', () => { if (win) { win = null; current = null; } });
+  const w = win;
+  win.on('closed', () => {
+    if (deps.onWindow) deps.onWindow(null);
+    if (win === w) { win = null; current = null; }
+  });
+  if (deps.onWindow) deps.onWindow(win);
   win.webContents.on('console-message', (e, level, message) => {
     if (typeof message === 'string' && message.startsWith('[tracker]')) console.log(message);
   });
@@ -111,7 +126,22 @@ function cleanData(data) {
       label: String((o && o.label) || '').slice(0, 60), where: String((o && o.where) || '').slice(0, 80),
       done: !!(o && o.done), missable: !!(o && o.missable),
     })).filter((o) => o.label),
+    labels: cleanLabels(data && data.labels),
   };
+}
+
+/** The page's words in the app's language: short strings only, for the keys the page knows. */
+const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone'];
+function cleanLabels(labels) {
+  const out = {};
+  if (!labels || typeof labels !== 'object') return out;
+  for (const k of LABEL_KEYS) if (typeof labels[k] === 'string' && labels[k].trim()) out[k] = labels[k].slice(0, 120);
+  return out;
+}
+
+/** A saved spot only counts if it's on the screen the tracker opens on. */
+function onScreen(s, wa) {
+  return Number.isFinite(s.x) && Number.isFinite(s.y) && s.x >= wa.x && s.y >= wa.y && s.x + 60 <= wa.x + wa.width && s.y + 40 <= wa.y + wa.height;
 }
 
 /**
@@ -123,11 +153,17 @@ async function show(data, gameKey) {
   const clean = cleanData(data);
   if (!clean.objectives.length && !clean.quest) { hide(); return false; }
   const fresh = !alive();
-  if (fresh) await createWindow();
+  const disp = fresh ? startDisplay() : null;
+  if (fresh) await createWindow(disp);
   if (!alive()) return false;
   current = { data: clean, gameKey: gameKey || '_default' };
-  const s = settingsFor(current.gameKey);
-  js(`window.qcTrackerShow(${JSON.stringify(clean)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge })})`);
+  let s = settingsFor(current.gameKey);
+  // The saved spot is for this game; on a different screen now (another monitor), start top-right on this one.
+  if (fresh && (Number.isFinite(s.x) || Number.isFinite(s.y)) && !onScreen(s, disp.workArea)) {
+    patchSettings(current.gameKey, { x: null, y: null });
+    s = settingsFor(current.gameKey);
+  }
+  js(`window.qcTrackerShow(${JSON.stringify(clean)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale })})`);
   if (fresh && Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
   // Shown when the panel hides; while the panel is open it waits hidden with the new data.
   if (deps.isPanelOpen && deps.isPanelOpen()) suspended = true;
@@ -145,7 +181,7 @@ function update(patch) {
 
 function hide() {
   if (alive()) win.destroy();
-  win = null; current = null; suspended = false;
+  win = null; current = null; suspended = false; captureHidden = false;
   unregisterHotkey();
 }
 
@@ -170,6 +206,41 @@ function restore() {
 /** Header click or Ctrl+G: open the panel at the tracker. */
 function openPanel() {
   if (alive() && deps.onOpenPanel) deps.onOpenPanel(win.getBounds());
+}
+
+/**
+ * Around a screenshot for the AI: out of the picture, then back. Separate from hideTemporarily/restore, so a capture
+ * while the panel is opening never brings the tracker back on top of the panel. Returns whether it was hidden.
+ */
+function hideForCapture() {
+  if (!alive() || suspended || captureHidden || !win.isVisible()) return false;
+  captureHidden = true;
+  win.hide();
+  return true;
+}
+function showAfterCapture() {
+  if (!captureHidden) return;
+  captureHidden = false;
+  if (alive() && !suspended) win.showInactive();
+}
+
+/** Where the tracker is on screen, or null when it's closed or hidden (for the sticky markers' exclude list). */
+function getBounds() {
+  return alive() && !suspended && !captureHidden && win.isVisible() ? win.getBounds() : null;
+}
+
+/** The markers' "show in recordings" setting: off hides the tracker from all screen capture. */
+function setVisibleInRecordings(on) {
+  inRecordings = !!on;
+  if (alive()) win.setContentProtection(!inRecordings);
+}
+
+/** The app's UI scale: the tracker's text grows with it. */
+function setScale(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v <= 0) return;
+  scale = Math.max(0.5, Math.min(3, v));
+  js(`window.qcTrackerSettings(${JSON.stringify({ scale })})`);
 }
 
 function unregisterHotkey() {
@@ -259,4 +330,10 @@ function init(d) {
   d.app.on('will-quit', hide);
 }
 
-module.exports = { init, show, update, hide, hideTemporarily, restore, registerHotkey, isOpen: () => alive() };
+module.exports = {
+  init, show, update, hide, hideTemporarily, restore, registerHotkey, hideForCapture, showAfterCapture, getBounds,
+  setVisibleInRecordings, setScale, openPanel,
+  isOpen: () => alive(),
+  /** On screen right now (not hidden behind the open panel). */
+  isShowing: () => alive() && !suspended && win.isVisible(),
+};

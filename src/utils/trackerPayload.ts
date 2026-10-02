@@ -2,6 +2,7 @@
  * What the objectives tracker (electron/tracker.cjs) shows for an answer: the quest line, where the player is and
  * the answer's markers as a checklist. The tracker is the panel's minimized state, so it always follows the latest
  * finished answer with markers in the active game tab (or the one picked with "Track on screen").
+ * Its words come from the app's translations (labels), so it follows the app language.
  */
 import type { ChatMessage, GameTab, SteamGameData } from '../types';
 import { samePlace } from './placeName';
@@ -11,11 +12,20 @@ export type TrackerData = {
   accent: string;
   quest: string;
   place?: { name: string; story?: string; sure: boolean };
-  objectives: { label: string; where?: string; done: boolean }[];
+  objectives: { label: string; where?: string; done: boolean; missable?: boolean }[];
+  labels?: Record<string, string>;
 };
 export type TrackerPayload = { data: TrackerData; gameKey: string };
 
-/** The answer's first line, without Markdown, as the quest title. */
+/** The tracker page's words (electron/tracker.html), from the "tracker.*" translations. */
+const LABEL_KEYS = [
+  'title', 'confirm', 'missable', 'hint', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size',
+  'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone',
+] as const;
+export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
+  Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));
+
+/** The answer's first line, without Markdown: the quest title when the model didn't name one. */
 function questLine(text: string): string {
   const line = (text || '').split('\n').find((l) => l.trim()) || '';
   return line
@@ -42,7 +52,13 @@ export function trackedMessage(tab: GameTab | null | undefined, pickedId?: strin
   return undefined;
 }
 
-export function buildTrackerPayload(msg: ChatMessage, accent: string, gameKey: string, tab?: GameTab | null): TrackerPayload {
+export function buildTrackerPayload(
+  msg: ChatMessage,
+  accent: string,
+  gameKey: string,
+  tab?: GameTab | null,
+  labels?: Record<string, string>,
+): TrackerPayload {
   const done = new Set(msg.donePoints ?? []);
   // The place as the player set it for this answer (or confirmed for the tab), else the AI's guess.
   const confirmed = tab?.place?.confirmed && msg.place && samePlace(tab.place.name, msg.place.name) ? tab.place : undefined;
@@ -53,9 +69,10 @@ export function buildTrackerPayload(msg: ChatMessage, accent: string, gameKey: s
     data: {
       id: msg.id,
       accent,
-      quest: questLine(msg.text),
+      quest: msg.title?.trim() || questLine(msg.text),
       place: placeName ? { name: placeName, story, sure: !!msg.placeChosen || !!confirmed || !!msg.place?.sure } : undefined,
-      objectives: (msg.points ?? []).map((p, i) => ({ label: p.label, where: p.where, done: done.has(i) })),
+      objectives: (msg.points ?? []).map((p, i) => ({ label: p.label, where: p.where, done: done.has(i), missable: !!p.missable })),
+      ...(labels ? { labels } : {}),
     },
   };
 }

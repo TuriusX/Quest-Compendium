@@ -8,7 +8,8 @@
      collapsed (one header line) and away (a small tab at the screen edge). Hovering shows the controls. */
   :root {
     --accent: #a87ffb;
-    --fs: 16px;            /* base text size: 14 / 16 / 19 (small / medium / large) */
+    --scale: 1;            /* the app's UI scale (Settings) */
+    --fs: calc(16px * var(--scale)); /* text size: 14 / 16 / 19 (small / medium / large) times the scale */
     --alpha: 1;            /* whole-tracker transparency, from the slider */
     --ink: #f3eefc;
     --dim: rgba(243, 238, 252, .55);
@@ -129,7 +130,7 @@
     <span class="btn" id="bCollapse" title="Collapse to one line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg></span>
     <span class="btn" id="bAway" title="Send to the screen edge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h12"/><path d="m13 6 6 6-6 6"/><path d="M21 4v16"/></svg></span>
     <span class="btn aa" id="bSize" title="Text size">Aa</span>
-    <span class="sl" title="Transparency"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg><input type="range" id="alpha" min="30" max="100" value="100"></span>
+    <span class="sl" id="alphaWrap" title="Transparency"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg><input type="range" id="alpha" min="30" max="100" value="100"></span>
     <span class="btn" id="bBackdrop" title="Soft dark backdrop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18" opacity=".5"/></svg></span>
   </div>
 </div>
@@ -159,14 +160,45 @@
     view: 'full',                 // full | collapsed | away
     peekFrom: null,               // the view to fold back to after a peek
     size: 'medium', alpha: 100, backdrop: false, edge: 'right',
+    scale: 1,                     // the app's UI scale (Settings), applied on top of the text size
   };
   let peekTimer = null, hintTimer = null;
 
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const send = (type, payload) => { if (bridge) bridge.send({ type, ...payload }); else console.log('[tracker]', type, payload || ''); };
+  // The page's words, in the app's language (payload.labels), with English as the fallback.
+  const EN = {
+    title: 'Objectives', confirm: 'Confirm', missable: 'Missable: {list}', hint: '{keys} or click the title: open the Compendium',
+    headHint: 'Click: open the Compendium here. Drag: move.', placeHint: 'Click to confirm this is where you are',
+    confirmHint: 'Confirm where you are', collapse: 'Collapse to one line', open: 'Open', away: 'Send to the screen edge',
+    size: 'Text size', alpha: 'Transparency', backdrop: 'Soft dark backdrop', tabHint: 'Bring the objectives back',
+    itemTodo: 'Click: collected', itemDone: 'Click: not collected yet',
+  };
+  const L = (k, vars) => {
+    const own = state.data && state.data.labels && state.data.labels[k];
+    let s = typeof own === 'string' && own.trim() ? own : EN[k];
+    for (const [n, v] of Object.entries(vars || {})) s = s.split(`{${n}}`).join(v);
+    return s;
+  };
+  function applyLabels() {
+    $('title').textContent = L('title');
+    $('tabLbl').textContent = L('title');
+    $('placeConfirm').textContent = L('confirm');
+    $('head').title = L('headHint');
+    $('place').title = L('placeHint');
+    $('bConfirm').title = L('confirmHint');
+    $('bAway').title = L('away');
+    $('bSize').title = L('size');
+    $('alphaWrap').title = L('alpha');
+    $('bBackdrop').title = L('backdrop');
+    tab.title = L('tabHint');
+    const [before, after] = L('hint').split('{keys}');
+    $('hint').innerHTML = after === undefined ? esc(before) : `${esc(before)}<kbd>Ctrl+G</kbd>${esc(after)}`;
+  }
 
   function render() {
     const d = state.data; if (!d) return;
+    applyLabels();
     document.documentElement.style.setProperty('--accent', /^#[0-9a-f]{3,8}$/i.test(d.accent || '') ? d.accent : '#a87ffb');
     const objs = d.objectives || [];
     const done = objs.filter((o) => o.done).length;
@@ -183,18 +215,20 @@
       $('place').classList.toggle('sure', !!p.sure);
       $('bConfirm').classList.toggle('on', !!p.sure);
     }
-    list.innerHTML = objs.map((o, i) => `<li class="${o.done ? 'done' : ''}" data-i="${i}" title="${o.done ? 'Click: not collected yet' : 'Click: collected'}">
+    list.innerHTML = objs.map((o, i) => `<li class="${o.done ? 'done' : ''}" data-i="${i}" title="${esc(o.done ? L('itemDone') : L('itemTodo'))}">
         <span class="badge">${o.done ? '✓' : i + 1}</span>
         <span class="obj">${esc(o.label)}${o.where && !o.done ? ` <span class="where">— ${esc(o.where)}</span>` : ''}</span></li>`).join('');
     const missable = objs.filter((o) => o.missable && !o.done).map((o) => o.label);
-    const warnText = d.warning || (missable.length ? `Missable: ${missable.join(', ')}` : '');
+    const warnText = d.warning || (missable.length ? L('missable', { list: missable.join(', ') }) : '');
     $('warn').classList.toggle('off', !warnText);
     $('warn').innerHTML = warnText ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>${esc(warnText)}</span>` : '';
     applyView();
   }
 
   function applyView() {
-    document.documentElement.style.setProperty('--fs', `${SIZES[state.size] || 16}px`);
+    const scale = Number.isFinite(state.scale) && state.scale > 0 ? state.scale : 1;
+    document.documentElement.style.setProperty('--scale', String(scale));
+    document.documentElement.style.setProperty('--fs', `calc(${SIZES[state.size] || 16}px * var(--scale))`);
     document.documentElement.style.setProperty('--alpha', String(state.alpha / 100));
     $('alpha').value = state.alpha;
     tracker.classList.toggle('backdrop', state.backdrop);
@@ -204,7 +238,7 @@
     tracker.classList.toggle('away', state.view === 'away');
     document.body.classList.toggle('away', state.view === 'away');
     tab.className = state.edge === 'left' ? 'left' : 'right';
-    $('bCollapse').title = state.view === 'collapsed' ? 'Open' : 'Collapse to one line';
+    $('bCollapse').title = state.view === 'collapsed' ? L('open') : L('collapse');
     $('bCollapse').firstElementChild.style.transform = state.view === 'collapsed' ? 'rotate(180deg)' : '';
     reportSize();
   }
@@ -320,7 +354,11 @@
     render(); showHint();
   };
   window.qcTrackerUpdate = (patch) => { if (state.data) Object.assign(state.data, patch); render(); };
-  window.qcTrackerSettings = (s) => { Object.assign(state, s); applyView(); };
+  window.qcTrackerSettings = (s) => {
+    Object.assign(state, s);
+    if (s && 'scale' in s) lastSize = ''; // a new UI scale: always report the new size to the app
+    applyView();
+  };
   window.qcTrackerPeek = peek;
   window.qcTrackerEdge = (edge) => { state.edge = edge; applyView(); };
   window.addEventListener('resize', reportSize);

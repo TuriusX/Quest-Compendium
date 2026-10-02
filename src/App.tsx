@@ -36,7 +36,7 @@ import pixelSceneUrl from './pixel-scene.png';
 import { LOCALES, aiLanguageName, applyLocale, detectLocale, translate, useT } from './i18n';
 import { ControllerLayer } from './components/ControllerLayer';
 import { markersActiveFor, rememberAreaFind, setPointersActive } from './components/pointerStore';
-import { buildTrackerPayload, trackedMessage, trackerGameKey } from './utils/trackerPayload';
+import { buildTrackerPayload, trackedMessage, trackerGameKey, trackerLabels } from './utils/trackerPayload';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -524,10 +524,11 @@ export default function App() {
   };
   const trackerAccent = (THEME_STYLES[settings.theme] || THEME_STYLES.purple).color;
   const trackerKeyOfGame = trackerGameKey(activeTab, activeTab?.activeSteamGame || globalActiveGame);
+  const trackerWords = trackerLabels(tr); // the tracker's words follow the app language
   const trackerMsg = trackedMessage(activeTab, trackerPickId);
-  const trackerPayload = trackerMsg ? buildTrackerPayload(trackerMsg, trackerAccent, trackerKeyOfGame, activeTab) : null;
-  const trackerCtx = useRef({ tab: activeTab, accent: trackerAccent, gameKey: trackerKeyOfGame });
-  trackerCtx.current = { tab: activeTab, accent: trackerAccent, gameKey: trackerKeyOfGame };
+  const trackerPayload = trackerMsg ? buildTrackerPayload(trackerMsg, trackerAccent, trackerKeyOfGame, activeTab, trackerWords) : null;
+  const trackerCtx = useRef({ tab: activeTab, accent: trackerAccent, gameKey: trackerKeyOfGame, labels: trackerWords });
+  trackerCtx.current = { tab: activeTab, accent: trackerAccent, gameKey: trackerKeyOfGame, labels: trackerWords };
   const latestTrackedId = trackedMessage(activeTab)?.id;
   // A newer answer with markers takes over from the one picked with "Track on screen".
   useEffect(() => {
@@ -537,10 +538,10 @@ export default function App() {
   useEffect(() => {
     const api = (window as any).electronAPI;
     api?.onPanelHidden?.(() => {
-      const { tab, accent, gameKey } = trackerCtx.current;
+      const { tab, accent, gameKey, labels } = trackerCtx.current;
       const msg = trackedMessage(tab, trackerPickRef.current);
       if (!msg) return;
-      const p = buildTrackerPayload(msg, accent, gameKey, tab);
+      const p = buildTrackerPayload(msg, accent, gameKey, tab, labels);
       api.showObjectivesTracker?.(p.data, p.gameKey);
     });
   }, []);
@@ -1351,6 +1352,7 @@ export default function App() {
         modelUsed: data.modelUsed || 'Gemini 3.8 Flash',
         bannerImageUrl: data.bannerImageUrl,
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
+        ...(typeof data.title === 'string' && data.title.trim() ? { title: data.title.trim().slice(0, 60) } : {}),
         ...(typeof data.factsSaved === 'number' && data.factsSaved > 0 ? { factsSaved: data.factsSaved } : {}),
         ...(data.place && typeof data.place.name === 'string'
           ? {

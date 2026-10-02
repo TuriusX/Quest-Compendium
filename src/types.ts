@@ -47,6 +47,8 @@ export interface ScreenPoint {
   note?: string;
   /** A sentence or two more, shown when the player expands the item. */
   detail?: string;
+  /** Lost for good if the player moves on (the objectives tracker warns about it). */
+  missable?: boolean;
 }
 
 /** Something the AI knows is in this area but wasn't on screen yet. */
@@ -70,6 +72,8 @@ export interface ChatMessage {
   isStreaming?: boolean;
   /** On-screen pointers for the screenshot this answer is about. */
   points?: ScreenPoint[];
+  /** A short quest-log name for what the player is doing (the objectives tracker's title). */
+  title?: string;
   /** Other items in the same area, looked for as the player walks (desktop). */
   nearby?: NearbyItem[];
   /** Markers the player checked off as collected (their on-screen markers are hidden). */

@@ -968,9 +968,14 @@ The <...> parts are placeholders: always write your own values. Never copy the p
 - "category": exactly one of these, matching the thing itself: weapon (weapons), armor (armor, shields, clothing, rings, amulets), consumable (potions, scrolls, food, ammo, and items spent as currency such as Soul Coins), key (keys and key items needed to progress or open something), quest (quest objectives and quest givers), lore (books, notes and readables), secret (hidden switches, passages and stashes), character (people to talk to), enemy, danger (traps and hazards), action (something to do: a lever to pull, a spot to jump), place (exits, waypoints, save points).
 - "note": ONE short line (at most 8 words, it's shown under the marker on screen) saying what it is and why the player should care. No filler, no repeating the label. Leave it out on duplicate markers (see above).
 - "detail": optional, 1 or 2 short sentences with the most useful extra facts (what it does, who needs it, when to use it, whether it's missable). Leave it out rather than repeating the note.
+- "missable": add "missable": true only when the player can lose this for good if they move on (a point of no return, a one-time event, a choice that locks it out). Leave it out otherwise; never guess.
 - note and detail are in the player's language and must agree with your answer text.
 - Only point at things that are actually visible in the screenshot, and be precise. If nothing specific is worth pointing at, leave the block out entirely.
 - Never mention the block, coordinates or "pointers" in your answer text.
+
+When you add a <qc-points> block, also add one line naming what the player is doing right now, like a quest title in an RPG quest log:
+<qc-title>Short quest name</qc-title>
+- 2 to 6 words, at most 60 characters, in the player's language, title-style (for example "Loot the Sunken Crypt", "Find Duncan's Cabin"). No quotes, no ending punctuation, never a sentence about the answer itself.
 
 Accuracy: a wrong marker is worse than no marker. Players act on these, so:
 - Check before pinning: before you name a specific item in a specific container or spot, be certain. If you aren't, use Google Search to confirm it first (for example "<game> <area> <item> location"). If you still can't confirm which object it is, don't pin it: say where to look in your answer text instead.
@@ -1433,6 +1438,10 @@ percentages:
       // On-screen pointers: pull the <qc-points> block out of the answer.
       const { text: answerText, points, nearby } = extractScreenPoints(responseText, Boolean(imageBase64));
       responseText = answerText;
+      // The quest-log title for the on-screen objectives tracker (only with markers).
+      const titleParsed = extractTitle(responseText);
+      responseText = titleParsed.text;
+      const title = points.length ? titleParsed.title : '';
       // Where the AI thinks the player is: pull the <qc-place> line out of the answer.
       const placeParsed = extractPlace(responseText);
       responseText = placeParsed.text;
@@ -1495,6 +1504,7 @@ percentages:
         modelUsed,
         bannerImageUrl,
         ...(points.length ? { points } : {}),
+        ...(title ? { title } : {}),
         ...(nearby.length ? { nearby } : {}),
         ...(placeParsed.place ? { place: placeParsed.place } : {}),
         ...(factsSaved ? { factsSaved } : {}),
@@ -1557,7 +1567,18 @@ percentages:
    * The block is always removed, even when no screenshot was sent (the points would be meaningless then).
    */
   const MARKER_CATEGORIES = new Set(['weapon', 'armor', 'consumable', 'key', 'quest', 'lore', 'secret', 'character', 'enemy', 'danger', 'action', 'place']);
-  type ParsedPoint = { x: number; y: number; label: string; where?: string; category?: string; note?: string; detail?: string };
+  type ParsedPoint = { x: number; y: number; label: string; where?: string; category?: string; note?: string; detail?: string; missable?: boolean };
+
+  /** The model's <qc-title> line (a short quest-log name for the objectives tracker), always removed from the answer. */
+  function extractTitle(text: string): { text: string; title: string } {
+    let title = '';
+    const cleaned = text.replace(/(?:```[a-z]*\s*)?<qc-title>([\s\S]*?)<\/qc-title>(?:\s*```)?/gi, (_m, inner) => {
+      if (!title) title = String(inner).replace(/\s+/g, ' ').replace(/^["'“”‘’]+|["'“”‘’.!:;]+$/g, '').trim();
+      return '';
+    }).replace(/\n{3,}/g, '\n\n').trim();
+    if (title.length > 60) title = title.slice(0, 60).replace(/\s+\S*$/, '').trim();
+    return { text: cleaned || text, title };
+  }
   function extractScreenPoints(text: string, hadImage: boolean): { text: string; points: ParsedPoint[]; nearby: { label: string; hint: string; onMap: boolean }[] } {
     // Other items in the same area that aren't on screen yet (the desktop app looks for them as the player walks).
     let nearbyRaw = '';
@@ -1607,6 +1628,7 @@ percentages:
                 ...(MARKER_CATEGORIES.has(category) ? { category } : {}),
                 ...(note ? { note } : {}),
                 ...(detail && detail !== note ? { detail } : {}),
+                ...(p?.missable === true ? { missable: true } : {}),
               });
             }
           }

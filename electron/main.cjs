@@ -420,7 +420,7 @@ async function slideIn(opts = {}) {
  * panel fits there whole. Otherwise the panel opens at its dock as usual.
  */
 function openPanelAtTracker(t) {
-  if (!mainWindow || mainWindow.isDestroyed() || isAppVisible) return;
+  if (!mainWindow || mainWindow.isDestroyed() || isAppVisible) return Promise.resolve();
   const wa = screen.getDisplayMatching(t).workArea;
   const { width: w, height: h } = mainWindow.getBounds();
   const undocked = currentDockPosition === 'undocked';
@@ -430,7 +430,7 @@ function openPanelAtTracker(t) {
   const x = right ? t.x + t.width - w : t.x;
   const y = bottom ? t.y + t.height - h : t.y;
   const fits = x >= wa.x && y >= wa.y && x + w <= wa.x + wa.width && y + h <= wa.y + wa.height;
-  slideIn((undocked || right === trackerOnRight) && fits ? { at: { x, y } } : {});
+  return slideIn((undocked || right === trackerOnRight) && fits ? { at: { x, y } } : {});
 }
 
 function slideOut() {
@@ -532,7 +532,7 @@ app.whenReady().then(() => {
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show App', click: () => { slideIn(); } },
     { type: 'separator' },
-    { label: 'Quit', click: () => { app.isQuiting = true; app.quit(); } }
+    { label: 'Quit', click: () => { app.isQuiting = true; tracker.hide(); app.quit(); } }
   ]);
   tray.setContextMenu(contextMenu);
   
@@ -594,7 +594,13 @@ app.whenReady().then(() => {
     getMainWindow: () => mainWindow,
     isPanelOpen: () => isAppVisible,
     onOpenPanel: (bounds) => openPanelAtTracker(bounds),
+    // A new tracker opens on the game's screen: the one the last screenshot came from.
+    getDisplay: () => lastCaptureDisplay,
+    // Processor share while it's open, next to the markers' (startPerfLog).
+    onWindow: (w) => watchPerf('tracker', w),
   });
+  tracker.setVisibleInRecordings(markersInRecordings);
+  tracker.setScale(currentUiScale);
 
   // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
   // overlay with the controller while it's visible. See controller.cjs.
@@ -605,7 +611,9 @@ app.whenReady().then(() => {
       if (isAppVisible) {
         slideOut();
       } else {
-        Promise.resolve(slideIn()).then(() => {
+        // With the objectives tracker on screen, open the panel at it (a pad can't press Ctrl+G or click its title).
+        const at = tracker.isShowing() ? tracker.getBounds() : null;
+        Promise.resolve(at ? openPanelAtTracker(at) : slideIn()).then(() => {
           if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-activated');
         });
       }
@@ -687,6 +695,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  tracker.hide();
   if (controllerService) controllerService.stop();
   globalShortcut.unregisterAll();
 });
@@ -898,6 +907,7 @@ ipcMain.on('start-steam-login', (event) => {
 
 ipcMain.on('set-ui-scale', (event, scale) => {
   currentUiScale = scale;
+  tracker.setScale(scale); // the objectives tracker's text grows with the app's
   if (mainWindow) {
     mainWindow.webContents.setZoomFactor(scale);
     const bounds = mainWindow.getBounds();
@@ -972,7 +982,10 @@ ipcMain.on('set-dock-position', (event, pos) => {
 ipcMain.on('set-overlay-options', (event, opts) => {
   if (opts && typeof opts.snapshotOnOpen === 'boolean') snapshotOnOpen = opts.snapshotOnOpen;
   if (opts && typeof opts.stickyPointers === 'boolean') stickyPointers = opts.stickyPointers;
-  if (opts && typeof opts.markersInRecordings === 'boolean') markersInRecordings = opts.markersInRecordings;
+  if (opts && typeof opts.markersInRecordings === 'boolean') {
+    markersInRecordings = opts.markersInRecordings;
+    tracker.setVisibleInRecordings(markersInRecordings); // the objectives tracker follows the markers
+  }
   if (opts && Number.isFinite(opts.markerLifetimeMs) && opts.markerLifetimeMs >= 0) {
     markerLifetimeMs = opts.markerLifetimeMs;
     // Apply to markers already on screen too.
@@ -1005,8 +1018,10 @@ ipcMain.on('toggle-slide', () => {
 async function captureScreenImage() {
   // Never capture our own on-screen pointers in the next screenshot.
   closeScreenPointers();
+  // ...or the objectives tracker (hidden for the capture, then back; a moment for the screen to redraw without it).
+  if (tracker.hideForCapture()) await new Promise((resolve) => setTimeout(resolve, 80));
   let base64Image = null;
-  {
+  try {
     let sources = [];
     const getSourcesPromise = desktopCapturer.getSources({ 
       types: ['screen'], 
@@ -1057,6 +1072,8 @@ async function captureScreenImage() {
         }
       }
     }
+  } finally {
+    tracker.showAfterCapture();
   }
   lastCaptureImage = base64Image || lastCaptureImage;
   return base64Image;
@@ -1069,30 +1086,40 @@ function sendPointerState(id, active) {
 
 const NEARBY_CHECKS = false;
 
-// While markers are up, log how much processor the app uses (Electron reports a share of the whole processor, all
-// cores together: one fully busy core on a 16-core PC shows about 6%), to keep an eye on game performance.
+// While markers (or the objectives tracker) are up, log how much processor the app uses (Electron reports a share of
+// the whole processor, all cores together: one fully busy core on a 16-core PC shows about 6%), to keep an eye on game
+// performance. One sampler for both: each getAppMetrics() call measures the time since the previous one.
 let perfTimer = null;
-function startPerfLog(win) {
-  if (perfTimer) clearInterval(perfTimer);
-  app.getAppMetrics(); // start the measurement window
-  perfTimer = setInterval(() => {
-    if (!win || win.isDestroyed()) return stopPerfLog();
-    let markerPid = 0;
-    try { markerPid = win.webContents.getOSProcessId(); } catch { /* window closing */ }
-    let markers = 0, gpu = 0, total = 0;
-    for (const m of app.getAppMetrics()) {
-      const c = m.cpu ? m.cpu.percentCPUUsage : 0;
-      total += c;
-      if (m.pid === markerPid) markers += c;
-      else if (m.type === 'GPU') gpu += c;
-    }
-    console.log(`[perf] processor: marker window ${Math.round(markers)}%, graphics process ${Math.round(gpu)}%, whole app ${Math.round(total)}% (share of the whole processor)`);
-  }, 10000);
+const perfWins = { marker: null, tracker: null };
+function perfTick() {
+  for (const k of Object.keys(perfWins)) if (perfWins[k] && perfWins[k].isDestroyed()) perfWins[k] = null;
+  if (!perfWins.marker && !perfWins.tracker) {
+    if (perfTimer) clearInterval(perfTimer);
+    perfTimer = null;
+    return;
+  }
+  const pidOf = (w) => { try { return w ? w.webContents.getOSProcessId() : 0; } catch { return 0; } };
+  const markerPid = pidOf(perfWins.marker), trackerPid = pidOf(perfWins.tracker);
+  let markers = 0, trackerCpu = 0, gpu = 0, total = 0;
+  for (const m of app.getAppMetrics()) {
+    const c = m.cpu ? m.cpu.percentCPUUsage : 0;
+    total += c;
+    if (markerPid && m.pid === markerPid) markers += c;
+    else if (trackerPid && m.pid === trackerPid) trackerCpu += c;
+    else if (m.type === 'GPU') gpu += c;
+  }
+  if (perfWins.marker) console.log(`[perf] processor: marker window ${Math.round(markers)}%, graphics process ${Math.round(gpu)}%, whole app ${Math.round(total)}% (share of the whole processor)`);
+  if (perfWins.tracker) console.log(`[perf] tracker: tracker window ${Math.round(trackerCpu)}%, graphics process ${Math.round(gpu)}%, whole app ${Math.round(total)}% (share of the whole processor)`);
 }
-function stopPerfLog() {
-  if (perfTimer) clearInterval(perfTimer);
-  perfTimer = null;
+function watchPerf(kind, win) {
+  perfWins[kind] = win || null;
+  if (win && !perfTimer) {
+    app.getAppMetrics(); // start the measurement window
+    perfTimer = setInterval(perfTick, 10000);
+  }
 }
+function startPerfLog(win) { watchPerf('marker', win); }
+function stopPerfLog() { watchPerf('marker', null); }
 
 function closeScreenPointers() {
   stopPerfLog();
@@ -1143,14 +1170,18 @@ function showScreenPointers(points, accent, opts = {}) {
     selfVisible: markersInRecordings,
     lifetimeMs: markerLifetimeMs,
     // Our own overlay panel doesn't move with the game: keep the camera tracker from using it as background.
+    // The objectives tracker doesn't move with the game either.
     exclude: (() => {
+      const frac = (b) => ({ x0: (b.x - x) / width, y0: (b.y - y) / height, x1: (b.x + b.width - x) / width, y1: (b.y + b.height - y) / height });
+      const out = [];
       try {
-        if (!mainWindow || mainWindow.isDestroyed() || !isAppVisible) return [];
-        const b = mainWindow.getBounds();
-        return [{ x0: (b.x - x) / width, y0: (b.y - y) / height, x1: (b.x + b.width - x) / width, y1: (b.y + b.height - y) / height }];
-      } catch (_) {
-        return [];
-      }
+        if (mainWindow && !mainWindow.isDestroyed() && isAppVisible) out.push(frac(mainWindow.getBounds()));
+      } catch (_) { /* window closing */ }
+      try {
+        const tb = tracker.getBounds();
+        if (tb) out.push(frac(tb));
+      } catch (_) { /* window closing */ }
+      return out;
     })(),
     fixedMs: 8000,
   };
@@ -1244,8 +1275,11 @@ ipcMain.on('pointers-highlight', (event, { id, index } = {}) => {
 /** A screenshot of the marker session's screen, with our markers kept out of it. */
 async function captureForLocate(session) {
   const win = session.win;
+  // The objectives tracker stays out of it too (the image goes to the AI).
+  const trackerHidden = tracker.hideForCapture();
   try {
     if (win && !win.isDestroyed()) win.setContentProtection(true);
+    if (trackerHidden) await new Promise((resolve) => setTimeout(resolve, 80));
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1280, height: 720 } });
     const source = sources.find((s) => s.id === session.sourceId) || sources[0];
     if (!source || !source.thumbnail || source.thumbnail.isEmpty()) return null;
@@ -1255,6 +1289,7 @@ async function captureForLocate(session) {
     return null;
   } finally {
     if (win && !win.isDestroyed()) win.setContentProtection(!markersInRecordings);
+    tracker.showAfterCapture();
   }
 }
 
