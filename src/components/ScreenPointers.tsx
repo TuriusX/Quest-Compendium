@@ -47,16 +47,13 @@ export function withMarkerBadges(text: string, points: ScreenPoint[]): string {
   return out;
 }
 
-/** Which markers the answer text mentions by name (those get an inline checkbox; the rest are listed separately). */
+/**
+ * Which markers got an inline checkbox in the answer text (the rest are listed separately). Read from the badges
+ * withMarkerBadges actually added, so a marker never ends up with no checkbox at all.
+ */
 export function markerMentions(text: string, points: ScreenPoint[]): Set<number> {
   const found = new Set<number>();
-  const used = new Set<string>();
-  points.forEach((p, i) => {
-    const label = p.label.trim();
-    if (label.length < 3 || used.has(label.toLowerCase())) return;
-    used.add(label.toLowerCase());
-    if (new RegExp(`(^|[^\\p{L}\\p{N}\\[])(${escapeRe(label)})(?![\\p{L}\\p{N}])`, 'iu').test(text)) found.add(i);
-  });
+  for (const m of withMarkerBadges(text, points).matchAll(/\]\(#qc-marker-(\d+)\)/g)) found.add(Number(m[1]) - 1);
   return found;
 }
 
