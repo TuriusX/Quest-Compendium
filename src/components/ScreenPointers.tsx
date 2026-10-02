@@ -47,6 +47,19 @@ export function withMarkerBadges(text: string, points: ScreenPoint[]): string {
   return out;
 }
 
+/** Which markers the answer text mentions by name (those get an inline checkbox; the rest are listed separately). */
+export function markerMentions(text: string, points: ScreenPoint[]): Set<number> {
+  const found = new Set<number>();
+  const used = new Set<string>();
+  points.forEach((p, i) => {
+    const label = p.label.trim();
+    if (label.length < 3 || used.has(label.toLowerCase())) return;
+    used.add(label.toLowerCase());
+    if (new RegExp(`(^|[^\\p{L}\\p{N}\\[])(${escapeRe(label)})(?![\\p{L}\\p{N}])`, 'iu').test(text)) found.add(i);
+  });
+  return found;
+}
+
 /** A numbered checkbox inside the answer text, synced with the checklist. */
 export function MarkerBadge({ n, label, checked, onToggle }: { n: number; label: string; checked: boolean; onToggle: () => void }) {
   const t = useT();
@@ -79,6 +92,8 @@ export function AnnotatedShot({
   onChangeLifetime,
   onHighlight,
   removed,
+  compact = false,
+  referenced,
 }: {
   msgId: string;
   imageUrl?: string;
@@ -95,6 +110,10 @@ export function AnnotatedShot({
   onHighlight?: (index: number | null) => void;
   /** Markers the close-up check removed because it couldn't see them. */
   removed?: string[];
+  /** Desktop: a compact footer after the answer (markers are on screen and checkboxes are in the text). */
+  compact?: boolean;
+  /** With compact: markers the answer text already mentions; only the others get listed. */
+  referenced?: Set<number>;
 }) {
   const t = useT();
   const [large, setLarge] = useState(false);
@@ -109,12 +128,16 @@ export function AnnotatedShot({
   const watching = (nearby ?? []).filter((n) => n.onMap && !n.found);
   const elsewhere = (nearby ?? []).filter((n) => !n.onMap);
   const describe = (list: NearbyItem[]) => list.map((n) => (n.hint ? `${n.label} (${n.hint})` : n.label)).join(' · ');
+  // Compact: only markers the text doesn't mention get a line here; the screenshot is behind a toggle.
+  const listed = compact ? points.map((_, i) => i).filter((i) => !referenced?.has(i)) : points.map((_, i) => i);
+  const [showShot, setShowShot] = useState(false);
+  const shotVisible = !!imageUrl && (!compact || showShot);
 
   return (
-    <div className="qc-marker-card mb-3 p-3 rounded-xl bg-black/25 border border-[var(--accent-border)] space-y-2.5">
+    <div className={compact ? 'qc-marker-card mt-3 pt-2.5 border-t border-white/[0.08] space-y-2' : 'qc-marker-card mb-3 p-3 rounded-xl bg-black/25 border border-[var(--accent-border)] space-y-2.5'}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-baseline gap-2">
-          <span className="font-fantasy font-bold text-sm text-white">{t('chat.markersTitle')}</span>
+          <span className={`font-fantasy font-bold ${compact ? 'text-xs text-zinc-300' : 'text-sm text-white'}`}>{t('chat.markersTitle')}</span>
           <span className="text-[10px] font-mono uppercase text-zinc-400">
             {t('chat.collected', { done: done.filter((i) => i < points.length).length, total: points.length })}
             {active && <span className="ml-2 text-emerald-400">● {t('chat.onScreen')}</span>}
@@ -158,7 +181,12 @@ export function AnnotatedShot({
         )}
       </div>
 
-      {imageUrl && (
+      {compact && imageUrl && (
+        <button type="button" onClick={() => setShowShot((v) => !v)} className="text-[11px] text-zinc-500 hover:text-zinc-300 cursor-pointer">
+          {showShot ? t('chat.shotHide') : t('chat.shotShow')}
+        </button>
+      )}
+      {shotVisible && (
         <button
           type="button"
           onClick={() => setLarge((v) => !v)}
@@ -180,8 +208,9 @@ export function AnnotatedShot({
 
       {/* The checklist: checked = collected (its marker leaves the screen). Each line shows what the item is and why it
           matters; pointing at a line makes its marker stand out, and the arrow opens a little more detail. */}
-      <ul className="space-y-1.5" aria-label={t('chat.markersTitle')} onMouseLeave={() => pointAt(null)}>
-        {points.map((p, i) => {
+      {listed.length > 0 && <ul className="space-y-1.5" aria-label={t('chat.markersTitle')} onMouseLeave={() => pointAt(null)}>
+        {listed.map((i) => {
+          const p = points[i];
           const checked = doneSet.has(i);
           const Icon = (p.category && CATEGORY_ICONS[p.category]) || Gem;
           const isOpen = open.has(i);
@@ -230,7 +259,7 @@ export function AnnotatedShot({
             </li>
           );
         })}
-      </ul>
+      </ul>}
 
       {removed && removed.length > 0 && (
         <p className="mt-2 text-[11px] leading-snug text-zinc-500">{t('chat.removedMarkers', { list: removed.join(', ') })}</p>
