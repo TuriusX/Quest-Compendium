@@ -1,0 +1,39 @@
+# Games the pipeline adds as quick guides, two per run, top to bottom (games that already have a guide are skipped).
+# One game per line, using its Steam store name so it gets the right art and achievements. Lines starting with # are
+# ignored. Older, well-known games work best: quick mode writes from the AI's own knowledge, so very new games
+# (released in the last year or so) belong in a careful build instead.
+God of War
+Cyberpunk 2077
+Hogwarts Legacy
+FINAL FANTASY XVI
+Metaphor: ReFantazio
+Lies of P
+NieR:Automata
+Yakuza: Like a Dragon
+Like a Dragon: Infinite Wealth
+God of War Ragnarök
+Horizon Zero Dawn Remastered
+Horizon Forbidden West Complete Edition
+Ghost of Tsushima DIRECTOR'S CUT
+Dragon Age: Inquisition
+Kingdom Come: Deliverance
+Disco Elysium - The Final Cut
+Pillars of Eternity: Definitive Edition
+Pillars of Eternity II: Deadfire
+Pathfinder: Wrath of the Righteous - Enhanced Edition
+Divinity: Original Sin - Enhanced Edition
+DARK SOULS II: Scholar of the First Sin
+Tales of Arise
+Tales of Berseria
+STAR OCEAN THE SECOND STORY R
+DRAGON QUEST III HD-2D Remake
+Sea of Stars
+Chained Echoes
+TRIANGLE STRATEGY
+Ys VIII: Lacrimosa of DANA
+The Legend of Heroes: Trails of Cold Steel
+The Legend of Heroes: Trails from Zero
+Okami HD
+Bloodstained: Ritual of the Night
+Ori and the Will of the Wisps
+Shadow of the Tomb Raider: Definitive Edition

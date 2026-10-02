@@ -23,7 +23,8 @@
  *   PIPELINE_MONTHLY_SEARCHES     searches the pipeline may use per month (default 1500)
  *   PIPELINE_PLAYER_RESERVE       searches always left for players under MONTHLY_SEARCH_CAP (default 2000)
  *   MONTHLY_SEARCH_CAP            the app's whole monthly search cap (default 5000; same setting as the server)
- *   PIPELINE_MAX_ACTIONS          actions per run (default 3)
+ *   PIPELINE_MAX_ACTIONS          actions per run (default 6)
+ *   PIPELINE_FEATURED_LANGS       languages for the featured guides before players ask (default es,pt)
  *   PIPELINE_MIN_PLAYERS          players before a game counts as in demand (default 3)
  *   PIPELINE_LANGS                languages to translate into (default es,pt,de,fr,ru,ja,ko,zh)
  *   PIPELINE_FEATURED             guides to translate into every language even before players ask, separated by |
@@ -33,6 +34,8 @@
  * Off switch: set `enabled: false` on system/pipeline in Firestore (or PIPELINE_ENABLED=false).
  */
 import { spawnSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 import { db, gameKey } from '../guides/common';
 import { getAuth } from 'firebase-admin/auth';
 import { deployToNetlify } from './netlify';
@@ -44,13 +47,27 @@ const AI_CAP = env('PIPELINE_MONTHLY_AI_DOLLARS', 10);
 const SEARCH_CAP = env('PIPELINE_MONTHLY_SEARCHES', 1500);
 const RESERVE = env('PIPELINE_PLAYER_RESERVE', 2000);
 const APP_CAP = env('MONTHLY_SEARCH_CAP', 5000);
-const MAX_ACTIONS = env('PIPELINE_MAX_ACTIONS', 3);
+const MAX_ACTIONS = env('PIPELINE_MAX_ACTIONS', 6); // most actions are cheap now (see the plan order below)
 const MIN_PLAYERS = env('PIPELINE_MIN_PLAYERS', 3);
 const LANGS = (process.env.PIPELINE_LANGS || 'es,pt,de,fr,ru,ja,ko,zh').split(',').map((s) => s.trim()).filter(Boolean);
 const LANG_BY_NAME: Record<string, string> = {
   Spanish: 'es', 'Brazilian Portuguese': 'pt', German: 'de', French: 'fr', Russian: 'ru', Japanese: 'ja', Korean: 'ko', 'Simplified Chinese': 'zh',
 };
 const DAY = 86_400_000;
+/** Languages the featured guides go into before players ask (the biggest non-English audiences; others on demand). */
+const FEATURED_LANGS = (process.env.PIPELINE_FEATURED_LANGS || 'es,pt').split(',').map((s) => s.trim()).filter(Boolean);
+/** Games to add as quick guides, a couple per run (scripts/pipeline/wishlist.txt, one Steam name per line). */
+function wishlist(): string[] {
+  try {
+    return fs
+      .readFileSync(path.resolve('scripts/pipeline/wishlist.txt'), 'utf8')
+      .split(/\r?\n/)
+      .map((l) => l.replace(/#.*/, '').trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 const FEATURED = (process.env.PIPELINE_FEATURED ||
   'FINAL FANTASY VI|CHRONO TRIGGER®|DRAGON QUEST® XI S: Echoes of an Elusive Age™ - Definitive Edition|Baldur\'s Gate 3|The Witcher 3: Wild Hunt - Complete Edition')
   .split('|')
@@ -150,15 +167,34 @@ async function main() {
     else if (g.pipeline.newRelease && !g.pipeline.revisited && Date.now() - (g.pipeline.builtAt || 0) > 21 * DAY)
       add({ kind: 'revisit', game: t.name, key: g.key, searches: 300, why: 'a new-release guide, 3 weeks on: more is known now' });
   }
+  // The rest, most content per dollar first:
+  //   achievement guides (a couple of cents each, popular searches) -> quick guides for wish-list games (a few cents,
+  //   no searches) -> upgrades for games players use (searches) -> translations players actually need -> featured
+  //   guides in the biggest languages.
+  const allGuides = (await db().collection('guides').get()).docs;
+  const demandFirst = [...demand.map((d) => gameKey(d.game)), ...FEATURED.map((f) => gameKey(f))];
+  const byPriority = allGuides.slice().sort((a, b) => {
+    const ia = demandFirst.indexOf(a.id), ib = demandFirst.indexOf(b.id);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+  });
+  for (const d of byPriority) {
+    const info = d.data();
+    if (info.appId && !info.hasAchievements && !info.pipeline?.achTried)
+      add({ kind: 'achievements', game: String(info.game || d.id), key: d.id, searches: 40, why: 'an achievement guide and roadmap' });
+  }
+  const have = new Set(allGuides.map((d) => d.id));
+  let wished = 0;
+  for (const name of wishlist()) {
+    if (wished >= 2) break;
+    if (have.has(gameKey(name))) continue;
+    add({ kind: 'build', game: name, key: gameKey(name), searches: 0, why: 'from the wish list' });
+    wished++;
+  }
   for (const s of demand) {
     const g = await guideInfo(s.game);
     if (g.quick > 0) add({ kind: 'upgrade', game: s.game, key: g.key, searches: Math.min(400, g.quick * 6), why: `${s.playerCount} players use it; ${g.quick} quick pages to check` });
   }
-  // Achievement guides: games players use first, then the featured guides (a few dozen searches each).
-  for (const name of [...demand.map((d) => d.game), ...FEATURED]) {
-    const g = await guideInfo(name);
-    if (g.published && !g.hasAch && !g.pipeline.achTried) add({ kind: 'achievements', game: g.info?.game || name, key: g.key, searches: 60, why: 'an achievement guide and roadmap' });
-  }
+  // Translations only where they're wanted: the languages players use for that game.
   for (const s of demand) {
     const g = await guideInfo(s.game);
     if (!g.published) continue;
@@ -166,16 +202,13 @@ async function main() {
       .sort((a, b) => b[1] - a[1])
       .map(([name]) => LANG_BY_NAME[name])
       .filter((c): c is string => !!c && LANGS.includes(c));
-    for (const lang of [...new Set([...used, ...LANGS])]) {
-      if (!g.languages.includes(lang)) add({ kind: 'translate', game: s.game, key: g.key, lang, searches: 0, why: used.includes(lang) ? 'players use this game in this language' : `${s.playerCount} players use this game` });
-    }
+    for (const lang of used) if (!g.languages.includes(lang)) add({ kind: 'translate', game: s.game, key: g.key, lang, searches: 0, why: 'players use this game in this language' });
   }
-
-  // Featured guides go into every language, so people searching in their own language can find the site.
+  // Featured guides in the biggest languages (PIPELINE_FEATURED_LANGS), for people searching in their own language.
   for (const name of FEATURED) {
     const g = await guideInfo(name);
     if (!g.published) continue;
-    for (const lang of LANGS) if (!g.languages.includes(lang)) add({ kind: 'translate', game: g.info?.game || name, key: g.key, lang, searches: 0, why: 'a featured guide, for people searching in this language' });
+    for (const lang of FEATURED_LANGS) if (!g.languages.includes(lang)) add({ kind: 'translate', game: g.info?.game || name, key: g.key, lang, searches: 0, why: 'a featured guide, for people searching in this language' });
   }
 
   // ---- 3. run, inside the budget ----
