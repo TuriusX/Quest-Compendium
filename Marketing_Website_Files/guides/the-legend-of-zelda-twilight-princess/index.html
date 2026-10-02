@@ -30,6 +30,8 @@
     [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
     [data-progress].is-complete { color: #34d399; }
     .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
+    /* Search hides entries with the hidden attribute; layout classes like "flex" would otherwise keep them showing. */
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body class="min-h-screen" data-guide="the-legend-of-zelda-twilight-princess">
