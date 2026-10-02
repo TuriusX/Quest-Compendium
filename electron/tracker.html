@@ -161,7 +161,7 @@
     peekFrom: null,               // the view to fold back to after a peek
     size: 'medium', alpha: 100, backdrop: false, edge: 'right',
     scale: 1,                     // the app's UI scale (Settings), applied on top of the text size
-    keys: 'Ctrl+G',               // the open shortcut as shown ('' = none)
+    keys: 'Ctrl+Space',           // the show/hide shortcut as shown ('' = none)
   };
   let peekTimer = null, hintTimer = null;
 
@@ -193,7 +193,7 @@
     $('alphaWrap').title = L('alpha');
     $('bBackdrop').title = L('backdrop');
     tab.title = L('tabHint');
-    // The open shortcut from Settings (state.keys), or a hint without one when it's cleared.
+    // The show/hide shortcut (state.keys), or a hint without one when none is registered.
     if (!state.keys) { $('hint').textContent = L('hintNoKeys'); return; }
     const [before, after] = L('hint').split('{keys}');
     $('hint').innerHTML = after === undefined ? esc(before) : `${esc(before)}<kbd>${esc(state.keys)}</kbd>${esc(after)}`;

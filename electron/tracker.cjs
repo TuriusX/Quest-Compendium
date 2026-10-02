@@ -5,13 +5,13 @@
  * transparency and backdrop are remembered per game in userData/tracker.json.
  *
  * It's the panel's minimized state: hidden (not closed) while the panel is open, back when the panel hides. Clicking
- * its header or pressing Ctrl+G asks the app to open the panel (deps.onOpenPanel, with the tracker's bounds). The
- * hotkey is only held while the tracker is actually showing, so Ctrl+G inside the panel stays Ask/Guide.
+ * its header asks the app to open the panel (deps.onOpenPanel, with the tracker's bounds); the show/hide shortcut
+ * (Ctrl+Space by default) opens it too, and the hint names that shortcut (setKeys). The tracker holds no keys itself.
  *
  * Wire it up from main.cjs:
  *   const tracker = require('./tracker.cjs');
  *   tracker.init({ app, ipcMain, screen, globalShortcut, getMainWindow: () => mainWindow });
- *   ... and call tracker.registerHotkey() again at the end of the 'update-shortcuts' handler (it unregisters everything).
+ *   ... and tracker.setKeys(accelerator) whenever the show/hide shortcut is (re)registered ('' when there's none).
  */
 const path = require('path');
 const fs = require('fs');
@@ -26,8 +26,7 @@ let inRecordings = true; // follows the markers' "show in recordings" setting (c
 let scale = 1; // the app's UI scale (Settings)
 let store = null;   // per-game settings, loaded once
 let storeFile = '';
-let hotkey = 'CommandOrControl+G'; // the open shortcut (Settings), or null for none
-let registeredKey = null; // what this module actually holds right now
+let keys = 'CommandOrControl+Space'; // the show/hide shortcut, named in the hint ('' = none registered)
 let saveTimer = null;
 const MARGIN = 0;
 
@@ -164,12 +163,11 @@ async function show(data, gameKey) {
     patchSettings(current.gameKey, { x: null, y: null });
     s = settingsFor(current.gameKey);
   }
-  js(`window.qcTrackerShow(${JSON.stringify(clean)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: hotkeyLabel() })})`);
+  js(`window.qcTrackerShow(${JSON.stringify(clean)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel() })})`);
   if (fresh && Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
   // Shown when the panel hides; while the panel is open it waits hidden with the new data.
   if (deps.isPanelOpen && deps.isPanelOpen()) suspended = true;
   else if (fresh || suspended || !win.isVisible()) { suspended = false; win.showInactive(); }
-  registerHotkey();
   return true;
 }
 
@@ -183,7 +181,6 @@ function update(patch) {
 function hide() {
   if (alive()) win.destroy();
   win = null; current = null; suspended = false; captureHidden = false;
-  unregisterHotkey();
 }
 
 /** The panel opened: hide without losing anything. */
@@ -191,7 +188,6 @@ function hideTemporarily() {
   if (!alive()) return;
   suspended = true;
   win.hide();
-  unregisterHotkey();
 }
 
 /** The panel hid again: back at its own saved spot. */
@@ -201,10 +197,9 @@ function restore() {
   const s = settingsFor(current && current.gameKey);
   if (s.view !== 'away' && Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
   win.showInactive();
-  registerHotkey();
 }
 
-/** Header click or Ctrl+G: open the panel at the tracker. */
+/** Header click (or the controller's open button): open the panel at the tracker. */
 function openPanel() {
   if (alive() && deps.onOpenPanel) deps.onOpenPanel(win.getBounds());
 }
@@ -244,40 +239,14 @@ function setScale(n) {
   js(`window.qcTrackerSettings(${JSON.stringify({ scale })})`);
 }
 
-/** The shortcut as the page shows it ("Ctrl+G"), or '' when there's none. */
-const hotkeyLabel = () =>
-  hotkey ? hotkey.replace(/\b(CommandOrControl|CmdOrCtrl)\b/g, process.platform === 'darwin' ? 'Cmd' : 'Ctrl') : '';
+/** The show/hide shortcut as the page shows it ("Ctrl+Space"), or '' when there's none. */
+const keysLabel = () =>
+  keys ? keys.replace(/(CommandOrControl|CmdOrCtrl)/g, process.platform === 'darwin' ? 'Cmd' : 'Ctrl') : '';
 
-/** Only ever let go of the key this module registered (another shortcut may use the same keys). */
-function unregisterHotkey() {
-  try { if (deps && registeredKey) deps.globalShortcut.unregister(registeredKey); } catch { /* not registered */ }
-  registeredKey = null;
-}
-
-/**
- * Hold the open shortcut while the tracker is on screen. With an accelerator: that's the shortcut from now on
- * (Settings); null or '' means none. With no argument: (re)register the current one (after the panel hides, or after
- * update-shortcuts unregistered everything).
- */
-function registerHotkey(accelerator) {
-  if (accelerator !== undefined) {
-    const next = typeof accelerator === 'string' && accelerator.trim() ? accelerator.trim() : null;
-    if (next !== hotkey) {
-      unregisterHotkey();
-      hotkey = next;
-      js(`window.qcTrackerSettings(${JSON.stringify({ keys: hotkeyLabel() })})`);
-    }
-  }
-  // update-shortcuts calls globalShortcut.unregisterAll() first: whatever we held is gone.
-  if (registeredKey && !deps.globalShortcut.isRegistered(registeredKey)) registeredKey = null;
-  if (!hotkey || !alive() || suspended || registeredKey) return;
-  try {
-    if (deps.globalShortcut.isRegistered(hotkey)) {
-      console.warn(`[tracker] ${hotkey} is already used by another shortcut; the tracker won't take it`);
-      return;
-    }
-    if (deps.globalShortcut.register(hotkey, openPanel)) registeredKey = hotkey;
-  } catch (err) { console.warn('[tracker] hotkey failed:', err && err.message); }
+/** The show/hide shortcut changed (or couldn't be registered: ''): the hint follows. */
+function setKeys(accelerator) {
+  keys = typeof accelerator === 'string' ? accelerator.trim() : '';
+  js(`window.qcTrackerSettings(${JSON.stringify({ keys: keysLabel() })})`);
 }
 
 function onMessage(event, msg) {
@@ -356,7 +325,7 @@ function init(d) {
 }
 
 module.exports = {
-  init, show, update, hide, hideTemporarily, restore, registerHotkey, hideForCapture, showAfterCapture, getBounds,
+  init, show, update, hide, hideTemporarily, restore, setKeys, hideForCapture, showAfterCapture, getBounds,
   setVisibleInRecordings, setScale, openPanel,
   isOpen: () => alive(),
   /** On screen right now (not hidden behind the open panel). */

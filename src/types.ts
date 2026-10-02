@@ -153,8 +153,6 @@ export interface AppSettings {
   hideAppShortcut: string;
   voiceInputShortcut: string;
   autoScreenshotShortcut: string;
-  /** Opens the panel from the objectives tracker while it's on screen; '' = none. */
-  trackerShortcut: string;
   enableThematicBanners?: boolean;
   /** Interface style: 'lofi' (pixel art, default) or 'classic' (the original look). */
   uiStyle?: UiStyle;

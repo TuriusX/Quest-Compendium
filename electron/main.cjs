@@ -643,15 +643,18 @@ app.whenReady().then(() => {
     if (!ok) console.warn(`[panel] ${keys} is taken (by another app or shortcut); the show/hide shortcut isn't set`);
     return ok;
   };
-  registerHideShortcut('CommandOrControl+Space');
+  tracker.setKeys(registerHideShortcut('CommandOrControl+Space') ? 'CommandOrControl+Space' : '');
 
   ipcMain.on('update-shortcuts', (event, shortcuts) => {
     globalShortcut.unregisterAll();
 
     // Always ensure a show/hide shortcut exists: the player's, else Ctrl+Space.
     const hideAppCmd = shortcuts.hideAppShortcut || 'CommandOrControl+Space';
-    if (!registerHideShortcut(hideAppCmd) && hideAppCmd !== 'CommandOrControl+Space') registerHideShortcut('CommandOrControl+Space');
-    console.log(`[panel] show/hide shortcut: ${hideAppCmd}`);
+    let hideKeys = registerHideShortcut(hideAppCmd) ? hideAppCmd : '';
+    if (!hideKeys && hideAppCmd !== 'CommandOrControl+Space' && registerHideShortcut('CommandOrControl+Space')) hideKeys = 'CommandOrControl+Space';
+    // The tracker's hint names the shortcut that opens the panel.
+    tracker.setKeys(hideKeys);
+    console.log(`[panel] show/hide shortcut: ${hideKeys || `none (${hideAppCmd} and Ctrl+Space are taken)`}`);
     
     const voiceCmd = shortcuts.voiceInputShortcut || 'CommandOrControl+Shift+V';
     try {
@@ -674,10 +677,6 @@ app.whenReady().then(() => {
     } catch (err) {
       console.error("Failed to register autoScreenshotShortcut", err);
     }
-
-    // The objectives tracker's open shortcut (Settings; '' = none, missing = the default Ctrl+G). unregisterAll()
-    // above dropped it, so this registers it again if the tracker is on screen.
-    tracker.registerHotkey(typeof shortcuts.trackerShortcut === 'string' ? shortcuts.trackerShortcut : 'CommandOrControl+G');
   });
 
   app.on('activate', () => {
