@@ -18,6 +18,8 @@
  *            No synthetic key presses here (an Alt tap reaches the game: in Baldur's Gate 3 it highlights items).
  * other():   the focused window if it isn't one of ours (the game), else null; recorded before the overlay opens.
  * describe(): a window for the logs: its title, process name and handle.
+ * windowInFolder(dir): the main window of a program installed in that folder (the detected game, when nothing was
+ *            recorded at open: the panel opened itself at startup).
  *
  * Note: an earlier version kept the game's input thread attached (AttachThreadInput), which could leave Windows'
  * input state tangled after repeated use. Step 2 only attaches around a single call and always detaches.
@@ -26,14 +28,20 @@
  */
 
 function createFocusHelper() {
-  const noop = { available: false, take: () => null, restore: () => {}, other: () => null, describe: () => '' };
+  const noop = { available: false, take: () => null, restore: () => {}, other: () => null, describe: () => '', windowInFolder: () => null };
   if (process.platform !== 'win32') return noop;
   let api;
   try {
     const koffi = require('koffi');
     const user32 = koffi.load('user32.dll');
     const kernel32 = koffi.load('kernel32.dll');
+    const RECT = koffi.struct('QC_RECT', { left: 'int', top: 'int', right: 'int', bottom: 'int' });
+    const EnumWindowsProc = koffi.proto('int __stdcall QC_EnumWindowsProc(uintptr_t hwnd, intptr_t lParam)');
     api = {
+      koffi, EnumWindowsProc,
+      EnumWindows: user32.func('int __stdcall EnumWindows(QC_EnumWindowsProc *lpEnumFunc, intptr_t lParam)'),
+      IsWindowVisible: user32.func('int __stdcall IsWindowVisible(uintptr_t hWnd)'),
+      GetWindowRect: user32.func('int __stdcall GetWindowRect(uintptr_t hWnd, _Out_ QC_RECT *lpRect)'),
       GetForegroundWindow: user32.func('uintptr_t __stdcall GetForegroundWindow()'),
       GetWindowThreadProcessId: user32.func('uint32 __stdcall GetWindowThreadProcessId(uintptr_t hWnd, _Out_ uint32 *lpdwProcessId)'),
       SetForegroundWindow: user32.func('int __stdcall SetForegroundWindow(uintptr_t hWnd)'),
@@ -76,26 +84,62 @@ function createFocusHelper() {
     return api.GetWindowThreadProcessId(hwnd, pid) || 0;
   }
 
-  /** "Baldur's Gate 3 [bg3_dx11.exe] #17500494" for the logs (or "none"). */
-  function describe(hwnd) {
-    if (!hwnd) return 'none';
-    let title = '', exe = '?';
+  function titleOf(hwnd) {
     try {
       const buf = new Uint16Array(256);
       const n = api.GetWindowTextW(hwnd, buf, 256);
-      title = String.fromCharCode(...buf.slice(0, Math.max(0, n)));
-    } catch { /* no title */ }
+      return String.fromCharCode(...buf.slice(0, Math.max(0, n)));
+    } catch {
+      return '';
+    }
+  }
+
+  /** The full path of the program that owns the window ('' when Windows won't say). */
+  function exePathOf(hwnd) {
     try {
       const pid = pidOf(hwnd);
       const h = pid ? asNum(api.OpenProcess(0x1000, 0, pid)) : 0; // PROCESS_QUERY_LIMITED_INFORMATION
-      if (h) {
-        const buf = new Uint16Array(520);
-        const size = [520];
-        if (api.QueryFullProcessImageNameW(h, 0, buf, size)) exe = String.fromCharCode(...buf.slice(0, size[0])).split('\\').pop();
-        api.CloseHandle(h);
-      }
-    } catch { /* no process name */ }
-    return `"${title}" [${exe}] #${hwnd}`;
+      if (!h) return '';
+      const buf = new Uint16Array(520);
+      const size = [520];
+      const ok = api.QueryFullProcessImageNameW(h, 0, buf, size);
+      api.CloseHandle(h);
+      return ok ? String.fromCharCode(...buf.slice(0, size[0])) : '';
+    } catch {
+      return '';
+    }
+  }
+
+  /** "Baldur's Gate 3 [bg3_dx11.exe] #17500494" for the logs (or "none"). */
+  function describe(hwnd) {
+    if (!hwnd) return 'none';
+    const exe = exePathOf(hwnd).split('\\').pop() || '?';
+    return `"${titleOf(hwnd)}" [${exe}] #${hwnd}`;
+  }
+
+  /** The largest visible, titled top-level window of a program installed in `dir` (not ours), or null. */
+  function windowInFolder(dir) {
+    if (!dir) return null;
+    const prefix = dir.replace(/[\\/]+$/, '').toLowerCase() + '\\';
+    let best = null, bestArea = 0;
+    const cb = api.koffi.register((hwnd) => {
+      try {
+        const h = asNum(hwnd);
+        if (!api.IsWindowVisible(h) || isOurs(h) || !titleOf(h)) return 1;
+        if (!exePathOf(h).toLowerCase().startsWith(prefix)) return 1;
+        const r = {};
+        api.GetWindowRect(h, r);
+        const area = Math.max(0, r.right - r.left) * Math.max(0, r.bottom - r.top);
+        if (area > bestArea) { best = h; bestArea = area; }
+      } catch { /* skip this window */ }
+      return 1; // keep going
+    }, api.koffi.pointer(api.EnumWindowsProc));
+    try {
+      api.EnumWindows(cb, 0);
+    } finally {
+      api.koffi.unregister(cb);
+    }
+    return best;
   }
 
   return {
@@ -149,14 +193,20 @@ function createFocusHelper() {
 
     /** A window for the logs: its title, process name and handle. */
     describe,
+    windowInFolder,
 
-    /** Hand focus back to `previous` if our app still has it (called before the panel moves or hides). */
-    restore(win, previous) {
+    /**
+     * Hand focus back to `previous` if our app still has it (called before the panel moves or hides).
+     * opts.detected: `previous` is the detected game's window, found because nothing was recorded at open.
+     */
+    restore(win, previous, opts = {}) {
       try {
         if (!win || win.isDestroyed()) return;
         const fg = foreground();
         const exists = !!previous && !!api.IsWindow(previous);
-        console.log(`[focus] hide: recorded ${describe(previous)} (${previous ? (exists ? 'still exists' : 'gone') : 'nothing recorded'}); foreground before: ${describe(fg)}`);
+        console.log(opts.detected
+          ? `[focus] hide: nothing recorded at open; the detected game's window: ${describe(previous)}; foreground before: ${describe(fg)}`
+          : `[focus] hide: recorded ${describe(previous)} (${previous ? (exists ? 'still exists' : 'gone') : 'nothing recorded'}); foreground before: ${describe(fg)}`);
         if (fg && !isOurs(fg)) {
           console.log('[focus] restore: skipped (something else already has focus)');
           return;
@@ -168,7 +218,7 @@ function createFocusHelper() {
         if (exists) {
           // 1. Ask normally, while the panel still has focus (Windows lets the foreground app pass it on).
           api.SetForegroundWindow(previous);
-          if (foreground() === previous) return done('ok (direct)');
+          if (foreground() === previous) return done(opts.detected ? 'ok (detected game window)' : 'ok (direct)');
           // 2. Refused: attach our input thread to the foreground window's thread (the game's when the foreground
           //    window is ours, since that's this very thread) for this one call, then detach.
           const me = api.GetCurrentThreadId();
@@ -181,7 +231,8 @@ function createFocusHelper() {
           } finally {
             if (attached) api.AttachThreadInput(me, target, 0);
           }
-          if (foreground() === previous) return done(`ok (attached to ${now && !isOurs(now) ? 'the foreground' : "the game's"} thread)`);
+          const via = `attached to ${now && !isOurs(now) ? 'the foreground' : "the game's"} thread`;
+          if (foreground() === previous) return done(opts.detected ? `ok (detected game window, ${via})` : `ok (${via})`);
           console.log(`[focus] restore: SetForegroundWindow refused (attach ${attached ? 'ok' : 'failed'})`);
         }
         // 3. Release focus so Windows returns it to the window underneath (the game).

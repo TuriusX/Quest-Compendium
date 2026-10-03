@@ -440,8 +440,12 @@ function openPanelAtTracker(t) {
 function slideOut() {
   if (!mainWindow) return;
   isAppVisible = false;
-  // Hand focus back to the game so it gets the controller again.
-  focusHelper.restore(mainWindow, focusBeforeOverlay);
+  // Hand focus back to the game so it gets the controller again: the window recorded when the panel opened, else (the
+  // panel opened itself at startup) the detected running game's window.
+  let handBack = focusBeforeOverlay;
+  const detected = !handBack ? focusHelper.windowInFolder(gameInstallDir(lastRunningAppId)) : null;
+  if (detected) handBack = detected;
+  focusHelper.restore(mainWindow, handBack, { detected: !!detected });
   focusBeforeOverlay = null;
   openSnapshot = null; // the snapshot only lives for one visit
   if (currentDockPosition !== 'undocked') {
@@ -746,6 +750,28 @@ function steamLibraryFolders() {
     } catch (_) { /* no library file */ }
   }
   return [...libs];
+}
+
+/**
+ * The running game's install folder (steamapps/common/<installdir> from its manifest), so the panel can hand focus to
+ * the game's window when it didn't record one. QC_FOCUS_GAME_DIR overrides it (for testing the focus handback).
+ */
+const gameDirCache = new Map();
+function gameInstallDir(appId) {
+  if (process.env.QC_FOCUS_GAME_DIR) return process.env.QC_FOCUS_GAME_DIR;
+  if (!appId) return null;
+  if (gameDirCache.has(appId)) return gameDirCache.get(appId);
+  let dir = null;
+  for (const lib of steamLibraryFolders()) {
+    try {
+      const acf = fs.readFileSync(path.join(lib, `appmanifest_${appId}.acf`), 'utf8');
+      const m = acf.match(/"installdir"\s+"([^"]+)"/);
+      const d = m && path.join(lib, 'common', m[1].trim());
+      if (d && fs.existsSync(d)) { dir = d; break; }
+    } catch (_) { /* not in this library */ }
+  }
+  gameDirCache.set(appId, dir);
+  return dir;
 }
 
 /** The game's name from its local Steam manifest (fast, works offline, no rate limits). */
