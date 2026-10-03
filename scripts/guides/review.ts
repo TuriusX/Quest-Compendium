@@ -1,5 +1,6 @@
 /**
- * Guide reviewer: grades a guide (its published and draft pages) with a stronger model than quick builds use.
+ * Guide reviewer: grades a guide (its published and draft pages). Gemini 3.1 Pro for careful builds' final gates (a
+ * daily allowance, see reviewerQuota.ts), Gemini 3.8 Flash for everything else (pass mark 80 for quick guides).
  *
  *   npx tsx scripts/guides/review.ts --game "Dead Space"          one guide (or --key dead-space; a staged build is
  *                                                                 --key dead-space--next)
@@ -12,6 +13,8 @@
  *            --gate          the publishing gate: on a pass (score ≥ 75 and at least 5 pages) a staged build is
  *                            promoted to the live guide (promote.ts) or a guide's drafts are published; on a fail the
  *                            guide goes to the review queue (reviewQueue in Firestore, shown on /admin/reviews)
+ *            --tier flash   review with Gemini 3.8 Flash (bulk audits); the default is Pro, counted against its daily
+ *                           allowance as an "other" use (200 of the 250 are kept for careful rebuilds)
  *            --max-dollars N stop --all before the estimate passes N (default 15)
  *            --concurrency N guides graded at once with --all (default 4)
  *            --no-save       grade and write the report file, but don't save the result on the guide
@@ -33,17 +36,26 @@ import {
 import { estimateCost } from '../../usage';
 import { recordMonthly } from '../../searchGuard';
 import { promote } from './promote';
+import { PRO_MODEL, FLASH_REVIEW_MODEL, takePro, proExhausted, isQuotaError, ProQuotaWait, type ReviewTier, type ProKind } from './reviewerQuota';
 
-const REVIEW_MODEL = process.env.REVIEW_MODEL || 'gemini-3.1-pro-preview'; // stronger than the build model (gemini-3.8-flash)
+// The reviewer is split by importance (reviewerQuota.ts): Gemini 3.1 Pro for careful builds' final gates, counted per
+// day and never replaced by another model; Gemini 3.8 Flash for everything else, with a stricter pass mark for quick
+// guides (Flash writes those too).
 export const PASS = 75;
+export const FLASH_QUICK_PASS = 80;
+/** The pass mark for a review: 80 when Flash reviews a quick guide, else 75. */
+export const passMark = (tier: ReviewTier, buildMode: string) => (tier === 'flash' && buildMode === 'quick' ? FLASH_QUICK_PASS : PASS);
 export const MIN_PAGES = 5;
-const RATES = { input: 2.0, output: 12.0 }; // per million tokens, for --estimate (gemini-3.1-pro-preview)
+// Per million tokens, for --estimate: gemini-3.1-pro-preview, and gemini-3.8-flash.
+const RATES = { pro: { input: 2.0, output: 12.0 }, flash: { input: 0.75, output: 3.75 } };
 const OUTPUT_GUESS = 4500; // output + thinking tokens per review, for --estimate (on the safe side of real reviews)
 const OUT_DIR = 'scratchpad/reviews';
 
 const all = arg('all') === 'true';
 const estimateOnly = arg('estimate') === 'true';
 const verifyArg = arg('verify') === 'true';
+/** --tier flash: review with Gemini 3.8 Flash (for bulk audits); the default is Pro, counted as an "other" use. */
+const tierArg: ReviewTier = arg('tier') === 'flash' ? 'flash' : 'pro';
 const gate = arg('gate') === 'true';
 const noSave = arg('no-save') === 'true';
 const maxDollars = Number(arg('max-dollars', '15'));
@@ -73,6 +85,9 @@ export type Review = {
   buildMode: 'quick' | 'careful' | 'mixed';
   pageCount: number;
   model: string;
+  /** Which reviewer graded it, and the mark it had to reach (80 for a quick guide reviewed by Flash). */
+  tier?: ReviewTier;
+  passMark?: number;
   at: number;
 };
 
@@ -182,11 +197,27 @@ function cleanReview(raw: any, base: Pick<Review, 'buildMode' | 'pageCount' | 'm
   };
 }
 
+type Reviewer = { tier: ReviewTier; model: string; kind: ProKind };
+const reviewerFor = (tier: ReviewTier, kind: ProKind): Reviewer => ({ tier, kind, model: tier === 'pro' ? PRO_MODEL : FLASH_REVIEW_MODEL });
+/** A reviewer call. Pro requests are counted first (ProQuotaWait when today's are used up) and never retried elsewhere. */
+async function call(rv: Reviewer, request: any): Promise<any> {
+  if (rv.tier === 'pro') await takePro(rv.kind);
+  try {
+    return await gemini().models.generateContent({ ...request, model: rv.model });
+  } catch (e: any) {
+    if (rv.tier === 'pro' && isQuotaError(e)) {
+      await proExhausted();
+      throw new ProQuotaWait();
+    }
+    throw e;
+  }
+}
+
 /**
  * The spot-check: specific names from across the guide (an item, or else an enemy or shop, from up to 15 pages spread
  * through it), looked up with Google Search (up to 30 searches). Only checked pages unless `allPages`.
  */
-async function spotCheck(game: string, pages: any[], allPages: boolean): Promise<{ result: NonNullable<Review['verified']>; searches: number; dollars: number }> {
+async function spotCheck(rv: Reviewer, game: string, pages: any[], allPages: boolean): Promise<{ result: NonNullable<Review['verified']>; searches: number; dollars: number }> {
   const pool = pages.filter((p) => allPages || p.verified !== false);
   const step = Math.max(1, pool.length / 15);
   const names: string[] = [];
@@ -201,8 +232,7 @@ async function spotCheck(game: string, pages: any[], allPages: boolean): Promise
   // ran no searches, or that can't be read, is retried once; after that the check counts as not done (checked 0),
   // never as "nothing found".
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res: any = await gemini().models.generateContent({
-      model: REVIEW_MODEL,
+    const res: any = await call(rv, {
       contents: [{ role: 'user', parts: [{ text:
         (attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : '') +
         `Search the web to check that each of these really exists in the video game "${game}", at that place in the game. ` +
@@ -216,7 +246,7 @@ async function spotCheck(game: string, pages: any[], allPages: boolean): Promise
     const n = searchesIn(res);
     searches += n;
     if (n) recordMonthly(n);
-    dollars += estimateCost(REVIEW_MODEL, res) || 0;
+    dollars += estimateCost(rv.model, res) || 0;
     const text = String(res?.text || '');
     if (process.env.REVIEW_DEBUG) console.log('[spot-check]', n, 'searches\n', text.slice(0, 1500));
     const verdicts = new Map<number, string>();
@@ -237,7 +267,7 @@ function report(game: string, key: string, r: Review): string {
   return [
     `# ${game}: guide review`,
     ``,
-    `Score **${r.score}/100**: ${r.pass ? 'pass' : 'fail'}. Recommended: **${r.recommendation}** (outline: ${r.layout}).`,
+    `Score **${r.score}/100**: ${r.pass ? 'pass' : 'fail'} (pass mark ${r.passMark ?? PASS}, ${r.tier === 'flash' ? 'Flash' : 'Pro'} reviewer). Recommended: **${r.recommendation}** (outline: ${r.layout}).`,
     `${r.pageCount} pages (${r.buildMode} build), released ${r.released}. Reviewed by ${r.model} on ${new Date(r.at).toISOString().slice(0, 10)}.`,
     r.newerThanReviewer ? `Released after the reviewer's knowledge cutoff: knowledge graded by the spot-check only (structure etc. scored ${r.baseScore}).` : '',
     ``,
@@ -253,27 +283,35 @@ function report(game: string, key: string, r: Review): string {
   ].join('\n');
 }
 
-/** Review one guide (or a staged build). Returns the review plus what it cost. */
-export async function reviewGuide(key: string, opts: { save: boolean; verify: boolean }): Promise<{ review: Review | null; dollars: number; searches: number; game: string }> {
+/**
+ * Review one guide (or a staged build). Returns the review plus what it cost. opts.tier: 'pro' (careful builds' final
+ * gates; opts.proKind 'careful' may use the whole daily allowance) or 'flash' (everything else). Throws ProQuotaWait
+ * when Pro's daily requests are used up: the caller waits for the next day.
+ */
+export async function reviewGuide(key: string, opts: { save: boolean; verify: boolean; tier?: ReviewTier; proKind?: ProKind }): Promise<{ review: Review | null; dollars: number; searches: number; game: string }> {
+  const rv = reviewerFor(opts.tier || 'pro', opts.proKind || 'other');
   const g = await loadGuide(key);
   if (!g || !g.pages.length) return { review: null, dollars: 0, searches: 0, game: g?.game || key };
   const rel = await guideRelease(g.game, g.live);
   const newer = releasedAfter(rel, REVIEWER_CUTOFF, g.newRelease);
   const layout = String(g.info.layout || 'area');
-  const res: any = await gemini().models.generateContent({
-    model: REVIEW_MODEL,
+  const res: any = await call(rv, {
     contents: [{ role: 'user', parts: [{ text: prompt(g.game, rel.text, layout, g.buildMode, g.pages, newer) }] }],
     config: { responseMimeType: 'application/json', temperature: 0.2, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
   });
-  let dollars = estimateCost(REVIEW_MODEL, res) || 0;
+  let dollars = estimateCost(rv.model, res) || 0;
   let searches = 0;
   const raw = parseJson(String(res?.text || ''));
   if (!raw) throw new Error('the reviewer did not return a readable grade');
-  const review = cleanReview(raw, { buildMode: g.buildMode, pageCount: g.pages.length, model: REVIEW_MODEL, at: Date.now(), released: rel.text, newerThanReviewer: newer }, layout);
+  const review = cleanReview(raw, { buildMode: g.buildMode, pageCount: g.pages.length, model: rv.model, at: Date.now(), released: rel.text, newerThanReviewer: newer }, layout);
+  const mark = passMark(rv.tier, g.buildMode);
+  review.tier = rv.tier;
+  review.passMark = mark;
+  review.pass = review.score >= mark;
   // Newer games: always spot-checked (every page), and the knowledge grade is the spot-check's. Older games: on
   // request, checked pages only, and it can only pull a guide down.
   if (newer || (opts.verify && g.buildMode !== 'quick')) {
-    const v = await spotCheck(g.game, g.pages, newer);
+    const v = await spotCheck(rv, g.game, g.pages, newer);
     review.verified = v.result;
     dollars += v.dollars;
     searches += v.searches;
@@ -282,13 +320,13 @@ export async function reviewGuide(key: string, opts: { save: boolean; verify: bo
     if (!k.checked) review.knowledge.problems.unshift('Spot-check could not run (no names, or no searched reply): knowledge unchecked.');
     if (newer) {
       review.baseScore = review.score;
-      review.score = k.checked ? Math.round(0.6 * review.score + 0.4 * k.score) : Math.min(review.score, PASS - 1); // nothing to check: can't pass
+      review.score = k.checked ? Math.round(0.6 * review.score + 0.4 * k.score) : Math.min(review.score, mark - 1); // nothing to check: can't pass
       if (k.checked && k.score < 50) review.recommendation = 'rebuild careful';
     } else if (k.checked && k.score < 50) {
       review.score = Math.min(review.score, 60);
       review.recommendation = 'rebuild careful';
     }
-    review.pass = review.score >= PASS;
+    review.pass = review.score >= mark;
     if (review.pass && review.recommendation === 'rebuild careful') review.recommendation = 'fix pages';
   }
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -343,9 +381,9 @@ async function estimate(keys: string[]): Promise<{ total: number; per: { key: st
     const g = await loadGuide(key);
     if (!g || !g.pages.length) continue;
     const text = prompt(g.game, 'unknown', String(g.info.layout || 'area'), g.buildMode, g.pages, false);
-    const c: any = await gemini().models.countTokens({ model: REVIEW_MODEL, contents: [{ role: 'user', parts: [{ text }] }] });
+    const c: any = await gemini().models.countTokens({ model: tierArg === 'pro' ? PRO_MODEL : FLASH_REVIEW_MODEL, contents: [{ role: 'user', parts: [{ text }] }] });
     const tokens = Number(c?.totalTokens || 0);
-    per.push({ key, tokens, dollars: (tokens * RATES.input + OUTPUT_GUESS * RATES.output) / 1_000_000 });
+    per.push({ key, tokens, dollars: (tokens * RATES[tierArg].input + OUTPUT_GUESS * RATES[tierArg].output) / 1_000_000 });
   }
   return { total: per.reduce((n, x) => n + x.dollars, 0), per };
 }
@@ -357,7 +395,7 @@ async function main() {
     process.exit(1);
   }
   const est = await estimate(keys);
-  console.log(`${est.per.length} guide(s) to review with ${REVIEW_MODEL}: about ${Math.round(est.per.reduce((n, x) => n + x.tokens, 0) / 1000)}k input tokens, estimated cost ≈ $${est.total.toFixed(2)} (plus spot-checks: up to 30 searches for each game newer than ${REVIEWER_CUTOFF}${verifyArg ? ' or checked guide' : ''}).`);
+  console.log(`${est.per.length} guide(s) to review with ${tierArg === 'pro' ? PRO_MODEL : FLASH_REVIEW_MODEL}: about ${Math.round(est.per.reduce((n, x) => n + x.tokens, 0) / 1000)}k input tokens, estimated cost ≈ $${est.total.toFixed(2)} (plus spot-checks: up to 30 searches for each game newer than ${REVIEWER_CUTOFF}${verifyArg ? ' or checked guide' : ''}).`);
   if (estimateOnly) {
     for (const x of est.per.sort((a, b) => b.dollars - a.dollars).slice(0, 10)) console.log(`  ${x.key}: ${x.tokens} tokens, ≈ $${x.dollars.toFixed(3)}`);
     setTimeout(() => process.exit(0), 500);
@@ -375,7 +413,7 @@ async function main() {
     for (let key = queue.shift(); key; key = queue.shift()) {
       if (dollars > maxDollars) break;
       try {
-        const r = await reviewGuide(key, { save: !noSave, verify: verifyArg });
+        const r = await reviewGuide(key, { save: !noSave, verify: verifyArg, tier: tierArg });
         dollars += r.dollars;
         searches += r.searches;
         done++;
@@ -386,6 +424,11 @@ async function main() {
           if (gate && !noSave) console.log(await gateGuide(key, r.game, r.review));
         } else if (gate) console.log('Gate: failed (no pages to review).');
       } catch (e: any) {
+        if (e instanceof ProQuotaWait) {
+          console.log(`Gate: waiting (${e.message}; reviewed tomorrow).`);
+          queue.length = 0;
+          break;
+        }
         failed++;
         console.warn(`failed: ${key}: ${e?.message}`);
       }

@@ -32,8 +32,10 @@ import { db, gemini, gameKey, arg, parseJson, guideRelease, releasedAfter, stage
 import { estimateCost } from '../../usage';
 import { stageCopy, discard } from './promote';
 import { reviewGuide, gateGuide, type Review } from './review';
+import { FLASH_REVIEW_MODEL, ProQuotaWait, type ReviewTier } from './reviewerQuota';
 
-const PLAN_MODEL = process.env.REVIEW_MODEL || 'gemini-3.1-pro-preview';
+// Page fixes are Flash work (reviewerQuota.ts): the fix plan and the fixed guide's gate.
+const PLAN_MODEL = FLASH_REVIEW_MODEL;
 const key = liveKey(arg('key') || (arg('game') && arg('game') !== 'true' ? gameKey(arg('game')!) : ''));
 const ACTIONS = ['fix', 'outline', 'careful', 'extend', 'upgrade'];
 const action = arg('action') as 'fix' | 'outline' | 'careful' | 'extend' | 'upgrade';
@@ -194,11 +196,18 @@ async function main() {
     return setTimeout(() => process.exit(0), 500);
   }
 
+  // The final gate's reviewer: Pro for careful builds and rebuilds (anything that ends up Checked), Flash for page
+  // fixes and quick rebuilds. A careful build whose gate had to wait for Pro (its daily requests used up) goes straight
+  // to the gate on the next run, without building again.
+  const tier: ReviewTier = action === 'fix' || (action === 'outline' && !newer) ? 'flash' : 'pro';
+  const waiting: any = (await db().collection('guides').doc(stageKey(key)).get()).data();
+  const gateOnly = !!waiting?.awaitingGate && waiting.repair === action;
   let ready = true;
-  if (action === 'fix') {
+  if (gateOnly) console.log('Repair: built earlier; its review waited for the Pro reviewer, so it goes straight to the gate.');
+  else if (action === 'fix') {
     // A guide reviewed before (or a player report about one that wasn't): review it first.
     if (!review) {
-      const r = await reviewGuide(key, { save: true, verify: false });
+      const r = await reviewGuide(key, { save: true, verify: false, tier: 'flash' });
       dollars += r.dollars;
       searches += r.searches;
       review = r.review || undefined;
@@ -210,6 +219,7 @@ async function main() {
     await discard(key);
     const r = build(['--game', game, '--stage', '--copy-live', '--max-searches', String(maxSearches),
       ...(action === 'upgrade' ? ['--upgrade'] : ['--part', 'the whole game, especially areas not covered yet', '--areas', '25'])]);
+    await db().collection('guides').doc(stageKey(key)).set({ repair: action }, { merge: true }).catch(() => {});
     if (!r.ok && !/Done/.test(r.out)) ready = false;
   } else {
     // A fresh staged build; a careful one that stopped at the search cap last time just continues.
@@ -247,11 +257,19 @@ async function main() {
     }
   }
   if (ready) {
-    const r = await reviewGuide(stageKey(key), { save: true, verify: false });
-    dollars += r.dollars;
-    searches += r.searches;
-    console.log(r.review ? `Review: ${r.review.score}/100, ${r.review.recommendation}.` : 'Review: nothing staged to review.');
-    console.log(r.review ? await gateGuide(stageKey(key), game, r.review) : 'Gate: failed (nothing was built).');
+    try {
+      const r = await reviewGuide(stageKey(key), { save: true, verify: false, tier, proKind: 'careful' });
+      dollars += r.dollars;
+      searches += r.searches;
+      await db().collection('guides').doc(stageKey(key)).set({ awaitingGate: false }, { merge: true }).catch(() => {});
+      console.log(r.review ? `Review: ${r.review.score}/100 (pass mark ${r.review.passMark}, ${tier} reviewer), ${r.review.recommendation}.` : 'Review: nothing staged to review.');
+      console.log(r.review ? await gateGuide(stageKey(key), game, r.review) : 'Gate: failed (nothing was built).');
+    } catch (e: any) {
+      if (!(e instanceof ProQuotaWait)) throw e;
+      // Never another model for a careful build's gate: it waits (staged, unpublished) for tomorrow's Pro requests.
+      await db().collection('guides').doc(stageKey(key)).set({ awaitingGate: true, repair: action }, { merge: true });
+      console.log(`Gate: waiting (${e.message}); the staged build is reviewed on the next run.`);
+    }
   }
   console.log(`Done: repair (${action}) of ${game}, ${searches} searches used, estimated AI cost ≈ $${dollars.toFixed(2)}.`);
   setTimeout(() => process.exit(0), 1500);

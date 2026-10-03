@@ -20,6 +20,9 @@
  *   Player corrections (scripts/guides/corrections.ts): reports from conversations that a guide entry is wrong are
  *   checked against sources (up to 8 searches an entry) and the reviewer, and written into the guides through the
  *   review gate; ones sources can't settle need 3+ different players. Decided before the repair queue.
+ *   The reviewer (scripts/guides/reviewerQuota.ts): Gemini 3.1 Pro (250 requests a day, counted in system/proBudget,
+ *   200 kept for careful rebuilds) for careful builds' final gates, which wait for the next day when it's used up;
+ *   Gemini 3.8 Flash for everything else (page fixes, quick builds, corrections), pass mark 80 for quick guides.
  *   The review gate: every build, fix, extension and upgrade is made in a staged copy (scripts/guides/repair.ts) and
  *   only replaces the live guide if it passes review (score 75+, at least 5 pages; games newer than the reviewer are
  *   spot-checked with searches). A guide that fails goes to the review queue for a decision. A quick build of a game
@@ -72,7 +75,7 @@ const QUEUE_MIN = 150;
 /** A quick guide needs at least this many pages to be published (build.ts does the same). */
 const QUICK_MIN = 5;
 /** The repair queue's items: careful builds, fixes and outline rebuilds (scripts/guides/repair.ts). 'quick' = outline. */
-type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string };
+type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string };
 /** Minutes the repair queue may run before the rest of the run (the job's limit is 3 hours). */
 const QUEUE_MINUTES = env('PIPELINE_QUEUE_MINUTES', 120);
 const LANGS = (process.env.PIPELINE_LANGS || 'es,pt,de,fr,ru,ja,ko,zh').split(',').map((s) => s.trim()).filter(Boolean);
@@ -302,7 +305,7 @@ async function main() {
     const action = item.mode === 'quick' ? 'outline' : item.mode;
     // Careful builds, and outline rebuilds of new releases (careful too), need real search room; fixes and quick
     // rebuilds search little (spot-checks, careful pages of new games).
-    const big = action === 'careful' || !!item.newRelease;
+    const big = action === 'careful' || action === 'extend' || action === 'upgrade' || !!item.newRelease;
     const need = big ? QUEUE_MIN : 60;
     if (aiRoom < 0.25 || Date.now() - queueStart > QUEUE_MINUTES * 60_000) {
       waiting.push(item, ...queue);
@@ -340,6 +343,10 @@ async function main() {
         aiRoom -= a.dollars;
         report.push(`${a.ok ? '✅' : '⚠️'} achievements **${item.game}**: ${a.summary || (a.ok ? '' : 'failed (see the job log)')}`.trim());
       }
+    } else if (/^Gate: waiting/m.test(r.out)) {
+      // A careful build's gate needs the Pro reviewer, whose daily requests are used up: reviewed on the next run.
+      waiting.push(item);
+      report.push(`⏳ queue ${action} **${item.game}**: built; its review waits for tomorrow's Pro reviewer requests.`);
     } else if (/continues on the next run/.test(r.out)) {
       waiting.push(item);
       report.push(`⏳ queue ${action} **${item.game}**: built up to its search cap; continues next run.`);
@@ -393,10 +400,13 @@ async function main() {
       const cap = Math.min(a.searches, Math.max(50, searchRoom));
       r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', a.kind === 'revisit' ? 'extend' : 'careful', '--max-searches', String(cap)]);
       await guideRef.set({ pipeline: { ...g.pipeline, newRelease: g.pipeline.newRelease || a.kind === 'build-checked', builtAt: g.pipeline.builtAt || Date.now(), ...(a.kind === 'revisit' ? { revisited: Date.now() } : {}) } }, { merge: true });
-      if (/continues on the next run/.test(r.out) && !state.carefulQueue.some((x: QueueItem) => gameKey(x.game) === g.key))
-        state.carefulQueue.push({ game: a.game, mode: 'careful', newRelease: true, addedAt: Date.now(), why: 'a new release; its careful build continues' });
+      if ((/continues on the next run/.test(r.out) || /^Gate: waiting/m.test(r.out)) && !state.carefulQueue.some((x: QueueItem) => gameKey(x.game) === g.key))
+        state.carefulQueue.push({ game: a.game, mode: a.kind === 'revisit' ? 'extend' : 'careful', newRelease: true, addedAt: Date.now(), why: 'a new release; its careful build continues (or waits for the Pro reviewer)' });
     } else if (a.kind === 'upgrade') {
       r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', 'upgrade', '--max-searches', String(Math.min(a.searches, Math.max(50, searchRoom)))]);
+      // Its gate waits for the Pro reviewer: the queue reviews it on the next run.
+      if (/^Gate: waiting/m.test(r.out) && !state.carefulQueue.some((x: QueueItem) => gameKey(x.game) === g.key))
+        state.carefulQueue.push({ game: a.game, mode: 'upgrade', addedAt: Date.now(), why: 'upgraded; its review waits for the Pro reviewer' });
     } else if (a.kind === 'achievements') {
       r = runScript(['scripts/guides/achievements.ts', '--game', a.game, '--max-searches', String(Math.min(120, Math.max(30, searchRoom)))]);
       // Not every game has Steam achievements; don't keep retrying one that failed.

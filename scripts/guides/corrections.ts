@@ -11,7 +11,7 @@
  *   1. The source check: the reports and the guide's text go to the build model with Google Search (up to 8 searches,
  *      counted in the monthly budget), which says whether sources confirm, contradict or can't settle the reports,
  *      which reports agree, and rewrites the entry's where / how / notes clearly and specifically.
- *   2. The reviewer (a stronger model, no searches) checks that rewrite against the evidence.
+ *   2. The reviewer (Gemini 3.8 Flash, no searches; corrections never use Pro) checks that rewrite against the evidence.
  *   3. Confirmed by sources (and the reviewer): the entry is rewritten. Contradicted: dismissed. Can't be settled by
  *      sources: applied only once 3 or more different signed-in players reported the same correction; otherwise it
  *      stays pending (or disputed, when the reports disagree with each other).
@@ -25,8 +25,11 @@ import { estimateCost } from '../../usage';
 import { recordMonthly } from '../../searchGuard';
 import { stageCopy, discard } from './promote';
 import { reviewGuide, gateGuide } from './review';
+import { FLASH_REVIEW_MODEL } from './reviewerQuota';
 
-const REVIEW_MODEL = process.env.REVIEW_MODEL || 'gemini-3.1-pro-preview';
+// Corrections never use the Pro reviewer (its daily requests are kept for careful rebuilds): Gemini 3.8 Flash checks the
+// rewrite and runs the gate.
+const REVIEW_MODEL = FLASH_REVIEW_MODEL;
 const maxSearches = Math.max(8, Number(arg('max-searches', '120')));
 const onlyGroup = arg('group') && arg('group') !== 'true' ? arg('group')! : '';
 const dryRun = arg('dry-run') === 'true';
@@ -37,7 +40,8 @@ let searches = 0;
 let dollars = 0;
 
 type Report = { id: string; claim: string; uidHash: string; guest: boolean; via: string; placeConfirmed: boolean; field: string };
-type Rewrite = { where?: string; how?: string; notes?: string };
+/** An item's corrected where / how / notes; a secret or checklist line's corrected whole text (it names what it is). */
+type Rewrite = { where?: string; how?: string; notes?: string; text?: string };
 type Check = { verdict: 'confirmed' | 'contradicted' | 'unclear'; agree: number[]; rewrite: Rewrite; evidence: string; sources: string[]; searches: number };
 
 const cut = (s: unknown, n: number) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
@@ -78,6 +82,7 @@ async function sourceCheck(game: string, area: string, kind: string, entry: any,
       `WHERE: the entry's location, rewritten to be clear and specific (landmarks, directions, how to get there); empty if unclear`,
       `HOW: what it takes or how to do it (checks, keys, steps), if relevant; else empty`,
       `NOTES: anything else a player needs, if any; else empty`,
+      ...(kind === 'item' ? [] : [`TEXT: the whole entry rewritten as one clear line that first names what it is (as the guide's entry does), then where and how; empty if unclear`]),
       `EVIDENCE: two to four sentences: each fact in WHERE / HOW / NOTES and which site showed it`,
       `Only use facts your searches showed: no character names, numbers, checks or contents that you didn't find. Leave a
       field empty rather than guess. Write in your own words; never copy sentences from websites.`,
@@ -89,13 +94,13 @@ async function sourceCheck(game: string, area: string, kind: string, entry: any,
   if (n) recordMonthly(n);
   dollars += estimateCost(MODEL, res) || 0;
   const text = String(res?.text || '');
-  const line = (k: string) => cut((text.match(new RegExp(`^\\W*${k}\\W*:\\s*(.*)$`, 'im')) || [])[1], 600).replace(/^(empty|none|n\/a|-)$/i, '');
+  const line = (k: string) => cut((text.match(new RegExp(`^\\W*${k}\\W*:[ \\t]*(.*)$`, 'im')) || [])[1], 600).replace(/^(empty|none|n\/a|-)$/i, '');
   const v = line('VERDICT').toLowerCase();
   const verdict = n === 0 ? 'unclear' : v.startsWith('confirm') ? 'confirmed' : v.startsWith('contradict') ? 'contradicted' : 'unclear';
   const agree = [...line('AGREE').matchAll(/\d+/g)].map((m) => Number(m[0])).filter((x) => x >= 1 && x <= reports.length);
   const chunks = res?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
   const sources = [...new Set(chunks.map((c: any) => String(c?.web?.title || c?.web?.domain || '')).filter(Boolean))].slice(0, 6) as string[];
-  return { verdict, agree, rewrite: { where: line('WHERE'), how: line('HOW'), notes: line('NOTES') }, evidence: line('EVIDENCE'), sources, searches: n };
+  return { verdict, agree, rewrite: { where: line('WHERE'), how: line('HOW'), notes: line('NOTES'), text: line('TEXT') }, evidence: line('EVIDENCE'), sources, searches: n };
 }
 
 /** Step 2: the reviewer checks (and tidies) the rewrite against the evidence. */
@@ -107,17 +112,21 @@ async function reviewerCheck(game: string, area: string, kind: string, entry: an
       `Current entry: ${describeEntry(kind, entry)}`,
       `Player reports: ${reports.map((r) => r.claim).join(' / ')}`,
       `Source check: ${check.verdict}. Evidence: ${check.evidence || '(none)'}. Sources: ${check.sources.join(', ') || '(none)'}`,
-      `Proposed entry: where: ${check.rewrite.where || '-'}; how: ${check.rewrite.how || '-'}; notes: ${check.rewrite.notes || '-'}`,
+      kind === 'item'
+        ? `Proposed entry: where: ${check.rewrite.where || '-'}; how: ${check.rewrite.how || '-'}; notes: ${check.rewrite.notes || '-'}`
+        : `Proposed entry (one line): ${check.rewrite.text || [check.rewrite.where, check.rewrite.how, check.rewrite.notes].filter(Boolean).join(' ')}`,
       ``,
       `Is the proposed entry supported by the evidence, specific enough to follow in the game, and free of guesses? If so,`,
       `return it tidied (same facts, clear wording, no new facts). Reply with JSON only:`,
-      `{"ok": true|false, "where": "...", "how": "...", "notes": "...", "reason": "<one sentence>"}`,
+      kind === 'item'
+        ? `{"ok": true|false, "where": "...", "how": "...", "notes": "...", "reason": "<one sentence>"}`
+        : `{"ok": true|false, "text": "<the one-line entry, naming what it is first>", "reason": "<one sentence>"}`,
     ].join('\n') }] }],
     config: { responseMimeType: 'application/json', temperature: 0.1, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
   });
   dollars += estimateCost(REVIEW_MODEL, res) || 0;
   const j: any = parseJson(String(res?.text || '')) || {};
-  return { ok: j.ok === true, rewrite: { where: cut(j.where, 600), how: cut(j.how, 400), notes: cut(j.notes, 400) }, reason: cut(j.reason, 300) };
+  return { ok: j.ok === true, rewrite: { where: cut(j.where, 600), how: cut(j.how, 400), notes: cut(j.notes, 400), text: cut(j.text, 900) }, reason: cut(j.reason, 300) };
 }
 
 /** The entry with the correction written in. Items keep where / notes; lines (secrets, checklist) are one text. */
@@ -127,7 +136,7 @@ function rewritten(kind: string, e: any, r: Rewrite, checked: boolean) {
   if (kind === 'item') {
     return { ...e, where: `${(r.where || e.where || '').replace(/\.?$/, '.')}${how}`.trim(), ...(r.notes ? { notes: r.notes } : {}), ...marks };
   }
-  const text = [r.where, r.how, r.notes].filter(Boolean).map((x) => x!.replace(/\.?$/, '.')).join(' ');
+  const text = r.text || [r.where, r.how, r.notes].filter(Boolean).map((x) => x!.replace(/\.?$/, '.')).join(' ');
   return { ...e, text: text || e.text, ...marks };
 }
 
@@ -150,7 +159,7 @@ async function applyToGuide(gameKey: string, game: string, groups: { id: string;
       : { sections: (page.sections || []).map((s: any) => ({ ...s, entries: fix(s.entries) })) };
     await ref.update({ ...patch, updatedAt: Date.now() });
   }
-  const r = await reviewGuide(stageKey(gameKey), { save: true, verify: false });
+  const r = await reviewGuide(stageKey(gameKey), { save: true, verify: false, tier: 'flash' });
   dollars += r.dollars;
   searches += r.searches;
   return r.review ? gateGuide(stageKey(gameKey), game, r.review) : 'Gate: failed (nothing to review).';
@@ -205,7 +214,7 @@ async function main() {
     }
     const check = await sourceCheck(g.game, g.areaName, g.entryKind, live.entry, reports);
     console.log(`  source check: ${check.verdict} (${check.searches} searches; agree: ${check.agree.join(', ') || 'none'}) ${check.evidence}`);
-    console.log(`  proposed: where: ${check.rewrite.where || '-'} | how: ${check.rewrite.how || '-'} | notes: ${check.rewrite.notes || '-'}`);
+    console.log(`  proposed: ${check.rewrite.text ? `text: ${check.rewrite.text}` : `where: ${check.rewrite.where || '-'} | how: ${check.rewrite.how || '-'} | notes: ${check.rewrite.notes || '-'}`}`);
     const agreeing = check.agree.length ? check.agree.map((i) => reports[i - 1]) : [];
     const players = new Set(agreeing.filter((r) => !r.guest).map((r) => r.uidHash)).size;
     let status: string;
@@ -219,7 +228,7 @@ async function main() {
       console.log(`  reviewer: ${rv.ok ? 'ok' : 'not ok'}: ${rv.reason}`);
       if (rv.ok) {
         status = 'verified';
-        rewrite = { where: rv.rewrite.where || check.rewrite.where, how: rv.rewrite.how || check.rewrite.how, notes: rv.rewrite.notes || check.rewrite.notes };
+        rewrite = { where: rv.rewrite.where || check.rewrite.where, how: rv.rewrite.how || check.rewrite.how, notes: rv.rewrite.notes || check.rewrite.notes, text: rv.rewrite.text || check.rewrite.text };
       } else status = players >= MIN_PLAYERS && !(rv as any).failed ? 'verified' : 'pending';
     } else status = players >= MIN_PLAYERS ? 'verified' : agreeing.length && agreeing.length < reports.length ? 'disputed' : 'pending';
     const checked = status === 'verified' && check.verdict === 'confirmed' && reviewer.ok;
