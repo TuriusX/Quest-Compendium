@@ -191,10 +191,12 @@ async function editionPrompt(guideRef: FirebaseFirestore.DocumentReference): Pro
  * in a clearly different state (another world, era or chapter) gets its own page, "Narshe (World of Ruin)".
  */
 const UNIT: Partial<Record<Layout, string>> = {
-  area: 'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ',
+  area: 'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ' +
+    'A single room is never its own page: it belongs on the page of the building or area it\'s in. ',
   regions: 'An area is a region, city, settlement or major location (a dungeon, fortress or landmark) worth its own guide page. ' +
     'Never make a page for a return visit, a story phase, New Game+, or a single building, camp, shop or room inside a ' +
-    'region: those belong on the region\'s page. ',
+    'region: those belong on the region\'s page. Never make pages for procedurally generated or generic places ' +
+    '("Abandoned Mine"). ',
 };
 
 /** Every page of a guide is the same kind of unit (the guide review's most common failure was mixing them). */
