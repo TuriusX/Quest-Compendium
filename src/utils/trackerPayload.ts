@@ -33,6 +33,21 @@ export type TrackerItem = {
   badge?: number;
   /** Can be ticked on the tracker. */
   tick?: boolean;
+  /**
+   * Everything the guide (or the answer) has on the entry, untrimmed: shown when it's expanded on the tracker. full is
+   * the whole text when the label is shortened; missable says why it can be missed (or what a point of no return locks).
+   */
+  detail?: TrackerDetail;
+};
+export type TrackerDetail = { full?: string; where?: string; how?: string; missable?: string; notes?: string };
+/** A detail with only the parts that have something in them (undefined when there's nothing). */
+const detail = (d: TrackerDetail): TrackerDetail | undefined => {
+  const out: TrackerDetail = {};
+  for (const k of ['full', 'where', 'how', 'missable', 'notes'] as const) {
+    const v = (d[k] || '').trim();
+    if (v) out[k] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
 };
 export type TrackerSectionId = 'answer' | 'missable' | 'noreturn' | 'collect' | 'ach';
 export type TrackerSection = { id: TrackerSectionId; title: string; tone?: 'amber'; icon?: 'warn'; items: TrackerItem[] };
@@ -76,9 +91,11 @@ export type TrackerGuideArea = {
 
 /** The tracker page's words (electron/tracker.html), from the "tracker.*" translations. */
 const LABEL_KEYS = [
-  'title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size',
+  'title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size',
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
   'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
+  'hintBook', 'hintBookNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
+  'expandHint', 'spine',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
   Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));
@@ -182,21 +199,28 @@ export function buildTrackerPayload(
       id: 'answer',
       title: title('answer'),
       // In marker order: the badges match the numbered markers on screen.
-      items: markers.map((p, i) => ({ id: `a:${msg.id}:${i}`, label: p.label, where: p.where, done: done.has(i), missable: !!p.missable, badge: i + 1, tick: true })),
+      items: markers.map((p, i) => ({
+        id: `a:${msg.id}:${i}`, label: p.label, where: p.where, done: done.has(i), missable: !!p.missable, badge: i + 1, tick: true,
+        detail: detail({ full: p.label, where: p.where, notes: [p.note, p.detail].filter(Boolean).join(' ') }),
+      })),
     });
   }
 
   const page = guideArea?.page;
   if (guideArea && page) {
     const done = guideArea.done;
-    const entry = (id: string, label: string, where?: string, missable?: boolean): TrackerItem => ({
+    const entry = (id: string, label: string, where?: string, missable?: boolean, more?: TrackerDetail): TrackerItem => ({
       id: `g:${guideArea.slug}:${id}`, label, where, done: done.has(id), missable, tick: true,
+      detail: detail({ full: label, where, ...more }),
     });
+    // A guide entry's notes, for its details.
+    const itemMore = (e: { notes?: string }): TrackerDetail => ({ notes: e.notes });
     // Missable: the area's missable items and its missable checklist sections (the area page's "Don't miss").
     const missSec = (page.sections || []).filter((x) => x.check && /miss/i.test(x.title));
     const missable = [
-      ...page.items.filter((e) => e.missable).map((e) => entry(e.id, e.name || e.text || '', e.where, true)),
-      ...missSec.flatMap((x) => x.entries.map((e) => entry(e.id, e.text, undefined, true))),
+      ...page.items.filter((e) => e.missable).map((e) => entry(e.id, e.name || e.text || '', e.where, true, { ...itemMore(e), how: e.name && e.text && e.text !== e.name ? e.text : undefined })),
+      // A missable checklist line says itself what can be missed and how.
+      ...missSec.flatMap((x) => x.entries.map((e) => entry(e.id, e.text, undefined, true, { missable: x.title }))),
     ].filter((it) => it.label);
     if (missable.length) sections.push({ id: 'missable', title: title('missable'), tone: 'amber', items: openFirst(missable) });
 
@@ -204,14 +228,14 @@ export function buildTrackerPayload(
     if (noReturn.length) {
       sections.push({
         id: 'noreturn', title: title('noreturn'), tone: 'amber', icon: 'warn',
-        items: noReturn.map((n) => ({ id: `n:${guideArea.slug}:${nameKey(n.point)}`, label: n.point, where: n.lost })),
+        items: noReturn.map((n) => ({ id: `n:${guideArea.slug}:${nameKey(n.point)}`, label: n.point, where: n.lost, detail: detail({ full: n.point, missable: n.lost }) })),
       });
     }
 
     // To collect: everything else the area page has a checkbox for, in the guide's order.
     const collect = [
-      ...page.items.filter((e) => !e.missable).map((e) => entry(e.id, e.name || e.text || '', e.where)),
-      ...page.secrets.map((e) => entry(e.id, e.text || e.name || '')),
+      ...page.items.filter((e) => !e.missable).map((e) => entry(e.id, e.name || e.text || '', e.where, undefined, { ...itemMore(e), how: e.name && e.text && e.text !== e.name ? e.text : undefined })),
+      ...page.secrets.map((e) => entry(e.id, e.text || e.name || '', undefined, undefined, { ...itemMore(e), where: e.where })),
       ...(page.sections || []).filter((x) => x.check && !missSec.includes(x)).flatMap((x) => x.entries.map((e) => entry(e.id, e.text))),
     ].filter((it) => it.label);
     if (collect.length) sections.push({ id: 'collect', title: title('collect'), items: openFirst(collect) });
@@ -227,6 +251,8 @@ export function buildTrackerPayload(
       where: t.hidden ? undefined : t.how ? t.how.slice(0, 90) : undefined,
       done: unlocked.some((a) => tipMatches(t, a.name)),
       missable: !!t.missable,
+      // The whole tip (the line above shows only its start); hidden achievements still keep their secret.
+      detail: t.hidden ? undefined : detail({ full: t.name, how: t.how || t.desc, notes: t.how && t.desc && t.desc !== t.how ? t.desc : undefined }),
     }));
     if (items.length) sections.push({ id: 'ach', title: title('ach'), items: openFirst(items) });
   }

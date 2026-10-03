@@ -51,6 +51,30 @@ test("Locate me's state and message reach the tracker", () => {
   assert.equal(q.data.locating, undefined);
   assert.equal(q.data.notice, undefined);
 });
+test("an entry's details carry the full guide text (not the trimmed line); hidden achievements keep their secret", () => {
+  const longWhere = "In the Dank Crypt, behind the false wall left of the sarcophagus: push the lever twice, then climb the broken stairs to the alcove.";
+  const longHow = "Defeat the Nautiloid's commander after freeing Shadowheart, then make your way through the burning corridors to the helm before the ship crashes.";
+  const a = area("overgrown-ruins", "Overgrown Ruins", 1);
+  a.page = { ...a.page!, items: [{ id: "i1", name: "Ring", where: longWhere, notes: "Worth 300 gold.", missable: true }],
+    sections: [{ title: "Don't miss", check: true, entries: [{ id: "m1", text: "Talk to Withers before leaving the crypt" }] }] };
+  const guide: AchievementGuide = { key: "bg3", list: [
+    { name: "Descent From Avernus", desc: "Escape the Nautiloid.", rarity: 30, icon: "", hidden: false, areaName: "Overgrown Ruins", how: longHow },
+    { name: "Secret One", desc: "Hidden.", rarity: 5, icon: "", hidden: true, areaName: "Overgrown Ruins", how: "A spoiler" },
+  ] };
+  const p = buildTrackerPayload(tab, null, a, guide, undefined, opts)!;
+  const items = p.data.sections.flatMap((s) => s.items);
+  const ring = items.find((i) => i.id === "g:overgrown-ruins:i1")!;
+  assert.equal(ring.detail?.where, longWhere);
+  assert.equal(ring.detail?.notes, "Worth 300 gold.");
+  // A missable checklist line says what it's in (the section), its text is the whole entry.
+  const withers = items.find((i) => i.id === "g:overgrown-ruins:m1")!;
+  assert.equal(withers.detail?.full, "Talk to Withers before leaving the crypt");
+  assert.equal(withers.detail?.missable, "Don't miss");
+  const descent = items.find((i) => i.id.startsWith("h:") && i.label === "Descent From Avernus")!;
+  assert.ok(descent.where!.length <= 90); // the line on the tracker is trimmed…
+  assert.equal(descent.detail?.how, longHow); // …its details are not
+  assert.equal(items.find((i) => i.label === "Secret One")!.detail, undefined);
+});
 test("Locate me's reply: only an area from the list (exactly as listed), else unknown; read needs the text", () => {
   const names = areas.map((a) => a.name);
   assert.deepEqual(parseLocateMeReply('{"area":"emerald grove","story":"At the druid camp gates","evidence":"read","seenText":"Emerald Grove"}', names),

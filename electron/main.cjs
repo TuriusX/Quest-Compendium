@@ -98,6 +98,7 @@ const { spawn } = require('child_process');
 const { createControllerService } = require('./controller.cjs');
 const { createFocusHelper } = require('./focus.cjs');
 const tracker = require('./tracker.cjs');
+const spine = require('./spine.cjs');
 const focusHelper = createFocusHelper();
 const http = require('http');
 
@@ -388,6 +389,7 @@ async function slideIn(opts = {}) {
   }
   lastSlideInAt = Date.now();
   isAppVisible = true;
+  spine.hide();
   // The window the player was in (the game), recorded before show()/focus() hand focus to the panel: by the time
   // take() looks, the panel usually has it already, so take() alone can't say where to give focus back on hide.
   const focusedBefore = focusHelper.other();
@@ -437,6 +439,16 @@ function openPanelAtTracker(t) {
   return slideIn((undocked || right === trackerOnRight) && fits ? { at: { x, y } } : {});
 }
 
+/**
+ * The docked panel has slid away: hide its window (nothing of it stays on screen to catch the game's clicks) and show
+ * the book spine on the dock edge instead. Skipped if the panel was opened again meanwhile.
+ */
+function parkPanel() {
+  if (isAppVisible || !mainWindow || mainWindow.isDestroyed() || currentDockPosition === 'undocked') return;
+  mainWindow.hide();
+  spine.show();
+}
+
 function slideOut() {
   if (!mainWindow) return;
   isAppVisible = false;
@@ -455,8 +467,9 @@ function slideOut() {
       if (animationInterval) clearInterval(animationInterval);
       const b = mainWindow.getBounds();
       mainWindow.setBounds({ x: coords.x, y: coords.y, width: b.width, height: b.height });
+      parkPanel();
     } else {
-      animateWindow(coords.x, coords.y, 150);
+      animateWindow(coords.x, coords.y, 150).then(parkPanel);
     }
   } else {
     mainWindow.hide(); // if undocked, just hide it
@@ -494,6 +507,9 @@ function createWindow() {
       contextIsolation: true,
       webviewTag: true,
       webSecurity: false,
+      // Hidden while the panel is away (the spine shows instead): its timers (game detection, the tracker's updates)
+      // must keep their pace.
+      backgroundThrottling: false,
     },
   });
 
@@ -616,6 +632,19 @@ app.whenReady().then(() => {
   });
   tracker.setVisibleInRecordings(markersInRecordings);
   tracker.setScale(currentUiScale);
+  // The hidden panel's book spine on the dock edge (electron/spine.cjs): a click opens the panel.
+  spine.init({
+    ipcMain, screen,
+    onOpen: () => { if (!isAppVisible) slideIn(); },
+    getDock: () => {
+      const wa = screen.getPrimaryDisplay().workArea;
+      const b = mainWindow && !mainWindow.isDestroyed() ? mainWindow.getBounds() : null;
+      return { position: currentDockPosition, panelHeight: b ? b.height : wa.height, workArea: wa };
+    },
+    getTrackerBounds: () => tracker.getBounds(),
+    raiseTracker: () => tracker.raise(),
+    getLook: () => tracker.getLook(),
+  });
 
   // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
   // overlay with the controller while it's visible. See controller.cjs.
@@ -1000,9 +1029,11 @@ ipcMain.on('set-dock-position', (event, pos) => {
     if (pos === 'undocked') {
       // allow dragging
       mainWindow.setIgnoreMouseEvents(false);
+      spine.hide();
     } else {
       const coords = getDockCoords(!isAppVisible);
       animateWindow(coords.x, coords.y, 150);
+      if (!isAppVisible) spine.show(); // the spine moves to the new dock edge
     }
   }
 });

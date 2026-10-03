@@ -55,8 +55,8 @@ export function QcGuidesView({
   gameName?: string;
   place?: string;
   onAsk?: (question: string) => void;
-  /** Open this area (from the achievements drawer's "In the guide"). */
-  openRequest?: { slug: string; n: number } | null;
+  /** Open this area (the achievements drawer's "In the guide"), and show one entry in it (a tracker entry's "Open in guide"). */
+  openRequest?: { slug: string; entry?: string; n: number } | null;
   /** The player's Steam achievements (unlocked or not), for "Achievements here". */
   achievements?: Achievement[];
 }) {
@@ -90,8 +90,11 @@ export function QcGuidesView({
     };
   }, [gameName, guideLang]);
 
+  const [focus, setFocus] = useState<{ slug: string; id: string; n: number } | null>(null);
   useEffect(() => {
-    if (openRequest?.slug && guide) openArea(guide.key, openRequest.slug, guide.game);
+    if (!openRequest?.slug || !guide) return;
+    openArea(guide.key, openRequest.slug, guide.game);
+    setFocus(openRequest.entry ? { slug: openRequest.slug, id: openRequest.entry, n: openRequest.n } : null);
   }, [openRequest?.n, guide?.key]);
   // The achievement guide of whichever game's guide is open (by the guide itself, so renamed games still match).
   const viewKey = view.view === 'games' ? guide?.key : view.key;
@@ -157,6 +160,7 @@ export function QcGuidesView({
               onAsk={onAsk}
               achHere={achGuide && achGuide.key === view.key ? achGuide.list.filter((a) => a.area === view.slug) : []}
               achievements={achievements}
+              focus={focus && focus.slug === view.slug ? focus : null}
               onGo={(a) => setStack((s) => [...s.slice(0, -1), { view: 'area', key: view.key, slug: a.slug, game: view.game }])}
             />
           )}
@@ -347,9 +351,12 @@ function AreaPage({
   onAsk,
   achHere = [],
   achievements = [],
+  focus,
 }: {
   gameKey: string;
   slug: string;
+  /** An entry to show: its section opens, it scrolls into view and is highlighted for a moment. ach:<name> = an achievement. */
+  focus?: { id: string; n: number } | null;
   onGo: (a: Area) => void;
   onAsk?: (q: string) => void;
   achHere?: { name: string; desc: string; missable?: boolean; how?: string; icon?: string }[];
@@ -360,6 +367,8 @@ function AreaPage({
   const order = useApi<{ areas: Area[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
   const [done, setDone] = useState<Set<string>>(() => readDone(gameKey, slug));
   const [open, setOpen] = useState<Set<string>>(new Set());
+  // Sections opened to show a focused entry (on top of the ones the player opened or closed).
+  const [forced, setForced] = useState<Set<string>>(new Set());
   useEffect(() => ls.set(`qc-guide-last:${gameKey}`, slug), [gameKey, slug]);
   // Ticks made on the objectives tracker show here too (and ours show there: writeDone tells everyone).
   useEffect(() => {
@@ -377,13 +386,48 @@ function AreaPage({
     setDone(next);
     writeDone(gameKey, slug, next);
   };
-  const flip = (k: string) =>
+  const flip = (k: string) => {
+    if (forced.has(k)) {
+      // Opened for a focused entry: closing it is the player's call from now on.
+      setForced((p) => new Set([...p].filter((x) => x !== k)));
+      setOpen((p) => {
+        const n = new Set(p);
+        if (n.has(k)) n.delete(k);
+        else n.add(k);
+        return n;
+      });
+      return;
+    }
     setOpen((p) => {
       const n = new Set(p);
       if (n.has(k)) n.delete(k);
       else n.add(k);
       return n;
     });
+  };
+  // A focused entry: open its section, then scroll to it and highlight it for a moment.
+  const focusPage = s.data;
+  useEffect(() => {
+    if (!focus || !focusPage) return;
+    const id = focus.id;
+    const key = id.startsWith('ach:')
+      ? 'achievements'
+      : focusPage.items.some((e) => e.id === id && !e.missable)
+        ? 'items'
+        : focusPage.secrets.some((e) => e.id === id)
+          ? 'secrets'
+          : (focusPage.sections || []).find((x) => x.entries.some((e) => e.id === id) && !(x.check && /miss/i.test(x.title)))?.title;
+    if (key) setForced((p) => new Set([...p, ['achievements', 'items', 'secrets'].includes(key) ? key : `s:${key}`]));
+    const t = setTimeout(() => {
+      const el = [...document.querySelectorAll<HTMLElement>('[data-entry]')].find((x) => x.dataset.entry === id);
+      if (!el) return;
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const flash = ['ring-2', 'ring-[var(--accent-color)]', 'rounded-lg', 'bg-white/[0.06]'];
+      el.classList.add(...flash);
+      setTimeout(() => el.classList.remove(...flash), 2400);
+    }, 120);
+    return () => clearTimeout(t);
+  }, [focus?.n, !!focusPage]);
   if (s.loading) return <Note>{t('qcg.loading')}</Note>;
   const pg = s.data;
   if (s.error || !pg) return <Note>{t('qcg.none')}</Note>;
@@ -395,7 +439,7 @@ function AreaPage({
   const ask = (q: string) => onAsk?.(q);
 
   const check = (id: string, label: React.ReactNode, askAbout?: string) => (
-    <div key={id} className="group flex items-start gap-1">
+    <div key={id} data-entry={id} className="group flex items-start gap-1">
       <button
         type="button"
         onClick={() => toggle(id)}
@@ -422,7 +466,7 @@ function AreaPage({
   );
   /** A folding section: the header shows its progress; it opens when you want it. */
   const fold = (k: string, title: string, icon: React.ReactNode, body: React.ReactNode, count?: number, total?: number, startOpen = false) => {
-    const isOpen = open.has(k) !== startOpen;
+    const isOpen = forced.has(k) || open.has(k) !== startOpen;
     return (
       <section key={k} className="mt-3">
         <button
@@ -502,7 +546,7 @@ function AreaPage({
               .map((a) => {
                 const mine = achievements.find((x) => tipMatches(a as any, x.name));
                 return (
-                  <div key={a.name} className={`px-3 py-2 rounded-lg bg-white/[0.03] text-sm ${mine?.unlocked ? 'opacity-60' : ''}`}>
+                  <div key={a.name} data-entry={`ach:${a.name}`} className={`px-3 py-2 rounded-lg bg-white/[0.03] text-sm ${mine?.unlocked ? 'opacity-60' : ''}`}>
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-zinc-100">{mine?.unlocked ? '✓ ' : ''}{a.name}</span>
                       {a.missable && !mine?.unlocked && <span className="text-[10px] font-bold uppercase text-amber-300">{t('ach.missable')}</span>}

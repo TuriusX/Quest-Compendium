@@ -36,7 +36,7 @@ import pixelSceneUrl from './pixel-scene.png';
 import { LOCALES, aiLanguageName, applyLocale, detectLocale, translate, useLocale, useT } from './i18n';
 import { ControllerLayer } from './components/ControllerLayer';
 import { markersActiveFor, rememberAreaFind, setPointersActive } from './components/pointerStore';
-import { buildTrackerPayload, trackedMessage, trackerGameKey, trackerLabels } from './utils/trackerPayload';
+import { buildTrackerPayload, trackedMessage, trackerGameKey, trackerLabels, type TrackerData } from './utils/trackerPayload';
 import { useTrackerGuide } from './utils/trackerGuide';
 import { setEntryDone } from './utils/guideProgress';
 
@@ -555,6 +555,14 @@ export default function App() {
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState('');
   const locatingRef = useRef(false);
+  /** The tracker as it was when "Locate me" started, and the place it found (null until then): see trackerPayload. */
+  const locateHold = useRef<{ data: TrackerData; target: string | null } | null>(null);
+  const [, setHoldTick] = useState(0);
+  const releaseLocateHold = () => {
+    if (!locateHold.current) return;
+    locateHold.current = null;
+    setHoldTick((n) => n + 1);
+  };
   const locateNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showLocateNote = (text: string) => {
     setLocateNote(text);
@@ -589,6 +597,9 @@ export default function App() {
       return;
     }
     locatingRef.current = true;
+    // The tracker holds what it shows now (only its place line says "Locating…") until the result is in and the new
+    // area's guide page has loaded: then it updates once, never through a half-loaded place in between.
+    locateHold.current = trackerPayloadRef.current ? { data: trackerPayloadRef.current.data, target: null } : null;
     setLocating(true);
     showLocateNote('');
     try {
@@ -621,15 +632,22 @@ export default function App() {
       const place = { ...(tab.place || {}), name: String(data.area), confirmed: sure, ...(story ? { story, storyConfirmed: sure } : {}) };
       setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, place, lastActive: Date.now() } : t)));
       rememberGameProgress(tab, place);
+      if (locateHold.current) {
+        locateHold.current.target = place.name;
+        // In case the area's page never loads (offline): let go after a few seconds anyway.
+        setTimeout(() => releaseLocateHold(), 5000);
+      }
     } catch {
       showLocateNote(tr('place.locateFail'));
     } finally {
+      // No new place (a failure, or nothing recognised): nothing to wait for.
+      if (locateHold.current && !locateHold.current.target) locateHold.current = null;
       locatingRef.current = false;
       setLocating(false);
     }
   };
   const trackerMsg = trackedMessage(activeTab, trackerPickId);
-  const trackerPayload = activeTab
+  const builtTrackerPayload = activeTab
     ? buildTrackerPayload({ ...activeTab, place: trackerPlace }, trackerMsg, trackerGame.guideArea, trackerGame.achievementGuide, trackerWords, {
         accent: trackerAccent,
         gameKey: trackerKeyOfGame,
@@ -639,6 +657,19 @@ export default function App() {
         notice: locateNote,
       })
     : null;
+  // While "Locate me" runs, the tracker keeps showing what it showed (its place line says "Locating…"). With a result,
+  // it waits for the new place's guide area and page before showing anything new.
+  const hold = locateHold.current;
+  const holdDone =
+    !!hold?.target &&
+    !locating &&
+    trackerPlace?.name === hold.target &&
+    (!trackerGame.guideKey || (!!trackerGame.guideArea && !!trackerGame.guideArea.page));
+  if (hold && holdDone) locateHold.current = null;
+  const trackerPayload =
+    hold && !holdDone && builtTrackerPayload
+      ? { ...builtTrackerPayload, data: { ...hold.data, locating: true, labels: builtTrackerPayload.data.labels } }
+      : builtTrackerPayload;
   const trackerPayloadRef = useRef(trackerPayload);
   trackerPayloadRef.current = trackerPayload;
   const trackerGuideKeyRef = useRef(trackerGame.guideKey);
@@ -711,6 +742,20 @@ export default function App() {
       moveToArea(e.name.trim());
     } else if (e.type === 'locate') {
       runLocate();
+    } else if (e.type === 'open-entry' && typeof e.item === 'string') {
+      // "Open in guide" on an expanded tracker entry (the panel is opening at the tracker): the Guide at that entry's
+      // area, the entry shown and highlighted. g:<area>:<entry>, h:<area>:<achievement>, n:<area>:<point>; an answer's
+      // marker (a:…) opens the area the player is in.
+      const [kind, ...rest] = e.item.split(':');
+      const slug = kind === 'a' ? trackerGameRef.current.guideArea?.slug : rest[0];
+      const tail = rest.slice(1).join(':');
+      const entry = kind === 'g' ? tail : kind === 'h' ? `ach:${tail}` : undefined;
+      if (slug) window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug, entry } }));
+    } else if (e.type === 'ask-about' && typeof e.label === 'string' && e.label.trim()) {
+      // "Ask about this": the panel opens with a question about the entry in the box, not sent.
+      const area = trackerPlaceRef.current?.name?.trim() || '';
+      const text = area ? tr('tracker.askQuestion', { item: e.label.trim(), area }) : tr('tracker.askQuestionNoArea', { item: e.label.trim() });
+      window.dispatchEvent(new CustomEvent('qc-prefill-question', { detail: { text } }));
     }
   };
   useEffect(() => {
@@ -1751,25 +1796,7 @@ export default function App() {
       {/* Background CRT scan line ambient glow */}
       <div className="absolute inset-0 bg-radial from-purple-900/10 via-transparent to-transparent pointer-events-none" />
 
-      {/* Edge Slide Toggle Tab (Desktop Only) */}
-      {isDesktop && settings.dockPosition !== 'undocked' && (
-        <button
-          onClick={() => {
-            if ((window as any).electronAPI?.toggleSlide) {
-              (window as any).electronAPI.toggleSlide();
-            }
-          }}
-          className={`absolute top-1/2 -translate-y-1/2 w-4 h-32 bg-[var(--accent-color)]/70 hover:bg-[var(--accent-color)] cursor-pointer flex items-center justify-center z-50 backdrop-blur-md shadow-lg border border-white/20 transition-all ${
-            settings.dockPosition.includes('right') 
-              ? 'left-0 rounded-r-xl border-l-0 hover:w-5' 
-              : 'right-0 rounded-l-xl border-r-0 hover:w-5'
-          }`}
-          style={{ WebkitAppRegion: 'no-drag' } as any}
-          title="Toggle Dock Visibility"
-        >
-          
-        </button>
-      )}
+      {/* The hidden docked panel shows as a book spine on the screen edge (electron/spine.cjs), not as part of this window. */}
 
       {/* Main App Window Frame */}
       <div 

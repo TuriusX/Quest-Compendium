@@ -144,17 +144,35 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       localStorage.setItem('qc-main-mode', m);
     } catch {}
   };
-  // "In the guide" from the achievements drawer: switch to the Guide at that area.
-  const [guideOpenReq, setGuideOpenReq] = useState<{ slug: string; n: number } | null>(null);
+  // "In the guide" from the achievements drawer, or "Open in guide" on a tracker entry: switch to the Guide at that
+  // area (and that entry, shown and highlighted).
+  const [guideOpenReq, setGuideOpenReq] = useState<{ slug: string; entry?: string; n: number } | null>(null);
   useEffect(() => {
     const onOpen = (e: Event) => {
-      const slug = (e as CustomEvent).detail?.slug;
-      if (!slug) return;
+      const d = (e as CustomEvent).detail;
+      if (!d?.slug) return;
       setMode('guide');
-      setGuideOpenReq({ slug, n: Date.now() });
+      setGuideOpenReq({ slug: d.slug, entry: typeof d.entry === 'string' ? d.entry : undefined, n: Date.now() });
     };
     window.addEventListener('qc-open-guide', onOpen);
     return () => window.removeEventListener('qc-open-guide', onOpen);
+  }, []);
+  // "Ask about this" on a tracker entry: the question goes in the box, ready to edit or send (not sent).
+  useEffect(() => {
+    const onPrefill = (e: Event) => {
+      const text = (e as CustomEvent).detail?.text;
+      if (typeof text !== 'string' || !text.trim()) return;
+      setMode('ask');
+      setInputQuestion(text);
+      setTimeout(() => {
+        const box = document.querySelector<HTMLTextAreaElement>('[data-qc-ask-input]');
+        if (!box) return;
+        box.focus();
+        box.setSelectionRange(box.value.length, box.value.length);
+      }, 250);
+    };
+    window.addEventListener('qc-prefill-question', onPrefill);
+    return () => window.removeEventListener('qc-prefill-question', onPrefill);
   }, []);
   // Ctrl+G switches between Ask and Guide.
   useEffect(() => {

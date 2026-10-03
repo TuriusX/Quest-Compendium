@@ -5,7 +5,7 @@
 <title>Quest Compendium objectives</title>
 <style>
   /* The objectives tracker: a quest log drawn straight onto the game with a shadow, no card. Three states — full,
-     collapsed (one header line) and away (a small tab at the screen edge). Hovering shows the controls. The sections
+     collapsed (one header line: click the title) and away (a ribbon bookmark at the screen edge). Hovering shows the controls. The sections
      scroll inside once the tracker reaches its height limit (--maxh, from the app: 70% of the screen). */
   :root {
     --accent: #a87ffb;
@@ -56,19 +56,40 @@
   .notice { font-size: .8em; color: var(--warn); margin-top: .3em; line-height: 1.3; }
   .notice:empty { display: none; }
   #tracker.collapsed .arealist, #tracker.collapsed .notice { display: none; }
-  #bLocate.busy { border-color: var(--accent); }
-  #bLocate.busy svg { animation: qcspin 1.1s linear infinite; }
+  /* "Locate me": a crosshair right after the place name, as tall as the place text; its label slides out on hover. */
+  .place .loc { display: inline-flex; vertical-align: -.25em; margin: 0 .2em 0 .35em; align-items: center; gap: .3em; height: 1.35em; padding: 0 .3em; border-radius: 3px; box-sizing: border-box;
+    border: 1px solid rgba(168,127,251,.55); background: rgba(16,12,28,.55); color: var(--accent); cursor: pointer;
+    text-shadow: none; flex-shrink: 0; }
+  .place .loc svg { width: 1em; height: 1em; }
+  .place .loc .ll { font-size: .8em; font-weight: 700; color: var(--ink); white-space: nowrap; max-width: 0; overflow: hidden;
+    transition: max-width .15s steps(3); }
+  .place .loc:hover { border-color: var(--accent); background: rgba(168,127,251,.18); }
+  .place .loc:hover .ll { max-width: 9em; }
+  .place .loc.busy svg { animation: qcspin 1.1s linear infinite; }
   @keyframes qcspin { to { transform: rotate(360deg); } }
+  /* While locating, the place line says only "Locating…" until the result arrives. */
+  .place.locating .arr, .place.locating .story, .place.locating .tick, .place.locating .confirm { display: none; }
+  .place.locating .name { color: var(--dim); font-style: italic; text-decoration: none; }
   #tracker.collapsed .body, #tracker.collapsed .warn, #tracker.collapsed .hint, #tracker.collapsed .place,
   #tracker.collapsed .quest, #tracker.collapsed .next { display: none; }
   #tracker.away { display: none; }
 
+  /* The header: the title (with the count and a chevron) folds the whole log to this line and back; the book at the
+     right end opens the panel; dragging anywhere on it moves the tracker. */
   .head { display: flex; align-items: center; gap: .45em; cursor: pointer; line-height: 1.25; }
-  .head:hover .title { color: #fff; }
+  .head .tg { display: inline-flex; align-items: center; gap: .45em; padding: 0 .3em; margin-left: -.3em; border-radius: 3px; }
+  .head .tg:hover { background: rgba(255,255,255,.09); }
+  .head .tg:hover .title { color: #fff; }
   .title { font-weight: 800; font-size: 1.05em; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
   .count { font-weight: 700; color: var(--dim); font-size: .9em; }
-  .chev { color: var(--dim); font-size: .8em; margin-left: .1em; transition: transform .15s steps(2); }
-  #tracker.collapsed .chev { transform: rotate(-90deg); }
+  .chev { color: var(--dim); font-size: .8em; display: inline-block; width: .8em; text-align: center; }
+  .head .tg:hover .chev { color: var(--ink); }
+  .head .book { margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 1.7em; height: 1.35em;
+    border-radius: 3px; border: 1px solid rgba(255,255,255,.14); background: rgba(16,12,28,.7); color: var(--accent);
+    text-shadow: none; opacity: .7; transition: opacity .12s steps(2); }
+  #tracker:hover .head .book { opacity: 1; }
+  .head .book:hover { border-color: var(--accent); background: rgba(168,127,251,.2); color: #fff; }
+  .head .book svg { width: 1.15em; height: .9em; image-rendering: pixelated; }
 
   .place { display: flex; align-items: center; gap: .4em; margin: .15em 0 .35em 0; font-size: .9em; color: var(--dim); cursor: pointer; line-height: 1.3; }
   .place .pin { color: var(--accent); flex-shrink: 0; width: .95em; height: .95em; }
@@ -93,14 +114,14 @@
   .none { color: var(--dim); font-size: .9em; margin: .2em 0; }
   .sec { margin-top: .4em; }
   .sechead { display: flex; align-items: center; gap: .4em; cursor: pointer; font-size: .74em; font-weight: 800;
-    letter-spacing: .1em; text-transform: uppercase; color: var(--dim); line-height: 1.5; }
-  .sechead:hover { color: var(--ink); }
+    letter-spacing: .1em; text-transform: uppercase; color: var(--dim); line-height: 1.5; padding: 0 .35em; margin: 0 -.35em;
+    border-radius: 3px; }
+  .sechead:hover { color: var(--ink); background: rgba(255,255,255,.09); }
   .sechead svg { width: 1.1em; height: 1.1em; }
   .sechead .cnt { font-weight: 700; letter-spacing: 0; opacity: .85; }
   .sechead .chev { margin-left: auto; }
   .sec.amber .sechead { color: var(--warn); }
-  .sec.folded ol, .sec.folded .more { display: none; }
-  .sec.folded .chev { transform: rotate(-90deg); }
+  .sec.folded ol, .sec.folded .more, .sec.folded .unhide { display: none; }
   .more { font-size: .78em; font-weight: 700; color: var(--accent); cursor: pointer; margin: .1em 0 0 1.75em; }
   .more:hover { filter: brightness(1.25); }
   /* A guide entry: an empty square that fills in when collected. An info line (a point of no return): no box. */
@@ -121,8 +142,27 @@
     background: rgba(16,12,28,.55); }
   .next .go:hover { filter: brightness(1.25); }
   .next.off { display: none; }
-  li { display: flex; align-items: flex-start; gap: .5em; line-height: 1.35; margin: .2em 0; cursor: pointer; }
-  li:hover .obj { color: #fff; }
+  /* An entry: ticking happens only on its square (or number) badge; clicking the text opens its details in place. */
+  li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 .5em; line-height: 1.35; margin: .2em 0; cursor: default; }
+  li .obj { flex: 1 1 0; min-width: 0; cursor: pointer; }
+  li .obj:hover, li.open .obj { color: #fff; }
+  li .badge.tk, li .box.tk { cursor: pointer; }
+  li .badge.tk:hover, li .box.tk:hover { filter: brightness(1.25); box-shadow: 0 0 0 1.5px var(--accent), 0 2px 4px rgba(0,0,0,.6); }
+  li .ex { color: var(--dim); font-size: .8em; margin-left: .3em; opacity: 0; transition: opacity .12s steps(2); }
+  li .obj:hover .ex { opacity: .9; }
+  li.open .ex { opacity: .9; }
+  /* The details: everything the guide has on the entry, then "Open in guide" and "Ask about this". */
+  li .det { flex: 0 0 100%; box-sizing: border-box; margin: .25em 0 .35em 1.55em; padding: .35em .55em .45em .55em;
+    border-left: 2px solid var(--accent); background: rgba(10,8,18,.55); border-radius: 0 3px 3px 0; font-size: .86em;
+    line-height: 1.4; color: var(--ink); cursor: default; }
+  li .det .dl { margin: .1em 0; }
+  li .det .dk { font-weight: 800; color: var(--accent); font-size: .82em; letter-spacing: .06em; text-transform: uppercase; margin-right: .4em; }
+  li .det .dk.amber { color: var(--warn); }
+  li .det .dacts { display: flex; gap: .4em; margin-top: .45em; flex-wrap: wrap; }
+  li .det .dbtn { font-size: .85em; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px;
+    padding: .05em .55em; cursor: pointer; text-shadow: none; background: rgba(16,12,28,.7); }
+  li .det .dbtn:hover { background: var(--accent); color: #16101f; }
+  li.done .det .dl { text-decoration: none; }
   .badge { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 1.25em; height: 1.25em;
     padding: 0 .3em; margin-top: .12em; border-radius: 2px; background: var(--accent); color: #16101f; font-size: .78em;
     font-weight: 800; text-shadow: none; box-shadow: 0 0 0 1.5px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.6);
@@ -157,19 +197,29 @@
   .sl svg { width: 1em; height: 1em; opacity: .8; }
   input[type=range] { width: 5.5em; accent-color: var(--accent); cursor: pointer; margin: 0; }
 
-  /* Sent away: a small tab on the screen edge with the logo. Hovering slides a "bring back" label out of it. */
-  #tab { position: absolute; left: 0; top: 0; display: none; align-items: center; gap: .4em; height: 2.4em; padding: 0 .45em;
-    background: rgba(16,12,28,.9); border: 1.5px solid var(--accent); border-radius: .5em; cursor: pointer;
-    box-shadow: 0 4px 14px rgba(0,0,0,.6); opacity: var(--alpha); }
-  #tab.right { border-right: 0; border-radius: .5em 0 0 .5em; }
-  #tab.left { border-left: 0; border-radius: 0 .5em .5em 0; flex-direction: row-reverse; }
-  body.away #tab { display: inline-flex; }
-  #tab svg.logo { width: 1.6em; height: 1.6em; image-rendering: pixelated; flex-shrink: 0; }
-  #tab .lbl { font-size: .8em; font-weight: 700; color: var(--ink); white-space: nowrap; max-width: 0; overflow: hidden; transition: max-width .2s steps(4); }
-  #tab:hover .lbl { max-width: 10em; }
-  #tab .n { position: absolute; top: -.5em; right: -.5em; min-width: 1.3em; height: 1.3em; border-radius: 2px; background: var(--accent);
-    color: #16101f; font-size: .7em; font-weight: 800; display: flex; align-items: center; justify-content: center; }
-  #tab.left .n { right: auto; left: -.5em; }
+  /* Sent away: a ribbon bookmark in the accent colour sticking out of the screen edge, with a swallowtail notch at its
+     free end, the logo and the uncollected count. It's anchored to the edge, so hovering lengthens it (it slides a
+     little further out, in steps); the window keeps room for that. Pixel look: hard 2 px light and shade lines. */
+  #tab { position: absolute; top: 3px; right: 0; display: none; cursor: pointer; opacity: var(--alpha);
+    filter: drop-shadow(0 2px 0 rgba(0,0,0,.6)) drop-shadow(0 3px 5px rgba(0,0,0,.45)); }
+  #tab.left { right: auto; left: 0; }
+  body.away #tab { display: block; }
+  #tab .rib { position: relative; display: flex; align-items: center; gap: .35em; height: 1.9em; box-sizing: border-box;
+    padding: 0 .5em 0 1.2em; background: var(--accent); image-rendering: pixelated;
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.3), inset 0 -2px 0 rgba(0,0,0,.32);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, .65em 50%); transition: padding .12s steps(2); }
+  #tab.left .rib { flex-direction: row-reverse; padding: 0 1.2em 0 .5em;
+    clip-path: polygon(0 0, 100% 0, calc(100% - .65em) 50%, 100% 100%, 0 100%); }
+  #tab.right:hover .rib { padding-left: 1.75em; }
+  #tab.left:hover .rib { padding-right: 1.75em; }
+  /* Stitching along the ribbon, one pixel in from the light and shade lines. */
+  #tab .rib::before { content: ''; position: absolute; left: .95em; right: .2em; top: 4px; bottom: 4px;
+    border-top: 1px dashed rgba(22,16,31,.35); border-bottom: 1px dashed rgba(22,16,31,.35); pointer-events: none; }
+  #tab.left .rib::before { left: .2em; right: .95em; }
+  #tab svg.logo { width: 16px; height: 16px; image-rendering: pixelated; flex-shrink: 0; position: relative; }
+  #tab .n { position: relative; min-width: 1.35em; height: 1.35em; padding: 0 .25em; box-sizing: border-box; border-radius: 2px;
+    background: #16101f; color: var(--ink); font-size: .72em; font-weight: 800; display: flex; align-items: center;
+    justify-content: center; text-shadow: none; }
 
   @keyframes pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: var(--alpha); transform: none; } }
   #tracker.in { animation: pop .25s steps(3) both; }
@@ -179,15 +229,14 @@
 </head>
 <body>
 <div id="tracker" class="in">
-  <div class="head" id="head" title="Click: open the Compendium here. Drag: move.">
-    <span class="title" id="title">Objectives</span>
-    <span class="count" id="count"></span>
-    <span class="chev">▾</span>
+  <div class="head" id="head">
+    <span class="tg" id="fold" title="Click: fold or open. Drag: move."><span class="title" id="title">Objectives</span><span class="count" id="count"></span><span class="chev" id="headChev">▾</span></span>
+    <span class="book" id="bBook" title="Open the Compendium"><svg viewBox="0 0 16 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 1h5v1h1v9H6v-1H1zM15 1h-5v1H9v9h1v-1h5z"/><path fill="#16101f" d="M2 3h3v1H2zM2 5h3v1H2zM2 7h3v1H2zM11 3h3v1h-3zM11 5h3v1h-3zM11 7h3v1h-3z"/></svg></span>
   </div>
   <div class="place" id="place">
     <svg class="pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
     <span class="arr off" id="prevArea">‹</span>
-    <span><span class="name" id="placeName"></span><span class="story" id="placeStory"></span></span>
+    <span class="ptxt"><span class="name" id="placeName"></span><span class="loc" id="bLocate" title="Locate me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.5"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg><span class="ll" id="locLbl">Locate me</span></span><span class="story" id="placeStory"></span></span>
     <span class="arr off" id="nextArea">›</span>
     <span class="tick">✓</span>
     <span class="confirm" id="placeConfirm">Confirm</span>
@@ -205,8 +254,6 @@
   <div class="hint" id="hint"><kbd>Ctrl+G</kbd> or click the title: open the Compendium</div>
   <div class="ctl" id="ctl">
     <span class="btn" id="bConfirm" title="Confirm where you are"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span>
-    <span class="btn" id="bLocate" title="Locate me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg></span>
-    <span class="btn" id="bCollapse" title="Collapse to one line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg></span>
     <span class="btn" id="bAway" title="Send to the screen edge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h12"/><path d="m13 6 6 6-6 6"/><path d="M21 4v16"/></svg></span>
     <span class="btn aa" id="bSize" title="Text size">Aa</span>
     <span class="sl" id="alphaWrap" title="Transparency"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg><input type="range" id="alpha" min="30" max="100" value="100"></span>
@@ -215,12 +262,10 @@
 </div>
 
 <div id="tab" class="right" title="Bring the objectives back">
-  <svg class="logo" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><g> <rect x="1" y="1" width="12" height="1" fill="#0b0916" /> <rect x="1" y="2" width="1" height="1" fill="#0b0916" /> <rect x="2" y="2" width="1" height="1" fill="#1c1635" /> <rect x="3" y="2" width="7" height="1" fill="#16112c" /> <rect x="10" y="2" width="2" height="1" fill="#f4c535" /> <rect x="12" y="2" width="1" height="1" fill="#0b0916" /> <rect x="13" y="2" width="1" height="1" fill="#d6cda4" /> <rect x="0" y="3" width="2" height="1" fill="#f4c535" /> <rect x="2" y="3" width="1" height="1" fill="#1c1635" /> <rect x="3" y="3" width="8" height="1" fill="#16112c" /> <rect x="11" y="3" width="1" height="1" fill="#f4c535" /> <rect x="12" y="3" width="1" height="1" fill="#0b0916" /> <rect x="13" y="3" width="1" height="1" fill="#a49a71" /> <rect x="1" y="4" width="1" height="1" fill="#0b0916" /> <rect x="2" y="4" width="1" height="1" fill="#1c1635" /> <rect x="3" y="4" width="9" height="1" fill="#16112c" /> <rect x="12" y="4" width="1" height="1" fill="#0b0916" /> <rect x="13" y="4" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="5" width="1" height="1" fill="#0b0916" /> <rect x="2" y="5" width="1" height="1" fill="#1c1635" /> <rect x="3" y="5" width="9" height="1" fill="#16112c" /> <rect x="12" y="5" width="1" height="1" fill="#0b0916" /> <rect x="13" y="5" width="1" height="1" fill="#a49a71" /> <rect x="1" y="6" width="1" height="1" fill="#0b0916" /> <rect x="2" y="6" width="1" height="1" fill="#1c1635" /> <rect x="3" y="6" width="3" height="1" fill="#16112c" /> <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="9" y="6" width="3" height="1" fill="#16112c" /> <rect x="12" y="6" width="1" height="1" fill="#0b0916" /> <rect x="13" y="6" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="7" width="1" height="1" fill="#0b0916" /> <rect x="2" y="7" width="1" height="1" fill="#1c1635" /> <rect x="3" y="7" width="2" height="1" fill="#16112c" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill="#16112c" /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="10" y="7" width="2" height="1" fill="#16112c" /> <rect x="12" y="7" width="1" height="1" fill="#0b0916" /> <rect x="13" y="7" width="1" height="1" fill="#a49a71" /> <rect x="1" y="8" width="1" height="1" fill="#0b0916" /> <rect x="2" y="8" width="1" height="1" fill="#1c1635" /> <rect x="3" y="8" width="2" height="1" fill="#16112c" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="3" height="1" fill="#16112c" /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="10" y="8" width="2" height="1" fill="#16112c" /> <rect x="12" y="8" width="1" height="1" fill="#0b0916" /> <rect x="13" y="8" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="9" width="1" height="1" fill="#0b0916" /> <rect x="2" y="9" width="1" height="1" fill="#1c1635" /> <rect x="3" y="9" width="2" height="1" fill="#16112c" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill="#16112c" /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="10" y="9" width="2" height="1" fill="#16112c" /> <rect x="12" y="9" width="1" height="1" fill="#0b0916" /> <rect x="13" y="9" width="1" height="1" fill="#a49a71" /> <rect x="1" y="10" width="1" height="1" fill="#0b0916" /> <rect x="2" y="10" width="1" height="1" fill="#1c1635" /> <rect x="3" y="10" width="3" height="1" fill="#16112c" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> <rect x="9" y="10" width="3" height="1" fill="#16112c" /> <rect x="12" y="10" width="1" height="1" fill="#0b0916" /> <rect x="13" y="10" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="11" width="1" height="1" fill="#0b0916" /> <rect x="2" y="11" width="1" height="1" fill="#1c1635" /> <rect x="3" y="11" width="9" height="1" fill="#16112c" /> <rect x="12" y="11" width="1" height="1" fill="#0b0916" /> <rect x="13" y="11" width="1" height="1" fill="#a49a71" /> <rect x="0" y="12" width="2" height="1" fill="#f4c535" /> <rect x="2" y="12" width="1" height="1" fill="#1c1635" /> <rect x="3" y="12" width="9" height="1" fill="#16112c" /> <rect x="12" y="12" width="1" height="1" fill="#0b0916" /> <rect x="13" y="12" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="13" width="1" height="1" fill="#0b0916" /> <rect x="2" y="13" width="1" height="1" fill="#1c1635" /> <rect x="3" y="13" width="8" height="1" fill="#16112c" /> <rect x="11" y="13" width="1" height="1" fill="#f4c535" /> <rect x="12" y="13" width="1" height="1" fill="#0b0916" /> <rect x="13" y="13" width="1" height="1" fill="#a49a71" /> <rect x="1" y="14" width="1" height="1" fill="#0b0916" /> <rect x="2" y="14" width="1" height="1" fill="#1c1635" /> <rect x="3" y="14" width="7" height="1" fill="#16112c" /> <rect x="10" y="14" width="2" height="1" fill="#f4c535" /> <rect x="12" y="14" width="1" height="1" fill="#0b0916" /> <rect x="13" y="14" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="15" width="13" height="1" fill="#0b0916" /> </g> <g > <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill=var(--accent) /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="1" height="1" fill=var(--accent) /> <rect x="7" y="8" width="1" height="1" fill=#ffffff /> <rect x="8" y="8" width="1" height="1" fill=var(--accent) /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill=var(--accent) /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> </g></svg>
-  <span class="lbl" id="tabLbl">Objectives</span>
-  <span class="n" id="tabN"></span>
+  <div class="rib"><svg class="logo" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><g> <rect x="1" y="1" width="12" height="1" fill="#0b0916" /> <rect x="1" y="2" width="1" height="1" fill="#0b0916" /> <rect x="2" y="2" width="1" height="1" fill="#1c1635" /> <rect x="3" y="2" width="7" height="1" fill="#16112c" /> <rect x="10" y="2" width="2" height="1" fill="#f4c535" /> <rect x="12" y="2" width="1" height="1" fill="#0b0916" /> <rect x="13" y="2" width="1" height="1" fill="#d6cda4" /> <rect x="0" y="3" width="2" height="1" fill="#f4c535" /> <rect x="2" y="3" width="1" height="1" fill="#1c1635" /> <rect x="3" y="3" width="8" height="1" fill="#16112c" /> <rect x="11" y="3" width="1" height="1" fill="#f4c535" /> <rect x="12" y="3" width="1" height="1" fill="#0b0916" /> <rect x="13" y="3" width="1" height="1" fill="#a49a71" /> <rect x="1" y="4" width="1" height="1" fill="#0b0916" /> <rect x="2" y="4" width="1" height="1" fill="#1c1635" /> <rect x="3" y="4" width="9" height="1" fill="#16112c" /> <rect x="12" y="4" width="1" height="1" fill="#0b0916" /> <rect x="13" y="4" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="5" width="1" height="1" fill="#0b0916" /> <rect x="2" y="5" width="1" height="1" fill="#1c1635" /> <rect x="3" y="5" width="9" height="1" fill="#16112c" /> <rect x="12" y="5" width="1" height="1" fill="#0b0916" /> <rect x="13" y="5" width="1" height="1" fill="#a49a71" /> <rect x="1" y="6" width="1" height="1" fill="#0b0916" /> <rect x="2" y="6" width="1" height="1" fill="#1c1635" /> <rect x="3" y="6" width="3" height="1" fill="#16112c" /> <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="9" y="6" width="3" height="1" fill="#16112c" /> <rect x="12" y="6" width="1" height="1" fill="#0b0916" /> <rect x="13" y="6" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="7" width="1" height="1" fill="#0b0916" /> <rect x="2" y="7" width="1" height="1" fill="#1c1635" /> <rect x="3" y="7" width="2" height="1" fill="#16112c" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill="#16112c" /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="10" y="7" width="2" height="1" fill="#16112c" /> <rect x="12" y="7" width="1" height="1" fill="#0b0916" /> <rect x="13" y="7" width="1" height="1" fill="#a49a71" /> <rect x="1" y="8" width="1" height="1" fill="#0b0916" /> <rect x="2" y="8" width="1" height="1" fill="#1c1635" /> <rect x="3" y="8" width="2" height="1" fill="#16112c" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="3" height="1" fill="#16112c" /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="10" y="8" width="2" height="1" fill="#16112c" /> <rect x="12" y="8" width="1" height="1" fill="#0b0916" /> <rect x="13" y="8" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="9" width="1" height="1" fill="#0b0916" /> <rect x="2" y="9" width="1" height="1" fill="#1c1635" /> <rect x="3" y="9" width="2" height="1" fill="#16112c" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill="#16112c" /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="10" y="9" width="2" height="1" fill="#16112c" /> <rect x="12" y="9" width="1" height="1" fill="#0b0916" /> <rect x="13" y="9" width="1" height="1" fill="#a49a71" /> <rect x="1" y="10" width="1" height="1" fill="#0b0916" /> <rect x="2" y="10" width="1" height="1" fill="#1c1635" /> <rect x="3" y="10" width="3" height="1" fill="#16112c" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> <rect x="9" y="10" width="3" height="1" fill="#16112c" /> <rect x="12" y="10" width="1" height="1" fill="#0b0916" /> <rect x="13" y="10" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="11" width="1" height="1" fill="#0b0916" /> <rect x="2" y="11" width="1" height="1" fill="#1c1635" /> <rect x="3" y="11" width="9" height="1" fill="#16112c" /> <rect x="12" y="11" width="1" height="1" fill="#0b0916" /> <rect x="13" y="11" width="1" height="1" fill="#a49a71" /> <rect x="0" y="12" width="2" height="1" fill="#f4c535" /> <rect x="2" y="12" width="1" height="1" fill="#1c1635" /> <rect x="3" y="12" width="9" height="1" fill="#16112c" /> <rect x="12" y="12" width="1" height="1" fill="#0b0916" /> <rect x="13" y="12" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="13" width="1" height="1" fill="#0b0916" /> <rect x="2" y="13" width="1" height="1" fill="#1c1635" /> <rect x="3" y="13" width="8" height="1" fill="#16112c" /> <rect x="11" y="13" width="1" height="1" fill="#f4c535" /> <rect x="12" y="13" width="1" height="1" fill="#0b0916" /> <rect x="13" y="13" width="1" height="1" fill="#a49a71" /> <rect x="1" y="14" width="1" height="1" fill="#0b0916" /> <rect x="2" y="14" width="1" height="1" fill="#1c1635" /> <rect x="3" y="14" width="7" height="1" fill="#16112c" /> <rect x="10" y="14" width="2" height="1" fill="#f4c535" /> <rect x="12" y="14" width="1" height="1" fill="#0b0916" /> <rect x="13" y="14" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="15" width="13" height="1" fill="#0b0916" /> </g> <g > <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill=var(--accent) /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="1" height="1" fill=var(--accent) /> <rect x="7" y="8" width="1" height="1" fill=#ffffff /> <rect x="8" y="8" width="1" height="1" fill=var(--accent) /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill=var(--accent) /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> </g></svg><span class="n" id="tabN"></span></div>
 </div>
 
-<div id="demo">demo: <b>1/2/3</b> state · <b>G</b> peek · drag the header to move · <b>B</b> backdrop · <b>T</b> text size · click items/place</div>
+<div id="demo">demo: <b>1/2/3</b> state · <b>G</b> peek · <b>L</b> locating · drag the header to move · <b>B</b> backdrop · <b>T</b> text size · click items/place</div>
 
 <script>
   'use strict';
@@ -246,6 +291,7 @@
     hidden: [],                   // entries hidden with their × (saved per game by the app)
     limits: {},                   // entries shown per section: 3, 6 or 0 = all (saved per game); unset = SHOW
     areaOpen: false,              // the guide's area list is open
+    openItem: null,               // the entry whose details are open (one at a time), until the next place
     scale: 1,                     // the app's UI scale (Settings), applied on top of the text size
     keys: 'Ctrl+Space',           // the show/hide shortcut as shown ('' = none)
   };
@@ -255,16 +301,19 @@
   const send = (type, payload) => { if (bridge) bridge.send({ type, ...payload }); else console.log('[tracker]', type, payload || ''); };
   // The page's words, in the app's language (payload.labels), with English as the fallback.
   const EN = {
-    title: 'Objectives', confirm: 'Confirm', missable: 'Missable: {list}', hint: '{keys} or click the title: open the Compendium',
-    headHint: 'Click: open the Compendium here. Drag: move.', placeHint: 'Click to confirm this is where you are',
-    confirmHint: 'Confirm where you are', collapse: 'Collapse to one line', open: 'Open', away: 'Send to the screen edge',
+    title: 'Objectives', confirm: 'Confirm', missable: 'Missable: {list}', placeHint: 'Click to confirm this is where you are',
+    confirmHint: 'Confirm where you are', away: 'Send to the screen edge',
     size: 'Text size', alpha: 'Transparency', backdrop: 'Soft dark backdrop', tabHint: 'Bring the objectives back',
-    itemTodo: 'Click: collected', itemDone: 'Click: not collected yet', hintNoKeys: 'Click the title to open the Compendium',
+    itemTodo: 'Click: collected', itemDone: 'Click: not collected yet',
     empty: 'Nothing to track here yet', secAnswer: 'From your last answer', secMissable: 'Missable here',
     secNoReturn: 'Point of no return', secCollect: 'To collect', secAch: 'Achievements here', more: '+{n} more',
     next: 'Next: {area}', closest: 'From the guide: {area} (closest match)', showHidden: 'Show {n} hidden', hideEntry: 'Hide',
     limitHint: 'Click: show 3, 6 or all', prevArea: 'Previous area', nextArea: 'Next area', areaList: 'All areas in the guide',
     locate: 'Locate me', locating: 'Locating…',
+    hintBook: '{keys} or the book icon: open the Compendium', hintBookNoKeys: 'The book icon opens the Compendium',
+    headFold: 'Click: fold the log to this line or open it. Drag: move.', openBook: 'Open the Compendium',
+    foldHint: 'Click to fold or open', detWhere: 'Where', detHow: 'How', detMissable: 'Missable', detNotes: 'Notes',
+    openInGuide: 'Open in guide', askAbout: 'Ask about this', expandHint: 'Click for details',
   };
   const L = (k, vars) => {
     const own = state.data && state.data.labels && state.data.labels[k];
@@ -274,9 +323,10 @@
   };
   function applyLabels() {
     $('title').textContent = L('title');
-    $('tabLbl').textContent = L('title');
     $('placeConfirm').textContent = L('confirm');
-    $('head').title = L('headHint');
+    $('fold').title = L('headFold');
+    $('bBook').title = L('openBook');
+    $('locLbl').textContent = L('locate');
     $('placeConfirm').title = L('placeHint');
     $('prevArea').title = L('prevArea');
     $('nextArea').title = L('nextArea');
@@ -288,25 +338,41 @@
     $('bdWrap').title = L('backdrop');
     tab.title = L('tabHint');
     // The show/hide shortcut (state.keys), or a hint without one when none is registered.
-    if (!state.keys) { $('hint').textContent = L('hintNoKeys'); return; }
-    const [before, after] = L('hint').split('{keys}');
+    if (!state.keys) { $('hint').textContent = L('hintBookNoKeys'); return; }
+    const [before, after] = L('hintBook').split('{keys}');
     $('hint').innerHTML = after === undefined ? esc(before) : `${esc(before)}<kbd>${esc(state.keys)}</kbd>${esc(after)}`;
   }
 
   const WARN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
 
   /**
-   * One line: the answer's markers get their number badge, guide entries a box, other lines (no return) none. Every
-   * line has a × (on hover) that hides it.
+   * One line: the answer's markers get their number badge, guide entries a box, other lines (no return) none. Ticking
+   * is on the badge or box only; clicking the text opens the entry's details below it (one at a time). Every line has a
+   * × (on hover) that hides it.
    */
   function itemHtml(o, sectionId) {
-    const cls = [o.done ? 'done' : '', o.missable ? 'miss' : '', sectionId === 'noreturn' ? 'info' : '', !o.tick && sectionId !== 'noreturn' ? 'static' : ''].filter(Boolean).join(' ');
-    const mark = o.badge ? `<span class="badge">${o.done ? '✓' : o.badge}</span>`
+    const open = state.openItem === o.id;
+    const cls = [o.done ? 'done' : '', o.missable ? 'miss' : '', sectionId === 'noreturn' ? 'info' : '', !o.tick && sectionId !== 'noreturn' ? 'static' : '', open ? 'open' : ''].filter(Boolean).join(' ');
+    const tickTitle = o.tick ? ` title="${esc(o.done ? L('itemDone') : L('itemTodo'))}"` : '';
+    const tk = o.tick ? ' tk' : '';
+    const mark = o.badge ? `<span class="badge${tk}"${tickTitle}>${o.done ? '✓' : o.badge}</span>`
       : sectionId === 'noreturn' ? ''
-      : `<span class="box">${o.done ? '✓' : ''}</span>`;
-    const title = o.tick ? ` title="${esc(o.done ? L('itemDone') : L('itemTodo'))}"` : '';
+      : `<span class="box${tk}"${tickTitle}>${o.done ? '✓' : ''}</span>`;
     const where = o.where && !o.done ? ` <span class="where">— ${esc(o.where)}</span>` : '';
-    return `<li class="${cls}" data-item="${esc(o.id)}"${title}>${mark}<span class="obj">${esc(o.label)}${where}</span><span class="x" title="${esc(L('hideEntry'))}">×</span></li>`;
+    return `<li class="${cls}" data-item="${esc(o.id)}">${mark}<span class="obj" title="${esc(L('expandHint'))}">${esc(o.label)}${where}<span class="ex">${open ? '▾' : '▸'}</span></span><span class="x" title="${esc(L('hideEntry'))}">×</span>${open ? detailHtml(o) : ''}</li>`;
+  }
+
+  /** An entry's details: its full text and everything the guide has (where, how, why it's missable, notes). */
+  function detailHtml(o) {
+    const d = o.detail || {};
+    const row = (k, v, amber) => (v ? `<div class="dl"><span class="dk${amber ? ' amber' : ''}">${esc(L(k))}</span>${esc(v)}</div>` : '');
+    const full = d.full && d.full !== o.label ? `<div class="dl">${esc(d.full)}</div>` : '';
+    const where = d.where || o.where || '';
+    // A missable entry says why when the guide does; otherwise the tag alone.
+    const miss = o.missable || d.missable ? `<div class="dl"><span class="dk amber">${esc(L('detMissable'))}</span>${esc(d.missable || '')}</div>` : '';
+    const guide = /^[ghn]:/.test(o.id) || !!(state.data && state.data.areas);
+    const acts = `<div class="dacts">${guide ? `<span class="dbtn" data-act="open-entry">${esc(L('openInGuide'))}</span>` : ''}<span class="dbtn" data-act="ask-about">${esc(L('askAbout'))}</span></div>`;
+    return `<div class="det">${full}${row('detWhere', where)}${row('detHow', d.how)}${miss}${row('detNotes', d.notes)}${acts}</div>`;
   }
 
   function render() {
@@ -333,9 +399,11 @@
     $('quest').style.display = d.quest ? '' : 'none';
     const p = d.place || null;
     $('place').style.display = p && p.name ? '' : 'none';
+    // While locating, the place line says only "Locating…" (the rest of the log stays as it was until the result).
+    $('place').classList.toggle('locating', !!d.locating);
     if (p) {
-      $('placeName').textContent = p.name || '';
-      $('placeStory').textContent = p.story ? ` · ${p.story}` : '';
+      $('placeName').textContent = d.locating ? L('locating') : p.name || '';
+      $('placeStory').textContent = p.story && !d.locating ? ` · ${p.story}` : '';
       $('place').classList.toggle('sure', !!p.sure);
       $('bConfirm').classList.toggle('on', !!p.sure);
     }
@@ -366,7 +434,7 @@
       const n = tickable.length ? `${tickable.filter((o) => o.done).length}/${tickable.length}` : `${x.items.length}`;
       const cnt = `<span class="cnt" title="${esc(L('limitHint'))}">${n}</span>`;
       return `<div class="sec${x.tone === 'amber' ? ' amber' : ''}${folded ? ' folded' : ''}" data-sec="${esc(x.id)}">
-        <div class="sechead">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${cnt}<span class="chev">▾</span></div>
+        <div class="sechead" title="${esc(L('foldHint'))}">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${cnt}<span class="chev">${folded ? '▸' : '▾'}</span></div>
         <ol>${shown.map((o) => itemHtml(o, x.id)).join('')}</ol>
         ${left > 0 ? `<div class="more">${esc(L('more', { n: left }))}</div>` : ''}
         ${x.hiddenIds.length ? `<div class="unhide">${esc(L('showHidden', { n: x.hiddenIds.length }))}</div>` : ''}
@@ -385,6 +453,7 @@
     $('notice').textContent = d.notice || '';
     $('bLocate').classList.toggle('busy', !!d.locating);
     $('bLocate').title = d.locating ? L('locating') : L('locate');
+    $('locLbl').textContent = d.locating ? L('locating') : L('locate');
     const warnText = d.warning || '';
     $('warn').classList.toggle('off', !warnText);
     $('warn').innerHTML = warnText ? `${WARN_ICON}<span>${esc(warnText)}</span>` : '';
@@ -406,8 +475,7 @@
     tracker.classList.toggle('away', state.view === 'away');
     document.body.classList.toggle('away', state.view === 'away');
     tab.className = state.edge === 'left' ? 'left' : 'right';
-    $('bCollapse').title = state.view === 'collapsed' ? L('open') : L('collapse');
-    $('bCollapse').firstElementChild.style.transform = state.view === 'collapsed' ? 'rotate(180deg)' : '';
+    $('headChev').textContent = state.view === 'collapsed' ? '▸' : '▾';
     reportSize();
   }
 
@@ -415,9 +483,19 @@
   let lastSize = '';
   function reportSize() {
     requestAnimationFrame(() => {
-      const el = state.view === 'away' ? tab : tracker;
-      const r = el.getBoundingClientRect();
-      const w = Math.ceil(r.right + 6), h = Math.ceil(r.bottom + 6);
+      let w, h;
+      if (state.view === 'away') {
+        // The ribbon sits flush against the screen edge (the app puts the window there); the window keeps room for it
+        // to lengthen on hover (.55em), measured from its resting length so hovering never resizes the window.
+        const em = parseFloat(getComputedStyle(tab).fontSize) || 16;
+        const grow = Math.ceil(em * 0.55);
+        const rest = tab.offsetWidth - (tab.matches(':hover') ? grow : 0);
+        w = rest + grow + 2;
+        h = Math.ceil(tab.getBoundingClientRect().bottom + 6);
+      } else {
+        const r = tracker.getBoundingClientRect();
+        w = Math.ceil(r.right + 6); h = Math.ceil(r.bottom + 6);
+      }
       const key = `${w}x${h}:${state.view}`;
       if (key === lastSize) return;
       lastSize = key;
@@ -457,11 +535,12 @@
     hintTimer = setTimeout(() => hint.classList.add('fade'), 4000);
   }
 
-  // Header: a click opens the panel here (the app; peek in the demo), a drag moves the whole tracker.
+  // Header: the book opens the panel here, a click anywhere else folds the whole log to the header line (and back), and
+  // a drag moves the whole tracker. (The press target is kept: under pointer capture the release reports the header.)
   let drag = null;
   $('head').addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    drag = { x: e.screenX, y: e.screenY, moved: false };
+    drag = { x: e.screenX, y: e.screenY, moved: false, book: !!e.target.closest('#bBook') };
     $('head').setPointerCapture(e.pointerId);
   });
   $('head').addEventListener('pointermove', (e) => {
@@ -479,8 +558,8 @@
     const was = drag; drag = null;
     if (!was) return;
     if (was.moved) send('drag-end', {});
-    else if (bridge && !demo) send('open-panel', {});
-    else peek();
+    else if (was.book) send('open-panel', {});
+    else setView(state.view === 'collapsed' ? 'full' : 'collapsed');
   });
   $('head').addEventListener('pointercancel', () => { drag = null; });
 
@@ -535,9 +614,22 @@
       send('hide-item', { id: o.id, hidden: true });
       return;
     }
-    if (!o.tick) return;
-    o.done = !o.done; render();
-    send('tick', { item: o.id, done: o.done });
+    // The details' buttons: show the entry in the guide, or put a question about it in the panel's question box.
+    const act = e.target.closest('.dbtn');
+    if (act) { send(act.dataset.act, { item: o.id }); return; }
+    if (e.target.closest('.det')) return;
+    // Ticking: the square box or the number badge only.
+    if (e.target.closest('.badge, .box')) {
+      if (!o.tick) return;
+      o.done = !o.done; render();
+      send('tick', { item: o.id, done: o.done });
+      return;
+    }
+    // The text: open its details in place (one at a time), or close them.
+    if (e.target.closest('.obj')) {
+      state.openItem = state.openItem === o.id ? null : o.id;
+      render();
+    }
   });
   // Area navigation: ‹ ›, and the name opens the guide's area list (current one highlighted).
   const gotoArea = (i) => {
@@ -557,7 +649,8 @@
     const it = e.target.closest('.ai'); if (!it) return;
     gotoArea(Number(it.dataset.i));
   });
-  // "Locate me": the app takes a screenshot and finds the area (the button spins meanwhile).
+  // "Locate me" (the crosshair after the place name): the app takes a screenshot and finds the area; meanwhile the
+  // crosshair spins and the place line says "Locating…".
   $('bLocate').addEventListener('click', () => { if (state.data && !state.data.locating) send('locate', {}); });
   const confirmPlace = () => {
     const p = state.data && state.data.place; if (!p || !p.name) return;
@@ -566,7 +659,6 @@
   };
   $('placeConfirm').addEventListener('click', confirmPlace);
   $('bConfirm').addEventListener('click', confirmPlace);
-  $('bCollapse').addEventListener('click', () => setView(state.view === 'collapsed' ? 'full' : 'collapsed'));
   $('bAway').addEventListener('click', () => setView('away'));
   tab.addEventListener('click', () => setView('full'));
   $('bSize').addEventListener('click', () => {
@@ -590,7 +682,7 @@
     releasePress();
     if (settings && typeof settings.backdrop === 'boolean') settings.backdrop = settings.backdrop ? 45 : 0;
     const samePlace = state.data && data && state.data.place && data.place && state.data.place.name === data.place.name;
-    if (!samePlace) { state.more = {}; state.areaOpen = false; }
+    if (!samePlace) { state.more = {}; state.areaOpen = false; state.openItem = null; }
     state.data = data;
     if (settings) Object.assign(state, settings);
     if (settings && settings.view) state.view = settings.view;
@@ -619,7 +711,8 @@
           { id: 'a:d:1', label: 'Falmer sword', where: 'on the dead Falmer near the bridge', done: true, badge: 2, tick: true },
         ] },
         { id: 'missable', title: 'Missable here', tone: 'amber', items: [
-          { id: 'g:b:1', label: 'Attunement sphere', where: 'top of the stairs', missable: true, tick: true },
+          { id: 'g:b:1', label: 'Attunement sphere', where: 'top of the stairs', missable: true, tick: true,
+            detail: { where: 'Top of the stairs in the Tower of Mzark, on the lens control pedestal', how: 'Bring the Elder Scroll and the Lexicon from Septimus Signus', missable: 'The tower seals once you read the Elder Scroll', notes: "Pick up Auriel's Bow in the Chantry afterwards." } },
         ] },
         { id: 'noreturn', title: 'Point of no return', tone: 'amber', icon: 'warn', items: [
           { id: 'n:0', label: 'Reading the Elder Scroll', where: 'the Tower of Mzark closes' },
@@ -632,6 +725,7 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === '1') setView('full'); if (e.key === '2') setView('collapsed'); if (e.key === '3') setView('away');
       if (e.key.toLowerCase() === 'g') peek();
+      if (e.key.toLowerCase() === 'l') window.qcTrackerUpdate({ locating: !state.data.locating });
       if (e.key.toLowerCase() === 'b') { state.backdrop = state.backdrop >= 90 ? 0 : state.backdrop + 30; applyView(); }
       if (e.key.toLowerCase() === 't') $('bSize').click();
     });

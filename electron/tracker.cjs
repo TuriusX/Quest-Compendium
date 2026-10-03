@@ -7,9 +7,11 @@
  *
  * It's the panel's minimized state: its window is closed while the panel is open (the data, settings and position
  * stay here) and a fresh one opens when the panel hides. A window reused across panel cycles lost the button-down of
- * every click after the first hide/show, so it's never reused that way. Clicking
- * its header asks the app to open the panel (deps.onOpenPanel, with the tracker's bounds); the show/hide shortcut
- * (Ctrl+Space by default) opens it too, and the hint names that shortcut (setKeys). The tracker holds no keys itself.
+ * every click after the first hide/show, so it's never reused that way. The book icon at
+ * the right end of its header asks the app to open the panel (deps.onOpenPanel, with the tracker's bounds); clicking
+ * the title folds the log to its header line. The show/hide shortcut (Ctrl+Space by default) opens the panel too, and
+ * the hint names that shortcut (setKeys). The tracker holds no keys itself. An entry's expanded details can open the
+ * panel at that guide entry (open-entry) or with a question about it in the box (ask-about).
  *
  * Wire it up from main.cjs:
  *   const tracker = require('./tracker.cjs');
@@ -261,6 +263,8 @@ function cleanData(data) {
         id: str(o && o.id, 200), label: str(o && o.label, 140), where: str(o && o.where, 160),
         done: !!(o && o.done), missable: !!(o && o.missable), tick: !!(o && o.tick),
         badge: Number.isInteger(o && o.badge) ? o.badge : 0,
+        // Everything the guide has on the entry, untrimmed, for its expanded details on the tracker.
+        detail: cleanDetail(o && o.detail),
       })).filter((o) => o.label && o.id),
     })).filter((x) => x.items.length),
     next: data && data.next && data.next.name ? { name: str(data.next.name, 60) } : null,
@@ -275,8 +279,18 @@ function cleanData(data) {
   };
 }
 
+/** An entry's details: its full text, where, how (requirements), why it's missable, notes. */
+function cleanDetail(d) {
+  if (!d || typeof d !== 'object') return null;
+  const out = {};
+  for (const k of ['full', 'where', 'how', 'missable', 'notes']) if (typeof d[k] === 'string' && d[k].trim()) out[k] = d[k].trim().slice(0, 900);
+  return Object.keys(out).length ? out : null;
+}
+
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
-const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating'];
+const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
+  'hintBook', 'hintBookNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
+  'expandHint', 'spine'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -375,6 +389,17 @@ function showAfterCapture() {
   if (!captureHidden) return;
   captureHidden = false;
   if (alive() && !suspended) win.setOpacity(1);
+}
+
+/** Put the tracker above other always-on-top windows (the hidden panel's spine never covers it). */
+function raise() {
+  if (alive() && !suspended && win.isVisible()) win.moveTop();
+}
+
+/** The accent colour and the spine's hover label, in the app's language (from the last tracker data). */
+function getLook() {
+  const d = current && current.data;
+  return { accent: (d && d.accent) || '#a87ffb', label: (d && d.labels && d.labels.spine) || 'Open Quest Compendium' };
 }
 
 /** Where the tracker is on screen, or null when it's closed or hidden (for the sticky markers' exclude list). */
@@ -510,6 +535,16 @@ function onMessage(event, msg) {
     case 'open-panel':
       openPanel();
       break;
+    case 'open-entry':
+    case 'ask-about': {
+      // An expanded entry's buttons: the panel opens at the tracker, then the app shows the entry in the guide, or puts a
+      // question about it in the question box (not sent).
+      const item = current && current.data.sections.flatMap((x) => x.items).find((o) => o.id === msg.item);
+      if (!item) break;
+      openPanel();
+      tell({ type: msg.type, item: item.id, label: item.label });
+      break;
+    }
     default:
       break;
   }
@@ -528,7 +563,7 @@ function init(d) {
 
 module.exports = {
   init, show, update, hide, hideTemporarily, restore, setKeys, hideForCapture, showAfterCapture, getBounds,
-  setVisibleInRecordings, setScale, openPanel,
+  setVisibleInRecordings, setScale, openPanel, raise, getLook,
   isOpen: () => alive(),
   /** On screen right now (not hidden behind the open panel). */
   isShowing: () => alive() && !suspended && win.isVisible(),
