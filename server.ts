@@ -21,7 +21,8 @@ import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe } from './locateMe';
 import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPanel, guideAreasWithPages } from './guidesApi';
-import { registerReviewQueue } from './reviewQueue';
+import { registerReviewQueue, isAdmin } from './reviewQueue';
+import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { samePlace } from './src/utils/placeName';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
@@ -311,6 +312,8 @@ async function startServer() {
   registerWebSearch(app, { requireAuth, getGeminiClient, searchBudget: { allowed: monthlyBudgetOk, record: recordMonthly } });
   // Published guides as JSON for the Steam Deck plugin, which shows them natively (public, read-only).
   registerGuidesApi(app);
+  // Player corrections to the guides: candidates from conversations, and the Corrections tab of /admin/reviews.
+  registerCorrections(app, { requireAuth, isAdmin });
   // The guide review queue: failed reviews and players' mistake reports, decided on /admin/reviews (ADMIN_EMAILS).
   registerReviewQueue(app, {
     requireAuth,
@@ -1133,7 +1136,13 @@ percentages:
       if (knownFacts) systemInstruction += `\n\n${knownFacts}`;
       // The guide page for where the player is: background notes for this answer only (never saved as facts).
       const guidePage = await guidePageFor(effectiveGame?.name, place?.name);
-      if (guidePage) systemInstruction += `\n\n${guideNotesForPrompt(guidePage)}`;
+      if (guidePage) {
+        systemInstruction += `\n\n${guideNotesForPrompt(guidePage)}`;
+        // Player corrections to these notes that were verified: used right away, before the page is republished.
+        const corrected = await verifiedCorrectionsForPrompt(guidePage.key, guidePage.slug);
+        if (corrected) systemInstruction += `\n\n${corrected}`;
+        systemInstruction += `\n${CORRECTION_RULES}`;
+      }
       if (!searchOk) {
         systemInstruction += `\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. Don't mention search limits to the player.`;
       }
@@ -1475,6 +1484,13 @@ percentages:
       // Facts the AI confirmed with a search: remember them for this game. Count the searches this question ran.
       const factsParsed = extractFacts(responseText);
       responseText = factsParsed.text;
+      // Corrections to the guide notes (after the player pushed back, or on something asked directly): saved as
+      // candidates to be verified (corrections.ts), never applied from one player.
+      const correctionsParsed = extractCorrections(responseText);
+      responseText = correctionsParsed.text;
+      const correctionIds = await saveCorrectionCandidates({
+        page: guidePage, corrections: correctionsParsed.corrections, question: String(question || ''), uid: userId, isGuest, game: String(effectiveGame?.name || ''),
+      });
       if (searchesUsed > 0) recordSearches(searchCtx, searchesUsed);
       // Only file a fact under a place or story point that's actually known: confirmed by the player, or settled on
       // screen. A guessed place would put facts in the wrong spot for everyone.
@@ -1530,6 +1546,7 @@ percentages:
         ...(nearby.length ? { nearby } : {}),
         ...(placeParsed.place ? { place: placeParsed.place } : {}),
         ...(factsSaved ? { factsSaved } : {}),
+        ...(correctionIds.length ? { correctionIds } : {}),
         userData: {
           isPremium: userData.isPremium === true,
           proQueriesAvailable: userData.proQueriesAvailable,
@@ -2062,7 +2079,7 @@ percentages:
   <div class="container">
     <div class="badge">Official Legal Document</div>
     <h1>Privacy Policy for Quest Compendium</h1>
-    <div class="updated">Last updated: September 18, 2026</div>
+    <div class="updated">Last updated: October 3, 2026</div>
 
     <p>Welcome to <strong>Quest Compendium</strong> (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;the application&rdquo;). This Privacy Policy explains how personal information and application data are collected, used, and protected when you use our desktop application and web services.</p>
 
@@ -2083,6 +2100,7 @@ percentages:
       <li>Synchronizing your compendium tabs, notes, and preferences across your authorized devices using secure cloud storage.</li>
       <li>Verifying subscription status and managing daily query quotas.</li>
       <li>Maintaining and improving app reliability and performance.</li>
+      <li>Improving our game guides: when an answer corrects one of our guides (for example after you say a location is wrong), the correction may be saved anonymously and used to improve the guide. We keep only the text of the correction, the game and area it is about, and a one-way anonymised identifier (never your account, email or screenshots), and we check it against other sources or other players before changing a guide.</li>
     </ul>
 
     <h2>3. Third-Party Services and Data Sharing</h2>

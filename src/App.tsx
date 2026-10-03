@@ -1534,6 +1534,7 @@ export default function App() {
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
         ...(typeof data.title === 'string' && data.title.trim() ? { title: data.title.trim().slice(0, 60) } : {}),
         ...(typeof data.factsSaved === 'number' && data.factsSaved > 0 ? { factsSaved: data.factsSaved } : {}),
+        ...(Array.isArray(data.correctionIds) && data.correctionIds.length ? { correctionIds: data.correctionIds.filter((x: unknown) => typeof x === 'string').slice(0, 5) } : {}),
         ...(data.place && typeof data.place.name === 'string'
           ? {
               place: {

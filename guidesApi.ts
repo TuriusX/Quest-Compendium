@@ -294,6 +294,9 @@ export async function guideAreasWithPages(game: string): Promise<{ areas: { slug
 }
 
 export type GuidePageForPlace = {
+  /** The guide and the area page (player corrections are filed under these). */
+  key: string;
+  slug: string;
   name: string;
   verified: boolean;
   overview: string;
@@ -322,6 +325,8 @@ export async function guidePageFor(game: string | undefined, place: string | und
       const a: any = doc.exists ? doc.data() : null;
       if (!a || a.status !== 'published') return null;
       return {
+        key,
+        slug: area.slug,
         name: String(a.name || area.name),
         verified: a.verified !== false,
         overview: String(a.overview || ''),

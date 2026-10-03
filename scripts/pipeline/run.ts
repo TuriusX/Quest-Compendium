@@ -17,6 +17,9 @@
  *      First, though, decisions made on the review queue page (/admin/reviews), then the repair queue
  *      (system/pipeline.carefulQueue): careful builds for thin quick guides and games too new for quick mode (newest
  *      first), plus fixes and outline rebuilds, within PIPELINE_QUEUE_DAILY_SEARCHES and the player reserve.
+ *   Player corrections (scripts/guides/corrections.ts): reports from conversations that a guide entry is wrong are
+ *   checked against sources (up to 8 searches an entry) and the reviewer, and written into the guides through the
+ *   review gate; ones sources can't settle need 3+ different players. Decided before the repair queue.
  *   The review gate: every build, fix, extension and upgrade is made in a staged copy (scripts/guides/repair.ts) and
  *   only replaces the live guide if it passes review (score 75+, at least 5 pages; games newer than the reviewer are
  *   spot-checked with searches). A guide that fails goes to the review queue for a decision. A quick build of a game
@@ -276,7 +279,22 @@ async function main() {
   // allowance (PIPELINE_QUEUE_DAILY_SEARCHES) and keep the app-wide player reserve; an item that doesn't fit waits
   // for the next run, and a careful build that stops at its search cap continues on the next run. The queue stops
   // after PIPELINE_QUEUE_MINUTES so the rest of the run still fits in the job's time limit.
-  let queueRoom = Math.min(QUEUE_DAILY, APP_CAP - RESERVE - appUsed);
+  // ---- 3b'. player corrections (scripts/guides/corrections.ts): reports from conversations, checked against sources
+  // (up to 8 searches an entry, within the player reserve) and written into the guides through the review gate ----
+  let correctionSearches = 0;
+  if (!DRY && aiRoom >= 0.25) {
+    const room = Math.min(120, APP_CAP - RESERVE - appUsed);
+    if (room >= 8) {
+      const c = runScript(['scripts/guides/corrections.ts', '--max-searches', String(room)]);
+      correctionSearches = c.searches;
+      state.searches = (state.searches || 0) + c.searches;
+      state.dollars = (state.dollars || 0) + c.dollars;
+      aiRoom -= c.dollars;
+      if (/[1-9]\d* applied/.test(c.summary)) changed = true;
+      if (!/^corrections: 0 verified, 0 applied, 0 dismissed, 0 waiting/.test(c.summary)) report.push(`${c.ok ? '🧭' : '⚠️'} ${c.summary || 'corrections check failed (see the job log)'}`);
+    }
+  }
+  let queueRoom = Math.min(QUEUE_DAILY, APP_CAP - RESERVE - appUsed) - correctionSearches;
   const waiting: QueueItem[] = [];
   const queueStart = Date.now();
   while (queue.length && !DRY) {

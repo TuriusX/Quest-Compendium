@@ -88,6 +88,8 @@ export interface ChatMessage {
   removedMarkers?: string[];
   /** How many facts this answer taught (or re-confirmed for) the game knowledge base. */
   factsSaved?: number;
+  /** Corrections to the guide this answer made (candidates to verify): "That's right" on it confirms their area. */
+  correctionIds?: string[];
 }
 
 export interface PlaceGuess {

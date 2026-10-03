@@ -5,6 +5,7 @@
  *   POST /api/guides/report              public: { key, page, text, lang, path } from a guide page; rate-limited
  *   GET  /admin/reviews                  the admin page (sign in with Google; only ADMIN_EMAILS get the data)
  *   GET  /api/admin/review-queue         open items, then the last decided ones
+ * The page's Corrections tab lists player corrections to the guides (corrections.ts) with apply / dismiss.
  *   POST /api/admin/review-queue/:id     { action }: publish (a staged rebuild, as it is), fix, outline, careful
  *                                        (repair.ts), unpublish, dismiss, reopen
  *
@@ -20,7 +21,7 @@ type Deps = { requireAuth: Mw; optionalAuth: Mw; firebaseWebConfig: Record<strin
 
 export const ADMIN_ACTIONS = ['publish', 'fix', 'outline', 'careful', 'unpublish', 'dismiss', 'reopen'] as const;
 const admins = () => (process.env.ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-const isAdmin = (user: any) => !!user?.email && user.email_verified !== false && admins().includes(String(user.email).toLowerCase());
+export const isAdmin = (user: any) => !!user?.email && user.email_verified !== false && admins().includes(String(user.email).toLowerCase());
 
 // Reports: at most 5 an hour from one address and 300 a day in all (kept in memory; a restart resets them).
 const perIp = new Map<string, number[]>();
@@ -144,17 +145,27 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   a { color: var(--accent); }
   #msg { color: var(--dim); }
   details summary { cursor: pointer; color: var(--dim); }
+  .tabs { display: flex; gap: 4px; }
+  .tab { border-radius: 8px; }
+  .tab.on { border-color: var(--accent); color: #fff; background: #2a2140; }
+  .chip.pending { color: var(--warn); border-color: #fbbf2455; }
+  .chip.disputed { color: var(--bad); border-color: #f8717155; }
+  .chip.approved { color: var(--ok); border-color: #4ade8055; }
+  .said { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: #a87ffb10; border-radius: 0 8px 8px 0; }
+  .guide { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--line); background: #ffffff08; border-radius: 0 8px 8px 0; }
 </style>
 </head>
 <body>
 <header>
   <h1>Guide review queue</h1>
+  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button></nav>
   <select id="filter" aria-label="Show"><option value="all">All open</option><option value="review">Failed reviews</option><option value="report">Player reports</option></select>
   <button id="signin" class="primary">Sign in with Google</button>
 </header>
 <main>
   <p id="msg">Sign in to see the queue. Decisions are carried out by the next guide pipeline run (daily, 9:00 Chicago time); a dismissal is immediate.</p>
   <div id="list"></div>
+  <div id="corr" hidden></div>
   <details id="decidedBox" hidden><summary>Recently decided</summary><div id="decided"></div></details>
 </main>
 <script type="module">
@@ -166,6 +177,39 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   const SITE = 'https://questcompendium.com/guides/';
   const LABEL = { publish: 'Publish as is', fix: 'Fix pages', outline: 'Rebuild: new outline', careful: 'Rebuild careful', unpublish: 'Unpublish', dismiss: 'Dismiss', reopen: 'Reopen' };
   let data = { open: [], decided: [] };
+  let corr = { open: [], decided: [] };
+  let tab = 'guides';
+  const VERDICT = { confirmed: 'sources confirm the players', contradicted: 'sources contradict the players', unclear: 'sources do not settle it' };
+  // A correction: what the guide says, what players said, the source check, and apply / dismiss.
+  function corrCard(g) {
+    const head = '<div class="row"><span class="game">' + esc(g.game) + ' · ' + esc(g.areaName) + '</span>'
+      + '<span class="chip ' + esc(g.status) + '">' + esc(g.status === 'approved' ? 'applying next run' : g.status) + '</span>'
+      + '<span class="dim">' + esc(g.players || 0) + ' signed-in player(s), ' + esc(g.reports?.length || g.reports || 0) + ' report(s)</span>'
+      + '<span class="dim">' + new Date(g.updatedAt || g.createdAt).toLocaleString() + '</span>'
+      + ' <a href="' + SITE + esc(g.gameKey) + '/' + esc(g.area) + '/" target="_blank" rel="noopener">open on the site</a></div>';
+    const guide = '<div class="guide"><b>The guide says</b> (' + esc(g.entryName) + '): ' + esc(g.guideText || '(nothing)') + '</div>';
+    const said = (Array.isArray(g.reports) ? g.reports : []).map((r) => '<div class="said">' + esc(r.claim)
+      + ' <span class="dim">(' + esc(r.via === 'pushback' ? 'after the player pushed back' : 'answer contradicted the guide') + (r.placeConfirmed ? ', place confirmed' : '') + (r.guest ? ', guest' : '') + ')</span></div>').join('');
+    const sc = g.sourceCheck;
+    const check = sc ? '<div class="dim">Source check: <b>' + esc(VERDICT[sc.verdict] || sc.verdict) + '</b>. ' + esc(sc.evidence || '') + (sc.sources?.length ? ' (' + esc(sc.sources.join(', ')) + ')' : '') + (sc.reviewer ? ' Reviewer: ' + esc(sc.reviewer) : '') + '</div>' : '<div class="dim">Not checked against sources yet (the next pipeline run does).</div>';
+    const buttons = '<div class="actions"><button class="primary" data-cid="' + esc(g.id) + '" data-cact="apply">Apply</button><button data-cid="' + esc(g.id) + '" data-cact="dismiss">Dismiss</button></div>';
+    return '<div class="card">' + head + guide + said + check + buttons + '</div>';
+  }
+  function renderCorr() {
+    $('corr').innerHTML = (corr.open.length ? corr.open.map(corrCard).join('') : '<p class="dim">No corrections waiting.</p>')
+      + (corr.decided.length ? '<details><summary>Recently decided</summary>' + corr.decided.map((g) => '<div class="card"><div class="row"><span class="game">' + esc(g.game) + ' · ' + esc(g.areaName) + ' · ' + esc(g.entryName) + '</span><span class="chip">' + esc(g.status) + '</span></div>' + (g.verifiedText ? '<div class="said">' + esc([g.verifiedText.where, g.verifiedText.how, g.verifiedText.notes].filter(Boolean).join(' ')) + '</div>' : '') + '</div>').join('') + '</details>' : '');
+    if (tab === 'corr') $('msg').textContent = corr.open.length + ' correction(s) waiting. Apply writes it into the guide on the next pipeline run (through the review gate); dismiss is immediate.';
+  }
+  function showTab(t) {
+    tab = t;
+    $('tabGuides').classList.toggle('on', t === 'guides');
+    $('tabCorr').classList.toggle('on', t === 'corr');
+    $('list').hidden = t !== 'guides';
+    $('decidedBox').hidden = t !== 'guides' || !data.decided.length;
+    $('filter').hidden = t !== 'guides';
+    $('corr').hidden = t !== 'corr';
+    if (t === 'corr') renderCorr(); else render();
+  }
 
   async function api(path, body) {
     const token = await auth.currentUser.getIdToken();
@@ -196,13 +240,26 @@ function adminPage(firebaseConfig: Record<string, string>): string {
     $('list').innerHTML = open.length ? open.map((i) => card(i, false)).join('') : '<p class="dim">Nothing waiting. 🎉</p>';
     $('decided').innerHTML = data.decided.map((i) => card(i, true)).join('');
     $('decidedBox').hidden = !data.decided.length;
+    if (tab !== 'guides') return;
     $('msg').textContent = data.open.length + ' open item(s). Decisions run on the next pipeline run (daily, 9:00 Chicago time); a dismissal is immediate.';
   }
   async function load() {
-    try { data = await api('/api/admin/review-queue'); render(); }
+    try {
+      [data, corr] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections')]);
+      render();
+      renderCorr();
+      showTab(tab);
+    }
     catch (e) { $('msg').textContent = e.message === 'Not an admin.' ? 'This account is not an admin (ADMIN_EMAILS on the server).' : 'Could not load the queue: ' + e.message; }
   }
   document.addEventListener('click', async (e) => {
+    const c = e.target.closest('button[data-cact]');
+    if (c) {
+      c.disabled = true;
+      try { await api('/api/admin/corrections/' + encodeURIComponent(c.dataset.cid), { action: c.dataset.cact }); await load(); }
+      catch (err) { alert(err.message); c.disabled = false; }
+      return;
+    }
     const b = e.target.closest('button[data-act]');
     if (!b) return;
     b.disabled = true;
@@ -210,6 +267,8 @@ function adminPage(firebaseConfig: Record<string, string>): string {
     catch (err) { alert(err.message); b.disabled = false; }
   });
   $('filter').addEventListener('change', render);
+  $('tabGuides').addEventListener('click', () => showTab('guides'));
+  $('tabCorr').addEventListener('click', () => showTab('corr'));
   $('signin').addEventListener('click', () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => { $('msg').textContent = 'Sign-in failed: ' + (e.code || e.message); }));
   onAuthStateChanged(auth, (u) => { $('signin').hidden = !!u; if (u) load(); });
 </script>

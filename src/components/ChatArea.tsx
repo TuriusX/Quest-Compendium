@@ -157,6 +157,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     window.addEventListener('qc-open-guide', onOpen);
     return () => window.removeEventListener('qc-open-guide', onOpen);
   }, []);
+  /** "That's right" on an answer that corrected the guide: tell the server the player confirmed that area (best effort). */
+  const confirmCorrectionsPlace = async (ids: string[]) => {
+    try {
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      if (!token) return;
+      await fetch(`${getApiBaseUrl()}/api/corrections/confirm-place`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids }),
+      });
+    } catch {
+      /* not important enough to bother the player */
+    }
+  };
   // "Ask about this" on a tracker entry: the question goes in the box, ready to edit or send (not sent).
   useEffect(() => {
     const onPrefill = (e: Event) => {
@@ -1226,6 +1240,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       onChoosePlace={(name) => {
                         onUpdateMessage?.(msg.id, { placeChosen: name });
                         onSetPlace?.(name);
+                        // This answer corrected the guide: the player confirming where they are backs up the correction's area.
+                        if (msg.correctionIds?.length) confirmCorrectionsPlace(msg.correctionIds);
                       }}
                       onChooseStory={(story) => {
                         onUpdateMessage?.(msg.id, { storyChosen: story });
