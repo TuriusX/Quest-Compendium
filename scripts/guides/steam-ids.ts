@@ -44,6 +44,7 @@ async function main() {
   const guides = await db().collection('guides').get();
   let found = 0, missing = 0, skipped = 0;
   for (const g of guides.docs) {
+    if (g.id.endsWith('--next')) continue; // a staged rebuild: it gets no Steam id of its own
     const info = g.data();
     const name = String(info.game || g.id);
     if (!redo && (info.appId || info.noSteam)) {

@@ -128,6 +128,7 @@ export function registerGuidesApi(app: Express): void {
         const docs = await getFirestore().collection('guides').get();
         const out: { key: string; game: string; areas: number; art?: string }[] = [];
         for (const d of docs.docs) {
+          if (d.id.endsWith('--next')) continue; // a staged rebuild, not a guide (scripts/guides/promote.ts)
           const g = await gameAreas(d.id);
           if (g) out.push({ key: g.key, game: g.game, areas: g.areas.length, art: g.art });
         }

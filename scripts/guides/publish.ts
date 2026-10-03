@@ -650,7 +650,8 @@ function indexBody(list: { key: string; game: string; count: number; players?: n
 }
 
 async function main() {
-  const guides = await db().collection('guides').get();
+  // Staged rebuilds (guides/{key}--next) are never part of the site; review.ts --gate promotes them.
+  const guides = { docs: (await db().collection('guides').get()).docs.filter((d) => !d.id.endsWith('--next')) };
   if (approve) {
     const ref = db().collection('guides').doc(gameKey(approve));
     const drafts = await ref.collection('areas').where('status', '==', 'draft').get();

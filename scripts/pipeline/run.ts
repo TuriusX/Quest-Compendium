@@ -185,7 +185,7 @@ async function main() {
   //   achievement guides (a couple of cents each, popular searches) -> quick guides for wish-list games (a few cents,
   //   no searches) -> upgrades for games players use (searches) -> translations players actually need -> featured
   //   guides in the biggest languages.
-  const allGuides = (await db().collection('guides').get()).docs;
+  const allGuides = (await db().collection('guides').get()).docs.filter((d) => !d.id.endsWith('--next')); // not staged rebuilds
   const demandFirst = [...demand.map((d) => gameKey(d.game)), ...FEATURED.map((f) => gameKey(f))];
   const byPriority = allGuides.slice().sort((a, b) => {
     const ia = demandFirst.indexOf(a.id), ib = demandFirst.indexOf(b.id);

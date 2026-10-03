@@ -1,5 +1,6 @@
 /**
  * Promote a staged guide (guides/{key}--next, built with build.ts --stage) to the live guide, once it has passed review.
+ * (stageCopy starts a staged build as a copy of the live guide, for fixes, extensions and upgrades.)
  *
  *   npx tsx scripts/guides/promote.ts --key dead-space            (review.ts --gate calls this itself on a pass)
  *   npx tsx scripts/guides/promote.ts --key dead-space --discard  throw the staged build away instead
@@ -58,6 +59,34 @@ export async function promote(key: string): Promise<{ published: number; retired
   await flush();
   await db().recursiveDelete(stageRef);
   return { published: order.length, retired };
+}
+
+/** Start a staged build as a copy of the live guide (its published and draft pages, as drafts), to fix or extend it. */
+export async function stageCopy(key: string): Promise<number> {
+  const live = liveKey(key);
+  const liveRef = db().collection('guides').doc(live);
+  const info: any = (await liveRef.get()).data() || {};
+  const stageRef = db().collection('guides').doc(stageKey(live));
+  const pages = (await liveRef.collection('areas').get()).docs.filter((d) => ['published', 'draft'].includes(d.data().status));
+  const keep = new Set(pages.map((d) => d.id));
+  let batch = db().batch();
+  let ops = 0;
+  // No Steam id or pipeline notes on the staged copy, so nothing mistakes it for a live guide.
+  batch.set(stageRef, {
+    game: info.game, title: info.title || `${info.game} guide`, stagingFor: live, layout: info.layout || 'area',
+    areas: (info.areas || []).filter((o: any) => keep.has(o.slug)), aliases: info.aliases || {},
+    ...(info.edition ? { edition: info.edition } : {}), createdAt: Date.now(),
+  });
+  for (const d of pages) {
+    batch.set(stageRef.collection('areas').doc(d.id), { ...d.data(), status: 'draft', staged: 'copy' });
+    if (++ops >= 400) {
+      await batch.commit();
+      batch = db().batch();
+      ops = 0;
+    }
+  }
+  await batch.commit();
+  return pages.length;
 }
 
 export async function discard(key: string): Promise<boolean> {

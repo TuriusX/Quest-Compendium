@@ -6,8 +6,16 @@
  *            --redo           rebuild areas that already exist
  *            --area "Name | when in the story"   build just this one page (no area list step), e.g.
  *                             --area "Kefka's Tower: Final Battle | the summit gauntlet against Kefka"
- *            --layout area|regions|chapters|calendar   how the guide is organized (see common.ts). Normally left out:
- *                             a new guide picks one automatically, and later runs reuse the game's saved layout.
+ *            --layout area|regions|linear|chapters|calendar|roguelike|metroidvania   the guide's outline by game type
+ *                             (see LAYOUTS in common.ts). Normally left out: a new guide (or a --restructure) picks one
+ *                             automatically, and later runs reuse the game's saved layout.
+ *            --stage          build into guides/{key}--next instead of the live guide. Nothing there is published:
+ *                             review.ts --key {key}--next --gate promotes it to the live guide only if it passes review.
+ *                             A staged build that stopped at the search cap continues on the next run.
+ *            --copy-live      with --stage: a new staged build starts as a copy of the live guide (to fix pages, add
+ *                             pages or upgrade quick pages); without it, the staged build starts empty (a rebuild)
+ *            --note "..."     what a review found wrong with the previous version, passed to the writer to avoid
+ *                             (fix.ts uses it with --area to rewrite one page)
  *            --group NAME     put this run's pages in a named section, e.g. an expansion: --group "Hearts of Stone"
  *                             (the website and apps show a heading per section; see set-groups.ts for existing pages)
  *            --upgrade        check a game's existing quick pages the careful way, one by one (no new area list).
@@ -23,7 +31,9 @@
  *                             page; a normal (checked) run later upgrades them. With --auto-publish, a quick guide is
  *                             only published once it has at least 5 pages (QUICK_MIN_PAGES): fewer means the AI barely
  *                             knows the game, so its pages stay drafts and it needs a careful build (the pipeline
- *                             queues one when it sees "Not published: thin quick guide").
+ *                             queues one when it sees "Not published: thin quick guide"). A game released after the
+ *                             quick model's knowledge cutoff (QUICK_MODEL_CUTOFF) is never built quick: the run stops
+ *                             with "Not built: released ..., after the quick model's knowledge cutoff".
  *
  * For each area: research with Google Search (a step that runs no searches is retried once, then fails, so nothing
  * comes from the model's memory) -> keep only details that at least two different websites back, judged from Google's
@@ -33,7 +43,12 @@
  * searches and an estimated AI cost. A search cap stops the run before it
  * spends more than you allow; it's separate from players' search budget.
  */
-import { db, gemini, MODEL, gameKey, arg, editionOf, editionNote, searchesIn, visitName, cleanAreaName, resolveArea, normalizeVisits, isLayout, type GuideArea, type GuideEntry, type GuideSection, type Layout } from './common';
+import {
+  db, gemini, MODEL, gameKey, arg, editionOf, editionNote, searchesIn, visitName, cleanAreaName, resolveArea, normalizeVisits, isLayout,
+  LAYOUTS, LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, releaseInfo, releasedAfter, stageKey,
+  type GuideArea, type GuideEntry, type GuideSection, type Layout,
+} from './common';
+import { stageCopy } from './promote';
 import { getGameFacts, saveGameFacts, recordMonthly } from '../../searchGuard';
 import { estimateCost } from '../../usage';
 import { ThinkingLevel } from '@google/genai';
@@ -42,7 +57,8 @@ const game = arg('game');
 const part = arg('part', 'the beginning of the game');
 const maxAreas = Math.max(1, Math.min(40, Number(arg('areas', '10'))));
 const maxSearches = Math.max(10, Number(arg('max-searches', '150')));
-const autoPublish = arg('auto-publish') === 'true';
+// A staged build is never published directly: it's promoted only after it passes review (review.ts --gate).
+const autoPublish = arg('auto-publish') === 'true' && arg('stage') !== 'true';
 const redo = arg('redo') === 'true';
 const quick = arg('quick') === 'true';
 const layoutArg = arg('layout');
@@ -54,6 +70,15 @@ const groupArg = (() => {
   return g && g !== 'true' ? g.trim().slice(0, 40) : undefined;
 })();
 const retryFailed = arg('retry-failed') === 'true';
+/** --stage: build into guides/{key}--next instead of the live guide; nothing is published until it passes review. */
+const stage = arg('stage') === 'true';
+/** --copy-live (with --stage): a new staged build starts as a copy of the live guide (to fix, extend or upgrade it). */
+const copyLive = arg('copy-live') === 'true';
+/** --note "...": what a review found wrong with the previous version of these pages, for the writer to avoid. */
+const note = (() => {
+  const n = arg('note');
+  return n && n !== 'true' ? ` A review of the previous version found this problem: ${n.trim().slice(0, 600)} Make sure this version doesn't have it.` : '';
+})();
 /** The guide's structure for this run (set in main from --layout, the saved layout, or an automatic pick). */
 let layout: Layout = 'area';
 const placeBased = () => layout === 'area' || layout === 'regions';
@@ -153,7 +178,7 @@ const BASE_RULES =
   'from websites. Only include details you found in your searches. Use the names the game itself uses.';
 /** For a remake or remaster: which version this is, and that details must be confirmed for it (set in main). */
 let EDITION = '';
-const RULES = () => BASE_RULES + EDITION;
+const RULES = () => BASE_RULES + EDITION + note;
 /** Works out (once per guide) whether the game is a remake or remaster, and returns the prompt note for it. */
 async function editionPrompt(guideRef: FirebaseFirestore.DocumentReference): Promise<string> {
   const e = await editionOf(game!, guideRef);
@@ -165,37 +190,62 @@ async function editionPrompt(guideRef: FirebaseFirestore.DocumentReference): Pro
  * The area list, shared by normal and quick runs. Revisits count as their own areas: a place the player comes back to
  * in a clearly different state (another world, era or chapter) gets its own page, "Narshe (World of Ruin)".
  */
-const UNIT: Record<Layout, string> = {
+const UNIT: Partial<Record<Layout, string>> = {
   area: 'An area is a place with its own map: a town, dungeon, castle, cave, building, or field region worth its own guide page. ',
-  regions: 'An area is a region, city, settlement or major location (a dungeon, fortress or landmark) worth its own guide page. ',
-  chapters: '',
-  calendar: '',
+  regions: 'An area is a region, city, settlement or major location (a dungeon, fortress or landmark) worth its own guide page. ' +
+    'Never make a page for a return visit, a story phase, New Game+, or a single building, camp, shop or room inside a ' +
+    'region: those belong on the region\'s page. ',
 };
 
-const outlinePrompt = (extra: string, existing: { name: string; story: string }[]) =>
-  layout === 'chapters'
-    ? `List the guide pages for ${part} of the video game "${game}", up to ${maxAreas} pages. Each page is one character's ` +
-      'story chapter, named like "Olberic, Chapter 1", in a sensible play order. Also add a short reference page for each ' +
-      'main town or region the characters share, named by the place. ' +
-      (existing.length ? `The guide already has these pages; reuse a name exactly for the same page:\n${existing.map((e) => `- ${e.name}`).join('\n')}\n` : '') +
-      `${extra} Reply with one line per page, exactly: AREA: page name | a few words on what happens | the character's name for a chapter page, or Places for a place page. ` +
-      'Every line starts with the word AREA: itself, never a region or other label.'
-    : layout === 'calendar'
-      ? `List the guide pages for ${part} of the video game "${game}", up to ${maxAreas} pages. Most pages are stretches of the ` +
-        'in-game calendar, usually one month or the period up to a deadline, named like "April" or "May: Kamoshida\'s Palace", ' +
-        'in calendar order. Also add a few reference pages: one per dungeon, and one for social links or confidants, named by topic. ' +
-        (existing.length ? `The guide already has these pages; reuse a name exactly for the same page:\n${existing.map((e) => `- ${e.name}`).join('\n')}\n` : '') +
-        `${extra} Reply with one line per page, exactly: AREA: page name | a few words on what happens | Calendar for a calendar page, or Reference for a reference page. ` +
-        'Every line starts with the word AREA: itself, never a month or other label.'
-      : placeOutline(extra, existing);
+/** Every page of a guide is the same kind of unit (the guide review's most common failure was mixing them). */
+const ONE_KIND = 'Every page must be the same kind of unit: never mix in pages for characters, bosses, topics (weapons, upgrades, ' +
+  'collectibles), the whole game, or a generic label instead of the game\'s own name. ';
+const reuseNames = (existing: { name: string }[]) =>
+  existing.length ? `The guide already has these pages; reuse a name exactly for the same page:\n${existing.map((e) => `- ${e.name}`).join('\n')}\n` : '';
+const lineFormat = (third: string) =>
+  `Reply with one line per page, exactly: AREA: page name | a few words on what happens | ${third}. ` +
+  'Every line starts with the word AREA: itself, never a chapter, month or other label.';
+
+/** The page list, by game type (the guide's layout; see LAYOUTS in common.ts). */
+const outlinePrompt = (extra: string, existing: { name: string; story: string }[]) => {
+  const head = `List the guide pages for ${part} of the video game "${game}", up to ${maxAreas} pages. `;
+  switch (layout) {
+    case 'linear':
+      return head + 'The game is linear and split into chapters, missions or levels: make one page per chapter (or mission or level), ' +
+        'in order, using the game\'s own numbering and names, like "Chapter 1: New Arrivals" or "Mission 03: Fallen Angel". ' +
+        'Don\'t add pages for places, and don\'t split a chapter into several pages unless the game itself does. ' + ONE_KIND +
+        reuseNames(existing) + `${extra} ` + lineFormat('empty');
+    case 'chapters':
+      return head + 'Each page is one character\'s story chapter, named like "Olberic, Chapter 1", in a sensible play order. ' +
+        'Only chapter pages: no separate pages for towns or regions (a town\'s shops and items go on the chapter where the ' +
+        'character first visits it). ' + ONE_KIND + reuseNames(existing) + `${extra} ` + lineFormat('the character\'s name');
+    case 'calendar':
+      return head + 'Pages are stretches of the in-game calendar, usually one month or the period up to a deadline, named like ' +
+        '"April" or "May: Kamoshida\'s Palace", in calendar order; a dungeon is covered on the calendar page where it\'s done. ' +
+        'After all the calendar pages, add at most three reference pages for systems that run all game (social links or ' +
+        'confidants, for example), named by topic. ' + reuseNames(existing) + `${extra} ` + lineFormat('Calendar for a calendar page, or Reference for a reference page');
+    case 'roguelike':
+      return head + 'The game is run-based. Make one page for the hub, then one page per region of a run, in the order a run ' +
+        'goes through them, named as the game names them. Never split a region into first and later runs; endings and ' +
+        'post-game content go on the relevant region\'s page. ' + ONE_KIND + reuseNames(existing) + `${extra} ` + lineFormat('empty');
+    case 'metroidvania':
+      return head + 'The game is one interconnected map. Make one page per map region, named as the game\'s map names it, in a ' +
+        'sensible first-time route. Never make a page for a return visit, a single room or a boss: an item that needs a later ' +
+        'ability stays on its region\'s page, with the ability noted. ' + ONE_KIND + reuseNames(existing) + `${extra} ` + lineFormat('empty');
+    default:
+      return placeOutline(extra, existing);
+  }
+};
 
 const placeOutline = (extra: string, existing: { name: string; story: string }[]) =>
   `List the areas a player visits in ${part} of the video game "${game}", in story order, up to ${maxAreas} areas. ` +
-  UNIT[layout] +
-  'If the player comes back to a place later in a clearly different state (a different world, era or chapter, with ' +
-  'new items, people or events), list that visit as its own area and name the world, era or chapter in the third field ' +
-  '(for example "World of Ruin"). Leave the third field empty for a first visit (including a place that only exists in ' +
-  'a later world) and for a return in the same state. ' +
+  UNIT[layout] + ONE_KIND +
+  (layout === 'regions'
+    ? 'Leave the third field empty. '
+    : 'If the player comes back to a place later in a clearly different state (a different world or era, with new items, ' +
+      'people or events), list that visit as its own area and name the world or era in the third field (for example ' +
+      '"World of Ruin"). Leave the third field empty for a first visit (including a place that only exists in a later ' +
+      'world) and for a return in the same state. ') +
   (existing.length
     ? 'The guide already has pages for these visits (name: when). If an area in your list is the same visit as one of ' +
       'them, write exactly that name and leave the third field empty; a later visit to one of these places is a revisit:\n' +
@@ -216,10 +266,12 @@ function parseOutline(text: string): { name: string; story: string; group?: stri
     .map((m) =>
       placeBased()
         ? { name: cleanAreaName(visitName(cleanAreaName(m![1]), m![3]), 100), story: m![2].trim().slice(0, 120) }
-        : { name: m![1].trim().replace(/\s+/g, ' ').slice(0, 100), story: m![2].trim().slice(0, 120), group: (m![3] || '').trim().slice(0, 40) || undefined },
+        : { name: m![1].trim().replace(/\s+/g, ' ').slice(0, 100), story: m![2].trim().slice(0, 120), group: (m![3] || '').trim().replace(/^(empty|none|n\/a|-)$/i, '').slice(0, 40) || undefined },
     )
     .filter((a) => a.name && !seen.has(a.name.toLowerCase()) && seen.add(a.name.toLowerCase()))
-    .slice(0, maxAreas);
+    .slice(0, maxAreas)
+    // Calendar guides: the reference pages come after the calendar, so they never interrupt it.
+    .sort((a, b) => (layout === 'calendar' ? Number(a.group === 'Reference') - Number(b.group === 'Reference') : 0));
 }
 
 /** Tells the research step which visit a revisit page is about. */
@@ -249,7 +301,14 @@ type Parsed = {
 };
 
 /** What a page is about, in words the writing prompt can use. */
-const pageKind = () => (layout === 'chapters' ? 'guide page (a character chapter or a shared place)' : layout === 'calendar' ? 'guide page (a stretch of the calendar, or a reference topic)' : 'area');
+const pageKind = () =>
+  ({
+    chapters: 'guide page (a character\'s story chapter)',
+    calendar: 'guide page (a stretch of the calendar, or a reference topic)',
+    linear: 'chapter (or mission or level)',
+    roguelike: 'guide page (the hub, or a region of a run)',
+    metroidvania: 'map region',
+  } as Partial<Record<Layout, string>>)[layout] || 'area';
 
 /** The detail lines a page can have. Calendar and chapter guides add the lines that matter for how they're played. */
 const detailFormats = () =>
@@ -259,7 +318,7 @@ const detailFormats = () =>
       'MISSABLE: an event, choice, item or social link step that can be missed in this period, and how not to miss it\n' +
       'LINK: social link or confidant name | how to start or advance it now\n' +
       'ACTIVITY: a worthwhile thing to do on free days or evenings in this period\n'
-    : layout === 'chapters'
+    : layout === 'chapters' || layout === 'linear'
       ? 'MISSABLE: an event, choice or item in this chapter that can be missed, and how not to miss it\n'
       : '') +
   'ITEM: item name | exactly where | missable: yes or no\n' +
@@ -351,18 +410,16 @@ const twoSources = (e: GuideEntry) => (e.sources || []).length >= 2;
 /** The layout for this run: --layout if given, else the game's saved layout, else an automatic pick. */
 async function pickLayout(info: any): Promise<Layout> {
   if (isLayout(layoutArg)) return layoutArg;
-  if (isLayout(info.layout)) return info.layout;
+  // --restructure starts over, so it picks again rather than keeping the outline being replaced.
+  if (isLayout(info.layout) && !restructure) return info.layout;
   try {
+    // The main model, not Flash-Lite: the cheaper one mistook chaptered linear games for multi-character ones.
     const answer = await plain(
-      `How should a player's guide for the video game "${game}" be organized? Reply with one word:\n` +
-        'area: the player moves from place to place (towns and dungeons in story order), like most RPGs and adventures\n' +
-        'regions: an open world, best split by region and major location\n' +
-        'chapters: the story is split between several characters\' separate chapters, played in any order\n' +
-        'calendar: the game runs on an in-game calendar with deadlines and free days',
+      `How should a player's guide for the video game "${game}" be organized? Reply with one word:\n` + LAYOUT_CHOICES,
       'structure',
-      LITE_MODEL,
+      MODEL,
     );
-    const word = (answer.toLowerCase().match(/\b(area|regions|chapters|calendar)\b/) || [])[1];
+    const word = (answer.toLowerCase().match(new RegExp(`\\b(${LAYOUTS.join('|')})\\b`)) || [])[1];
     if (isLayout(word)) {
       console.log(`  structure: ${word}`);
       return word;
@@ -380,7 +437,7 @@ const retired = (doc: any) => doc.exists && doc.data()?.status === 'held' && doc
 /** Save the page list and layout; after --restructure, hold back old pages that aren't in the new list. */
 async function finishGuide(guideRef: any, order: { slug: string }[], previous: { slug: string; name: string }[]) {
   const had = (await guideRef.get()).data();
-  await guideRef.set({ game, title: `${game} guide`, areas: order, layout, updatedAt: Date.now(), ...(had?.createdAt ? {} : { createdAt: Date.now() }) }, { merge: true });
+  await guideRef.set({ game, title: `${game} guide`, areas: order, layout, ...(stage ? { stagingFor: gameKey(game!) } : {}), updatedAt: Date.now(), ...(had?.createdAt ? {} : { createdAt: Date.now() }) }, { merge: true });
   if (!restructure) return;
   const keep = new Set(order.map((o) => o.slug));
   let retired = 0;
@@ -413,7 +470,7 @@ async function plain(prompt: string, label: string, model: string): Promise<stri
 }
 
 async function quickOutline(existing: { name: string; story: string }[]): Promise<{ name: string; story: string; group?: string }[]> {
-  const prompt = outlinePrompt(`Only list what you're confident about.${EDITION}`, existing);
+  const prompt = outlinePrompt(`Only list what you're confident about.${EDITION}${note}`, existing);
   let list: { name: string; story: string; group?: string }[] = [];
   try {
     list = parseOutline(await plain(prompt, 'outline', LITE_MODEL));
@@ -425,7 +482,7 @@ async function quickOutline(existing: { name: string; story: string }[]): Promis
 
 async function quickArea(area: { name: string; story: string; group?: string }): Promise<Parsed> {
   const text = await plain(
-    `Write guide notes for the ${pageKind()} "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}, from what you know.${visitNote(area.name)} ` +
+    `Write guide notes for the ${pageKind()} "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}, from what you know.${visitNote(area.name)}${note} ` +
       "Only include details you're confident about; leave out anything you're unsure of. Write in your own words." +
       `${EDITION} Reply with one detail per line, using exactly these formats:\n` +
       detailFormats(),
@@ -438,11 +495,43 @@ async function quickArea(area: { name: string; story: string; group?: string }):
 /** A quick guide with fewer published pages than this isn't published (the AI barely knows the game). */
 const QUICK_MIN_PAGES = 5;
 
+/** The guide this run writes to: the live guide, or with --stage its staged build (created on first use). */
+async function openGuide(): Promise<{ key: string; guideRef: FirebaseFirestore.DocumentReference; info: any }> {
+  const live = gameKey(game!);
+  if (!stage) {
+    const guideRef = db().collection('guides').doc(live);
+    return { key: live, guideRef, info: (await guideRef.get()).data() || {} };
+  }
+  const key = stageKey(live);
+  const guideRef = db().collection('guides').doc(key);
+  if (!(await guideRef.get()).exists) {
+    if (copyLive) await stageCopy(live);
+    else {
+      const liveInfo: any = (await db().collection('guides').doc(live).get()).data() || {};
+      await guideRef.set({ game, title: `${game} guide`, stagingFor: live, ...(liveInfo.edition ? { edition: liveInfo.edition } : {}), createdAt: Date.now() });
+    }
+    console.log(`Staged build ${key}${copyLive ? ' (starting from a copy of the live guide)' : ''}: nothing is published until it passes review.`);
+  }
+  return { key, guideRef, info: (await guideRef.get()).data() || {} };
+}
+
+/**
+ * Quick builds write from the build model's own knowledge, which stops at QUICK_MODEL_CUTOFF: a game released later
+ * would be guesswork (the guide review found invented content in exactly those), so it's refused and needs a careful build.
+ */
+async function quickAllowed(): Promise<boolean> {
+  const live: any = (await db().collection('guides').doc(gameKey(game!)).get()).data() || {};
+  const rel = await releaseInfo(game!, Number(live.appId) || undefined);
+  if (!releasedAfter(rel, QUICK_MODEL_CUTOFF, !!live.pipeline?.newRelease)) return true;
+  console.log(`Not built: released ${rel.text}, after the quick model's knowledge cutoff (${QUICK_MODEL_CUTOFF}); it needs a careful build.`);
+  console.log('Done: 0 quick page(s), nothing built, estimated AI cost ≈ $0.00.');
+  return false;
+}
+
 async function mainQuick() {
   console.log(`Quick guide (from the AI's knowledge, no searches): ${game} (${part}), up to ${maxAreas} areas${autoPublish ? ', publishing' : ', as drafts'}`);
-  const key = gameKey(game!);
-  const guideRef = db().collection('guides').doc(key);
-  const info = (await guideRef.get()).data() || {};
+  if (!(await quickAllowed())) return setTimeout(() => process.exit(0), 500);
+  const { guideRef, info } = await openGuide();
   layout = await pickLayout(info);
   EDITION = await editionPrompt(guideRef);
   const previous: { slug: string; name: string; story: string; group?: string }[] = [...(info.areas || [])];
@@ -523,10 +612,8 @@ async function mainQuick() {
 async function main() {
   if (quick) return mainQuick();
   console.log(`Building guide: ${game} (${part}), up to ${maxAreas} areas, search cap ${maxSearches}${autoPublish ? ', auto-publish' : ', as drafts'}`);
-  const key = gameKey(game!);
-  const guideRef = db().collection('guides').doc(key);
+  const { guideRef, info } = await openGuide();
   await getGameFacts(game); // load what the knowledge base already knows, so new facts add confirmations
-  const info = (await guideRef.get()).data() || {};
   layout = await pickLayout(info);
   EDITION = await editionPrompt(guideRef);
   const previous: { slug: string; name: string; story: string; group?: string }[] = [...(info.areas || [])];
@@ -540,7 +627,7 @@ async function main() {
     let tried = 0;
     for (const o of order) {
       const d = (await guideRef.collection('areas').doc(o.slug).get()).data();
-      if (!d || d.verified !== false || d.status !== 'published') continue;
+      if (!d || d.verified !== false || !(d.status === 'published' || (stage && d.status === 'draft'))) continue;
       // Pages an earlier upgrade couldn't confirm are skipped unless --retry-failed.
       if (d.upgradeTried && !retryFailed) {
         tried++;
@@ -616,7 +703,7 @@ async function main() {
         ...(sections.length ? { sections } : {}),
         ...(area.group ? { group: area.group } : {}),
         sources: usedSources.slice(0, 8),
-        status: heldReason ? 'held' : autoPublish || upgrade ? 'published' : 'draft',
+        status: heldReason ? 'held' : (autoPublish || upgrade) && !stage ? 'published' : 'draft',
         verified: true,
         checks: { claims: claims.length, supported: supported.size, rejected, singleSource },
         ...(heldReason ? { heldReason } : {}),
