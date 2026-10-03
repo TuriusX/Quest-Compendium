@@ -11,6 +11,7 @@
  *            3. last resort: a single Alt tap, which Windows treats as permission to switch focus
  * restore(): give focus back to that window when the overlay hides, only if the overlay (our app) still has
  *            it. If Windows refuses, releasing focus (blur) lets Windows hand it back to the window underneath.
+ * other():   the focused window if it isn't one of ours (the game), else null; recorded before the overlay opens.
  *
  * Note: an earlier version briefly attached to the game's input thread (AttachThreadInput). That can leave
  * Windows' input state tangled after repeated use, so it is no longer used.
@@ -19,7 +20,7 @@
  */
 
 function createFocusHelper() {
-  const noop = { available: false, take: () => null, restore: () => {} };
+  const noop = { available: false, take: () => null, restore: () => {}, other: () => null };
   if (process.platform !== 'win32') return noop;
   let api;
   try {
@@ -91,6 +92,16 @@ function createFocusHelper() {
         return previous;
       } catch (err) {
         console.warn('[focus] take failed:', err && err.message);
+        return null;
+      }
+    },
+
+    /** The focused window if it belongs to another app (the game), else null. */
+    other() {
+      try {
+        const fg = foreground();
+        return fg && !isOurs(fg) ? fg : null;
+      } catch {
         return null;
       }
     },

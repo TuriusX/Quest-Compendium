@@ -388,12 +388,15 @@ async function slideIn(opts = {}) {
   }
   lastSlideInAt = Date.now();
   isAppVisible = true;
+  // The window the player was in (the game), recorded before show()/focus() hand focus to the panel: by the time
+  // take() looks, the panel usually has it already, so take() alone can't say where to give focus back on hide.
+  const focusedBefore = focusHelper.other();
   mainWindow.show();
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.focus();
   // Take focus from the game (Windows won't let a background app do this on its own when the overlay was
   // opened with a controller), so the game stops reacting to controller input while the overlay is open.
-  const previous = focusHelper.take(mainWindow);
+  const previous = focusHelper.take(mainWindow) || focusedBefore;
   if (previous) focusBeforeOverlay = previous;
   // macOS equivalent
   app.focus({ steal: true });
