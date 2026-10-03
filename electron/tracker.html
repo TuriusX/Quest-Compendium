@@ -262,7 +262,7 @@
       const key = `${w}x${h}:${state.view}`;
       if (key === lastSize) return;
       lastSize = key;
-      send('size', { width: w, height: h, view: state.view });
+      send('size', { width: w, height: h, view: state.view, hasData: !!state.data });
     });
   }
 

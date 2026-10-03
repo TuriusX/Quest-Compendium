@@ -11,7 +11,6 @@
  *            3. last resort: a single Alt tap, which Windows treats as permission to switch focus
  * restore(): give focus back to that window when the overlay hides, only if the overlay (our app) still has
  *            it. If Windows refuses, releasing focus (blur) lets Windows hand it back to the window underneath.
- * other():   the window that has focus right now if it isn't one of ours (the game), else null.
  *
  * Note: an earlier version briefly attached to the game's input thread (AttachThreadInput). That can leave
  * Windows' input state tangled after repeated use, so it is no longer used.
@@ -20,7 +19,7 @@
  */
 
 function createFocusHelper() {
-  const noop = { available: false, take: () => null, restore: () => {}, other: () => null };
+  const noop = { available: false, take: () => null, restore: () => {} };
   if (process.platform !== 'win32') return noop;
   let api;
   try {
@@ -60,16 +59,13 @@ function createFocusHelper() {
   return {
     available: true,
 
-    /**
-     * Focus `win`. Returns the non-overlay window that had focus before (to hand it back later), or null.
-     * fallback: the window to hand back when one of ours has focus already (the objectives tracker after a click on it).
-     */
-    take(win, fallback) {
+    /** Focus `win`. Returns the non-overlay window that had focus before (to hand it back later), or null. */
+    take(win) {
       try {
         if (!win || win.isDestroyed()) return null;
         const hwnd = hwndOf(win);
         const before = foreground();
-        const previous = before && !isOurs(before) ? before : fallback || null;
+        const previous = before && !isOurs(before) ? before : null;
         if (before === hwnd) return previous;
 
         api.SetForegroundWindow(hwnd);
@@ -95,16 +91,6 @@ function createFocusHelper() {
         return previous;
       } catch (err) {
         console.warn('[focus] take failed:', err && err.message);
-        return null;
-      }
-    },
-
-    /** The focused window if it belongs to another app (the game), else null. */
-    other() {
-      try {
-        const fg = foreground();
-        return fg && !isOurs(fg) ? fg : null;
-      } catch {
         return null;
       }
     },

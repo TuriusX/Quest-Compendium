@@ -4,7 +4,9 @@
  * mouse is over the text, so the game keeps playing underneath. Position, view (full / collapsed / away), text size,
  * transparency and backdrop are remembered per game in userData/tracker.json.
  *
- * It's the panel's minimized state: hidden (not closed) while the panel is open, back when the panel hides. Clicking
+ * It's the panel's minimized state: its window is closed while the panel is open (the data, settings and position
+ * stay here) and a fresh one opens when the panel hides. A window reused across panel cycles lost the button-down of
+ * every click after the first hide/show, so it's never reused that way. Clicking
  * its header asks the app to open the panel (deps.onOpenPanel, with the tracker's bounds); the show/hide shortcut
  * (Ctrl+Space by default) opens it too, and the hint names that shortcut (setKeys). The tracker holds no keys itself.
  *
@@ -20,8 +22,11 @@ const { BrowserWindow } = require('electron');
 let deps = null;
 let win = null;
 let current = null; // { data, gameKey }
-let suspended = false; // hidden while the panel is open (hideTemporarily / restore)
-let captureHidden = false; // hidden for a moment while the app takes a screenshot for the AI
+let suspended = false; // the panel is open: no window, the data waits in current (hideTemporarily / restore)
+let lastSpot = null; // where the window was when the panel opened: the fresh window opens there
+let creating = null; // the window being created (its page load), shared by show() and restore()
+let revealPending = false, revealTimer = null; // a new window shows once its page has reported its size
+let captureHidden = false; // invisible (opacity 0) for a moment while the app takes a screenshot for the AI
 let inRecordings = true; // follows the markers' "show in recordings" setting (content protection when off)
 let scale = 1; // the app's UI scale (Settings)
 let store = null;   // per-game settings, loaded once
@@ -35,9 +40,6 @@ let saveTimer = null;
 // mouseOn is null right after the window is shown again: Windows' real click-through state after a hide/show isn't
 // known, so the next tick of the watch applies it for real instead of trusting the last value.
 let mouseOn = false, pressed = false, mouseTimer = null;
-// The game's window, remembered when the cursor comes onto the tracker: a click on the tracker focuses it (it has to be
-// focusable for clicks to arrive), and focus goes straight back to the game when the click or drag ends.
-let gameWindow = null;
 const MARGIN = 0;
 
 const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: true, x: null, y: null, edge: 'right' };
@@ -97,23 +99,11 @@ function setMouse(on) {
   mouseOn = on;
   win.setIgnoreMouseEvents(!on, { forward: true });
   console.log(`[tracker] mouse ${on ? 'on' : 'off'}`);
-  if (on) {
-    const other = deps.focusHelper && deps.focusHelper.other();
-    if (other) gameWindow = other;
-  } else {
-    giveFocusBack();
-  }
-}
-
-/** After a click or drag on the tracker (which focused it), focus goes back to the game. */
-function giveFocusBack() {
-  if (!alive() || pressed || !win.isFocused() || !deps.focusHelper) return;
-  deps.focusHelper.restore(win, gameWindow);
 }
 function startMouseWatch() {
   clearInterval(mouseTimer);
   mouseTimer = setInterval(() => {
-    if (!alive() || !win.isVisible()) { setMouse(false); return; }
+    if (!alive() || !win.isVisible() || captureHidden) { setMouse(false); return; } // off screen, or invisible for a capture
     if (pressed) { setMouse(true); return; }
     const p = deps.screen.getCursorScreenPoint(), b = win.getBounds();
     setMouse(p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height);
@@ -143,16 +133,12 @@ function startDisplay() {
   return d || deps.screen.getDisplayNearestPoint(deps.screen.getCursorScreenPoint());
 }
 
-function createWindow(disp) {
-  const wa = disp.workArea;
-  // The right edge, under the minimap, by default (the saved spot wins once the player has dragged it).
-  const spot = defaultSpot(wa);
+/** A new window, created hidden at (x, y); it shows once its page has reported its size (reveal). */
+function createWindow(x, y) {
   win = new BrowserWindow({
-    x: spot.x, y: spot.y, width: 420, height: 300,
-    // Focusable: a non-focusable window loses the button-down of every click once the panel has been opened and
-    // hidden (only moves and button-ups arrived). It's always shown with showInactive, so it never takes focus by
-    // itself, and a click hands focus straight back to the game (giveFocusBack).
-    transparent: true, frame: false, resizable: false, movable: false, focusable: true,
+    x: Math.round(x), y: Math.round(y), width: 420, height: 300,
+    // Never focusable and only ever shown with showInactive: the game keeps keyboard focus, always.
+    transparent: true, frame: false, resizable: false, movable: false, focusable: false,
     skipTaskbar: true, hasShadow: false, show: false, alwaysOnTop: true,
     webPreferences: {
       contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false,
@@ -166,8 +152,10 @@ function createWindow(disp) {
   win.setIgnoreMouseEvents(true, { forward: true });
   const w = win;
   win.on('closed', () => {
+    // A window closed on purpose (the panel opened, or hide()) is already detached: nothing to clean up here.
+    if (win !== w) return;
     if (deps.onWindow) deps.onWindow(null);
-    if (win === w) { win = null; current = null; stopMouseWatch(); }
+    win = null; current = null; stopMouseWatch();
   });
   if (deps.onWindow) deps.onWindow(win);
   win.webContents.on('console-message', (e, level, message) => {
@@ -175,7 +163,64 @@ function createWindow(disp) {
   });
   win.loadFile(path.join(__dirname, 'tracker.html'));
   startMouseWatch();
-  return new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+  // Settles when the page has loaded, or when the window is closed first (the panel opened while it loaded).
+  return new Promise((resolve) => { w.webContents.once('did-finish-load', resolve); w.once('closed', resolve); });
+}
+
+/** Close the window but keep the data (current), the settings and suspended: the panel opened, or a reset. */
+function dropWindow() {
+  const w = win;
+  win = null;
+  revealPending = false; clearTimeout(revealTimer);
+  captureHidden = false; pressed = false;
+  stopMouseWatch();
+  if (w && !w.isDestroyed()) {
+    if (deps.onWindow) deps.onWindow(null);
+    w.destroy();
+  }
+}
+
+/** Where a new window opens: the spot it had when the panel opened, else the game's saved spot, else the default. */
+function spotFor(spot) {
+  if (spot) return { x: spot.x, y: spot.y };
+  const wa = startDisplay().workArea;
+  let s = settingsFor(current.gameKey);
+  // The saved spot is for this game; on a different screen now (another monitor), start at the default spot on this one.
+  if ((Number.isFinite(s.x) || Number.isFinite(s.y)) && !onScreen(s, wa)) {
+    patchSettings(current.gameKey, { x: null, y: null });
+    s = settingsFor(current.gameKey);
+  }
+  return Number.isFinite(s.x) && Number.isFinite(s.y) ? { x: s.x, y: s.y } : defaultSpot(wa);
+}
+
+/**
+ * Make sure there's a window showing current (unless the panel is open): create one if needed (one at a time, shared
+ * by show() and restore()), hand it the data and settings, and show it once its page has laid out.
+ */
+async function open(spot) {
+  if (!alive() && !creating) {
+    const at = spotFor(spot);
+    creating = createWindow(at.x, at.y).finally(() => { creating = null; });
+  }
+  if (creating) await creating;
+  if (!alive() || !current) return false;
+  if (suspended) { lastSpot = lastSpot || win.getBounds(); dropWindow(); return false; } // the panel opened meanwhile
+  const s = settingsFor(current.gameKey);
+  js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel() })})`);
+  if (!win.isVisible() && !revealPending) {
+    revealPending = true;
+    clearTimeout(revealTimer);
+    revealTimer = setTimeout(reveal, 500); // in case the page never reports its size
+  }
+  return true;
+}
+
+/** Show the new window (its size report arrived): no flash at a default spot or size first. */
+function reveal() {
+  revealPending = false; clearTimeout(revealTimer);
+  if (!alive() || suspended || captureHidden || win.isVisible()) return;
+  win.showInactive();
+  afterShow();
 }
 
 /** What the page gets: only known fields, trimmed to length. */
@@ -218,67 +263,59 @@ async function show(data, gameKey) {
   if (!deps) throw new Error('tracker.init() first');
   const clean = cleanData(data);
   if (!clean.objectives.length && !clean.quest && !clean.place) { hide(); return false; }
-  const fresh = !alive();
-  const disp = fresh ? startDisplay() : null;
-  if (fresh) await createWindow(disp);
-  if (!alive()) return false;
   current = { data: clean, gameKey: gameKey || '_default' };
-  let s = settingsFor(current.gameKey);
-  // The saved spot is for this game; on a different screen now (another monitor), start at the default spot on this one.
-  if (fresh && (Number.isFinite(s.x) || Number.isFinite(s.y)) && !onScreen(s, disp.workArea)) {
-    patchSettings(current.gameKey, { x: null, y: null });
-    s = settingsFor(current.gameKey);
-    const spot = defaultSpot(disp.workArea, win.getBounds().width);
-    win.setPosition(spot.x, spot.y);
+  // While the panel is open there's no window: the data waits for restore().
+  if (deps.isPanelOpen && deps.isPanelOpen()) {
+    suspended = true;
+    if (alive()) { lastSpot = win.getBounds(); dropWindow(); }
+    return true;
   }
-  js(`window.qcTrackerShow(${JSON.stringify(clean)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel() })})`);
-  if (fresh && Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
-  // Shown when the panel hides; while the panel is open it waits hidden with the new data.
-  if (deps.isPanelOpen && deps.isPanelOpen()) suspended = true;
-  else if (fresh || suspended || !win.isVisible()) { suspended = false; win.showInactive(); afterShow(); }
-  return true;
+  suspended = false;
+  return open(null);
 }
 
 /**
  * New data for the answer on show (or a newer answer): replaces what's shown entirely, cleaned like show(), so an
- * answer without a place or objectives doesn't keep the previous answer's.
+ * answer without a place or objectives doesn't keep the previous answer's. Kept while the panel is open (no window).
  */
 function update(patch) {
-  if (!alive() || !current) return;
+  if (!current) return;
   current.data = cleanData(patch || {});
   js(`window.qcTrackerShow(${JSON.stringify(current.data)})`);
 }
 
 function hide() {
-  if (alive()) win.destroy();
-  win = null; current = null; suspended = false; captureHidden = false; pressed = false;
-  stopMouseWatch();
+  current = null; suspended = false; lastSpot = null;
+  dropWindow();
 }
 
-/** The panel opened: hide without losing anything. */
+/** The panel opened: close the window, keeping the data, settings and position for restore(). */
 function hideTemporarily() {
-  if (!alive()) return;
   suspended = true;
   pressed = false;
-  win.hide();
+  if (!alive()) return;
+  lastSpot = win.getBounds();
+  dropWindow();
 }
 
-/** The panel hid again: back at its own saved spot. */
+/** The panel hid again: a fresh window, where the last one was. */
 function restore() {
-  if (!alive() || !suspended) return;
+  if (!suspended) return;
   suspended = false;
-  const s = settingsFor(current && current.gameKey);
-  if (s.view !== 'away' && Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
-  win.showInactive();
-  afterShow();
-  // Once the panel has finished sliding back to its dock (150 ms), log where both are; the panel must not cover it.
-  setTimeout(() => {
-    if (!alive() || suspended) return;
-    const t = win.getBounds();
-    const m = deps.getMainWindow && deps.getMainWindow();
-    const p = m && !m.isDestroyed() ? m.getBounds() : null;
-    console.log(`[tracker] restored at ${t.x},${t.y} (${t.width}x${t.height}); panel at ${p ? `${p.x},${p.y} (${p.width}x${p.height})` : 'none'}${overlaps(t, p) ? ': the panel overlaps the tracker (the tracker is kept on top)' : ''}`);
-  }, 300);
+  if (!current) return;
+  const spot = lastSpot;
+  lastSpot = null;
+  open(spot).then((ok) => {
+    if (!ok) return;
+    // Once the panel has finished sliding back to its dock (150 ms), log where both are; the panel must not cover it.
+    setTimeout(() => {
+      if (!alive() || suspended) return;
+      const t = win.getBounds();
+      const m = deps.getMainWindow && deps.getMainWindow();
+      const p = m && !m.isDestroyed() ? m.getBounds() : null;
+      console.log(`[tracker] restored at ${t.x},${t.y} (${t.width}x${t.height}); panel at ${p ? `${p.x},${p.y} (${p.width}x${p.height})` : 'none'}${overlaps(t, p) ? ': the panel overlaps the tracker (the tracker is kept on top)' : ''}`);
+    }, 300);
+  }).catch((err) => console.warn('[tracker] restore failed:', err && err.message));
 }
 
 /** Header click (or the controller's open button): open the panel at the tracker. */
@@ -289,18 +326,20 @@ function openPanel() {
 /**
  * Around a screenshot for the AI: out of the picture, then back. Separate from hideTemporarily/restore, so a capture
  * while the panel is opening never brings the tracker back on top of the panel. Returns whether it was hidden.
+ * Fully transparent rather than hidden: a hide()/showInactive() cycle loses the button-down of every later click (the
+ * same failure as reusing the window across panel cycles), and captures happen often (the markers' nearby check).
  */
 function hideForCapture() {
   if (!alive() || suspended || captureHidden || !win.isVisible()) return false;
   captureHidden = true;
   pressed = false;
-  win.hide();
+  win.setOpacity(0);
   return true;
 }
 function showAfterCapture() {
   if (!captureHidden) return;
   captureHidden = false;
-  if (alive() && !suspended) { win.showInactive(); afterShow(); }
+  if (alive() && !suspended) win.setOpacity(1);
 }
 
 /** Where the tracker is on screen, or null when it's closed or hidden (for the sticky markers' exclude list). */
@@ -342,12 +381,13 @@ function onMessage(event, msg) {
       const b = win.getBounds();
       if (w !== b.width || h !== b.height) win.setBounds({ x: b.x, y: b.y, width: w, height: h });
       placeWindow(msg.view);
+      // A new window's first layout with the data: show it now, already at its size and spot.
+      if (revealPending && msg.hasData) reveal();
       break;
     }
     case 'press':
       pressed = !!msg.down;
       if (pressed) setMouse(true);
-      else giveFocusBack();
       break;
     case 'drag': {
       const b = win.getBounds();
@@ -413,8 +453,6 @@ module.exports = {
   init, show, update, hide, hideTemporarily, restore, setKeys, hideForCapture, showAfterCapture, getBounds,
   setVisibleInRecordings, setScale, openPanel,
   isOpen: () => alive(),
-  /** The game's window when the tracker itself has focus (a click on its title opens the panel): the panel hands focus back there. */
-  gameWindowIfFocused: () => (alive() && win.isFocused() ? gameWindow : null),
   /** On screen right now (not hidden behind the open panel). */
   isShowing: () => alive() && !suspended && win.isVisible(),
 };
