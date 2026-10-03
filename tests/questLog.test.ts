@@ -1,7 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/questLog.test.ts)
 import assert from "node:assert/strict";
 import { buildTrackerPayload, type TrackerGuideArea } from "../src/utils/trackerPayload";
-import { parseLocateMeReply } from "../locateMe";
+import { parseLocateMeReply, seenTextNamesArea } from "../locateMe";
 import type { AchievementGuide } from "../src/utils/achievementGuide";
 
 let passed = 0;
@@ -51,16 +51,37 @@ test("Locate me's state and message reach the tracker", () => {
   assert.equal(q.data.locating, undefined);
   assert.equal(q.data.notice, undefined);
 });
-test("Locate me's reply: only an area from the list (exactly as listed), else unknown", () => {
+test("Locate me's reply: only an area from the list (exactly as listed), else unknown; read needs the text", () => {
   const names = areas.map((a) => a.name);
-  assert.deepEqual(parseLocateMeReply('{"area":"emerald grove","story":"At the druid camp gates","confidence":"high"}', names),
-    { area: "Emerald Grove", story: "At the druid camp gates", confidence: "high" });
-  assert.deepEqual(parseLocateMeReply('{"area":"Baldur\'s Gate","story":"x","confidence":"high"}', names), { area: "unknown", story: "", confidence: "low" });
-  assert.deepEqual(parseLocateMeReply('{"area":"unknown","confidence":"high"}', names), { area: "unknown", story: "", confidence: "low" });
-  // A fenced reply and an odd confidence word.
-  assert.deepEqual(parseLocateMeReply('```json\n{"area":"Ravaged Beach","story":"","confidence":"certain"}\n```', names),
-    { area: "Ravaged Beach", story: "", confidence: "low" });
-  assert.deepEqual(parseLocateMeReply("not json", names), { area: "unknown", story: "", confidence: "low" });
+  assert.deepEqual(parseLocateMeReply('{"area":"emerald grove","story":"At the druid camp gates","evidence":"read","seenText":"Emerald Grove"}', names),
+    { area: "Emerald Grove", story: "At the druid camp gates", evidence: "read", seenText: "Emerald Grove" });
+  // "read" without any quoted text is a guess.
+  assert.equal(parseLocateMeReply('{"area":"Emerald Grove","story":"x","evidence":"read","seenText":""}', names).evidence, "guessed");
+  assert.deepEqual(parseLocateMeReply('{"area":"Baldur\'s Gate","story":"x","evidence":"read","seenText":"Baldur\'s Gate"}', names),
+    { area: "unknown", story: "", evidence: "guessed", seenText: "" });
+  // A fenced reply, an odd evidence word.
+  assert.deepEqual(parseLocateMeReply('```json\n{"area":"Ravaged Beach","story":"","evidence":"certain","seenText":"Ravaged Beach"}\n```', names),
+    { area: "Ravaged Beach", story: "", evidence: "guessed", seenText: "Ravaged Beach" });
+  assert.deepEqual(parseLocateMeReply("not json", names), { area: "unknown", story: "", evidence: "guessed", seenText: "" });
+});
+test("Locate me's read check: the seen text must name that area, or one of its sub-locations in the guide", () => {
+  const guideAreas = [
+    { slug: "ravaged-beach", name: "Ravaged Beach", story: "" },
+    { slug: "overgrown-ruins", name: "Overgrown Ruins", story: "" },
+    { slug: "emerald-grove", name: "Emerald Grove", story: "" },
+  ];
+  const pages = {
+    "overgrown-ruins": { key: "bg3", slug: "overgrown-ruins", name: "Overgrown Ruins", story: "", overview: "", tips: [], sections: [], secrets: [], enemies: [], shops: [],
+      items: [{ id: "i1", name: "Ring", where: "Dank Crypt inside a heavy chest" }, { id: "i2", name: "Sword", where: "Dank Crypt sarcophagus" }] },
+  };
+  assert.equal(seenTextNamesArea("Ravaged Beach", "Ravaged Beach", guideAreas, pages), true); // the minimap label
+  assert.equal(seenTextNamesArea("RAVAGED BEACH", "Ravaged Beach", guideAreas, pages), true);
+  assert.equal(seenTextNamesArea("Overgrown Ruins - Dank Crypt", "Overgrown Ruins", guideAreas, pages), true);
+  assert.equal(seenTextNamesArea("Dank Crypt", "Overgrown Ruins", guideAreas, pages), true); // a sub-location
+  assert.equal(seenTextNamesArea("Emerald Grove", "Overgrown Ruins", guideAreas, pages), false); // another area's name
+  assert.equal(seenTextNamesArea("Dank Crypt", "Emerald Grove", guideAreas, pages), false); // a sub-location elsewhere
+  assert.equal(seenTextNamesArea("Waukeen's Rest", "Ravaged Beach", guideAreas, pages), false); // not in the guide here
+  assert.equal(seenTextNamesArea("", "Ravaged Beach", guideAreas, pages), false);
 });
 
 console.log(`\n${passed} tests passed`);

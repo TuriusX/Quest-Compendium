@@ -550,8 +550,8 @@ export default function App() {
     rememberGameProgress(activeTab, place);
   };
   // "Locate me" (the tracker's crosshair, the PlaceBar): a screenshot of the game and the guide's areas go to
-  // /api/locate-me (its own daily limit, never the player's questions). A confident answer sets the place confirmed;
-  // otherwise it's set unconfirmed, so the confirm button shows.
+  // /api/locate-me (its own daily limit, never the player's questions). The place is confirmed only when its name was
+  // read on screen (and the server checked it names that area); a guess is set unconfirmed, so the confirm button shows.
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState('');
   const locatingRef = useRef(false);
@@ -561,6 +561,24 @@ export default function App() {
     if (locateNoteTimer.current) clearTimeout(locateNoteTimer.current);
     if (text) locateNoteTimer.current = setTimeout(() => setLocateNote(''), 8000);
   };
+  /** The markers' screenshot size (1280x720): anything bigger is scaled down before it's sent (fewer tokens). */
+  const shrinkForLocate = (dataUrl: string): Promise<string> =>
+    new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, 1280 / img.naturalWidth, 720 / img.naturalHeight);
+        if (scale >= 1) return resolve(dataUrl);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(dataUrl);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
   const runLocate = async () => {
     const api = (window as any).electronAPI;
     const tab = activeTab;
@@ -574,8 +592,9 @@ export default function App() {
     setLocating(true);
     showLocateNote('');
     try {
-      const image: string | null = await api.captureForLocate();
-      if (!image) throw new Error('no screenshot');
+      const captured: string | null = await api.captureForLocate();
+      if (!captured) throw new Error('no screenshot');
+      const image = await shrinkForLocate(captured);
       const token = user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken() : null;
       const res = await fetch(`${getApiBaseUrl()}/api/locate-me`, {
         method: 'POST',
@@ -583,6 +602,7 @@ export default function App() {
         body: JSON.stringify({
           imageBase64: image,
           game: tab.activeSteamGame?.name || activeGame?.name || tab.name,
+          guideKey: trackerGameRef.current.guideKey || '',
           areas: guideAreas.map((a) => ({ name: a.name, story: a.story })),
           place: trackerPlaceRef.current?.name || '',
         }),
@@ -596,7 +616,7 @@ export default function App() {
         showLocateNote(tr('place.locateUnknown'));
         return;
       }
-      const sure = data.confidence === 'high';
+      const sure = data.evidence === 'read';
       const story = typeof data.story === 'string' ? data.story.trim() : '';
       const place = { ...(tab.place || {}), name: String(data.area), confirmed: sure, ...(story ? { story, storyConfirmed: sure } : {}) };
       setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, place, lastActive: Date.now() } : t)));

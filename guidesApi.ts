@@ -257,6 +257,40 @@ const loose = (x: string) =>
     .map((w) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w))
     .join(' ');
 
+/**
+ * A guide's published areas in order, with the parts of each page that name sub-locations (entries' "where", shops,
+ * section headings): for checking that a place name read off the screen belongs to an area (POST /api/locate-me).
+ */
+export async function guideAreasWithPages(game: string): Promise<{ areas: { slug: string; name: string; story: string }[]; pages: Record<string, any> } | null> {
+  const key = gameKey(game);
+  if (!key) return null;
+  return cached(`pages:${key}`, async () => {
+    const ref = getFirestore().collection('guides').doc(key);
+    const doc = await ref.get();
+    if (!doc.exists) return null;
+    const info = doc.data() || {};
+    const snap = await ref.collection('areas').where('status', '==', 'published').get();
+    const published = new Map(snap.docs.map((d) => [d.id, d.data() as any]));
+    const order: { slug: string; name: string; story?: string }[] = Array.isArray(info.areas) ? info.areas : [];
+    const areas = order.filter((o) => published.has(o.slug)).map((o) => ({
+      slug: o.slug,
+      name: String(published.get(o.slug)?.name || o.name),
+      story: String(published.get(o.slug)?.story || o.story || ''),
+    }));
+    const list = (v: any) => (Array.isArray(v) ? v : []).map((e: any) => ({ id: String(e?.id || ''), name: e?.name, text: e?.text, where: e?.where }));
+    const pages: Record<string, any> = {};
+    for (const a of areas) {
+      const d = published.get(a.slug) || {};
+      pages[a.slug] = {
+        key, slug: a.slug, name: a.name, story: a.story, overview: '', tips: [],
+        items: list(d.items), secrets: list(d.secrets), enemies: list(d.enemies), shops: list(d.shops),
+        sections: (Array.isArray(d.sections) ? d.sections : []).map((x: any) => ({ title: String(x?.title || ''), check: !!x?.check, entries: [] })),
+      };
+    }
+    return areas.length ? { areas, pages } : null;
+  });
+}
+
 export type GuidePageForPlace = {
   name: string;
   verified: boolean;

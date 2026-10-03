@@ -20,7 +20,7 @@ import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe } from './locateMe';
-import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPanel } from './guidesApi';
+import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPanel, guideAreasWithPages } from './guidesApi';
 import { samePlace } from './src/utils/placeName';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
@@ -349,7 +349,7 @@ async function startServer() {
   };
   registerLocate(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed });
   // "Locate me" (the tracker and the PlaceBar): its own daily limit, never the player's questions.
-  registerLocateMe(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST, updateUserDoc: updateFirestoreDocREST });
+  registerLocateMe(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST, updateUserDoc: updateFirestoreDocREST, loadGuide: guideAreasWithPages });
   registerRefine(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed });
 
   // --- API Health Check ---
