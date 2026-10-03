@@ -14,9 +14,13 @@
  *        - upgrading quick pages of games players use to checked pages
  *        - an achievement guide and roadmap for games players use and the featured guides
  *        - translating guides of games players use into the languages they play in, then into the other languages
- *      First, though, the careful-build queue (system/pipeline.carefulQueue): thin quick guides and games quick mode
- *      couldn't do, newest first, within PIPELINE_QUEUE_DAILY_SEARCHES and the player reserve. A quick build that
- *      comes out with fewer than 5 pages isn't published (build.ts) and joins the queue.
+ *      First, though, decisions made on the review queue page (/admin/reviews), then the repair queue
+ *      (system/pipeline.carefulQueue): careful builds for thin quick guides and games too new for quick mode (newest
+ *      first), plus fixes and outline rebuilds, within PIPELINE_QUEUE_DAILY_SEARCHES and the player reserve.
+ *   The review gate: every build, fix, extension and upgrade is made in a staged copy (scripts/guides/repair.ts) and
+ *   only replaces the live guide if it passes review (score 75+, at least 5 pages; games newer than the reviewer are
+ *   spot-checked with searches). A guide that fails goes to the review queue for a decision. A quick build of a game
+ *   released after the quick model's cutoff is refused and queued for a careful build, as is a thin quick guide.
  *   3. Runs them with the existing scripts, inside the budget, then publishes the site and deploys it to Netlify.
  *   4. Posts a summary to Discord (if DISCORD_WEBHOOK_URL is set) and saves the month's totals in system/pipeline.
  *      The summary starts with yesterday's activity: questions, signed-in players vs guests, which apps, and sign-ups.
@@ -29,7 +33,8 @@
  *   PIPELINE_MAX_ACTIONS          actions per run (default 6)
  *   PIPELINE_QUEUE_DAILY_SEARCHES searches the careful-build queue may use per run (default 1500); it also keeps the
  *                                 player reserve, and isn't limited by PIPELINE_MONTHLY_SEARCHES
- *   PIPELINE_WISHLIST_SLOTS       of those, kept for wish-list guides while the wish list has games (default 2)
+ *   PIPELINE_QUEUE_MINUTES        minutes the repair queue may run each time (default 120; the job's limit is 3 hours)
+ *   PIPELINE_WISHLIST_SLOTS      of those, kept for wish-list guides while the wish list has games (default 2)
  *   PIPELINE_FEATURED_LANGS       languages for the featured guides before players ask (default es,pt)
  *   PIPELINE_MIN_PLAYERS          players before a game counts as in demand (default 3)
  *   PIPELINE_LANGS                languages to translate into (default es,pt,de,fr,ru,ja,ko,zh)
@@ -46,6 +51,7 @@ import { db, gameKey } from '../guides/common';
 import { getAuth } from 'firebase-admin/auth';
 import { deployToNetlify } from './netlify';
 import { steamCandidates } from './steam';
+import { promote } from '../guides/promote';
 
 const env = (k: string, d: number) => (Number.isFinite(Number(process.env[k])) && process.env[k] !== '' ? Number(process.env[k]) : d);
 const DRY = process.argv.includes('--dry-run');
@@ -62,7 +68,10 @@ const QUEUE_CAREFUL_SEARCHES = 300;
 const QUEUE_MIN = 150;
 /** A quick guide needs at least this many pages to be published (build.ts does the same). */
 const QUICK_MIN = 5;
-type QueueItem = { game: string; mode: 'careful' | 'quick'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string };
+/** The repair queue's items: careful builds, fixes and outline rebuilds (scripts/guides/repair.ts). 'quick' = outline. */
+type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string };
+/** Minutes the repair queue may run before the rest of the run (the job's limit is 3 hours). */
+const QUEUE_MINUTES = env('PIPELINE_QUEUE_MINUTES', 120);
 const LANGS = (process.env.PIPELINE_LANGS || 'es,pt,de,fr,ru,ja,ko,zh').split(',').map((s) => s.trim()).filter(Boolean);
 const LANG_BY_NAME: Record<string, string> = {
   Spanish: 'es', 'Brazilian Portuguese': 'pt', German: 'de', French: 'fr', Russian: 'ru', Japanese: 'ja', Korean: 'ko', 'Simplified Chinese': 'zh',
@@ -91,7 +100,7 @@ const FEATURED = (process.env.PIPELINE_FEATURED ||
 type Action = { kind: 'build' | 'build-checked' | 'revisit' | 'upgrade' | 'translate' | 'achievements'; game: string; key: string; lang?: string; searches: number; why: string; wish?: boolean };
 
 /** Run one of the guide scripts and read what it spent from its summary line. */
-function runScript(args: string[]): { ok: boolean; searches: number; dollars: number; summary: string } {
+function runScript(args: string[]): { ok: boolean; searches: number; dollars: number; summary: string; out: string } {
   console.log(`$ npx tsx ${args.join(' ')}`);
   const r = spawnSync('npx', ['tsx', ...args], { encoding: 'utf8', timeout: 45 * 60_000, maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32' });
   const out = `${r.stdout || ''}\n${r.stderr || ''}`;
@@ -101,7 +110,7 @@ function runScript(args: string[]): { ok: boolean; searches: number; dollars: nu
   const dollars = Number((out.match(/cost ≈ \$(\d+(?:\.\d+)?)/i) || [])[1] || 0);
   // The script's "Done" line, without the "Done." prefix and its "Next: …" hint.
   const summary = (out.match(/^Done[^\n]*$/m) || [''])[0].replace(/^Done[.:]?\s*/, '').replace(/\s*Next:.*$/, '').slice(0, 300);
-  return { ok: r.status === 0, searches, dollars, summary };
+  return { ok: r.status === 0, searches, dollars, summary, out };
 }
 
 async function appSearchesThisMonth(month: string): Promise<number> {
@@ -232,43 +241,76 @@ async function main() {
   console.log(`Budget: ${Math.max(0, searchRoom)} searches and $${Math.max(0, aiRoom).toFixed(2)} of AI left for the pipeline this month. ${plan.length} candidate action(s).`);
   let changed = false, done = 0;
 
-  // ---- 3a. the careful-build queue (state.carefulQueue): thin quick guides and games quick mode couldn't do ----
-  // Worked through in order (newest games first), before the other actions, within its own daily allowance
-  // (PIPELINE_QUEUE_DAILY_SEARCHES) and the app-wide player reserve. An item that doesn't fit waits for the next run
-  // rather than being skipped. A careful build that publishes at least QUICK_MIN pages leaves the queue and gets an
-  // achievement guide (searched) if it has none; one that doesn't is tried once more, then reported and dropped.
+  // ---- 3a. decisions made on the review queue page (/admin/reviews) ----
+  // Publish and unpublish happen now; fixes and rebuilds go to the front of the repair queue below.
   const queue: QueueItem[] = Array.isArray(state.carefulQueue) ? state.carefulQueue : [];
+  if (!DRY) {
+    const decided = await db().collection('reviewQueue').where('status', '==', 'queued').get();
+    for (const d of decided.docs) {
+      const it: any = d.data();
+      const game = String(it.game || it.key);
+      let resolution = '';
+      if (it.action === 'publish') {
+        const p = await promote(it.key);
+        resolution = p ? `published as it was (${p.published} pages)` : 'nothing staged to publish';
+        if (p) changed = true;
+      } else if (it.action === 'unpublish') {
+        const r = runScript(['scripts/guides/unpublish.ts', '--key', it.key, '--why', 'admin decision on the review queue']);
+        resolution = r.ok ? 'unpublished' : 'unpublishing failed (see the job log)';
+        changed = changed || r.ok;
+      } else if (['fix', 'outline', 'careful'].includes(it.action)) {
+        const rest = queue.filter((q) => gameKey(q.game) !== it.key);
+        queue.length = 0;
+        queue.push({ game, mode: it.action, addedAt: Date.now(), why: 'admin decision on the review queue', ...(it.kind === 'report' ? { report: `${it.pageName ? `on the page "${it.pageName}": ` : ''}${it.text}` } : {}) }, ...rest);
+        resolution = `handed to the repair queue (${it.action})`;
+      }
+      await d.ref.set({ status: 'done', resolution, updatedAt: Date.now() }, { merge: true });
+      report.push(`🗂️ review queue: ${it.action} **${game}**: ${resolution}.`);
+    }
+  }
+
+  // ---- 3b. the repair queue (state.carefulQueue): careful builds, fixes and outline rebuilds, through the review gate ----
+  // Thin quick guides and games quick mode can't do get careful builds (newest games first); admin decisions and the
+  // guide-review plan add fixes and outline rebuilds. Every item is built into a staged copy (repair.ts) and goes live
+  // only if it passes review; a failure goes to the review queue instead. Careful items use their own daily search
+  // allowance (PIPELINE_QUEUE_DAILY_SEARCHES) and keep the app-wide player reserve; an item that doesn't fit waits
+  // for the next run, and a careful build that stops at its search cap continues on the next run. The queue stops
+  // after PIPELINE_QUEUE_MINUTES so the rest of the run still fits in the job's time limit.
   let queueRoom = Math.min(QUEUE_DAILY, APP_CAP - RESERVE - appUsed);
+  const waiting: QueueItem[] = [];
+  const queueStart = Date.now();
   while (queue.length && !DRY) {
-    const item = queue[0];
-    const quickItem = item.mode === 'quick';
-    if (aiRoom < 0.25) break;
-    if (!quickItem && queueRoom < QUEUE_MIN) {
-      report.push(`⏳ Careful-build queue: ${queue.length} left (next: ${item.game}); waiting for search room (${Math.max(0, queueRoom)} now).`);
+    const item = queue.shift()!;
+    const action = item.mode === 'quick' ? 'outline' : item.mode;
+    const need = action === 'careful' ? QUEUE_MIN : 60; // fixes and quick rebuilds search little (spot-checks, careful pages of new games)
+    if (aiRoom < 0.25 || Date.now() - queueStart > QUEUE_MINUTES * 60_000) {
+      waiting.push(item, ...queue);
+      queue.length = 0;
       break;
     }
-    const cap = Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom);
-    console.log(`\n▶ queue ${item.mode} ${item.game}${quickItem ? ` (${item.areas || 40} areas)` : ` (up to ${cap} searches)`}`);
-    const args = quickItem
-      ? ['scripts/guides/build.ts', '--game', item.game, '--part', 'the whole game, in story order', '--areas', String(item.areas || 40), '--quick', '--auto-publish']
-      : ['scripts/guides/build.ts', '--game', item.game, '--part', 'the main story, in order', '--areas', '25', '--max-searches', String(cap), '--auto-publish'];
-    if (item.restructure) args.push('--restructure');
-    const r = runScript(args);
+    if (queueRoom < need) {
+      waiting.push(item);
+      continue;
+    }
+    const cap = action === 'careful' ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom);
+    console.log(`\n▶ queue ${action} ${item.game} (up to ${cap} searches)`);
+    const r = runScript(['scripts/guides/repair.ts', '--game', item.game, '--action', action, '--max-searches', String(cap), ...(item.report ? ['--report', item.report] : [])]);
     state.searches = (state.searches || 0) + r.searches;
     state.dollars = (state.dollars || 0) + r.dollars;
     queueRoom -= r.searches;
     aiRoom -= r.dollars;
     const g = await guideInfo(item.game);
     guideCache.delete(g.key);
-    const pages = (await db().collection('guides').doc(g.key).collection('areas').where('status', '==', 'published').get()).size;
-    const guideRef = db().collection('guides').doc(g.key);
-    if (pages >= QUICK_MIN) {
-      queue.shift();
+    const gate = (r.out.match(/^Gate: [^\n]*/m) || [''])[0];
+    if (/^Gate: passed/.test(gate)) {
       changed = true;
-      await guideRef.set({ pipeline: { ...g.pipeline, carefulBuilt: Date.now(), ...(item.newRelease ? { newRelease: true, builtAt: g.pipeline.builtAt || Date.now() } : {}) } }, { merge: true });
-      report.push(`✅ queue ${item.mode} **${item.game}**: ${pages} pages published. ${r.summary}`.trim());
-      // Its achievement guide, searched (the AI doesn't know these games well enough for quick tips).
       const fresh = await guideInfo(item.game);
+      guideCache.delete(g.key);
+      if (action === 'careful') {
+        await db().collection('guides').doc(g.key).set({ pipeline: { ...fresh.pipeline, carefulBuilt: Date.now(), ...(item.newRelease ? { newRelease: true, builtAt: fresh.pipeline.builtAt || Date.now() } : {}) } }, { merge: true });
+      }
+      report.push(`✅ queue ${action} **${item.game}**: ${gate.replace(/^Gate: /, '')}`);
+      // Its achievement guide, searched (the AI doesn't know new games well enough for quick tips).
       if (!fresh.hasAch && fresh.info?.appId && queueRoom >= 30 && aiRoom >= 0.25) {
         const a = runScript(['scripts/guides/achievements.ts', '--game', item.game, '--max-searches', String(Math.min(120, queueRoom))]);
         state.searches = (state.searches || 0) + a.searches;
@@ -277,18 +319,19 @@ async function main() {
         aiRoom -= a.dollars;
         report.push(`${a.ok ? '✅' : '⚠️'} achievements **${item.game}**: ${a.summary || (a.ok ? '' : 'failed (see the job log)')}`.trim());
       }
+    } else if (/continues on the next run/.test(r.out)) {
+      waiting.push(item);
+      report.push(`⏳ queue careful **${item.game}**: built up to its search cap; continues next run.`);
+    } else if (/^Gate: failed/.test(gate)) {
+      report.push(`⚠️ queue ${action} **${item.game}**: ${gate.replace(/^Gate: /, '')} (decide on /admin/reviews)`);
     } else {
       item.tries = (item.tries || 0) + 1;
-      if (item.tries >= 2) {
-        queue.shift();
-        report.push(`⚠️ queue ${item.mode} **${item.game}**: still only ${pages} page(s) after ${item.tries} tries; dropped from the queue.`);
-      } else {
-        queue.push(queue.shift()!); // to the back: give the next game its turn
-        report.push(`⚠️ queue ${item.mode} **${item.game}**: ${pages} page(s); trying again later.`);
-      }
+      if (item.tries < 2) waiting.push(item);
+      report.push(`⚠️ queue ${action} **${item.game}**: the repair failed${item.tries < 2 ? '; trying again next run' : ' twice; dropped'} (see the job log).`);
     }
   }
-  state.carefulQueue = queue;
+  state.carefulQueue = [...waiting, ...queue];
+  if (state.carefulQueue.length) report.push(`⏳ Repair queue: ${state.carefulQueue.length} waiting (next: ${state.carefulQueue[0].game}).`);
   searchRoom = Math.min(SEARCH_CAP - (state.searches || 0), APP_CAP - RESERVE - (await appSearchesThisMonth(month)));
   // Wish-list guides have their own slots, so the long queue of achievement guides doesn't hold them back; slots the
   // wish list can't fill (it ran out) go to everything else.
@@ -309,26 +352,30 @@ async function main() {
       if (!a.wish) others++;
       continue;
     }
-    let r = { ok: false, searches: 0, dollars: 0, summary: '' };
+    let r = { ok: false, searches: 0, dollars: 0, summary: '', out: '' };
     const g = await guideInfo(a.game);
     const guideRef = db().collection('guides').doc(g.key);
     if (a.kind === 'build') {
-      r = runScript(['scripts/guides/build.ts', '--game', a.game, '--part', 'the whole game, in story order', '--areas', '40', '--quick', '--auto-publish']);
-      const after = await db().collection('guides').doc(g.key).collection('areas').where('status', '==', 'published').get();
+      // A new guide: quick, staged and reviewed (repair.ts outline), live only if it passes. A game too new for quick
+      // mode, or one that comes out thin, gets a careful build from the repair queue.
+      r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', 'outline', '--quick-only']);
       await guideRef.set({ pipeline: { ...g.pipeline, quickTried: true, builtAt: Date.now() } }, { merge: true });
-      if (after.size < QUICK_MIN) {
-        // Not published (build.ts keeps a thin quick guide as drafts): it joins the careful-build queue.
-        const q: QueueItem[] = Array.isArray(state.carefulQueue) ? state.carefulQueue : [];
-        if (!q.some((x) => gameKey(x.game) === g.key)) q.push({ game: a.game, mode: 'careful', restructure: true, addedAt: Date.now(), why: `thin quick guide (${after.size} pages)` });
-        state.carefulQueue = q;
-        report.push(`${a.game}: the quick guide came out thin (${after.size} pages), so it isn't published; queued for a careful build.`);
+      const tooNew = /Not built: released/.test(r.out);
+      const thin = /^Gate: failed \((\d+, only|nothing)/m.test(r.out) || /^Gate: failed.*rebuild careful/m.test(r.out);
+      if (tooNew || thin) {
+        const q: QueueItem[] = state.carefulQueue;
+        if (!q.some((x) => gameKey(x.game) === g.key)) q.push({ game: a.game, mode: 'careful', addedAt: Date.now(), why: tooNew ? 'too new for a quick guide' : 'the quick guide came out thin or unreliable' });
+        report.push(`${a.game}: ${tooNew ? 'too new for a quick guide' : 'the quick guide didn\'t pass review'}, so it isn't published; queued for a careful build.`);
       }
     } else if (a.kind === 'build-checked' || a.kind === 'revisit') {
+      // A new release, built (or, 3 weeks on, extended) with research in a staged copy, through the review gate.
       const cap = Math.min(a.searches, Math.max(50, searchRoom));
-      r = runScript(['scripts/guides/build.ts', '--game', a.game, '--part', a.kind === 'revisit' ? 'the whole game, especially areas not covered yet' : 'the main story, in order', '--areas', '25', '--max-searches', String(cap), '--auto-publish']);
+      r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', a.kind === 'revisit' ? 'extend' : 'careful', '--max-searches', String(cap)]);
       await guideRef.set({ pipeline: { ...g.pipeline, newRelease: g.pipeline.newRelease || a.kind === 'build-checked', builtAt: g.pipeline.builtAt || Date.now(), ...(a.kind === 'revisit' ? { revisited: Date.now() } : {}) } }, { merge: true });
+      if (/continues on the next run/.test(r.out) && !state.carefulQueue.some((x: QueueItem) => gameKey(x.game) === g.key))
+        state.carefulQueue.push({ game: a.game, mode: 'careful', newRelease: true, addedAt: Date.now(), why: 'a new release; its careful build continues' });
     } else if (a.kind === 'upgrade') {
-      r = runScript(['scripts/guides/build.ts', '--game', a.game, '--upgrade', '--max-searches', String(Math.min(a.searches, Math.max(50, searchRoom)))]);
+      r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', 'upgrade', '--max-searches', String(Math.min(a.searches, Math.max(50, searchRoom)))]);
     } else if (a.kind === 'achievements') {
       r = runScript(['scripts/guides/achievements.ts', '--game', a.game, '--max-searches', String(Math.min(120, Math.max(30, searchRoom)))]);
       // Not every game has Steam achievements; don't keep retrying one that failed.

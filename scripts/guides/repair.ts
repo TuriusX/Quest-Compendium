@@ -6,6 +6,9 @@
  *   npx tsx scripts/guides/repair.ts --key dead-space --action outline    rebuild with the review's outline (layout)
  *   npx tsx scripts/guides/repair.ts --key hollow-knight --action careful rebuild with research (searches)
  *   options: --plan-only        fix: make and save the fix plan, change nothing (for estimates)
+ *            --game "Name"      the game's name, for a game with no guide yet (a new guide is an outline repair)
+ *            --quick-only       outline: stop if the game is newer than the quick cutoff ("Not built: ...")
+ *            --report "text"    fix: a player's mistake report to fix as well
  *            --max-searches N   the search cap for this repair (careful pages, spot-checks); default 300
  *
  *   fix      A plan from the reviewer's per-page problems (no searches): pages to remove (duplicates, wrong kind of
@@ -13,6 +16,8 @@
  *            chapters) and pages to move. Applied to a staged copy of the guide; pages are rewritten quick where the
  *            game is older than the quick model's cutoff and the page was quick, otherwise the careful way.
  *   outline  A fresh staged build in the outline the review named (quick for games older than the cutoff).
+ *   extend   More pages for a guide (the 3-week revisit of a new release): a staged copy plus careful pages.
+ *   upgrade  The guide's quick pages checked the careful way, in a staged copy.
  *   careful  A fresh staged build with research, up to the search cap. A build that stops at the cap continues on
  *            the next run (the staged pages are kept); only a finished build goes to the gate.
  * The gate (review.ts): a pass promotes the staged build to the live guide; a fail puts it on the review queue.
@@ -22,14 +27,20 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { ThinkingLevel } from '@google/genai';
-import { db, gemini, arg, parseJson, releaseInfo, releasedAfter, stageKey, liveKey, QUICK_MODEL_CUTOFF } from './common';
+import { db, gemini, gameKey, arg, parseJson, releaseInfo, releasedAfter, stageKey, liveKey, QUICK_MODEL_CUTOFF } from './common';
 import { estimateCost } from '../../usage';
 import { stageCopy, discard } from './promote';
 import { reviewGuide, gateGuide, type Review } from './review';
 
 const PLAN_MODEL = process.env.REVIEW_MODEL || 'gemini-3.1-pro-preview';
-const key = liveKey(arg('key') || '');
-const action = arg('action') as 'fix' | 'outline' | 'careful';
+const key = liveKey(arg('key') || (arg('game') && arg('game') !== 'true' ? gameKey(arg('game')!) : ''));
+const ACTIONS = ['fix', 'outline', 'careful', 'extend', 'upgrade'];
+const action = arg('action') as 'fix' | 'outline' | 'careful' | 'extend' | 'upgrade';
+const gameArg = arg('game') && arg('game') !== 'true' ? arg('game')! : '';
+/** outline only: a game newer than the quick cutoff isn't built (the pipeline queues a careful build instead). */
+const quickOnly = arg('quick-only') === 'true';
+/** fix: a player's mistake report to fix as well (from the review queue). */
+const reportText = arg('report') && arg('report') !== 'true' ? arg('report')!.slice(0, 1000) : '';
 const planOnly = arg('plan-only') === 'true';
 const maxSearches = Math.max(30, Number(arg('max-searches', '300')));
 const CAREFUL_PAGE_SEARCHES = 40; // a careful page rewrite: research plus fact-check
@@ -44,7 +55,8 @@ function build(args: string[]): { ok: boolean; out: string } {
   const out = `${r.stdout || ''}\n${r.stderr || ''}`;
   searches += Number((out.match(/(\d+) searches used/) || [])[1] || 0);
   dollars += Number((out.match(/cost ≈ \$(\d+(?:\.\d+)?)/i) || [])[1] || 0);
-  const lines = out.split('\n').filter((l) => /^(Areas:|Done|Stopping|Not built|Staged|- |  (draft|held|published))/.test(l));
+  // Not build.ts's own "Done" line: the pipeline reads this run's totals from repair's Done line.
+  const lines = out.split('\n').filter((l) => /^(Areas:|Stopping|Not built|Staged|- |  (draft|held|published))/.test(l));
   console.log(lines.map((l) => `    ${l}`).join('\n'));
   return { ok: r.status === 0, out };
 }
@@ -73,6 +85,7 @@ async function makePlan(game: string, review: Review, pages: { name: string; sto
       ``,
       `Review summary: ${review.summary}`,
       `Problems: ${[...review.structure.problems, ...review.coverage.problems, ...review.depth.problems, ...review.knowledge.problems, ...review.ordering.problems].join(' / ')}`,
+      ...(reportText ? [`A player reported this mistake (fix it too, if it's right): ${reportText}`] : []),
       `Problem pages:`,
       ...review.pages.map((p) => `- ${p.name} (${p.verdict}): ${p.reason}`),
       ``,
@@ -163,30 +176,49 @@ async function fix(game: string, review: Review, newer: boolean): Promise<boolea
 }
 
 async function main() {
-  if (!key || !['fix', 'outline', 'careful'].includes(action)) {
-    console.log('Usage: npx tsx scripts/guides/repair.ts --key key --action fix|outline|careful [--plan-only] [--max-searches 300]');
+  if (!key || !ACTIONS.includes(action)) {
+    console.log('Usage: npx tsx scripts/guides/repair.ts --key key [--game "Name"] --action fix|outline|careful|extend|upgrade [--plan-only] [--quick-only] [--report "text"] [--max-searches 300]');
     process.exit(1);
   }
   const live: any = (await db().collection('guides').doc(key).get()).data();
-  if (!live) throw new Error(`no guide ${key}`);
-  const game = String(live.game || key);
-  const review: Review | undefined = live.review;
-  const rel = await releaseInfo(game, Number(live.appId) || undefined);
-  const newer = releasedAfter(rel, QUICK_MODEL_CUTOFF, !!live.pipeline?.newRelease);
+  if (!live && !gameArg) throw new Error(`no guide ${key} (pass --game for a game with no guide yet)`);
+  const game = String(live?.game || gameArg);
+  let review: Review | undefined = live?.review;
+  const rel = await releaseInfo(game, Number(live?.appId) || undefined);
+  const newer = releasedAfter(rel, QUICK_MODEL_CUTOFF, !!live?.pipeline?.newRelease);
   console.log(`Repair (${action}): ${game}, released ${rel.text}${newer ? ' (after the quick cutoff: careful only)' : ''}.`);
+  if (quickOnly && newer && action === 'outline') {
+    console.log(`Not built: released ${rel.text}, after the quick model's knowledge cutoff (${QUICK_MODEL_CUTOFF}); it needs a careful build.`);
+    console.log(`Done: repair (${action}) of ${game}, 0 searches used, estimated AI cost ≈ $0.00.`);
+    return setTimeout(() => process.exit(0), 500);
+  }
 
   let ready = true;
   if (action === 'fix') {
-    if (!review) throw new Error('no review to fix from: run review.ts first');
+    // A guide reviewed before (or a player report about one that wasn't): review it first.
+    if (!review) {
+      const r = await reviewGuide(key, { save: true, verify: false });
+      dollars += r.dollars;
+      searches += r.searches;
+      review = r.review || undefined;
+    }
+    if (!review) throw new Error('nothing to fix: the guide has no pages');
     ready = await fix(game, review, newer);
+  } else if (action === 'extend' || action === 'upgrade') {
+    // Adds to the live guide (more pages, or quick pages checked), so the staged build starts as a copy of it.
+    await discard(key);
+    const r = build(['--game', game, '--stage', '--copy-live', '--max-searches', String(maxSearches),
+      ...(action === 'upgrade' ? ['--upgrade'] : ['--part', 'the whole game, especially areas not covered yet', '--areas', '25'])]);
+    if (!r.ok && !/Done/.test(r.out)) ready = false;
   } else {
     // A fresh staged build; a careful one that stopped at the search cap last time just continues.
     const staged = (await db().collection('guides').doc(stageKey(key)).get()).data();
     if (staged && (action === 'outline' || staged.repair !== 'careful')) await discard(key);
-    const layout = review?.layout || live.layout || 'area';
+    // The outline the review named; a game with no review gets one picked by build.ts.
+    const layout = review?.layout;
     const quick = action === 'outline' && !newer;
-    const r = build(['--game', game, '--stage', '--layout', layout,
-      ...(quick ? ['--quick', '--part', 'the whole game, in story order', '--areas', '40'] : ['--part', 'the whole game, in story order', '--areas', '40', '--max-searches', String(maxSearches)])]);
+    const r = build(['--game', game, '--stage', ...(layout ? ['--layout', layout] : []), '--part', 'the whole game, in story order', '--areas', '40',
+      ...(quick ? ['--quick'] : ['--max-searches', String(maxSearches)])]);
     await db().collection('guides').doc(stageKey(key)).set({ repair: action }, { merge: true }).catch(() => {});
     if (/Stopping: search cap/.test(r.out)) {
       ready = false;
@@ -198,7 +230,7 @@ async function main() {
     dollars += r.dollars;
     searches += r.searches;
     console.log(r.review ? `Review: ${r.review.score}/100, ${r.review.recommendation}.` : 'Review: nothing staged to review.');
-    if (r.review) console.log(await gateGuide(stageKey(key), game, r.review));
+    console.log(r.review ? await gateGuide(stageKey(key), game, r.review) : 'Gate: failed (nothing was built).');
   }
   console.log(`Done: repair (${action}) of ${game}, ${searches} searches used, estimated AI cost ≈ $${dollars.toFixed(2)}.`);
   setTimeout(() => process.exit(0), 1500);

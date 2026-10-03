@@ -110,9 +110,13 @@ const searchWords = (a: GuideArea) => [...a.items.map((e) => e.name), ...a.secre
 const totalOf = (a: GuideArea) =>
   a.items.length + a.secrets.length + (a.sections || []).filter((x) => x.check).reduce((n, x) => n + x.entries.length, 0);
 
+/** Where "Report it here" sends mistake reports: the app server's review queue (reviewQueue.ts). */
+const REPORT_API = `${process.env.QC_SERVER_URL || 'https://quest-compendium-890629309063.us-east1.run.app'}/api/guides/report`;
+
 /**
  * Small script for guide pages: remembers ticked items and the last page per game in the visitor's browser, keeps the
- * progress counts up to date, and fills in "Continue where you left off". Nothing is sent anywhere.
+ * progress counts up to date, and fills in "Continue where you left off". Nothing is sent anywhere, except a mistake
+ * report the visitor writes and sends (to the server's review queue).
  */
 const SCRIPT = `
 (function(){
@@ -165,6 +169,21 @@ const SCRIPT = `
   if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
     var a=s&&document.querySelector('[data-area-link="'+s+'"]');
     if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+  // "Spot a mistake?": a short report about this page, sent to the review queue (the only thing this script sends).
+  var dlg=document.getElementById('qc-report');
+  if(dlg&&dlg.showModal){
+    var ta=dlg.querySelector('textarea'), st=dlg.querySelector('[data-report-status]'), send=dlg.querySelector('[data-report-send]');
+    document.querySelectorAll('[data-report]').forEach(function(btn){btn.addEventListener('click',function(){st.hidden=true;ta.value='';send.disabled=false;dlg.showModal();});});
+    dlg.querySelector('form').addEventListener('submit',function(e){
+      if(e.submitter&&e.submitter.value==='cancel')return;
+      e.preventDefault();
+      var t=ta.value.trim(); if(t.length<5)return;
+      send.disabled=true;
+      fetch(dlg.getAttribute('data-api'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:K||'',page:S||'',text:t,lang:dlg.getAttribute('data-lang')||'en',path:location.pathname})})
+        .then(function(r){if(!r.ok)throw 0;st.textContent=dlg.getAttribute('data-thanks');st.hidden=false;setTimeout(function(){dlg.close();},1800);})
+        .catch(function(){st.textContent=dlg.getAttribute('data-error');st.hidden=false;send.disabled=false;});
+    });
+  }
 })();`;
 
 function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string }) {
@@ -227,8 +246,22 @@ function page(opts: { title: string; description: string; depth: number; canonic
   ${opts.draft ? '<div class="bg-amber-500/15 border-b border-amber-500/30 text-amber-300 text-sm text-center py-2">DRAFT preview: not public yet</div>' : ''}
   <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8">${opts.body}</main>
   <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
-    ${esc(ui('footer')).replace('{discord}', '<a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>')} ${esc(ui('imagesNote'))}
+    ${esc(ui('footerReport'))
+      .replace('{report}', `<button type="button" data-report class="text-[#a87ffb] hover:underline">${esc(ui('reportLink'))}</button>`)
+      .replace('{discord}', '<a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>')} ${esc(ui('imagesNote'))}
   </footer>
+  <dialog id="qc-report" class="rounded-2xl bg-[#121218] text-zinc-200 border border-white/10 p-0 w-[min(92vw,28rem)] backdrop:bg-black/60" data-api="${REPORT_API}" data-lang="${LANG}" data-thanks="${esc(ui('reportThanks'))}" data-error="${esc(ui('reportError'))}">
+    <form method="dialog" class="p-5 space-y-3">
+      <h2 class="text-base font-bold text-white">${esc(ui('reportTitle'))}</h2>
+      <label class="block text-sm text-zinc-400" for="qc-report-text">${esc(ui('reportHint'))}</label>
+      <textarea id="qc-report-text" rows="4" minlength="5" maxlength="1000" required class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"></textarea>
+      <p data-report-status class="text-sm text-zinc-300" hidden></p>
+      <div class="flex justify-end gap-2">
+        <button value="cancel" formnovalidate class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white">${esc(ui('reportCancel'))}</button>
+        <button value="send" data-report-send class="px-3 py-1.5 text-sm rounded-lg bg-[#a87ffb] text-black font-semibold">${esc(ui('reportSend'))}</button>
+      </div>
+    </form>
+  </dialog>
   <script>${SCRIPT}</script>
 </body>
 </html>

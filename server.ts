@@ -21,6 +21,7 @@ import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe } from './locateMe';
 import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPanel, guideAreasWithPages } from './guidesApi';
+import { registerReviewQueue } from './reviewQueue';
 import { samePlace } from './src/utils/placeName';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
@@ -310,6 +311,17 @@ async function startServer() {
   registerWebSearch(app, { requireAuth, getGeminiClient, searchBudget: { allowed: monthlyBudgetOk, record: recordMonthly } });
   // Published guides as JSON for the Steam Deck plugin, which shows them natively (public, read-only).
   registerGuidesApi(app);
+  // The guide review queue: failed reviews and players' mistake reports, decided on /admin/reviews (ADMIN_EMAILS).
+  registerReviewQueue(app, {
+    requireAuth,
+    optionalAuth,
+    firebaseWebConfig: {
+      apiKey: process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY',
+      authDomain: 'quest-compendium-1bccf.firebaseapp.com',
+      projectId: 'quest-compendium-1bccf',
+      appId: '1:890629309063:web:87293cf13f922fd3edee22',
+    },
+  });
 
   // "Known here": what the game knowledge base already knows about the player's confirmed place. Straight from the
   // database, no AI call, so it never costs a question.
