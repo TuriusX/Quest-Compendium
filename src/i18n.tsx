@@ -174,6 +174,7 @@ const en: Dict = {
   "tracker.more": "+{n} more",
   "tracker.next": "Next: {area}",
   "tracker.hereNow": "I'm here now",
+  "tracker.closest": "From the guide: {area} (closest match)",
   'header.dock': 'Dock window',
   'header.undock': 'Undock window',
   // common
@@ -653,6 +654,7 @@ const es: Dict = {
   "tracker.more": "+{n} más",
   "tracker.next": "Siguiente: {area}",
   "tracker.hereNow": "Ya estoy aquí",
+  "tracker.closest": "De la guía: {area} (la más cercana)",
   'header.dock': 'Acoplar ventana',
   'header.undock': 'Desacoplar ventana',
   'common.achievements': 'Logros',
@@ -1124,6 +1126,7 @@ const pt: Dict = {
   "tracker.more": "+{n} mais",
   "tracker.next": "Próximo: {area}",
   "tracker.hereNow": "Estou aqui agora",
+  "tracker.closest": "Do guia: {area} (a mais próxima)",
   'header.dock': 'Fixar janela',
   'header.undock': 'Soltar janela',
   'common.achievements': 'Conquistas',

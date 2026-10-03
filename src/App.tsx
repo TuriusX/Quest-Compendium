@@ -534,7 +534,7 @@ export default function App() {
   const trackerPlace = activeTab
     ? activeTab.place || settings.gameProgress?.[(activeTab.activeSteamGame?.name || activeTab.name || '').trim().toLowerCase()]
     : undefined;
-  const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, trackerPlace?.name, useLocale());
+  const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, trackerPlace?.name, trackerPlace?.story, useLocale());
   const trackerMsg = trackedMessage(activeTab, trackerPickId);
   const trackerPayload = activeTab
     ? buildTrackerPayload({ ...activeTab, place: trackerPlace }, trackerMsg, trackerGame.guideArea, trackerGame.achievementGuide, trackerWords, {
@@ -548,6 +548,8 @@ export default function App() {
   trackerPayloadRef.current = trackerPayload;
   const trackerGuideKeyRef = useRef(trackerGame.guideKey);
   trackerGuideKeyRef.current = trackerGame.guideKey;
+  const trackerNextRef = useRef(trackerGame.guideArea?.next || null);
+  trackerNextRef.current = trackerGame.guideArea?.next || null;
   const latestTrackedId = trackedMessage(activeTab)?.id;
   // A newer finished answer takes over from the one picked with "Track on screen".
   useEffect(() => {
@@ -612,8 +614,15 @@ export default function App() {
       if (typeof e.id === 'string' && e.id) updateMessageById(e.id, (m) => ({ ...m, placeChosen: e.name }));
       handleSetPlace(e.name);
     } else if (e.type === 'next-area' && typeof e.name === 'string' && e.name.trim()) {
-      // "I'm here now": the next area becomes where the player is (confirmed), and the whole tracker moves on.
-      handleSetPlace(e.name.trim());
+      // "I'm here now": the next area becomes where the player is, with its story beat (both confirmed), in the tab and
+      // in the game's saved progress, and the whole tracker moves on.
+      const name = e.name.trim();
+      const next = trackerNextRef.current;
+      const story = next && next.name === name ? next.story?.trim() : '';
+      if (!activeTab) return;
+      const place = { ...(activeTab.place || {}), name, confirmed: true, ...(story ? { story, storyConfirmed: true } : {}) };
+      setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place, lastActive: Date.now() } : t)));
+      rememberGameProgress(activeTab, place);
     }
   };
   useEffect(() => {

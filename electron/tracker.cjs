@@ -253,12 +253,13 @@ function cleanData(data) {
       })).filter((o) => o.label && o.id),
     })).filter((x) => x.items.length),
     next: data && data.next && data.next.name ? { name: str(data.next.name, 60) } : null,
+    source: str(data && data.source, 120), // "From the guide: <area> (closest match)" when the place isn't an area by name
     labels: cleanLabels(data && data.labels),
   };
 }
 
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
-const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'hereNow'];
+const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'hereNow', 'closest'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;

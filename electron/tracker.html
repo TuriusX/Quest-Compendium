@@ -52,6 +52,9 @@
   .place.sure .tick { color: var(--ok); font-weight: 800; }
   .place:not(.sure) .tick { display: none; }
 
+  .source { font-size: .78em; color: var(--dim); font-style: italic; margin: -.15em 0 .25em 0; }
+  .source:empty { display: none; }
+  #tracker.collapsed .source { display: none; }
   .quest { font-weight: 700; font-size: 1.02em; line-height: 1.3; margin: .1em 0 .2em 0; color: #fff; }
   /* The sections scroll here once the tracker is at its height limit; the scrollbar only shows while hovered. */
   .body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: .2em;
@@ -158,6 +161,7 @@
     <span class="tick">✓</span>
     <span class="confirm" id="placeConfirm">Confirm</span>
   </div>
+  <div class="source" id="source"></div>
   <div class="quest" id="quest"></div>
   <div class="body" id="body">
     <div id="secs"></div>
@@ -221,7 +225,7 @@
     itemTodo: 'Click: collected', itemDone: 'Click: not collected yet', hintNoKeys: 'Click the title to open the Compendium',
     empty: 'Nothing to track here yet', secAnswer: 'From your last answer', secMissable: 'Missable here',
     secNoReturn: 'Point of no return', secCollect: 'To collect', secAch: 'Achievements here', more: '+{n} more',
-    next: 'Next: {area}', hereNow: "I'm here now",
+    next: 'Next: {area}', hereNow: "I'm here now", closest: 'From the guide: {area} (closest match)',
   };
   const L = (k, vars) => {
     const own = state.data && state.data.labels && state.data.labels[k];
@@ -272,6 +276,8 @@
     $('count').textContent = ticks.length ? `${done}/${ticks.length}` : '';
     $('tabN').textContent = ticks.length ? `${ticks.length - done}` : '';
     $('tabN').style.display = ticks.length - done > 0 ? '' : 'none';
+    // The guide area is the closest match for the place (not one of its areas by name): say so under the place.
+    $('source').textContent = d.source || '';
     $('quest').textContent = d.quest || '';
     $('quest').style.display = d.quest ? '' : 'none';
     const p = d.place || null;

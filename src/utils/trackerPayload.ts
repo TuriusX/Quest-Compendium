@@ -39,6 +39,8 @@ export type TrackerData = {
   sections: TrackerSection[];
   /** The next area in the guide's order ("I'm here now" moves the tracker there). */
   next?: { name: string };
+  /** When the place isn't a guide area by name: "From the guide: <area> (closest match)". */
+  source?: string;
   /** Only without a guide: the answer's missable markers, as one line. */
   warning?: string;
   labels?: Record<string, string>;
@@ -52,15 +54,17 @@ export type TrackerGuideArea = {
   name: string;
   story: string;
   page: GuidePage | null;
-  next?: { slug: string; name: string } | null;
+  next?: { slug: string; name: string; story?: string } | null;
   done: Set<string>;
+  /** How the area was found for the place (utils/guideMatch): by name, or as the closest match. */
+  via?: 'name' | 'sub' | 'story';
 };
 
 /** The tracker page's words (electron/tracker.html), from the "tracker.*" translations. */
 const LABEL_KEYS = [
   'title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size',
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
-  'more', 'next', 'hereNow',
+  'more', 'next', 'hereNow', 'closest',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
   Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));
@@ -230,6 +234,10 @@ export function buildTrackerPayload(
       place,
       sections,
       ...(guideArea?.next ? { next: { name: guideArea.next.name } } : {}),
+      // The place isn't one of the guide's areas by name: say which area this is and that it's the closest match.
+      ...(guideArea && guideArea.via && guideArea.via !== 'name'
+        ? { source: (L.closest || 'From the guide: {area} (closest match)').replace('{area}', guideArea.name) }
+        : {}),
       ...(warning ? { warning } : {}),
       ...(labels ? { labels } : {}),
     },
