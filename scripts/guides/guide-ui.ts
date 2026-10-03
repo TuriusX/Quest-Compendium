@@ -36,6 +36,11 @@ export const GUIDE_UI_EN: Record<string, string> = {
   statThings: 'things to find',
   statMissables: 'missables flagged',
   statChecked: 'pages checked against sources',
+  // The same stats when the number is 1 ("1 area", not "1 areas").
+  statAreasOne: 'area',
+  statThingsOne: 'thing to find',
+  statMissablesOne: 'missable flagged',
+  statCheckedOne: 'page checked against sources',
   statAll: 'All',
   continue: 'Continue where you left off',
   indexTitle: 'Game Guides and Walkthroughs | Quest Compendium',

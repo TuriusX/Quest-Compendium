@@ -176,8 +176,9 @@ export function registerGuidesApi(app: Express): void {
       roadmap: tr.roadmap ? { ...data.roadmap, ...tr.roadmap } : data.roadmap,
     };
   };
+  // Only for a game whose guide is visible (published pages): an unpublished guide hides its achievement guide too.
   const sendAch = async (res: any, key: string | null, lang: string, notFound404: boolean) => {
-    const data = key ? await achievementsFor(key) : null;
+    const data = key && (await gameAreas(key)) ? await achievementsFor(key) : null;
     if (!data) return notFound404 ? res.status(404).json({ error: 'No achievement guide for this game yet.' }) : send(res, { key: null });
     send(res, { key, ...localizeAch(data, await translation(key!, lang)) });
   };

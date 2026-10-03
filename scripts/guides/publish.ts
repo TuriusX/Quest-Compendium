@@ -520,6 +520,8 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   const checked = visible.filter((o) => byslug.get(o.slug)!.verified !== false).length;
   const totalChecks = links.reduce((n, l) => n + l.total, 0);
   const missables = visible.reduce((n, o) => n + byslug.get(o.slug)!.items.filter((e) => e.missable).length, 0);
+  // "1 area" / "2 areas": the singular label when the number is 1.
+  const one = (n: number, key: string) => ui(n === 1 ? `${key}One` : key);
   const stat = (v: number | string, label: string) => `<div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">${v}</div><div class="text-xs text-zinc-500">${esc(label)}</div></div>`;
   let lastGroup = '';
   const rows = links
@@ -548,7 +550,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           ${artBox(gameName, appId, 'rounded-2xl border border-white/10 mb-5')}
           <h1 class="text-3xl font-bold text-white">${esc(ui('gameH1', { game: gameName }))}</h1>
           <p class="text-zinc-400 mt-2">${esc(ui('gameIntro'))}</p>
-          <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, ui('statAreas'))}${stat(totalChecks, ui('statThings'))}${stat(missables, ui('statMissables'))}${checked ? stat(checked === links.length ? ui('statAll') : checked, ui('statChecked')) : ''}</div>
+          <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, one(links.length, 'statAreas'))}${stat(totalChecks, one(totalChecks, 'statThings'))}${stat(missables, one(missables, 'statMissables'))}${checked ? stat(checked === links.length ? ui('statAll') : checked, one(checked, 'statChecked')) : ''}</div>
           ${achHere ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${(achHere.list || []).length} · ${(achHere.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
           <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
           <input type="search" data-filter="#qc-area-rows" data-empty="#qc-area-empty" placeholder="${esc(ui('searchAreas'))}" class="mt-6 w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">

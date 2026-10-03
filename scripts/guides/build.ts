@@ -20,7 +20,10 @@
  *                             old pages not in it are held back (never deleted)
  *            --quick          fast and cheap: written from the AI's own knowledge with no searches. Pages are marked
  *                             unchecked in the data, add nothing to the knowledge base, and never replace a checked
- *                             page; a normal (checked) run later upgrades them.
+ *                             page; a normal (checked) run later upgrades them. With --auto-publish, a quick guide is
+ *                             only published once it has at least 5 pages (QUICK_MIN_PAGES): fewer means the AI barely
+ *                             knows the game, so its pages stay drafts and it needs a careful build (the pipeline
+ *                             queues one when it sees "Not published: thin quick guide").
  *
  * For each area: research with Google Search (a step that runs no searches is retried once, then fails, so nothing
  * comes from the model's memory) -> keep only details that at least two different websites back, judged from Google's
@@ -432,6 +435,9 @@ async function quickArea(area: { name: string; story: string; group?: string }):
   return parseDetails(text, []);
 }
 
+/** A quick guide with fewer published pages than this isn't published (the AI barely knows the game). */
+const QUICK_MIN_PAGES = 5;
+
 async function mainQuick() {
   console.log(`Quick guide (from the AI's knowledge, no searches): ${game} (${part}), up to ${maxAreas} areas${autoPublish ? ', publishing' : ', as drafts'}`);
   const key = gameKey(game!);
@@ -449,6 +455,7 @@ async function mainQuick() {
   if (!areas.length) throw new Error('could not work out the list of areas');
   console.log(`Areas: ${areas.map((a) => a.name).join(' | ')}`);
   let built = 0, held = 0, skipped = 0;
+  const builtSlugs: string[] = []; // this run's pages: drafts until the guide has enough pages to publish
   for (const found of areas) {
     // Same page as an existing one under a slightly different name (or a merged/renamed page): use that page.
     const { slug: s, name } = resolveArea(found.name, order, aliases);
@@ -478,7 +485,8 @@ async function mainQuick() {
         ...(sections.length ? { sections } : {}),
         ...(area.group ? { group: area.group } : {}),
         sources: [],
-        status: heldReason ? 'held' : autoPublish ? 'published' : 'draft',
+        // Drafts at first even with --auto-publish: published at the end, only if the guide gets enough pages.
+        status: heldReason ? 'held' : 'draft',
         verified: false,
         checks: { claims: 0, supported: 0, rejected: 0, singleSource: 0 },
         ...(heldReason ? { heldReason } : {}),
@@ -486,14 +494,28 @@ async function mainQuick() {
       };
       await ref.set(page);
       if (heldReason) held++;
-      else built++;
+      else {
+        built++;
+        builtSlugs.push(s);
+      }
       console.log(`  ${page.status}: ${kept} details${heldReason ? ` (${heldReason})` : ''}`);
     } catch (e: any) {
       console.warn(`  failed: ${e?.message}`);
     }
   }
+  // Publish this run's pages only if the guide then has at least QUICK_MIN_PAGES published pages.
+  let published = false;
+  if (autoPublish && builtSlugs.length) {
+    const already = (await guideRef.collection('areas').where('status', '==', 'published').get()).size;
+    if (already + builtSlugs.length >= QUICK_MIN_PAGES) {
+      for (const slug of builtSlugs) await guideRef.collection('areas').doc(slug).set({ status: 'published', updatedAt: Date.now() }, { merge: true });
+      published = true;
+    } else {
+      console.log(`Not published: thin quick guide (${already + builtSlugs.length} page(s), fewer than ${QUICK_MIN_PAGES}); its pages stay drafts until a careful build.`);
+    }
+  }
   await finishGuide(guideRef, order, previous);
-  console.log(`Done: ${built} quick page(s) ${autoPublish ? 'published' : 'saved as drafts'}, ${held} held back, ${skipped} skipped, estimated AI cost ≈ $${dollars.toFixed(2)}${unpriced ? ` (plus ${unpriced} call(s) on a model without a known rate)` : ''}. No searches used, nothing added to the knowledge base.`);
+  console.log(`Done: ${built} quick page(s) ${published ? 'published' : 'saved as drafts'}, ${held} held back, ${skipped} skipped, estimated AI cost ≈ $${dollars.toFixed(2)}${unpriced ? ` (plus ${unpriced} call(s) on a model without a known rate)` : ''}. No searches used, nothing added to the knowledge base.`);
   console.log('Next: npx tsx scripts/guides/publish.ts   (then upload Marketing_Website_Files to Netlify)');
   setTimeout(() => process.exit(0), 3000);
 }
