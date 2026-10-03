@@ -320,6 +320,16 @@ export async function releaseInfo(game: string, appId?: number): Promise<{ text:
     return { text: 'unknown', time: null };
   }
 }
+/**
+ * The release date the cutoffs go by: the guide's `firstReleased` override (YYYY-MM-DD) when set, else Steam's date.
+ * The override is for PC ports of older console games (Steam has the later PC date, but the models know the game
+ * from its first release): set it on guides/{key} by hand.
+ */
+export async function guideRelease(game: string, live?: any): Promise<{ text: string; time: number | null }> {
+  const first = Date.parse(String(live?.firstReleased || ''));
+  if (Number.isFinite(first)) return { text: `${live.firstReleased} (first release)`, time: first };
+  return releaseInfo(game, Number(live?.appId) || undefined);
+}
 /** Released after the cutoff (or not released yet). An unknown date counts as after only when the guide says it's new. */
 export const releasedAfter = (r: { text: string; time: number | null }, cutoff: string, newRelease = false) =>
   r.time === null ? newRelease || /coming soon|to be announced|tba|20(2[6-9]|3\d)/i.test(r.text) : r.time >= Date.parse(cutoff);

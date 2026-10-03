@@ -27,7 +27,7 @@
 import fs from 'fs';
 import { ThinkingLevel } from '@google/genai';
 import {
-  db, gemini, gameKey, arg, parseJson, searchesIn, releaseInfo, releasedAfter, isLayout, isStageKey, liveKey,
+  db, gemini, gameKey, arg, parseJson, searchesIn, guideRelease, releasedAfter, isLayout, isStageKey, liveKey,
   LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, REVIEWER_CUTOFF, type Layout,
 } from './common';
 import { estimateCost } from '../../usage';
@@ -257,7 +257,7 @@ function report(game: string, key: string, r: Review): string {
 export async function reviewGuide(key: string, opts: { save: boolean; verify: boolean }): Promise<{ review: Review | null; dollars: number; searches: number; game: string }> {
   const g = await loadGuide(key);
   if (!g || !g.pages.length) return { review: null, dollars: 0, searches: 0, game: g?.game || key };
-  const rel = await releaseInfo(g.game, g.appId);
+  const rel = await guideRelease(g.game, g.live);
   const newer = releasedAfter(rel, REVIEWER_CUTOFF, g.newRelease);
   const layout = String(g.info.layout || 'area');
   const res: any = await gemini().models.generateContent({

@@ -20,14 +20,15 @@
  *   upgrade  The guide's quick pages checked the careful way, in a staged copy.
  *   careful  A fresh staged build with research, up to the search cap. A build that stops at the cap continues on
  *            the next run (the staged pages are kept); only a finished build goes to the gate.
- * The gate (review.ts): a pass promotes the staged build to the live guide; a fail puts it on the review queue.
+ * A guide can override its outline for outline and careful rebuilds: guides/{key}.outline = { layout, extraPages:
+ * [{ name, story, note }] } (extra pages go first). The gate (review.ts): a pass promotes the staged build to the live guide; a fail puts it on the review queue.
  * Logs "N searches used" and "cost ≈ $x" for the pipeline.
  */
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { ThinkingLevel } from '@google/genai';
-import { db, gemini, gameKey, arg, parseJson, releaseInfo, releasedAfter, stageKey, liveKey, QUICK_MODEL_CUTOFF } from './common';
+import { db, gemini, gameKey, arg, parseJson, guideRelease, releasedAfter, stageKey, liveKey, QUICK_MODEL_CUTOFF } from './common';
 import { estimateCost } from '../../usage';
 import { stageCopy, discard } from './promote';
 import { reviewGuide, gateGuide, type Review } from './review';
@@ -184,7 +185,7 @@ async function main() {
   if (!live && !gameArg) throw new Error(`no guide ${key} (pass --game for a game with no guide yet)`);
   const game = String(live?.game || gameArg);
   let review: Review | undefined = live?.review;
-  const rel = await releaseInfo(game, Number(live?.appId) || undefined);
+  const rel = await guideRelease(game, live);
   const newer = releasedAfter(rel, QUICK_MODEL_CUTOFF, !!live?.pipeline?.newRelease);
   console.log(`Repair (${action}): ${game}, released ${rel.text}${newer ? ' (after the quick cutoff: careful only)' : ''}.`);
   if (quickOnly && newer && action === 'outline') {
@@ -213,16 +214,36 @@ async function main() {
   } else {
     // A fresh staged build; a careful one that stopped at the search cap last time just continues.
     const staged = (await db().collection('guides').doc(stageKey(key)).get()).data();
-    if (staged && (action === 'outline' || staged.repair !== 'careful')) await discard(key);
+    const quickBuild = action === 'outline' && !newer;
+    if (staged && (quickBuild || staged.repair !== action)) await discard(key);
     // The outline the review named; a game with no review gets one picked by build.ts.
-    const layout = review?.layout;
-    const quick = action === 'outline' && !newer;
+    // The guide's outline override (guides/{key}.outline: { layout, extraPages }) wins over the review's outline.
+    const layout = live?.outline?.layout || review?.layout;
+    const quick = quickBuild;
     const r = build(['--game', game, '--stage', ...(layout ? ['--layout', layout] : []), '--part', 'the whole game, in story order', '--areas', '40',
       ...(quick ? ['--quick'] : ['--max-searches', String(maxSearches)])]);
     await db().collection('guides').doc(stageKey(key)).set({ repair: action }, { merge: true }).catch(() => {});
     if (/Stopping: search cap/.test(r.out)) {
       ready = false;
       console.log('Repair: the careful build stopped at the search cap; it continues on the next run.');
+    } else {
+      // Pages the guide's outline override asks for on top of the layout (Dawnwalker's main questline and its
+      // 30-day timer, say), first in the guide.
+      const extra: { name: string; story?: string; note?: string }[] = Array.isArray(live?.outline?.extraPages) ? live.outline.extraPages : [];
+      for (const p of extra) {
+        console.log(`  extra page: ${p.name}`);
+        build(['--game', game, '--stage', '--area', `${p.name} | ${p.story || ''}`, '--redo', ...(p.note ? ['--note', p.note] : []),
+          ...(quick ? ['--quick'] : ['--max-searches', String(Math.max(30, Math.min(60, maxSearches - searches)))])]);
+      }
+      if (extra.length) {
+        const stageRef = db().collection('guides').doc(stageKey(key));
+        const order: any[] = ((await stageRef.get()).data()?.areas || []).slice();
+        for (const p of [...extra].reverse()) {
+          const i = order.findIndex((o) => o.name === p.name);
+          if (i > 0) order.unshift(...order.splice(i, 1));
+        }
+        await stageRef.set({ areas: order }, { merge: true });
+      }
     }
   }
   if (ready) {

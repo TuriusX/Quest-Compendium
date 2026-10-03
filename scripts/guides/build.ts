@@ -45,7 +45,7 @@
  */
 import {
   db, gemini, MODEL, gameKey, arg, editionOf, editionNote, searchesIn, visitName, cleanAreaName, resolveArea, normalizeVisits, isLayout,
-  LAYOUTS, LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, releaseInfo, releasedAfter, stageKey,
+  LAYOUTS, LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, guideRelease, releasedAfter, stageKey,
   type GuideArea, type GuideEntry, type GuideSection, type Layout,
 } from './common';
 import { stageCopy } from './promote';
@@ -521,7 +521,7 @@ async function openGuide(): Promise<{ key: string; guideRef: FirebaseFirestore.D
  */
 async function quickAllowed(): Promise<boolean> {
   const live: any = (await db().collection('guides').doc(gameKey(game!)).get()).data() || {};
-  const rel = await releaseInfo(game!, Number(live.appId) || undefined);
+  const rel = await guideRelease(game!, live);
   if (!releasedAfter(rel, QUICK_MODEL_CUTOFF, !!live.pipeline?.newRelease)) return true;
   console.log(`Not built: released ${rel.text}, after the quick model's knowledge cutoff (${QUICK_MODEL_CUTOFF}); it needs a careful build.`);
   console.log('Done: 0 quick page(s), nothing built, estimated AI cost ≈ $0.00.');

@@ -282,7 +282,10 @@ async function main() {
   while (queue.length && !DRY) {
     const item = queue.shift()!;
     const action = item.mode === 'quick' ? 'outline' : item.mode;
-    const need = action === 'careful' ? QUEUE_MIN : 60; // fixes and quick rebuilds search little (spot-checks, careful pages of new games)
+    // Careful builds, and outline rebuilds of new releases (careful too), need real search room; fixes and quick
+    // rebuilds search little (spot-checks, careful pages of new games).
+    const big = action === 'careful' || !!item.newRelease;
+    const need = big ? QUEUE_MIN : 60;
     if (aiRoom < 0.25 || Date.now() - queueStart > QUEUE_MINUTES * 60_000) {
       waiting.push(item, ...queue);
       queue.length = 0;
@@ -292,7 +295,7 @@ async function main() {
       waiting.push(item);
       continue;
     }
-    const cap = action === 'careful' ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom);
+    const cap = big ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom);
     console.log(`\n▶ queue ${action} ${item.game} (up to ${cap} searches)`);
     const r = runScript(['scripts/guides/repair.ts', '--game', item.game, '--action', action, '--max-searches', String(cap), ...(item.report ? ['--report', item.report] : [])]);
     state.searches = (state.searches || 0) + r.searches;
@@ -321,7 +324,7 @@ async function main() {
       }
     } else if (/continues on the next run/.test(r.out)) {
       waiting.push(item);
-      report.push(`⏳ queue careful **${item.game}**: built up to its search cap; continues next run.`);
+      report.push(`⏳ queue ${action} **${item.game}**: built up to its search cap; continues next run.`);
     } else if (/^Gate: failed/.test(gate)) {
       report.push(`⚠️ queue ${action} **${item.game}**: ${gate.replace(/^Gate: /, '')} (decide on /admin/reviews)`);
     } else {
