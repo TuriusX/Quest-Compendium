@@ -398,6 +398,7 @@ async function slideIn(opts = {}) {
   // opened with a controller), so the game stops reacting to controller input while the overlay is open.
   const previous = focusHelper.take(mainWindow) || focusedBefore;
   if (previous) focusBeforeOverlay = previous;
+  console.log(`[focus] open: recorded ${focusHelper.describe ? focusHelper.describe(focusBeforeOverlay) : focusBeforeOverlay} (before the panel: ${focusHelper.describe ? focusHelper.describe(focusedBefore) : focusedBefore})`);
   // macOS equivalent
   app.focus({ steal: true });
   
