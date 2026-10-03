@@ -33,10 +33,12 @@ import { samePlace } from './utils/placeName';
 import { useCloudSync } from './hooks/useCloudSync';
 import { recordTombstone } from './hooks/tabMerge';
 import pixelSceneUrl from './pixel-scene.png';
-import { LOCALES, aiLanguageName, applyLocale, detectLocale, translate, useT } from './i18n';
+import { LOCALES, aiLanguageName, applyLocale, detectLocale, translate, useLocale, useT } from './i18n';
 import { ControllerLayer } from './components/ControllerLayer';
 import { markersActiveFor, rememberAreaFind, setPointersActive } from './components/pointerStore';
 import { buildTrackerPayload, trackedMessage, trackerGameKey, trackerLabels } from './utils/trackerPayload';
+import { useTrackerGuide } from './utils/trackerGuide';
+import { setEntryDone } from './utils/guideProgress';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -514,8 +516,10 @@ export default function App() {
   };
 
   // ---- The objectives tracker: the panel's minimized state (desktop, electron/tracker.cjs) ----
-  // It follows the latest finished answer in the active game tab (markers or not), or the one picked with "Track on screen"
-  // until a newer answer arrives. Hiding the panel shows it; opening the panel hides it (main.cjs).
+  // A quest log for where the player is, filled from our own guides (utils/trackerPayload): it shows when the active
+  // tab has a known place or an answer with markers. Hiding the panel shows it; opening the panel hides it (main.cjs).
+  // The latest finished answer's markers are one section of it, or the answer picked with "Track on screen" until a
+  // newer answer arrives.
   const [trackerPickId, setTrackerPickId] = useState<string | null>(null);
   const trackerPickRef = useRef<string | null>(null);
   const pickTracked = (id: string | null) => {
@@ -525,31 +529,45 @@ export default function App() {
   const trackerAccent = (THEME_STYLES[settings.theme] || THEME_STYLES.purple).color;
   const trackerKeyOfGame = trackerGameKey(activeTab, activeTab?.activeSteamGame || globalActiveGame);
   const trackerWords = trackerLabels(tr); // the tracker's words follow the app language
+  // Where the player is: the tab's place, else the place saved for this game.
+  // (The same key as gameProgressKey below, which is declared later in this component.)
+  const trackerPlace = activeTab
+    ? activeTab.place || settings.gameProgress?.[(activeTab.activeSteamGame?.name || activeTab.name || '').trim().toLowerCase()]
+    : undefined;
+  const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, trackerPlace?.name, useLocale());
   const trackerMsg = trackedMessage(activeTab, trackerPickId);
-  const trackerPayload = trackerMsg ? buildTrackerPayload(trackerMsg, trackerAccent, trackerKeyOfGame, activeTab, trackerWords) : null;
-  const trackerCtx = useRef({ tab: activeTab, accent: trackerAccent, gameKey: trackerKeyOfGame, labels: trackerWords });
-  trackerCtx.current = { tab: activeTab, accent: trackerAccent, gameKey: trackerKeyOfGame, labels: trackerWords };
+  const trackerPayload = activeTab
+    ? buildTrackerPayload({ ...activeTab, place: trackerPlace }, trackerMsg, trackerGame.guideArea, trackerGame.achievementGuide, trackerWords, {
+        accent: trackerAccent,
+        gameKey: trackerKeyOfGame,
+        pinned: !!trackerPickId && trackerMsg?.id === trackerPickId,
+        achievements: activeGame?.achievements,
+      })
+    : null;
+  const trackerPayloadRef = useRef(trackerPayload);
+  trackerPayloadRef.current = trackerPayload;
+  const trackerGuideKeyRef = useRef(trackerGame.guideKey);
+  trackerGuideKeyRef.current = trackerGame.guideKey;
   const latestTrackedId = trackedMessage(activeTab)?.id;
   // A newer finished answer takes over from the one picked with "Track on screen".
   useEffect(() => {
     if (trackerPickRef.current) pickTracked(null);
   }, [latestTrackedId]);
-  // Hiding the panel (any route) shows the tracker; with no answer to track, nothing happens.
+  // Hiding the panel (any route) shows the tracker; with no place known and no answer with markers, nothing happens.
   useEffect(() => {
     const api = (window as any).electronAPI;
     api?.onPanelHidden?.(() => {
-      const { tab, accent, gameKey, labels } = trackerCtx.current;
-      const msg = trackedMessage(tab, trackerPickRef.current);
-      if (!msg) {
-        console.log('[panel] panel-hidden: no finished answer in this tab, no tracker');
+      const p = trackerPayloadRef.current;
+      if (!p) {
+        console.log('[panel] panel-hidden: no place known and no answer with markers in this tab, no tracker');
         return;
       }
-      const p = buildTrackerPayload(msg, accent, gameKey, tab, labels);
-      console.log(`[panel] panel-hidden: showing the tracker for answer ${msg.id} (${p.data.objectives.length} objective(s), "${p.data.quest}")`);
+      const counts = p.data.sections.map((x) => `${x.id} ${x.items.length}`).join(', ') || 'no sections';
+      console.log(`[panel] panel-hidden: showing the tracker at "${p.data.place?.name || '?'}" (${counts}), quest "${p.data.quest}"`);
       api.showObjectivesTracker?.(p.data, p.gameKey);
     });
   }, []);
-  // Kept current while the panel is open: ticks, the place, a newer answer.
+  // Kept current: a new place, ticks anywhere (the guide page, the checklist, the tracker), a new answer.
   const trackerJson = trackerPayload ? JSON.stringify(trackerPayload.data) : '';
   useEffect(() => {
     if (trackerPayload) (window as any).electronAPI?.updateObjectivesTracker?.(trackerPayload.data);
@@ -564,22 +582,38 @@ export default function App() {
     pickTracked(null);
     (window as any).electronAPI?.hideObjectivesTracker?.();
   }, [activeTabId]);
-  // Ticks and the place confirmed on the tracker, handled like the checklist and PlaceBar do.
+  // Ticks, the place confirmed and "I'm here now" on the tracker, handled like the checklist, guide page and PlaceBar.
   const trackerEventRef = useRef<(e: any) => void>(() => {});
   trackerEventRef.current = (e: any) => {
-    if (!e || typeof e.id !== 'string') return;
+    if (!e || typeof e.type !== 'string') return;
     const api = (window as any).electronAPI;
-    if (e.type === 'done' && Number.isInteger(e.index)) {
-      const msg = tabs.flatMap((t) => t.messages).find((m) => m.id === e.id);
-      if (!msg?.points?.length || e.index < 0 || e.index >= msg.points.length) return;
-      const done = msg.donePoints ?? [];
-      const next = e.done ? [...new Set([...done, e.index])].sort((x, y) => x - y) : done.filter((d) => d !== e.index);
-      updateMessageById(e.id, (m) => ({ ...m, donePoints: next }));
-      if (next.length >= msg.points.length) api?.hideScreenPointers?.();
-      else if (markersActiveFor(e.id)) api?.setPointersHidden?.(e.id, next);
+    if (e.type === 'tick' && typeof e.item === 'string') {
+      const id: string = e.item;
+      if (id.startsWith('a:')) {
+        // An answer's marker: a:<message id>:<index>, the same as its checklist under the answer.
+        const cut = id.lastIndexOf(':');
+        const msgId = id.slice(2, cut);
+        const index = Number(id.slice(cut + 1));
+        const msg = tabs.flatMap((t) => t.messages).find((m) => m.id === msgId);
+        if (!msg?.points?.length || !Number.isInteger(index) || index < 0 || index >= msg.points.length) return;
+        const done = msg.donePoints ?? [];
+        const next = e.done ? [...new Set([...done, index])].sort((x, y) => x - y) : done.filter((d) => d !== index);
+        updateMessageById(msgId, (m) => ({ ...m, donePoints: next }));
+        if (next.length >= msg.points.length) api?.hideScreenPointers?.();
+        else if (markersActiveFor(msgId)) api?.setPointersHidden?.(msgId, next);
+      } else if (id.startsWith('g:')) {
+        // A guide entry: g:<area slug>:<entry id>, the same ticks as the guide page.
+        const rest = id.slice(2);
+        const cut = rest.indexOf(':');
+        const key = trackerGuideKeyRef.current;
+        if (cut > 0 && key) setEntryDone(key, rest.slice(0, cut), rest.slice(cut + 1), !!e.done);
+      }
     } else if (e.type === 'confirm-place' && typeof e.name === 'string' && e.name.trim()) {
-      updateMessageById(e.id, (m) => ({ ...m, placeChosen: e.name }));
+      if (typeof e.id === 'string' && e.id) updateMessageById(e.id, (m) => ({ ...m, placeChosen: e.name }));
       handleSetPlace(e.name);
+    } else if (e.type === 'next-area' && typeof e.name === 'string' && e.name.trim()) {
+      // "I'm here now": the next area becomes where the player is (confirmed), and the whole tracker moves on.
+      handleSetPlace(e.name.trim());
     }
   };
   useEffect(() => {

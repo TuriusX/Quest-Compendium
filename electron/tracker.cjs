@@ -1,6 +1,7 @@
 /**
- * The objectives tracker: a small transparent always-on-top window (electron/tracker.html) that draws the current
- * answer's objectives straight onto the game, WoW-style. It never takes focus and is click-through except while the
+ * The objectives tracker: a small transparent always-on-top window (electron/tracker.html) that draws a quest log for
+ * where the player is straight onto the game, WoW-style: sections the app builds from our guides and the latest
+ * answer (src/utils/trackerPayload.ts). It never takes focus and is click-through except while the
  * mouse is over the text, so the game keeps playing underneath. Position, view (full / collapsed / away), text size,
  * transparency and backdrop are remembered per game in userData/tracker.json.
  *
@@ -42,7 +43,11 @@ let saveTimer = null;
 let mouseOn = false, pressed = false, mouseTimer = null;
 const MARGIN = 0;
 
-const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: true, x: null, y: null, edge: 'right' };
+// collapsed: the sections folded by clicking their heading ({ [section id]: true }), per game.
+const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: true, x: null, y: null, edge: 'right', collapsed: {} };
+/** The tracker grows with its content up to this share of the screen's height, then scrolls inside. */
+const MAX_HEIGHT_SHARE = 0.7;
+const maxHeight = () => Math.round(display().workArea.height * MAX_HEIGHT_SHARE);
 
 function loadStore() {
   if (store) return store;
@@ -206,7 +211,7 @@ async function open(spot) {
   if (!alive() || !current) return false;
   if (suspended) { lastSpot = lastSpot || win.getBounds(); dropWindow(); return false; } // the panel opened meanwhile
   const s = settingsFor(current.gameKey);
-  js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel() })})`);
+  js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel(), collapsed: s.collapsed || {}, maxHeight: maxHeight() })})`);
   if (!win.isVisible() && !revealPending) {
     revealPending = true;
     clearTimeout(revealTimer);
@@ -224,25 +229,36 @@ function reveal() {
 }
 
 /** What the page gets: only known fields, trimmed to length. */
+const SECTION_IDS = ['answer', 'missable', 'noreturn', 'collect', 'ach'];
 function cleanData(data) {
+  const str = (v, n) => String(v || '').slice(0, n);
   return {
-    id: String((data && data.id) || ''),
+    id: str(data && data.id, 80),
     accent: /^#[0-9a-fA-F]{3,8}$/.test((data && data.accent) || '') ? data.accent : '#a87ffb',
-    quest: String((data && data.quest) || '').slice(0, 120),
-    warning: String((data && data.warning) || '').slice(0, 160),
+    quest: str(data && data.quest, 120),
+    warning: str(data && data.warning, 200),
     place: data && data.place && data.place.name ? {
-      name: String(data.place.name).slice(0, 60), story: String(data.place.story || '').slice(0, 80), sure: !!data.place.sure,
+      name: str(data.place.name, 60), story: str(data.place.story, 80), sure: !!data.place.sure,
     } : null,
-    objectives: (Array.isArray(data && data.objectives) ? data.objectives : []).slice(0, 8).map((o) => ({
-      label: String((o && o.label) || '').slice(0, 60), where: String((o && o.where) || '').slice(0, 80),
-      done: !!(o && o.done), missable: !!(o && o.missable),
-    })).filter((o) => o.label),
+    // Sections, in the order the app built them; each item is one line (ticks go back to the app by item id).
+    sections: (Array.isArray(data && data.sections) ? data.sections : []).filter((x) => x && SECTION_IDS.includes(x.id)).slice(0, 8).map((x) => ({
+      id: x.id,
+      title: str(x.title, 60),
+      tone: x.tone === 'amber' ? 'amber' : '',
+      icon: x.icon === 'warn' ? 'warn' : '',
+      items: (Array.isArray(x.items) ? x.items : []).slice(0, 120).map((o) => ({
+        id: str(o && o.id, 200), label: str(o && o.label, 140), where: str(o && o.where, 160),
+        done: !!(o && o.done), missable: !!(o && o.missable), tick: !!(o && o.tick),
+        badge: Number.isInteger(o && o.badge) ? o.badge : 0,
+      })).filter((o) => o.label && o.id),
+    })).filter((x) => x.items.length),
+    next: data && data.next && data.next.name ? { name: str(data.next.name, 60) } : null,
     labels: cleanLabels(data && data.labels),
   };
 }
 
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
-const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'none'];
+const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'hereNow'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -256,13 +272,14 @@ function onScreen(s, wa) {
 }
 
 /**
- * Show (or replace) the tracker for an answer.
- * data: { id, title?, quest?, place?: {name, story, sure}, objectives: [{label, where?, done?, missable?}], warning?, accent? }
+ * Show (or replace) the tracker.
+ * data: { id, quest, place?: {name, story, sure}, sections: [{id, title, tone?, icon?, items: [{id, label, where?, done?,
+ *         missable?, badge?, tick?}]}], next?: {name}, warning?, accent, labels }
  */
 async function show(data, gameKey) {
   if (!deps) throw new Error('tracker.init() first');
   const clean = cleanData(data);
-  if (!clean.objectives.length && !clean.quest && !clean.place) { hide(); return false; }
+  if (!clean.sections.length && !clean.quest && !clean.place) { hide(); return false; }
   current = { data: clean, gameKey: gameKey || '_default' };
   // While the panel is open there's no window: the data waits for restore().
   if (deps.isPanelOpen && deps.isPanelOpen()) {
@@ -275,8 +292,8 @@ async function show(data, gameKey) {
 }
 
 /**
- * New data for the answer on show (or a newer answer): replaces what's shown entirely, cleaned like show(), so an
- * answer without a place or objectives doesn't keep the previous answer's. Kept while the panel is open (no window).
+ * New data (a new place, ticks, a newer answer): replaces what's shown entirely, cleaned like show(), so nothing from
+ * the previous place or answer stays. Kept while the panel is open (no window).
  */
 function update(patch) {
   if (!current) return;
@@ -377,7 +394,7 @@ function onMessage(event, msg) {
   switch (msg.type) {
     case 'size': {
       const w = Math.max(60, Math.min(900, Math.round(msg.width || 0)));
-      const h = Math.max(40, Math.min(1200, Math.round(msg.height || 0)));
+      const h = Math.max(40, Math.min(maxHeight() + 12, Math.round(msg.height || 0)));
       const b = win.getBounds();
       if (w !== b.width || h !== b.height) win.setBounds({ x: b.x, y: b.y, width: w, height: h });
       placeWindow(msg.view);
@@ -420,9 +437,27 @@ function onMessage(event, msg) {
       patchSettings(gameKey, p);
       break;
     }
-    case 'done':
-      if (current && current.data.objectives[msg.index]) current.data.objectives[msg.index].done = !!msg.done;
-      tell({ type: 'done', id: msg.id, index: msg.index, done: !!msg.done });
+    case 'tick': {
+      // A guide entry or an answer marker ticked on the tracker: the app saves it where the guide page and the
+      // checklist keep theirs, and sends the rebuilt tracker back.
+      const item = current && current.data.sections.flatMap((x) => x.items).find((o) => o.id === msg.item && o.tick);
+      if (!item) break;
+      item.done = !!msg.done;
+      tell({ type: 'tick', item: item.id, done: item.done });
+      break;
+    }
+    case 'section':
+      // A section folded or opened by its heading: remembered for this game.
+      if (typeof msg.id === 'string' && SECTION_IDS.includes(msg.id)) {
+        const folded = { ...(settingsFor(gameKey).collapsed || {}) };
+        if (msg.collapsed) folded[msg.id] = true;
+        else delete folded[msg.id];
+        patchSettings(gameKey, { collapsed: folded });
+      }
+      break;
+    case 'next-area':
+      // "I'm here now" on the next area: the app makes it the player's place and rebuilds the tracker there.
+      if (current && current.data.next && current.data.next.name) tell({ type: 'next-area', name: current.data.next.name });
       break;
     case 'confirm-place':
       if (current && current.data.place) current.data.place.sure = true;

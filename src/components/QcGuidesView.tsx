@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Check, ChevronDown, ChevronRight, ArrowLeft, Gem, Skull, Sparkles, TriangleAlert, MapPin, Play, MessageCircleQuestion } from './icons';
-import { getApiBaseUrl } from '../utils/api';
+import { guideApi } from '../utils/guideApi';
+import { GUIDE_DONE_EVENT, readDone, writeDone } from '../utils/guideProgress';
 import { useLocale, useT } from '../i18n';
 import { tipMatches, useAchievementGuideByKey, type AchievementGuide } from '../utils/achievementGuide';
 import { samePlace } from '../utils/placeName';
@@ -25,19 +26,10 @@ type Page = {
 };
 type View = { view: 'games' } | { view: 'game'; key: string; game?: string } | { view: 'area'; key: string; slug: string; game?: string } | { view: 'ach'; key: string; game?: string };
 
-const cache = new Map<string, Promise<any>>();
-// The guide's language follows the app's (a translated guide where one exists, English otherwise).
+// The guide's language follows the app's (a translated guide where one exists, English otherwise). Fetches are shared
+// with the objectives tracker (utils/guideApi).
 let guideLang = 'en';
-const withLang = (path: string) => (guideLang === 'en' || path === '/api/guides' ? path : `${path}${path.includes('?') ? '&' : '?'}lang=${guideLang}`);
-const api = (rawPath: string): Promise<any> => {
-  const path = withLang(rawPath);
-  if (!cache.has(path)) {
-    const p = fetch(`${getApiBaseUrl()}${path}`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
-    p.catch(() => cache.delete(path));
-    cache.set(path, p);
-  }
-  return cache.get(path)!;
-};
+const api = (path: string): Promise<any> => guideApi(path, guideLang);
 const ls = {
   get: (k: string) => {
     try {
@@ -51,14 +43,6 @@ const ls = {
       localStorage.setItem(k, v);
     } catch {}
   },
-};
-const doneKey = (key: string, slug: string) => `qc-guide-done:${key}:${slug}`;
-const readDone = (key: string, slug: string) => {
-  try {
-    return new Set<string>(JSON.parse(ls.get(doneKey(key, slug)) || '[]'));
-  } catch {
-    return new Set<string>();
-  }
 };
 
 export function QcGuidesView({
@@ -377,12 +361,21 @@ function AreaPage({
   const [done, setDone] = useState<Set<string>>(() => readDone(gameKey, slug));
   const [open, setOpen] = useState<Set<string>>(new Set());
   useEffect(() => ls.set(`qc-guide-last:${gameKey}`, slug), [gameKey, slug]);
+  // Ticks made on the objectives tracker show here too (and ours show there: writeDone tells everyone).
+  useEffect(() => {
+    const onDone = (e: Event) => {
+      const d = (e as CustomEvent).detail;
+      if (d && d.key === gameKey && d.slug === slug) setDone(readDone(gameKey, slug));
+    };
+    window.addEventListener(GUIDE_DONE_EVENT, onDone);
+    return () => window.removeEventListener(GUIDE_DONE_EVENT, onDone);
+  }, [gameKey, slug]);
   const toggle = (id: string) => {
     const next = new Set(done);
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setDone(next);
-    ls.set(doneKey(gameKey, slug), JSON.stringify([...next]));
+    writeDone(gameKey, slug, next);
   };
   const flip = (k: string) =>
     setOpen((p) => {

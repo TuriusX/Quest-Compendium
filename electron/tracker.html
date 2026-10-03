@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <title>Quest Compendium objectives</title>
 <style>
-  /* The objectives tracker: text drawn straight onto the game with a shadow, no card. Three states — full,
-     collapsed (one header line) and away (a small tab at the screen edge). Hovering shows the controls. */
+  /* The objectives tracker: a quest log drawn straight onto the game with a shadow, no card. Three states — full,
+     collapsed (one header line) and away (a small tab at the screen edge). Hovering shows the controls. The sections
+     scroll inside once the tracker reaches its height limit (--maxh, from the app: 70% of the screen). */
   :root {
     --accent: #a87ffb;
     --scale: 1;            /* the app's UI scale (Settings) */
@@ -17,17 +18,20 @@
     --warn: #ffc14d;
     --ok: #4ade80;
     --shadow: 0 1px 2px rgba(0,0,0,.95), 0 0 6px rgba(0,0,0,.85), 0 2px 10px rgba(0,0,0,.6);
+    --maxh: 70vh;          /* the tallest the tracker may grow (set by the app in px) */
   }
   html, body { margin: 0; background: transparent; overflow: hidden; width: 100%; height: 100%;
     font-family: 'Segoe UI', system-ui, sans-serif; font-size: var(--fs); color: var(--ink); user-select: none; }
   body.demo { background: #2a3a2a url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="%2335553a"/><rect x="20" y="20" width="20" height="20" fill="%232e4a33"/><rect width="20" height="20" fill="%232e4a33"/></svg>'); }
 
-  #tracker { position: absolute; left: 4px; top: 4px; display: inline-block; opacity: var(--alpha);
-    text-shadow: var(--shadow); max-width: 26em; padding: .35em .6em .5em .6em; border-radius: .5em; }
+  #tracker { position: absolute; left: 4px; top: 4px; display: inline-flex; flex-direction: column; opacity: var(--alpha);
+    text-shadow: var(--shadow); max-width: 26em; max-height: calc(var(--maxh) - 10px); box-sizing: border-box;
+    padding: .35em .6em .5em .6em; border-radius: .5em; }
   /* The soft dark backdrop (optional, toggled in the controls): a gradient that fades out, so it reads as a
      shade behind the text rather than a box. */
   #tracker.backdrop { background: radial-gradient(ellipse at 20% 30%, rgba(10,8,18,.62), rgba(10,8,18,.42) 55%, rgba(10,8,18,0) 100%); }
-  #tracker.collapsed .body, #tracker.collapsed .warn, #tracker.collapsed .hint, #tracker.collapsed .place { display: none; }
+  #tracker.collapsed .body, #tracker.collapsed .warn, #tracker.collapsed .hint, #tracker.collapsed .place,
+  #tracker.collapsed .quest, #tracker.collapsed .next { display: none; }
   #tracker.away { display: none; }
 
   .head { display: flex; align-items: center; gap: .45em; cursor: pointer; line-height: 1.25; }
@@ -48,9 +52,43 @@
   .place.sure .tick { color: var(--ok); font-weight: 800; }
   .place:not(.sure) .tick { display: none; }
 
-  .quest { font-weight: 700; font-size: 1.02em; line-height: 1.3; margin: .1em 0 .3em 0; color: #fff; }
+  .quest { font-weight: 700; font-size: 1.02em; line-height: 1.3; margin: .1em 0 .2em 0; color: #fff; }
+  /* The sections scroll here once the tracker is at its height limit; the scrollbar only shows while hovered. */
+  .body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: .2em;
+    scrollbar-width: thin; scrollbar-color: transparent transparent; }
+  #tracker:hover .body { scrollbar-color: rgba(243,238,252,.35) transparent; }
   ol { list-style: none; margin: 0; padding: 0; }
   .none { color: var(--dim); font-size: .9em; margin: .2em 0; }
+  .sec { margin-top: .4em; }
+  .sechead { display: flex; align-items: center; gap: .4em; cursor: pointer; font-size: .74em; font-weight: 800;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--dim); line-height: 1.5; }
+  .sechead:hover { color: var(--ink); }
+  .sechead svg { width: 1.1em; height: 1.1em; }
+  .sechead .cnt { font-weight: 700; letter-spacing: 0; opacity: .85; }
+  .sechead .chev { margin-left: auto; }
+  .sec.amber .sechead { color: var(--warn); }
+  .sec.folded ol, .sec.folded .more { display: none; }
+  .sec.folded .chev { transform: rotate(-90deg); }
+  .more { font-size: .78em; font-weight: 700; color: var(--accent); cursor: pointer; margin: .1em 0 0 1.75em; }
+  .more:hover { filter: brightness(1.25); }
+  /* A guide entry: an empty square that fills in when collected. An info line (a point of no return): no box. */
+  .box { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 1.05em; height: 1.05em;
+    margin-top: .17em; border: 1.5px solid rgba(243,238,252,.7); border-radius: 2px; font-size: .78em; font-weight: 800;
+    color: #16101f; box-shadow: 0 0 0 1px rgba(0,0,0,.5); text-shadow: none; }
+  li.done .box { background: #6b6678; border-color: #6b6678; color: #e9e6f0; }
+  li.miss .box { border-color: var(--warn); }
+  li.info { cursor: default; }
+  li.info .obj { color: var(--warn); font-weight: 600; }
+  li.info .where { color: var(--ink); opacity: .8; }
+  li.static { cursor: default; }
+  li.miss:not(.done) .obj { color: #ffe1a6; }
+  .next { display: flex; align-items: center; gap: .5em; margin-top: .45em; font-size: .88em; color: var(--dim); }
+  .next .nm { color: var(--ink); font-weight: 600; }
+  .next .go { margin-left: auto; font-size: .85em; font-weight: 700; color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 999px; padding: 0 .6em; line-height: 1.55; cursor: pointer; white-space: nowrap; text-shadow: none;
+    background: rgba(16,12,28,.55); }
+  .next .go:hover { filter: brightness(1.25); }
+  .next.off { display: none; }
   li { display: flex; align-items: flex-start; gap: .5em; line-height: 1.35; margin: .2em 0; cursor: pointer; }
   li:hover .obj { color: #fff; }
   .badge { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 1.25em; height: 1.25em;
@@ -120,11 +158,12 @@
     <span class="tick">✓</span>
     <span class="confirm" id="placeConfirm">Confirm</span>
   </div>
-  <div class="body">
-    <div class="quest" id="quest"></div>
-    <ol id="list"></ol>
+  <div class="quest" id="quest"></div>
+  <div class="body" id="body">
+    <div id="secs"></div>
     <div class="none" id="none"></div>
   </div>
+  <div class="next off" id="next"><span id="nextLbl"></span><span class="go" id="hereNow"></span></div>
   <div class="warn off" id="warn"></div>
   <div class="hint" id="hint"><kbd>Ctrl+G</kbd> or click the title: open the Compendium</div>
   <div class="ctl" id="ctl">
@@ -152,13 +191,17 @@
   const bridge = window.qcTracker || null;
   const demo = !bridge || /[?&]demo=1/.test(location.search);
   const $ = (id) => document.getElementById(id);
-  const tracker = $('tracker'), tab = $('tab'), list = $('list'), hint = $('hint');
+  const tracker = $('tracker'), tab = $('tab'), secs = $('secs'), hint = $('hint');
+  const SHOW = 12; // entries per section before "+N more"
   const SIZES = { small: 14, medium: 16, large: 19 };
   const PEEK_MS = 7000;
 
   // What's on screen right now and how the player set it up (settings come from the app, per game).
   const state = {
-    data: null,                   // { id, title, quest, place:{name,story,sure}, objectives:[{label,where,done,missable}], warning, accent }
+    data: null,                   // { id, quest, place:{name,story,sure}, sections:[{id,title,tone,icon,items:[…]}], next, warning, accent }
+    collapsed: {},                // sections folded by their heading (saved per game by the app)
+    more: {},                     // sections opened past SHOW entries ("+N more"), until the next place
+    maxHeight: 0,                 // the tallest the tracker may grow, in px (70% of the screen)
     view: 'full',                 // full | collapsed | away
     peekFrom: null,               // the view to fold back to after a peek
     size: 'medium', alpha: 100, backdrop: false, edge: 'right',
@@ -176,7 +219,9 @@
     confirmHint: 'Confirm where you are', collapse: 'Collapse to one line', open: 'Open', away: 'Send to the screen edge',
     size: 'Text size', alpha: 'Transparency', backdrop: 'Soft dark backdrop', tabHint: 'Bring the objectives back',
     itemTodo: 'Click: collected', itemDone: 'Click: not collected yet', hintNoKeys: 'Click the title to open the Compendium',
-    none: 'No objectives for this answer',
+    empty: 'Nothing to track here yet', secAnswer: 'From your last answer', secMissable: 'Missable here',
+    secNoReturn: 'Point of no return', secCollect: 'To collect', secAch: 'Achievements here', more: '+{n} more',
+    next: 'Next: {area}', hereNow: "I'm here now",
   };
   const L = (k, vars) => {
     const own = state.data && state.data.labels && state.data.labels[k];
@@ -202,15 +247,31 @@
     $('hint').innerHTML = after === undefined ? esc(before) : `${esc(before)}<kbd>${esc(state.keys)}</kbd>${esc(after)}`;
   }
 
+  const WARN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+
+  /** One line: the answer's markers get their number badge, guide entries a box, other lines (no return) none. */
+  function itemHtml(o, sectionId) {
+    const cls = [o.done ? 'done' : '', o.missable ? 'miss' : '', sectionId === 'noreturn' ? 'info' : '', !o.tick && sectionId !== 'noreturn' ? 'static' : ''].filter(Boolean).join(' ');
+    const mark = o.badge ? `<span class="badge">${o.done ? '✓' : o.badge}</span>`
+      : sectionId === 'noreturn' ? ''
+      : `<span class="box">${o.done ? '✓' : ''}</span>`;
+    const title = o.tick ? ` title="${esc(o.done ? L('itemDone') : L('itemTodo'))}"` : '';
+    const where = o.where && !o.done ? ` <span class="where">— ${esc(o.where)}</span>` : '';
+    return `<li class="${cls}" data-item="${esc(o.id)}"${title}>${mark}<span class="obj">${esc(o.label)}${where}</span></li>`;
+  }
+
   function render() {
     const d = state.data; if (!d) return;
     applyLabels();
     document.documentElement.style.setProperty('--accent', /^#[0-9a-f]{3,8}$/i.test(d.accent || '') ? d.accent : '#a87ffb');
-    const objs = d.objectives || [];
-    const done = objs.filter((o) => o.done).length;
-    $('count').textContent = objs.length ? `${done}/${objs.length}` : '';
-    $('tabN').textContent = objs.length ? `${objs.length - done}` : '';
-    $('tabN').style.display = objs.length - done > 0 ? '' : 'none';
+    if (state.maxHeight > 0) document.documentElement.style.setProperty('--maxh', `${state.maxHeight}px`);
+    const sections = d.sections || [];
+    // The header count and the away tab's number: what's left to tick.
+    const ticks = sections.flatMap((x) => x.items).filter((o) => o.tick);
+    const done = ticks.filter((o) => o.done).length;
+    $('count').textContent = ticks.length ? `${done}/${ticks.length}` : '';
+    $('tabN').textContent = ticks.length ? `${ticks.length - done}` : '';
+    $('tabN').style.display = ticks.length - done > 0 ? '' : 'none';
     $('quest').textContent = d.quest || '';
     $('quest').style.display = d.quest ? '' : 'none';
     const p = d.place || null;
@@ -221,16 +282,31 @@
       $('place').classList.toggle('sure', !!p.sure);
       $('bConfirm').classList.toggle('on', !!p.sure);
     }
-    list.innerHTML = objs.map((o, i) => `<li class="${o.done ? 'done' : ''}" data-i="${i}" title="${esc(o.done ? L('itemDone') : L('itemTodo'))}">
-        <span class="badge">${o.done ? '✓' : i + 1}</span>
-        <span class="obj">${esc(o.label)}${o.where && !o.done ? ` <span class="where">— ${esc(o.where)}</span>` : ''}</span></li>`).join('');
-    // An answer with nothing to collect: one muted line instead of an empty list.
-    $('none').textContent = objs.length ? '' : L('none');
-    $('none').style.display = objs.length ? 'none' : '';
-    const missable = objs.filter((o) => o.missable && !o.done).map((o) => o.label);
-    const warnText = d.warning || (missable.length ? L('missable', { list: missable.join(', ') }) : '');
+    secs.innerHTML = sections.map((x) => {
+      const folded = !!state.collapsed[x.id];
+      const shown = state.more[x.id] ? x.items : x.items.slice(0, SHOW);
+      const left = x.items.length - shown.length;
+      const tickable = x.items.filter((o) => o.tick);
+      const cnt = tickable.length ? `<span class="cnt">${tickable.filter((o) => o.done).length}/${tickable.length}</span>` : `<span class="cnt">${x.items.length}</span>`;
+      return `<div class="sec${x.tone === 'amber' ? ' amber' : ''}${folded ? ' folded' : ''}" data-sec="${esc(x.id)}">
+        <div class="sechead">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${cnt}<span class="chev">▾</span></div>
+        <ol>${shown.map((o) => itemHtml(o, x.id)).join('')}</ol>
+        ${left > 0 ? `<div class="more">${esc(L('more', { n: left }))}</div>` : ''}
+      </div>`;
+    }).join('');
+    // Nothing at all to list here: one muted line.
+    $('none').textContent = sections.length ? '' : L('empty');
+    $('none').style.display = sections.length ? 'none' : '';
+    const nx = d.next && d.next.name;
+    $('next').classList.toggle('off', !nx);
+    if (nx) {
+      const [before, after] = L('next').split('{area}');
+      $('nextLbl').innerHTML = after === undefined ? esc(before) : `${esc(before)}<span class="nm">${esc(nx)}</span>${esc(after)}`;
+      $('hereNow').textContent = L('hereNow');
+    }
+    const warnText = d.warning || '';
     $('warn').classList.toggle('off', !warnText);
-    $('warn').innerHTML = warnText ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>${esc(warnText)}</span>` : '';
+    $('warn').innerHTML = warnText ? `${WARN_ICON}<span>${esc(warnText)}</span>` : '';
     applyView();
   }
 
@@ -335,12 +411,26 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden) releasePress(); });
   window.addEventListener('blur', releasePress);
 
-  list.addEventListener('click', (e) => {
+  secs.addEventListener('click', (e) => {
+    const sec = e.target.closest('.sec'); if (!sec || !state.data) return;
+    const id = sec.dataset.sec;
+    if (e.target.closest('.sechead')) {
+      // Fold or open the section (remembered per game by the app).
+      state.collapsed = { ...state.collapsed, [id]: !state.collapsed[id] };
+      if (!state.collapsed[id]) delete state.collapsed[id];
+      render();
+      send('section', { id, collapsed: !!state.collapsed[id] });
+      return;
+    }
+    if (e.target.closest('.more')) { state.more = { ...state.more, [id]: true }; render(); return; }
     const li = e.target.closest('li'); if (!li) return;
-    const i = Number(li.dataset.i); const o = state.data.objectives[i]; if (!o) return;
+    const x = (state.data.sections || []).find((s2) => s2.id === id);
+    const o = x && x.items.find((it) => it.id === li.dataset.item);
+    if (!o || !o.tick) return;
     o.done = !o.done; render();
-    send('done', { id: state.data.id, index: i, done: o.done });
+    send('tick', { item: o.id, done: o.done });
   });
+  $('hereNow').addEventListener('click', () => send('next-area', {}));
   const confirmPlace = () => {
     const p = state.data && state.data.place; if (!p || !p.name) return;
     p.sure = true; render();
@@ -369,6 +459,8 @@
   // Called by the app.
   window.qcTrackerShow = (data, settings) => {
     releasePress();
+    const samePlace = state.data && data && state.data.place && data.place && state.data.place.name === data.place.name;
+    if (!samePlace) state.more = {};
     state.data = data;
     if (settings) Object.assign(state, settings);
     if (settings && settings.view) state.view = settings.view;
@@ -391,13 +483,22 @@
     window.qcTrackerShow({
       id: 'demo', accent: '#a87ffb', quest: 'Find the Elder Scroll in the Dwemer ruins',
       place: { name: 'Blackreach', story: 'Just after meeting Septimus', sure: false },
-      objectives: [
-        { label: 'Crimson Nirnroot', where: 'by the glowing mushrooms, left of the lift' },
-        { label: 'Falmer sword', where: 'on the dead Falmer near the bridge', done: true },
-        { label: 'Lexicon receptacle', where: 'inside the Tower of Mzark' },
-        { label: 'Attunement sphere', where: 'top of the stairs', missable: true },
+      sections: [
+        { id: 'answer', title: 'From your last answer', items: [
+          { id: 'a:d:0', label: 'Crimson Nirnroot', where: 'by the glowing mushrooms, left of the lift', badge: 1, tick: true },
+          { id: 'a:d:1', label: 'Falmer sword', where: 'on the dead Falmer near the bridge', done: true, badge: 2, tick: true },
+        ] },
+        { id: 'missable', title: 'Missable here', tone: 'amber', items: [
+          { id: 'g:b:1', label: 'Attunement sphere', where: 'top of the stairs', missable: true, tick: true },
+        ] },
+        { id: 'noreturn', title: 'Point of no return', tone: 'amber', icon: 'warn', items: [
+          { id: 'n:0', label: 'Reading the Elder Scroll', where: 'the Tower of Mzark closes' },
+        ] },
+        { id: 'collect', title: 'To collect', items: Array.from({ length: 16 }, (_, i) => ({ id: 'g:b:c' + i, label: 'Crimson Nirnroot #' + (i + 1), tick: true, done: i < 3 })) },
+        { id: 'ach', title: 'Achievements here', items: [{ id: 'h:0:x', label: 'Elder Knowledge', where: 'read the scroll at the Tower of Mzark' }] },
       ],
-    });
+      next: { name: 'Tower of Mzark' },
+    }, { maxHeight: Math.round(window.innerHeight * 0.7) });
     document.addEventListener('keydown', (e) => {
       if (e.key === '1') setView('full'); if (e.key === '2') setView('collapsed'); if (e.key === '3') setView('away');
       if (e.key.toLowerCase() === 'g') peek();
