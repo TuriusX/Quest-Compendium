@@ -49,5 +49,10 @@ server's image only holds the built app.
 - **Budget:** `PIPELINE_MONTHLY_AI_DOLLARS` (default $10) and `PIPELINE_MONTHLY_SEARCHES` (default 1,500), and it always
   leaves `PIPELINE_PLAYER_RESERVE` (default 2,000) of the app's monthly searches for players. Change them with
   `gcloud run jobs update guide-pipeline --update-env-vars …`.
+  - **Set since 2026-10-03, to finish the guide-review rebuilds quickly:** `MONTHLY_SEARCH_CAP=8500` on both the job
+    and the server (`gcloud run services update quest-compendium --update-env-vars …`; searches past the free 5,000 a
+    month cost $14 per 1,000), `PIPELINE_MONTHLY_AI_DOLLARS=15` and `PIPELINE_QUEUE_MINUTES=160`. The pipeline still
+    stops 2,000 below the cap (the player reserve), so it may use up to 6,500 searches a month app-wide. The cap stays
+    at 8,500 into later months until it's set back to 5000 on both.
 - **Off switch:** set `enabled` to `false` on the `system/pipeline` document in Firestore. The month's totals and the
   last report are on that document too.
