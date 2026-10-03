@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>STAR WARS™ Knights of the Old Republic™ Guide and Walkthrough | Quest Compendium</title>
+  <meta name="description" content="Area-by-area STAR WARS™ Knights of the Old Republic™ guide with item checklists, secrets, missables and enemy weaknesses.">
+  <link rel="canonical" href="https://questcompendium.com/guides/star-wars-knights-of-the-old-republic/">
+  
+  
+  <meta property="og:title" content="STAR WARS™ Knights of the Old Republic™ Guide and Walkthrough | Quest Compendium">
+  <meta property="og:description" content="Area-by-area STAR WARS™ Knights of the Old Republic™ guide with item checklists, secrets, missables and enemy weaknesses.">
+  <meta property="og:image" content="https://questcompendium.com/icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="../../favicon-192.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="../../favicon-96.png">
+  <link rel="icon" href="../../favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="../../icon.svg">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
+    .qc-pixel { image-rendering: pixelated; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
+    /* Search hides entries with the hidden attribute; layout classes like "flex" would otherwise keep them showing. */
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body class="min-h-screen" data-guide="star-wars-knights-of-the-old-republic">
+  <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
+        <a href="../../guides/index.html" class="hover:text-white">Guides</a>
+        <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
+        
+      </div>
+    </div>
+  </nav>
+  
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] rounded-2xl border border-white/10 mb-5"><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">SW</span></div><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/32370/header.jpg?t=1681144833" alt="STAR WARS™ Knights of the Old Republic™" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()"></div>
+          <h1 class="text-3xl font-bold text-white">STAR WARS™ Knights of the Old Republic™ guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">29</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">79</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">33</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          
+          <a hidden data-continue="star-wars-knights-of-the-old-republic" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <input type="search" data-filter="#qc-area-rows" data-empty="#qc-area-empty" placeholder="Search areas and items…" class="mt-6 w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
+          <div id="qc-area-rows" class="mt-3"><a data-search="Endar Spire Prologue aboard the Republic ship Short Sword Blaster Pistol Computer Spikes Prototype Vibroblade Slicing the terminal before the bridge allows you to overload the power conduit in the adjacent room, eliminating the entire patrol of Sith soldiers without entering direct combat. Sith Trooper Sith Heavy Trooper Sith Commander Sith Patrol Droid" href="endar-spire/index.html" data-area-link="endar-spire" data-name="Endar Spire" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Endar Spire</span><span class="block text-sm text-zinc-500 truncate">Prologue aboard the Republic ship</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|endar-spire|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Taris Upper City Arrival on Taris Sith Armor Permacharge Republic Uniform In the South Apartments, Dia has a bounty placed on her by Holdan; you can resolve this through persuasion or paying her fee to receive her energy blade or light side points. In the Upper City North Apartments, you can unlock a locked footlocker by correctly answering the riddle questions left by Elinda&#39;s holographic security system. Sith Patrol Trooper" href="taris-upper-city/index.html" data-area-link="taris-upper-city" data-name="Taris Upper City" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Taris Upper City</span><span class="block text-sm text-zinc-500 truncate">Arrival on Taris</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|taris-upper-city|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Taris Lower City Searching for Bastila Sith Papers Republic Uniform Lower City Security Pass Matrik&#39;s Faked Death | Help the bounty target Matrik escape Taris by bringing him a permacrete detonator to blow up his apartment, earning light side points while claiming the bounty credit. Black Vulkar Gangers" href="taris-lower-city/index.html" data-area-link="taris-lower-city" data-name="Taris Lower City" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Taris Lower City</span><span class="block text-sm text-zinc-500 truncate">Searching for Bastila</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|taris-lower-city|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Taris Undercity Searching for the Promised Land Rukil&#39;s Apprentice&#39;s Journal Promised Land Journal Second Promised Land Journal Igear&#39;s Alternate Offer | Speak to the merchant Igear in the outcast village before turning in the journals to Rukil; he will pay you credits to give the journals to him instead so the villagers remain reliant on him. Rakghoul Patrol Droid" href="taris-undercity/index.html" data-area-link="taris-undercity" data-name="Taris Undercity" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Taris Undercity</span><span class="block text-sm text-zinc-500 truncate">Searching for the Promised Land</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|taris-undercity|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Taris Sewers Navigating the sewers Bakrana Energy Shield Republic Mod Armor Moisture Vaporator Parts Gamorrean Patrol Rakghoul Fiend Rancor" href="taris-sewers/index.html" data-area-link="taris-sewers" data-name="Taris Sewers" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Taris Sewers</span><span class="block text-sm text-zinc-500 truncate">Navigating the sewers</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|taris-sewers|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Taris Black Vulkar Base Infiltrating the gang base Passcard Prototype Swoop Accelerator Reinforced Fiber Armor Black Vulkar Guard Patrol Droid Heavy Labor Droid Kandon Ark" href="taris-black-vulkar-base/index.html" data-area-link="taris-black-vulkar-base" data-name="Taris Black Vulkar Base" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Taris Black Vulkar Base</span><span class="block text-sm text-zinc-500 truncate">Infiltrating the gang base</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|taris-black-vulkar-base|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Taris Davik&#39;s Estate Escaping Taris Davik&#39;s War Suit Calo Nord&#39;s Armor Davik Kang Calo Nord Security Droids" href="taris-daviks-estate/index.html" data-area-link="taris-daviks-estate" data-name="Taris Davik&#39;s Estate" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Taris Davik&#39;s Estate</span><span class="block text-sm text-zinc-500 truncate">Escaping Taris</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|taris-daviks-estate|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Dantooine Jedi Enclave Training as a Jedi Jedi Robe Lightsaber Juhani" href="dantooine-jedi-enclave/index.html" data-area-link="dantooine-jedi-enclave" data-name="Dantooine Jedi Enclave" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dantooine Jedi Enclave</span><span class="block text-sm text-zinc-500 truncate">Training as a Jedi</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|dantooine-jedi-enclave|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Dantooine Plains Exploring the surface Sandral Droid Head Crystal, Rubat Crystal, Opila Star Map Reclaiming Casus Sandral&#39;s diary near the Matale Grounds allows you to resolve the family blood feud peacefully rather than letting it escalate to bloodshed. Kath Hound Horned Kath Hound Kinrath Kinrath Hive Viper Juhani Mandalorians" href="dantooine-plains/index.html" data-area-link="dantooine-plains" data-name="Dantooine Plains" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Dantooine Plains</span><span class="block text-sm text-zinc-500 truncate">Exploring the surface</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|dantooine-plains|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Tatooine Anchorhead Arrival on Tatooine Czerka Hunting License Sand People Clothing Krayt Dragon Pearl You can use Persuade or Threaten dialogue options with Yuka Laka to drastically lower HK-47&#39;s purchase price from 5,000 down to 2,500 credits. Dark Jedi Gamorrean Thug" href="tatooine-anchorhead/index.html" data-area-link="tatooine-anchorhead" data-name="Tatooine Anchorhead" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tatooine Anchorhead</span><span class="block text-sm text-zinc-500 truncate">Arrival on Tatooine</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|tatooine-anchorhead|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Tatooine Dune Sea Hunting the Krayt Dragon Star Map: Tatooine Krayt Dragon Pearl Krayt Dragon Desert Wraid Holy Banthas" href="tatooine-dune-sea/index.html" data-area-link="tatooine-dune-sea" data-name="Tatooine Dune Sea" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tatooine Dune Sea</span><span class="block text-sm text-zinc-500 truncate">Hunting the Krayt Dragon</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|tatooine-dune-sea|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Tatooine Sand People Enclave Negotiating with Tuskens Gaffi Stick Moisture Vaporators Krayt Dragon Pearl Sand People History Datapads Returning to the enclave without wearing the Sand People clothing disguise at any point turns the entire camp hostile permanently, ending diplomatic options. Opening any storage wicker bin or container inside the enclave while wandering around in peaceful mode is treated as theft, instantly turning all Sand People hostile. Sand People Warrior Sand People Holy Man Sand People Chieftain" href="tatooine-sand-people-enclave/index.html" data-area-link="tatooine-sand-people-enclave" data-name="Tatooine Sand People Enclave" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tatooine Sand People Enclave</span><span class="block text-sm text-zinc-500 truncate">Negotiating with Tuskens</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|tatooine-sand-people-enclave|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Tatooine Eastern Dune Sea Finding the Star Map Tatooine Star Map Krayt Dragon Pearls Holocron of Master Sarresh Bantha Fodder Krayt Dragon Desert Wraid" href="tatooine-eastern-dune-sea/index.html" data-area-link="tatooine-eastern-dune-sea" data-name="Tatooine Eastern Dune Sea" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Tatooine Eastern Dune Sea</span><span class="block text-sm text-zinc-500 truncate">Finding the Star Map</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|tatooine-eastern-dune-sea|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Kashyyyk Great Walkway Entering the forest Czerka Bowcaster Kinrath Viper Kinrath Mykal Dark Jedi Czerka Patrol" href="kashyyyk-great-walkway/index.html" data-area-link="kashyyyk-great-walkway" data-name="Kashyyyk Great Walkway" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kashyyyk Great Walkway</span><span class="block text-sm text-zinc-500 truncate">Entering the forest</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|kashyyyk-great-walkway|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Kashyyyk Shadowlands Searching for the Star Map Promissary Note Bacca&#39;s Ceremonial Blade Katarn Kinrath Terentatek Mandalorian Hunter" href="kashyyyk-shadowlands/index.html" data-area-link="kashyyyk-shadowlands" data-name="Kashyyyk Shadowlands" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Kashyyyk Shadowlands</span><span class="block text-sm text-zinc-500 truncate">Searching for the Star Map</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|kashyyyk-shadowlands|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Manaan Ahto City Arrival on Manaan Republic Passcard Sith Diplomat" href="manaan-ahto-city/index.html" data-area-link="manaan-ahto-city" data-name="Manaan Ahto City" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Manaan Ahto City</span><span class="block text-sm text-zinc-500 truncate">Arrival on Manaan</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|manaan-ahto-city|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Manaan Hrakert Station Underwater facility Environmental Suit Sonic Emitter Insane Selkath Submersible Droid Firaxa Shark" href="manaan-hrakert-station/index.html" data-area-link="manaan-hrakert-station" data-name="Manaan Hrakert Station" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Manaan Hrakert Station</span><span class="block text-sm text-zinc-500 truncate">Underwater facility</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|manaan-hrakert-station|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Manaan Kolto Control Finding the Star Map Sonic Emitter Insane Scientist Mining Droid" href="manaan-kolto-control/index.html" data-area-link="manaan-kolto-control" data-name="Manaan Kolto Control" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Manaan Kolto Control</span><span class="block text-sm text-zinc-500 truncate">Finding the Star Map</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|manaan-kolto-control|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Korriban Dreshdae Arrival on Korriban Sith Medallion Moisture Vaporator Sith Thugs" href="korriban-dreshdae/index.html" data-area-link="korriban-dreshdae" data-name="Korriban Dreshdae" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Korriban Dreshdae</span><span class="block text-sm text-zinc-500 truncate">Arrival on Korriban</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|korriban-dreshdae|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Korriban Sith Academy Training as a Sith Sith Medallion Qel-Droma Robes Interrogating the Mandalorian prisoner inside the academy can be solved by carefully monitoring his serum levels to extract the information Uthar wants without killing him. Uthar Wynn Yuthura Ban Sith Students" href="korriban-sith-academy/index.html" data-area-link="korriban-sith-academy" data-name="Korriban Sith Academy" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Korriban Sith Academy</span><span class="block text-sm text-zinc-500 truncate">Training as a Sith</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|korriban-sith-academy|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Korriban Valley of the Dark Lords Exploring tombs Ajunta Pall&#39;s Blade Darth Bandon&#39;s Fiber Armor Placing the notch-less, notched, and jagged swords in the correct order on the statues in Ajunta Pall&#39;s tomb awakens his spirit peacefully instead of triggering hostile traps. In the Tomb of Marko Ragnos, you can disable the rogue assassin droid&#39;s defenses by reprogramming or shuting down its escort combat droids using a series of sound-dampening devices. Tuk&#39;ata Shyrack Terentatek" href="korriban-valley-of-the-dark-lords/index.html" data-area-link="korriban-valley-of-the-dark-lords" data-name="Korriban Valley of the Dark Lords" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Korriban Valley of the Dark Lords</span><span class="block text-sm text-zinc-500 truncate">Exploring tombs</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|korriban-valley-of-the-dark-lords|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Korriban Tomb of Naga Sadow Finding the Star Map Sith Lightsaber Naga Sadow&#39;s Poison Blade Fire Grenade Solving the Towers of Hanoi puzzle on the computer terminal in the southern wing unlocks the sealed door behind it, allowing access to the chamber containing Fire Grenades. Terentatek Uthar Wynn Yuthura Ban Tuk&#39;ata" href="korriban-tomb-of-naga-sadow/index.html" data-area-link="korriban-tomb-of-naga-sadow" data-name="Korriban Tomb of Naga Sadow" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Korriban Tomb of Naga Sadow</span><span class="block text-sm text-zinc-500 truncate">Finding the Star Map</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|korriban-tomb-of-naga-sadow|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Leviathan Bridge Captured by the Sith Sith Tremor Sword Verpine Cardio-Regulator Admiral Saul Karath Dark Jedi Sith Trooper" href="leviathan-bridge/index.html" data-area-link="leviathan-bridge" data-name="Leviathan Bridge" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Leviathan Bridge</span><span class="block text-sm text-zinc-500 truncate">Captured by the Sith</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|leviathan-bridge|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Leviathan Detention Block Escaping the ship Equipment Locker contents (party gear) Space Suit Sith Trooper Sith Patrol Droid Sith Technician" href="leviathan-detention-block/index.html" data-area-link="leviathan-detention-block" data-name="Leviathan Detention Block" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Leviathan Detention Block</span><span class="block text-sm text-zinc-500 truncate">Escaping the ship</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|leviathan-detention-block|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Unknown World Beach Crash landing Computer Spikes Parts for the Ebon Hawk Rakatan Warrior Gizka" href="unknown-world-beach/index.html" data-area-link="unknown-world-beach" data-name="Unknown World Beach" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Unknown World Beach</span><span class="block text-sm text-zinc-500 truncate">Crash landing</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|unknown-world-beach|2"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Unknown World Temple Exterior Approaching the temple Mandalorian Datapad Black Rakata Temple Defense Droid Mandalorian Ambushers" href="unknown-world-temple-exterior/index.html" data-area-link="unknown-world-temple-exterior" data-name="Unknown World Temple Exterior" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Unknown World Temple Exterior</span><span class="block text-sm text-zinc-500 truncate">Approaching the temple</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|unknown-world-temple-exterior|1"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Unknown World Temple Interior Finding the Star Map Massive Sith Apprentice Vestment Star Map The lower level contains a square floor tile puzzle; stepping on the tiles in an &quot;H&quot; pattern unlocks the door leading to the Rakatan computer terminal and the final Star Map. Temple Droid Dark Jedi Master" href="unknown-world-temple-interior/index.html" data-area-link="unknown-world-temple-interior" data-name="Unknown World Temple Interior" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Unknown World Temple Interior</span><span class="block text-sm text-zinc-500 truncate">Finding the Star Map</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|unknown-world-temple-interior|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Star Forge Deck 1 Final assault Dark Jedi Sith Trooper Assault Droid" href="star-forge-deck-1/index.html" data-area-link="star-forge-deck-1" data-name="Star Forge Deck 1" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Star Forge Deck 1</span><span class="block text-sm text-zinc-500 truncate">Final assault</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|star-forge-deck-1|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Star Forge Deck 2 Confronting Malak Dark Jedi Sith Apprentice Sith Heavy Trooper Sith Trooper Assault Droid" href="star-forge-deck-2/index.html" data-area-link="star-forge-deck-2" data-name="Star Forge Deck 2" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Star Forge Deck 2</span><span class="block text-sm text-zinc-500 truncate">Confronting Malak</span></span>
+          <span data-progress="star-wars-knights-of-the-old-republic|star-forge-deck-2|0"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          <p id="qc-area-empty" hidden class="mt-3 text-sm text-zinc-500">Nothing matches that search.</p>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
+    <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in STAR WARS™ Knights of the Old Republic™?</h2>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
+    <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+    Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>. Game names belong to their owners; this site isn&#39;t affiliated with any publisher. Game images © their respective owners.
+  </footer>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  // Search boxes: hide entries that don't match, and section headings left with nothing under them.
+  var norm=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');};
+  document.querySelectorAll('[data-filter]').forEach(function(inp){
+    var list=document.querySelector(inp.getAttribute('data-filter')), empty=document.querySelector(inp.getAttribute('data-empty')||'#_');
+    if(!list) return;
+    inp.addEventListener('input',function(){
+      var q=norm(inp.value.trim()), shown=0;
+      list.querySelectorAll('[data-search]').forEach(function(el){var ok=!q||norm(el.getAttribute('data-search')).indexOf(q)>=0; el.hidden=!ok; if(ok) shown++;});
+      list.querySelectorAll('[data-head]').forEach(function(h){var g=h.getAttribute('data-head'),any=false;list.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){if(!el.hidden)any=true;});h.hidden=!any;});
+      document.querySelectorAll('[data-hide-when-searching]').forEach(function(el){el.hidden=!!q;});
+      if(empty) empty.hidden=shown>0;
+    });
+  });
+  // Sorting and the A–Z bar on the guides page.
+  var grid=document.querySelector('[data-games]');
+  var sortSel=document.querySelector('[data-sort]');
+  if(grid&&sortSel){sortSel.addEventListener('change',function(){
+    var k=sortSel.value, cards=Array.prototype.slice.call(grid.children);
+    cards.sort(function(a,b){ if(k==='az') return a.getAttribute('data-name').localeCompare(b.getAttribute('data-name')); return (+b.getAttribute('data-'+k))-(+a.getAttribute('data-'+k)) || a.getAttribute('data-name').localeCompare(b.getAttribute('data-name')); });
+    cards.forEach(function(c){grid.appendChild(c);});
+  });}
+  document.querySelectorAll('[data-letter]').forEach(function(btn){btn.addEventListener('click',function(){
+    if(sortSel&&sortSel.value!=='az'){sortSel.value='az';sortSel.dispatchEvent(new Event('change'));}
+    var L=btn.getAttribute('data-letter'), t=grid&&grid.querySelector('[data-first="'+L+'"]'); if(t) t.scrollIntoView({behavior:'smooth',block:'center'});
+  });});
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+})();</script>
+</body>
+</html>
