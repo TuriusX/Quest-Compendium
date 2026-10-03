@@ -97,6 +97,8 @@ export function useTrackerGuide(gameName: string | undefined, placeName: string 
           next: next ? { slug: next.slug, name: next.name, story: next.story || '' } : null,
           done: readDone(guide.key, area.slug),
           via: match.via,
+          areas: guide.areas.map((a) => ({ name: a.name, story: a.story || '' })),
+          index,
         }
       : null;
   return { guideKey: guide?.key || null, guideArea, achievementGuide };

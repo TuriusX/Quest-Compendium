@@ -7,7 +7,9 @@
  *   - "Point of no return": the achievement guide's roadmap points for this area, and what they lock out
  *   - "To collect": the area's other checklist entries, in the guide's order
  *   - "Achievements here": achievement tips for this area (done once unlocked on Steam)
- * and "Next: <area>" from the guide's area order. Uncollected entries come first in each section.
+ * and "Next: <area>" from the guide's area order; the place line steps through the guide's areas (‹ ›, or a list).
+ * Uncollected entries come first in each section. Entry ids are stable (per area), so hiding an entry on the tracker
+ * sticks.
  * Without a guide for the game it falls back to the answer's markers and quest line. The panel-hidden handler, live
  * updates and "Track on screen" all build it here. Its words come from the app's translations (labels).
  */
@@ -18,7 +20,10 @@ import type { GuidePage } from './guideApi';
 import { nameKey, samePlace } from './placeName';
 
 export type TrackerItem = {
-  /** Where a tick goes: a:<answer id>:<marker index>, g:<area slug>:<entry id>; others (n:, h:) can't be ticked here. */
+  /**
+   * Stable per area: a:<answer id>:<marker index>, g:<area slug>:<entry id> (both tickable), n:<area slug>:<point>,
+   * h:<area slug>:<achievement>. Hidden entries are saved by id.
+   */
   id: string;
   label: string;
   where?: string;
@@ -43,6 +48,12 @@ export type TrackerData = {
   source?: string;
   /** Only without a guide: the answer's missable markers, as one line. */
   warning?: string;
+  /** The guide's areas in order and where the player is among them (the ‹ › arrows and the area list). */
+  areas?: { names: string[]; index: number };
+  /** "Locate me" is looking at a screenshot. */
+  locating?: boolean;
+  /** A short message on the tracker (why "Locate me" couldn't set the place). */
+  notice?: string;
   labels?: Record<string, string>;
 };
 export type TrackerPayload = { data: TrackerData; gameKey: string };
@@ -58,13 +69,16 @@ export type TrackerGuideArea = {
   done: Set<string>;
   /** How the area was found for the place (utils/guideMatch): by name, or as the closest match. */
   via?: 'name' | 'sub' | 'story';
+  /** All the guide's areas in order, and this one's position. */
+  areas?: { name: string; story: string }[];
+  index?: number;
 };
 
 /** The tracker page's words (electron/tracker.html), from the "tracker.*" translations. */
 const LABEL_KEYS = [
   'title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size',
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
-  'more', 'next', 'hereNow', 'closest',
+  'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
   Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));
@@ -133,7 +147,7 @@ export function buildTrackerPayload(
   guideArea: TrackerGuideArea | null | undefined,
   achievementGuide: AchievementGuide | null | undefined,
   labels: Record<string, string> | undefined,
-  opts: { accent: string; gameKey: string; pinned?: boolean; achievements?: Achievement[] },
+  opts: { accent: string; gameKey: string; pinned?: boolean; achievements?: Achievement[]; locating?: boolean; notice?: string },
 ): TrackerPayload | null {
   const msg = latestAnswer || null;
   const L = labels || {};
@@ -190,7 +204,7 @@ export function buildTrackerPayload(
     if (noReturn.length) {
       sections.push({
         id: 'noreturn', title: title('noreturn'), tone: 'amber', icon: 'warn',
-        items: noReturn.map((n, i) => ({ id: `n:${i}`, label: n.point, where: n.lost })),
+        items: noReturn.map((n) => ({ id: `n:${guideArea.slug}:${nameKey(n.point)}`, label: n.point, where: n.lost })),
       });
     }
 
@@ -206,8 +220,8 @@ export function buildTrackerPayload(
   if (guideArea && achievementGuide?.list?.length) {
     const unlocked = (opts.achievements || []).filter((a) => a.unlocked);
     const here = achievementGuide.list.filter((t) => t.area === guideArea.slug || (!!t.areaName && samePlace(t.areaName, guideArea.name)));
-    const items = here.map((t, i): TrackerItem => ({
-      id: `h:${i}:${t.englishName || t.name}`,
+    const items = here.map((t): TrackerItem => ({
+      id: `h:${guideArea.slug}:${t.englishName || t.name}`,
       label: t.name,
       // Hidden achievements keep their secret: no "how" on the game.
       where: t.hidden ? undefined : t.how ? t.how.slice(0, 90) : undefined,
@@ -234,6 +248,9 @@ export function buildTrackerPayload(
       place,
       sections,
       ...(guideArea?.next ? { next: { name: guideArea.next.name } } : {}),
+      ...(guideArea?.areas?.length && Number.isInteger(guideArea.index) ? { areas: { names: guideArea.areas.map((a) => a.name), index: guideArea.index! } } : {}),
+      ...(opts.locating ? { locating: true } : {}),
+      ...(opts.notice ? { notice: opts.notice } : {}),
       // The place isn't one of the guide's areas by name: say which area this is and that it's the closest match.
       ...(guideArea && guideArea.via && guideArea.via !== 'name'
         ? { source: (L.closest || 'From the guide: {area} (closest match)').replace('{area}', guideArea.name) }

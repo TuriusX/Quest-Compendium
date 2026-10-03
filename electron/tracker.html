@@ -18,7 +18,8 @@
     --warn: #ffc14d;
     --ok: #4ade80;
     --shadow: 0 1px 2px rgba(0,0,0,.95), 0 0 6px rgba(0,0,0,.85), 0 2px 10px rgba(0,0,0,.6);
-    --maxh: 70vh;          /* the tallest the tracker may grow (set by the app in px) */
+    --maxh: 70vh;
+    --bd: .45;            /* the backdrop's darkness at its centre (the Backdrop slider) */          /* the tallest the tracker may grow (set by the app in px) */
   }
   html, body { margin: 0; background: transparent; overflow: hidden; width: 100%; height: 100%;
     font-family: 'Segoe UI', system-ui, sans-serif; font-size: var(--fs); color: var(--ink); user-select: none; }
@@ -27,9 +28,37 @@
   #tracker { position: absolute; left: 4px; top: 4px; display: inline-flex; flex-direction: column; opacity: var(--alpha);
     text-shadow: var(--shadow); max-width: 26em; max-height: calc(var(--maxh) - 10px); box-sizing: border-box;
     padding: .35em .6em .5em .6em; border-radius: .5em; }
-  /* The soft dark backdrop (optional, toggled in the controls): a gradient that fades out, so it reads as a
-     shade behind the text rather than a box. */
-  #tracker.backdrop { background: radial-gradient(ellipse at 20% 30%, rgba(10,8,18,.62), rgba(10,8,18,.42) 55%, rgba(10,8,18,0) 100%); }
+  /* The soft dark backdrop (the Backdrop slider, 0 = off to 95%): a gradient that fades out, so it reads as a shade
+     behind the text rather than a box. --bd is the darkness at its centre; at the top of the range the centre is nearly
+     opaque and only the edges fade. */
+  #tracker.backdrop { background: radial-gradient(ellipse at 45% 40%, rgba(10,8,18,var(--bd)) 0%, rgba(10,8,18,var(--bd)) 38%,
+    rgba(10,8,18,calc(var(--bd) * .72)) 68%, rgba(10,8,18,0) 100%); }
+  /* Area navigation on the place line: ‹ › step through the guide's areas, the name opens the list of them. */
+  .place .arr { cursor: pointer; color: var(--dim); font-weight: 800; font-size: 1.15em; line-height: 1; padding: 0 .15em; }
+  .place .arr:hover { color: #fff; }
+  .place .arr.dis { opacity: .25; cursor: default; }
+  .place .arr.off { display: none; }
+  .place .name.pick { cursor: pointer; text-decoration: underline dotted rgba(243,238,252,.4); text-underline-offset: .2em; }
+  .arealist { max-height: 12em; overflow-y: auto; margin: 0 0 .35em 1.3em; padding-left: .5em; font-size: .85em;
+    border-left: 2px solid rgba(255,255,255,.15); scrollbar-width: thin; scrollbar-color: rgba(243,238,252,.35) transparent; }
+  .arealist.off { display: none; }
+  .arealist .ai { cursor: pointer; color: var(--dim); line-height: 1.55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .arealist .ai:hover { color: #fff; }
+  .arealist .ai.cur { color: var(--accent); font-weight: 700; }
+  /* Shortening: an entry's × hides it, "Show N hidden" brings them back, the count cycles 3 / 6 / all. */
+  li .x { margin-left: auto; padding-left: .45em; flex-shrink: 0; color: var(--dim); font-weight: 800; cursor: pointer; opacity: 0; }
+  li:hover .x { opacity: .8; }
+  li .x:hover { color: #fff; opacity: 1; }
+  .unhide { font-size: .74em; color: var(--dim); font-style: italic; cursor: pointer; margin: .1em 0 0 1.75em; }
+  .unhide:hover { color: var(--ink); }
+  .sechead .cnt { cursor: pointer; border-bottom: 1px dotted transparent; }
+  .sechead .cnt:hover { border-bottom-color: currentColor; }
+  .notice { font-size: .8em; color: var(--warn); margin-top: .3em; line-height: 1.3; }
+  .notice:empty { display: none; }
+  #tracker.collapsed .arealist, #tracker.collapsed .notice { display: none; }
+  #bLocate.busy { border-color: var(--accent); }
+  #bLocate.busy svg { animation: qcspin 1.1s linear infinite; }
+  @keyframes qcspin { to { transform: rotate(360deg); } }
   #tracker.collapsed .body, #tracker.collapsed .warn, #tracker.collapsed .hint, #tracker.collapsed .place,
   #tracker.collapsed .quest, #tracker.collapsed .next { display: none; }
   #tracker.away { display: none; }
@@ -155,28 +184,33 @@
     <span class="count" id="count"></span>
     <span class="chev">▾</span>
   </div>
-  <div class="place" id="place" title="Click to confirm this is where you are">
+  <div class="place" id="place">
     <svg class="pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+    <span class="arr off" id="prevArea">‹</span>
     <span><span class="name" id="placeName"></span><span class="story" id="placeStory"></span></span>
+    <span class="arr off" id="nextArea">›</span>
     <span class="tick">✓</span>
     <span class="confirm" id="placeConfirm">Confirm</span>
   </div>
+  <div class="arealist off" id="areaList"></div>
   <div class="source" id="source"></div>
   <div class="quest" id="quest"></div>
   <div class="body" id="body">
     <div id="secs"></div>
     <div class="none" id="none"></div>
   </div>
-  <div class="next off" id="next"><span id="nextLbl"></span><span class="go" id="hereNow"></span></div>
+  <div class="next off" id="next"><span id="nextLbl"></span></div>
+  <div class="notice" id="notice"></div>
   <div class="warn off" id="warn"></div>
   <div class="hint" id="hint"><kbd>Ctrl+G</kbd> or click the title: open the Compendium</div>
   <div class="ctl" id="ctl">
     <span class="btn" id="bConfirm" title="Confirm where you are"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span>
+    <span class="btn" id="bLocate" title="Locate me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg></span>
     <span class="btn" id="bCollapse" title="Collapse to one line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg></span>
     <span class="btn" id="bAway" title="Send to the screen edge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h12"/><path d="m13 6 6 6-6 6"/><path d="M21 4v16"/></svg></span>
     <span class="btn aa" id="bSize" title="Text size">Aa</span>
     <span class="sl" id="alphaWrap" title="Transparency"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg><input type="range" id="alpha" min="30" max="100" value="100"></span>
-    <span class="btn" id="bBackdrop" title="Soft dark backdrop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18" opacity=".5"/></svg></span>
+    <span class="sl" id="bdWrap" title="Backdrop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18" opacity=".5"/></svg><input type="range" id="bd" min="0" max="95" value="45"></span>
   </div>
 </div>
 
@@ -208,7 +242,10 @@
     maxHeight: 0,                 // the tallest the tracker may grow, in px (70% of the screen)
     view: 'full',                 // full | collapsed | away
     peekFrom: null,               // the view to fold back to after a peek
-    size: 'medium', alpha: 100, backdrop: false, edge: 'right',
+    size: 'medium', alpha: 100, backdrop: 45, edge: 'right', // backdrop: 0 (off) to 95 (% darkness)
+    hidden: [],                   // entries hidden with their × (saved per game by the app)
+    limits: {},                   // entries shown per section: 3, 6 or 0 = all (saved per game); unset = SHOW
+    areaOpen: false,              // the guide's area list is open
     scale: 1,                     // the app's UI scale (Settings), applied on top of the text size
     keys: 'Ctrl+Space',           // the show/hide shortcut as shown ('' = none)
   };
@@ -225,7 +262,9 @@
     itemTodo: 'Click: collected', itemDone: 'Click: not collected yet', hintNoKeys: 'Click the title to open the Compendium',
     empty: 'Nothing to track here yet', secAnswer: 'From your last answer', secMissable: 'Missable here',
     secNoReturn: 'Point of no return', secCollect: 'To collect', secAch: 'Achievements here', more: '+{n} more',
-    next: 'Next: {area}', hereNow: "I'm here now", closest: 'From the guide: {area} (closest match)',
+    next: 'Next: {area}', closest: 'From the guide: {area} (closest match)', showHidden: 'Show {n} hidden', hideEntry: 'Hide',
+    limitHint: 'Click: show 3, 6 or all', prevArea: 'Previous area', nextArea: 'Next area', areaList: 'All areas in the guide',
+    locate: 'Locate me', locating: 'Locating…',
   };
   const L = (k, vars) => {
     const own = state.data && state.data.labels && state.data.labels[k];
@@ -238,12 +277,15 @@
     $('tabLbl').textContent = L('title');
     $('placeConfirm').textContent = L('confirm');
     $('head').title = L('headHint');
-    $('place').title = L('placeHint');
+    $('placeConfirm').title = L('placeHint');
+    $('prevArea').title = L('prevArea');
+    $('nextArea').title = L('nextArea');
+    $('placeName').title = state.data && state.data.areas ? L('areaList') : '';
     $('bConfirm').title = L('confirmHint');
     $('bAway').title = L('away');
     $('bSize').title = L('size');
     $('alphaWrap').title = L('alpha');
-    $('bBackdrop').title = L('backdrop');
+    $('bdWrap').title = L('backdrop');
     tab.title = L('tabHint');
     // The show/hide shortcut (state.keys), or a hint without one when none is registered.
     if (!state.keys) { $('hint').textContent = L('hintNoKeys'); return; }
@@ -253,7 +295,10 @@
 
   const WARN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
 
-  /** One line: the answer's markers get their number badge, guide entries a box, other lines (no return) none. */
+  /**
+   * One line: the answer's markers get their number badge, guide entries a box, other lines (no return) none. Every
+   * line has a × (on hover) that hides it.
+   */
   function itemHtml(o, sectionId) {
     const cls = [o.done ? 'done' : '', o.missable ? 'miss' : '', sectionId === 'noreturn' ? 'info' : '', !o.tick && sectionId !== 'noreturn' ? 'static' : ''].filter(Boolean).join(' ');
     const mark = o.badge ? `<span class="badge">${o.done ? '✓' : o.badge}</span>`
@@ -261,7 +306,7 @@
       : `<span class="box">${o.done ? '✓' : ''}</span>`;
     const title = o.tick ? ` title="${esc(o.done ? L('itemDone') : L('itemTodo'))}"` : '';
     const where = o.where && !o.done ? ` <span class="where">— ${esc(o.where)}</span>` : '';
-    return `<li class="${cls}" data-item="${esc(o.id)}"${title}>${mark}<span class="obj">${esc(o.label)}${where}</span></li>`;
+    return `<li class="${cls}" data-item="${esc(o.id)}"${title}>${mark}<span class="obj">${esc(o.label)}${where}</span><span class="x" title="${esc(L('hideEntry'))}">×</span></li>`;
   }
 
   function render() {
@@ -269,7 +314,13 @@
     applyLabels();
     document.documentElement.style.setProperty('--accent', /^#[0-9a-f]{3,8}$/i.test(d.accent || '') ? d.accent : '#a87ffb');
     if (state.maxHeight > 0) document.documentElement.style.setProperty('--maxh', `${state.maxHeight}px`);
-    const sections = d.sections || [];
+    // Hidden entries (their ×) leave the lists and the counts; each section can bring its own back.
+    const hidden = new Set(state.hidden || []);
+    const sections = (d.sections || []).map((x) => ({
+      ...x,
+      items: x.items.filter((o) => !hidden.has(o.id)),
+      hiddenIds: x.items.filter((o) => hidden.has(o.id)).map((o) => o.id),
+    }));
     // The header count and the away tab's number: what's left to tick.
     const ticks = sections.flatMap((x) => x.items).filter((o) => o.tick);
     const done = ticks.filter((o) => o.done).length;
@@ -288,28 +339,52 @@
       $('place').classList.toggle('sure', !!p.sure);
       $('bConfirm').classList.toggle('on', !!p.sure);
     }
+    // ‹ › and the area list, from the guide's area order (disabled at the ends).
+    const ar = d.areas && Array.isArray(d.areas.names) && d.areas.names.length ? d.areas : null;
+    $('prevArea').classList.toggle('off', !ar);
+    $('nextArea').classList.toggle('off', !ar);
+    $('placeName').classList.toggle('pick', !!ar);
+    if (ar) {
+      $('prevArea').classList.toggle('dis', ar.index <= 0);
+      $('nextArea').classList.toggle('dis', ar.index >= ar.names.length - 1);
+    }
+    const list = $('areaList');
+    list.classList.toggle('off', !(ar && state.areaOpen));
+    if (ar && state.areaOpen) {
+      list.innerHTML = ar.names.map((n, i) => `<div class="ai${i === ar.index ? ' cur' : ''}" data-i="${i}">${esc(n)}</div>`).join('');
+      const cur = list.querySelector('.cur');
+      if (cur) cur.scrollIntoView({ block: 'nearest' });
+    }
     secs.innerHTML = sections.map((x) => {
       const folded = !!state.collapsed[x.id];
-      const shown = state.more[x.id] ? x.items : x.items.slice(0, SHOW);
+      // The section's limit (its count cycles 3 / 6 / all; unset = SHOW), and "+N more" past it.
+      const limit = state.limits && state.limits[x.id];
+      const max = limit === 0 ? Infinity : limit || SHOW;
+      const shown = state.more[x.id] ? x.items : x.items.slice(0, max);
       const left = x.items.length - shown.length;
       const tickable = x.items.filter((o) => o.tick);
-      const cnt = tickable.length ? `<span class="cnt">${tickable.filter((o) => o.done).length}/${tickable.length}</span>` : `<span class="cnt">${x.items.length}</span>`;
+      const n = tickable.length ? `${tickable.filter((o) => o.done).length}/${tickable.length}` : `${x.items.length}`;
+      const cnt = `<span class="cnt" title="${esc(L('limitHint'))}">${n}</span>`;
       return `<div class="sec${x.tone === 'amber' ? ' amber' : ''}${folded ? ' folded' : ''}" data-sec="${esc(x.id)}">
         <div class="sechead">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${cnt}<span class="chev">▾</span></div>
         <ol>${shown.map((o) => itemHtml(o, x.id)).join('')}</ol>
         ${left > 0 ? `<div class="more">${esc(L('more', { n: left }))}</div>` : ''}
+        ${x.hiddenIds.length ? `<div class="unhide">${esc(L('showHidden', { n: x.hiddenIds.length }))}</div>` : ''}
       </div>`;
     }).join('');
     // Nothing at all to list here: one muted line.
     $('none').textContent = sections.length ? '' : L('empty');
     $('none').style.display = sections.length ? 'none' : '';
+    // "Next: <area>", a muted line (the ‹ › arrows move there).
     const nx = d.next && d.next.name;
     $('next').classList.toggle('off', !nx);
     if (nx) {
       const [before, after] = L('next').split('{area}');
       $('nextLbl').innerHTML = after === undefined ? esc(before) : `${esc(before)}<span class="nm">${esc(nx)}</span>${esc(after)}`;
-      $('hereNow').textContent = L('hereNow');
     }
+    $('notice').textContent = d.notice || '';
+    $('bLocate').classList.toggle('busy', !!d.locating);
+    $('bLocate').title = d.locating ? L('locating') : L('locate');
     const warnText = d.warning || '';
     $('warn').classList.toggle('off', !warnText);
     $('warn').innerHTML = warnText ? `${WARN_ICON}<span>${esc(warnText)}</span>` : '';
@@ -322,8 +397,10 @@
     document.documentElement.style.setProperty('--fs', `calc(${SIZES[state.size] || 16}px * var(--scale))`);
     document.documentElement.style.setProperty('--alpha', String(state.alpha / 100));
     $('alpha').value = state.alpha;
-    tracker.classList.toggle('backdrop', state.backdrop);
-    $('bBackdrop').classList.toggle('on', state.backdrop);
+    const bd = Number.isFinite(state.backdrop) ? Math.max(0, Math.min(95, state.backdrop)) : 45;
+    tracker.classList.toggle('backdrop', bd > 0);
+    document.documentElement.style.setProperty('--bd', String(bd / 100));
+    $('bd').value = bd;
     $('bSize').textContent = state.size === 'small' ? 'aa' : state.size === 'large' ? 'AA' : 'Aa';
     tracker.classList.toggle('collapsed', state.view === 'collapsed');
     tracker.classList.toggle('away', state.view === 'away');
@@ -420,6 +497,17 @@
   secs.addEventListener('click', (e) => {
     const sec = e.target.closest('.sec'); if (!sec || !state.data) return;
     const id = sec.dataset.sec;
+    const x = (state.data.sections || []).find((s2) => s2.id === id);
+    if (e.target.closest('.cnt')) {
+      // The count: show 3, then 6, then all (remembered per game by the app).
+      const cur = state.limits && state.limits[id];
+      const next = cur === 3 ? 6 : cur === 6 ? 0 : 3;
+      state.limits = { ...(state.limits || {}), [id]: next };
+      state.more = { ...state.more, [id]: false };
+      render();
+      send('limit', { section: id, limit: next });
+      return;
+    }
     if (e.target.closest('.sechead')) {
       // Fold or open the section (remembered per game by the app).
       state.collapsed = { ...state.collapsed, [id]: !state.collapsed[id] };
@@ -429,20 +517,54 @@
       return;
     }
     if (e.target.closest('.more')) { state.more = { ...state.more, [id]: true }; render(); return; }
+    if (e.target.closest('.unhide')) {
+      // "Show N hidden": this section's hidden entries come back.
+      const ids = (x ? x.items : []).map((o) => o.id).filter((oid) => (state.hidden || []).includes(oid));
+      state.hidden = (state.hidden || []).filter((oid) => !ids.includes(oid));
+      render();
+      send('hide-item', { ids, hidden: false });
+      return;
+    }
     const li = e.target.closest('li'); if (!li) return;
-    const x = (state.data.sections || []).find((s2) => s2.id === id);
     const o = x && x.items.find((it) => it.id === li.dataset.item);
-    if (!o || !o.tick) return;
+    if (!o) return;
+    if (e.target.closest('.x')) {
+      // The ×: hide this entry (remembered per game, and per area through the entry's id).
+      state.hidden = [...(state.hidden || []), o.id];
+      render();
+      send('hide-item', { id: o.id, hidden: true });
+      return;
+    }
+    if (!o.tick) return;
     o.done = !o.done; render();
     send('tick', { item: o.id, done: o.done });
   });
-  $('hereNow').addEventListener('click', () => send('next-area', {}));
+  // Area navigation: ‹ ›, and the name opens the guide's area list (current one highlighted).
+  const gotoArea = (i) => {
+    const ar = state.data && state.data.areas;
+    if (!ar || i < 0 || i >= ar.names.length || i === ar.index) return;
+    state.areaOpen = false;
+    send('goto-area', { name: ar.names[i] });
+  };
+  $('prevArea').addEventListener('click', () => { const ar = state.data && state.data.areas; if (ar) gotoArea(ar.index - 1); });
+  $('nextArea').addEventListener('click', () => { const ar = state.data && state.data.areas; if (ar) gotoArea(ar.index + 1); });
+  $('placeName').addEventListener('click', () => {
+    if (!state.data || !state.data.areas) return;
+    state.areaOpen = !state.areaOpen;
+    render();
+  });
+  $('areaList').addEventListener('click', (e) => {
+    const it = e.target.closest('.ai'); if (!it) return;
+    gotoArea(Number(it.dataset.i));
+  });
+  // "Locate me": the app takes a screenshot and finds the area (the button spins meanwhile).
+  $('bLocate').addEventListener('click', () => { if (state.data && !state.data.locating) send('locate', {}); });
   const confirmPlace = () => {
     const p = state.data && state.data.place; if (!p || !p.name) return;
     p.sure = true; render();
     send('confirm-place', { id: state.data.id, name: p.name, story: p.story || '' });
   };
-  $('place').addEventListener('click', confirmPlace);
+  $('placeConfirm').addEventListener('click', confirmPlace);
   $('bConfirm').addEventListener('click', confirmPlace);
   $('bCollapse').addEventListener('click', () => setView(state.view === 'collapsed' ? 'full' : 'collapsed'));
   $('bAway').addEventListener('click', () => setView('away'));
@@ -453,7 +575,8 @@
   });
   $('alpha').addEventListener('input', () => { state.alpha = Number($('alpha').value); applyView(); });
   $('alpha').addEventListener('change', () => send('settings', { alpha: state.alpha }));
-  $('bBackdrop').addEventListener('click', () => { state.backdrop = !state.backdrop; applyView(); send('settings', { backdrop: state.backdrop }); });
+  $('bd').addEventListener('input', () => { state.backdrop = Number($('bd').value); applyView(); });
+  $('bd').addEventListener('change', () => send('settings', { backdrop: state.backdrop }));
 
   // Click-through is handled by the app (it hit-tests the cursor against this window). A press tells it to keep clicks
   // on until the press ends, so dragging the header or the transparency slider can leave the window.
@@ -465,8 +588,9 @@
   // Called by the app.
   window.qcTrackerShow = (data, settings) => {
     releasePress();
+    if (settings && typeof settings.backdrop === 'boolean') settings.backdrop = settings.backdrop ? 45 : 0;
     const samePlace = state.data && data && state.data.place && data.place && state.data.place.name === data.place.name;
-    if (!samePlace) state.more = {};
+    if (!samePlace) { state.more = {}; state.areaOpen = false; }
     state.data = data;
     if (settings) Object.assign(state, settings);
     if (settings && settings.view) state.view = settings.view;
@@ -508,7 +632,7 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === '1') setView('full'); if (e.key === '2') setView('collapsed'); if (e.key === '3') setView('away');
       if (e.key.toLowerCase() === 'g') peek();
-      if (e.key.toLowerCase() === 'b') $('bBackdrop').click();
+      if (e.key.toLowerCase() === 'b') { state.backdrop = state.backdrop >= 90 ? 0 : state.backdrop + 30; applyView(); }
       if (e.key.toLowerCase() === 't') $('bSize').click();
     });
   }

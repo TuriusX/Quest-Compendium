@@ -61,6 +61,10 @@ interface ChatAreaProps {
   onChangeMarkerLifetime?: (seconds: number) => void;
   /** The player picked where they are (one tap or voice): remember it for this game. */
   onSetPlace?: (name: string) => void;
+  /** "Locate me" in the PlaceBar (desktop, games with a guide). */
+  onLocate?: () => void;
+  locating?: boolean;
+  locateNote?: string;
   /** The player picked where they are in the story: remember it for this game. */
   onSetStory?: (story: string) => void;
   /** Update fields of one message (e.g. which markers were checked off). */
@@ -104,6 +108,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   markerLifetime,
   onChangeMarkerLifetime,
   onSetPlace,
+  onLocate,
+  locating,
+  locateNote,
   onSetStory,
 }) => {
   const t = useT();
@@ -1206,6 +1213,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         onUpdateMessage?.(msg.id, { storyChosen: story });
                         onSetStory?.(story);
                       }}
+                      onLocate={onLocate}
+                      locating={locating}
+                      locateNote={locateNote}
                       onReask={(name, story, q) => {
                         if (isLoading) return;
                         const where = story ? `${name} (${story})` : name;

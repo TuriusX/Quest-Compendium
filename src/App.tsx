@@ -535,6 +535,79 @@ export default function App() {
     ? activeTab.place || settings.gameProgress?.[(activeTab.activeSteamGame?.name || activeTab.name || '').trim().toLowerCase()]
     : undefined;
   const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, trackerPlace?.name, trackerPlace?.story, useLocale());
+  const trackerGameRef = useRef(trackerGame);
+  trackerGameRef.current = trackerGame;
+  const trackerPlaceRef = useRef(trackerPlace);
+  trackerPlaceRef.current = trackerPlace;
+  // Moving to a guide area from the tracker (‹ › or the area list): the place and that area's story beat, both
+  // confirmed, in the tab and in the game's saved progress, and the whole tracker moves on.
+  const moveToArea = (name: string) => {
+    if (!activeTab) return;
+    const area = (trackerGameRef.current.guideArea?.areas || []).find((a) => a.name === name);
+    const story = area?.story?.trim() || '';
+    const place = { ...(activeTab.place || {}), name, confirmed: true, ...(story ? { story, storyConfirmed: true } : {}) };
+    setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place, lastActive: Date.now() } : t)));
+    rememberGameProgress(activeTab, place);
+  };
+  // "Locate me" (the tracker's crosshair, the PlaceBar): a screenshot of the game and the guide's areas go to
+  // /api/locate-me (its own daily limit, never the player's questions). A confident answer sets the place confirmed;
+  // otherwise it's set unconfirmed, so the confirm button shows.
+  const [locating, setLocating] = useState(false);
+  const [locateNote, setLocateNote] = useState('');
+  const locatingRef = useRef(false);
+  const locateNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showLocateNote = (text: string) => {
+    setLocateNote(text);
+    if (locateNoteTimer.current) clearTimeout(locateNoteTimer.current);
+    if (text) locateNoteTimer.current = setTimeout(() => setLocateNote(''), 8000);
+  };
+  const runLocate = async () => {
+    const api = (window as any).electronAPI;
+    const tab = activeTab;
+    const guideAreas = trackerGameRef.current.guideArea?.areas || [];
+    if (locatingRef.current || !tab) return;
+    if (!api?.captureForLocate || !guideAreas.length) {
+      showLocateNote(tr('place.locateNoGuide'));
+      return;
+    }
+    locatingRef.current = true;
+    setLocating(true);
+    showLocateNote('');
+    try {
+      const image: string | null = await api.captureForLocate();
+      if (!image) throw new Error('no screenshot');
+      const token = user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken() : null;
+      const res = await fetch(`${getApiBaseUrl()}/api/locate-me`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          imageBase64: image,
+          game: tab.activeSteamGame?.name || activeGame?.name || tab.name,
+          areas: guideAreas.map((a) => ({ name: a.name, story: a.story })),
+          place: trackerPlaceRef.current?.name || '',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showLocateNote(data?.locateLimitReached ? tr('place.locateLimit', { n: data?.limit ?? '' }) : tr('place.locateFail'));
+        return;
+      }
+      if (!data?.area || data.area === 'unknown') {
+        showLocateNote(tr('place.locateUnknown'));
+        return;
+      }
+      const sure = data.confidence === 'high';
+      const story = typeof data.story === 'string' ? data.story.trim() : '';
+      const place = { ...(tab.place || {}), name: String(data.area), confirmed: sure, ...(story ? { story, storyConfirmed: sure } : {}) };
+      setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, place, lastActive: Date.now() } : t)));
+      rememberGameProgress(tab, place);
+    } catch {
+      showLocateNote(tr('place.locateFail'));
+    } finally {
+      locatingRef.current = false;
+      setLocating(false);
+    }
+  };
   const trackerMsg = trackedMessage(activeTab, trackerPickId);
   const trackerPayload = activeTab
     ? buildTrackerPayload({ ...activeTab, place: trackerPlace }, trackerMsg, trackerGame.guideArea, trackerGame.achievementGuide, trackerWords, {
@@ -542,14 +615,14 @@ export default function App() {
         gameKey: trackerKeyOfGame,
         pinned: !!trackerPickId && trackerMsg?.id === trackerPickId,
         achievements: activeGame?.achievements,
+        locating,
+        notice: locateNote,
       })
     : null;
   const trackerPayloadRef = useRef(trackerPayload);
   trackerPayloadRef.current = trackerPayload;
   const trackerGuideKeyRef = useRef(trackerGame.guideKey);
   trackerGuideKeyRef.current = trackerGame.guideKey;
-  const trackerNextRef = useRef(trackerGame.guideArea?.next || null);
-  trackerNextRef.current = trackerGame.guideArea?.next || null;
   const latestTrackedId = trackedMessage(activeTab)?.id;
   // A newer finished answer takes over from the one picked with "Track on screen".
   useEffect(() => {
@@ -613,16 +686,11 @@ export default function App() {
     } else if (e.type === 'confirm-place' && typeof e.name === 'string' && e.name.trim()) {
       if (typeof e.id === 'string' && e.id) updateMessageById(e.id, (m) => ({ ...m, placeChosen: e.name }));
       handleSetPlace(e.name);
-    } else if (e.type === 'next-area' && typeof e.name === 'string' && e.name.trim()) {
-      // "I'm here now": the next area becomes where the player is, with its story beat (both confirmed), in the tab and
-      // in the game's saved progress, and the whole tracker moves on.
-      const name = e.name.trim();
-      const next = trackerNextRef.current;
-      const story = next && next.name === name ? next.story?.trim() : '';
-      if (!activeTab) return;
-      const place = { ...(activeTab.place || {}), name, confirmed: true, ...(story ? { story, storyConfirmed: true } : {}) };
-      setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place, lastActive: Date.now() } : t)));
-      rememberGameProgress(activeTab, place);
+    } else if (e.type === 'goto-area' && typeof e.name === 'string' && e.name.trim()) {
+      // The ‹ › arrows or the area list on the tracker: that area becomes where the player is.
+      moveToArea(e.name.trim());
+    } else if (e.type === 'locate') {
+      runLocate();
     }
   };
   useEffect(() => {
@@ -1956,6 +2024,9 @@ export default function App() {
                 markerLifetime={settings.markerLifetime ?? 120}
                 onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
                 onSetPlace={handleSetPlace}
+                onLocate={isDesktop && trackerGame.guideArea?.areas?.length ? runLocate : undefined}
+                locating={locating}
+                locateNote={locateNote}
                 onTrackOnScreen={isDesktop ? handleTrackOnScreen : undefined}
                 onSetStory={(story) => {
                   const next = { name: activeTab.place?.name || '', confirmed: !!activeTab.place?.confirmed, ...(activeTab.place || {}), story, storyConfirmed: true };

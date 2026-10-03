@@ -1400,6 +1400,18 @@ ipcMain.on('pointers-locate-done', (event, { id, remaining } = {}) => {
   if (!remaining) session.watch = false;
 });
 
+// "Locate me" (the tracker, the PlaceBar): the game as it is. With the panel open, the snapshot from when it opened
+// (the panel isn't in it); otherwise a capture with the tracker made invisible for it. Never opens the panel.
+ipcMain.handle('capture-for-locate', async () => {
+  if (isAppVisible && openSnapshot && openSnapshot.session === overlaySession) return openSnapshot.image;
+  try {
+    return await captureScreenImage();
+  } catch (err) {
+    console.warn('[locate-me] capture failed:', err && err.message);
+    return null;
+  }
+});
+
 ipcMain.handle('take-screenshot', async () => {
   // A clean snapshot from when the overlay opened beats a fresh capture of a game that paused itself.
   if (isAppVisible && openSnapshot && openSnapshot.session === overlaySession) {

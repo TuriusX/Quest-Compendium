@@ -11,7 +11,8 @@ service cloud.firestore {
     function serverOnlyFields() {
       return ['isPremium', 'subscriptionStatus', 'stripeCustomerId',
               'proQueriesAvailable', 'flashQueriesAvailable', 'proQueriesToday', 'flashQueriesToday',
-              'lastResetDate', '_upgradedToday', 'freeQueriesUsed'];
+              'lastResetDate', '_upgradedToday', 'freeQueriesUsed',
+              'locateDate', 'locatesUsed'];
     }
 
     function isOwner(userId) {

@@ -43,8 +43,11 @@ let saveTimer = null;
 let mouseOn = false, pressed = false, mouseTimer = null;
 const MARGIN = 0;
 
-// collapsed: the sections folded by clicking their heading ({ [section id]: true }), per game.
-const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: true, x: null, y: null, edge: 'right', collapsed: {} };
+// Per game: collapsed (sections folded by their heading: { [section id]: true }), hidden (entries hidden with their ×,
+// by id: ids carry the area, so it's per area), limits (entries shown per section: 3, 6 or 0 = all; unset = 12),
+// backdrop (how dark the soft backdrop is, 0 = off to 95).
+const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: 45, x: null, y: null, edge: 'right', collapsed: {}, hidden: [], limits: {} };
+const MAX_HIDDEN = 600;
 /** The tracker grows with its content up to this share of the screen's height, then scrolls inside. */
 const MAX_HEIGHT_SHARE = 0.7;
 const maxHeight = () => Math.round(display().workArea.height * MAX_HEIGHT_SHARE);
@@ -61,7 +64,15 @@ function saveStore() {
     try { fs.writeFileSync(storeFile, JSON.stringify(store)); } catch (err) { console.warn('[tracker] save failed:', err && err.message); }
   }, 400);
 }
-const settingsFor = (gameKey) => ({ ...DEFAULTS, ...(loadStore()[gameKey || '_default'] || {}) });
+function settingsFor(gameKey) {
+  const s = { ...DEFAULTS, ...(loadStore()[gameKey || '_default'] || {}) };
+  // Saved before the backdrop slider: on was the old fixed shade (45%), off is 0.
+  if (typeof s.backdrop === 'boolean') s.backdrop = s.backdrop ? 45 : 0;
+  s.backdrop = Number.isFinite(s.backdrop) ? Math.max(0, Math.min(95, Math.round(s.backdrop))) : DEFAULTS.backdrop;
+  if (!Array.isArray(s.hidden)) s.hidden = [];
+  if (!s.limits || typeof s.limits !== 'object') s.limits = {};
+  return s;
+}
 function patchSettings(gameKey, patch) {
   const key = gameKey || '_default';
   loadStore()[key] = { ...settingsFor(key), ...patch };
@@ -211,7 +222,7 @@ async function open(spot) {
   if (!alive() || !current) return false;
   if (suspended) { lastSpot = lastSpot || win.getBounds(); dropWindow(); return false; } // the panel opened meanwhile
   const s = settingsFor(current.gameKey);
-  js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel(), collapsed: s.collapsed || {}, maxHeight: maxHeight() })})`);
+  js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel(), collapsed: s.collapsed || {}, hidden: s.hidden, limits: s.limits, maxHeight: maxHeight() })})`);
   if (!win.isVisible() && !revealPending) {
     revealPending = true;
     clearTimeout(revealTimer);
@@ -253,13 +264,19 @@ function cleanData(data) {
       })).filter((o) => o.label && o.id),
     })).filter((x) => x.items.length),
     next: data && data.next && data.next.name ? { name: str(data.next.name, 60) } : null,
+    // The guide's areas in order and where the player is among them (the ‹ › arrows and the area list).
+    areas: data && data.areas && Array.isArray(data.areas.names) && Number.isInteger(data.areas.index)
+      ? { names: data.areas.names.slice(0, 200).map((n) => str(n, 80)), index: data.areas.index }
+      : null,
+    locating: !!(data && data.locating),
+    notice: str(data && data.notice, 200),
     source: str(data && data.source, 120), // "From the guide: <area> (closest match)" when the place isn't an area by name
     labels: cleanLabels(data && data.labels),
   };
 }
 
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
-const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'hereNow', 'closest'];
+const LABEL_KEYS = ['title', 'confirm', 'missable', 'hint', 'hintNoKeys', 'headHint', 'placeHint', 'confirmHint', 'collapse', 'open', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -434,7 +451,7 @@ function onMessage(event, msg) {
       const p = {};
       if (['small', 'medium', 'large'].includes(msg.size)) p.size = msg.size;
       if (Number.isFinite(msg.alpha)) p.alpha = Math.max(30, Math.min(100, Math.round(msg.alpha)));
-      if (typeof msg.backdrop === 'boolean') p.backdrop = msg.backdrop;
+      if (Number.isFinite(msg.backdrop)) p.backdrop = Math.max(0, Math.min(95, Math.round(msg.backdrop)));
       patchSettings(gameKey, p);
       break;
     }
@@ -456,9 +473,33 @@ function onMessage(event, msg) {
         patchSettings(gameKey, { collapsed: folded });
       }
       break;
-    case 'next-area':
-      // "I'm here now" on the next area: the app makes it the player's place and rebuilds the tracker there.
-      if (current && current.data.next && current.data.next.name) tell({ type: 'next-area', name: current.data.next.name });
+    case 'goto-area':
+      // The ‹ › arrows or the area list: the app makes that guide area the player's place and rebuilds the tracker.
+      if (typeof msg.name === 'string' && current && current.data.areas && current.data.areas.names.includes(msg.name)) {
+        tell({ type: 'goto-area', name: msg.name });
+      }
+      break;
+    case 'locate':
+      // "Locate me": the app takes a screenshot (the tracker made invisible for it) and asks which area this is.
+      tell({ type: 'locate' });
+      break;
+    case 'hide-item': {
+      // An entry's ×, or "Show N hidden" (hidden: false): remembered for this game (ids carry the area).
+      const ids = (Array.isArray(msg.ids) ? msg.ids : [msg.id]).filter((id) => typeof id === 'string' && id).map((id) => id.slice(0, 200));
+      if (!ids.length) break;
+      const set = new Set(settingsFor(gameKey).hidden);
+      for (const id of ids) {
+        if (msg.hidden === false) set.delete(id);
+        else set.add(id);
+      }
+      patchSettings(gameKey, { hidden: [...set].slice(-MAX_HIDDEN) });
+      break;
+    }
+    case 'limit':
+      // A section's count clicked: 3, 6 or all (0) entries shown, for this game.
+      if (SECTION_IDS.includes(msg.section) && [0, 3, 6].includes(msg.limit)) {
+        patchSettings(gameKey, { limits: { ...settingsFor(gameKey).limits, [msg.section]: msg.limit } });
+      }
       break;
     case 'confirm-place':
       if (current && current.data.place) current.data.place.sure = true;

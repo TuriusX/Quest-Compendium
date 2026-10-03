@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MapPin, Mic, Check, BookOpen } from './icons';
+import { MapPin, Mic, Check, BookOpen, Crosshair } from './icons';
 import type { ChatMessage } from '../types';
 import { useT } from '../i18n';
 
@@ -9,6 +9,7 @@ import { useT } from '../i18n';
  * - It wasn't sure: its best guess and up to three other likely options as buttons, plus "Say it" (voice).
  * Picks are remembered for this game (sent with every later question). If a pick differs from what the answer was
  * based on, a button offers to answer again with the right place and story point.
+ * "Locate me" (desktop, games with a guide) looks at a screenshot and sets the place from the guide's areas.
  */
 export function PlaceBar({
   msg,
@@ -18,6 +19,9 @@ export function PlaceBar({
   onChoosePlace,
   onChooseStory,
   onReask,
+  onLocate,
+  locating,
+  locateNote,
 }: {
   msg: ChatMessage;
   /** The player's question this answer replied to (for "answer again"). */
@@ -27,6 +31,11 @@ export function PlaceBar({
   onChoosePlace: (name: string) => void;
   onChooseStory: (story: string) => void;
   onReask: (place: string, story: string | undefined, question: ChatMessage) => void;
+  /** "Locate me": find the place from a screenshot (its own daily limit, not the player's questions). */
+  onLocate?: () => void;
+  locating?: boolean;
+  /** The last "Locate me" result when it couldn't set the place (used up, unreadable screenshot…). */
+  locateNote?: string;
 }) {
   const t = useT();
   const place = msg.place;
@@ -55,6 +64,19 @@ export function PlaceBar({
       {t('place.say')}
     </button>
   );
+  const locate = onLocate ? (
+    <button
+      type="button"
+      onClick={onLocate}
+      disabled={locating}
+      title={t('place.locateTitle')}
+      className={`h-7 px-2.5 rounded-lg border border-white/10 bg-white/[0.04] text-[12px] font-semibold text-zinc-200 hover:bg-white/[0.08] transition-colors inline-flex items-center gap-1.5 ${locating ? 'opacity-70 cursor-wait' : 'cursor-pointer'}`}
+    >
+      <Crosshair className={`w-3.5 h-3.5 flex-shrink-0 ${locating ? 'animate-pulse' : ''}`} aria-hidden="true" />
+      {locating ? t('place.locating') : t('place.locate')}
+    </button>
+  ) : null;
+  const note = locateNote ? <div className="basis-full text-[11px] text-amber-300/90">{locateNote}</div> : null;
   const choices = (list: string[], pick: (v: string) => void, closes: boolean) =>
     list.map((v, i) => (
       <button
@@ -116,6 +138,8 @@ export function PlaceBar({
             {t('place.notRight')}
           </button>
         )}
+        {locate}
+        {note}
       </div>
     );
   }
@@ -131,6 +155,8 @@ export function PlaceBar({
           <div className="flex flex-wrap gap-2">
             {choices([place.name, ...(place.options || [])], onChoosePlace, !askStory)}
             {say}
+            {locate}
+            {note}
           </div>
         </div>
       )}
