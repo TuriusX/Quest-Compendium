@@ -258,16 +258,71 @@ export function cleanEntry<T extends Record<string, any>>(e: T): T {
 }
 
 /**
- * How a game's guide is organized. Different games are played differently, so their guides are split differently:
- *   area      place to place (towns, dungeons): most RPGs and adventures
- *   regions   open worlds: regions, cities and major locations
- *   chapters  character-based stories (Octopath Traveler): a page per character chapter, grouped by character,
- *             plus short reference pages for shared places
- *   calendar  calendar-driven games (Persona): a page per month or deadline stretch, plus reference pages
+ * How a game's guide is organized: its outline by game type. Every page of a guide is the same kind of unit (the
+ * guide review found that mixing places, chapters and topics in one guide is the most common way guides go wrong):
+ *   area          place to place (towns, dungeons) in story order: most RPGs and adventures
+ *   regions       open worlds: a page per region or major city/dungeon, never per visit or story phase
+ *   linear        linear games split into numbered chapters, missions or levels (Dead Space, Resident Evil 4,
+ *                 Half-Life 2): a page per chapter, named as the game names it, and nothing else
+ *   chapters      several protagonists' separate stories (Octopath Traveler): a page per character chapter, grouped by
+ *                 character
+ *   calendar      calendar-driven games (Persona): a page per month or deadline stretch, reference pages at the end
+ *   roguelike     run-based games (Hades): a page per region of a run, plus the hub; never split by run
+ *   metroidvania  one interconnected map (Hollow Knight, Metroid): a page per map region in a first-time route
  */
-export const LAYOUTS = ['area', 'regions', 'chapters', 'calendar'] as const;
+export const LAYOUTS = ['area', 'regions', 'linear', 'chapters', 'calendar', 'roguelike', 'metroidvania'] as const;
 export type Layout = (typeof LAYOUTS)[number];
 export const isLayout = (v: unknown): v is Layout => (LAYOUTS as readonly string[]).includes(String(v));
+/** One line per layout, for prompts that pick or judge a guide's outline. */
+export const LAYOUT_CHOICES =
+  'area: the player moves from place to place in story order (towns, dungeons, fields), like most RPGs and adventures\n' +
+  'regions: an open world, best split by region and major city or dungeon (Skyrim, Elden Ring, The Witcher 3)\n' +
+  'linear: a linear game split into numbered chapters, missions or levels (Dead Space, Resident Evil 4, Half-Life 2, Devil May Cry 5, Black Myth: Wukong)\n' +
+  'chapters: several protagonists each have their own story chapters, played in any order (Octopath Traveler)\n' +
+  'calendar: the game runs on an in-game calendar with deadlines and free days (Persona 3, 4, 5)\n' +
+  'roguelike: run-based; each run goes through the same regions (Hades, Dead Cells)\n' +
+  'metroidvania: one interconnected map explored as new abilities open it up (Hollow Knight, Metroid Prime, Ori)';
+
+/**
+ * Staging: a rebuild or fix is built into guides/{key}--next (its pages never published), reviewed there, and only
+ * replaces the live guide when it passes review (scripts/guides/promote.ts). gameKey never produces "--".
+ */
+export const STAGE_SUFFIX = '--next';
+export const stageKey = (key: string) => `${key}${STAGE_SUFFIX}`;
+export const isStageKey = (key: string) => key.endsWith(STAGE_SUFFIX);
+export const liveKey = (key: string) => (isStageKey(key) ? key.slice(0, -STAGE_SUFFIX.length) : key);
+
+/**
+ * Knowledge cutoffs. Quick builds write from the build model's own knowledge, which stops about here (judged from
+ * how quick builds of 2024–2026 games turned out), so games released later are never built quick. The reviewer's
+ * model can't judge names in games released after its own cutoff, so those reviews always spot-check with searches.
+ */
+export const QUICK_MODEL_CUTOFF = process.env.QUICK_MODEL_CUTOFF || '2025-01-01';
+export const REVIEWER_CUTOFF = process.env.REVIEWER_CUTOFF || '2025-01-01';
+
+/** A game's release date on Steam (the PC date; a console original may be earlier). time is null if unknown or unreleased. */
+export async function releaseInfo(game: string, appId?: number): Promise<{ text: string; time: number | null }> {
+  try {
+    let id = appId;
+    if (!id) {
+      const r = await fetch(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(game)}&cc=us&l=english`);
+      const items: any[] = (await r.json())?.items || [];
+      const norm = (s: string) => s.toLowerCase().replace(/[™®©]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+      id = (items.find((i) => norm(i.name) === norm(game)) || null)?.id;
+    }
+    if (!id) return { text: 'unknown', time: null };
+    const r = await fetch(`https://store.steampowered.com/api/appdetails?appids=${id}&filters=release_date&cc=us&l=english`);
+    const d: any = (await r.json())?.[id]?.data?.release_date;
+    const text = d?.date || 'unknown';
+    const t = Date.parse(text);
+    return { text, time: d?.coming_soon || !Number.isFinite(t) ? null : t };
+  } catch {
+    return { text: 'unknown', time: null };
+  }
+}
+/** Released after the cutoff (or not released yet). An unknown date counts as after only when the guide says it's new. */
+export const releasedAfter = (r: { text: string; time: number | null }, cutoff: string, newRelease = false) =>
+  r.time === null ? newRelease || /coming soon|to be announced|tba|20(2[6-9]|3\d)/i.test(r.text) : r.time >= Date.parse(cutoff);
 
 export type GuideSection = { title: string; check: boolean; entries: { id: string; text: string }[] };
 
