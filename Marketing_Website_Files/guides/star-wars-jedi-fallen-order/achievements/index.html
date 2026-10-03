@@ -185,8 +185,20 @@
   </div>
       </div></main>
   <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
-    Guides are written with AI help. Spot a mistake? Tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>. Game names belong to their owners; this site isn&#39;t affiliated with any publisher. Game images © their respective owners.
+    Guides are written with AI help. Spot a mistake? <button type="button" data-report class="text-[#a87ffb] hover:underline">Report it here</button>, or tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>. Game names belong to their owners; this site isn&#39;t affiliated with any publisher. Game images © their respective owners.
   </footer>
+  <dialog id="qc-report" class="rounded-2xl bg-[#121218] text-zinc-200 border border-white/10 p-0 w-[min(92vw,28rem)] backdrop:bg-black/60" data-api="https://quest-compendium-890629309063.us-east1.run.app/api/guides/report" data-lang="en" data-thanks="Thanks! We&#39;ll check it and fix the guide." data-error="That didn&#39;t send. Try again later, or tell us on Discord.">
+    <form method="dialog" class="p-5 space-y-3">
+      <h2 class="text-base font-bold text-white">Report a mistake</h2>
+      <label class="block text-sm text-zinc-400" for="qc-report-text">What&#39;s wrong on this page? Name the item, place or detail if you can.</label>
+      <textarea id="qc-report-text" rows="4" minlength="5" maxlength="1000" required class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"></textarea>
+      <p data-report-status class="text-sm text-zinc-300" hidden></p>
+      <div class="flex justify-end gap-2">
+        <button value="cancel" formnovalidate class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white">Cancel</button>
+        <button value="send" data-report-send class="px-3 py-1.5 text-sm rounded-lg bg-[#a87ffb] text-black font-semibold">Send</button>
+      </div>
+    </form>
+  </dialog>
   <script>
 (function(){
   function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
@@ -238,6 +250,21 @@
   if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
     var a=s&&document.querySelector('[data-area-link="'+s+'"]');
     if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+  // "Spot a mistake?": a short report about this page, sent to the review queue (the only thing this script sends).
+  var dlg=document.getElementById('qc-report');
+  if(dlg&&dlg.showModal){
+    var ta=dlg.querySelector('textarea'), st=dlg.querySelector('[data-report-status]'), send=dlg.querySelector('[data-report-send]');
+    document.querySelectorAll('[data-report]').forEach(function(btn){btn.addEventListener('click',function(){st.hidden=true;ta.value='';send.disabled=false;dlg.showModal();});});
+    dlg.querySelector('form').addEventListener('submit',function(e){
+      if(e.submitter&&e.submitter.value==='cancel')return;
+      e.preventDefault();
+      var t=ta.value.trim(); if(t.length<5)return;
+      send.disabled=true;
+      fetch(dlg.getAttribute('data-api'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:K||'',page:S||'',text:t,lang:dlg.getAttribute('data-lang')||'en',path:location.pathname})})
+        .then(function(r){if(!r.ok)throw 0;st.textContent=dlg.getAttribute('data-thanks');st.hidden=false;setTimeout(function(){dlg.close();},1800);})
+        .catch(function(){st.textContent=dlg.getAttribute('data-error');st.hidden=false;send.disabled=false;});
+    });
+  }
 })();</script>
 </body>
 </html>
