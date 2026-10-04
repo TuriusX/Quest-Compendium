@@ -211,17 +211,34 @@ async function main() {
   if (gateOnly) console.log('Repair: built earlier; its review waited for the Pro reviewer, so it goes straight to the gate.');
   else if (action === 'fights') {
     if (!live) throw new Error(`no guide ${key}`);
-    await discard(key);
-    await stageCopy(key);
-    const r = await writeFights(key, game, live, maxSearches);
-    searches += r.searches;
-    dollars += r.dollars;
-    tier = r.tier;
-    await db().collection('guides').doc(stageKey(key)).set({ repair: action, fightsTier: r.tier }, { merge: true });
-    if (!r.found) {
+    const stageRef = db().collection('guides').doc(stageKey(key));
+    const staged: any = (await stageRef.get()).data();
+    // Another rebuild of this guide is staged (a careful build part-way, say): never thrown away for key fights.
+    if (staged && staged.repair && staged.repair !== 'fights') {
       ready = false;
-      await discard(key);
-      console.log('Gate: skipped (no key fights to add).');
+      console.log(`Repair: a ${staged.repair} rebuild of this guide is staged; key fights wait and continues on the next run.`);
+    } else {
+      // A run that stopped at the search cap carries on in its staged copy; otherwise a fresh copy of the live guide.
+      const resume = staged?.repair === 'fights' && staged?.fightsPending === true;
+      if (!resume) {
+        await discard(key);
+        await stageCopy(key);
+      }
+      const r = await writeFights(key, game, live, maxSearches);
+      searches += r.searches;
+      dollars += r.dollars;
+      const found = (resume ? Number(staged.fightsFound || 0) : 0) + r.found;
+      // Pro when any page was searched, in this run or an earlier one.
+      tier = r.tier === 'pro' || (resume && staged.fightsTier === 'pro') ? 'pro' : 'flash';
+      await stageRef.set({ repair: action, fightsTier: tier, fightsFound: found, fightsPending: r.left > 0 }, { merge: true });
+      if (r.left > 0) {
+        ready = false;
+        console.log(`Repair: ${r.left} page(s) left at the search cap; key fights continues on the next run.`);
+      } else if (!found) {
+        ready = false;
+        await discard(key);
+        console.log('Gate: skipped (no key fights to add).');
+      }
     }
   } else if (action === 'fix') {
     // A guide reviewed before (or a player report about one that wasn't): review it first.

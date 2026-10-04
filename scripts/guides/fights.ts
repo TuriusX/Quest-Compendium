@@ -64,26 +64,46 @@ const prompt = (game: string, p: any, grounded: boolean) => [
 ].join('\n');
 
 /** One page's key fights: quick (no searches) or grounded (searches; nothing from a reply that ran none). */
-export async function fightsForPage(game: string, page: any, quick: boolean): Promise<{ fights: GuideFight[]; searches: number; dollars: number }> {
-  const res: any = await gemini().models.generateContent({
-    model: MODEL,
-    contents: [{ role: 'user', parts: [{ text: prompt(game, page, !quick) }] }],
-    config: { ...(quick ? {} : { tools: [{ googleSearch: {} }] }), temperature: 0.2, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
-  });
-  const searches = quick ? 0 : searchesIn(res);
-  if (searches) recordMonthly(searches);
-  const dollars = estimateCost(MODEL, res) || 0;
-  if (!quick && !searches) return { fights: [], searches, dollars };
-  return { fights: parseFightLines(String(res?.text || ''), quick ? [] : sourcesIn(res)), searches, dollars };
+export async function fightsForPage(game: string, page: any, quick: boolean): Promise<{ fights: GuideFight[]; searches: number; dollars: number; checked: boolean }> {
+  let searches = 0;
+  let dollars = 0;
+  // Searching is optional for the model: a searched page whose reply ran none is asked once more, more firmly.
+  for (let attempt = 0; attempt < (quick ? 1 : 2); attempt++) {
+    const res: any = await gemini().models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: [{ text: (attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : '') + prompt(game, page, !quick) }] }],
+      config: { ...(quick ? {} : { tools: [{ googleSearch: {} }] }), temperature: 0.2, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    });
+    const n = quick ? 0 : searchesIn(res);
+    if (n) recordMonthly(n);
+    searches += n;
+    dollars += estimateCost(MODEL, res) || 0;
+    if (quick) return { fights: parseFightLines(String(res?.text || '')), searches, dollars, checked: true };
+    if (!n) continue;
+    // Searched pages (checked pages, and every page of a game past the quick model's cutoff): fights only from a reply
+    // that searched and names its sources; nothing from memory.
+    const sources = sourcesIn(res);
+    return { fights: sources.length ? parseFightLines(String(res?.text || ''), sources) : [], searches, dollars, checked: true };
+  }
+  // Never searched: nothing written, and the page is asked again on a later run.
+  return { fights: [], searches, dollars, checked: false };
 }
 
-/** Published pages with no key fights yet, and how each would be written. */
-export async function fightPlan(key: string, game: string, live: any) {
+
+/**
+ * Published pages with no key fights yet (and not checked for them already), and how each would be written. `from` is
+ * the copy to read: the live guide for the plan, the staged copy while writing (a run that stopped at the search cap
+ * carries on there).
+ */
+export async function fightPlan(key: string, game: string, live: any, from = key) {
   const newer = releasedAfter(await guideRelease(game, live), QUICK_MODEL_CUTOFF, !!live?.pipeline?.newRelease);
-  const snap = await db().collection('guides').doc(key).collection('areas').get();
+  // The pages published in the live guide (a staged copy marks every page as a draft).
+  const liveSnap = await db().collection('guides').doc(key).collection('areas').get();
+  const published = new Set(liveSnap.docs.filter((d) => d.data().status === 'published').map((d) => d.id));
+  const snap = from === key ? liveSnap : await db().collection('guides').doc(from).collection('areas').get();
   const pages = snap.docs
     .map((d) => ({ slug: d.id, ...(d.data() as any) }))
-    .filter((p) => p.status === 'published' && !(Array.isArray(p.fights) && p.fights.length))
+    .filter((p) => published.has(p.slug) && !p.fightsChecked && !(Array.isArray(p.fights) && p.fights.length))
     .map((p) => ({ ...p, quick: !newer && p.verified === false }));
   const careful = pages.filter((p) => !p.quick).length;
   const quick = pages.length - careful;
@@ -99,16 +119,17 @@ export async function fightPlan(key: string, game: string, live: any) {
  * Checked), Flash when every page was quick.
  */
 export async function writeFights(key: string, game: string, live: any, maxSearches: number) {
-  const plan = await fightPlan(key, game, live);
+  const plan = await fightPlan(key, game, live, stageKey(key));
   let searches = 0;
   let dollars = 0;
   let written = 0;
   let found = 0;
   let careful = 0;
+  let left = 0;
   const stage = db().collection('guides').doc(stageKey(key)).collection('areas');
   for (const p of plan.pages) {
     if (!p.quick && searches + FIGHT_EST.searchesPerPage > maxSearches) {
-      console.log(`  skipped ${p.name}: the search cap is reached`);
+      left++;
       continue;
     }
     try {
@@ -117,17 +138,17 @@ export async function writeFights(key: string, game: string, live: any, maxSearc
       dollars += r.dollars;
       written++;
       if (!p.quick) careful++;
-      console.log(`  ${p.quick ? 'quick' : 'searched'} ${p.name}: ${r.fights.length ? r.fights.map((f) => f.name).join('; ') : 'no key fights'}${r.searches ? ` (${r.searches} searches)` : ''}`);
-      if (r.fights.length) {
-        found += r.fights.length;
-        await stage.doc(p.slug).set({ fights: r.fights }, { merge: true });
-      }
+      console.log(`  ${p.quick ? 'quick' : 'searched'} ${p.name}: ${r.fights.length ? r.fights.map((f) => f.name).join('; ') : r.checked ? 'no key fights' : 'no searches ran (asked again next run)'}${r.searches ? ` (${r.searches} searches)` : ''}`);
+      if (r.fights.length) found += r.fights.length;
+      // Checked (with or without fights): a run that carries on doesn't ask about this page again. A searched page
+      // whose reply never searched isn't checked: it's asked again next time.
+      if (r.fights.length || r.checked) await stage.doc(p.slug).set({ ...(r.fights.length ? { fights: r.fights } : {}), ...(r.checked ? { fightsChecked: true } : {}) }, { merge: true });
     } catch (e: any) {
       console.log(`  failed ${p.name}: ${e?.message || e}`);
     }
   }
-  console.log(`Key fights: ${found} fights on ${written}/${plan.pages.length} pages.`);
-  return { searches, dollars, written, found, tier: (careful ? 'pro' : 'flash') as 'flash' | 'pro' };
+  console.log(`Key fights: ${found} fights on ${written}/${plan.pages.length} pages${left ? ` (${left} left at the search cap)` : ''}.`);
+  return { searches, dollars, written, found, left, tier: (careful ? 'pro' : 'flash') as 'flash' | 'pro' };
 }
 
 /** Players in the game on Steam right now (a public endpoint, no key); 0 when unknown. */

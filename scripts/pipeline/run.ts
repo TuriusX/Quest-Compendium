@@ -316,7 +316,8 @@ async function main() {
       waiting.push(item);
       continue;
     }
-    const cap = big ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom);
+    // Key fights search one call a page (a big guide needs about 300): the careful cap, without needing careful room.
+    const cap = big || action === 'fights' ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom);
     console.log(`\n▶ queue ${action} ${item.game} (up to ${cap} searches)`);
     const r = runScript(['scripts/guides/repair.ts', '--game', item.game, '--action', action, '--max-searches', String(cap), ...(item.report ? ['--report', item.report] : [])]);
     state.searches = (state.searches || 0) + r.searches;
