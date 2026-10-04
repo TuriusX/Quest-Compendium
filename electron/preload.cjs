@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   hideScreenPointers: () => ipcRenderer.send('hide-screen-pointers'),
   // The objectives tracker drawn over the game (electron/tracker.cjs).
   showObjectivesTracker: (data, gameKey) => ipcRenderer.invoke('tracker-show', { data, gameKey }),
-  updateObjectivesTracker: (patch) => ipcRenderer.send('tracker-update', patch),
+  updateObjectivesTracker: (patch, gameKey) => ipcRenderer.send('tracker-update', { data: patch, gameKey }),
   hideObjectivesTracker: () => ipcRenderer.send('tracker-hide'),
   peekObjectivesTracker: () => ipcRenderer.send('tracker-peek'),
   // The panel was hidden (any route): the app shows the objectives tracker for the latest answer.

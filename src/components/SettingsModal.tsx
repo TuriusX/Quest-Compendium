@@ -696,17 +696,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
-                {/* On-screen pointers (desktop only) */}
-                {typeof window !== 'undefined' && (window as any).electronAPI && (
+                {/* On-screen markers (experimental, on by default). Off: no markers anywhere and none asked for. */}
+                {(
                   <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
                     <div>
-                      <div className="text-xs font-semibold text-white">{tr('set.pointers')}</div>
-                      <div className="text-[11px] text-zinc-400">{tr('set.pointersDesc')}</div>
+                      <div className="text-xs font-semibold text-white">{tr('set.markers')}</div>
+                      <div className="text-[11px] text-zinc-400">{tr('set.markersDesc')}</div>
                     </div>
                     <button
                       role="switch"
                       aria-checked={settings.showPointersOnScreen !== false}
-                      aria-label={tr('set.pointers')}
+                      aria-label={tr('set.markers')}
                       onClick={() => {
                         playBlipSound(soundEnabled);
                         onUpdateSettings({ showPointersOnScreen: settings.showPointersOnScreen === false });

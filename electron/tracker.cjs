@@ -290,7 +290,7 @@ function cleanDetail(d) {
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
 const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintBook', 'hintBookNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
-  'expandHint', 'spine'];
+  'expandHint', 'spine', 'choice'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -327,10 +327,23 @@ async function show(data, gameKey) {
  * New data (a new place, ticks, a newer answer): replaces what's shown entirely, cleaned like show(), so nothing from
  * the previous place or answer stays. Kept while the panel is open (no window).
  */
-function update(patch) {
-  if (!current) return;
+function update(patch, gameKey) {
+  if (!current) {
+    // No tracker data yet (or it was put away), and the panel is open: keep this, so a newly finished answer is on the
+    // tracker the moment the panel hides (and the app's next show() starts from it).
+    if (deps.isPanelOpen && deps.isPanelOpen() && gameKey) {
+      const clean = cleanData(patch || {});
+      if (clean.sections.length || clean.quest || clean.place) {
+        current = { data: clean, gameKey };
+        suspended = true;
+        console.log(`[tracker] data kept while the panel is open (${clean.sections.map((x) => `${x.id} ${x.items.length}`).join(', ') || 'no sections'})`);
+      }
+    }
+    return;
+  }
   current.data = cleanData(patch || {});
   js(`window.qcTrackerShow(${JSON.stringify(current.data)})`);
+  if (suspended) console.log(`[tracker] updated while the panel is open (${current.data.sections.map((x) => `${x.id} ${x.items.length}`).join(', ') || 'no sections'})`);
 }
 
 function hide() {
@@ -555,7 +568,7 @@ function init(d) {
   storeFile = path.join(d.app.getPath('userData'), 'tracker.json');
   d.ipcMain.on('tracker-msg', onMessage);
   d.ipcMain.handle('tracker-show', (e, payload) => show(payload && payload.data, payload && payload.gameKey).catch((err) => { console.warn('[tracker]', err && err.message); return false; }));
-  d.ipcMain.on('tracker-update', (e, patch) => update(patch));
+  d.ipcMain.on('tracker-update', (e, p) => update(p && p.data ? p.data : p, p && p.gameKey));
   d.ipcMain.on('tracker-hide', () => hide());
   d.ipcMain.on('tracker-peek', () => js('window.qcTrackerPeek()'));
   d.app.on('will-quit', hide);

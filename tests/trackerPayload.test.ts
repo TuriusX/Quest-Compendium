@@ -49,9 +49,11 @@ test("shows with no answers in the tab, just a known place and its guide", () =>
   assert.deepEqual(p!.data.sections.map((s) => s.id), ["missable", "noreturn", "collect", "ach"]);
   assert.equal(p!.data.next?.name, "Figaro Castle");
 });
-test("nothing to show without a place or an answer with markers", () => {
+test("nothing to show without a place or an answer with steps (markers never count)", () => {
   assert.equal(buildTrackerPayload(tab(), answer({ text: "Hi" }), null, null, undefined, opts), null);
   assert.equal(buildTrackerPayload(tab(), null, null, null, undefined, opts), null);
+  // An answer with on-screen markers but no steps: still nothing (markers are optional and never feed the quest log).
+  assert.equal(buildTrackerPayload(tab(), answer({ points: [{ x: 1, y: 1, label: "Chest" }] }), null, null, undefined, opts), null);
 });
 test("missable: missable items and missable checklist sections; collect: the rest, in the guide's order", () => {
   const p = buildTrackerPayload(tab({ name: "Narshe", confirmed: true }), null, area(), null, undefined, opts)!;
@@ -81,26 +83,40 @@ test("achievements here: by area slug or name, done once unlocked on Steam, hidd
   assert.equal(a.items.find((i) => i.label === "Esper Hunter")!.done, true);
   assert.equal(a.items.find((i) => i.label === "Secret One")!.where, undefined);
 });
-test("the answer's markers and title count only while the answer is about the current place", () => {
-  const here = answer({ title: "Find the Esper", place: { name: "Narshe", sure: true, options: [] }, points: [{ x: 1, y: 1, label: "Chest" }], donePoints: [0] });
-  const p = buildTrackerPayload(tab({ name: "Narshe", confirmed: true }), here, area(), null, undefined, opts)!;
+const steps = [
+  { kind: "step", text: "Search the chest left of the crashed pod", detail: "The chest just left of the pod holds a Healing Potion." },
+  { kind: "choice", text: "Fight the Intellect Devourers or climb the rock wall to avoid them" },
+  { kind: "warning", text: "Loot the pod before you leave: it can't be reached later" },
+];
+test("the answer's steps and title count only while the answer is about the current place", () => {
+  const here = answer({ title: "Find the Esper", place: { name: "Narshe", sure: true, options: [] }, steps, doneSteps: [0], points: [{ x: 1, y: 1, label: "Chest" }] });
+  const p = buildTrackerPayload(tab({ name: "Narshe", confirmed: true }), here, area(), null, { choice: "Choice: {text}" }, opts)!;
   assert.equal(p.data.quest, "Find the Esper");
-  assert.deepEqual(p.data.sections[0].items.map((i) => [i.id, i.badge, !!i.done]), [["a:m1:0", 1, true]]);
-  const elsewhere = answer({ title: "Board the airship", place: { name: "Zozo", sure: true, options: [] }, points: [{ x: 1, y: 1, label: "Chest" }] });
+  const items = p.data.sections[0].items;
+  assert.equal(p.data.sections[0].id, "answer");
+  // Only the steps (no markers): ids per answer and step, ticked per answer; a choice says so; a warning is amber.
+  assert.deepEqual(items.map((i) => [i.id, i.label, !!i.done, !!i.missable, !!i.tick]), [
+    ["s:m1:0", "Search the chest left of the crashed pod", true, false, true],
+    ["s:m1:1", "Choice: Fight the Intellect Devourers or climb the rock wall to avoid them", false, false, true],
+    ["s:m1:2", "Loot the pod before you leave: it can't be reached later", false, true, true],
+  ]);
+  // Details: the sentence from the answer.
+  assert.equal(items[0].detail?.full, "The chest just left of the pod holds a Healing Potion.");
+  const elsewhere = answer({ title: "Board the airship", place: { name: "Zozo", sure: true, options: [] }, steps });
   const q = buildTrackerPayload(tab({ name: "Narshe", confirmed: true }), elsewhere, area(), null, undefined, opts)!;
   assert.equal(q.data.quest, "Escape the mines");
   assert.equal(q.data.sections.some((s) => s.id === "answer"), false);
-  // Picked with "Track on screen": its markers show wherever it's about.
+  // Picked with "Track on screen": its steps show wherever it's about.
   const r = buildTrackerPayload(tab({ name: "Narshe", confirmed: true }), elsewhere, area(), null, undefined, { ...opts, pinned: true })!;
   assert.equal(r.data.sections[0].id, "answer");
 });
-test("no guide: falls back to the answer's markers, quest line and missable warning", () => {
-  const msg = answer({ text: "Sorry about that.\nHead to the docks", place: { name: "Port", sure: false, options: [] }, points: [{ x: 1, y: 1, label: "Key", missable: true }] });
-  const p = buildTrackerPayload(tab(), msg, null, null, { missable: "Missable: {list}" }, opts)!;
+test("no guide: the answer's steps and quest line (a warning step stands in for the old missable line)", () => {
+  const msg = answer({ text: "Sorry about that.\nHead to the docks", place: { name: "Port", sure: false, options: [] }, steps: [{ kind: "warning", text: "Grab the Key before boarding" }] });
+  const p = buildTrackerPayload(tab(), msg, null, null, undefined, opts)!;
   assert.equal(p.data.quest, "Head to the docks");
   assert.equal(p.data.place?.name, "Port");
   assert.deepEqual(p.data.sections.map((s) => s.id), ["answer"]);
-  assert.equal(p.data.warning, "Missable: Key");
+  assert.equal(p.data.sections[0].items[0].missable, true);
   assert.equal(p.data.next, undefined);
 });
 test("the place's story beat becomes the quest line (and leaves the place line) when nothing better exists", () => {

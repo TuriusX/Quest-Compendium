@@ -52,6 +52,8 @@ import { useLocale } from '../i18n';
 const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3', 'chat.follow4'];
 
 interface ChatAreaProps {
+  /** On-screen markers (Settings, on by default): off, answers show no markers card, checklist or marker badges. */
+  markersOn?: boolean;
   /** The screenshot shortcut from Settings, ready to show ("Ctrl + Shift + S"). */
   screenshotKeys?: string;
   /** Desktop: show an answer's markers in the on-screen objectives tracker (hides the panel). */
@@ -87,6 +89,7 @@ interface ChatAreaProps {
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
+  markersOn = true,
   activeTab,
   onSendMessage,
   isLoading,
@@ -1085,7 +1088,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             // desktop app it's a compact footer after the answer, since the markers are already on the game screen and
             // the numbered checkboxes live in the text.
             const markerCard = (compact: boolean) => {
-              if (isUser || !msg.points || msg.points.length === 0) return null;
+              if (isUser || !markersOn || !msg.points || msg.points.length === 0) return null;
                           const shotUrl = (() => {
                               // The screenshot this answer is about: the nearest earlier question that had one.
                               for (let i = msgIndex - 1; i >= 0; i--) {
@@ -1291,7 +1294,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         },
                       }}
                     >
-                      {!isUser && msg.points?.length ? withMarkerBadges(msg.text, msg.points) : msg.text}
+                      {!isUser && markersOn && msg.points?.length ? withMarkerBadges(msg.text, msg.points) : msg.text}
                     </ReactMarkdown>
                   </div>
                   {isDesktopApp && markerCard(true)}

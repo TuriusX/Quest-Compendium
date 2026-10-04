@@ -33,6 +33,14 @@ export interface SteamGameData {
 }
 
 /** A spot the AI pointed at on the screenshot (0-1 fractions from the top-left) with a short label. */
+/** One quest-log takeaway from an answer: a step to take, a choice to make, or a warning (shown in amber). */
+export interface QuestStep {
+  kind: 'step' | 'choice' | 'warning';
+  text: string;
+  /** The sentence of the answer it comes from (its details on the quest log). */
+  detail?: string;
+}
+
 export interface ScreenPoint {
   x: number;
   y: number;
@@ -74,6 +82,10 @@ export interface ChatMessage {
   points?: ScreenPoint[];
   /** A short quest-log name for what the player is doing (the objectives tracker's title). */
   title?: string;
+  /** The 1-4 things to keep in front of the player (the quest log's "From your last answer"), most important first. */
+  steps?: QuestStep[];
+  /** Steps the player ticked on the quest log, by index. */
+  doneSteps?: number[];
   /** Other items in the same area, looked for as the player walks (desktop). */
   nearby?: NearbyItem[];
   /** Markers the player checked off as collected (their on-screen markers are hidden). */
@@ -165,7 +177,11 @@ export interface AppSettings {
   controllerToggle?: 'back+start' | 'ls+rs' | 'lb+rb+back' | 'off';
   /** Desktop: screenshot the game just before the overlay opens (for games that pause when they lose focus). */
   snapshotOnOpen?: boolean;
-  /** Desktop: draw the AI's pointers over the game when an answer arrives. */
+  /**
+   * On-screen markers (Settings, experimental, on by default): the AI points at things in the screenshot. Off: answers
+   * aren't asked for markers (no tokens spent), no marker window, no markers card or checklist under answers. Markers
+   * never feed the quest log (its "From your last answer" comes from the answer's steps).
+   */
   showPointersOnScreen?: boolean;
   /** Desktop: markers stay on the things they point at while the game scrolls. */
   stickyPointers?: boolean;

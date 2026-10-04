@@ -23,6 +23,7 @@ import { registerLocateMe } from './locateMe';
 import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPanel, guideAreasWithPages } from './guidesApi';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerDiscord } from './discord';
+import { STEPS_RULES, extractSteps } from './steps';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { samePlace } from './src/utils/placeName';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
@@ -902,8 +903,11 @@ async function startServer() {
         activeGame,
         achievements,
         news,
-        language: languageRaw = 'English'
+        language: languageRaw = 'English',
+        // On-screen markers on in the app (Settings). Older apps don't send it: on.
+        markers: markersRaw,
       } = req.body;
+      const wantMarkers = markersRaw !== false;
       // Only languages the apps offer (the name goes into the AI's instructions, so nothing else is let through).
       const language = ['English', 'Spanish', 'Brazilian Portuguese', 'German', 'French', 'Russian', 'Japanese', 'Korean', 'Simplified Chinese'].includes(String(languageRaw))
         ? String(languageRaw)
@@ -972,7 +976,8 @@ Describe things the way the game does. A door is a door, not a "secret passage";
 - Don't invent hidden routes, secret rooms, or dramatic details that aren't in the game.
 - Only call something secret or hidden when the game actually treats it that way.`;
 
-      if (imageBase64) {
+      // Markers only when the player has them on: nobody sees them otherwise, so they'd only cost tokens.
+      if (imageBase64 && wantMarkers) {
         systemInstruction += `
 
 [ON-SCREEN POINTERS]
@@ -1018,6 +1023,8 @@ End every answer with one line naming what the player is doing right now, like a
 <qc-title>Short quest name</qc-title>
 - 2 to 6 words, at most 60 characters, in the player's language, title-style (for example "Loot the Sunken Crypt", "Find Duncan's Cabin"). No quotes, no ending punctuation, never a sentence about the answer itself.
 - Never mention the title line in your answer text.`;
+        // The quest log's steps: what the player should keep in front of them (src/utils/trackerPayload.ts).
+        systemInstruction += STEPS_RULES;
       }
 
       systemInstruction += `
@@ -1477,6 +1484,9 @@ percentages:
       const titleParsed = extractTitle(responseText);
       responseText = titleParsed.text;
       const title = titleParsed.title;
+      // The quest log's steps (1-4 takeaways), always removed from the text.
+      const stepsParsed = extractSteps(responseText);
+      responseText = stepsParsed.text;
       // Where the AI thinks the player is: pull the <qc-place> line out of the answer.
       const placeParsed = extractPlace(responseText);
       responseText = placeParsed.text;
@@ -1547,6 +1557,7 @@ percentages:
         bannerImageUrl,
         ...(points.length ? { points } : {}),
         ...(title ? { title } : {}),
+        ...(stepsParsed.steps.length ? { steps: stepsParsed.steps } : {}),
         ...(nearby.length ? { nearby } : {}),
         ...(placeParsed.place ? { place: placeParsed.place } : {}),
         ...(factsSaved ? { factsSaved } : {}),

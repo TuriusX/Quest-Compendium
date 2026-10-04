@@ -1,7 +1,7 @@
 /**
  * What the objectives tracker (electron/tracker.cjs) shows: a quest log for where the player is, filled from our own
  * guides. Top to bottom: the place, a quest line, then sections, each only when it has something:
- *   - "From your last answer": the answer's markers (numbered like the markers on screen), while that answer is about
+ *   - "From your last answer": the answer's steps (its <qc-steps>: steps, choices, warnings in amber), while that answer is about
  *     the current place
  *   - "Missable here": the guide area's missable entries (and missable sections)
  *   - "Point of no return": the achievement guide's roadmap points for this area, and what they lock out
@@ -10,7 +10,8 @@
  * and "Next: <area>" from the guide's area order; the place line steps through the guide's areas (‹ ›, or a list).
  * Uncollected entries come first in each section. Entry ids are stable (per area), so hiding an entry on the tracker
  * sticks.
- * Without a guide for the game it falls back to the answer's markers and quest line. The panel-hidden handler, live
+ * Without a guide for the game it shows the answer's steps and quest line. On-screen markers never feed the quest log
+ * (they're optional, Settings). The panel-hidden handler, live
  * updates and "Track on screen" all build it here. Its words come from the app's translations (labels).
  */
 import type { Achievement, ChatMessage, GameTab, SteamGameData } from '../types';
@@ -21,7 +22,7 @@ import { nameKey, samePlace } from './placeName';
 
 export type TrackerItem = {
   /**
-   * Stable per area: a:<answer id>:<marker index>, g:<area slug>:<entry id> (both tickable), n:<area slug>:<point>,
+   * Stable per area: s:<answer id>:<step index>, g:<area slug>:<entry id> (both tickable), n:<area slug>:<point>,
    * h:<area slug>:<achievement>. Hidden entries are saved by id.
    */
   id: string;
@@ -29,8 +30,6 @@ export type TrackerItem = {
   where?: string;
   done?: boolean;
   missable?: boolean;
-  /** The number of the answer's on-screen marker. */
-  badge?: number;
   /** Can be ticked on the tracker. */
   tick?: boolean;
   /**
@@ -61,8 +60,6 @@ export type TrackerData = {
   next?: { name: string };
   /** When the place isn't a guide area by name: "From the guide: <area> (closest match)". */
   source?: string;
-  /** Only without a guide: the answer's missable markers, as one line. */
-  warning?: string;
   /** The guide's areas in order and where the player is among them (the ‹ › arrows and the area list). */
   areas?: { names: string[]; index: number };
   /** "Locate me" is looking at a screenshot. */
@@ -95,7 +92,7 @@ const LABEL_KEYS = [
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
   'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintBook', 'hintBookNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
-  'expandHint', 'spine',
+  'expandHint', 'spine', 'choice',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
   Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));
@@ -129,7 +126,7 @@ function questLine(text: string): string {
 export const trackerGameKey = (tab: GameTab | null | undefined, game?: SteamGameData | null) =>
   String(game?.appId ?? game?.name ?? tab?.activeSteamGame?.appId ?? tab?.activeSteamGame?.name ?? tab?.name ?? '');
 
-/** The finished answer the tracker follows in a tab: the picked one if it's still there, else the latest (markers or not). */
+/** The finished answer the tracker follows in a tab: the picked one if it's still there, else the latest. */
 export function trackedMessage(tab: GameTab | null | undefined, pickedId?: string | null): ChatMessage | undefined {
   const finished = (m: ChatMessage) => m.role === 'assistant' && !m.isStreaming;
   if (!tab) return undefined;
@@ -153,10 +150,10 @@ function pointIsHere(point: string, area: string): boolean {
 
 /**
  * The tracker for the active tab. tab.place is where the player is (the caller fills it from the saved game progress
- * when the tab has none). latestAnswer: the answer to show markers from (the latest finished one, or the one picked
- * with "Track on screen": opts.pinned shows its markers wherever it's about). guideArea / achievementGuide: the
+ * when the tab has none). latestAnswer: the answer to show steps from (the latest finished one, or the one picked
+ * with "Track on screen": opts.pinned shows its steps wherever it's about). guideArea / achievementGuide: the
  * guide's data for the current place (null without a guide). Returns null when there's nothing to show: no known
- * place and no answer with markers.
+ * place and no answer with steps.
  */
 export function buildTrackerPayload(
   tab: GameTab | null | undefined,
@@ -175,8 +172,8 @@ export function buildTrackerPayload(
   const answerPlace = msg ? msg.placeChosen || msg.place?.name || '' : '';
   // The answer counts for the current place when it's about it (or nothing better is known, or it was picked).
   const answerHere = !!msg && (!!opts.pinned || !tabPlace || (!!answerPlace && samePlace(answerPlace, tabPlace.name)));
-  const markers = answerHere && msg?.points?.length ? msg.points : [];
-  if (!tabPlace && !markers.length) return null;
+  const steps = answerHere && msg?.steps?.length ? msg.steps : [];
+  if (!tabPlace && !steps.length) return null;
 
   const place = tabPlace
     ? { name: tabPlace.name, story: tabPlace.story, sure: !!tabPlace.confirmed }
@@ -193,15 +190,18 @@ export function buildTrackerPayload(
   if (place && placeStory) place.story = undefined;
 
   const sections: TrackerSection[] = [];
-  if (markers.length && msg) {
-    const done = new Set(msg.donePoints ?? []);
+  if (steps.length && msg) {
+    const done = new Set(msg.doneSteps ?? []);
     sections.push({
       id: 'answer',
       title: title('answer'),
-      // In marker order: the badges match the numbered markers on screen.
-      items: markers.map((p, i) => ({
-        id: `a:${msg.id}:${i}`, label: p.label, where: p.where, done: done.has(i), missable: !!p.missable, badge: i + 1, tick: true,
-        detail: detail({ full: p.label, where: p.where, notes: [p.note, p.detail].filter(Boolean).join(' ') }),
+      // In the answer's order (most important first): a choice says so, a warning shows in amber like a missable.
+      items: steps.map((st, i) => ({
+        id: `s:${msg.id}:${i}`,
+        label: st.kind === 'choice' ? (L.choice || 'Choice: {text}').replace('{text}', st.text) : st.text,
+        done: done.has(i), missable: st.kind === 'warning', tick: true,
+        // Its details: the sentence of the answer it comes from.
+        detail: detail({ full: st.detail }),
       })),
     });
   }
@@ -257,14 +257,6 @@ export function buildTrackerPayload(
     if (items.length) sections.push({ id: 'ach', title: title('ach'), items: openFirst(items) });
   }
 
-  // Without a guide, the answer's missable markers still get their warning line (as before the guide sections).
-  const warning = !guideArea
-    ? (() => {
-        const miss = markers.filter((p, i) => p.missable && !(msg?.donePoints ?? []).includes(i)).map((p) => p.label);
-        return miss.length && L.missable ? L.missable.replace('{list}', miss.join(', ')) : miss.length ? `Missable: ${miss.join(', ')}` : '';
-      })()
-    : '';
-
   return {
     gameKey: opts.gameKey,
     data: {
@@ -281,7 +273,6 @@ export function buildTrackerPayload(
       ...(guideArea && guideArea.via && guideArea.via !== 'name'
         ? { source: (L.closest || 'From the guide: {area} (closest match)').replace('{area}', guideArea.name) }
         : {}),
-      ...(warning ? { warning } : {}),
       ...(labels ? { labels } : {}),
     },
   };

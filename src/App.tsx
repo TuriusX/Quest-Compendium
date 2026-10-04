@@ -696,7 +696,8 @@ export default function App() {
   // Kept current: a new place, ticks anywhere (the guide page, the checklist, the tracker), a new answer.
   const trackerJson = trackerPayload ? JSON.stringify(trackerPayload.data) : '';
   useEffect(() => {
-    if (trackerPayload) (window as any).electronAPI?.updateObjectivesTracker?.(trackerPayload.data);
+    // As soon as an answer finishes (even with the panel open), so the tracker never shows an older answer.
+    if (trackerPayload) (window as any).electronAPI?.updateObjectivesTracker?.(trackerPayload.data, trackerPayload.gameKey);
   }, [trackerJson]);
   // A different game tab (or the game closing, handled in main.cjs) puts the tracker away.
   const firstTabRef = useRef(true);
@@ -715,7 +716,16 @@ export default function App() {
     const api = (window as any).electronAPI;
     if (e.type === 'tick' && typeof e.item === 'string') {
       const id: string = e.item;
-      if (id.startsWith('a:')) {
+      if (id.startsWith('s:')) {
+        // A step from an answer: s:<message id>:<index>, ticked per answer.
+        const cut = id.lastIndexOf(':');
+        const msgId = id.slice(2, cut);
+        const index = Number(id.slice(cut + 1));
+        const msg = tabs.flatMap((t) => t.messages).find((m) => m.id === msgId);
+        if (!msg?.steps?.length || !Number.isInteger(index) || index < 0 || index >= msg.steps.length) return;
+        const done = msg.doneSteps ?? [];
+        updateMessageById(msgId, (m) => ({ ...m, doneSteps: e.done ? [...new Set([...done, index])].sort((x, y) => x - y) : done.filter((d) => d !== index) }));
+      } else if (id.startsWith('a:')) {
         // An answer's marker: a:<message id>:<index>, the same as its checklist under the answer.
         const cut = id.lastIndexOf(':');
         const msgId = id.slice(2, cut);
@@ -1449,6 +1459,8 @@ export default function App() {
           news: activeGame?.patchNotes || [],
           generateBanner: false, // AI banner art is retired
           language: aiLanguageName(settings.language),
+          // On-screen markers (Settings): off, the answer doesn't spend tokens on markers nobody would see.
+          markers: settings.showPointersOnScreen !== false,
           // Where the player is in this game (confirmed by them, or the AI's last guess). A new compendium for the same
           // game starts from what the player's other compendiums for it already know.
           place: activeTab.place || settings.gameProgress?.[gameProgressKey(activeTab)] || null
@@ -1533,6 +1545,15 @@ export default function App() {
         bannerImageUrl: data.bannerImageUrl,
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
         ...(typeof data.title === 'string' && data.title.trim() ? { title: data.title.trim().slice(0, 60) } : {}),
+        // The quest log's steps: the 1-4 things to keep in front of the player (the tracker's "From your last answer").
+        ...(Array.isArray(data.steps) && data.steps.length
+          ? {
+              steps: data.steps
+                .filter((x: any) => x && typeof x.text === 'string' && x.text.trim())
+                .slice(0, 4)
+                .map((x: any) => ({ kind: ['step', 'choice', 'warning'].includes(x.kind) ? x.kind : 'step', text: String(x.text).slice(0, 120), ...(typeof x.detail === 'string' && x.detail.trim() ? { detail: String(x.detail).slice(0, 400) } : {}) })),
+            }
+          : {}),
         ...(typeof data.factsSaved === 'number' && data.factsSaved > 0 ? { factsSaved: data.factsSaved } : {}),
         ...(Array.isArray(data.correctionIds) && data.correctionIds.length ? { correctionIds: data.correctionIds.filter((x: unknown) => typeof x === 'string').slice(0, 5) } : {}),
         ...(data.place && typeof data.place.name === 'string'
@@ -1574,7 +1595,7 @@ export default function App() {
         });
       }
       // Precision pass: zoom in on each marked spot so markers land on the exact object (free, rate-limited).
-      if (aiMessage.points?.length && imageBase64) {
+      if (aiMessage.points?.length && imageBase64 && settings.showPointersOnScreen !== false) {
         refineMarkers(aiMessage.id, imageBase64, aiMessage.points, activeTab.activeSteamGame?.name || globalActiveGame?.name || '', token);
       }
 
@@ -2060,6 +2081,7 @@ export default function App() {
             ) : (
               <ChatArea
                 activeTab={activeTab}
+                markersOn={settings.showPointersOnScreen !== false}
                 steamName={settings.steamName}
                 steamAvatar={settings.steamAvatar}
                 onSendMessage={handleSendMessage}
