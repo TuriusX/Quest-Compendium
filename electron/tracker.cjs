@@ -244,38 +244,50 @@ function reveal() {
 
 /** What the page gets: only known fields, trimmed to length. */
 const SECTION_IDS = ['answer', 'missable', 'noreturn', 'collect', 'ach'];
+/**
+ * Text for the page, cut without breaking a word: at the last space before the limit, with "…" (the page wraps text,
+ * so the limits are generous and only stop runaway text). Ids are cut plainly (str).
+ */
+function clip(v, n) {
+  const t = String(v || '').replace(/\s+/g, ' ').trim();
+  if (t.length <= n) return t;
+  const cut = t.slice(0, n - 1);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > n * 0.5 ? cut.slice(0, space) : cut).replace(/[\s,;:.-]+$/, '')}…`;
+}
+
 function cleanData(data) {
   const str = (v, n) => String(v || '').slice(0, n);
   return {
     id: str(data && data.id, 80),
     accent: /^#[0-9a-fA-F]{3,8}$/.test((data && data.accent) || '') ? data.accent : '#a87ffb',
-    quest: str(data && data.quest, 120),
-    warning: str(data && data.warning, 200),
+    quest: clip(data && data.quest, 160),
+    warning: clip(data && data.warning, 300),
     place: data && data.place && data.place.name ? {
-      name: str(data.place.name, 60), story: str(data.place.story, 80), sure: !!data.place.sure,
+      name: clip(data.place.name, 90), story: clip(data.place.story, 140), sure: !!data.place.sure,
     } : null,
     // Sections, in the order the app built them; each item is one line (ticks go back to the app by item id).
     sections: (Array.isArray(data && data.sections) ? data.sections : []).filter((x) => x && SECTION_IDS.includes(x.id)).slice(0, 8).map((x) => ({
       id: x.id,
-      title: str(x.title, 60),
+      title: clip(x.title, 60),
       tone: x.tone === 'amber' ? 'amber' : '',
       icon: x.icon === 'warn' ? 'warn' : '',
       items: (Array.isArray(x.items) ? x.items : []).slice(0, 120).map((o) => ({
-        id: str(o && o.id, 200), label: str(o && o.label, 140), where: str(o && o.where, 160),
+        id: str(o && o.id, 200), label: clip(o && o.label, 320), where: clip(o && o.where, 320),
         done: !!(o && o.done), missable: !!(o && o.missable), tick: !!(o && o.tick),
         badge: Number.isInteger(o && o.badge) ? o.badge : 0,
         // Everything the guide has on the entry, untrimmed, for its expanded details on the tracker.
         detail: cleanDetail(o && o.detail),
       })).filter((o) => o.label && o.id),
     })).filter((x) => x.items.length),
-    next: data && data.next && data.next.name ? { name: str(data.next.name, 60) } : null,
+    next: data && data.next && data.next.name ? { name: clip(data.next.name, 90) } : null,
     // The guide's areas in order and where the player is among them (the ‹ › arrows and the area list).
     areas: data && data.areas && Array.isArray(data.areas.names) && Number.isInteger(data.areas.index)
-      ? { names: data.areas.names.slice(0, 200).map((n) => str(n, 80)), index: data.areas.index }
+      ? { names: data.areas.names.slice(0, 200).map((n) => clip(n, 100)), index: data.areas.index }
       : null,
     locating: !!(data && data.locating),
-    notice: str(data && data.notice, 200),
-    source: str(data && data.source, 120), // "From the guide: <area> (closest match)" when the place isn't an area by name
+    notice: clip(data && data.notice, 240),
+    source: clip(data && data.source, 160), // "From the guide: <area> (closest match)" when the place isn't an area by name
     labels: cleanLabels(data && data.labels),
   };
 }

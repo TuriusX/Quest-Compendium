@@ -14,7 +14,7 @@ export const WORTH_POINTING_OUT = `Only point out something the player could eas
   - notably valuable (rare or unique gear, a big reward).
   Never point out obvious things in plain view with trivial contents (for example a corpse right in front of the
   player holding minor supplies and gold), routine loot, or things the game already highlights for them.
-  Fewer is better: 0 to 3 is normal, and 0 is fine when nothing is worth it.`;
+  Fewer is better: 0 to 3 is normal, and 0 is fine when nothing is worth it. (In a fight, see [COMBAT] instead.)`;
 
 const BODY_OR_CONTAINER = /\b(corpse|body|bodies|remains|dead|cadaver|skeleton|crate|barrel|sack|bag|pouch|pot|urn|chest|box|basket|loot)\b/i;
 const LOW_VALUE = /\b(minor|some|a few|small amount|bit of|gold|coins?|supplies|random loot|junk|common|basic|mundane|trash|consumables?|camp supplies|miscellaneous|misc|odds and ends|trinkets?)\b/i;
@@ -64,4 +64,55 @@ export function sharpenAction(text: string, answerText: string): { text: string;
   const t = String(text || '');
   if (!/\bjump/i.test(String(answerText || '')) || !CLIMB_LIKE.test(t)) return { text: t, changed: false };
   return { text: t.replace(CLIMB_LIKE, 'Jump up'), changed: true };
+}
+
+/**
+ * Combat: when the screenshot shows a fight in progress, the answer is a battle plan, markers point at the enemies (in
+ * kill order) and the positions or objects that win the fight, and the quest-log steps are the plan. The "easy to
+ * miss" bar doesn't apply to combat markers. The model marks a combat answer with <qc-combat/> (extractCombat).
+ */
+export function combatRules(markers: boolean): string {
+  return `
+
+[COMBAT]
+If the screenshot shows a fight in progress (turn-order or initiative portraits, an End Turn or similar button, a round
+or turn counter, health bars over enemies, a combat log), answer as a battle plan:
+- First: whose turn it is now and exactly what they should do this turn (the action, its target, where to stand), using
+  the game's own action names and inputs.
+- Then: the kill order (which enemy first, and why) and the one or two tactics that win this fight (high ground, a
+  choke point, a hazard or explosive to use, an ability or item to save for this).
+- Use the guide notes for this area's fights and enemies (their abilities, weaknesses, positions, rewards) when they
+  match what's on screen.${markers ? `
+- Markers: the "easy to miss" bar does not apply in combat. Mark up to 5:
+  - the key enemies in kill order (the first marker is the first target), category "enemy", each labelled with the
+    enemy and a short threat note in "note" ("Goblin archer" / "Kill first: shoots the gate defenders", "Worg" /
+    "Bite knocks prone");
+  - important positions or objects, category "action", labelled with the action ("Jump (Z) here" / "High ground: +2
+    to hit", "Explosive barrel" / "Throw to hit the group").` : ''}
+- Quest-log steps (<qc-steps>): the battle plan: the priority targets in order ("Kill the goblin archer on the
+  palisade first"), then the one or two key tactics. They replace the earlier steps.
+- Add <qc-combat/> on its own line at the very end (removed before the player sees it). Leave it out when no fight is
+  happening.`;
+}
+
+/** Pull the <qc-combat/> flag out of an answer (always removed from the text). */
+export function extractCombat(text: string): { text: string; combat: boolean } {
+  let combat = false;
+  const cleaned = String(text || '').replace(/(?:```[a-z]*\s*)?<qc-combat\s*\/?>(?:\s*<\/qc-combat>)?(?:\s*```)?/gi, () => {
+    combat = true;
+    return '';
+  });
+  return { text: combat ? cleaned.replace(/\n{3,}/g, '\n\n').trimEnd() : cleaned, combat };
+}
+
+/**
+ * Cut text for display without breaking a word: at the last space before the limit, with "…". Text within the limit
+ * is returned whole (the quest log wraps it).
+ */
+export function clipWords(text: string, max: number): string {
+  const t = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max - 1);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > max * 0.5 ? cut.slice(0, space) : cut).replace(/[\s,;:.-]+$/, '')}…`;
 }

@@ -4,7 +4,7 @@
  * block to every in-game answer; the server pulls it out (extractSteps) before the player sees the answer.
  */
 
-import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, isFillerStep, sharpenAction } from './answerBar';
+import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, isFillerStep, sharpenAction, clipWords } from './answerBar';
 
 export type StepKind = 'step' | 'choice' | 'warning';
 export type QuestStep = { kind: StepKind; text: string; detail?: string };
@@ -28,13 +28,14 @@ next, never filler:
 - ${PRECISE_ACTIONS}
   For example "Jump (Z) up the rock ledge right of the burning wreck to skip the Intellect Devourers", not "Climb the
   cliff path on the right".
+- In a fight, the steps are the battle plan instead (see [COMBAT]): the priority targets in order, then the key tactics.
 - Only what your answer actually says. Leave the line out for questions that aren't about playing (settings, lore
   chat, a game's release date). Never mention the line in your answer text.`;
 
 const KINDS: StepKind[] = ['step', 'choice', 'warning'];
 
 /** Pull the <qc-steps> line out of an answer (always removed from the text): at most 4 steps, cleaned. */
-export function extractSteps(text: string): { text: string; steps: QuestStep[] } {
+export function extractSteps(text: string, opts: { combat?: boolean } = {}): { text: string; steps: QuestStep[] } {
   let steps: QuestStep[] = [];
   const cleaned = String(text || '').replace(/(?:```[a-z]*\s*)?<qc-steps>([\s\S]*?)<\/qc-steps>(?:\s*```)?/gi, (_m, body) => {
     try {
@@ -44,13 +45,14 @@ export function extractSteps(text: string): { text: string; steps: QuestStep[] }
       steps = list
         .map((s: any) => ({
           kind: (KINDS.includes(s?.kind) ? s.kind : 'step') as StepKind,
-          text: str(s?.text, 120),
-          ...(str(s?.detail, 400) ? { detail: str(s?.detail, 400) } : {}),
+          text: clipWords(String(s?.text ?? ''), 140),
+          ...(str(s?.detail, 400) ? { detail: clipWords(String(s?.detail ?? ''), 400) } : {}),
         }))
         .filter((s: QuestStep) => s.text)
         // Filler ("Explore the area") and routine loot ("Search the corpse" for minor supplies) stay off the quest log;
         // choices and warnings always count.
-        .filter((s: QuestStep) => !isFillerStep(s.text) && !(s.kind === 'step' && isTrivialMarker({ label: s.text, detail: s.detail })))
+        // (A battle plan is never trimmed as low-value: its targets and tactics all count.)
+        .filter((s: QuestStep) => !isFillerStep(s.text) && (opts.combat || !(s.kind === 'step' && isTrivialMarker({ label: s.text, detail: s.detail }))))
         .slice(0, 4);
     } catch {
       /* a broken line is dropped */
@@ -61,7 +63,7 @@ export function extractSteps(text: string): { text: string; steps: QuestStep[] }
   steps = steps.map((s) => {
     const sharp = sharpenAction(s.text, cleaned);
     if (sharp.changed) console.log(`[steps] sharpened "${s.text.slice(0, 50)}" to "${sharp.text.slice(0, 50)}"`);
-    return sharp.changed ? { ...s, text: sharp.text.slice(0, 120) } : s;
+    return sharp.changed ? { ...s, text: clipWords(sharp.text, 140) } : s;
   });
   return { text: cleaned.replace(/\n{3,}/g, '\n\n').trimEnd(), steps };
 }

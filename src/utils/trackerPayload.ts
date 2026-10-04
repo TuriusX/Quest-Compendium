@@ -92,7 +92,7 @@ const LABEL_KEYS = [
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
   'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintBook', 'hintBookNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
-  'expandHint', 'spine', 'choice',
+  'expandHint', 'spine', 'choice', 'secBattle',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
   Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));
@@ -190,6 +190,15 @@ export function mergeSameSpot(page: { items: { id: string; name?: string; text?:
   return out;
 }
 
+/** Cut text without breaking a word: at the last space before the limit, with "…". */
+export function clipWords(text: string, max: number): string {
+  const t = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max - 1);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > max * 0.5 ? cut.slice(0, space) : cut).replace(/[\s,;:.-]+$/, '')}…`;
+}
+
 /** Uncollected first, otherwise in the guide's order. */
 const openFirst = (items: TrackerItem[]) => items.map((it, i) => ({ it, i })).sort((a, b) => Number(!!a.it.done) - Number(!!b.it.done) || a.i - b.i).map((x) => x.it);
 
@@ -246,7 +255,8 @@ export function buildTrackerPayload(
     const done = new Set(msg.doneSteps ?? []);
     sections.push({
       id: 'answer',
-      title: title('answer'),
+      // A fight: the steps are the battle plan (the latest combat answer's, replacing earlier ones).
+      title: msg.combat ? L.secBattle || 'Battle plan' : title('answer'),
       // In the answer's order (most important first): a choice says so, a warning shows in amber like a missable.
       items: steps.map((st, i) => ({
         id: `s:${msg.id}:${i}`,
@@ -320,7 +330,7 @@ export function buildTrackerPayload(
       id: `h:${guideArea.slug}:${t.englishName || t.name}`,
       label: t.name,
       // Hidden achievements keep their secret: no "how" on the game.
-      where: t.hidden ? undefined : t.how ? t.how.slice(0, 90) : undefined,
+      where: t.hidden ? undefined : t.how ? clipWords(t.how, 90) : undefined,
       done: unlocked.some((a) => tipMatches(t, a.name)),
       missable: !!t.missable,
       // The whole tip (the line above shows only its start); hidden achievements still keep their secret.

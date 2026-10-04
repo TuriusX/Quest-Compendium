@@ -39,3 +39,18 @@ export function storyPhrase(story: string | null | undefined): string {
   if (stripped !== t && stripped) t = stripped.charAt(0).toUpperCase() + stripped.slice(1);
   return t.replace(/\.$/, '').trim();
 }
+
+/**
+ * The place after moving to an area (the tracker's arrows or area list, Locate me): the new area's story beat, or none.
+ * The old area's beat never carries over to a different area; staying in the same area keeps it unless there's a new one.
+ */
+export function placeAfterMove<P extends { name?: string; story?: string; storyConfirmed?: boolean; confirmed?: boolean }>(
+  prev: P | null | undefined,
+  name: string,
+  story: string,
+  confirmed: boolean,
+): P & { name: string; confirmed: boolean } {
+  const same = !!prev?.name && samePlace(prev.name, name);
+  const { story: _oldStory, storyConfirmed: _oldStoryConfirmed, ...rest } = (prev || {}) as P;
+  return { ...(same ? prev : rest), name, confirmed, ...(story ? { story, storyConfirmed: confirmed } : {}) } as P & { name: string; confirmed: boolean };
+}

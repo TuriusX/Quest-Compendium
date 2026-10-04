@@ -386,6 +386,32 @@ export function guideNotesForPrompt(pg: GuidePageForPlace): string {
         '(weaknesses, stats, prices) before stating them, and trust what is actually on screen over these notes]\n' + body;
 }
 
+const FIGHT = /\b(fight|fights|battle|boss|ambush|defeat|kill|attack|attacks|defend|defenders?|defen[cs]e|enemies|enemy|hostiles?|combat|encounter|raid|assault|siege|horde|wave)\b/i;
+
+/**
+ * This area's fights, in full, for a battle plan: every enemy entry (weakness, what to steal, notes), and the sections,
+ * tips and secrets about fighting here. The model is told to use their specifics when the screenshot shows a fight.
+ * '' when the page has nothing about fights.
+ */
+export function guideFightNotes(pg: GuidePageForPlace): string {
+  const lines: string[] = [];
+  for (const e of pg.enemies)
+    lines.push(`Enemy: ${e.name}${!blankish(e.weakness) ? `; weak to ${e.weakness}` : ''}${!blankish(e.steal) ? `; steal/drop ${e.steal}` : ''}${!blankish(e.notes) ? `; ${e.notes}` : ''}`);
+  // A line is about fighting if it says so, or names one of this area's enemies ("Harpy" also finds "Harpies").
+  const stems = pg.enemies.map((e) => String(e.name || '').toLowerCase().replace(/(ies|y|es|s)$/, '')).filter((s) => s.length >= 4);
+  const aboutFights = (t: string) => FIGHT.test(t) || stems.some((s) => t.toLowerCase().includes(s));
+  for (const x of pg.sections) {
+    const fightSection = aboutFights(x.title);
+    for (const e of x.entries) if (fightSection || aboutFights(e.text)) lines.push(`${x.title}: ${e.text}`);
+  }
+  for (const t of pg.tips) if (aboutFights(t)) lines.push(`Tip: ${t}`);
+  for (const s of pg.secrets) if (aboutFights(String(s.text || ''))) lines.push(`Secret: ${s.text}`);
+  if (pg.overview && FIGHT.test(pg.overview)) lines.unshift(`Overview: ${pg.overview}`);
+  if (!lines.length) return '';
+  return `[GUIDE: FIGHTS AND ENEMIES IN ${pg.name}] If the screenshot shows a fight here, use these specifics (abilities, ` +
+    `weaknesses, positions, rewards) in the battle plan and the markers:\n${lines.map((l) => `- ${l}`).join('\n').slice(0, 2400)}`;
+}
+
 /** "From the guide" lines for the Known here panel. */
 export function guideLinesForPanel(pg: GuidePageForPlace): { kind: string; subject: string; fact: string }[] {
   const out: { kind: string; subject: string; fact: string }[] = [];

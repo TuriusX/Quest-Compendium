@@ -28,7 +28,7 @@ test("at most 4 steps; unknown kinds become steps; empty, overlong and broken li
   assert.equal(r.steps[1].kind, "step");
   const long = extractSteps(`A <qc-steps>[{"kind":"step","text":"${"x".repeat(300)}"},{"kind":"step","text":"  "}]</qc-steps>`);
   assert.equal(long.steps.length, 1);
-  assert.ok(long.steps[0].text.length <= 120);
+  assert.ok(long.steps[0].text.length <= 140);
   const broken = extractSteps("Answer\n<qc-steps>[not json</qc-steps>");
   assert.deepEqual(broken.steps, []);
   assert.equal(broken.text, "Answer");

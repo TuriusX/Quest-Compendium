@@ -20,11 +20,11 @@ import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe } from './locateMe';
-import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPanel, guideAreasWithPages } from './guidesApi';
+import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideFightNotes, guideLinesForPanel, guideAreasWithPages } from './guidesApi';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerDiscord } from './discord';
 import { STEPS_RULES, extractSteps } from './steps';
-import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction } from './answerBar';
+import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat } from './answerBar';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { samePlace, storyPhrase } from './src/utils/placeName';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
@@ -1030,6 +1030,8 @@ End every answer with one line naming what the player is doing right now, like a
 - Never mention the title line in your answer text.`;
         // The quest log's steps: what the player should keep in front of them (src/utils/trackerPayload.ts).
         systemInstruction += STEPS_RULES;
+        // A fight on screen: a battle plan, enemy and position markers, the steps as the plan (answerBar.ts).
+        if (imageBase64) systemInstruction += combatRules(wantMarkers);
       }
 
       systemInstruction += `
@@ -1156,6 +1158,9 @@ percentages:
       const guidePage = await guidePageFor(effectiveGame?.name, place?.name);
       if (guidePage) {
         systemInstruction += `\n\n${guideNotesForPrompt(guidePage)}`;
+        // This area's fights and enemies in full, for a battle plan when the screenshot shows a fight.
+        const fights = imageBase64 ? guideFightNotes(guidePage) : '';
+        if (fights) systemInstruction += `\n\n${fights}`;
         // Player corrections to these notes that were verified: used right away, before the page is republished.
         const corrected = await verifiedCorrectionsForPrompt(guidePage.key, guidePage.slug);
         if (corrected) systemInstruction += `\n\n${corrected}`;
@@ -1485,14 +1490,17 @@ percentages:
       responseText = stripSearchCitations(responseText);
 
       // On-screen pointers: pull the <qc-points> block out of the answer.
-      const { text: answerText, points, nearby } = extractScreenPoints(responseText, Boolean(imageBase64));
+      // A fight on screen (the model's <qc-combat/>): enemy and tactical markers are never dropped as low-value.
+      const combatParsed = extractCombat(responseText);
+      responseText = combatParsed.text;
+      const { text: answerText, points, nearby } = extractScreenPoints(responseText, Boolean(imageBase64), combatParsed.combat);
       responseText = answerText;
       // The quest-log title for the on-screen objectives tracker (any in-game answer, markers or not).
       const titleParsed = extractTitle(responseText);
       responseText = titleParsed.text;
       const title = titleParsed.title;
       // The quest log's steps (1-4 takeaways), always removed from the text.
-      const stepsParsed = extractSteps(responseText);
+      const stepsParsed = extractSteps(responseText, { combat: combatParsed.combat });
       responseText = stepsParsed.text;
       // Where the AI thinks the player is: pull the <qc-place> line out of the answer.
       const placeParsed = extractPlace(responseText);
@@ -1565,6 +1573,7 @@ percentages:
         ...(points.length ? { points } : {}),
         ...(title ? { title } : {}),
         ...(stepsParsed.steps.length ? { steps: stepsParsed.steps } : {}),
+        ...(combatParsed.combat ? { combat: true } : {}),
         ...(nearby.length ? { nearby } : {}),
         ...(placeParsed.place ? { place: placeParsed.place } : {}),
         ...(factsSaved ? { factsSaved } : {}),
@@ -1641,7 +1650,7 @@ percentages:
     if (title.length > 60) title = title.slice(0, 60).replace(/\s+\S*$/, '').trim();
     return { text: cleaned || text, title };
   }
-  function extractScreenPoints(text: string, hadImage: boolean): { text: string; points: ParsedPoint[]; nearby: { label: string; hint: string; onMap: boolean }[] } {
+  function extractScreenPoints(text: string, hadImage: boolean, combat = false): { text: string; points: ParsedPoint[]; nearby: { label: string; hint: string; onMap: boolean }[] } {
     // Other items in the same area that aren't on screen yet (the desktop app looks for them as the player walks).
     let nearbyRaw = '';
     text = text.replace(/(?:```[a-z]*\s*)?<qc-nearby>([\s\S]*?)<\/qc-nearby>(?:\s*```)?/gi, (_m, inner) => {
@@ -1683,7 +1692,7 @@ percentages:
               const note = String(p?.note ?? '').trim().slice(0, 140);
               const detail = String(p?.detail ?? '').trim().slice(0, 400);
               // Obvious low-value things (a corpse in plain view with minor supplies) never become markers.
-              if (isTrivialMarker({ label, note, detail, category, missable: p?.missable === true })) continue;
+              if (!combat && isTrivialMarker({ label, note, detail, category, missable: p?.missable === true })) continue;
               // "Climb here" when the answer says to jump: the label names the game's own action.
               const sharp = sharpenAction(label, cleaned);
               points.push({

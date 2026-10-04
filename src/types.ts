@@ -86,6 +86,8 @@ export interface ChatMessage {
   steps?: QuestStep[];
   /** Steps the player ticked on the quest log, by index. */
   doneSteps?: number[];
+  /** The screenshot showed a fight: the steps are the battle plan (the quest log titles them so). */
+  combat?: boolean;
   /** Other items in the same area, looked for as the player walks (desktop). */
   nearby?: NearbyItem[];
   /** Markers the player checked off as collected (their on-screen markers are hidden). */

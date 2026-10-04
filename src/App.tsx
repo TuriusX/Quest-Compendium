@@ -29,7 +29,7 @@ import { db } from './lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
 import { playBlipSound } from './utils/audio';
-import { samePlace } from './utils/placeName';
+import { samePlace, placeAfterMove } from './utils/placeName';
 import { useCloudSync } from './hooks/useCloudSync';
 import { recordTombstone } from './hooks/tabMerge';
 import pixelSceneUrl from './pixel-scene.png';
@@ -539,7 +539,7 @@ export default function App() {
     if (!activeTab) return;
     const area = (trackerGameRef.current.guideArea?.areas || []).find((a) => a.name === name);
     const story = area?.story?.trim() || '';
-    const place = { ...(activeTab.place || {}), name, confirmed: true, ...(story ? { story, storyConfirmed: true } : {}) };
+    const place = placeAfterMove(activeTab.place, name, story, true);
     setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place, lastActive: Date.now() } : t)));
     rememberGameProgress(activeTab, place);
   };
@@ -623,7 +623,7 @@ export default function App() {
       }
       const sure = data.evidence === 'read';
       const story = typeof data.story === 'string' ? data.story.trim() : '';
-      const place = { ...(tab.place || {}), name: String(data.area), confirmed: sure, ...(story ? { story, storyConfirmed: sure } : {}) };
+      const place = placeAfterMove(tab.place, String(data.area), story, sure);
       setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, place, lastActive: Date.now() } : t)));
       rememberGameProgress(tab, place);
       if (locateHold.current) {
@@ -1540,13 +1540,15 @@ export default function App() {
         bannerImageUrl: data.bannerImageUrl,
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
         ...(typeof data.title === 'string' && data.title.trim() ? { title: data.title.trim().slice(0, 60) } : {}),
+        // A fight on screen: the steps are the battle plan.
+        ...(data.combat === true ? { combat: true } : {}),
         // The quest log's steps: the 1-4 things to keep in front of the player (the tracker's "From your last answer").
         ...(Array.isArray(data.steps) && data.steps.length
           ? {
               steps: data.steps
                 .filter((x: any) => x && typeof x.text === 'string' && x.text.trim())
                 .slice(0, 4)
-                .map((x: any) => ({ kind: ['step', 'choice', 'warning'].includes(x.kind) ? x.kind : 'step', text: String(x.text).slice(0, 120), ...(typeof x.detail === 'string' && x.detail.trim() ? { detail: String(x.detail).slice(0, 400) } : {}) })),
+                .map((x: any) => ({ kind: ['step', 'choice', 'warning'].includes(x.kind) ? x.kind : 'step', text: String(x.text).slice(0, 200), ...(typeof x.detail === 'string' && x.detail.trim() ? { detail: String(x.detail).slice(0, 500) } : {}) })),
             }
           : {}),
         ...(typeof data.factsSaved === 'number' && data.factsSaved > 0 ? { factsSaved: data.factsSaved } : {}),
