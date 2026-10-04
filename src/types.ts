@@ -57,6 +57,8 @@ export interface ScreenPoint {
   detail?: string;
   /** Lost for good if the player moves on (the objectives tracker warns about it). */
   missable?: boolean;
+  /** A fight: kill order of the top 2-3 targets (1 = first), numbered and drawn stronger. */
+  rank?: number;
 }
 
 /** Something the AI knows is in this area but wasn't on screen yet. */
@@ -88,6 +90,8 @@ export interface ChatMessage {
   doneSteps?: number[];
   /** The screenshot showed a fight: the steps are the battle plan (the quest log titles them so). */
   combat?: boolean;
+  /** The screenshot showed no fight: a fight the player was in is over (its markers and battle plan are cleared). */
+  noFight?: boolean;
   /** Other items in the same area, looked for as the player walks (desktop). */
   nearby?: NearbyItem[];
   /** Markers the player checked off as collected (their on-screen markers are hidden). */

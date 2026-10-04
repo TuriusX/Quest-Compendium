@@ -294,6 +294,10 @@ let pointerSession = null;
 const LOCATE_MIN_INTERVAL_MS = 4000;
 const LOCATE_MAX_PER_SESSION = 20;
 let markerLifetimeMs = 120000; // how long markers stay on screen (0 = until hidden or the scene changes)
+const COMBAT_MARKERS = 8;
+const COMBAT_MARKER_MS = 3 * 60_000;
+/** A fight's markers: the player's display time, but never more than 3 minutes. */
+const combatLifetime = (ms) => (ms > 0 ? Math.min(ms, COMBAT_MARKER_MS) : COMBAT_MARKER_MS);
 let currentDockPosition = "top-right";
 let panelAnchored = false; // the panel was opened at the objectives tracker, not at its dock
 let undockedSpot = null; // an undocked panel's own spot, put back after it was opened at the tracker
@@ -1049,9 +1053,15 @@ ipcMain.on('set-overlay-options', (event, opts) => {
     markerLifetimeMs = opts.markerLifetimeMs;
     // Apply to markers already on screen too.
     if (pointerWindow && !pointerWindow.isDestroyed() && pointerSession && pointerSession.ready) {
-      pointerWindow.webContents.executeJavaScript(`window.qcSetLifetime(${markerLifetimeMs})`).catch(() => {});
+      const ms = pointerSession.combat ? combatLifetime(markerLifetimeMs) : markerLifetimeMs;
+      pointerWindow.webContents.executeJavaScript(`window.qcSetLifetime(${ms})`).catch(() => {});
       if (pointerTimer) clearTimeout(pointerTimer);
       pointerTimer = null;
+      // A fight's markers keep their 3-minute safety net.
+      if (pointerSession.combat) {
+        const win = pointerWindow;
+        pointerTimer = setTimeout(() => { if (pointerWindow === win) closeScreenPointers(); }, ms + 5000);
+      }
     }
   }
   if (!snapshotOnOpen) openSnapshot = null;
@@ -1198,15 +1208,18 @@ function closeScreenPointers() {
  */
 function showScreenPointers(points, accent, opts = {}) {
   closeScreenPointers();
+  // A fight's markers: up to 8 (every important enemy and the key positions), the top targets ranked in kill order.
+  const combat = opts.combat === true;
   const valid = (Array.isArray(points) ? points : [])
     .filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)
-    .slice(0, 5)
+    .slice(0, combat ? COMBAT_MARKERS : 5)
     .map((p) => ({
       x: p.x,
       y: p.y,
       label: String(p.label || '').slice(0, 40),
       category: /^[a-z]{2,12}$/.test(String(p.category || '')) ? String(p.category) : '',
       note: String(p.note || '').slice(0, 140),
+      ...(combat && Number.isInteger(p.rank) && p.rank >= 1 && p.rank <= 3 ? { rank: p.rank } : {}),
     }));
   if (!valid.length) return false;
   const display = lastCaptureDisplay || screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
@@ -1227,7 +1240,9 @@ function showScreenPointers(points, accent, opts = {}) {
     sourceId: lastCaptureSourceId,
     refImage: sticky ? refImage : null,
     selfVisible: markersInRecordings,
-    lifetimeMs: markerLifetimeMs,
+    // A fight's markers never outlast one turn's worth of play: 3 minutes at most (the next question hides them sooner).
+    lifetimeMs: combat ? combatLifetime(markerLifetimeMs) : markerLifetimeMs,
+    combat,
     // Our own overlay panel doesn't move with the game: keep the camera tracker from using it as background.
     // The objectives tracker doesn't move with the game either.
     exclude: (() => {
@@ -1264,7 +1279,7 @@ function showScreenPointers(points, accent, opts = {}) {
     },
   });
   pointerWindow = win;
-  pointerSession = { id: sessionId, win, watch: watchNearby, checks: 0, lastCheck: 0, inFlight: false, sourceId: lastCaptureSourceId, ready: false, queue: [] };
+  pointerSession = { id: sessionId, combat, win, watch: watchNearby, checks: 0, lastCheck: 0, inFlight: false, sourceId: lastCaptureSourceId, ready: false, queue: [] };
   const session = pointerSession;
   win.setIgnoreMouseEvents(true);
   win.setAlwaysOnTop(true, 'screen-saver');

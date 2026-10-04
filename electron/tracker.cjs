@@ -272,6 +272,8 @@ function cleanData(data) {
       title: clip(x.title, 60),
       tone: x.tone === 'amber' ? 'amber' : '',
       icon: x.icon === 'warn' ? 'warn' : '',
+      // The Battle plan's "Next turn" button.
+      nextTurn: !!x.nextTurn,
       items: (Array.isArray(x.items) ? x.items : []).slice(0, 120).map((o) => ({
         id: str(o && o.id, 200), label: clip(o && o.label, 320), where: clip(o && o.where, 320),
         done: !!(o && o.done), missable: !!(o && o.missable), tick: !!(o && o.tick),
@@ -303,7 +305,7 @@ function cleanDetail(d) {
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
 const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintBook', 'hintBookNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
-  'expandHint', 'spine', 'choice'];
+  'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -528,6 +530,10 @@ function onMessage(event, msg) {
       if (typeof msg.name === 'string' && current && current.data.areas && current.data.areas.names.includes(msg.name)) {
         tell({ type: 'goto-area', name: msg.name });
       }
+      break;
+    case 'next-turn':
+      // "Next turn" under the Battle plan: the app takes a fresh screenshot and asks for whoever is acting now.
+      tell({ type: 'next-turn' });
       break;
     case 'locate':
       // "Locate me": the app takes a screenshot (the tracker made invisible for it) and asks which area this is.

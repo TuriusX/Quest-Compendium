@@ -34,6 +34,18 @@
            border: 2px solid var(--accent); color: #fff; font-size: 17px; font-weight: 700; box-shadow: 0 6px 18px rgba(0, 0, 0, .6);
            animation: pop .25s steps(3) both; white-space: nowrap; }
   .toast b { color: var(--accent); }
+  /* A fight: one line per marker ("Archer · shoots the defenders"). The top targets carry their kill-order number and
+     stand out (red, bigger, glowing); the other enemies and positions are quieter, without a number. */
+  body.combat .txt { flex-direction: row; align-items: center; gap: 6px; }
+  body.combat .note { font-size: 13.5px; max-width: 260px; padding: 0; }
+  body.combat .note::before { content: '· '; }
+  body.combat .m:not(.kill) .num { display: none; }
+  body.combat .m:not(.kill) .tag { padding-left: 8px; font-size: 14px; border-width: 1.5px; background: rgba(16, 12, 28, .86); }
+  body.combat .m.kill { z-index: 5; }
+  body.combat .m.kill .tag { --accent: #ff5a4f; font-size: 18px; border-width: 3px; padding: 4px 14px 4px 4px;
+                             box-shadow: 0 0 0 2px rgba(0, 0, 0, .55), 0 0 18px rgba(255, 90, 79, .75), 0 6px 18px rgba(0, 0, 0, .6); }
+  body.combat .m.kill .num { width: 28px; height: 28px; font-size: 18px; color: #fff; align-self: center; }
+  body.combat .m.kill.r1 .tag { font-size: 20px; }
   @keyframes pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
 </style>
 </head>
@@ -99,14 +111,15 @@
     return points.map((p, j) => {
       const i = startIndex + j;
       const el = document.createElement('div');
-      el.className = 'm';
+      el.className = 'm' + (p.rank ? ` kill r${p.rank}` : '');
       const inner = document.createElement('div');
       inner.className = 'inner';
       const tag = document.createElement('div');
       tag.className = 'tag';
       const num = document.createElement('span');
       num.className = 'num';
-      num.textContent = String(i + 1);
+      // In a fight the number is the kill order (only the top targets have one).
+      num.textContent = String(p.rank || i + 1);
       const txt = document.createElement('span');
       txt.className = 'txt';
       const name = document.createElement('span');
@@ -423,6 +436,7 @@
     hidden = new Set(opts.hidden || []);
     if (Array.isArray(opts.extra)) pendingAdds.push(...opts.extra);
     document.documentElement.style.setProperty('--accent', opts.accent || '#a87ffb');
+    document.body.classList.toggle('combat', !!opts.combat);
     const els = buildMarkers(opts.points || []);
     els.forEach((el, i) => hidden.has(i) && el.classList.add('hidden'));
     if (opts.sticky && opts.sourceId && opts.refImage && window.QCTracker) {

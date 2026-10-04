@@ -49,7 +49,7 @@ const detail = (d: TrackerDetail): TrackerDetail | undefined => {
   return Object.keys(out).length ? out : undefined;
 };
 export type TrackerSectionId = 'answer' | 'missable' | 'noreturn' | 'collect' | 'ach';
-export type TrackerSection = { id: TrackerSectionId; title: string; tone?: 'amber'; icon?: 'warn'; items: TrackerItem[] };
+export type TrackerSection = { id: TrackerSectionId; title: string; tone?: 'amber'; icon?: 'warn'; items: TrackerItem[]; nextTurn?: boolean };
 export type TrackerData = {
   id: string;
   accent: string;
@@ -92,7 +92,7 @@ const LABEL_KEYS = [
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
   'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintBook', 'hintBookNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
-  'expandHint', 'spine', 'choice', 'secBattle',
+  'expandHint', 'spine', 'choice', 'secBattle', 'nextTurn', 'nextTurnHint',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
   Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));
@@ -131,8 +131,10 @@ export function trackedMessage(tab: GameTab | null | undefined, pickedId?: strin
   const finished = (m: ChatMessage) => m.role === 'assistant' && !m.isStreaming;
   if (!tab) return undefined;
   if (pickedId) {
-    const picked = tab.messages.find((m) => m.id === pickedId && finished(m));
-    if (picked) return picked;
+    const at = tab.messages.findIndex((m) => m.id === pickedId && finished(m));
+    // A picked battle plan stops once a later screenshot shows no fight: the fight is over.
+    const over = at >= 0 && tab.messages[at].combat && tab.messages.slice(at + 1).some((m) => finished(m) && m.noFight);
+    if (at >= 0 && !over) return tab.messages[at];
   }
   for (let i = tab.messages.length - 1; i >= 0; i--) if (finished(tab.messages[i])) return tab.messages[i];
   return undefined;
@@ -257,6 +259,8 @@ export function buildTrackerPayload(
       id: 'answer',
       // A fight: the steps are the battle plan (the latest combat answer's, replacing earlier ones).
       title: msg.combat ? L.secBattle || 'Battle plan' : title('answer'),
+      // A fight: "Next turn" asks again with a fresh screenshot (a normal question).
+      ...(msg.combat ? { nextTurn: true } : {}),
       // In the answer's order (most important first): a choice says so, a warning shows in amber like a missable.
       items: steps.map((st, i) => ({
         id: `s:${msg.id}:${i}`,

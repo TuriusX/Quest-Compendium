@@ -17,10 +17,10 @@ test("a fight on screen: the rules say how to spot it (game-agnostic) and how to
   for (const cue of ["turn-order", "End Turn", "health bars over enemies"]) assert.ok(r.includes(cue), cue);
   assert.match(r, /whose turn it is now/);
   assert.match(r, /kill order/);
-  assert.match(r, /Mark up to 5/);
+  assert.match(r, /Mark up to 8/);
   assert.match(r, /<qc-combat>\{"fight": /);
   // Markers off: no marker instructions at all.
-  assert.equal(combatRules(false).includes("Mark up to 5"), false);
+  assert.equal(combatRules(false).includes("Mark up to 8"), false);
 });
 
 test("the <qc-combat/> flag is read and always removed", () => {

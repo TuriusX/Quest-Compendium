@@ -35,7 +35,7 @@ import { recordTombstone } from './hooks/tabMerge';
 import pixelSceneUrl from './pixel-scene.png';
 import { LOCALES, aiLanguageName, applyLocale, detectLocale, translate, useLocale, useT } from './i18n';
 import { ControllerLayer } from './components/ControllerLayer';
-import { markersActiveFor, rememberAreaFind, setPointersActive } from './components/pointerStore';
+import { markersActiveFor, activeMarkersId, rememberAreaFind, setPointersActive } from './components/pointerStore';
 import { buildTrackerPayload, trackedMessage, trackerGameKey, trackerLabels, type TrackerData } from './utils/trackerPayload';
 import { useTrackerGuide } from './utils/trackerGuide';
 import { formatShortcut } from './utils/shortcut';
@@ -747,6 +747,8 @@ export default function App() {
       moveToArea(e.name.trim());
     } else if (e.type === 'locate') {
       runLocate();
+    } else if (e.type === 'next-turn') {
+      runNextTurn();
     } else if (e.type === 'open-entry' && typeof e.item === 'string') {
       // "Open in guide" on an expanded tracker entry (the panel is opening at the tracker): the Guide at that entry's
       // area, the entry shown and highlighted. g:<area>:<entry>, h:<area>:<achievement>, n:<area>:<point>; an answer's
@@ -854,7 +856,8 @@ export default function App() {
           removedMarkers: [...(m.removedMarkers || []), ...removedLabels],
         }));
         const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
-        if (kept.length) (window as any).electronAPI?.showScreenPointers?.(kept, accent, { refImage: image, sessionId: msgId, hidden: [] });
+        const combat = !!tabs.flatMap((t) => t.messages).find((m) => m.id === msgId)?.combat;
+        if (kept.length) (window as any).electronAPI?.showScreenPointers?.(kept, accent, { refImage: image, sessionId: msgId, hidden: [], combat });
         else (window as any).electronAPI?.hideScreenPointers?.();
         return;
       }
@@ -1346,6 +1349,28 @@ export default function App() {
   }, [activeGame?.appId, settings.steamId, activeTab?.id]);
 
   // Handle Sending Message to Server Gemini API
+  /** Hide the markers on screen if they're a fight's (they never outlast one turn's worth of play). */
+  const hideCombatMarkers = () => {
+    const id = activeMarkersId();
+    if (id && tabs.some((t) => t.messages.some((m) => m.id === id && m.combat))) (window as any).electronAPI?.hideScreenPointers?.();
+  };
+  /**
+   * "Next turn" (the quest log's Battle plan, or under a combat answer): a fresh screenshot and a short question for
+   * whoever is acting now. A normal question; its answer replaces the markers and the battle plan.
+   */
+  const nextTurnBusy = useRef(false);
+  const runNextTurn = async () => {
+    const api = (window as any).electronAPI;
+    if (nextTurnBusy.current || isLoadingAi || !api?.captureForLocate) return;
+    nextTurnBusy.current = true;
+    try {
+      const image: string | null = await api.captureForLocate();
+      if (image) await handleSendMessage(tr('chat.nextTurnQ'), image);
+    } finally {
+      nextTurnBusy.current = false;
+    }
+  };
+
   const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash') => {
     if (!activeTab) return;
 
@@ -1378,6 +1403,8 @@ export default function App() {
       lastActive: now 
     } : t));
     setIsLoadingAi(true);
+    // A fight's markers last one turn: the next question hides them (its answer brings new ones).
+    hideCombatMarkers();
 
     let token: string | null = null;
     try {
@@ -1542,6 +1569,8 @@ export default function App() {
         ...(typeof data.title === 'string' && data.title.trim() ? { title: data.title.trim().slice(0, 60) } : {}),
         // A fight on screen: the steps are the battle plan.
         ...(data.combat === true ? { combat: true } : {}),
+        // No fight on the screenshot: a fight is over (its markers go, the quest log shows normal steps).
+        ...(data.noFight === true ? { noFight: true } : {}),
         // The quest log's steps: the 1-4 things to keep in front of the player (the tracker's "From your last answer").
         ...(Array.isArray(data.steps) && data.steps.length
           ? {
@@ -1589,7 +1618,11 @@ export default function App() {
           sessionId: aiMessage.id,
           hidden: [],
           watchNearby: !!aiMessage.nearby?.length,
+          combat: !!aiMessage.combat,
         });
+      } else if (aiMessage.noFight) {
+        // The fight is over and this answer marks nothing: the old fight's markers go.
+        hideCombatMarkers();
       }
       // Precision pass: zoom in on each marked spot so markers land on the exact object (free, rate-limited).
       if (aiMessage.points?.length && imageBase64 && settings.showPointersOnScreen !== false) {
@@ -2095,6 +2128,7 @@ export default function App() {
                 locating={locating}
                 locateNote={locateNote}
                 onTrackOnScreen={isDesktop ? handleTrackOnScreen : undefined}
+                onNextTurn={isDesktop ? runNextTurn : undefined}
                 onSetStory={(story) => {
                   const next = { name: activeTab.place?.name || '', confirmed: !!activeTab.place?.confirmed, ...(activeTab.place || {}), story, storyConfirmed: true };
                   setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));

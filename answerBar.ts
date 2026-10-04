@@ -14,7 +14,8 @@ export const WORTH_POINTING_OUT = `Only point out something the player could eas
   - notably valuable (rare or unique gear, a big reward).
   Never point out obvious things in plain view with trivial contents (for example a corpse right in front of the
   player holding minor supplies and gold), routine loot, or things the game already highlights for them.
-  Fewer is better: 0 to 3 is normal, and 0 is fine when nothing is worth it. (In a fight, see [COMBAT] instead.)`;
+  Fewer is better: 0 to 3 is normal, and 0 is fine when nothing is worth it. None of this applies to markers in a
+  fight: there [COMBAT] asks for every enemy that matters plus the key positions (usually 5 to 8 markers).`;
 
 const BODY_OR_CONTAINER = /\b(corpse|body|bodies|remains|dead|cadaver|skeleton|crate|barrel|sack|bag|pouch|pot|urn|chest|box|basket|loot)\b/i;
 const LOW_VALUE = /\b(minor|some|a few|small amount|bit of|gold|coins?|supplies|random loot|junk|common|basic|mundane|trash|consumables?|camp supplies|miscellaneous|misc|odds and ends|trinkets?)\b/i;
@@ -66,6 +67,10 @@ export function sharpenAction(text: string, answerText: string): { text: string;
   return { text: t.replace(CLIMB_LIKE, 'Jump up'), changed: true };
 }
 
+/** On-screen markers per answer: 5 normally; a fight gets every important enemy and the key positions. */
+export const MARKER_LIMIT = 5;
+export const COMBAT_MARKER_LIMIT = 8;
+
 /**
  * Combat: when the screenshot shows a fight in progress, the answer is a battle plan, markers point at the enemies (in
  * kill order) and the positions or objects that win the fight, and the quest-log steps are the plan. The "easy to
@@ -83,18 +88,24 @@ or turn counter, health bars over enemies, a combat log), answer as a battle pla
   choke point, a hazard or explosive to use, an ability or item to save for this).
 - Use the guide notes for this area's fights and enemies (their abilities, weaknesses, positions, rewards) when they
   match what's on screen.${markers ? `
-- Markers: the "easy to miss" bar does not apply in combat. Mark up to 5:
-  - the key enemies in kill order (the first marker is the first target), category "enemy", each labelled with the
-    enemy and a short threat note in "note" ("Goblin archer" / "Kill first: shoots the gate defenders", "Worg" /
-    "Bite knocks prone");
-  - important positions or objects, category "action", labelled with the action ("Jump (Z) here" / "High ground: +2
-    to hit", "Explosive barrel" / "Throw to hit the group").` : ''}
+- Markers: the "easy to miss" bar does not apply in combat. Mark up to ${COMBAT_MARKER_LIMIT}; a fight with several
+  enemies usually needs 5 to ${COMBAT_MARKER_LIMIT}, not just the top targets:
+  - every important enemy visible, ranked or not (one marker per enemy that matters; not each identical weakling in a
+    big group), category "enemy": "label" is the enemy in 1-2 words, "note" a threat tag of 2-5 words that doesn't
+    repeat the label ("Archer" / "shoots the defenders", "Worg" / "bite knocks prone", "Za'Krug" / "heavy axe hits");
+  - "rank": 1, 2, 3 on the top 2-3 targets in kill order (1 = kill first); no "rank" on the rest;
+  - 1 to 3 key positions and objects that the plan uses, category "action": "label" is the action with its input,
+    "note" why ("Jump (Z) here" / "high ground +2", "Explosive barrel" / "throw into the group", "Chokepoint" / "hold
+    the gate here"). Every place to stand or object to use that a battle-plan step names gets its own marker on that
+    exact spot (a step "keep your archers on the ridge" means a marker on the ridge).
+  List the ranked enemies first, then the other enemies, then the positions.` : ''}
 - Quest-log steps (<qc-steps>): the battle plan: the priority targets in order ("Kill the goblin archer on the
   palisade first"), then the one or two key tactics. They replace the earlier steps.
 - Add this on its own line at the very end (removed before the player sees it), naming the fight and the enemies on
   screen as the game does:
 <qc-combat>{"fight": "<a short name for this fight, e.g. Goblin raid on the grove gate>", "enemies": ["<named enemies and enemy types on screen, e.g. Za'Krug, Goblin archer>"]}</qc-combat>
-  Leave it out when no fight is happening.`;
+  Leave it out when no fight is happening, and when the fight is over (no turn order, no End Turn button: the
+  battle-end screen, looting, walking on): then answer and write steps as usual.`;
 }
 
 /**

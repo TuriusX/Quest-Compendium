@@ -28,6 +28,8 @@ export function useMarkersActive(msgId: string): boolean {
 }
 
 export const markersActiveFor = (msgId: string): boolean => activeId === msgId;
+/** The answer whose markers are on screen right now (null when none). */
+export const activeMarkersId = (): string | null => activeId;
 
 export function setPointersActive(id: string, active: boolean): void {
   if (active) activeId = id;

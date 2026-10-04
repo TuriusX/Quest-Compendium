@@ -24,7 +24,7 @@ import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideFightNotes, 
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerDiscord } from './discord';
 import { STEPS_RULES, extractSteps } from './steps';
-import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat } from './answerBar';
+import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT } from './answerBar';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase } from './src/utils/placeName';
@@ -992,7 +992,7 @@ The <...> parts are placeholders: always write your own values. Never copy the p
 - ${PRECISE_ACTIONS}
 - A marker for a move sits on the exact surface or object to use (the rock ledge to jump onto, not the cliff near it),
   and its label is the action itself: "Jump up here", "Shove this", "Throw at this".
-- Fewer, better markers: never more than 5. If several markers would say the same thing (for example several identical enemies), give the note to one of them and leave the note out on the others, so they show the label alone.
+- Outside a fight: fewer, better markers, never more than 5. In a fight, [COMBAT] decides instead: every enemy that matters plus the key positions, up to 8. If several markers would say the same thing (for example several identical enemies), give the note to one of them and leave the note out on the others, so they show the label alone.
 - Exits and doors are low priority: only mark one if it's clearly visible AND either the player asked how to leave or it's genuinely easy to miss. Markers go to items, secrets, people and hazards first. A normal door isn't worth a marker.
 - Top-down games: exits are often just a gap or a doormat at the bottom edge of the room, and the player's own character may be standing on or in front of it. Stairs, ladders and wall openings are not the exit unless you can see they lead out. If you're not sure where the exit is, don't mark it and don't name a specific spot in your answer; just say to leave the room and which way to go.
 - Labels: 1 to 4 words, in the player's language.
@@ -1580,6 +1580,8 @@ percentages:
         ...(title ? { title } : {}),
         ...(stepsParsed.steps.length ? { steps: stepsParsed.steps } : {}),
         ...(combatParsed.combat ? { combat: true } : {}),
+        // A screenshot with no fight on it: a fight the player was in is over (the app clears its combat markers and plan).
+        ...(imageBase64 && !combatParsed.combat ? { noFight: true } : {}),
         ...(nearby.length ? { nearby } : {}),
         ...(placeParsed.place ? { place: placeParsed.place } : {}),
         ...(factsSaved ? { factsSaved } : {}),
@@ -1640,11 +1642,11 @@ percentages:
 
   /**
    * On-screen pointers: the model may append <qc-points>[{"y":..,"x":..,"label":".."}]</qc-points> (0-1000 scale).
-   * Returns the answer without the block, and up to 5 validated points as 0-1 fractions.
+   * Returns the answer without the block, and up to 5 validated points as 0-1 fractions (8 in a fight).
    * The block is always removed, even when no screenshot was sent (the points would be meaningless then).
    */
   const MARKER_CATEGORIES = new Set(['weapon', 'armor', 'consumable', 'key', 'quest', 'lore', 'secret', 'character', 'enemy', 'danger', 'action', 'place']);
-  type ParsedPoint = { x: number; y: number; label: string; where?: string; category?: string; note?: string; detail?: string; missable?: boolean };
+  type ParsedPoint = { x: number; y: number; label: string; where?: string; category?: string; note?: string; detail?: string; missable?: boolean; rank?: number };
 
   /** The model's <qc-title> line (a short quest-log name for the objectives tracker), always removed from the answer. */
   function extractTitle(text: string): { text: string; title: string } {
@@ -1688,7 +1690,8 @@ percentages:
       try {
         const parsed = JSON.parse(raw.trim());
         if (Array.isArray(parsed)) {
-          for (const p of parsed.slice(0, 5)) {
+          // A fight: every important enemy plus key positions (up to 8); otherwise 5.
+          for (const p of parsed.slice(0, combat ? COMBAT_MARKER_LIMIT : MARKER_LIMIT)) {
             const pt = Array.isArray(p?.point) ? { y: p.point[0], x: p.point[1] } : p;
             const x = Number(pt?.x), y = Number(pt?.y);
             const label = String(p?.label ?? '').trim().slice(0, 40);
@@ -1710,6 +1713,8 @@ percentages:
                 ...(note ? { note } : {}),
                 ...(detail && detail !== note ? { detail } : {}),
                 ...(p?.missable === true ? { missable: true } : {}),
+                // Kill order (combat): the top 2-3 targets, numbered and drawn stronger.
+                ...(combat && Number.isInteger(p?.rank) && p.rank >= 1 && p.rank <= 3 ? { rank: p.rank } : {}),
               });
             }
           }
@@ -1718,6 +1723,8 @@ percentages:
         /* malformed block: ignore the points, keep the answer */
       }
     }
+    // A fight: the ranked targets first, in kill order (their numbers then match the answer's list).
+    if (combat) points.sort((a, b) => (a.rank || 9) - (b.rank || 9));
     return { text: cleaned || text, points, nearby };
   }
 

@@ -43,6 +43,11 @@ const maxSearches = Math.max(8, Number(arg('max-searches', '120')));
 const onlyGroup = arg('group') && arg('group') !== 'true' ? arg('group')! : '';
 const dryRun = arg('dry-run') === 'true';
 const PER_ENTRY = 8;
+/**
+ * Missing fights keep collecting (and show on the review queue), but writing them into guides is paused until
+ * MISSING_FIGHTS_APPLY=on: they aren't checked or applied, and use no searches.
+ */
+const FIGHTS_PAUSED = process.env.MISSING_FIGHTS_APPLY !== 'on';
 const MIN_PLAYERS = 3;
 
 let searches = 0;
@@ -290,6 +295,7 @@ async function main() {
   // Verified but not in the guide yet (its review gate failed): tried again at most once a week. They're used in
   // answers meanwhile.
   const retry = onlyGroup ? [] : (await db().collection('correctionGroups').where('status', '==', 'verified').get()).docs
+    .filter((d) => !(FIGHTS_PAUSED && d.data().entryKind === 'fight'))
     .filter((d) => !ids.has(d.id) && Date.now() - Number(d.data().lastApplyTry || 0) > 7 * 86_400_000);
   console.log(`Corrections: ${ids.size} entr${ids.size === 1 ? 'y' : 'ies'} to check${dryRun ? ' (dry run: nothing is changed)' : ''}.`);
   // The most-reported entries first (more reports of the same missing fight raise its priority), within the search cap.
@@ -298,11 +304,15 @@ async function main() {
   const order = [...ids].sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0));
 
   const toApply = new Map<string, { game: string; groups: { id: string; g: any; rewrite: Rewrite; checked: boolean }[] }>();
-  let verified = 0, dismissed = 0, waiting = 0;
+  let verified = 0, dismissed = 0, waiting = 0, pausedFights = 0;
   for (const id of order) {
     const gref = db().collection('correctionGroups').doc(id);
     const g: any = (await gref.get()).data();
     if (!g) continue;
+    if (g.entryKind === 'fight' && FIGHTS_PAUSED) {
+      pausedFights++;
+      continue;
+    }
     const reportDocs = (await db().collection('corrections').where('groupId', '==', id).get()).docs;
     const reports: Report[] = reportDocs.map((d) => ({ id: d.id, ...(d.data() as any) }));
     const live = await liveEntry(g.gameKey, g.area, g.entryId, g.entryKind);
@@ -409,6 +419,7 @@ async function main() {
       }
     }
   }
+  if (pausedFights) console.log(`Missing fights: ${pausedFights} collected; writing them into guides is paused (MISSING_FIGHTS_APPLY=on resumes).`);
   console.log(`Done: corrections: ${verified} verified, ${applied} applied to guides, ${dismissed} dismissed, ${waiting} waiting for more reports or a decision; ${searches} searches used, estimated AI cost ≈ $${dollars.toFixed(2)}.`);
   setTimeout(() => process.exit(0), 1500);
 }

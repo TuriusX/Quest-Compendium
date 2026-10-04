@@ -58,6 +58,8 @@ interface ChatAreaProps {
   screenshotKeys?: string;
   /** Desktop: show an answer's markers in the on-screen objectives tracker (hides the panel). */
   onTrackOnScreen?: (msgId: string) => void;
+  /** "Next turn" under a combat answer: a fresh screenshot and a short question for whoever acts now (desktop). */
+  onNextTurn?: () => void;
   /** Desktop: how long markers stay on screen, in seconds (0 = always). */
   markerLifetime?: number;
   onChangeMarkerLifetime?: (seconds: number) => void;
@@ -97,6 +99,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   activeGame,
   screenshotKeys,
   onTrackOnScreen,
+  onNextTurn,
   soundEnabled,
   onAppendToNotes,
   onOpenScreenModal,
@@ -1109,6 +1112,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               hidden: doneList,
                               watchNearby: !!msg.nearby?.some((n) => !n.found),
                               extra: areaFindsFor(msg.id),
+                              combat: !!msg.combat,
                             });
                           };
                           const setDone = (next: number[]) => {
@@ -1397,6 +1401,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* A fight: "Next turn" asks again with a fresh screenshot (a normal question) */}
+                {!isUser && msg.combat && msg.id === lastAssistantId && !isLoading && onNextTurn && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playBlipSound(soundEnabled);
+                      onNextTurn();
+                    }}
+                    title={t('tracker.nextTurnHint')}
+                    className="qc-px-frame mt-2.5 px-3.5 py-1.5 rounded-full border border-[var(--accent-color)] text-[12.5px] font-bold text-[var(--accent-color)] hover:bg-[var(--accent-color)] hover:text-black transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    ⟳ {t('tracker.nextTurn')}
+                  </button>
+                )}
 
                 {/* Suggested follow-ups under the latest answer */}
                 {!isUser && msg.id === lastAssistantId && !isLoading && (

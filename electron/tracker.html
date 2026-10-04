@@ -122,6 +122,11 @@
   .sechead .chev { margin-left: auto; }
   .sec.amber .sechead { color: var(--warn); }
   .sec.folded ol, .sec.folded .more, .sec.folded .unhide { display: none; }
+  /* The Battle plan's "Next turn": a fresh screenshot and a short question for whoever acts now. */
+  .nturn { display: inline-flex; align-items: center; gap: .35em; margin: .3em 0 .1em 1.75em; padding: .2em .65em; font-size: .78em; font-weight: 800;
+           color: var(--accent); border: 1px solid var(--accent); border-radius: 99px; cursor: pointer; }
+  .nturn:hover { background: var(--accent); color: #16101f; }
+  .nturn.busy { opacity: .55; pointer-events: none; }
   .more { font-size: .78em; font-weight: 700; color: var(--accent); cursor: pointer; margin: .1em 0 0 1.75em; }
   .more:hover { filter: brightness(1.25); }
   /* A guide entry: an empty square that fills in when collected. An info line (a point of no return): no box. */
@@ -310,6 +315,7 @@
     next: 'Next: {area}', closest: 'From the guide: {area} (closest match)', showHidden: 'Show {n} hidden', hideEntry: 'Hide',
     limitHint: 'Click: show 3, 6 or all', prevArea: 'Previous area', nextArea: 'Next area', areaList: 'All areas in the guide',
     locate: 'Locate me', locating: 'Locating…',
+    nextTurn: 'Next turn (asks a question)', nextTurnHint: 'Takes a new screenshot and asks what to do this turn',
     hintBook: '{keys} or the book icon: open the Compendium', hintBookNoKeys: 'The book icon opens the Compendium',
     headFold: 'Click: fold the log to this line or open it. Drag: move.', openBook: 'Open the Compendium',
     foldHint: 'Click to fold or open', detWhere: 'Where', detHow: 'How', detMissable: 'Missable', detNotes: 'Notes',
@@ -436,6 +442,7 @@
       return `<div class="sec${x.tone === 'amber' ? ' amber' : ''}${folded ? ' folded' : ''}" data-sec="${esc(x.id)}">
         <div class="sechead" title="${esc(L('foldHint'))}">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${cnt}<span class="chev">${folded ? '▸' : '▾'}</span></div>
         <ol>${shown.map((o) => itemHtml(o, x.id)).join('')}</ol>
+        ${x.nextTurn ? `<div class="nturn${state.turnBusy ? ' busy' : ''}" title="${esc(L('nextTurnHint'))}">⟳ ${esc(L('nextTurn'))}</div>` : ''}
         ${left > 0 ? `<div class="more">${esc(L('more', { n: left }))}</div>` : ''}
         ${x.hiddenIds.length ? `<div class="unhide">${esc(L('showHidden', { n: x.hiddenIds.length }))}</div>` : ''}
       </div>`;
@@ -595,6 +602,14 @@
       send('section', { id, collapsed: !!state.collapsed[id] });
       return;
     }
+    if (e.target.closest('.nturn')) {
+      // Busy until the new answer replaces the plan (or a few seconds pass, if nothing comes back).
+      state.turnBusy = true;
+      render();
+      setTimeout(() => { state.turnBusy = false; render(); }, 20000);
+      send('next-turn', {});
+      return;
+    }
     if (e.target.closest('.more')) { state.more = { ...state.more, [id]: true }; render(); return; }
     if (e.target.closest('.unhide')) {
       // "Show N hidden": this section's hidden entries come back.
@@ -678,8 +693,11 @@
   document.addEventListener('pointercancel', () => send('press', { down: false }));
 
   // Called by the app.
+  // The answer the steps come from (a new one ends "Next turn"'s busy state).
+  const answerKey = (d) => { const a = d && (d.sections || []).find((x) => x.id === 'answer'); return a && a.items[0] ? a.items[0].id.replace(/:\d+$/, '') : ''; };
   window.qcTrackerShow = (data, settings) => {
     releasePress();
+    if (answerKey(data) !== answerKey(state.data)) state.turnBusy = false;
     if (settings && typeof settings.backdrop === 'boolean') settings.backdrop = settings.backdrop ? 45 : 0;
     const samePlace = state.data && data && state.data.place && data.place && state.data.place.name === data.place.name;
     if (!samePlace) { state.more = {}; state.areaOpen = false; state.openItem = null; }
@@ -688,7 +706,11 @@
     if (settings && settings.view) state.view = settings.view;
     render(); showHint();
   };
-  window.qcTrackerUpdate = (patch) => { if (state.data) Object.assign(state.data, patch); render(); };
+  window.qcTrackerUpdate = (patch) => {
+    if (state.data && patch && patch.sections && answerKey(patch) !== answerKey(state.data)) state.turnBusy = false;
+    if (state.data) Object.assign(state.data, patch);
+    render();
+  };
   window.qcTrackerSettings = (s) => {
     Object.assign(state, s);
     if (s && 'scale' in s) lastSize = ''; // a new UI scale: always report the new size to the app
