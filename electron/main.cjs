@@ -1448,16 +1448,6 @@ ipcMain.on('pointers-locate-done', (event, { id, remaining } = {}) => {
 
 // "Locate me" (the tracker, the PlaceBar): the game as it is. With the panel open, the snapshot from when it opened
 // (the panel isn't in it); otherwise a capture with the tracker made invisible for it. Never opens the panel.
-ipcMain.handle('capture-for-locate', async () => {
-  if (isAppVisible && openSnapshot && openSnapshot.session === overlaySession) return openSnapshot.image;
-  try {
-    return await captureScreenImage();
-  } catch (err) {
-    console.warn('[locate-me] capture failed:', err && err.message);
-    return null;
-  }
-});
-
 /** Slide the panel out of the way (or hide it when undocked) and give the screen time to redraw without it. */
 async function hidePanelForCapture() {
   try {
@@ -1474,7 +1464,7 @@ async function hidePanelForCapture() {
   await new Promise(resolve => setTimeout(resolve, 400));
 }
 
-// "Next turn": always a fresh capture of the game as it is now, never the snapshot from when the panel opened. An open
+// "Next turn" and "Locate me": always a fresh capture of the game as it is now, never the snapshot from when the panel opened. An open
 // panel slides away for the capture and comes back; the tracker and markers stay out of it (captureScreenImage).
 ipcMain.handle('capture-fresh', async () => {
   const wasVisible = isAppVisible;

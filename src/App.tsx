@@ -586,7 +586,7 @@ export default function App() {
     const tab = activeTab;
     const guideAreas = trackerGameRef.current.guideArea?.areas || [];
     if (locatingRef.current || !tab) return;
-    if (!api?.captureForLocate || !guideAreas.length) {
+    if (!api?.captureFresh || !guideAreas.length) {
       showLocateNote(tr('place.locateNoGuide'));
       return;
     }
@@ -597,7 +597,8 @@ export default function App() {
     setLocating(true);
     showLocateNote('');
     try {
-      const captured: string | null = await api.captureForLocate();
+      // A fresh capture of the game (an open panel slides away for it), never the panel or the snapshot from opening it.
+      const captured: string | null = await api.captureFresh();
       if (!captured) throw new Error('no screenshot');
       const image = await shrinkForLocate(captured);
       const token = user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken() : null;
