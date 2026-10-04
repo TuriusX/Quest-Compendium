@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lies of P Guide and Walkthrough | Quest Compendium</title>
+  <meta name="description" content="Area-by-area Lies of P guide with item checklists, secrets, missables and enemy weaknesses.">
+  <link rel="canonical" href="https://questcompendium.com/guides/lies-of-p/">
+  
+  
+  <meta property="og:title" content="Lies of P Guide and Walkthrough | Quest Compendium">
+  <meta property="og:description" content="Area-by-area Lies of P guide with item checklists, secrets, missables and enemy weaknesses.">
+  <meta property="og:image" content="https://questcompendium.com/icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="../../favicon-192.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="../../favicon-96.png">
+  <link rel="icon" href="../../favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" type="image/svg+xml" href="../../icon.svg">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
+    .qc-pixel { image-rendering: pixelated; }
+    .qc-check input { accent-color: #a87ffb; width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .2rem; cursor: pointer; }
+    .qc-check.is-done span { text-decoration: line-through; opacity: .5; }
+    details.qc-fold > summary { list-style: none; cursor: pointer; }
+    details.qc-fold > summary::-webkit-details-marker { display: none; }
+    details.qc-fold > summary .qc-caret { transition: transform .15s; }
+    details.qc-fold[open] > summary .qc-caret { transform: rotate(90deg); }
+    [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+    [data-progress].is-complete { color: #34d399; }
+    .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
+    /* Search hides entries with the hidden attribute; layout classes like "flex" would otherwise keep them showing. */
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body class="min-h-screen" data-guide="lies-of-p">
+  <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
+      <a href="../../index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="../../icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
+      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
+        <a href="../../guides/index.html" class="hover:text-white">Guides</a>
+        <a href="../../index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">Get the app</a>
+        
+      </div>
+    </div>
+  </nav>
+  
+  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8"><div class="max-w-3xl">
+          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">Guides</a></p>
+          <div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] rounded-2xl border border-white/10 mb-5"><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">LP</span></div><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1627720/header.jpg?t=1764565054" alt="Lies of P" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()"></div>
+          <h1 class="text-3xl font-bold text-white">Lies of P guide</h1>
+          <p class="text-zinc-400 mt-2">Every area in order, with checklists of items, secrets and missables. Your ticks are saved in this browser.</p>
+          <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">11</div><div class="text-xs text-zinc-500">areas</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">69</div><div class="text-xs text-zinc-500">things to find</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">6</div><div class="text-xs text-zinc-500">missables flagged</div></div></div>
+          
+          <a hidden data-continue="lies-of-p" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">Continue where you left off</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          <input type="search" data-filter="#qc-area-rows" data-empty="#qc-area-empty" placeholder="Search areas and items…" class="mt-6 w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
+          <div id="qc-area-rows" class="mt-3"><a data-search="Chapter I: The Train Station Arrival in Krat and the first puppets Monad&#39;s Lamp Puppet&#39;s Saber Wintry Rapier Greatsword of Fate Krat Central Station Main Entrance Key Left Behind Letter Basic Puppet Station Officer Puppet Guard Dog Puppet" href="chapter-i-the-train-station/index.html" data-area-link="chapter-i-the-train-station" data-name="Chapter I: The Train Station" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chapter I: The Train Station</span><span class="block text-sm text-zinc-500 truncate">Arrival in Krat and the first puppets</span></span>
+          <span data-progress="lies-of-p|chapter-i-the-train-station|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Chapter II: Elysion Boulevard Navigating the burning city streets Electric Blitz Abrasive Krat City Hall Key Broken Baby Puppet Feel (Record) Life Amulet Opening the window near the rooftops allows you to speak to Toma, an infected boy who asks you to find a whistle; playing the Faded Whistle by his window later rewards you with Ergo and Humanity. Basic Puppet Bomb-throwing Puppet Large Police Puppet" href="chapter-ii-elysion-boulevard/index.html" data-area-link="chapter-ii-elysion-boulevard" data-name="Chapter II: Elysion Boulevard" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chapter II: Elysion Boulevard</span><span class="block text-sm text-zinc-500 truncate">Navigating the burning city streets</span></span>
+          <span data-progress="lies-of-p|chapter-ii-elysion-boulevard|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Chapter III: Factory Exploring the Venigni Works facility Salamander Dagger Booster Glaive Big Pipe Wrench Trinity Sanctum: Found by descending through the red-lit drainage pipes near the Survivor fight; requires a Trinity Key obtained by answering Arlecchino&#39;s riddle correctly on the nearby ringing telephone. Cryptic Vessel deciphering: A Crafted Cryptic Vessel can be found near the rafters in the hound-infested warehouse; return it to Venigni at Hotel Krat to unlock a hidden stash in the City Path. Worker Puppet Flunkey Puppet Shielded Puppet" href="chapter-iii-factory/index.html" data-area-link="chapter-iii-factory" data-name="Chapter III: Factory" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chapter III: Factory</span><span class="block text-sm text-zinc-500 truncate">Exploring the Venigni Works facility</span></span>
+          <span data-progress="lies-of-p|chapter-iii-factory|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Chapter IV: Moonlight Town Reaching the village and the cathedral The Atoned&#39;s Mask Workshop Union Standard Corrosion Converter Cryptic Vessel deciphering reward: Handing the Crafted Cryptic Vessel to Venigni leads to a marked spot on the Pilgrim&#39;s Path/Moonlight Town route where striking the hanging puppet provides rewards. Carcass Townsfolk Carcass Brute" href="chapter-iv-moonlight-town/index.html" data-area-link="chapter-iv-moonlight-town" data-name="Chapter IV: Moonlight Town" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chapter IV: Moonlight Town</span><span class="block text-sm text-zinc-500 truncate">Reaching the village and the cathedral</span></span>
+          <span data-progress="lies-of-p|chapter-iv-moonlight-town|4"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Chapter V: Malum District Fighting through the slums and the Black Rabbit Brotherhood Bone-Cutting Saw Blade and Handle Bramble Curved Sword Blade and Handle Arch Heavyweight Frame Red Fox&#39;s Mask Taunt Gesture Inside the Red Lobster Inn, behind a stack of destructible wooden barrels near the shortcut ladder, you can find a hidden ladder leading to an upper loft where the Wandering Merchant resides. Carcass Butcher Brood Hound" href="chapter-v-malum-district/index.html" data-area-link="chapter-v-malum-district" data-name="Chapter V: Malum District" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chapter V: Malum District</span><span class="block text-sm text-zinc-500 truncate">Fighting through the slums and the Black Rabbit Brotherhood</span></span>
+          <span data-progress="lies-of-p|chapter-v-malum-district|8"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Chapter VI: Rosa Isabelle Street Investigating the opera house and the estate Dancer&#39;s Curved Sword Bright Red Apple Fascination Record Incredible Venigni Collection Dropping the burning chandelier onto the puppet stage inside the Estella Opera House opens a shortcut and damages enemies below. Spider Puppet Clown Puppet (Mad Clown Puppet)" href="chapter-vi-rosa-isabelle-street/index.html" data-area-link="chapter-vi-rosa-isabelle-street" data-name="Chapter VI: Rosa Isabelle Street" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chapter VI: Rosa Isabelle Street</span><span class="block text-sm text-zinc-500 truncate">Investigating the opera house and the estate</span></span>
+          <span data-progress="lies-of-p|chapter-vi-rosa-isabelle-street|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Chapter VII: Exhibition Traversing the grand exhibition hall Legion Caliber Quartz Strength Fruit (Gold Coin Fruit) Saintess of Mercy Statue Key The Saintess of Mercy Statue allows you to respec Pinocchio&#39;s level, Legion Arm, and P-Organ in exchange for Gold Coin Fruit once the gallery shortcut is unlocked. Shield Puppets Boxer Puppets" href="chapter-vii-exhibition/index.html" data-area-link="chapter-vii-exhibition" data-name="Chapter VII: Exhibition" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chapter VII: Exhibition</span><span class="block text-sm text-zinc-500 truncate">Traversing the grand exhibition hall</span></span>
+          <span data-progress="lies-of-p|chapter-vii-exhibition|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Chapter VIII: Barren Swamp Surviving the swamp and the puppet graveyard City Longspear Live Puppet&#39;s Axe Recharged Amulet Hermit&#39;s Cave | A locked gate near the Barren Swamp Bridge Stargazer requires the Rusty Cryptic Vessel to open, which can be acquired later in Chapter IX and decoded by Venigni to access this hidden sub-area. Puppet of the Future" href="chapter-viii-barren-swamp/index.html" data-area-link="chapter-viii-barren-swamp" data-name="Chapter VIII: Barren Swamp" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chapter VIII: Barren Swamp</span><span class="block text-sm text-zinc-500 truncate">Surviving the swamp and the puppet graveyard</span></span>
+          <span data-progress="lies-of-p|chapter-viii-barren-swamp|5"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Chapter IX: Station Returning to the Krat Central Station Acidic Greatsword Master Chef&#39;s Knife Carrier&#39;s Amulet +1 Why letter A Trinity Sanctum door is located in the Krat Central Station area; answer the ringing telephone outside the station correctly to receive the Trinity Key required to open it. Carcass Pitcher Corrupted Police Puppet" href="chapter-ix-station/index.html" data-area-link="chapter-ix-station" data-name="Chapter IX: Station" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chapter IX: Station</span><span class="block text-sm text-zinc-500 truncate">Returning to the Krat Central Station</span></span>
+          <span data-progress="lies-of-p|chapter-ix-station|6"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Chapter X: Relic of Trismegistus Descending into the ancient ruins Alidoro&#39;s Cryptic Vessel Great Venigni Collection Carcass Butcher" href="chapter-x-relic-of-trismegistus/index.html" data-area-link="chapter-x-relic-of-trismegistus" data-name="Chapter X: Relic of Trismegistus" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chapter X: Relic of Trismegistus</span><span class="block text-sm text-zinc-500 truncate">Descending into the ancient ruins</span></span>
+          <span data-progress="lies-of-p|chapter-x-relic-of-trismegistus|3"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a><a data-search="Chapter XI: Arche Abbey The final ascent to the tower Sophia&#39;s Letter Arm of God Amulet Noblesse Oblige Uroboros&#39;s Eye Disruption Carcass" href="chapter-xi-arche-abbey/index.html" data-area-link="chapter-xi-arche-abbey" data-name="Chapter XI: Arche Abbey" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
+          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">Chapter XI: Arche Abbey</span><span class="block text-sm text-zinc-500 truncate">The final ascent to the tower</span></span>
+          <span data-progress="lies-of-p|chapter-xi-arche-abbey|7"></span>
+          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a></div>
+          <p id="qc-area-empty" hidden class="mt-3 text-sm text-zinc-500">Nothing matches that search.</p>
+          
+  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
+    <h2 class="text-lg font-bold text-white mb-1">Stuck somewhere in Lies of P?</h2>
+    <p class="text-zinc-300 text-sm mb-4">Quest Compendium sees your screen while you play: ask about exactly where you are, and keep this guide open right beside your game.</p>
+    <a href="../../index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">Get live help while you play</a>
+  </div>
+        </div></main>
+  <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
+    Guides are written with AI help. Spot a mistake? <button type="button" data-report class="text-[#a87ffb] hover:underline">Report it here</button>, or tell us on <a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>. Game names belong to their owners; this site isn&#39;t affiliated with any publisher. Game images © their respective owners.
+  </footer>
+  <dialog id="qc-report" class="rounded-2xl bg-[#121218] text-zinc-200 border border-white/10 p-0 w-[min(92vw,28rem)] backdrop:bg-black/60" data-api="https://quest-compendium-890629309063.us-east1.run.app/api/guides/report" data-lang="en" data-thanks="Thanks! We&#39;ll check it and fix the guide." data-error="That didn&#39;t send. Try again later, or tell us on Discord.">
+    <form method="dialog" class="p-5 space-y-3">
+      <h2 class="text-base font-bold text-white">Report a mistake</h2>
+      <label class="block text-sm text-zinc-400" for="qc-report-text">What&#39;s wrong on this page? Name the item, place or detail if you can.</label>
+      <textarea id="qc-report-text" rows="4" minlength="5" maxlength="1000" required class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"></textarea>
+      
+      <label class="block text-sm text-zinc-400" for="qc-report-correct">What&#39;s correct? (optional)</label>
+      <input id="qc-report-correct" maxlength="300" placeholder="e.g. it&#39;s under the rock by the fallen log, not on the western cliffs" class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100">
+      <p data-report-status class="text-sm text-zinc-300" hidden></p>
+      <div class="flex justify-end gap-2">
+        <button value="cancel" formnovalidate class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white">Cancel</button>
+        <button value="send" data-report-send class="px-3 py-1.5 text-sm rounded-lg bg-[#a87ffb] text-black font-semibold">Send</button>
+      </div>
+    </form>
+  </dialog>
+  <script>
+(function(){
+  function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
+  if(K&&S){
+    try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
+    var key='qcw:'+K+':'+S, done=load(key);
+    var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    document.querySelectorAll('[data-check]').forEach(function(el){
+      var id=el.getAttribute('data-check'), box=el.querySelector('input');
+      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+    });
+    counts();
+  }
+  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+    var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(!t){el.textContent='';return}
+    el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
+  });};
+  progress();
+  // Search boxes: hide entries that don't match, and section headings left with nothing under them.
+  var norm=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');};
+  document.querySelectorAll('[data-filter]').forEach(function(inp){
+    var list=document.querySelector(inp.getAttribute('data-filter')), empty=document.querySelector(inp.getAttribute('data-empty')||'#_');
+    if(!list) return;
+    inp.addEventListener('input',function(){
+      var q=norm(inp.value.trim()), shown=0;
+      list.querySelectorAll('[data-search]').forEach(function(el){var ok=!q||norm(el.getAttribute('data-search')).indexOf(q)>=0; el.hidden=!ok; if(ok) shown++;});
+      list.querySelectorAll('[data-head]').forEach(function(h){var g=h.getAttribute('data-head'),any=false;list.querySelectorAll('[data-group="'+g+'"]').forEach(function(el){if(!el.hidden)any=true;});h.hidden=!any;});
+      document.querySelectorAll('[data-hide-when-searching]').forEach(function(el){el.hidden=!!q;});
+      if(empty) empty.hidden=shown>0;
+    });
+  });
+  // Sorting and the A–Z bar on the guides page.
+  var grid=document.querySelector('[data-games]');
+  var sortSel=document.querySelector('[data-sort]');
+  if(grid&&sortSel){sortSel.addEventListener('change',function(){
+    var k=sortSel.value, cards=Array.prototype.slice.call(grid.children);
+    cards.sort(function(a,b){ if(k==='az') return a.getAttribute('data-name').localeCompare(b.getAttribute('data-name')); return (+b.getAttribute('data-'+k))-(+a.getAttribute('data-'+k)) || a.getAttribute('data-name').localeCompare(b.getAttribute('data-name')); });
+    cards.forEach(function(c){grid.appendChild(c);});
+  });}
+  document.querySelectorAll('[data-letter]').forEach(function(btn){btn.addEventListener('click',function(){
+    if(sortSel&&sortSel.value!=='az'){sortSel.value='az';sortSel.dispatchEvent(new Event('change'));}
+    var L=btn.getAttribute('data-letter'), t=grid&&grid.querySelector('[data-first="'+L+'"]'); if(t) t.scrollIntoView({behavior:'smooth',block:'center'});
+  });});
+  var c=document.querySelector('[data-continue]');
+  if(c){var s=null;try{s=localStorage.getItem('qcw-last:'+c.getAttribute('data-continue'))}catch(e){}
+    var a=s&&document.querySelector('[data-area-link="'+s+'"]');
+    if(a){c.setAttribute('href',a.getAttribute('href'));c.querySelector('[data-continue-name]').textContent=a.getAttribute('data-name');c.hidden=false;}}
+  // "Spot a mistake?": a short report about this page, sent to the review queue (the only thing this script sends).
+  var dlg=document.getElementById('qc-report');
+  if(dlg&&dlg.showModal){
+    var ta=dlg.querySelector('textarea'), st=dlg.querySelector('[data-report-status]'), send=dlg.querySelector('[data-report-send]');
+    var pick=document.getElementById('qc-report-entry'), fix=document.getElementById('qc-report-correct');
+    document.querySelectorAll('[data-report]').forEach(function(btn){btn.addEventListener('click',function(){st.hidden=true;ta.value='';if(pick)pick.value='';if(fix)fix.value='';send.disabled=false;dlg.showModal();});});
+    dlg.querySelector('form').addEventListener('submit',function(e){
+      if(e.submitter&&e.submitter.value==='cancel')return;
+      e.preventDefault();
+      var t=ta.value.trim(); if(t.length<5)return;
+      send.disabled=true;
+      fetch(dlg.getAttribute('data-api'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:K||'',page:S||'',text:t,entry:pick?pick.value:'',correct:fix?fix.value.trim():'',lang:dlg.getAttribute('data-lang')||'en',path:location.pathname})})
+        .then(function(r){if(!r.ok)throw 0;st.textContent=dlg.getAttribute('data-thanks');st.hidden=false;setTimeout(function(){dlg.close();},1800);})
+        .catch(function(){st.textContent=dlg.getAttribute('data-error');st.hidden=false;send.disabled=false;});
+    });
+  }
+})();</script>
+</body>
+</html>
