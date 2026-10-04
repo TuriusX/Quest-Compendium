@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   // "Locate me": a screenshot of the game that never opens the panel (the tracker stays out of it).
   captureForLocate: () => ipcRenderer.invoke('capture-for-locate'),
+  // "Next turn": a fresh screenshot of the game now (an open panel slides away for it), never the snapshot on open.
+  captureFresh: () => ipcRenderer.invoke('capture-fresh'),
   closeApp: () => ipcRenderer.send('close-app'),
   openSettingsWindow: () => ipcRenderer.send('open-settings-window'),
   closeSettingsWindow: () => ipcRenderer.send('close-settings-window'),

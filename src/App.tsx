@@ -1361,10 +1361,11 @@ export default function App() {
   const nextTurnBusy = useRef(false);
   const runNextTurn = async () => {
     const api = (window as any).electronAPI;
-    if (nextTurnBusy.current || isLoadingAi || !api?.captureForLocate) return;
+    if (nextTurnBusy.current || isLoadingAi || !api?.captureFresh) return;
     nextTurnBusy.current = true;
     try {
-      const image: string | null = await api.captureForLocate();
+      // Always a fresh capture (the open panel slides away for it), never the snapshot from when the panel opened.
+      const image: string | null = await api.captureFresh();
       if (image) await handleSendMessage(tr('chat.nextTurnQ'), image);
     } finally {
       nextTurnBusy.current = false;

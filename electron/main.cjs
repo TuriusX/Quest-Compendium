@@ -1458,27 +1458,50 @@ ipcMain.handle('capture-for-locate', async () => {
   }
 });
 
+/** Slide the panel out of the way (or hide it when undocked) and give the screen time to redraw without it. */
+async function hidePanelForCapture() {
+  try {
+    if (currentDockPosition !== 'undocked') {
+      const coords = getDockCoords(true);
+      await animateWindow(coords.x, coords.y, 150);
+    } else if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.hide();
+    }
+  } catch (err) {
+    console.warn('Failed to hide window for screenshot:', err);
+  }
+  // Give window time to hide and OS to redraw the desktop / game screen
+  await new Promise(resolve => setTimeout(resolve, 400));
+}
+
+// "Next turn": always a fresh capture of the game as it is now, never the snapshot from when the panel opened. An open
+// panel slides away for the capture and comes back; the tracker and markers stay out of it (captureScreenImage).
+ipcMain.handle('capture-fresh', async () => {
+  const wasVisible = isAppVisible;
+  if (wasVisible) await hidePanelForCapture();
+  try {
+    return await captureScreenImage();
+  } catch (err) {
+    console.warn('[next-turn] capture failed:', err && err.message);
+    return null;
+  } finally {
+    if (wasVisible) {
+      try {
+        slideIn({});
+      } catch (err) {
+        console.error('Failed to slideIn window:', err);
+      }
+    }
+  }
+});
+
 ipcMain.handle('take-screenshot', async () => {
   // A clean snapshot from when the overlay opened beats a fresh capture of a game that paused itself.
   if (isAppVisible && openSnapshot && openSnapshot.session === overlaySession) {
     return openSnapshot.image;
   }
   const wasVisible = isAppVisible;
-  
-  if (wasVisible) {
-    try {
-      if (currentDockPosition !== 'undocked') {
-        const coords = getDockCoords(true);
-        await animateWindow(coords.x, coords.y, 150);
-      } else if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.hide();
-      }
-    } catch (err) {
-      console.warn('Failed to hide window for screenshot:', err);
-    }
-    // Give window time to hide and OS to redraw the desktop / game screen
-    await new Promise(resolve => setTimeout(resolve, 400));
-  }
+  if (wasVisible) await hidePanelForCapture();
 
   let base64Image = null;
   try {
