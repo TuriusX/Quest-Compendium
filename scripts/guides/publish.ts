@@ -173,20 +173,26 @@ const SCRIPT = `
   var dlg=document.getElementById('qc-report');
   if(dlg&&dlg.showModal){
     var ta=dlg.querySelector('textarea'), st=dlg.querySelector('[data-report-status]'), send=dlg.querySelector('[data-report-send]');
-    document.querySelectorAll('[data-report]').forEach(function(btn){btn.addEventListener('click',function(){st.hidden=true;ta.value='';send.disabled=false;dlg.showModal();});});
+    var pick=document.getElementById('qc-report-entry'), fix=document.getElementById('qc-report-correct');
+    document.querySelectorAll('[data-report]').forEach(function(btn){btn.addEventListener('click',function(){st.hidden=true;ta.value='';if(pick)pick.value='';if(fix)fix.value='';send.disabled=false;dlg.showModal();});});
     dlg.querySelector('form').addEventListener('submit',function(e){
       if(e.submitter&&e.submitter.value==='cancel')return;
       e.preventDefault();
       var t=ta.value.trim(); if(t.length<5)return;
       send.disabled=true;
-      fetch(dlg.getAttribute('data-api'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:K||'',page:S||'',text:t,lang:dlg.getAttribute('data-lang')||'en',path:location.pathname})})
+      fetch(dlg.getAttribute('data-api'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:K||'',page:S||'',text:t,entry:pick?pick.value:'',correct:fix?fix.value.trim():'',lang:dlg.getAttribute('data-lang')||'en',path:location.pathname})})
         .then(function(r){if(!r.ok)throw 0;st.textContent=dlg.getAttribute('data-thanks');st.hidden=false;setTimeout(function(){dlg.close();},1800);})
         .catch(function(){st.textContent=dlg.getAttribute('data-error');st.hidden=false;send.disabled=false;});
     });
   }
 })();`;
 
-function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string }) {
+function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string; entries?: { id: string; label: string }[] }) {
+  // "Spot a mistake?": on an area page, the form can say which entry is wrong (its id goes to the server).
+  const entryPicker = opts.entries && opts.entries.length
+    ? `<label class="block text-sm text-zinc-400" for="qc-report-entry">${esc(ui('reportEntry'))}</label>
+      <select id="qc-report-entry" class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"><option value="">${esc(ui('reportEntryNone'))}</option>${opts.entries.map((e) => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join('')}</select>`
+    : '';
   const up = '../'.repeat(opts.depth);
   // Other languages of this same page: a menu in the top bar and hreflang tags for search engines.
   const langs = opts.langs && opts.langs.length > 1 && opts.path !== undefined ? opts.langs : [];
@@ -255,6 +261,9 @@ function page(opts: { title: string; description: string; depth: number; canonic
       <h2 class="text-base font-bold text-white">${esc(ui('reportTitle'))}</h2>
       <label class="block text-sm text-zinc-400" for="qc-report-text">${esc(ui('reportHint'))}</label>
       <textarea id="qc-report-text" rows="4" minlength="5" maxlength="1000" required class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"></textarea>
+      ${entryPicker}
+      <label class="block text-sm text-zinc-400" for="qc-report-correct">${esc(ui('reportCorrect'))}</label>
+      <input id="qc-report-correct" maxlength="300" placeholder="${esc(ui('reportCorrectHint'))}" class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100">
       <p data-report-status class="text-sm text-zinc-300" hidden></p>
       <div class="flex justify-end gap-2">
         <button value="cancel" formnovalidate class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white">${esc(ui('reportCancel'))}</button>
@@ -544,6 +553,12 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
         draft,
         guide: key,
         area: o.slug,
+        // The page's entries, for the report form's "which entry?" picker.
+        entries: [
+          ...a.items.map((e) => ({ id: e.id, label: String(e.name || '') })),
+          ...a.secrets.map((e) => ({ id: e.id, label: String(e.text || e.name || '').slice(0, 70) })),
+          ...(a.sections || []).filter((x) => x.check).flatMap((x) => x.entries.map((e) => ({ id: e.id, label: String(e.text || '').slice(0, 70) }))),
+        ].filter((e) => e.id && e.label),
         langs: pageLangs(o.slug),
         path: `guides/${key}/${o.slug}/`,
       }),

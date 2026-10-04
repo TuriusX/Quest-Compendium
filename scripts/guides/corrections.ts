@@ -13,7 +13,8 @@
  *      which reports agree, and rewrites the entry's where / how / notes clearly and specifically.
  *   2. The reviewer (Gemini 3.8 Flash, no searches; corrections never use Pro) checks that rewrite against the evidence.
  *   3. Confirmed by sources (and the reviewer): the entry is rewritten. Contradicted: dismissed. Can't be settled by
- *      sources: applied only once 3 or more different signed-in players reported the same correction; otherwise it
+ *      sources: applied only once reporters worth 3 or more (a signed-in app player or Discord user 1, an anonymous
+ *      website report 0.5, an app guest 0) reported the same correction, or a Discord moderator confirmed it; otherwise it
  *      stays pending (or disputed, when the reports disagree with each other).
  * A verified correction is used in answers for its area at once. The guide itself changes through a staged copy and
  * the review gate (review.ts), the entry marked "updatedFrom: player reports", and checked only when sources confirmed it.
@@ -23,6 +24,7 @@ import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, parseJson, searchesIn, stageKey } from './common';
 import { estimateCost } from '../../usage';
 import { recordMonthly } from '../../searchGuard';
+import { reporterCount } from '../../corrections';
 import { stageCopy, discard } from './promote';
 import { reviewGuide, gateGuide } from './review';
 import { FLASH_REVIEW_MODEL } from './reviewerQuota';
@@ -39,7 +41,7 @@ const MIN_PLAYERS = 3;
 let searches = 0;
 let dollars = 0;
 
-type Report = { id: string; claim: string; uidHash: string; guest: boolean; via: string; placeConfirmed: boolean; field: string };
+type Report = { id: string; claim: string; uidHash: string; reporterKey?: string; source?: string; weight?: number; guest: boolean; via: string; placeConfirmed: boolean; field: string };
 /** An item's corrected where / how / notes; a secret or checklist line's corrected whole text (it names what it is). */
 type Rewrite = { where?: string; how?: string; notes?: string; text?: string };
 type Check = { verdict: 'confirmed' | 'contradicted' | 'unclear'; agree: number[]; rewrite: Rewrite; evidence: string; sources: string[]; searches: number };
@@ -216,7 +218,9 @@ async function main() {
     console.log(`  source check: ${check.verdict} (${check.searches} searches; agree: ${check.agree.join(', ') || 'none'}) ${check.evidence}`);
     console.log(`  proposed: ${check.rewrite.text ? `text: ${check.rewrite.text}` : `where: ${check.rewrite.where || '-'} | how: ${check.rewrite.how || '-'} | notes: ${check.rewrite.notes || '-'}`}`);
     const agreeing = check.agree.length ? check.agree.map((i) => reports[i - 1]) : [];
-    const players = new Set(agreeing.filter((r) => !r.guest).map((r) => r.uidHash)).size;
+    const players = reporterCount(agreeing);
+    // A moderator's confirmation (Discord) stands in for the 3 reporters; it never skips the source check.
+    const enough = players >= MIN_PLAYERS || !!g.modConfirmed;
     let status: string;
     let rewrite: Rewrite = check.rewrite;
     let reviewer = { ok: false, reason: '' };
@@ -229,12 +233,12 @@ async function main() {
       if (rv.ok) {
         status = 'verified';
         rewrite = { where: rv.rewrite.where || check.rewrite.where, how: rv.rewrite.how || check.rewrite.how, notes: rv.rewrite.notes || check.rewrite.notes, text: rv.rewrite.text || check.rewrite.text };
-      } else status = players >= MIN_PLAYERS && !(rv as any).failed ? 'verified' : 'pending';
-    } else status = players >= MIN_PLAYERS ? 'verified' : agreeing.length && agreeing.length < reports.length ? 'disputed' : 'pending';
+      } else status = enough && !(rv as any).failed ? 'verified' : 'pending';
+    } else status = enough ? 'verified' : agreeing.length && agreeing.length < reports.length ? 'disputed' : 'pending';
     const checked = status === 'verified' && check.verdict === 'confirmed' && reviewer.ok;
     // Not settled by sources, but 3+ players agree: their own wording (the latest agreeing report).
     if (status === 'verified' && !checked) rewrite = { where: agreeing[agreeing.length - 1]?.claim || g.lastClaim };
-    console.log(`  decision: ${status}${status === 'verified' ? (checked ? ' (confirmed by sources)' : ` (${players} players agree)`) : ''}`);
+    console.log(`  decision: ${status}${status === 'verified' ? (checked ? ' (confirmed by sources)' : g.modConfirmed && players < MIN_PLAYERS ? ' (confirmed by a moderator)' : ` (${players} reporters agree)`) : ''}`);
     if (status === 'verified') {
       console.log(`  before: ${describeEntry(g.entryKind, live.entry)}`);
       console.log(`  after:  ${describeEntry(g.entryKind, rewritten(g.entryKind, live.entry, rewrite, checked))}`);

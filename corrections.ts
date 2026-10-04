@@ -95,18 +95,117 @@ export const playerHash = (uid: string) =>
 
 export const groupId = (gameKey: string, slug: string, entryId: string) => `${gameKey}__${slug}__${entryId}`.slice(0, 400);
 
-// At most 20 candidates per player a day (kept in memory; a restart resets it).
+// At most 20 candidates per reporter a day (anonymous website reports: 5), kept in memory; a restart resets it.
 const perPlayer = new Map<string, { day: string; n: number }>();
-function allowed(uidHash: string): boolean {
+function allowed(uidHash: string, limit = 20): boolean {
   const day = new Date().toISOString().slice(0, 10);
   const c = perPlayer.get(uidHash);
   if (!c || c.day !== day) {
     perPlayer.set(uidHash, { day, n: 1 });
     return true;
   }
-  if (c.n >= 20) return false;
+  if (c.n >= limit) return false;
   c.n++;
   return true;
+}
+
+/** Where a candidate came from. Each source's reporters count differently toward the 3-reporter rule (REPORTER_WEIGHT). */
+export type CorrectionSource = 'app' | 'website' | 'discord';
+/**
+ * How much one reporter counts toward the 3 needed when sources can't settle a correction: a signed-in app player or a
+ * Discord user 1, an anonymous website report half (by IP hash), an app guest nothing (a new guest id is too easy).
+ */
+export const REPORTER_WEIGHT = { app: 1, appGuest: 0, website: 0.5, discord: 1 } as const;
+
+/**
+ * How many reporters agree, weighted by where they reported (REPORTER_WEIGHT: app player and Discord user 1, anonymous
+ * website report 0.5, app guest 0). Each reporter counts once, at their highest weight. The daily check needs 3.
+ */
+export function reporterCount(reports: { reporterKey?: string; uidHash?: string; weight?: number; guest?: boolean }[]): number {
+  const best = new Map<string, number>();
+  for (const r of reports) {
+    const key = String(r.reporterKey || r.uidHash || '');
+    const w = typeof r.weight === 'number' ? r.weight : r.guest ? 0 : 1;
+    best.set(key, Math.max(best.get(key) || 0, w));
+  }
+  return [...best.values()].reduce((n, w) => n + w, 0);
+}
+
+/** Obvious spam in a free-text correction: links, gibberish, or too little to be a correction. */
+export function looksLikeSpam(text: string): boolean {
+  const t = String(text || '').trim();
+  if (t.length < 8 || t.split(/\s+/).length < 2) return true;
+  if (/https?:\/\/|www\.|\.(com|net|ru|xyz|io)\b|discord\.gg|t\.me\//i.test(t)) return true;
+  if (/(.)\1{7,}/.test(t)) return true; // aaaaaaaa
+  const letters = (t.match(/\p{L}/gu) || []).length;
+  if (letters < t.length * 0.4) return true; // mostly symbols or digits
+  const words = t.toLowerCase().split(/\s+/);
+  if (words.length >= 6 && new Set(words).size <= words.length / 3) return true; // the same words over and over
+  return false;
+}
+
+/**
+ * Save one correction candidate (and create or bump its entry's group). Returns its id, or null when it wasn't saved
+ * (over the reporter's daily limit, the same reporter already said this, or a write failed).
+ */
+export async function saveCandidate(c: {
+  gameKey: string; game: string; area: string; areaName: string; entry: EntryRef;
+  claim: string; field: CorrectionOut['field']; via: 'pushback' | 'contradiction' | 'report' | 'command';
+  question?: string; reporterKey: string; source: CorrectionSource; weight: number; guest?: boolean;
+  dailyLimit?: number; extra?: Record<string, unknown>;
+}): Promise<string | null> {
+  if (!allowed(`${c.source}:${c.reporterKey}`, c.dailyLimit ?? 20)) return null;
+  const gid = groupId(c.gameKey, c.area, c.entry.id);
+  try {
+    // The same reporter repeating the same correction for the same entry counts once.
+    const dupe = await getFirestore().collection('corrections').where('groupId', '==', gid).where('reporterKey', '==', c.reporterKey).limit(5).get();
+    if (dupe.docs.some((d) => norm(d.data().claim) === norm(c.claim))) return null;
+    const ref = await getFirestore().collection('corrections').add({
+      gameKey: c.gameKey, game: c.game.slice(0, 120), area: c.area, areaName: c.areaName,
+      entryId: c.entry.id, entryKind: c.entry.kind, entryName: c.entry.name, guideText: c.entry.text.slice(0, 600),
+      claim: c.claim.slice(0, 500), field: c.field, via: c.via, question: String(c.question || '').slice(0, 300),
+      // reporterKey: an anonymised id (a hashed account id, IP or Discord id), never the id itself. uidHash is the same
+      // key, kept for older code.
+      reporterKey: c.reporterKey, uidHash: c.reporterKey, source: c.source, weight: c.weight, guest: !!c.guest,
+      placeConfirmed: false, groupId: gid, status: 'pending', at: Date.now(), ...(c.extra || {}),
+    });
+    // The entry's group (what the review queue lists and the daily check decides): created pending on its first report.
+    const gref = getFirestore().collection('correctionGroups').doc(gid);
+    const g = await gref.get();
+    const sources = new Set<string>([...(g.exists ? (g.data()?.sources as string[]) || [] : []), c.source]);
+    const summary = { lastClaim: c.claim.slice(0, 500), reports: (g.exists ? Number(g.data()?.reports || 0) : 0) + 1, sources: [...sources], updatedAt: Date.now() };
+    if (g.exists) await gref.update({ ...summary, ...(['applied', 'dismissed'].includes(g.data()?.status) ? { status: 'pending' } : {}) });
+    else {
+      await gref.set({
+        gameKey: c.gameKey, game: c.game.slice(0, 120), area: c.area, areaName: c.areaName,
+        entryId: c.entry.id, entryKind: c.entry.kind, entryName: c.entry.name, guideText: c.entry.text.slice(0, 600),
+        status: 'pending', createdAt: Date.now(), ...summary,
+      });
+    }
+    return ref.id;
+  } catch (e: any) {
+    console.warn('[corrections] save failed:', e?.message);
+    return null;
+  }
+}
+
+/** A guide entry by its id, on a published area page (the website's report form and Discord name entries by id). */
+export async function entryById(gameKey: string, slug: string, entryId: string): Promise<{ entry: EntryRef; game: string; areaName: string } | null> {
+  const ref = getFirestore().collection('guides').doc(gameKey);
+  const [g, a] = await Promise.all([ref.get(), ref.collection('areas').doc(slug).get()]);
+  const page: any = a.data();
+  if (!page || page.status !== 'published') return null;
+  const item = (page.items || []).find((e: any) => e.id === entryId);
+  const line = (page.secrets || []).find((e: any) => e.id === entryId);
+  const sec = (page.sections || []).flatMap((s: any) => s.entries || []).find((e: any) => e.id === entryId);
+  const entry: EntryRef | null = item
+    ? { id: item.id, kind: 'item', name: String(item.name || ''), text: String(item.where || '') }
+    : line
+      ? { id: line.id, kind: 'secret', name: String(line.text || line.name || '').slice(0, 80), text: String(line.text || '') }
+      : sec
+        ? { id: sec.id, kind: 'section', name: String(sec.text || '').slice(0, 80), text: String(sec.text || '') }
+        : null;
+  return entry ? { entry, game: String(g.data()?.game || gameKey), areaName: String(page.name || slug) } : null;
 }
 
 /**
@@ -123,39 +222,18 @@ export async function saveCorrectionCandidates(opts: {
 }): Promise<string[]> {
   const { page, corrections } = opts;
   if (!page || !corrections.length || !opts.uid) return [];
-  const uidHash = playerHash(opts.uid);
   const pushback = isPushback(opts.question);
   const ids: string[] = [];
   for (const c of corrections) {
     const entry = matchGuideEntry(page, c.entry);
-    if (!entry || !allowed(uidHash)) continue;
-    try {
-      const ref = await getFirestore().collection('corrections').add({
-        gameKey: page.key, game: opts.game.slice(0, 120), area: page.slug, areaName: page.name,
-        entryId: entry.id, entryKind: entry.kind, entryName: entry.name, guideText: entry.text.slice(0, 600),
-        claim: c.claim, field: c.field,
-        // How it came up: the player pushed back, or the answer contradicted the guide on something asked directly.
-        via: pushback ? 'pushback' : 'contradiction',
-        question: String(opts.question || '').slice(0, 300),
-        uidHash, guest: !!opts.isGuest, placeConfirmed: false,
-        groupId: groupId(page.key, page.slug, entry.id), status: 'pending', at: Date.now(),
-      });
-      ids.push(ref.id);
-      // The entry's group (what the review queue lists and the daily check decides): created pending on its first report.
-      const gref = getFirestore().collection('correctionGroups').doc(groupId(page.key, page.slug, entry.id));
-      const g = await gref.get();
-      const summary = { lastClaim: c.claim, reports: (g.exists ? Number(g.data()?.reports || 0) : 0) + 1, updatedAt: Date.now() };
-      if (g.exists) await gref.update({ ...summary, ...(['applied', 'dismissed'].includes(g.data()?.status) ? { status: 'pending' } : {}) });
-      else {
-        await gref.set({
-          gameKey: page.key, game: opts.game.slice(0, 120), area: page.slug, areaName: page.name,
-          entryId: entry.id, entryKind: entry.kind, entryName: entry.name, guideText: entry.text.slice(0, 600),
-          status: 'pending', createdAt: Date.now(), ...summary,
-        });
-      }
-    } catch (e: any) {
-      console.warn('[corrections] save failed:', e?.message);
-    }
+    if (!entry) continue;
+    const id = await saveCandidate({
+      gameKey: page.key, game: opts.game, area: page.slug, areaName: page.name, entry, claim: c.claim, field: c.field,
+      // How it came up: the player pushed back, or the answer contradicted the guide on something asked directly.
+      via: pushback ? 'pushback' : 'contradiction', question: opts.question,
+      reporterKey: playerHash(opts.uid), source: 'app', weight: opts.isGuest ? REPORTER_WEIGHT.appGuest : REPORTER_WEIGHT.app, guest: opts.isGuest,
+    });
+    if (id) ids.push(id);
   }
   if (ids.length) console.log(`[corrections] ${ids.length} candidate(s) for ${page.key}/${page.slug} (${pushback ? 'pushback' : 'contradiction'})`);
   return ids;
@@ -221,9 +299,9 @@ export function registerCorrections(app: Express, deps: { requireAuth: Mw; isAdm
         const r = await db().collection('corrections').where('groupId', '==', g.id).limit(12).get();
         g.reports = r.docs.map((d) => {
           const c = d.data() as any;
-          return { claim: c.claim, via: c.via, placeConfirmed: !!c.placeConfirmed, guest: !!c.guest, at: c.at };
+          return { claim: c.claim, via: c.via, source: c.source || 'app', weight: typeof c.weight === 'number' ? c.weight : c.guest ? 0 : 1, placeConfirmed: !!c.placeConfirmed, guest: !!c.guest, at: c.at };
         });
-        g.players = new Set(r.docs.filter((d) => !d.data().guest).map((d) => d.data().uidHash)).size;
+        g.players = reporterCount(r.docs.map((d) => d.data() as any));
       }));
       res.json({
         open,

@@ -2,7 +2,10 @@
  * The guide review queue: guides that failed the publishing review (scripts/guides/review.ts --gate) and mistakes
  * players report from the website ("Spot a mistake? Report it here"), with a page for the admin to decide what happens.
  *
- *   POST /api/guides/report              public: { key, page, text, lang, path } from a guide page; rate-limited
+ *   POST /api/guides/report              public: { key, page, text, entry?, correct?, lang, path } from a guide page;
+ *                                        rate-limited, obvious spam dropped. With an entry and "what's correct", it's a
+ *                                        player correction (corrections.ts) instead: verified like the app's, an
+ *                                        anonymous one counting as half a reporter (keyed by a hash of the IP)
  *   GET  /admin/reviews                  the admin page (sign in with Google; only ADMIN_EMAILS get the data)
  *   GET  /api/admin/review-queue         open items, then the last decided ones
  * The page's Corrections tab lists player corrections to the guides (corrections.ts) with apply / dismiss.
@@ -14,7 +17,9 @@
  * per guide (the latest review replaces it) and one item per player report.
  */
 import type { Express, Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { getFirestore } from 'firebase-admin/firestore';
+import { saveCandidate, entryById, looksLikeSpam, playerHash, REPORTER_WEIGHT } from './corrections';
 
 type Mw = (req: Request, res: Response, next: NextFunction) => any;
 type Deps = { requireAuth: Mw; optionalAuth: Mw; firebaseWebConfig: Record<string, string> };
@@ -54,7 +59,26 @@ export function registerReviewQueue(app: Express, deps: Deps) {
     if (text.length < 5) return res.status(400).json({ error: 'Please say what is wrong.' });
     const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
     if (!reportAllowed(ip)) return res.status(429).json({ error: 'Too many reports right now. Please try again later.' });
+    const entryId = String(b.entry || '').trim();
+    const correct = String(b.correct || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    // Obvious spam is dropped quietly (a normal reply, so it isn't worth retrying).
+    if (looksLikeSpam(text) && !(correct && !looksLikeSpam(correct))) return res.json({ ok: true });
     try {
+      // A report that names an entry and says what's correct: a correction candidate for the daily check.
+      if (key && page && /^[A-Za-z0-9_-]{1,40}$/.test(entryId) && correct && !looksLikeSpam(correct)) {
+        const found = await entryById(key, page, entryId);
+        if (found) {
+          const uid = (req as any).user?.uid as string | undefined;
+          const signedIn = !!uid && !String(uid).startsWith('guest_');
+          const reporterKey = signedIn ? playerHash(uid!) : `ip:${crypto.createHash('sha256').update(`${process.env.CORRECTION_SALT || 'qc-corrections'}:ip:${ip}`).digest('hex').slice(0, 20)}`;
+          await saveCandidate({
+            gameKey: key, game: found.game, area: page, areaName: found.areaName, entry: found.entry, claim: correct, field: 'where',
+            via: 'report', question: text, reporterKey, source: 'website',
+            weight: signedIn ? 1 : REPORTER_WEIGHT.website, guest: !signedIn, dailyLimit: signedIn ? 20 : 5,
+          });
+          return res.json({ ok: true });
+        }
+      }
       let game = '', pageName = '';
       if (key) {
         const g = await getFirestore().collection('guides').doc(key).get();
@@ -62,7 +86,7 @@ export function registerReviewQueue(app: Express, deps: Deps) {
         if (page) pageName = String((await g.ref.collection('areas').doc(page).get()).data()?.name || '');
       }
       await queue().add({
-        kind: 'report', key, game, page, pageName, text,
+        kind: 'report', key, game, page, pageName, text, ...(correct ? { correct } : {}), ...(entryId ? { entry: entryId.slice(0, 40) } : {}),
         lang: String(b.lang || 'en').slice(0, 5), path: String(b.path || '').slice(0, 200),
         uid: (req as any).user?.uid || null, status: 'open', action: null, createdAt: Date.now(), updatedAt: Date.now(),
       });
@@ -149,6 +173,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   .tab { border-radius: 8px; }
   .tab.on { border-color: var(--accent); color: #fff; background: #2a2140; }
   .chip.pending { color: var(--warn); border-color: #fbbf2455; }
+  .chip.src { color: var(--text); border-color: #ffffff30; }
   .chip.disputed { color: var(--bad); border-color: #f8717155; }
   .chip.approved { color: var(--ok); border-color: #4ade8055; }
   .said { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: #a87ffb10; border-radius: 0 8px 8px 0; }
@@ -179,17 +204,22 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   let data = { open: [], decided: [] };
   let corr = { open: [], decided: [] };
   let tab = 'guides';
+  const SOURCE = { app: 'App', website: 'Website', discord: 'Discord' };
   const VERDICT = { confirmed: 'sources confirm the players', contradicted: 'sources contradict the players', unclear: 'sources do not settle it' };
   // A correction: what the guide says, what players said, the source check, and apply / dismiss.
   function corrCard(g) {
     const head = '<div class="row"><span class="game">' + esc(g.game) + ' · ' + esc(g.areaName) + '</span>'
       + '<span class="chip ' + esc(g.status) + '">' + esc(g.status === 'approved' ? 'applying next run' : g.status) + '</span>'
-      + '<span class="dim">' + esc(g.players || 0) + ' signed-in player(s), ' + esc(g.reports?.length || g.reports || 0) + ' report(s)</span>'
+      + '<span class="dim">reporters worth ' + esc(g.players || 0) + ' of 3, ' + esc(g.reports?.length || g.reports || 0) + ' report(s)' + (g.modConfirmed ? ', confirmed by a moderator' : '') + '</span>'
+      + (Array.isArray(g.sources) ? g.sources.map((x) => '<span class="chip src">' + esc(SOURCE[x] || x) + '</span>').join('') : '')
       + '<span class="dim">' + new Date(g.updatedAt || g.createdAt).toLocaleString() + '</span>'
       + ' <a href="' + SITE + esc(g.gameKey) + '/' + esc(g.area) + '/" target="_blank" rel="noopener">open on the site</a></div>';
     const guide = '<div class="guide"><b>The guide says</b> (' + esc(g.entryName) + '): ' + esc(g.guideText || '(nothing)') + '</div>';
-    const said = (Array.isArray(g.reports) ? g.reports : []).map((r) => '<div class="said">' + esc(r.claim)
-      + ' <span class="dim">(' + esc(r.via === 'pushback' ? 'after the player pushed back' : 'answer contradicted the guide') + (r.placeConfirmed ? ', place confirmed' : '') + (r.guest ? ', guest' : '') + ')</span></div>').join('');
+    const how = (r) => r.source === 'website' ? 'website report' + (r.weight < 1 ? ', anonymous (counts half)' : ', signed in')
+      : r.source === 'discord' ? 'Discord /correction'
+      : (r.via === 'pushback' ? 'app: after the player pushed back' : 'app: answer contradicted the guide') + (r.placeConfirmed ? ', place confirmed' : '') + (r.guest ? ', guest (does not count)' : '');
+    const said = (Array.isArray(g.reports) ? g.reports : []).map((r) => '<div class="said"><span class="chip src">' + esc(SOURCE[r.source] || 'App') + '</span> ' + esc(r.claim)
+      + ' <span class="dim">(' + esc(how(r)) + ')</span></div>').join('');
     const sc = g.sourceCheck;
     const check = sc ? '<div class="dim">Source check: <b>' + esc(VERDICT[sc.verdict] || sc.verdict) + '</b>. ' + esc(sc.evidence || '') + (sc.sources?.length ? ' (' + esc(sc.sources.join(', ')) + ')' : '') + (sc.reviewer ? ' Reviewer: ' + esc(sc.reviewer) : '') + '</div>' : '<div class="dim">Not checked against sources yet (the next pipeline run does).</div>';
     const buttons = '<div class="actions"><button class="primary" data-cid="' + esc(g.id) + '" data-cact="apply">Apply</button><button data-cid="' + esc(g.id) + '" data-cact="dismiss">Dismiss</button></div>';

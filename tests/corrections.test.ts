@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/corrections.test.ts)
 import assert from "node:assert/strict";
-import { extractCorrections, isPushback, matchGuideEntry, playerHash, groupId } from "../corrections";
+import { extractCorrections, isPushback, matchGuideEntry, playerHash, groupId, looksLikeSpam, reporterCount, REPORTER_WEIGHT } from "../corrections";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -57,6 +57,21 @@ test("players are anonymised, and reports group by game, area and entry", () => 
   assert.notEqual(playerHash("uid-1"), playerHash("uid-2"));
   assert.equal(playerHash("uid-1").includes("uid"), false);
   assert.equal(groupId("baldur-s-gate-3", "ravaged-beach", "x4"), "baldur-s-gate-3__ravaged-beach__x4");
+});
+
+test("obvious spam is dropped; a real correction isn't", () => {
+  for (const t of ["buy cheap gold at www.example.com now", "aaaaaaaaaaaa", "!!!! ???? 1234 5678", "ok", "wrong wrong wrong wrong wrong wrong", "join discord.gg/xyz for loot"]) assert.equal(looksLikeSpam(t), true, t);
+  for (const t of ["It's under the rock by the fallen log, not on the western cliffs", "The chest is southwest of the nautiloid near Astarion (X 145, Y 280)"]) assert.equal(looksLikeSpam(t), false, t);
+});
+
+test("reporters are weighted: app player and Discord user 1, anonymous website report half, app guest nothing; each counts once", () => {
+  assert.equal(REPORTER_WEIGHT.website, 0.5);
+  assert.equal(reporterCount([{ reporterKey: "a", weight: 1 }, { reporterKey: "b", weight: 1 }, { reporterKey: "ip:c", weight: 0.5 }]), 2.5);
+  assert.equal(reporterCount([{ reporterKey: "a", weight: 1 }, { reporterKey: "a", weight: 1 }]), 1); // the same reporter twice
+  assert.equal(reporterCount([{ reporterKey: "ip:x", weight: 0.5 }, { reporterKey: "ip:y", weight: 0.5 }, { reporterKey: "d:1", weight: 1 }, { reporterKey: "d:2", weight: 1 }]), 3);
+  assert.equal(reporterCount([{ reporterKey: "g", weight: 0 }, { reporterKey: "g2", guest: true }]), 0); // guests
+  // Older candidates without a weight: a signed-in player counts 1, a guest 0.
+  assert.equal(reporterCount([{ uidHash: "old1" }, { uidHash: "old2", guest: true }]), 1);
 });
 
 console.log(`\n${passed} tests passed`);
