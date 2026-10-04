@@ -217,7 +217,46 @@ export const sourcesIn = (response: any): string[] => {
   return out;
 };
 
-export type GuideEntry = { id: string; name?: string; text?: string; where?: string; weakness?: string; steal?: string; sells?: string; notes?: string; missable?: boolean; sources?: string[] };
+export type GuideEntry = {
+  id: string; name?: string; text?: string; where?: string; weakness?: string; steal?: string; sells?: string; notes?: string; missable?: boolean; sources?: string[];
+  /** The exact final step: the action or check that gets it ("drag the Scuffed Rock aside", "pass a Perception check"). */
+  how?: string;
+  /** Missable because: what locks it out ("lost once you leave for Act 2"). */
+  lockout?: string;
+};
+
+/**
+ * The standard for a missable entry (shared by the builders, the missables repair and the reviewer): where starts from
+ * a findable anchor and ends at the exact spot, how is the final action or check, lockout is what makes it missable.
+ */
+export const MISSABLE_STANDARD =
+  'A missable entry must be findable: "where" starts from a findable anchor (a waypoint, a named NPC, a major landmark, or ' +
+  'the map coordinates if the game shows them) and ends at the exact container or object; "how" is the exact final step, ' +
+  'the action or check needed ("drag the Scuffed Rock aside", "jump down to the lower ledge", "pass a Perception check"); ' +
+  '"missable because" says what locks it out ("lost once you leave for Act 2", "gone if you side with the goblins").';
+
+/**
+ * An ITEM line's fields: name | where | how | missable because. The older name | where | missable: yes/no still reads.
+ * An item is missable when it has a lockout (or an older "yes").
+ */
+export function parseItem(f: string[], id: string, sources: string[] = []): GuideEntry {
+  const strip = (v: string | undefined, label: RegExp) => String(v || '').replace(label, '').trim();
+  const none = (v: string) => (/^(none|n\/a|-|no|empty|not missable|can'?t be missed|cannot be missed)\.?$/i.test(v) ? '' : v);
+  const where = strip(f[1], /^(exactly\s+)?where\s*:\s*/i);
+  if (/^missable\s*:/i.test(f[2] || '')) return { id, name: f[0], where, missable: /yes/i.test(f[2] || ''), sources };
+  const how = none(strip(f[2], /^how\s*:\s*/i)).slice(0, 300);
+  const lockout = none(strip(f[3], /^(missable(\s+because)?|lockout)\s*:\s*/i)).slice(0, 300);
+  return { id, name: f[0], where, ...(how ? { how } : {}), ...(lockout ? { lockout } : {}), missable: !!lockout, sources };
+}
+
+/** What a missable entry still lacks against the standard (an anchor can only be judged by reading it). */
+export function missableGaps(e: { where?: string; how?: string; lockout?: string }): string[] {
+  const gaps: string[] = [];
+  if (String(e.where || '').trim().length < 25) gaps.push('vague where');
+  if (!String(e.how || '').trim()) gaps.push('no final step');
+  if (!String(e.lockout || '').trim()) gaps.push('no lockout');
+  return gaps;
+}
 export type GuideArea = {
   name: string;
   slug: string;

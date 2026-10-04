@@ -45,7 +45,7 @@
  */
 import {
   db, gemini, MODEL, gameKey, arg, editionOf, editionNote, searchesIn, visitName, cleanAreaName, resolveArea, normalizeVisits, isLayout,
-  LAYOUTS, LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, guideRelease, releasedAfter, stageKey,
+  LAYOUTS, LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, guideRelease, releasedAfter, stageKey, MISSABLE_STANDARD, parseItem,
   type GuideArea, type GuideEntry, type GuideSection, type GuideFight, type Layout,
 } from './common';
 import { stageCopy } from './promote';
@@ -319,13 +319,14 @@ const detailFormats = () =>
   'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
   (layout === 'calendar'
     ? 'DEADLINE: a deadline in this period and what must be done by then\n' +
-      'MISSABLE: an event, choice, item or social link step that can be missed in this period, and how not to miss it\n' +
+      'MISSABLE: an event, choice, item or social link step that can be missed in this period, in one line: where (from a findable anchor to the exact spot), the exact step that gets it, and what locks it out\n' +
       'LINK: social link or confidant name | how to start or advance it now\n' +
       'ACTIVITY: a worthwhile thing to do on free days or evenings in this period\n'
     : layout === 'chapters' || layout === 'linear'
-      ? 'MISSABLE: an event, choice or item in this chapter that can be missed, and how not to miss it\n'
+      ? 'MISSABLE: an event, choice or item in this chapter that can be missed, in one line: where (from a findable anchor to the exact spot), the exact step that gets it, and what locks it out\n'
       : '') +
-  'ITEM: item name | exactly where | missable: yes or no\n' +
+  'ITEM: item name | exactly where: from a findable anchor (a waypoint, a named NPC, a major landmark, or the map coordinates if the game shows them) to the exact container or object | how: the exact final step, the action or check needed (empty if you just pick it up) | missable because: what locks it out (empty if it can\'t be missed)\n' +
+  `(${MISSABLE_STANDARD})\n` +
   'SECRET: hidden thing and how to find it\n' +
   'ENEMY: enemy name | weakness (empty if it has none or the game has no weaknesses) | what can be stolen, or a notable drop (only if the game has stealing or drops worth noting; otherwise empty) | short note\n' +
   'SHOP: shop or NPC name | what they sell or offer\n' +
@@ -364,7 +365,7 @@ function parseDetails(text: string, real: Set<string>[]): Parsed {
     const id = `x${n++}`;
     switch (m[1].toUpperCase()) {
       case 'OVERVIEW': out.overview = { id, text: m[2].trim(), sources }; break;
-      case 'ITEM': out.items.push({ id, name: f[0], where: f[1] || '', missable: /yes/i.test(f[2] || ''), sources }); break;
+      case 'ITEM': out.items.push(parseItem(f, id, sources)); break;
       case 'SECRET': out.secrets.push({ id, text: m[2].trim(), sources }); break;
       case 'ENEMY': out.enemies.push({ id, name: f[0], weakness: f[1] || '', steal: f[2] || '', notes: f[3] || '', sources }); break;
       case 'SHOP': out.shops.push({ id, name: f[0], sells: f[1] || '', sources }); break;
@@ -385,7 +386,7 @@ type Claim = { id: string; text: string };
 
 function claimsFor(areaName: string, d: Parsed): Claim[] {
   const out: Claim[] = [];
-  for (const it of d.items) out.push({ id: it.id, text: `In ${areaName}, the item ${it.name} can be found ${it.where}.${it.missable ? ' It can be missed.' : ''}` });
+  for (const it of d.items) out.push({ id: it.id, text: `In ${areaName}, the item ${it.name} can be found ${it.where}.${it.how ? ` To get it: ${it.how}.` : ''}${it.missable ? ` It can be missed${it.lockout ? `: ${it.lockout}` : ''}.` : ''}` });
   for (const s of d.secrets) out.push({ id: s.id, text: `In ${areaName}: ${s.text}` });
   for (const e of d.enemies)
     out.push({ id: e.id, text: `The enemy ${e.name} appears in ${areaName}.${e.weakness ? ` It is weak to ${e.weakness}.` : ''}${e.steal ? ` It can be stolen from: ${e.steal}.` : ''}` });

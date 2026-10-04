@@ -31,7 +31,7 @@ import fs from 'fs';
 import { ThinkingLevel } from '@google/genai';
 import {
   db, gemini, gameKey, arg, parseJson, searchesIn, guideRelease, releasedAfter, isLayout, isStageKey, liveKey,
-  LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, REVIEWER_CUTOFF, type Layout,
+  LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, REVIEWER_CUTOFF, MISSABLE_STANDARD, missableGaps, type Layout,
 } from './common';
 import { estimateCost } from '../../usage';
 import { recordMonthly } from '../../searchGuard';
@@ -96,6 +96,11 @@ const cut = (s: unknown, n: number) => String(s ?? '').replace(/\s+/g, ' ').trim
 /** A page, condensed: what's on it and where, enough to judge structure, depth and how real it sounds. */
 function condense(p: any): string {
   const items = (p.items || []).slice(0, 14).map((e: any) => `${cut(e.name, 50)}${e.where ? ` @ ${cut(e.where, 70)}` : ''}${e.missable ? ' [missable]' : ''}`);
+  // Missables in full, with what they lack against the standard (findable anchor, exact final step, lockout).
+  const missables = (p.items || []).filter((e: any) => e.missable).slice(0, 8).map((e: any) => {
+    const gaps = missableGaps(e);
+    return `${cut(e.name, 50)}: where ${cut(e.where || '-', 180)}; how ${cut(e.how || '-', 100)}; missable because ${cut(e.lockout || '-', 100)}${gaps.length ? ` [${gaps.join(', ')}]` : ''}`;
+  });
   const secrets = (p.secrets || []).slice(0, 6).map((e: any) => cut(e.text || e.name, 90));
   const enemies = (p.enemies || []).slice(0, 8).map((e: any) => `${cut(e.name, 40)}${e.weakness ? ` (weak: ${cut(e.weakness, 30)})` : ''}`);
   const shops = (p.shops || []).slice(0, 4).map((e: any) => cut(e.name, 40));
@@ -107,6 +112,7 @@ function condense(p: any): string {
     p.story ? `when: ${cut(p.story, 120)}` : '',
     p.overview ? `overview: ${cut(p.overview, 220)}` : '',
     items.length ? `items (${(p.items || []).length}): ${items.join(' | ')}` : 'items: none',
+    missables.length ? `missables: ${missables.join(' || ')}` : '',
     secrets.length ? `secrets (${(p.secrets || []).length}): ${secrets.join(' | ')}` : '',
     fights.length ? `key fights (${(p.fights || []).length}): ${fights.join(' | ')}` : 'key fights: none',
     enemies.length ? `enemies (${(p.enemies || []).length}): ${enemies.join(' | ')}` : '',
@@ -150,7 +156,9 @@ function prompt(game: string, released: string, layout: string, buildMode: strin
       `Missing major fights: a boss or major set-piece battle you know happens in an area (a siege, a gate defence, an ` +
       `ambush the story forces) with no "key fights" entry on that page is a coverage problem; name each one ` +
       `("Emerald Grove: no key fight for the goblin attack on the gate"). Ordinary enemies don't need one.`,
-    `(c) depth: does each page have real entries (named items, missables, where/how to find them)? Flag thin or generic pages.`,
+    `(c) depth: does each page have real entries (named items, missables, where/how to find them)? Flag thin or generic pages. ` +
+      `Missables must be findable: ${MISSABLE_STANDARD} A missable whose location has no findable anchor, no exact final step, or ` +
+      `no lockout reason is a depth problem; name each one ("Emerald Grove: Harper's Map has no anchor or final step").`,
     newer
       ? `(d) knowledge: SKIP THIS. The game is newer than your knowledge, so you can't tell its real names from invented ones;\n` +
         `    names are checked separately with web searches. Don't call anything invented, fabricated or hallucinated, don't\n` +

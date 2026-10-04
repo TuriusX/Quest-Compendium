@@ -18,7 +18,7 @@ import type { Achievement } from '../types';
  */
 type Game = { key: string; game: string; areas: number; art?: string };
 type Area = { slug: string; name: string; story: string; group?: string; total?: number; search?: string };
-type Entry = { id: string; name?: string; text?: string; where?: string; weakness?: string; steal?: string; sells?: string; notes?: string; missable?: boolean };
+type Entry = { id: string; name?: string; text?: string; where?: string; weakness?: string; steal?: string; sells?: string; notes?: string; missable?: boolean; how?: string; lockout?: string };
 type Page = {
   key: string; slug: string; name: string; story: string; overview: string;
   items: Entry[]; secrets: Entry[]; enemies: Entry[]; shops: Entry[]; tips: string[];
@@ -497,6 +497,9 @@ function AreaPage({
       <>
         <span className="font-semibold text-zinc-100">{e.name}</span>
         {e.where && <span className="text-zinc-400">: {e.where}</span>}
+        {/* The exact final step, and what locks a missable out. */}
+        {e.how && <span className="block text-zinc-400 mt-0.5">{t('qcg.how')}: {e.how}</span>}
+        {e.lockout && <span className="block text-amber-300/90 mt-0.5">{t('qcg.lockout')}: {e.lockout}</span>}
       </>,
       t('qcg.askItem', { item: e.name || '', area: pg.name }),
     );

@@ -20,7 +20,13 @@ export function guideApi(rawPath: string, lang = 'en'): Promise<any> {
 /** A guide area as the guide's area list has it. */
 export type GuideAreaInfo = { slug: string; name: string; story: string; group?: string; total?: number; search?: string };
 /** One entry on a guide page (an item, secret, enemy, shop…). */
-export type GuideEntry = { id: string; name?: string; text?: string; where?: string; weakness?: string; steal?: string; sells?: string; notes?: string; missable?: boolean };
+export type GuideEntry = {
+  id: string; name?: string; text?: string; where?: string; weakness?: string; steal?: string; sells?: string; notes?: string; missable?: boolean;
+  /** The exact final step (the action or check that gets it). */
+  how?: string;
+  /** Missable because: what locks it out. */
+  lockout?: string;
+};
 /** A guide page (one area). */
 export type GuidePage = {
   key: string; slug: string; name: string; story: string; overview: string;

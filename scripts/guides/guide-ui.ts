@@ -24,6 +24,8 @@ export const GUIDE_UI_EN: Record<string, string> = {
   ctaButton: 'Get live help while you play',
   gotIt: 'Got it',
   weakTo: 'Weak to',
+  itemHow: 'How',
+  itemLockout: 'Missable because',
   fights: 'Key fights',
   fightEnemies: 'Enemies',
   fightThreats: 'Threats',

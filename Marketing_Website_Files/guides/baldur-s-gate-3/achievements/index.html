@@ -257,9 +257,9 @@
     var key='qcw:'+K+':'+S, done=load(key);
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
     document.querySelectorAll('[data-check]').forEach(function(el){
-      var id=el.getAttribute('data-check'), box=el.querySelector('input');
-      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
-      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+      var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
+      box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
     });
     counts();
   }

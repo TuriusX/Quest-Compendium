@@ -151,6 +151,9 @@ const landmarks = (s: string) => [...String(s || '').matchAll(/\b[A-Z][a-z'’]+
  * "Harper cache under the Scuffed Rock", "Inside an Ornate Chest concealed underneath the Scuffed Rock" becomes
  * "Ornate Chest under the Scuffed Rock".
  */
+/** A spot's name, not a sentence: at most 7 words and 60 characters. */
+const isSpotPhrase = (t: string) => !!t && t.length <= 60 && t.split(/\s+/).length <= 7;
+
 function spotName(s: string): string {
   let t = String(s || '').split(/[;,]|\s+(?:along|near|by|on|at|in|beside|past)\s+the\s+/i)[0].trim();
   t = t.replace(/^(inside|in|within)\s+/i, '').replace(/^(a|an|the)\s+/i, '');
@@ -176,11 +179,13 @@ export function mergeSameSpot(page: { items: { id: string; name?: string; text?:
   for (const group of byWhere.values()) {
     const where = String(group[0].where || '');
     const marks = landmarks(where).map((m) => m.toLowerCase());
-    const secret = page.secrets.find((s) => !used.has(s.id) && marks.some((m) => String(s.text || s.name || '').toLowerCase().includes(m)));
+    // A secret joins only when it names the spot in a short phrase ("Harper cache under the Scuffed Rock"), not when
+    // it's a sentence about something else there ("Gnarled Door can be bypassed by…").
+    const secret = page.secrets.find((s) => !used.has(s.id) && marks.some((m) => String(s.text || s.name || '').toLowerCase().includes(m)) && isSpotPhrase(spotName(String(s.text || s.name || ''))));
     if (group.length + (secret ? 1 : 0) < 2) continue;
     if (secret) used.add(secret.id);
     const names = group.map((e) => String(e.name || e.text || '')).filter(Boolean);
-    const spot = spotName(secret ? String(secret.text || secret.name || '') : where) || spotName(where);
+    const spot = clipWords(spotName(secret ? String(secret.text || secret.name || '') : where) || spotName(where), 60).replace(/…$/, '');
     out.push({
       ids: [...group.map((e) => e.id), ...(secret ? [secret.id] : [])],
       label: `${spot}: ${names.join(', ')}`,
@@ -280,7 +285,8 @@ export function buildTrackerPayload(
       detail: detail({ full: label, where, ...more }),
     });
     // A guide entry's notes, for its details.
-    const itemMore = (e: { notes?: string }): TrackerDetail => ({ notes: e.notes });
+    // An item's details: the exact final step (how) and what locks a missable out.
+    const itemMore = (e: { notes?: string; how?: string; lockout?: string }): TrackerDetail => ({ notes: e.notes, ...(e.how ? { how: e.how } : {}), ...(e.lockout ? { missable: e.lockout } : {}) });
     // Entries that are really one thing (the Harper's Map and Notebook in the chest under the Scuffed Rock, and the
     // secret about that cache): one entry listing what's inside, ticked together (its id joins theirs with "+").
     const merged = mergeSameSpot(page);
@@ -302,7 +308,7 @@ export function buildTrackerPayload(
       return g ? g.missable : !!page.items.find((e) => e.id === id)?.missable;
     };
     const missable = items([
-      ...page.items.filter((e) => isMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.name || e.text || '', e.where, true, { ...itemMore(e), how: e.name && e.text && e.text !== e.name ? e.text : undefined }))),
+      ...page.items.filter((e) => isMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.name || e.text || '', e.where, true, { ...itemMore(e), how: e.how || (e.name && e.text && e.text !== e.name ? e.text : undefined) }))),
       // A missable checklist line says itself what can be missed and how.
       ...missSec.flatMap((x) => x.entries.map((e) => entry(e.id, e.text, undefined, true, { missable: x.title }))),
     ]);
@@ -320,7 +326,7 @@ export function buildTrackerPayload(
     // under Missable when any part is missable).
     const inMissable = (id: string) => isMissable(id) && merged.some((m) => m.ids.includes(id));
     const collect = items([
-      ...page.items.filter((e) => !isMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.name || e.text || '', e.where, undefined, { ...itemMore(e), how: e.name && e.text && e.text !== e.name ? e.text : undefined }))),
+      ...page.items.filter((e) => !isMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.name || e.text || '', e.where, undefined, { ...itemMore(e), how: e.how || (e.name && e.text && e.text !== e.name ? e.text : undefined) }))),
       ...page.secrets.filter((e) => !inMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.text || e.name || '', undefined, undefined, { ...itemMore(e), where: e.where }))),
       ...(page.sections || []).filter((x) => x.check && !missSec.includes(x)).flatMap((x) => x.entries.map((e) => entry(e.id, e.text))),
     ]);

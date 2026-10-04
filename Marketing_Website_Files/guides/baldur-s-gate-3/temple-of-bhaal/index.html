@@ -60,7 +60,7 @@
       <p class="mt-5 text-zinc-300 leading-relaxed">Situated deep beneath the Lower City within the Undercity Ruins, this cavernous sanctuary serves as the hidden stronghold for the Cult of Bhaal. Players enter the temple to confront Orin the Red, recover her Netherstone, and rescue an abducted companion held hostage upon the blood-soaked central altar. The location also acts as the narrative climax for the Dark Urge origin character, who must face Orin in a duel for Bhaal&#39;s favor.</p>
       <section class="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
         <h2 class="flex items-center gap-2 px-1 pb-1 text-base font-bold text-amber-200"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg> Don&#39;t miss <span class="text-xs font-normal text-amber-200/70" data-count="x1,x2,x4">0/3</span></h2>
-        <label class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer" data-check="x1"><input type="checkbox" aria-label="Got it"><span class="text-sm leading-snug text-zinc-300"><strong class="text-white">Bloodthirst</strong><span class="text-zinc-400">: Dropped by Orin the Red upon her defeat at the Altar of Bhaal</span></span></label><label class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer" data-check="x2"><input type="checkbox" aria-label="Got it"><span class="text-sm leading-snug text-zinc-300"><strong class="text-white">Crimson Mischief</strong><span class="text-zinc-400">: Dropped by Orin the Red upon her defeat at the Altar of Bhaal</span></span></label><label class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer" data-check="x4"><input type="checkbox" aria-label="Got it"><span class="text-sm leading-snug text-zinc-300"><strong class="text-white">Mutilated Carapace</strong><span class="text-zinc-400">: Looted from Orin the Red&#39;s corpse at the Altar of Bhaal</span></span></label>
+        <label class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer" data-check="x1+x2"><input type="checkbox" aria-label="Got it"><span class="text-sm leading-snug text-zinc-300"><strong class="text-white">Dropped by Orin the Red upon her defeat</strong><span class="text-zinc-300">: Bloodthirst, Crimson Mischief</span><span class="block text-xs text-zinc-400 mt-0.5">Dropped by Orin the Red upon her defeat at the Altar of Bhaal</span></span></label><label class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer" data-check="x4"><input type="checkbox" aria-label="Got it"><span class="text-sm leading-snug text-zinc-300"><strong class="text-white">Mutilated Carapace</strong><span class="text-zinc-400">: Looted from Orin the Red&#39;s corpse at the Altar of Bhaal</span></span></label>
       </section>
       
       <details class="qc-fold mt-3" open>
@@ -124,9 +124,9 @@
     var key='qcw:'+K+':'+S, done=load(key);
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
     document.querySelectorAll('[data-check]').forEach(function(el){
-      var id=el.getAttribute('data-check'), box=el.querySelector('input');
-      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
-      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+      var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
+      box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
     });
     counts();
   }

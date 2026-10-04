@@ -251,7 +251,7 @@ export function registerGuidesApi(app: Express): void {
           ) || !String(v ?? '').trim();
         const clean = (list: any[]) =>
           (Array.isArray(list) ? list : []).map(({ sources, ...rest }) => {
-            for (const k of ['weakness', 'steal', 'notes', 'where', 'sells']) if (k in rest && blank(rest[k])) delete rest[k];
+            for (const k of ['weakness', 'steal', 'notes', 'where', 'sells', 'how', 'lockout']) if (k in rest && blank(rest[k])) delete rest[k];
             return rest;
           });
         return {
@@ -378,7 +378,7 @@ export function guideNotesForPrompt(pg: GuidePageForPlace): string {
   const lines: string[] = [];
   if (pg.overview) lines.push(pg.overview);
   for (const x of pg.sections) for (const e of x.entries.slice(0, 8)) lines.push(`${x.title}: ${e.text}`);
-  for (const e of pg.items.slice(0, 15)) lines.push(`Item: ${e.name}${!blankish(e.where) ? ` (${e.where})` : ''}${e.missable ? ' [missable]' : ''}`);
+  for (const e of pg.items.slice(0, 15)) lines.push(`Item: ${e.name}${!blankish(e.where) ? ` (${e.where})` : ''}${!blankish(e.how) ? `; how: ${e.how}` : ''}${e.missable ? ` [missable${!blankish(e.lockout) ? `: ${e.lockout}` : ''}]` : ''}`);
   for (const e of pg.secrets.slice(0, 8)) lines.push(`Secret: ${e.text}`);
   for (const e of pg.enemies.slice(0, 10))
     lines.push(`Enemy: ${e.name}${!blankish(e.weakness) ? `, weak to ${e.weakness}` : ''}${!blankish(e.steal) ? `, steal/drop ${e.steal}` : ''}${!blankish(e.notes) ? ` (${e.notes})` : ''}`);

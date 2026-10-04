@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
+import { mergeSameSpot } from '../../src/utils/trackerPayload';
 import { GENERATED as GUIDE_UI_GEN } from './guide-ui.generated';
 
 // ---- languages ----
@@ -129,9 +130,9 @@ const SCRIPT = `
     var key='qcw:'+K+':'+S, done=load(key);
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
     document.querySelectorAll('[data-check]').forEach(function(el){
-      var id=el.getAttribute('data-check'), box=el.querySelector('input');
-      box.checked=done.has(id); el.classList.toggle('is-done',box.checked);
-      box.addEventListener('change',function(){ if(box.checked) done.add(id); else done.delete(id); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+      var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
+      box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
     });
     counts();
   }
@@ -325,16 +326,33 @@ function areaList(gameKey: string, areas: AreaLink[], current: string | null, ba
 
 function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[], prev?: AreaLink, next?: AreaLink, up = '../../../', achs: any[] = []) {
   const items = a.items.map(cleanEntry);
-  const miss = items.filter((e) => e.missable);
-  const rest = items.filter((e) => !e.missable);
+  // Entries in the same container or spot are one line ("Ornate Chest under the Scuffed Rock: Harper's Map, Harper's
+  // Notebook"), ticked together (the row's id joins theirs with "+"), as in the app. A secret about that spot joins it.
+  const merged = mergeSameSpot({ items, secrets: a.secrets });
+  const mergedIds = new Set(merged.flatMap((g) => g.ids));
+  const miss = items.filter((e) => e.missable && !mergedIds.has(e.id));
+  const rest = items.filter((e) => !e.missable && !mergedIds.has(e.id));
+  const secretsLeft = a.secrets.filter((e) => !mergedIds.has(e.id));
   const missSec = (a.sections || []).filter((x: any) => x.check && /miss/i.test(x.orig || x.title));
   const otherSec = (a.sections || []).filter((x) => !missSec.includes(x));
-  const itemHtml = (e: GuideEntry) => `<strong class="text-white">${esc(e.name)}</strong>${e.where ? `<span class="text-zinc-400">: ${esc(e.where)}</span>` : ''}`;
-  const missIds = [...miss.map((e) => e.id), ...missSec.flatMap((x) => x.entries.map((e) => e.id))];
+  // The exact final step and what locks a missable out, under the item.
+  const extra = (how?: string, lockout?: string) =>
+    `${how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(how)}</span>` : ''}` +
+    `${lockout ? `<span class="block text-xs text-amber-300/90 mt-0.5"><span class="text-amber-200/70">${esc(ui('itemLockout'))}:</span> ${esc(lockout)}</span>` : ''}`;
+  const itemHtml = (e: GuideEntry) => `<strong class="text-white">${esc(e.name)}</strong>${e.where ? `<span class="text-zinc-400">: ${esc(e.where)}</span>` : ''}${extra(e.how, e.lockout)}`;
+  const groupItems = (g: (typeof merged)[number]) => items.filter((e) => g.ids.includes(e.id));
+  const groupHtml = (g: (typeof merged)[number]) => {
+    const parts = groupItems(g);
+    const [spot, ...names] = g.label.split(': ');
+    return `<strong class="text-white">${esc(spot)}</strong><span class="text-zinc-300">: ${esc(names.join(': '))}</span>${g.where ? `<span class="block text-xs text-zinc-400 mt-0.5">${esc(g.where)}</span>` : ''}${extra(parts.find((e) => e.how)?.how, parts.find((e) => e.lockout)?.lockout)}`;
+  };
+  const missGroups = merged.filter((g) => g.missable);
+  const restGroups = merged.filter((g) => !g.missable);
+  const missIds = [...missGroups.flatMap((g) => g.ids), ...miss.map((e) => e.id), ...missSec.flatMap((x) => x.entries.map((e) => e.id))];
   const dontMiss = missIds.length
     ? `<section class="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
         <h2 class="flex items-center gap-2 px-1 pb-1 text-base font-bold text-amber-200">${ICON.warn} ${esc(ui('dontMiss'))} <span class="text-xs font-normal text-amber-200/70" data-count="${esc(missIds.join(','))}">0/${missIds.length}</span></h2>
-        ${miss.map((e) => checkRow(e.id, itemHtml(e))).join('')}${missSec.flatMap((x) => x.entries.map((e) => checkRow(e.id, esc(e.text)))).join('')}
+        ${missGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g))).join('')}${miss.map((e) => checkRow(e.id, itemHtml(e))).join('')}${missSec.flatMap((x) => x.entries.map((e) => checkRow(e.id, esc(e.text)))).join('')}
       </section>`
     : '';
   const foes = a.enemies.map(cleanEntry);
@@ -382,8 +400,8 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         )
         .join('')}
       ${achs.length ? fold(ui('achHere'), ICON.list, achs.slice().sort((x, y) => Number(!!y.missable) - Number(!!x.missable)).map((x) => `<div class="px-3 py-2 text-sm text-zinc-300"><strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${x.how ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.how)}</span>` : ''}</div>`).join('') + `<p class="px-3 pt-1 text-xs"><a class="text-[#a87ffb] hover:text-white" href="../achievements/index.html">${esc(ui('achLink'))} &rarr;</a></p>`, { open: achs.some((x) => x.missable) }) : ''}
-      ${fold(ui('items'), ICON.items, rest.map((e) => checkRow(e.id, itemHtml(e))).join(''), { ids: rest.map((e) => e.id), open: true })}
-      ${fold(ui('secrets'), ICON.secrets, a.secrets.map((e) => checkRow(e.id, esc(e.text))).join(''), { ids: a.secrets.map((e) => e.id), open: true })}
+      ${fold(ui('items'), ICON.items, restGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g))).join('') + rest.map((e) => checkRow(e.id, itemHtml(e))).join(''), { ids: [...restGroups.flatMap((g) => g.ids), ...rest.map((e) => e.id)], open: true })}
+      ${fold(ui('secrets'), ICON.secrets, secretsLeft.map((e) => checkRow(e.id, esc(e.text))).join(''), { ids: secretsLeft.map((e) => e.id), open: true })}
       ${fold(ui('fights'), ICON.enemies, fights, { open: true })}
       ${fold(ui('enemies'), ICON.enemies, enemies)}
       ${fold(ui('shops'), ICON.shops, shops)}

@@ -30,7 +30,7 @@ if (!game || !langs.length) {
 
 type Tr = {
   name: string; story: string; overview: string;
-  items: { id: string; name?: string; where?: string }[];
+  items: { id: string; name?: string; where?: string; how?: string; lockout?: string }[];
   secrets: { id: string; text?: string }[];
   enemies: { id: string; name?: string; weakness?: string; steal?: string; notes?: string }[];
   shops: { id: string; name?: string; sells?: string }[];
@@ -44,7 +44,7 @@ type Tr = {
 function source(a: GuideArea) {
   return {
     name: a.name, story: a.story || '', overview: a.overview || '',
-    items: a.items.map((e) => ({ id: e.id, name: e.name, where: e.where })),
+    items: a.items.map((e) => ({ id: e.id, name: e.name, where: e.where, ...(e.how ? { how: e.how } : {}), ...(e.lockout ? { lockout: e.lockout } : {}) })),
     secrets: a.secrets.map((e) => ({ id: e.id, text: e.text })),
     enemies: a.enemies.map((e) => ({ id: e.id, name: e.name, weakness: e.weakness, steal: e.steal, notes: e.notes })),
     shops: a.shops.map((e) => ({ id: e.id, name: e.name, sells: e.sells })),
