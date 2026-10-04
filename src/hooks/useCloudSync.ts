@@ -505,7 +505,11 @@ export function useCloudSync(
             // Sync Settings if remote settings genuinely differ
             if (cloudSettings) {
               const currentLocalSettingsCanonical = canonicalStringify(localDataRef.current.settings);
-              if (currentLocalSettingsCanonical !== canonicalCloudSettingsStr) {
+              // After the first load: settings changed here and not uploaded yet (an answer saves the game's progress,
+              // say, while the tabs' own upload echoes back) win, and the upload sends them. Only an untouched local
+              // copy takes the cloud's. The first snapshot always loads the cloud's settings, as before.
+              const localUnsynced = currentLocalSettingsCanonical !== lastSyncedData.current.settings;
+              if (currentLocalSettingsCanonical !== canonicalCloudSettingsStr && (!hasDoneInitialCloudLoad || !localUnsynced)) {
                 setLocalSettings(cloudSettings);
                 lastSyncedData.current.settings = canonicalCloudSettingsStr;
                 addEvent('SETTINGS_LOADED_FROM_CLOUD', 'Applied updated settings from cloud');

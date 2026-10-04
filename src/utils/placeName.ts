@@ -24,6 +24,25 @@ export function samePlace(a?: string | null, b?: string | null): boolean {
   return !!x && !!y && (x === y || x.startsWith(`${y},`) || y.startsWith(`${x},`));
 }
 
+/**
+ * A place as one guide area: "Emerald Grove, Ravaged Beach" (two areas joined, or "Area, Region") becomes the first part
+ * that is one of the guide's areas ("Emerald Grove"). An exact area name, a game without a guide, or a name with no
+ * guide area in it stays as it is.
+ */
+export function singleArea(name: string, areaNames: string[]): string {
+  const n = String(name || '').trim();
+  if (!n || !areaNames.length) return n;
+  const exact = areaNames.find((a) => placeKey(a) === placeKey(n));
+  if (exact) return exact;
+  const parts = n.split(/[,、，]/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return n;
+  for (const p of parts) {
+    const a = areaNames.find((x) => placeKey(x) === placeKey(p));
+    if (a) return a;
+  }
+  return n;
+}
+
 /** An achievement name for comparing (no punctuation at all). */
 export const nameKey = (s: string | null | undefined) => placeKey(s, '').trim();
 

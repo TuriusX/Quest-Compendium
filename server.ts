@@ -19,7 +19,8 @@ import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard } from './guestGuard';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
-import { registerLocateMe } from './locateMe';
+import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
+import { DONE_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideFightNotes, guideLinesForPanel, guideAreasWithPages } from './guidesApi';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerDiscord } from './discord';
@@ -27,7 +28,7 @@ import { STEPS_RULES, extractSteps } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT } from './answerBar';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { saveMissingFight } from './missingFights';
-import { samePlace, storyPhrase } from './src/utils/placeName';
+import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
@@ -1069,16 +1070,46 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       // Where the player is. Many games reuse near-identical rooms, so the AI must not guess a place and build the
       // answer on it: it reports its guess, the app lets the player confirm it with one tap (or by voice), and a
       // confirmed place is sent back here on every later question.
-      const place = req.body.place && typeof req.body.place.name === 'string' && req.body.place.name.trim()
+      let place = req.body.place && typeof req.body.place.name === 'string' && req.body.place.name.trim()
         ? { name: String(req.body.place.name).trim().slice(0, 80), confirmed: req.body.place.confirmed === true }
         : null;
-      const story = req.body.place && typeof req.body.place.story === 'string' && req.body.place.story.trim()
+      let story = req.body.place && typeof req.body.place.story === 'string' && req.body.place.story.trim()
         ? { text: String(req.body.place.story).trim().slice(0, 120), confirmed: req.body.place.storyConfirmed === true }
         : null;
       // A game with a guide has official area names: the AI uses them, so places line up with guide pages and facts.
       const guideAreas = await getGuideAreaNames(effectiveGame?.name);
+      // A place is always one guide area ("Emerald Grove, Ravaged Beach" was two joined).
+      if (place && guideAreas.length) place = { ...place, name: singleArea(place.name, guideAreas) };
+      // On-screen place wins: with a screenshot, a place name read on screen (a minimap label, an area title) that names
+      // a guide area or one of its sub-locations replaces the stored place, confirmed, before the answer is built (the
+      // guide notes, the guide order and the quest log follow it). Locate me's check, without its daily allowance.
+      const guideFull = imageBase64 && guideAreas.length ? await guideAreasWithPages(String(effectiveGame?.name || '')).catch(() => null) : null;
+      let placeRead: { area: string; seenText: string; story: string } | null = guideFull?.areas?.length
+        ? await readPlaceOnScreen(getGeminiClient(), imageBase64, String(effectiveGame?.name || ''), guideFull, place?.name || '')
+        : null;
+      if (placeRead) {
+        const moved = !place || !samePlace(place.name, placeRead.area);
+        place = { name: placeRead.area, confirmed: true };
+        // A different area: the old story beat doesn't carry over.
+        if (moved) story = placeRead.story ? { text: placeRead.story, confirmed: false } : null;
+        situationalContext += `\n[PLACE READ ON SCREEN: "${placeRead.seenText}", so the player is in ${placeRead.area}. A place read on screen overrides any stored or confirmed location, and anything earlier in this conversation about where they were: they are in ${placeRead.area} now, so answer for ${placeRead.area}.]\n`;
+      }
       if (guideAreas.length) {
         situationalContext += `\n[AREAS IN THIS GAME'S GUIDE, in story order. When the player is in one of these, use its exact name as the place name: ${guideAreas.join(' | ')}]\n`;
+      }
+      // Don't point backwards: areas before the player's in the guide's order are assumed done.
+      const areaIndex = place ? guideAreas.findIndex((a) => samePlace(a, place!.name)) : -1;
+      if (areaIndex > 0) {
+        const earlier = guideAreas.slice(Math.max(0, areaIndex - 8), areaIndex);
+        situationalContext += `\n[GUIDE ORDER: the player is in ${guideAreas[areaIndex]}, area ${areaIndex + 1} of ${guideAreas.length} in the guide's order. Steps, fights and events in earlier areas (${areaIndex > 8 ? '…, ' : ''}${earlier.join(', ')}) are assumed done, including the way into ${guideAreas[areaIndex]} (its gate, entrance or approach, and any fight there): never send the player back, tell them to go to or approach those places, or prepare them for those fights, even if earlier messages in this conversation did, unless they ask about it.]\n`;
+      }
+      // Progress memory: what the player has already done in this game (the app's list, most recent first).
+      const doneList: string[] = (Array.isArray(req.body.done) ? req.body.done : [])
+        .map((x: unknown) => String(x ?? '').replace(/\s+/g, ' ').trim().slice(0, 130))
+        .filter(Boolean)
+        .slice(0, 30);
+      if (doneList.length) {
+        situationalContext += `\n[ALREADY DONE in this game (most recent first): ${doneList.join(' | ')}. Never suggest doing any of these, or going back for them, unless the player asks about one.]\n`;
       }
       if (story?.confirmed) {
         situationalContext += `\n[PLAYER'S CONFIRMED STORY POINT: ${story.text}. The player confirmed this; trust it over your own guess, and only mention what's available at this point.]\n`;
@@ -1096,8 +1127,12 @@ You must respond entirely in ${language}. Do not use English unless the user's l
 Many games reuse near-identical rooms and tiles, so never assume a specific place from looks alone.
 - Only name a specific place (town, house, dungeon, area) in your answer if something confirms it: on-screen text or a sign, a unique landmark, the player said so, or a confirmed location above that still matches the screen. Otherwise describe what's visible ("this house", "this room") and keep the answer to what's safe without knowing the exact place.
 - At the very end of your answer, add one line in exactly this format (it's removed before the player sees it):
-<qc-place>{"name": "Place, Region", "sure": true, "options": [], "story": "Story point", "storySure": false, "storyOptions": []}</qc-place>
-  - "name": your best identification of where the player is, e.g. "Duncan's House, near South Figaro".
+<qc-place>{"name": "Place, Region", "sure": true, "options": [], "story": "Story point", "storySure": false, "storyOptions": [], "seenText": ""}</qc-place>
+  - "name": your best identification of where the player is, e.g. "Duncan's House, near South Figaro". In a game with
+    guide areas (listed above), exactly one area name from that list, never two joined.
+  - "seenText": any place name visibly written on screen (a minimap label, an area title card, a map screen, a location
+    banner), exactly as written; empty if none. A place read on screen always wins over the stored or confirmed
+    location: then "name" is the place it names, with sure true.
   - "sure": true only when something confirms it, as above. If the player just told you where they are, use their words and true.
   - "options": always 2 or 3 other places this could be, most likely first, even when you're sure (the player picks one
     with a single tap if your guess is wrong).
@@ -1113,6 +1148,7 @@ Many games reuse near-identical rooms and tiles, so never assume a specific plac
     even when you're sure.
   - If a confirmed story point is given above and the screen still fits it, repeat it with storySure true.
   - Leave the line out entirely for menus, title screens, battles, loading screens, or anything that isn't a place.
+${DONE_RULES}
 - Markers and on-screen people: only mark people and things you can actually see in this screenshot right now. Never
   mark someone who "should" be there (an NPC from a story event); if you can't see them, don't mark them.
   In pixel art, look for an actual character sprite (a head and a body). A cushioned chair, a statue or a coat on a
@@ -1511,6 +1547,17 @@ percentages:
       if (placeParsed.place?.story && placeParsed.place.storySure && !story?.confirmed && history.length === 0) {
         placeParsed.place.storySure = false;
       }
+      // The answer's place is one guide area; a place name it read on screen (seenText) that names a guide area counts
+      // like the read before the answer (when that one found nothing).
+      if (placeParsed.place && guideAreas.length) placeParsed.place.name = singleArea(placeParsed.place.name, guideAreas);
+      if (!placeRead && guideFull?.areas?.length && placeParsed.place?.seenText) {
+        const area = areaForSeenText(placeParsed.place.seenText, guideFull);
+        if (area) placeRead = { area, seenText: placeParsed.place.seenText, story: storyPhrase(placeParsed.place.story || '') };
+      }
+      if (placeRead && placeParsed.place) placeParsed.place = { ...placeParsed.place, name: placeRead.area, sure: true };
+      // Something the answer says the player has finished (progress memory).
+      const doneParsed = extractDone(responseText);
+      responseText = doneParsed.text;
       // Facts the AI confirmed with a search: remember them for this game. Count the searches this question ran.
       const factsParsed = extractFacts(responseText);
       responseText = factsParsed.text;
@@ -1584,6 +1631,11 @@ percentages:
         ...(imageBase64 && !combatParsed.combat ? { noFight: true } : {}),
         ...(nearby.length ? { nearby } : {}),
         ...(placeParsed.place ? { place: placeParsed.place } : {}),
+        // A place read on screen (a guide area): the app confirms it as where the player is.
+        ...(placeRead ? { placeRead: { area: placeRead.area, seenText: placeRead.seenText, ...(placeRead.story ? { story: placeRead.story } : {}) } } : {}),
+        // Finished content the answer reported, and the fight a combat answer was about (progress memory).
+        ...(doneParsed.done.length ? { done: doneParsed.done } : {}),
+        ...(combatParsed.combat && combatParsed.fight ? { fight: combatParsed.fight } : {}),
         ...(factsSaved ? { factsSaved } : {}),
         ...(correctionIds.length ? { correctionIds } : {}),
         userData: {
@@ -1604,7 +1656,7 @@ percentages:
   });
 
   /** The AI's "where is the player" line: {name, sure, options}. Removed from the answer text either way. */
-  type PlaceOut = { name: string; sure: boolean; options: string[]; story?: string; storySure?: boolean; storyOptions?: string[] };
+  type PlaceOut = { name: string; sure: boolean; options: string[]; story?: string; storySure?: boolean; storyOptions?: string[]; seenText?: string };
   function extractPlace(text: string): { text: string; place: PlaceOut | null } {
     let place: PlaceOut | null = null;
     const cleaned = text.replace(/<qc-place>([\s\S]*?)<\/qc-place>/gi, (_m, body) => {
@@ -1622,7 +1674,8 @@ percentages:
             .map((o: unknown) => storyPhrase(String(o ?? '')).slice(0, 120))
             .filter((o: string, i: number, arr: string[]) => o && o.toLowerCase() !== story.toLowerCase() && arr.indexOf(o) === i)
             .slice(0, 3);
-          place = { name, sure: p?.sure === true, options, ...(story ? { story, storySure: p?.storySure === true, storyOptions } : {}) };
+          const seenText = String(p?.seenText ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+          place = { name, sure: p?.sure === true, options, ...(story ? { story, storySure: p?.storySure === true, storyOptions } : {}), ...(seenText ? { seenText } : {}) };
         }
       } catch {
         /* a malformed line is simply dropped */

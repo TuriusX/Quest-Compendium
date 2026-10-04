@@ -17,7 +17,7 @@ import type { Express, NextFunction, Request, Response } from 'express';
 import type { GoogleGenAI } from '@google/genai';
 import { logUsage } from './usage';
 import { matchGuideArea } from './src/utils/guideMatch';
-import { nameKey, samePlace } from './src/utils/placeName';
+import { nameKey, samePlace, storyPhrase } from './src/utils/placeName';
 
 type GuideWithPages = { areas: { slug: string; name: string; story: string }[]; pages: Record<string, any> } | null;
 type Deps = {
@@ -81,6 +81,65 @@ export function seenTextNamesArea(
   return !!m && m.via !== 'story' && areas[m.index]?.name === area;
 }
 
+/** Locate me's question to the model: which listed area, and the place name read on screen (if any). */
+function locatePrompt(game: string, areas: { name: string; story: string }[], place: string): string {
+  const list = areas.map((a) => `- ${a.name}${a.story ? `: ${a.story}` : ''}`).join('\n');
+  return (
+    `This is a screenshot of the video game "${game}". Which of these areas is the player in right now? Pick one name ` +
+    `exactly as written, or "unknown" if the screenshot doesn't show enough to tell (a menu, a loading screen, a map with ` +
+    `no marker, or somewhere not in the list).${place ? ` The player was last known to be in: ${place}.` : ''}\n` +
+    `Areas (name: story beat):\n${list}\n` +
+    `Say how you know. "read": a place name is visibly written on screen (a minimap label, an area title card, a map ` +
+    `screen, a location banner); put that exact text in seenText. "guessed": you're going by the scenery, characters or ` +
+    `story; leave seenText empty. Never claim "read" unless you can quote the text.\n` +
+    `Reply with JSON only: {"area": "<a name from the list, or unknown>", "story": "<where they are in the story, under 12 ` +
+    `words>", "evidence": "read" | "guessed", "seenText": "<the place name as written on screen, or empty>"}`
+  );
+}
+
+type GuideAreasPages = { areas: { slug: string; name: string; story: string }[]; pages: Record<string, any> };
+
+/**
+ * Read the place off an answer's screenshot with Locate me's check (the cheapest model; it doesn't use Locate me's
+ * daily allowance or the player's questions). A place name read on screen (a minimap label, an area title) that names
+ * a guide area or one of its sub-locations wins over the stored place. Null when nothing was read, the read doesn't
+ * name a guide area, or the check failed.
+ */
+export async function readPlaceOnScreen(
+  client: GoogleGenAI,
+  image: string,
+  game: string,
+  guide: GuideAreasPages,
+  place = '',
+): Promise<{ area: string; seenText: string; story: string } | null> {
+  const m = String(image || '').match(DATA_URL_RE);
+  if (!m || !guide.areas.length) return null;
+  const areas = guide.areas.slice(0, MAX_AREAS);
+  try {
+    const response: any = await client.models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: [{ inlineData: { mimeType: m[1], data: m[2] } }, { text: locatePrompt(game, areas, place) }] }],
+      config: { responseMimeType: 'application/json', temperature: 0.1, maxOutputTokens: 120 },
+    });
+    logUsage('place-read', MODEL, response);
+    const r = parseLocateMeReply(response?.text ?? '', areas.map((a) => a.name));
+    if (r.evidence !== 'read' || !seenTextNamesArea(r.seenText, r.area, areas, guide.pages)) return null;
+    // Story beats are quest-log phrases ("Exploring the inner sanctum"), never notes about "the player".
+    return { area: r.area, seenText: r.seenText, story: storyPhrase(r.story) };
+  } catch (err: any) {
+    console.warn('[place-read] failed:', err?.message);
+    return null;
+  }
+}
+
+/** The guide area that a place name read on screen names (the area itself, or one of its sub-locations), or null. */
+export function areaForSeenText(seenText: string, guide: GuideAreasPages): string | null {
+  const seen = String(seenText || '').trim();
+  if (!seen || !guide.areas.length) return null;
+  const named = guide.areas.find((a) => seenTextNamesArea(seen, a.name, guide.areas, guide.pages));
+  return named ? named.name : null;
+}
+
 export function registerLocateMe(app: Express, deps: Deps) {
   app.post('/api/locate-me', deps.requireAuth as any, async (req: Request, res: Response) => {
     const image = String(req.body?.imageBase64 ?? '');
@@ -120,17 +179,7 @@ export function registerLocateMe(app: Express, deps: Deps) {
       });
     }
 
-    const list = areas.map((a) => `- ${a.name}${a.story ? `: ${a.story}` : ''}`).join('\n');
-    const prompt =
-      `This is a screenshot of the video game "${game}". Which of these areas is the player in right now? Pick one name ` +
-      `exactly as written, or "unknown" if the screenshot doesn't show enough to tell (a menu, a loading screen, a map with ` +
-      `no marker, or somewhere not in the list).${place ? ` The player was last known to be in: ${place}.` : ''}\n` +
-      `Areas (name: story beat):\n${list}\n` +
-      `Say how you know. "read": a place name is visibly written on screen (a minimap label, an area title card, a map ` +
-      `screen, a location banner); put that exact text in seenText. "guessed": you're going by the scenery, characters or ` +
-      `story; leave seenText empty. Never claim "read" unless you can quote the text.\n` +
-      `Reply with JSON only: {"area": "<a name from the list, or unknown>", "story": "<where they are in the story, under 12 ` +
-      `words>", "evidence": "read" | "guessed", "seenText": "<the place name as written on screen, or empty>"}`;
+    const prompt = locatePrompt(game, areas, place);
     try {
       const response: any = await deps.getGeminiClient().models.generateContent({
         model: MODEL,

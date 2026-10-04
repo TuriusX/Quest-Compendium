@@ -1,3 +1,5 @@
+import type { DoneItem } from './utils/progressMemory';
+
 export type AiMode = 'standard' | 'roleplay' | 'minmax';
 
 export type ColorTheme = 'purple' | 'red' | 'cyan' | 'blue' | 'amber' | 'luigi' | 'masterchief' | 'gold' | 'pink' | 'silver';
@@ -90,6 +92,8 @@ export interface ChatMessage {
   doneSteps?: number[];
   /** The screenshot showed a fight: the steps are the battle plan (the quest log titles them so). */
   combat?: boolean;
+  /** The fight a combat answer was about (progress memory names it when the fight ends). */
+  fight?: string;
   /** The screenshot showed no fight: a fight the player was in is over (its markers and battle plan are cleared). */
   noFight?: boolean;
   /** Other items in the same area, looked for as the player walks (desktop). */
@@ -197,6 +201,8 @@ export interface AppSettings {
   markerLifetime?: number;
   /** Where the player is in each game (keyed by game name, lowercase), so a new compendium starts from it. */
   gameProgress?: Record<string, { name: string; confirmed: boolean; story?: string; storyConfirmed?: boolean }>;
+  /** Per game (same key as gameProgress): what the player has already done, most recent first (utils/progressMemory). */
+  gameDone?: Record<string, DoneItem[]>;
 }
 
 export interface SyncEventLog {

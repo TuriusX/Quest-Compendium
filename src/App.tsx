@@ -29,7 +29,8 @@ import { db } from './lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
 import { playBlipSound } from './utils/audio';
-import { samePlace, placeAfterMove } from './utils/placeName';
+import { samePlace, placeAfterMove, singleArea } from './utils/placeName';
+import { addDone, doneForRequest, areaMovedPast, endedFight, type DoneKind } from './utils/progressMemory';
 import { useCloudSync } from './hooks/useCloudSync';
 import { recordTombstone } from './hooks/tabMerge';
 import pixelSceneUrl from './pixel-scene.png';
@@ -507,6 +508,7 @@ export default function App() {
     const next = { ...(activeTab.place || {}), name, confirmed: true };
     setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));
     rememberGameProgress(activeTab, next);
+    noteAreaChange(activeTab, activeTab.place?.name, name);
   };
 
   // ---- The objectives tracker: the panel's minimized state (desktop, electron/tracker.cjs) ----
@@ -531,6 +533,23 @@ export default function App() {
   const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, trackerPlace?.name, trackerPlace?.story, useLocale());
   const trackerGameRef = useRef(trackerGame);
   trackerGameRef.current = trackerGame;
+  // A place is always one guide area: a saved place with two joined ("Emerald Grove, Ravaged Beach") becomes the first
+  // area in it, in the tab and the game's saved progress, once the guide's areas are known.
+  const guideAreaNames = (trackerGame.guideArea?.areas || []).map((a) => a.name).join('\u0001');
+  useEffect(() => {
+    if (!activeTab || !guideAreaNames) return;
+    const names = guideAreaNames.split('\u0001');
+    const key = (activeTab.activeSteamGame?.name || activeTab.name || '').trim().toLowerCase();
+    const fix = <P extends { name: string }>(p: P | undefined): P | undefined => {
+      if (!p?.name) return undefined;
+      const one = singleArea(p.name, names);
+      return one !== p.name ? { ...p, name: one } : undefined;
+    };
+    const tabFixed = fix(activeTab.place);
+    if (tabFixed) setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: tabFixed } : t)));
+    const saved = fix(settings.gameProgress?.[key]);
+    if (saved && key) setSettings((s) => ({ ...s, gameProgress: { ...(s.gameProgress || {}), [key]: saved } }));
+  }, [activeTab?.id, activeTab?.place?.name, guideAreaNames, settings.gameProgress]);
   const trackerPlaceRef = useRef(trackerPlace);
   trackerPlaceRef.current = trackerPlace;
   // Moving to a guide area from the tracker (‹ › or the area list): the place and that area's story beat, both
@@ -542,6 +561,7 @@ export default function App() {
     const place = placeAfterMove(activeTab.place, name, story, true);
     setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place, lastActive: Date.now() } : t)));
     rememberGameProgress(activeTab, place);
+    noteAreaChange(activeTab, activeTab.place?.name, name);
   };
   // "Locate me" (the tracker's crosshair, the PlaceBar): a screenshot of the game and the guide's areas go to
   // /api/locate-me (its own daily limit, never the player's questions). The place is confirmed only when its name was
@@ -627,6 +647,7 @@ export default function App() {
       const place = placeAfterMove(tab.place, String(data.area), story, sure);
       setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, place, lastActive: Date.now() } : t)));
       rememberGameProgress(tab, place);
+      noteAreaChange(tab, tab.place?.name, place.name);
       if (locateHold.current) {
         locateHold.current.target = place.name;
         // In case the area's page never loads (offline): let go after a few seconds anyway.
@@ -720,6 +741,9 @@ export default function App() {
         if (!msg?.steps?.length || !Number.isInteger(index) || index < 0 || index >= msg.steps.length) return;
         const done = msg.doneSteps ?? [];
         updateMessageById(msgId, (m) => ({ ...m, doneSteps: e.done ? [...new Set([...done, index])].sort((x, y) => x - y) : done.filter((d) => d !== index) }));
+        // A ticked step goes on the "already done" list.
+        const tabOf = tabs.find((t) => t.messages.some((m) => m.id === msgId));
+        if (e.done && tabOf) rememberDone(tabOf, [{ text: msg.steps[index].text, kind: 'step' }]);
       } else if (id.startsWith('a:')) {
         // An answer's marker: a:<message id>:<index>, the same as its checklist under the answer.
         const cut = id.lastIndexOf(':');
@@ -827,6 +851,18 @@ export default function App() {
     const key = gameProgressKey(t);
     if (!key) return;
     setSettings((s) => ({ ...s, gameProgress: { ...(s.gameProgress || {}), [key]: place } }));
+  };
+  /** Progress memory: add finished things to this game's "already done" list (utils/progressMemory). */
+  const rememberDone = (t: GameTab, items: { text: string; kind: DoneKind }[]) => {
+    const key = gameProgressKey(t);
+    if (!key || !items.length) return;
+    setSettings((s) => ({ ...s, gameDone: { ...(s.gameDone || {}), [key]: addDone(s.gameDone?.[key], items) } }));
+  };
+  /** Moving on to a later guide area: the area left behind goes on the "already done" list. */
+  const noteAreaChange = (t: GameTab, from: string | undefined, to: string | undefined) => {
+    const names = (trackerGameRef.current.guideArea?.areas || []).map((a) => a.name);
+    const past = areaMovedPast(names, from ? singleArea(from, names) : from, to);
+    if (past) rememberDone(t, [{ text: past, kind: 'area' }]);
   };
 
   const refineMarkers = async (msgId: string, image: string, points: ScreenPoint[], game: string, token: string | null) => {
@@ -1487,7 +1523,9 @@ export default function App() {
           markers: settings.showPointersOnScreen !== false,
           // Where the player is in this game (confirmed by them, or the AI's last guess). A new compendium for the same
           // game starts from what the player's other compendiums for it already know.
-          place: activeTab.place || settings.gameProgress?.[gameProgressKey(activeTab)] || null
+          place: activeTab.place || settings.gameProgress?.[gameProgressKey(activeTab)] || null,
+          // Progress memory: what the player has already done in this game, so answers never send them back.
+          done: doneForRequest(settings.gameDone?.[gameProgressKey(activeTab)]),
         }),
       });
       clearTimeout(timeoutId);
@@ -1573,6 +1611,7 @@ export default function App() {
         ...(data.combat === true ? { combat: true } : {}),
         // No fight on the screenshot: a fight is over (its markers go, the quest log shows normal steps).
         ...(data.noFight === true ? { noFight: true } : {}),
+        ...(typeof data.fight === 'string' && data.fight.trim() ? { fight: data.fight.trim().slice(0, 120) } : {}),
         // The quest log's steps: the 1-4 things to keep in front of the player (the tracker's "From your last answer").
         ...(Array.isArray(data.steps) && data.steps.length
           ? {
@@ -1631,6 +1670,22 @@ export default function App() {
         refineMarkers(aiMessage.id, imageBase64, aiMessage.points, activeTab.activeSteamGame?.name || globalActiveGame?.name || '', token);
       }
 
+      const readArea: string = data.placeRead && typeof data.placeRead.area === 'string' ? data.placeRead.area.trim().slice(0, 80) : '';
+      const readStory: string = readArea && typeof data.placeRead.story === 'string' ? data.placeRead.story.trim().slice(0, 100) : '';
+      const placeBefore = activeTab.place || settings.gameProgress?.[gameProgressKey(activeTab)];
+      if (readArea) {
+        const moved = placeAfterMove(placeBefore, readArea, readStory, true);
+        rememberGameProgress(activeTab, moved);
+        noteAreaChange(activeTab, placeBefore?.name, readArea);
+      }
+      // Progress memory: a fight that just ended (a combat answer, then a screenshot with no fight), and anything the
+      // answer says is finished.
+      const fightOver = endedFight(activeTab.messages, aiMessage);
+      rememberDone(activeTab, [
+        ...(fightOver ? [{ text: fightOver, kind: 'fight' as DoneKind }] : []),
+        ...(Array.isArray(data.done) ? data.done.filter((x: unknown) => typeof x === 'string').slice(0, 3).map((text: string) => ({ text, kind: 'quest' as DoneKind })) : []),
+      ]);
+
       setTabs(prev => {
         const nextTabs = prev.map(t => {
           if (t.id !== activeTab.id) return t;
@@ -1647,6 +1702,9 @@ export default function App() {
           // usually carries over.
           else if (g && place?.confirmed && !samePlace(g.name, place.name)) place = { ...place, name: g.name, confirmed: false };
           if (g?.story && place && !place.storyConfirmed) place = { ...place, story: g.story, storyConfirmed: false };
+          // On-screen place wins: a place name read on screen that names a guide area is where the player is, confirmed
+          // (as Locate me does), whatever was stored.
+          if (readArea) place = placeAfterMove(place, readArea, readStory, true);
           return { ...t, messages: [...t.messages, aiMessage], lastActive: nowAi, ...(place ? { place } : {}) };
         });
         return nextTabs;
