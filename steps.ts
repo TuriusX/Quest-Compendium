@@ -4,6 +4,8 @@
  * block to every in-game answer; the server pulls it out (extractSteps) before the player sees the answer.
  */
 
+import { WORTH_POINTING_OUT, isTrivialMarker, isFillerStep } from './answerBar';
+
 export type StepKind = 'step' | 'choice' | 'warning';
 export type QuestStep = { kind: StepKind; text: string; detail?: string };
 
@@ -12,7 +14,8 @@ export const STEPS_RULES = `
 
 [QUEST LOG STEPS]
 After your answer, add one line with the 1 to 4 most important things the player should keep in front of them while
-they play (it goes on their on-screen quest log), most important first:
+they play (it goes on their on-screen quest log), most important first. Only what they should actually do or decide
+next, never filler:
 <qc-steps>[{"kind": "step", "text": "<what to do>", "detail": "<the sentence from your answer it comes from>"}]</qc-steps>
 - "kind": "step" (something to do), "choice" (a decision the player has to make) or "warning" (something they can miss
   for good or that can go badly: a missable, a point of no return, a dangerous fight).
@@ -21,6 +24,7 @@ they play (it goes on their on-screen quest log), most important first:
   climb the rock wall to avoid them").
 - "detail": the sentence (or two) of your answer that the item comes from, copied as written, so the player can read
   it again from the quest log. At most 300 characters.
+- The same bar as markers. ${WORTH_POINTING_OUT}
 - Only what your answer actually says. Leave the line out for questions that aren't about playing (settings, lore
   chat, a game's release date). Never mention the line in your answer text.`;
 
@@ -41,6 +45,9 @@ export function extractSteps(text: string): { text: string; steps: QuestStep[] }
           ...(str(s?.detail, 400) ? { detail: str(s?.detail, 400) } : {}),
         }))
         .filter((s: QuestStep) => s.text)
+        // Filler ("Explore the area") and routine loot ("Search the corpse" for minor supplies) stay off the quest log;
+        // choices and warnings always count.
+        .filter((s: QuestStep) => !isFillerStep(s.text) && !(s.kind === 'step' && isTrivialMarker({ label: s.text, detail: s.detail })))
         .slice(0, 4);
     } catch {
       /* a broken line is dropped */

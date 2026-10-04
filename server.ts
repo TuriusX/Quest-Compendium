@@ -24,6 +24,7 @@ import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPane
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerDiscord } from './discord';
 import { STEPS_RULES, extractSteps } from './steps';
+import { WORTH_POINTING_OUT, isTrivialMarker } from './answerBar';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { samePlace } from './src/utils/placeName';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
@@ -986,7 +987,8 @@ When your answer refers to specific things that are visible in the game world in
 The <...> parts are placeholders: always write your own values. Never copy the placeholder text or any example wording from these instructions into a marker.
 - "y" and "x" are the center of the thing in the screenshot, normalized to 0-1000 (y from the top edge, x from the left edge).
 - Game world only: markers are for things in the game world (items, containers, enemies, characters, doors, levers, switches, paths and places). Never put a marker on the game's own interface: battle menus, command lists, HP, MP or ATB bars, inventory screens or other HUD elements. Advice about which command to use, whose turn it is, or what to do next belongs in your answer text, not on a marker. The only exception: if the player explicitly asks where something is in a menu, you may point at that menu item.
-- Fewer, better markers: mark only what matters most for the question, usually 1 to 3, never more than 5. If several markers would say the same thing (for example several identical enemies), give the note to one of them and leave the note out on the others, so they show the label alone.
+- What's worth a marker: ${WORTH_POINTING_OUT}
+- Fewer, better markers: never more than 5. If several markers would say the same thing (for example several identical enemies), give the note to one of them and leave the note out on the others, so they show the label alone.
 - Exits and doors are low priority: only mark one if it's clearly visible AND either the player asked how to leave or it's genuinely easy to miss. Markers go to items, secrets, people and hazards first. A normal door isn't worth a marker.
 - Top-down games: exits are often just a gap or a doormat at the bottom edge of the room, and the player's own character may be standing on or in front of it. Stairs, ladders and wall openings are not the exit unless you can see they lead out. If you're not sure where the exit is, don't mark it and don't name a specific spot in your answer; just say to leave the room and which way to go.
 - Labels: 1 to 4 words, in the player's language.
@@ -1674,6 +1676,8 @@ percentages:
               const category = String(p?.category ?? '').trim().toLowerCase();
               const note = String(p?.note ?? '').trim().slice(0, 140);
               const detail = String(p?.detail ?? '').trim().slice(0, 400);
+              // Obvious low-value things (a corpse in plain view with minor supplies) never become markers.
+              if (isTrivialMarker({ label, note, detail, category, missable: p?.missable === true })) continue;
               points.push({
                 x: Math.round(x) / 1000,
                 y: Math.round(y) / 1000,
