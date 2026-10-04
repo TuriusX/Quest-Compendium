@@ -8,7 +8,9 @@
  *     queue as a report. The bot replies with a short thanks and a "Confirm" button.
  *   Confirm (Guide Moderator role only): the moderator's confirmation stands in for the 3 reporters; the correction still
  *     goes through the source check (scripts/guides/corrections.ts). Anyone else gets a short "moderators only" note.
- * Once the pipeline decides (applied, or dismissed), it posts the result in the results channel (announceDecisions).
+ *   The pinned message in the results channel (scripts/discord/setup-channel.ts) has a "Suggest a correction" button that
+ *     opens a form (game, area, entry, what's correct); typed names are matched to the guides like /correction's.
+ * Once the pipeline decides (applied, or dismissed), it posts the result in the results channel (scripts/guides/corrections.ts).
  *
  * Settings: DISCORD_APP_ID, DISCORD_PUBLIC_KEY (request signatures), DISCORD_MOD_ROLE_ID, DISCORD_RESULTS_CHANNEL_ID,
  * and the secret DISCORD_BOT_TOKEN (for posting results and registering the command: scripts/discord/register.ts).
@@ -68,22 +70,76 @@ const reply = (content: string, opts: { ephemeral?: boolean; components?: any[] 
 });
 const confirmButton = (id: string) => [{ type: 1, components: [{ type: 2, style: 3, label: 'Confirm (moderators)', custom_id: `qc-confirm:${id}` }] }];
 
-/** /correction: save it, thank the reporter, offer moderators the Confirm button. */
-async function correctionCommand(i: any): Promise<any> {
-  const data = i.data;
+const nameKey = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['’™®]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+/** Letter-pair similarity (0 to 1): forgives typos and word order ("baldurs gate 3" vs "Baldur's Gate 3"). */
+function similarity(a: string, b: string): number {
+  const pairs = (s: string) => {
+    const t = ` ${s} `;
+    const out: string[] = [];
+    for (let i = 0; i < t.length - 1; i++) out.push(t.slice(i, i + 2));
+    return out;
+  };
+  const x = pairs(a), y = pairs(b);
+  if (!x.length || !y.length) return 0;
+  const counts = new Map<string, number>();
+  for (const p of y) counts.set(p, (counts.get(p) || 0) + 1);
+  let hit = 0;
+  for (const p of x) {
+    const n = counts.get(p) || 0;
+    if (n) {
+      hit++;
+      counts.set(p, n - 1);
+    }
+  }
+  return (2 * hit) / (x.length + y.length);
+}
+
+/**
+ * The closest match for what someone typed (or the exact value a suggestion filled in): exact name or value first, then
+ * a name that starts with or contains it, then letter-pair similarity. Returns the match (when it's close enough) and
+ * the best few names, for "did you mean…" when it isn't.
+ */
+export function closestMatch<T extends { name: string; value: string }>(typed: string, items: T[]): { match: T | null; suggestions: T[] } {
+  const t = nameKey(typed);
+  if (!t) return { match: null, suggestions: items.slice(0, 3) };
+  const scored = items
+    .map((c) => {
+      const n = nameKey(c.name);
+      const score = c.value === typed || n === t ? 1 : n.startsWith(t) || t.startsWith(n) ? 0.92 : n.includes(t) || t.includes(n) ? 0.85 : similarity(n, t);
+      return { c, score };
+    })
+    .sort((a, b) => b.score - a.score);
+  const best = scored[0];
+  // Close enough, and clearly ahead of the next one (two equally close names: ask).
+  const ok = !!best && best.score >= 0.6 && (!scored[1] || best.score === 1 || best.score - scored[1].score >= 0.05);
+  return { match: ok ? best.c : null, suggestions: scored.slice(0, 3).map((x) => x.c) };
+}
+
+const bullets = (xs: { name: string }[]) => xs.map((x) => `• ${x.name}`).join('\n');
+
+/**
+ * A correction from /correction or the pinned message's form: names matched to the guides (closest match), then saved
+ * like the app's and website's (corrections.ts). Replies privately with the closest names when something can't be matched.
+ */
+async function submitCorrection(i: any, typed: { game: string; area: string; entry: string; correct: string }): Promise<any> {
   const userId = String(i.member?.user?.id || i.user?.id || '');
-  const game = String(opt(data, 'game')?.value || '').trim();
-  const area = String(opt(data, 'area')?.value || '').trim();
-  const entryId = String(opt(data, 'entry')?.value || '').trim();
-  const correct = String(opt(data, 'correct')?.value || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const correct = typed.correct.replace(/\s+/g, ' ').trim().slice(0, 300);
   if (!userId) return reply('Sorry, I could not tell who sent that.', { ephemeral: true });
   if (looksLikeSpam(correct)) return reply('Please say what is correct in a sentence or two (no links).', { ephemeral: true });
-  const guide = await guideAreasByKey(game);
-  const areaInfo = guide?.areas.find((a) => a.slug === area);
-  if (!guide || !areaInfo) return reply('Pick a game and an area from the suggestions, so I know which guide page you mean.', { ephemeral: true });
-  if (entryId) {
-    const found = await entryById(game, area, entryId);
-    if (!found) return reply('Pick the entry from the suggestions (or leave it out).', { ephemeral: true });
+  const games = (await guideList()).map((g) => ({ name: g.game, value: g.key }));
+  const g = closestMatch(typed.game.trim(), games);
+  if (!g.match) return reply(`I couldn't find a guide for "${typed.game.slice(0, 80)}". Closest guides:\n${bullets(g.suggestions)}`, { ephemeral: true });
+  const guide = await guideAreasByKey(g.match.value);
+  const areas = (guide?.areas || []).map((a) => ({ name: a.name, value: a.slug }));
+  const a = closestMatch(typed.area.trim(), areas);
+  if (!guide || !a.match) return reply(`I couldn't find the area "${typed.area.slice(0, 80)}" in the ${g.match.name} guide. Closest areas:\n${bullets(a.suggestions)}`, { ephemeral: true });
+  const game = g.match.value, area = a.match.value;
+  if (typed.entry.trim()) {
+    const entries = (await guideAreaEntries(game, area)).map((e) => ({ name: e.label, value: e.id }));
+    const e = closestMatch(typed.entry.trim(), entries);
+    if (!e.match) return reply(`I couldn't find the entry "${typed.entry.slice(0, 80)}" on ${a.match.name}. Closest entries:\n${bullets(e.suggestions)}\n(Or leave the entry out.)`, { ephemeral: true });
+    const found = await entryById(game, area, e.match.value);
+    if (!found) return reply('That entry is no longer in the guide.', { ephemeral: true });
     const id = await saveCandidate({
       gameKey: game, game: found.game, area, areaName: found.areaName, entry: found.entry, claim: correct, field: 'where',
       via: 'command', reporterKey: reporterKey(userId), source: 'discord', weight: REPORTER_WEIGHT.discord,
@@ -99,10 +155,40 @@ async function correctionCommand(i: any): Promise<any> {
   }
   // No entry: a report for the review queue (an admin decides).
   await getFirestore().collection('reviewQueue').add({
-    kind: 'report', source: 'discord', key: game, game: guide.game, page: area, pageName: areaInfo.name, text: correct,
+    kind: 'report', source: 'discord', key: game, game: guide.game, page: area, pageName: a.match.name, text: correct,
     status: 'open', action: null, createdAt: Date.now(), updatedAt: Date.now(),
   });
-  return reply(`Thanks! Your note about **${areaInfo.name}** (${guide.game}) is on the review queue. Naming the entry next time lets it be checked and applied automatically.`);
+  return reply(`Thanks! Your note about **${a.match.name}** (${guide.game}) is on the review queue. Naming the entry next time lets it be checked and applied automatically.`);
+}
+
+/** /correction (picked from the suggestions, or typed: matched the same way). */
+const correctionCommand = (i: any) =>
+  submitCorrection(i, {
+    game: String(opt(i.data, 'game')?.value || ''),
+    area: String(opt(i.data, 'area')?.value || ''),
+    entry: String(opt(i.data, 'entry')?.value || ''),
+    correct: String(opt(i.data, 'correct')?.value || ''),
+  });
+
+/** The pinned message's "Suggest a correction" button: the form (a Discord modal). */
+const suggestForm = () => ({
+  type: 9,
+  data: {
+    custom_id: 'qc-suggest-form',
+    title: 'Suggest a correction',
+    components: [
+      { type: 1, components: [{ type: 4, custom_id: 'game', label: 'Game', style: 1, required: true, max_length: 100, placeholder: "e.g. Baldur's Gate 3" }] },
+      { type: 1, components: [{ type: 4, custom_id: 'area', label: 'Area (the guide page)', style: 1, required: true, max_length: 100, placeholder: 'e.g. Ravaged Beach' }] },
+      { type: 1, components: [{ type: 4, custom_id: 'entry', label: 'Entry that is wrong (optional)', style: 1, required: false, max_length: 120, placeholder: "e.g. Harper's Map (needed for automatic checking)" }] },
+      { type: 1, components: [{ type: 4, custom_id: 'correct', label: "What's correct?", style: 2, required: true, min_length: 8, max_length: 300, placeholder: 'Where it really is, how to get it…' }] },
+    ],
+  },
+});
+
+/** The form sent back: its fields, then the same matching and saving as /correction. */
+function formSubmitted(i: any): Promise<any> {
+  const v = (id: string) => String((i.data?.components || []).flatMap((r: any) => r.components || []).find((c: any) => c.custom_id === id)?.value || '');
+  return submitCorrection(i, { game: v('game'), area: v('area'), entry: v('entry'), correct: v('correct') });
 }
 
 /** Store the bot reply's message id and a link to it on the candidate (for the result post). */
@@ -156,6 +242,8 @@ export function registerDiscord(app: Express) {
       if (i.type === 4) return res.json({ type: 8, data: { choices: await autocomplete(i.data) } });
       if (i.type === 2 && i.data?.name === 'correction') return res.json(await correctionCommand(i));
       if (i.type === 3 && String(i.data?.custom_id || '').startsWith('qc-confirm:')) return res.json(await confirmButtonPressed(i));
+      if (i.type === 3 && i.data?.custom_id === 'qc-suggest') return res.json(suggestForm());
+      if (i.type === 5 && i.data?.custom_id === 'qc-suggest-form') return res.json(await formSubmitted(i));
       return res.json(reply('Unknown command.', { ephemeral: true }));
     } catch (e: any) {
       console.error('[discord]', e?.message);
