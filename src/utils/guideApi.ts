@@ -26,4 +26,6 @@ export type GuidePage = {
   key: string; slug: string; name: string; story: string; overview: string;
   items: GuideEntry[]; secrets: GuideEntry[]; enemies: GuideEntry[]; shops: GuideEntry[]; tips: string[];
   sections?: { title: string; check: boolean; entries: { id: string; text: string }[] }[];
+  /** Key fights: bosses and set-piece battles in this area, with what it takes to win them. */
+  fights?: { id: string; name: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
 };

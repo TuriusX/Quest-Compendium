@@ -83,6 +83,7 @@ function localize(a: GuideArea, t?: any): GuideArea {
     secrets: merge(a.secrets, t.secrets),
     enemies: merge(a.enemies, t.enemies),
     shops: merge(a.shops, t.shops),
+    fights: merge(a.fights || [], t.fights),
     tips: Array.isArray(t.tips) && t.tips.length === (a.tips || []).length ? t.tips : a.tips,
     sections: (a.sections || []).map((x, i) => ({
       ...x,
@@ -343,6 +344,13 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         .map((e) => `<div class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white text-sm">${esc(e.name)}</div><div class="mt-1.5 flex flex-wrap gap-1.5">${chip(ui('weakTo'), e.weakness)}${chip(ui('stealDrop'), e.steal)}</div>${e.notes ? `<p class="mt-1.5 text-xs text-zinc-400">${esc(e.notes)}</p>` : ''}</div>`)
         .join('')}</div>`
     : '';
+  // Key fights: one card per boss or set-piece battle, its details as labelled lines.
+  const fightRow = (label: string, v?: string) => (v ? `<p class="mt-1 text-sm text-zinc-300"><span class="text-zinc-500">${esc(label)}:</span> ${esc(v)}</p>` : '');
+  const fights = (a.fights || []).length
+    ? `<div class="space-y-2">${(a.fights || [])
+        .map((f) => `<div id="${esc(f.id)}" class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white">${esc(f.name)}</div>${fightRow(ui('fightEnemies'), f.enemies)}${fightRow(ui('fightThreats'), f.threats)}${fightRow(ui('fightWeak'), f.weaknesses)}${fightRow(ui('fightTactics'), f.tactics)}${fightRow(ui('fightRewards'), f.rewards)}</div>`)
+        .join('')}</div>`
+    : '';
   const shops = a.shops.length ? `<ul class="space-y-1.5 px-3">${a.shops.map(cleanEntry).map((e) => `<li class="text-sm"><strong class="text-white">${esc(e.name)}</strong>${e.sells ? `<span class="text-zinc-400">: ${esc(e.sells)}</span>` : ''}</li>`).join('')}</ul>` : '';
   const tips = a.tips.length ? `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${a.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '';
   const navCard = (x: AreaLink | undefined, dir: 'prev' | 'next') =>
@@ -376,6 +384,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       ${achs.length ? fold(ui('achHere'), ICON.list, achs.slice().sort((x, y) => Number(!!y.missable) - Number(!!x.missable)).map((x) => `<div class="px-3 py-2 text-sm text-zinc-300"><strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${x.how ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.how)}</span>` : ''}</div>`).join('') + `<p class="px-3 pt-1 text-xs"><a class="text-[#a87ffb] hover:text-white" href="../achievements/index.html">${esc(ui('achLink'))} &rarr;</a></p>`, { open: achs.some((x) => x.missable) }) : ''}
       ${fold(ui('items'), ICON.items, rest.map((e) => checkRow(e.id, itemHtml(e))).join(''), { ids: rest.map((e) => e.id), open: true })}
       ${fold(ui('secrets'), ICON.secrets, a.secrets.map((e) => checkRow(e.id, esc(e.text))).join(''), { ids: a.secrets.map((e) => e.id), open: true })}
+      ${fold(ui('fights'), ICON.enemies, fights, { open: true })}
       ${fold(ui('enemies'), ICON.enemies, enemies)}
       ${fold(ui('shops'), ICON.shops, shops)}
       ${fold(ui('tips'), ICON.tips, tips, { open: true })}

@@ -23,6 +23,7 @@ type Page = {
   key: string; slug: string; name: string; story: string; overview: string;
   items: Entry[]; secrets: Entry[]; enemies: Entry[]; shops: Entry[]; tips: string[];
   sections?: { title: string; check: boolean; entries: { id: string; text: string }[] }[];
+  fights?: { id: string; name: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
 };
 type View = { view: 'games' } | { view: 'game'; key: string; game?: string } | { view: 'area'; key: string; slug: string; game?: string } | { view: 'ach'; key: string; game?: string };
 
@@ -581,6 +582,40 @@ function AreaPage({
           pg.secrets.map((e) => check(e.id, e.text, t('qcg.askSecret', { secret: e.text || '', area: pg.name }))),
           n(pg.secrets.map((e) => e.id)),
           pg.secrets.length,
+        )}
+      {(pg.fights || []).length > 0 &&
+        fold(
+          'fights',
+          t('qcg.fights'),
+          <Skull className="w-4 h-4 text-[var(--accent-color)]" />,
+          <div className="space-y-1.5">
+            {(pg.fights || []).map((f) => (
+              <div key={f.id} id={`qc-entry-${f.id}`} className="px-3 py-2 rounded-lg bg-white/[0.03] text-sm text-zinc-300">
+                <div className="flex items-start gap-2">
+                  <span className="flex-1 font-semibold text-zinc-100">{f.name}</span>
+                  {onAsk && (
+                  <button
+                    onClick={() => ask(t('qcg.askFight', { fight: f.name, area: pg.name }))}
+                    className="shrink-0 text-xs text-[var(--accent-color)] hover:underline"
+                  >
+                    {t('qcg.ask')}
+                  </button>
+                  )}
+                </div>
+                {([['fightEnemies', f.enemies], ['fightThreats', f.threats], ['fightWeak', f.weaknesses], ['fightTactics', f.tactics], ['fightRewards', f.rewards]] as const).map(
+                  ([k, v]) =>
+                    v && (
+                      <p key={k} className="mt-1">
+                        <span className="text-zinc-500">{t(`qcg.${k}`)}:</span> {v}
+                      </p>
+                    ),
+                )}
+              </div>
+            ))}
+          </div>,
+          undefined,
+          undefined,
+          true,
         )}
       {pg.enemies.length > 0 &&
         fold(

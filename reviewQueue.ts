@@ -176,6 +176,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   .chip.src { color: var(--text); border-color: #ffffff30; }
   .chip.disputed { color: var(--bad); border-color: #f8717155; }
   .chip.approved { color: var(--ok); border-color: #4ade8055; }
+  .chip.fight { color: #f87171; border-color: #f8717155; }
   .said { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: #a87ffb10; border-radius: 0 8px 8px 0; }
   .guide { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--line); background: #ffffff08; border-radius: 0 8px 8px 0; }
 </style>
@@ -209,15 +210,18 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   // A correction: what the guide says, what players said, the source check, and apply / dismiss.
   function corrCard(g) {
     const head = '<div class="row"><span class="game">' + esc(g.game) + ' · ' + esc(g.areaName) + '</span>'
+      + (g.entryKind === 'fight' ? '<span class="chip fight">Missing fight</span>' : '')
       + '<span class="chip ' + esc(g.status) + '">' + esc(g.status === 'approved' ? 'applying next run' : g.status) + '</span>'
       + '<span class="dim">reporters worth ' + esc(g.players || 0) + ' of 3, ' + esc(g.reports?.length || g.reports || 0) + ' report(s)' + (g.modConfirmed ? ', confirmed by a moderator' : '') + '</span>'
       + (Array.isArray(g.sources) ? g.sources.map((x) => '<span class="chip src">' + esc(SOURCE[x] || x) + '</span>').join('') : '')
       + '<span class="dim">' + new Date(g.updatedAt || g.createdAt).toLocaleString() + '</span>'
       + ' <a href="' + SITE + esc(g.gameKey) + '/' + esc(g.area) + '/" target="_blank" rel="noopener">open on the site</a></div>';
-    const guide = '<div class="guide"><b>The guide says</b> (' + esc(g.entryName) + '): ' + esc(g.guideText || '(nothing)') + '</div>';
+    const guide = g.entryKind === 'fight'
+      ? '<div class="guide"><b>Not in the guide:</b> ' + esc(g.entryName) + (g.enemies && g.enemies.length ? ' <span class="dim">(enemies: ' + esc(g.enemies.join(', ')) + ')</span>' : '') + '. Battle plans from players below; Apply adds it to the key fights on that page.</div>'
+      : '<div class="guide"><b>The guide says</b> (' + esc(g.entryName) + '): ' + esc(g.guideText || '(nothing)') + '</div>';
     const how = (r) => r.source === 'website' ? 'website report' + (r.weight < 1 ? ', anonymous (counts half)' : ', signed in')
       : r.source === 'discord' ? 'Discord /correction'
-      : (r.via === 'pushback' ? 'app: after the player pushed back' : 'app: answer contradicted the guide') + (r.placeConfirmed ? ', place confirmed' : '') + (r.guest ? ', guest (does not count)' : '');
+      : (r.via === 'combat' ? 'app: battle plan for a fight the guide lacks' : r.via === 'pushback' ? 'app: after the player pushed back' : 'app: answer contradicted the guide') + (r.placeConfirmed ? ', place confirmed' : '') + (r.guest ? ', guest (does not count)' : '');
     const said = (Array.isArray(g.reports) ? g.reports : []).map((r) => '<div class="said"><span class="chip src">' + esc(SOURCE[r.source] || 'App') + '</span> ' + esc(r.claim)
       + ' <span class="dim">(' + esc(how(r)) + ')</span></div>').join('');
     const sc = g.sourceCheck;
@@ -227,7 +231,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   }
   function renderCorr() {
     $('corr').innerHTML = (corr.open.length ? corr.open.map(corrCard).join('') : '<p class="dim">No corrections waiting.</p>')
-      + (corr.decided.length ? '<details><summary>Recently decided</summary>' + corr.decided.map((g) => '<div class="card"><div class="row"><span class="game">' + esc(g.game) + ' · ' + esc(g.areaName) + ' · ' + esc(g.entryName) + '</span><span class="chip">' + esc(g.status) + '</span></div>' + (g.verifiedText ? '<div class="said">' + esc([g.verifiedText.where, g.verifiedText.how, g.verifiedText.notes].filter(Boolean).join(' ')) + '</div>' : '') + '</div>').join('') + '</details>' : '');
+      + (corr.decided.length ? '<details><summary>Recently decided</summary>' + corr.decided.map((g) => '<div class="card"><div class="row"><span class="game">' + esc(g.game) + ' · ' + esc(g.areaName) + ' · ' + esc(g.entryName) + '</span>' + (g.entryKind === 'fight' ? '<span class="chip fight">Missing fight</span>' : '') + '<span class="chip">' + esc(g.status) + '</span></div>' + (g.verifiedText ? '<div class="said">' + esc(g.verifiedText.fight ? [g.verifiedText.fight.name, g.verifiedText.fight.enemies, g.verifiedText.fight.tactics].filter(Boolean).join(' · ') : [g.verifiedText.where, g.verifiedText.how, g.verifiedText.notes].filter(Boolean).join(' ')) + '</div>' : '') + '</div>').join('') + '</details>' : '');
     if (tab === 'corr') $('msg').textContent = corr.open.length + ' correction(s) waiting. Apply writes it into the guide on the next pipeline run (through the review gate); dismiss is immediate.';
   }
   function showTab(t) {

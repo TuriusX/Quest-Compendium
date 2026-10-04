@@ -91,18 +91,36 @@ or turn counter, health bars over enemies, a combat log), answer as a battle pla
     to hit", "Explosive barrel" / "Throw to hit the group").` : ''}
 - Quest-log steps (<qc-steps>): the battle plan: the priority targets in order ("Kill the goblin archer on the
   palisade first"), then the one or two key tactics. They replace the earlier steps.
-- Add <qc-combat/> on its own line at the very end (removed before the player sees it). Leave it out when no fight is
-  happening.`;
+- Add this on its own line at the very end (removed before the player sees it), naming the fight and the enemies on
+  screen as the game does:
+<qc-combat>{"fight": "<a short name for this fight, e.g. Goblin raid on the grove gate>", "enemies": ["<named enemies and enemy types on screen, e.g. Za'Krug, Goblin archer>"]}</qc-combat>
+  Leave it out when no fight is happening.`;
 }
 
-/** Pull the <qc-combat/> flag out of an answer (always removed from the text). */
-export function extractCombat(text: string): { text: string; combat: boolean } {
+/**
+ * Pull the combat block out of an answer (always removed from the text): <qc-combat>{"fight", "enemies"}</qc-combat>,
+ * or the bare <qc-combat/> flag. The fight and enemies name it for the missing-fight check (missingFights.ts).
+ */
+export function extractCombat(text: string): { text: string; combat: boolean; fight?: string; enemies?: string[] } {
   let combat = false;
-  const cleaned = String(text || '').replace(/(?:```[a-z]*\s*)?<qc-combat\s*\/?>(?:\s*<\/qc-combat>)?(?:\s*```)?/gi, () => {
+  let fight: string | undefined;
+  let enemies: string[] | undefined;
+  const str = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+  const re = /(?:```[a-z]*\s*)?<qc-combat\s*\/>(?:\s*```)?|(?:```[a-z]*\s*)?<qc-combat>([\s\S]*?)<\/qc-combat>(?:\s*```)?|(?:```[a-z]*\s*)?<qc-combat>(?:\s*```)?/gi;
+  const cleaned = String(text || '').replace(re, (_m, body) => {
     combat = true;
+    if (body && body.trim()) {
+      try {
+        const j = JSON.parse(String(body).trim());
+        fight = str(j?.fight, 120) || undefined;
+        enemies = Array.isArray(j?.enemies) ? j.enemies.map((e: unknown) => str(e, 60)).filter(Boolean).slice(0, 8) : undefined;
+      } catch {
+        /* the flag still counts */
+      }
+    }
     return '';
   });
-  return { text: combat ? cleaned.replace(/\n{3,}/g, '\n\n').trimEnd() : cleaned, combat };
+  return { text: combat ? cleaned.replace(/\n{3,}/g, '\n\n').trimEnd() : cleaned, combat, ...(fight ? { fight } : {}), ...(enemies?.length ? { enemies } : {}) };
 }
 
 /**

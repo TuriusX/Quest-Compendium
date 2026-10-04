@@ -75,7 +75,7 @@ const QUEUE_MIN = 150;
 /** A quick guide needs at least this many pages to be published (build.ts does the same). */
 const QUICK_MIN = 5;
 /** The repair queue's items: careful builds, fixes and outline rebuilds (scripts/guides/repair.ts). 'quick' = outline. */
-type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string };
+type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade' | 'fights'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string };
 /** Minutes the repair queue may run before the rest of the run (the job's limit is 3 hours). */
 const QUEUE_MINUTES = env('PIPELINE_QUEUE_MINUTES', 120);
 const LANGS = (process.env.PIPELINE_LANGS || 'es,pt,de,fr,ru,ja,ko,zh').split(',').map((s) => s.trim()).filter(Boolean);
@@ -352,6 +352,8 @@ async function main() {
       report.push(`⏳ queue ${action} **${item.game}**: built up to its search cap; continues next run.`);
     } else if (/^Gate: failed/.test(gate)) {
       report.push(`⚠️ queue ${action} **${item.game}**: ${gate.replace(/^Gate: /, '')} (decide on /admin/reviews)`);
+    } else if (/^Gate: skipped/.test(gate)) {
+      report.push(`➖ queue ${action} **${item.game}**: ${gate.replace(/^Gate: /, '')}`);
     } else {
       item.tries = (item.tries || 0) + 1;
       if (item.tries < 2) waiting.push(item);

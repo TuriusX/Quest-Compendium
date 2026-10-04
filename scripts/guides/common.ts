@@ -235,6 +235,8 @@ export type GuideArea = {
   group?: string;
   /** Extra sections some structures use (a calendar page's deadlines, missable events, social links, activities). */
   sections?: GuideSection[];
+  /** Key fights here: bosses and major set-piece battles, with what it takes to win them. */
+  fights?: GuideFight[];
   /** false = a quick page, written from the AI's own knowledge and not yet fact-checked. Missing = checked (older pages). */
   verified?: boolean;
   /** When an --upgrade run last tried this quick page and couldn't confirm it (later upgrades skip it). */
@@ -335,6 +337,12 @@ export const releasedAfter = (r: { text: string; time: number | null }, cutoff: 
   r.time === null ? newRelease || /coming soon|to be announced|tba|20(2[6-9]|3\d)/i.test(r.text) : r.time >= Date.parse(cutoff);
 
 export type GuideSection = { title: string; check: boolean; entries: { id: string; text: string }[] };
+
+/**
+ * A key fight on an area page: a boss or a major set-piece battle (not ordinary enemies), with the enemies, their
+ * notable abilities and threats, weaknesses and resistances, the tactics and positions that win it, and the rewards.
+ */
+export type GuideFight = { id: string; name: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string; sources?: string[]; updatedFrom?: string };
 
 /** Steam's language names for its pages (official translations of achievement names and descriptions). */
 export const STEAM_LANG: Record<string, string> = {

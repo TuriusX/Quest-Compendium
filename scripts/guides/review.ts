@@ -101,12 +101,14 @@ function condense(p: any): string {
   const shops = (p.shops || []).slice(0, 4).map((e: any) => cut(e.name, 40));
   const sections = (p.sections || []).slice(0, 4).map((x: any) => `${cut(x.title, 40)}: ${(x.entries || []).slice(0, 4).map((e: any) => cut(e.text, 60)).join('; ')}`);
   const tips = (p.tips || []).slice(0, 3).map((t: any) => cut(t, 90));
+  const fights = (p.fights || []).slice(0, 5).map((f: any) => `${cut(f.name, 50)}${f.enemies ? ` (${cut(f.enemies, 50)})` : ''}${f.tactics ? '' : ' [no tactics]'}`);
   return [
     `## ${cut(p.name, 80)}${p.group ? ` [section: ${cut(p.group, 40)}]` : ''} (${p.verified === false ? 'quick' : 'checked'})`,
     p.story ? `when: ${cut(p.story, 120)}` : '',
     p.overview ? `overview: ${cut(p.overview, 220)}` : '',
     items.length ? `items (${(p.items || []).length}): ${items.join(' | ')}` : 'items: none',
     secrets.length ? `secrets (${(p.secrets || []).length}): ${secrets.join(' | ')}` : '',
+    fights.length ? `key fights (${(p.fights || []).length}): ${fights.join(' | ')}` : 'key fights: none',
     enemies.length ? `enemies (${(p.enemies || []).length}): ${enemies.join(' | ')}` : '',
     shops.length ? `shops: ${shops.join(' | ')}` : '',
     sections.length ? `sections: ${sections.join(' || ')}` : '',
@@ -144,7 +146,10 @@ function prompt(game: string, released: string, layout: string, buildMode: strin
     `Grade it on:`,
     `(a) structure: every page should be the same kind of unit for this game (places/regions, or the game's chapters/levels).`,
     `    A mix of places, characters, topics or generic labels ("The Fortress of the Antagonist") is a problem.`,
-    `(b) coverage: does the page count and content fit the game's size and type? Missing major areas or chapters?`,
+    `(b) coverage: does the page count and content fit the game's size and type? Missing major areas or chapters? ` +
+      `Missing major fights: a boss or major set-piece battle you know happens in an area (a siege, a gate defence, an ` +
+      `ambush the story forces) with no "key fights" entry on that page is a coverage problem; name each one ` +
+      `("Emerald Grove: no key fight for the goblin attack on the gate"). Ordinary enemies don't need one.`,
     `(c) depth: does each page have real entries (named items, missables, where/how to find them)? Flag thin or generic pages.`,
     newer
       ? `(d) knowledge: SKIP THIS. The game is newer than your knowledge, so you can't tell its real names from invented ones;\n` +

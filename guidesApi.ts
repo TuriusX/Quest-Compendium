@@ -103,6 +103,7 @@ function localizePage(p: any, t: any) {
     secrets: merge(p.secrets, x.secrets),
     enemies: merge(p.enemies, x.enemies),
     shops: merge(p.shops, x.shops),
+    fights: merge(p.fights || [], x.fights),
     tips: Array.isArray(x.tips) && x.tips.length === p.tips.length ? x.tips : p.tips,
     sections: p.sections.map((sec: any, i: number) => ({
       ...sec,
@@ -257,6 +258,8 @@ export function registerGuidesApi(app: Express): void {
           key, slug, name: a.name, story: a.story || '', overview: a.overview || '',
           items: clean(a.items), secrets: clean(a.secrets), enemies: clean(a.enemies), shops: clean(a.shops),
           tips: Array.isArray(a.tips) ? a.tips : [],
+          // Key fights: bosses and set-piece battles, with what it takes to win them.
+          fights: (Array.isArray(a.fights) ? a.fights : []).map(({ sources, updatedFrom, ...x }: any) => x).filter((x: any) => x && x.name),
           // Structure-specific sections (a calendar page's deadlines, missable events, social links, activities).
           sections: Array.isArray(a.sections)
             ? a.sections.map((x: any) => ({ title: String(x.title || ''), check: !!x.check, entries: (x.entries || []).map((e: any) => ({ id: String(e.id), text: String(e.text || '') })) }))
@@ -325,6 +328,8 @@ export type GuidePageForPlace = {
   overview: string;
   items: any[]; secrets: any[]; enemies: any[]; shops: any[]; tips: string[];
   sections: { title: string; check: boolean; entries: { id: string; text: string }[] }[];
+  /** Key fights (bosses and set-piece battles). */
+  fights: { id: string; name: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
 };
 
 /**
@@ -356,6 +361,7 @@ export async function guidePageFor(game: string | undefined, place: string | und
         items: a.items || [], secrets: a.secrets || [], enemies: a.enemies || [], shops: a.shops || [],
         tips: Array.isArray(a.tips) ? a.tips : [],
         sections: Array.isArray(a.sections) ? a.sections : [],
+        fights: Array.isArray(a.fights) ? a.fights.filter((x: any) => x && x.name) : [],
       };
     });
   } catch {
@@ -378,6 +384,7 @@ export function guideNotesForPrompt(pg: GuidePageForPlace): string {
     lines.push(`Enemy: ${e.name}${!blankish(e.weakness) ? `, weak to ${e.weakness}` : ''}${!blankish(e.steal) ? `, steal/drop ${e.steal}` : ''}${!blankish(e.notes) ? ` (${e.notes})` : ''}`);
   for (const e of pg.shops.slice(0, 6)) lines.push(`Shop/NPC: ${e.name}${!blankish(e.sells) ? `: ${e.sells}` : ''}`);
   for (const t of pg.tips.slice(0, 5)) lines.push(`Tip: ${t}`);
+  for (const f of (pg.fights || []).slice(0, 4)) lines.push(`Key fight: ${f.name}${f.enemies ? ` (${f.enemies})` : ''}`);
   const body = lines.map((l) => `- ${l}`).join('\n').slice(0, 2400);
   return pg.verified
     ? `[GUIDE NOTES FOR ${pg.name} (from the Quest Compendium guide, checked against sources): use these]\n${body}`
@@ -385,6 +392,10 @@ export function guideNotesForPrompt(pg: GuidePageForPlace): string {
         'use them for general guidance about this place (what is here, what is easy to miss), but verify exact numbers ' +
         '(weaknesses, stats, prices) before stating them, and trust what is actually on screen over these notes]\n' + body;
 }
+
+/** A key fight as one line: "Gate defence: enemies Za'Krug, goblin archers; threats …; weak to …; tactics …; rewards …". */
+export const fightLine = (f: { name: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }) =>
+  [f.name, f.enemies && `enemies ${f.enemies}`, f.threats && `threats ${f.threats}`, f.weaknesses && `weaknesses/resistances ${f.weaknesses}`, f.tactics && `tactics ${f.tactics}`, f.rewards && `rewards ${f.rewards}`].filter(Boolean).join('; ');
 
 const FIGHT = /\b(fight|fights|battle|boss|ambush|defeat|kill|attack|attacks|defend|defenders?|defen[cs]e|enemies|enemy|hostiles?|combat|encounter|raid|assault|siege|horde|wave)\b/i;
 
@@ -395,6 +406,7 @@ const FIGHT = /\b(fight|fights|battle|boss|ambush|defeat|kill|attack|attacks|def
  */
 export function guideFightNotes(pg: GuidePageForPlace): string {
   const lines: string[] = [];
+  for (const f of pg.fights || []) lines.push(`Key fight: ${fightLine(f)}`);
   for (const e of pg.enemies)
     lines.push(`Enemy: ${e.name}${!blankish(e.weakness) ? `; weak to ${e.weakness}` : ''}${!blankish(e.steal) ? `; steal/drop ${e.steal}` : ''}${!blankish(e.notes) ? `; ${e.notes}` : ''}`);
   // A line is about fighting if it says so, or names one of this area's enemies ("Harpy" also finds "Harpies").

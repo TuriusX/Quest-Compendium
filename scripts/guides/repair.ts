@@ -18,6 +18,8 @@
  *   outline  A fresh staged build in the outline the review named (quick for games older than the cutoff).
  *   extend   More pages for a guide (the 3-week revisit of a new release): a staged copy plus careful pages.
  *   upgrade  The guide's quick pages checked the careful way, in a staged copy.
+ *   fights   Key fights (bosses, set-piece battles) for published pages that have none (scripts/guides/fights.ts),
+ *            in a staged copy: quick pages of games older than the cutoff without searches, the rest with searches.
  *   careful  A fresh staged build with research, up to the search cap. A build that stops at the cap continues on
  *            the next run (the staged pages are kept); only a finished build goes to the gate.
  * A guide can override its outline for outline and careful rebuilds: guides/{key}.outline = { layout, extraPages:
@@ -33,12 +35,13 @@ import { estimateCost } from '../../usage';
 import { stageCopy, discard } from './promote';
 import { reviewGuide, gateGuide, type Review } from './review';
 import { FLASH_REVIEW_MODEL, ProQuotaWait, type ReviewTier } from './reviewerQuota';
+import { writeFights } from './fights';
 
 // Page fixes are Flash work (reviewerQuota.ts): the fix plan and the fixed guide's gate.
 const PLAN_MODEL = FLASH_REVIEW_MODEL;
 const key = liveKey(arg('key') || (arg('game') && arg('game') !== 'true' ? gameKey(arg('game')!) : ''));
-const ACTIONS = ['fix', 'outline', 'careful', 'extend', 'upgrade'];
-const action = arg('action') as 'fix' | 'outline' | 'careful' | 'extend' | 'upgrade';
+const ACTIONS = ['fix', 'outline', 'careful', 'extend', 'upgrade', 'fights'];
+const action = arg('action') as 'fix' | 'outline' | 'careful' | 'extend' | 'upgrade' | 'fights';
 const gameArg = arg('game') && arg('game') !== 'true' ? arg('game')! : '';
 /** outline only: a game newer than the quick cutoff isn't built (the pipeline queues a careful build instead). */
 const quickOnly = arg('quick-only') === 'true';
@@ -180,7 +183,7 @@ async function fix(game: string, review: Review, newer: boolean): Promise<boolea
 
 async function main() {
   if (!key || !ACTIONS.includes(action)) {
-    console.log('Usage: npx tsx scripts/guides/repair.ts --key key [--game "Name"] --action fix|outline|careful|extend|upgrade [--plan-only] [--quick-only] [--report "text"] [--max-searches 300]');
+    console.log('Usage: npx tsx scripts/guides/repair.ts --key key [--game "Name"] --action fix|outline|careful|extend|upgrade|fights [--plan-only] [--quick-only] [--report "text"] [--max-searches 300]');
     process.exit(1);
   }
   const live: any = (await db().collection('guides').doc(key).get()).data();
@@ -199,12 +202,28 @@ async function main() {
   // The final gate's reviewer: Pro for careful builds and rebuilds (anything that ends up Checked), Flash for page
   // fixes and quick rebuilds. A careful build whose gate had to wait for Pro (its daily requests used up) goes straight
   // to the gate on the next run, without building again.
-  const tier: ReviewTier = action === 'fix' || (action === 'outline' && !newer) ? 'flash' : 'pro';
+  let tier: ReviewTier = action === 'fix' || (action === 'outline' && !newer) ? 'flash' : 'pro';
   const waiting: any = (await db().collection('guides').doc(stageKey(key)).get()).data();
+  // Key fights: Pro when any page was searched (it ends up Checked), Flash when every page was quick.
+  if (action === 'fights' && waiting?.fightsTier) tier = waiting.fightsTier;
   const gateOnly = !!waiting?.awaitingGate && waiting.repair === action;
   let ready = true;
   if (gateOnly) console.log('Repair: built earlier; its review waited for the Pro reviewer, so it goes straight to the gate.');
-  else if (action === 'fix') {
+  else if (action === 'fights') {
+    if (!live) throw new Error(`no guide ${key}`);
+    await discard(key);
+    await stageCopy(key);
+    const r = await writeFights(key, game, live, maxSearches);
+    searches += r.searches;
+    dollars += r.dollars;
+    tier = r.tier;
+    await db().collection('guides').doc(stageKey(key)).set({ repair: action, fightsTier: r.tier }, { merge: true });
+    if (!r.found) {
+      ready = false;
+      await discard(key);
+      console.log('Gate: skipped (no key fights to add).');
+    }
+  } else if (action === 'fix') {
     // A guide reviewed before (or a player report about one that wasn't): review it first.
     if (!review) {
       const r = await reviewGuide(key, { save: true, verify: false, tier: 'flash' });

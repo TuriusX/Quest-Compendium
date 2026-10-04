@@ -21,7 +21,7 @@
 import crypto from 'crypto';
 import type { Express, Request, Response, NextFunction } from 'express';
 import { getFirestore } from 'firebase-admin/firestore';
-import type { GuidePageForPlace } from './guidesApi';
+import { fightLine, type GuidePageForPlace } from './guidesApi';
 
 type Mw = (req: Request, res: Response, next: NextFunction) => any;
 
@@ -66,7 +66,8 @@ export function isPushback(question: string): boolean {
 
 const norm = (s: unknown) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
-export type EntryRef = { id: string; kind: 'item' | 'secret' | 'section'; name: string; text: string };
+/** A guide entry a candidate is about; 'fight' is a missing key fight (missingFights.ts), not on the page yet. */
+export type EntryRef = { id: string; kind: 'item' | 'secret' | 'section' | 'fight'; name: string; text: string };
 
 /**
  * The guide entry a correction names: an item by its name, else a secret or checklist line whose text starts with (or
@@ -150,16 +151,20 @@ export function looksLikeSpam(text: string): boolean {
  */
 export async function saveCandidate(c: {
   gameKey: string; game: string; area: string; areaName: string; entry: EntryRef;
-  claim: string; field: CorrectionOut['field']; via: 'pushback' | 'contradiction' | 'report' | 'command';
+  claim: string; field: CorrectionOut['field']; via: 'pushback' | 'contradiction' | 'report' | 'command' | 'combat';
   question?: string; reporterKey: string; source: CorrectionSource; weight: number; guest?: boolean;
   dailyLimit?: number; extra?: Record<string, unknown>;
+  /** One report per reporter for this entry, whatever it says (a missing fight: each player's battle plan differs). */
+  oncePerReporter?: boolean;
+  /** Fields for a new group (a missing fight's enemies). */
+  groupExtra?: Record<string, unknown>;
 }): Promise<string | null> {
   if (!allowed(`${c.source}:${c.reporterKey}`, c.dailyLimit ?? 20)) return null;
   const gid = groupId(c.gameKey, c.area, c.entry.id);
   try {
     // The same reporter repeating the same correction for the same entry counts once.
     const dupe = await getFirestore().collection('corrections').where('groupId', '==', gid).where('reporterKey', '==', c.reporterKey).limit(5).get();
-    if (dupe.docs.some((d) => norm(d.data().claim) === norm(c.claim))) return null;
+    if (dupe.docs.some((d) => c.oncePerReporter || norm(d.data().claim) === norm(c.claim))) return null;
     const ref = await getFirestore().collection('corrections').add({
       gameKey: c.gameKey, game: c.game.slice(0, 120), area: c.area, areaName: c.areaName,
       entryId: c.entry.id, entryKind: c.entry.kind, entryName: c.entry.name, guideText: c.entry.text.slice(0, 600),
@@ -179,7 +184,7 @@ export async function saveCandidate(c: {
       await gref.set({
         gameKey: c.gameKey, game: c.game.slice(0, 120), area: c.area, areaName: c.areaName,
         entryId: c.entry.id, entryKind: c.entry.kind, entryName: c.entry.name, guideText: c.entry.text.slice(0, 600),
-        status: 'pending', createdAt: Date.now(), ...summary,
+        status: 'pending', createdAt: Date.now(), ...summary, ...(c.groupExtra || {}),
       });
     }
     return ref.id;
@@ -254,6 +259,8 @@ export async function verifiedCorrectionsForPrompt(gameKey: string, slug: string
       .filter((g) => g.status === 'verified' && g.verifiedText)
       .map((g) => {
         const v = g.verifiedText || {};
+        // A missing fight that was verified: the key fight as the guide will have it.
+        if (g.entryKind === 'fight' && v.fight) return `- Key fight: ${fightLine(v.fight)}`;
         const parts = [v.where && `where: ${v.where}`, v.how && `how: ${v.how}`, v.notes && `notes: ${v.notes}`].filter(Boolean).join('; ');
         return parts ? `- ${g.entryName}: ${parts}` : '';
       })

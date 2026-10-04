@@ -34,6 +34,7 @@ type Tr = {
   secrets: { id: string; text?: string }[];
   enemies: { id: string; name?: string; weakness?: string; steal?: string; notes?: string }[];
   shops: { id: string; name?: string; sells?: string }[];
+  fights?: { id: string; name?: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
   tips: string[];
   sections: { title: string; entries: { id: string; text: string }[] }[];
   src: number;
@@ -47,6 +48,7 @@ function source(a: GuideArea) {
     secrets: a.secrets.map((e) => ({ id: e.id, text: e.text })),
     enemies: a.enemies.map((e) => ({ id: e.id, name: e.name, weakness: e.weakness, steal: e.steal, notes: e.notes })),
     shops: a.shops.map((e) => ({ id: e.id, name: e.name, sells: e.sells })),
+    fights: (a.fights || []).map((e) => ({ id: e.id, name: e.name, enemies: e.enemies, threats: e.threats, weaknesses: e.weaknesses, tactics: e.tactics, rewards: e.rewards })),
     tips: a.tips || [],
     sections: (a.sections || []).map((x) => ({ title: x.title, entries: x.entries.map((e) => ({ id: e.id, text: e.text })) })),
   };
@@ -58,7 +60,7 @@ function sameShape(src: ReturnType<typeof source>, tr: any): boolean {
   const ids = (l: any[]) => (Array.isArray(l) ? l.map((e) => String(e?.id)).join(',') : '');
   return (
     ids(tr.items) === ids(src.items) && ids(tr.secrets) === ids(src.secrets) && ids(tr.enemies) === ids(src.enemies) &&
-    ids(tr.shops) === ids(src.shops) && Array.isArray(tr.tips) && tr.tips.length === src.tips.length &&
+    ids(tr.shops) === ids(src.shops) && ids(tr.fights || []) === ids(src.fights) && Array.isArray(tr.tips) && tr.tips.length === src.tips.length &&
     Array.isArray(tr.sections) && tr.sections.length === src.sections.length &&
     tr.sections.every((x: any, i: number) => ids(x?.entries) === ids(src.sections[i].entries))
   );

@@ -46,7 +46,7 @@
 import {
   db, gemini, MODEL, gameKey, arg, editionOf, editionNote, searchesIn, visitName, cleanAreaName, resolveArea, normalizeVisits, isLayout,
   LAYOUTS, LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, guideRelease, releasedAfter, stageKey,
-  type GuideArea, type GuideEntry, type GuideSection, type Layout,
+  type GuideArea, type GuideEntry, type GuideSection, type GuideFight, type Layout,
 } from './common';
 import { stageCopy } from './promote';
 import { getGameFacts, saveGameFacts, recordMonthly } from '../../searchGuard';
@@ -300,6 +300,8 @@ type Parsed = {
   overview: GuideEntry | null; items: GuideEntry[]; secrets: GuideEntry[]; enemies: GuideEntry[]; shops: GuideEntry[]; tips: GuideEntry[];
   /** Structure-specific details: DEADLINE, MISSABLE, ACTIVITY, LINK lines. */
   extra: Record<string, GuideEntry[]>;
+  /** FIGHT lines: the area's key fights (bosses and set-piece battles). */
+  fights: GuideFight[];
 };
 
 /** What a page is about, in words the writing prompt can use. */
@@ -327,6 +329,7 @@ const detailFormats = () =>
   'SECRET: hidden thing and how to find it\n' +
   'ENEMY: enemy name | weakness (empty if it has none or the game has no weaknesses) | what can be stolen, or a notable drop (only if the game has stealing or drops worth noting; otherwise empty) | short note\n' +
   'SHOP: shop or NPC name | what they sell or offer\n' +
+  'FIGHT: name of a boss or major set-piece battle here | the enemies | their notable abilities and threats | weaknesses and resistances | the tactics and positions that win it | the rewards (one line per key fight; never ordinary enemies; leave out if there are none)\n' +
   'TIP: short practical tip';
 
 /** Structure-specific sections for the page, from the extra detail lines. */
@@ -351,10 +354,10 @@ async function research(area: { name: string; story: string; group?: string }): 
 
 /** Read the one-detail-per-line reply. `real` = the websites backing each line (empty lists in quick mode). */
 function parseDetails(text: string, real: Set<string>[]): Parsed {
-  const out: Parsed = { overview: null, items: [], secrets: [], enemies: [], shops: [], tips: [], extra: {} };
+  const out: Parsed = { overview: null, items: [], secrets: [], enemies: [], shops: [], tips: [], extra: {}, fights: [] };
   let n = 0;
   text.split('\n').forEach((line, k) => {
-    const m = line.match(/^\s*[-*]?\s*(OVERVIEW|ITEM|SECRET|ENEMY|SHOP|TIP|DEADLINE|MISSABLE|LINK|ACTIVITY):\s*(.+)$/i);
+    const m = line.match(/^\s*[-*]?\s*(OVERVIEW|ITEM|SECRET|ENEMY|SHOP|TIP|DEADLINE|MISSABLE|LINK|ACTIVITY|FIGHT):\s*(.+)$/i);
     if (!m) return;
     const f = m[2].split('|').map((x) => x.trim());
     const sources = [...(real[k] || [])];
@@ -366,6 +369,11 @@ function parseDetails(text: string, real: Set<string>[]): Parsed {
       case 'ENEMY': out.enemies.push({ id, name: f[0], weakness: f[1] || '', steal: f[2] || '', notes: f[3] || '', sources }); break;
       case 'SHOP': out.shops.push({ id, name: f[0], sells: f[1] || '', sources }); break;
       case 'TIP': out.tips.push({ id, text: m[2].trim(), sources }); break;
+      case 'FIGHT': {
+        const v = (i: number) => (f[i] && !/^(none|n\/a|-|unknown)$/i.test(f[i]) ? f[i].slice(0, 400) : undefined);
+        if (f[0]) out.fights.push({ id: `f${n}`, name: f[0].slice(0, 100), enemies: v(1), threats: v(2), weaknesses: v(3), tactics: v(4), rewards: v(5), sources });
+        break;
+      }
       case 'LINK': (out.extra.LINK ||= []).push({ id, name: f[0], text: f.slice(1).join(' | '), sources }); break;
       default: (out.extra[m[1].toUpperCase()] ||= []).push({ id, text: m[2].trim(), sources });
     }
@@ -574,6 +582,7 @@ async function mainQuick() {
         items: d.items, secrets: d.secrets, enemies: d.enemies, shops: d.shops,
         tips: d.tips.map((t) => t.text!).slice(0, 6),
         ...(sections.length ? { sections } : {}),
+        ...(d.fights.length ? { fights: d.fights.slice(0, 6).map(({ sources: _s, ...x }) => x) } : {}),
         ...(area.group ? { group: area.group } : {}),
         sources: [],
         // Drafts at first even with --auto-publish: published at the end, only if the guide gets enough pages.
@@ -679,7 +688,7 @@ async function main() {
       const toCheck = claimsFor(area.name, {
         overview: null,
         items: data.items.filter(oneSource), secrets: data.secrets.filter(oneSource),
-        enemies: data.enemies.filter(oneSource), shops: data.shops.filter(oneSource), tips: [], extra: {},
+        enemies: data.enemies.filter(oneSource), shops: data.shops.filter(oneSource), tips: [], extra: {}, fights: [],
       });
       const supported = toCheck.length ? await factCheck(area.name, toCheck) : new Set<string>();
       const keep = (e: GuideEntry) => twoSources(e) || (oneSource(e) && supported.has(e.id));
@@ -703,6 +712,8 @@ async function main() {
         overview: overviewOk ? String(data.overview!.text || '') : '',
         items, secrets, enemies, shops, tips,
         ...(sections.length ? { sections } : {}),
+        // Key fights a real source backs (they're advice as much as facts, so one source is enough, like tips).
+        ...(data.fights.some((x) => (x.sources || []).length >= 1) ? { fights: data.fights.filter((x) => (x.sources || []).length >= 1).slice(0, 6) } : {}),
         ...(area.group ? { group: area.group } : {}),
         sources: usedSources.slice(0, 8),
         status: heldReason ? 'held' : (autoPublish || upgrade) && !stage ? 'published' : 'draft',

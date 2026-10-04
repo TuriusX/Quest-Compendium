@@ -26,6 +26,7 @@ import { registerDiscord } from './discord';
 import { STEPS_RULES, extractSteps } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat } from './answerBar';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
+import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase } from './src/utils/placeName';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
@@ -1520,6 +1521,11 @@ percentages:
       const correctionIds = await saveCorrectionCandidates({
         page: guidePage, corrections: correctionsParsed.corrections, question: String(question || ''), uid: userId, isGuest, game: String(effectiveGame?.name || ''),
       });
+      // A fight on screen that the area's guide page doesn't cover: a missing-fight candidate (the fight, its enemies
+      // and the battle plan's steps; no conversation text). In the background: the answer doesn't wait for it.
+      if (combatParsed.combat && guidePage) {
+        void saveMissingFight({ page: guidePage, combat: combatParsed, steps: stepsParsed.steps, uid: userId, isGuest, game: String(effectiveGame?.name || '') });
+      }
       if (searchesUsed > 0) recordSearches(searchCtx, searchesUsed);
       // Only file a fact under a place or story point that's actually known: confirmed by the player, or settled on
       // screen. A guessed place would put facts in the wrong spot for everyone.
