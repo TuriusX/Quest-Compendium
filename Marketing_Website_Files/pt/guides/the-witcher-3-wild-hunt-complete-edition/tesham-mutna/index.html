@@ -94,6 +94,10 @@
       <h2 class="text-base font-bold text-white">Reportar um erro</h2>
       <label class="block text-sm text-zinc-400" for="qc-report-text">O que está errado nesta página? Cite o item, local ou detalhe, se puder.</label>
       <textarea id="qc-report-text" rows="4" minlength="5" maxlength="1000" required class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"></textarea>
+      <label class="block text-sm text-zinc-400" for="qc-report-entry">Qual entrada está incorreta? (opcional)</label>
+      <select id="qc-report-entry" class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"><option value="">Não tenho certeza ou a página inteira</option><option value="x1">Armadura de Tesham Mutna</option><option value="x2">Máscara de Tesham Mutna</option><option value="x3">Calças de Tesham Mutna</option><option value="x4">Botas de Tesham Mutna</option><option value="x5">Espada de aço de Tesham Mutna</option></select>
+      <label class="block text-sm text-zinc-400" for="qc-report-correct">Qual é o correto? (opcional)</label>
+      <input id="qc-report-correct" maxlength="300" placeholder="ex.: fica embaixo da pedra perto do tronco caído, não nos penhascos a oeste" class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100">
       <p data-report-status class="text-sm text-zinc-300" hidden></p>
       <div class="flex justify-end gap-2">
         <button value="cancel" formnovalidate class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white">Cancelar</button>
@@ -156,13 +160,14 @@
   var dlg=document.getElementById('qc-report');
   if(dlg&&dlg.showModal){
     var ta=dlg.querySelector('textarea'), st=dlg.querySelector('[data-report-status]'), send=dlg.querySelector('[data-report-send]');
-    document.querySelectorAll('[data-report]').forEach(function(btn){btn.addEventListener('click',function(){st.hidden=true;ta.value='';send.disabled=false;dlg.showModal();});});
+    var pick=document.getElementById('qc-report-entry'), fix=document.getElementById('qc-report-correct');
+    document.querySelectorAll('[data-report]').forEach(function(btn){btn.addEventListener('click',function(){st.hidden=true;ta.value='';if(pick)pick.value='';if(fix)fix.value='';send.disabled=false;dlg.showModal();});});
     dlg.querySelector('form').addEventListener('submit',function(e){
       if(e.submitter&&e.submitter.value==='cancel')return;
       e.preventDefault();
       var t=ta.value.trim(); if(t.length<5)return;
       send.disabled=true;
-      fetch(dlg.getAttribute('data-api'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:K||'',page:S||'',text:t,lang:dlg.getAttribute('data-lang')||'en',path:location.pathname})})
+      fetch(dlg.getAttribute('data-api'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:K||'',page:S||'',text:t,entry:pick?pick.value:'',correct:fix?fix.value.trim():'',lang:dlg.getAttribute('data-lang')||'en',path:location.pathname})})
         .then(function(r){if(!r.ok)throw 0;st.textContent=dlg.getAttribute('data-thanks');st.hidden=false;setTimeout(function(){dlg.close();},1800);})
         .catch(function(){st.textContent=dlg.getAttribute('data-error');st.hidden=false;send.disabled=false;});
     });

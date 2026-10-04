@@ -96,6 +96,10 @@
       <h2 class="text-base font-bold text-white">Report a mistake</h2>
       <label class="block text-sm text-zinc-400" for="qc-report-text">What&#39;s wrong on this page? Name the item, place or detail if you can.</label>
       <textarea id="qc-report-text" rows="4" minlength="5" maxlength="1000" required class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"></textarea>
+      <label class="block text-sm text-zinc-400" for="qc-report-entry">Which entry is wrong? (optional)</label>
+      <select id="qc-report-entry" class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"><option value="">Not sure, or the whole page</option><option value="x1">Skill Book: The Mirror</option><option value="x2">Soul Gem (Lesser)</option><option value="x3">The Soul Gem Cache | Check the bookshelf in secret corners of Jouane M</option></select>
+      <label class="block text-sm text-zinc-400" for="qc-report-correct">What&#39;s correct? (optional)</label>
+      <input id="qc-report-correct" maxlength="300" placeholder="e.g. it&#39;s under the rock by the fallen log, not on the western cliffs" class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100">
       <p data-report-status class="text-sm text-zinc-300" hidden></p>
       <div class="flex justify-end gap-2">
         <button value="cancel" formnovalidate class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white">Cancel</button>
@@ -158,13 +162,14 @@
   var dlg=document.getElementById('qc-report');
   if(dlg&&dlg.showModal){
     var ta=dlg.querySelector('textarea'), st=dlg.querySelector('[data-report-status]'), send=dlg.querySelector('[data-report-send]');
-    document.querySelectorAll('[data-report]').forEach(function(btn){btn.addEventListener('click',function(){st.hidden=true;ta.value='';send.disabled=false;dlg.showModal();});});
+    var pick=document.getElementById('qc-report-entry'), fix=document.getElementById('qc-report-correct');
+    document.querySelectorAll('[data-report]').forEach(function(btn){btn.addEventListener('click',function(){st.hidden=true;ta.value='';if(pick)pick.value='';if(fix)fix.value='';send.disabled=false;dlg.showModal();});});
     dlg.querySelector('form').addEventListener('submit',function(e){
       if(e.submitter&&e.submitter.value==='cancel')return;
       e.preventDefault();
       var t=ta.value.trim(); if(t.length<5)return;
       send.disabled=true;
-      fetch(dlg.getAttribute('data-api'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:K||'',page:S||'',text:t,lang:dlg.getAttribute('data-lang')||'en',path:location.pathname})})
+      fetch(dlg.getAttribute('data-api'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:K||'',page:S||'',text:t,entry:pick?pick.value:'',correct:fix?fix.value.trim():'',lang:dlg.getAttribute('data-lang')||'en',path:location.pathname})})
         .then(function(r){if(!r.ok)throw 0;st.textContent=dlg.getAttribute('data-thanks');st.hidden=false;setTimeout(function(){dlg.close();},1800);})
         .catch(function(){st.textContent=dlg.getAttribute('data-error');st.hidden=false;send.disabled=false;});
     });

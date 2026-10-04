@@ -105,6 +105,10 @@
       <h2 class="text-base font-bold text-white">Report a mistake</h2>
       <label class="block text-sm text-zinc-400" for="qc-report-text">What&#39;s wrong on this page? Name the item, place or detail if you can.</label>
       <textarea id="qc-report-text" rows="4" minlength="5" maxlength="1000" required class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"></textarea>
+      <label class="block text-sm text-zinc-400" for="qc-report-entry">Which entry is wrong? (optional)</label>
+      <select id="qc-report-entry" class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"><option value="">Not sure, or the whole page</option><option value="x18">Holy Stone</option><option value="x19">Bringing a Persona of the matching Arcana when hanging out with a Conf</option><option value="x4">Unlocking the third semester Palace and story requires Takuto Maruki t</option><option value="x5">Goro Akechi&#39;s Rank 7 and 8 must be completed before November 18, and s</option><option value="x6">Kasumi Yoshizawa&#39;s Faith Confidant caps at Rank 5; failing to reach Ra</option><option value="x7">Sadayo Kawakami&#39;s Rank 8 request in Mementoes must be cleared to progr</option><option value="x8">Toranosuke Yoshida (Sun) becomes unavailable after mid-November due to</option><option value="x9">Takuto Maruki (Councillor): Available at Shujin Academy practice build</option><option value="x10">Sadayo Kawakami (Temperance): Initiate after the maid operation event </option><option value="x11">Chihaya Mifune (Fortune): Located in Shinjuku at night; pay 100,000 ye</option><option value="x12">Hifumi Togo (Star): Found in the Kanda church during evenings once Cha</option><option value="x13">Ryuji Sakamoto (Chariot): Hang out at school or Shibuya arcade; Rank 7</option><option value="x14">Yuuki Mishima (Moon): Progresses entirely through completing Mementos </option><option value="x15">Toranosuke Yoshida (Sun): Work at the Shibuya beef bowl shop twice to </option></select>
+      <label class="block text-sm text-zinc-400" for="qc-report-correct">What&#39;s correct? (optional)</label>
+      <input id="qc-report-correct" maxlength="300" placeholder="e.g. it&#39;s under the rock by the fallen log, not on the western cliffs" class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100">
       <p data-report-status class="text-sm text-zinc-300" hidden></p>
       <div class="flex justify-end gap-2">
         <button value="cancel" formnovalidate class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white">Cancel</button>
@@ -167,13 +171,14 @@
   var dlg=document.getElementById('qc-report');
   if(dlg&&dlg.showModal){
     var ta=dlg.querySelector('textarea'), st=dlg.querySelector('[data-report-status]'), send=dlg.querySelector('[data-report-send]');
-    document.querySelectorAll('[data-report]').forEach(function(btn){btn.addEventListener('click',function(){st.hidden=true;ta.value='';send.disabled=false;dlg.showModal();});});
+    var pick=document.getElementById('qc-report-entry'), fix=document.getElementById('qc-report-correct');
+    document.querySelectorAll('[data-report]').forEach(function(btn){btn.addEventListener('click',function(){st.hidden=true;ta.value='';if(pick)pick.value='';if(fix)fix.value='';send.disabled=false;dlg.showModal();});});
     dlg.querySelector('form').addEventListener('submit',function(e){
       if(e.submitter&&e.submitter.value==='cancel')return;
       e.preventDefault();
       var t=ta.value.trim(); if(t.length<5)return;
       send.disabled=true;
-      fetch(dlg.getAttribute('data-api'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:K||'',page:S||'',text:t,lang:dlg.getAttribute('data-lang')||'en',path:location.pathname})})
+      fetch(dlg.getAttribute('data-api'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:K||'',page:S||'',text:t,entry:pick?pick.value:'',correct:fix?fix.value.trim():'',lang:dlg.getAttribute('data-lang')||'en',path:location.pathname})})
         .then(function(r){if(!r.ok)throw 0;st.textContent=dlg.getAttribute('data-thanks');st.hidden=false;setTimeout(function(){dlg.close();},1800);})
         .catch(function(){st.textContent=dlg.getAttribute('data-error');st.hidden=false;send.disabled=false;});
     });
