@@ -167,6 +167,34 @@ async function applyToGuide(gameKey: string, game: string, groups: { id: string;
   return r.review ? gateGuide(stageKey(gameKey), game, r.review) : 'Gate: failed (nothing to review).';
 }
 
+/**
+ * Tell Discord how it went: for each report from /correction on an entry that was just applied or dismissed, one post
+ * in the results channel (with a link to the report). Each report is announced once. Needs DISCORD_BOT_TOKEN and
+ * DISCORD_RESULTS_CHANNEL_ID; skipped quietly without them.
+ */
+async function announce(groupId: string, outcome: 'applied' | 'dismissed', g: any, why = '') {
+  const token = process.env.DISCORD_BOT_TOKEN, channel = process.env.DISCORD_RESULTS_CHANNEL_ID;
+  if (!token || !channel || dryRun) return;
+  const reports = (await db().collection('corrections').where('groupId', '==', groupId).where('source', '==', 'discord').get()).docs.filter((d) => !d.data().announced);
+  for (const d of reports) {
+    const link = d.data().discord?.link ? ` (${d.data().discord.link})` : '';
+    const content = outcome === 'applied'
+      ? `✅ Correction applied: **${g.entryName}** in ${g.game} · ${g.areaName} is updated in the guide. Thanks!${link}`
+      : `❌ Correction not applied: **${g.entryName}** in ${g.game} · ${g.areaName}.${why ? ` ${why}` : ''}${link}`;
+    try {
+      const r = await fetch(`https://discord.com/api/v10/channels/${channel}/messages`, {
+        method: 'POST',
+        headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: content.slice(0, 1900), allowed_mentions: { parse: [] }, flags: 4 }), // 4: no link preview
+      });
+      if (r.ok) await d.ref.update({ announced: outcome, announcedAt: Date.now() });
+      else console.warn(`  Discord post failed: ${r.status} ${(await r.text()).slice(0, 120)}`);
+    } catch (e: any) {
+      console.warn(`  Discord post failed: ${e?.message}`);
+    }
+  }
+}
+
 async function main() {
   // Entries with new reports, and ones an admin approved.
   const pending = onlyGroup
@@ -255,6 +283,7 @@ async function main() {
     }, { merge: true });
     // Reports stay new (checked again next run) when the reviewer couldn't look.
     if (!/reviewer unavailable/.test(reviewer.reason)) for (const d of reportDocs) if (d.data().status === 'pending') await d.ref.update({ status: 'grouped' });
+    if (status === 'dismissed') await announce(id, 'dismissed', g, 'Sources say the guide was right.');
     if (status === 'verified') {
       if (!toApply.has(g.gameKey)) toApply.set(g.gameKey, { game: g.game, groups: [] });
       toApply.get(g.gameKey)!.groups.push({ id, g, rewrite, checked });
@@ -276,7 +305,10 @@ async function main() {
     console.log(`\n${game}: ${groups.length} correction(s) written into a staged copy. ${gate}`);
     if (/^Gate: passed/.test(gate)) {
       applied += groups.length;
-      for (const { id } of groups) await db().collection('correctionGroups').doc(id).set({ status: 'applied', appliedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+      for (const { id, g } of groups) {
+        await db().collection('correctionGroups').doc(id).set({ status: 'applied', appliedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+        await announce(id, 'applied', g);
+      }
     }
   }
   console.log(`Done: corrections: ${verified} verified, ${applied} applied to guides, ${dismissed} dismissed, ${waiting} waiting for more reports or a decision; ${searches} searches used, estimated AI cost ≈ $${dollars.toFixed(2)}.`);

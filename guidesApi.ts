@@ -112,6 +112,39 @@ function localizePage(p: any, t: any) {
   };
 }
 
+/** Every game with a published guide (cached): the apps' guide list, and the Discord bot's game autocomplete. */
+export function guideList(): Promise<{ key: string; game: string; areas: number; art?: string }[]> {
+  return cached('list', async () => {
+    const docs = await getFirestore().collection('guides').get();
+    const out: { key: string; game: string; areas: number; art?: string }[] = [];
+    for (const d of docs.docs) {
+      if (d.id.endsWith('--next')) continue; // a staged rebuild, not a guide (scripts/guides/promote.ts)
+      const g = await gameAreas(d.id);
+      if (g) out.push({ key: g.key, game: g.game, areas: g.areas.length, art: g.art });
+    }
+    return out.sort((a, b) => a.game.localeCompare(b.game));
+  });
+}
+
+/** A guide's published areas in order, by its key (cached): the Discord bot's area autocomplete. */
+export async function guideAreasByKey(key: string): Promise<{ game: string; areas: { slug: string; name: string }[] } | null> {
+  const g = await gameAreas(key);
+  return g ? { game: g.game, areas: g.areas.map((a: any) => ({ slug: a.slug, name: a.name })) } : null;
+}
+
+/** One published area page's raw entries, by key and slug (cached): the Discord bot's entry autocomplete. */
+export async function guideAreaEntries(key: string, slug: string): Promise<{ id: string; label: string }[]> {
+  return cached(`entries:${key}:${slug}`, async () => {
+    const d: any = (await getFirestore().collection('guides').doc(key).collection('areas').doc(slug).get()).data();
+    if (!d || d.status !== 'published') return [];
+    return [
+      ...(d.items || []).map((e: any) => ({ id: String(e.id), label: String(e.name || '') })),
+      ...(d.secrets || []).map((e: any) => ({ id: String(e.id), label: String(e.text || e.name || '').slice(0, 90) })),
+      ...(d.sections || []).filter((x: any) => x.check).flatMap((x: any) => (x.entries || []).map((e: any) => ({ id: String(e.id), label: String(e.text || '').slice(0, 90) }))),
+    ].filter((e) => e.id && e.label);
+  });
+}
+
 export function registerGuidesApi(app: Express): void {
   const send = (res: any, data: any) => {
     res.set('Cache-Control', 'public, max-age=300');
@@ -124,17 +157,7 @@ export function registerGuidesApi(app: Express): void {
 
   app.get('/api/guides', async (_req, res) => {
     try {
-      const list = await cached('list', async () => {
-        const docs = await getFirestore().collection('guides').get();
-        const out: { key: string; game: string; areas: number; art?: string }[] = [];
-        for (const d of docs.docs) {
-          if (d.id.endsWith('--next')) continue; // a staged rebuild, not a guide (scripts/guides/promote.ts)
-          const g = await gameAreas(d.id);
-          if (g) out.push({ key: g.key, game: g.game, areas: g.areas.length, art: g.art });
-        }
-        return out.sort((a, b) => a.game.localeCompare(b.game));
-      });
-      send(res, { games: list });
+      send(res, { games: await guideList() });
     } catch (e) {
       fail(res, e);
     }

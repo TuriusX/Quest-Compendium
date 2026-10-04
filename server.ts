@@ -22,6 +22,7 @@ import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe } from './locateMe';
 import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPanel, guideAreasWithPages } from './guidesApi';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
+import { registerDiscord } from './discord';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { samePlace } from './src/utils/placeName';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
@@ -245,6 +246,9 @@ async function startServer() {
     res.json({received: true});
   });
 
+  // The Discord bot's interactions (/correction, the moderators' Confirm button): signed over the raw body, so before
+  // express.json like the Stripe webhook.
+  registerDiscord(app);
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
