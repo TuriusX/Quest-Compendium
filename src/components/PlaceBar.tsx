@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { MapPin, Mic, Check, BookOpen, Crosshair } from './icons';
 import type { ChatMessage } from '../types';
 import { useT } from '../i18n';
+import { storyPhrase } from '../utils/placeName';
 
 /**
  * "Where are you?" and "When in the story?" under an answer, made for controllers: no typing needed.
@@ -113,7 +114,7 @@ export function PlaceBar({
         <div className="inline-flex items-center gap-2 min-w-0 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-[12px]">
           <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-color)]" aria-hidden="true" />
           <span className="text-zinc-200 font-medium">{placeNow || place.name}</span>
-          {(storyNow || place.story) && <span className="text-zinc-400">· {storyNow || place.story}</span>}
+          {(storyNow || place.story) && <span className="text-zinc-400">· {storyPhrase(storyNow || place.story)}</span>}
         </div>
         {reask}
         {!reask && (!placeNow || (place.story && !storyNow)) && (
@@ -167,7 +168,7 @@ export function PlaceBar({
             <span className="font-semibold text-white">{t('place.when')}</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {choices([place.story as string, ...(place.storyOptions || [])], onChooseStory, true)}
+            {choices([place.story as string, ...(place.storyOptions || [])].map((s) => storyPhrase(s)), onChooseStory, true)}
             {!askPlace && say}
           </div>
         </div>

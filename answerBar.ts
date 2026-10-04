@@ -41,3 +41,27 @@ export function isFillerStep(text: string): boolean {
   const t = String(text || '').trim();
   return FILLER.test(t) && t.split(/\s+/).length <= 6;
 }
+
+/**
+ * Precision: the exact action, input and spot. Players follow these to the letter, so "climb the cliff" (when the game
+ * means Jump) or "go over there" leaves them stuck.
+ */
+export const PRECISE_ACTIONS = `Be exact about the action and the spot:
+  - Name the game's own action and its input when it has one (Jump (Z), Shove, Throw, Dip, Sneak, a named spell or
+    item), never a generic verb like "climb", "go" or "get past".
+  - Place the spot by the landmarks the player can see ("the rock ledge right of the burning wreck"), not "over there".
+  - If the screenshot shows the game refusing a move ("Can't reach destination", a greyed-out path), say what to do
+    instead (usually Jump, or another route).`;
+
+/** A vague verb at the start of a step or marker label, where the game's own action would be exact. */
+const CLIMB_LIKE = /^(climb|clamber|scale|go up|get up|head up|make your way up)\b(\s+up\b)?/i;
+
+/**
+ * Sharpen a step or marker label the model wrote vaguely: when the answer itself says to jump, a leading "Climb…" (or
+ * "Scale…", "Go up…") becomes "Jump up…". Returns the text unchanged otherwise, and whether it changed (the server logs it).
+ */
+export function sharpenAction(text: string, answerText: string): { text: string; changed: boolean } {
+  const t = String(text || '');
+  if (!/\bjump/i.test(String(answerText || '')) || !CLIMB_LIKE.test(t)) return { text: t, changed: false };
+  return { text: t.replace(CLIMB_LIKE, 'Jump up'), changed: true };
+}

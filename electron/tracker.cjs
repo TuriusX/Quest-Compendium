@@ -21,6 +21,7 @@
 const path = require('path');
 const fs = require('fs');
 const { BrowserWindow } = require('electron');
+const { formatAccelerator } = require('./accelerator.cjs');
 
 let deps = null;
 let win = null;
@@ -435,8 +436,7 @@ function setScale(n) {
 }
 
 /** The show/hide shortcut as the page shows it ("Ctrl+Space"), or '' when there's none. */
-const keysLabel = () =>
-  keys ? keys.replace(/(CommandOrControl|CmdOrCtrl)/g, process.platform === 'darwin' ? 'Cmd' : 'Ctrl') : '';
+const keysLabel = () => formatAccelerator(keys);
 
 /** The show/hide shortcut changed (or couldn't be registered: ''): the hint follows. */
 function setKeys(accelerator) {

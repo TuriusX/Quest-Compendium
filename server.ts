@@ -24,9 +24,9 @@ import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideLinesForPane
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerDiscord } from './discord';
 import { STEPS_RULES, extractSteps } from './steps';
-import { WORTH_POINTING_OUT, isTrivialMarker } from './answerBar';
+import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction } from './answerBar';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
-import { samePlace } from './src/utils/placeName';
+import { samePlace, storyPhrase } from './src/utils/placeName';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
@@ -988,6 +988,9 @@ The <...> parts are placeholders: always write your own values. Never copy the p
 - "y" and "x" are the center of the thing in the screenshot, normalized to 0-1000 (y from the top edge, x from the left edge).
 - Game world only: markers are for things in the game world (items, containers, enemies, characters, doors, levers, switches, paths and places). Never put a marker on the game's own interface: battle menus, command lists, HP, MP or ATB bars, inventory screens or other HUD elements. Advice about which command to use, whose turn it is, or what to do next belongs in your answer text, not on a marker. The only exception: if the player explicitly asks where something is in a menu, you may point at that menu item.
 - What's worth a marker: ${WORTH_POINTING_OUT}
+- ${PRECISE_ACTIONS}
+- A marker for a move sits on the exact surface or object to use (the rock ledge to jump onto, not the cliff near it),
+  and its label is the action itself: "Jump up here", "Shove this", "Throw at this".
 - Fewer, better markers: never more than 5. If several markers would say the same thing (for example several identical enemies), give the note to one of them and leave the note out on the others, so they show the label alone.
 - Exits and doors are low priority: only mark one if it's clearly visible AND either the player asked how to leave or it's genuinely easy to miss. Markers go to items, secrets, people and hazards first. A normal door isn't worth a marker.
 - Top-down games: exits are often just a gap or a doormat at the bottom edge of the room, and the player's own character may be standing on or in front of it. Stairs, ladders and wall openings are not the exit unless you can see they lead out. If you're not sure where the exit is, don't mark it and don't name a specific spot in your answer; just say to leave the room and which way to go.
@@ -1096,7 +1099,9 @@ Many games reuse near-identical rooms and tiles, so never assume a specific plac
   - "options": always 2 or 3 other places this could be, most likely first, even when you're sure (the player picks one
     with a single tap if your guess is wrong).
   - If a confirmed location is given above and the screen still fits it, repeat that name with sure true.
-  - "story": where the player is in the story, in a few words, e.g. "Early game: Terra, Edgar and Locke heading to Mt. Kolts".
+  - "story": where the player is in the story, as a short quest-log phrase (3 to 8 words, in the player's language), e.g.
+    "Heading to Mt. Kolts with Edgar and Locke" or "Exploring the Nautiloid crash site". Never a sentence about the
+    player ("The player is exploring…"). The same for "storyOptions".
     Many places are visited more than once, and the lead character alone rarely tells you which visit this is.
   - "storySure": true only if the conversation, a confirmed story point above, or something on screen settles it
     (the whole party is visible, a story event is happening). Otherwise false, and don't build the answer on a guess:
@@ -1594,9 +1599,10 @@ percentages:
             .map((o: unknown) => String(o ?? '').trim().slice(0, 80))
             .filter((o: string, i: number, arr: string[]) => o && o.toLowerCase() !== name.toLowerCase() && arr.indexOf(o) === i)
             .slice(0, 3);
-          const story = String(p?.story ?? '').trim().slice(0, 120);
+          // Story beats are quest-log phrases ("Exploring the Nautiloid crash site"), never notes about "the player".
+          const story = storyPhrase(String(p?.story ?? '')).slice(0, 120);
           const storyOptions = (Array.isArray(p?.storyOptions) ? p.storyOptions : [])
-            .map((o: unknown) => String(o ?? '').trim().slice(0, 120))
+            .map((o: unknown) => storyPhrase(String(o ?? '')).slice(0, 120))
             .filter((o: string, i: number, arr: string[]) => o && o.toLowerCase() !== story.toLowerCase() && arr.indexOf(o) === i)
             .slice(0, 3);
           place = { name, sure: p?.sure === true, options, ...(story ? { story, storySure: p?.storySure === true, storyOptions } : {}) };
@@ -1678,10 +1684,12 @@ percentages:
               const detail = String(p?.detail ?? '').trim().slice(0, 400);
               // Obvious low-value things (a corpse in plain view with minor supplies) never become markers.
               if (isTrivialMarker({ label, note, detail, category, missable: p?.missable === true })) continue;
+              // "Climb here" when the answer says to jump: the label names the game's own action.
+              const sharp = sharpenAction(label, cleaned);
               points.push({
                 x: Math.round(x) / 1000,
                 y: Math.round(y) / 1000,
-                label,
+                label: sharp.text.slice(0, 40),
                 ...(where ? { where } : {}),
                 ...(MARKER_CATEGORIES.has(category) ? { category } : {}),
                 ...(note ? { note } : {}),

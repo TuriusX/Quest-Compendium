@@ -18,7 +18,7 @@ import type { Achievement, ChatMessage, GameTab, SteamGameData } from '../types'
 import type { AchievementGuide } from './achievementGuide';
 import { tipMatches } from './achievementGuide';
 import type { GuidePage } from './guideApi';
-import { nameKey, samePlace } from './placeName';
+import { nameKey, samePlace, storyPhrase } from './placeName';
 
 export type TrackerItem = {
   /**
@@ -138,6 +138,58 @@ export function trackedMessage(tab: GameTab | null | undefined, pickedId?: strin
   return undefined;
 }
 
+/** Entries the guide lists separately that are one thing in the game (one chest, one cache), merged on the tracker. */
+export type MergedSpot = { ids: string[]; label: string; missable: boolean; full?: string; where?: string };
+
+const spotKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+/** Named landmarks in a place description: Title Case phrases of two words or more ("Scuffed Rock", "Ornate Chest"). */
+const landmarks = (s: string) => [...String(s || '').matchAll(/\b[A-Z][a-z'’]+(?:\s+(?:of|the)\s+|\s+)[A-Z][a-z'’]+(?:\s+[A-Z][a-z'’]+)*/g)].map((m) => m[0]);
+/**
+ * A short name for the spot: "A Harper cache concealed beneath the Scuffed Rock along the western cliffs; …" becomes
+ * "Harper cache under the Scuffed Rock", "Inside an Ornate Chest concealed underneath the Scuffed Rock" becomes
+ * "Ornate Chest under the Scuffed Rock".
+ */
+function spotName(s: string): string {
+  let t = String(s || '').split(/[;,]|\s+(?:along|near|by|on|at|in|beside|past)\s+the\s+/i)[0].trim();
+  t = t.replace(/^(inside|in|within)\s+/i, '').replace(/^(a|an|the)\s+/i, '');
+  t = t.replace(/\b(concealed|hidden|buried|tucked|stashed)\s+(beneath|underneath|under|below)\b/gi, 'under').replace(/\bunderneath\b/gi, 'under');
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+}
+
+/**
+ * Guide entries that describe the same spot: items with the very same container or location ("Inside an Ornate Chest
+ * concealed underneath the Scuffed Rock"), plus a secret that names one of that spot's landmarks (the Harper cache under
+ * the Scuffed Rock). Only groups of two or more; conservative, so different chests that merely share a word stay apart.
+ */
+export function mergeSameSpot(page: { items: { id: string; name?: string; text?: string; where?: string; missable?: boolean }[]; secrets: { id: string; text?: string; name?: string }[] }): MergedSpot[] {
+  const byWhere = new Map<string, typeof page.items>();
+  for (const e of page.items) {
+    const w = String(e.where || '').trim();
+    if (w.length < 15) continue;
+    const k = spotKey(w);
+    byWhere.set(k, [...(byWhere.get(k) || []), e]);
+  }
+  const used = new Set<string>();
+  const out: MergedSpot[] = [];
+  for (const group of byWhere.values()) {
+    const where = String(group[0].where || '');
+    const marks = landmarks(where).map((m) => m.toLowerCase());
+    const secret = page.secrets.find((s) => !used.has(s.id) && marks.some((m) => String(s.text || s.name || '').toLowerCase().includes(m)));
+    if (group.length + (secret ? 1 : 0) < 2) continue;
+    if (secret) used.add(secret.id);
+    const names = group.map((e) => String(e.name || e.text || '')).filter(Boolean);
+    const spot = spotName(secret ? String(secret.text || secret.name || '') : where) || spotName(where);
+    out.push({
+      ids: [...group.map((e) => e.id), ...(secret ? [secret.id] : [])],
+      label: `${spot}: ${names.join(', ')}`,
+      missable: group.some((e) => e.missable),
+      full: secret ? String(secret.text || secret.name || '') : undefined,
+      where,
+    });
+  }
+  return out;
+}
+
 /** Uncollected first, otherwise in the guide's order. */
 const openFirst = (items: TrackerItem[]) => items.map((it, i) => ({ it, i })).sort((a, b) => Number(!!a.it.done) - Number(!!b.it.done) || a.i - b.i).map((x) => x.it);
 
@@ -176,9 +228,9 @@ export function buildTrackerPayload(
   if (!tabPlace && !steps.length) return null;
 
   const place = tabPlace
-    ? { name: tabPlace.name, story: tabPlace.story, sure: !!tabPlace.confirmed }
+    ? { name: tabPlace.name, story: storyPhrase(tabPlace.story) || undefined, sure: !!tabPlace.confirmed }
     : answerPlace
-      ? { name: answerPlace, story: msg?.storyChosen || msg?.place?.story, sure: !!msg?.placeChosen || !!msg?.place?.sure }
+      ? { name: answerPlace, story: storyPhrase(msg?.storyChosen || msg?.place?.story) || undefined, sure: !!msg?.placeChosen || !!msg?.place?.sure }
       : undefined;
 
   // The quest line: the answer's title (when it's about here), else the guide area's story beat, else the place's story
@@ -215,13 +267,31 @@ export function buildTrackerPayload(
     });
     // A guide entry's notes, for its details.
     const itemMore = (e: { notes?: string }): TrackerDetail => ({ notes: e.notes });
+    // Entries that are really one thing (the Harper's Map and Notebook in the chest under the Scuffed Rock, and the
+    // secret about that cache): one entry listing what's inside, ticked together (its id joins theirs with "+").
+    const merged = mergeSameSpot(page);
+    const mergedEntry = (g: MergedSpot): TrackerItem => ({
+      id: `g:${guideArea.slug}:${g.ids.join('+')}`, label: g.label, done: g.ids.every((id) => done.has(id)), missable: g.missable || undefined, tick: true,
+      detail: detail({ full: g.full, where: g.where }),
+    });
+    /** The merged entry in place of its first part, nothing for its other parts, the entry itself otherwise. */
+    const keep = (id: string, make: () => TrackerItem): TrackerItem | null => {
+      const g = merged.find((m) => m.ids.includes(id));
+      if (!g) return make();
+      return g.ids[0] === id ? mergedEntry(g) : null;
+    };
+    const items = (list: (TrackerItem | null)[]) => list.filter((it): it is TrackerItem => !!it && !!it.label);
     // Missable: the area's missable items and its missable checklist sections (the area page's "Don't miss").
     const missSec = (page.sections || []).filter((x) => x.check && /miss/i.test(x.title));
-    const missable = [
-      ...page.items.filter((e) => e.missable).map((e) => entry(e.id, e.name || e.text || '', e.where, true, { ...itemMore(e), how: e.name && e.text && e.text !== e.name ? e.text : undefined })),
+    const isMissable = (id: string) => {
+      const g = merged.find((m) => m.ids.includes(id));
+      return g ? g.missable : !!page.items.find((e) => e.id === id)?.missable;
+    };
+    const missable = items([
+      ...page.items.filter((e) => isMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.name || e.text || '', e.where, true, { ...itemMore(e), how: e.name && e.text && e.text !== e.name ? e.text : undefined }))),
       // A missable checklist line says itself what can be missed and how.
       ...missSec.flatMap((x) => x.entries.map((e) => entry(e.id, e.text, undefined, true, { missable: x.title }))),
-    ].filter((it) => it.label);
+    ]);
     if (missable.length) sections.push({ id: 'missable', title: title('missable'), tone: 'amber', items: openFirst(missable) });
 
     const noReturn = (achievementGuide?.roadmap?.noReturn || []).filter((n) => n?.point && pointIsHere(n.point, guideArea.name));
@@ -232,12 +302,14 @@ export function buildTrackerPayload(
       });
     }
 
-    // To collect: everything else the area page has a checkbox for, in the guide's order.
-    const collect = [
-      ...page.items.filter((e) => !e.missable).map((e) => entry(e.id, e.name || e.text || '', e.where, undefined, { ...itemMore(e), how: e.name && e.text && e.text !== e.name ? e.text : undefined })),
-      ...page.secrets.map((e) => entry(e.id, e.text || e.name || '', undefined, undefined, { ...itemMore(e), where: e.where })),
+    // To collect: everything else the area page has a checkbox for, in the guide's order (merged parts are listed once,
+    // under Missable when any part is missable).
+    const inMissable = (id: string) => isMissable(id) && merged.some((m) => m.ids.includes(id));
+    const collect = items([
+      ...page.items.filter((e) => !isMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.name || e.text || '', e.where, undefined, { ...itemMore(e), how: e.name && e.text && e.text !== e.name ? e.text : undefined }))),
+      ...page.secrets.filter((e) => !inMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.text || e.name || '', undefined, undefined, { ...itemMore(e), where: e.where }))),
       ...(page.sections || []).filter((x) => x.check && !missSec.includes(x)).flatMap((x) => x.entries.map((e) => entry(e.id, e.text))),
-    ].filter((it) => it.label);
+    ]);
     if (collect.length) sections.push({ id: 'collect', title: title('collect'), items: openFirst(collect) });
   }
 

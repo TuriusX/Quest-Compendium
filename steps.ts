@@ -4,7 +4,7 @@
  * block to every in-game answer; the server pulls it out (extractSteps) before the player sees the answer.
  */
 
-import { WORTH_POINTING_OUT, isTrivialMarker, isFillerStep } from './answerBar';
+import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, isFillerStep, sharpenAction } from './answerBar';
 
 export type StepKind = 'step' | 'choice' | 'warning';
 export type QuestStep = { kind: StepKind; text: string; detail?: string };
@@ -25,6 +25,9 @@ next, never filler:
 - "detail": the sentence (or two) of your answer that the item comes from, copied as written, so the player can read
   it again from the quest log. At most 300 characters.
 - The same bar as markers. ${WORTH_POINTING_OUT}
+- ${PRECISE_ACTIONS}
+  For example "Jump (Z) up the rock ledge right of the burning wreck to skip the Intellect Devourers", not "Climb the
+  cliff path on the right".
 - Only what your answer actually says. Leave the line out for questions that aren't about playing (settings, lore
   chat, a game's release date). Never mention the line in your answer text.`;
 
@@ -53,6 +56,12 @@ export function extractSteps(text: string): { text: string; steps: QuestStep[] }
       /* a broken line is dropped */
     }
     return '';
+  });
+  // A vague verb where the answer says exactly what to do ("Climb…" when it says to Jump) is made exact.
+  steps = steps.map((s) => {
+    const sharp = sharpenAction(s.text, cleaned);
+    if (sharp.changed) console.log(`[steps] sharpened "${s.text.slice(0, 50)}" to "${sharp.text.slice(0, 50)}"`);
+    return sharp.changed ? { ...s, text: sharp.text.slice(0, 120) } : s;
   });
   return { text: cleaned.replace(/\n{3,}/g, '\n\n').trimEnd(), steps };
 }

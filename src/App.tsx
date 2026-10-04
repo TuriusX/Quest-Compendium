@@ -38,6 +38,7 @@ import { ControllerLayer } from './components/ControllerLayer';
 import { markersActiveFor, rememberAreaFind, setPointersActive } from './components/pointerStore';
 import { buildTrackerPayload, trackedMessage, trackerGameKey, trackerLabels, type TrackerData } from './utils/trackerPayload';
 import { useTrackerGuide } from './utils/trackerGuide';
+import { formatShortcut } from './utils/shortcut';
 import { setEntryDone } from './utils/guideProgress';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -81,15 +82,8 @@ const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: str
 };
 
 
-/** "CmdOrCtrl+Shift+S" -> "Ctrl + Shift + S" (shown as Cmd on a Mac). */
-function prettyShortcut(accel?: string): string {
-  if (!accel) return '';
-  const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
-  return accel
-    .split('+')
-    .map((k) => (k === 'CmdOrCtrl' || k === 'CommandOrControl' ? (isMac ? 'Cmd' : 'Ctrl') : k))
-    .join(' + ');
-}
+/** "CmdOrCtrl+Shift+S" -> "Ctrl + Shift + S" (shown as Cmd on a Mac), for sentences (utils/shortcut). */
+const prettyShortcut = (accel?: string): string => formatShortcut(accel, { spaced: true });
 
 /** Apply the interface style: <html data-ui> switches the Lo-fi pixel layer in index.css on or off. */
 function applyUiStyle(style: AppSettings['uiStyle'], accentHex: string) {
@@ -742,7 +736,8 @@ export default function App() {
         const rest = id.slice(2);
         const cut = rest.indexOf(':');
         const key = trackerGuideKeyRef.current;
-        if (cut > 0 && key) setEntryDone(key, rest.slice(0, cut), rest.slice(cut + 1), !!e.done);
+        // A merged entry (one chest the guide lists as several entries) ticks all of its parts: ids joined by "+".
+        if (cut > 0 && key) for (const entryId of rest.slice(cut + 1).split('+')) setEntryDone(key, rest.slice(0, cut), entryId, !!e.done);
       }
     } else if (e.type === 'confirm-place' && typeof e.name === 'string' && e.name.trim()) {
       if (typeof e.id === 'string' && e.id) updateMessageById(e.id, (m) => ({ ...m, placeChosen: e.name }));
@@ -759,7 +754,7 @@ export default function App() {
       const [kind, ...rest] = e.item.split(':');
       const slug = kind === 'a' ? trackerGameRef.current.guideArea?.slug : rest[0];
       const tail = rest.slice(1).join(':');
-      const entry = kind === 'g' ? tail : kind === 'h' ? `ach:${tail}` : undefined;
+      const entry = kind === 'g' ? tail.split('+')[0] : kind === 'h' ? `ach:${tail}` : undefined;
       if (slug) window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug, entry } }));
     } else if (e.type === 'ask-about' && typeof e.label === 'string' && e.label.trim()) {
       // "Ask about this": the panel opens with a question about the entry in the box, not sent.

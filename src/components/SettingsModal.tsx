@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { keyLabel, shortcutKeys } from '../utils/shortcut';
 import { 
   X, 
   Sparkles, 
@@ -119,12 +120,12 @@ const ShortcutInput: React.FC<{
           t('set.sc.listening')
         ) : value ? (
           <span className="flex flex-wrap items-center gap-1.5">
-            {value.split('+').map((k, i) => (
+            {shortcutKeys(value).map((k, i) => (
               <kbd
                 key={i}
                 className="min-w-[24px] px-2 py-0.5 rounded-md bg-white/[0.06] border border-white/15 border-b-[3px] text-center text-[11px] font-mono font-semibold text-zinc-100"
               >
-                {k === 'CmdOrCtrl' || k === 'CommandOrControl' ? (isMacPlatform ? 'Cmd' : 'Ctrl') : k}
+                {keyLabel(k, isMacPlatform)}
               </kbd>
             ))}
             <span className="ml-auto text-[10px] text-zinc-500 font-sans">{t('set.sc.change')}</span>
