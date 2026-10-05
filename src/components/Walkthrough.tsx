@@ -25,6 +25,8 @@ export function Walkthrough({ isDesktop, screenshotKeys, onDone }: { isDesktop: 
     { title: t('tour.2t'), body: isDesktop ? t('tour.2bDesktop', { keys: screenshotKeys || 'Ctrl + Shift + S' }) : t('tour.2bWeb'), icon: '📸' },
     { title: t('tour.3t'), body: t('tour.3b'), icon: '📍' },
     { title: t('tour.4t'), body: t('tour.4b'), icon: '📖' },
+    // Desktop: the quest log over the game, independent of the panel.
+    ...(isDesktop ? [{ title: t('tour.5t'), body: t('tour.5b'), icon: '📜' }] : []),
   ];
   const finish = () => {
     try {

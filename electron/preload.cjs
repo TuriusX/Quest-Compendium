@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showObjectivesTracker: (data, gameKey) => ipcRenderer.invoke('tracker-show', { data, gameKey }),
   updateObjectivesTracker: (patch, gameKey) => ipcRenderer.send('tracker-update', { data: patch, gameKey }),
   hideObjectivesTracker: () => ipcRenderer.send('tracker-hide'),
+  // The panel header's "Quest log" toggle (shown if away or never shown, else sent away), and showing it for an answer.
+  toggleQuestLog: (data, gameKey) => ipcRenderer.invoke('tracker-toggle', { data, gameKey }),
+  showQuestLog: (data, gameKey) => ipcRenderer.invoke('tracker-show-log', { data, gameKey }),
   peekObjectivesTracker: () => ipcRenderer.send('tracker-peek'),
   // The panel was hidden (any route): the app shows the objectives tracker for the latest answer.
   onPanelHidden: (callback) => { ipcRenderer.removeAllListeners('panel-hidden'); ipcRenderer.on('panel-hidden', () => callback()); },

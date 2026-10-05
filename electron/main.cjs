@@ -299,8 +299,6 @@ const COMBAT_MARKER_MS = 3 * 60_000;
 /** A fight's markers: the player's display time, but never more than 3 minutes. */
 const combatLifetime = (ms) => (ms > 0 ? Math.min(ms, COMBAT_MARKER_MS) : COMBAT_MARKER_MS);
 let currentDockPosition = "top-right";
-let panelAnchored = false; // the panel was opened at the objectives tracker, not at its dock
-let undockedSpot = null; // an undocked panel's own spot, put back after it was opened at the tracker
 let animationInterval = null;
 
 function getDockCoords(isHidden = false) {
@@ -368,8 +366,7 @@ function animateWindow(targetX, targetY, durationMs = 200) {
 
 async function slideIn(opts = {}) {
   if (!mainWindow) return;
-  // The objectives tracker is the panel's minimized state: it waits hidden while the panel is open.
-  tracker.hideTemporarily();
+  // The quest log (tracker.cjs) is independent: opening the panel never hides it; it steps off the panel instead.
   if (!isAppVisible) {
     if (opts.snapshot) {
       openSnapshot = { image: opts.snapshot, session: overlaySession + 1 };
@@ -408,39 +405,24 @@ async function slideIn(opts = {}) {
   // macOS equivalent
   app.focus({ steal: true });
   
-  if (opts.at && !panelAnchored && currentDockPosition === 'undocked') {
-    const b = mainWindow.getBounds();
-    undockedSpot = { x: b.x, y: b.y };
-  }
-  panelAnchored = !!opts.at;
-  if (opts.at) {
-    // Opened from the objectives tracker: right where it is (the dock position stays as it was).
-    if (animationInterval) clearInterval(animationInterval);
-    const b = mainWindow.getBounds();
-    mainWindow.setBounds({ x: opts.at.x, y: opts.at.y, width: b.width, height: b.height });
-  } else if (currentDockPosition !== 'undocked') {
+  if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(false);
-    animateWindow(coords.x, coords.y, 150);
+    animateWindow(coords.x, coords.y, 150).then(() => tracker.panelShown());
+  } else {
+    tracker.panelShown();
   }
 }
 
 /**
- * Ctrl+G or a click on the objectives tracker: open the panel at the tracker, its dock-side corner on the tracker's
- * (top-right for a right dock, bottom-left for a bottom-left dock...), when the tracker sits on the dock's side and the
- * panel fits there whole. Otherwise the panel opens at its dock as usual.
+ * Where the open panel is (its final spot at the dock, even mid-slide), or null while it's away: the quest log steps
+ * just outside it rather than being covered.
  */
-function openPanelAtTracker(t) {
-  if (!mainWindow || mainWindow.isDestroyed() || isAppVisible) return Promise.resolve();
-  const wa = screen.getDisplayMatching(t).workArea;
-  const { width: w, height: h } = mainWindow.getBounds();
-  const undocked = currentDockPosition === 'undocked';
-  const right = currentDockPosition.endsWith('right');
-  const bottom = currentDockPosition.startsWith('bottom');
-  const trackerOnRight = t.x + t.width / 2 > wa.x + wa.width / 2;
-  const x = right ? t.x + t.width - w : t.x;
-  const y = bottom ? t.y + t.height - h : t.y;
-  const fits = x >= wa.x && y >= wa.y && x + w <= wa.x + wa.width && y + h <= wa.y + wa.height;
-  return slideIn((undocked || right === trackerOnRight) && fits ? { at: { x, y } } : {});
+function panelRect() {
+  if (!isAppVisible || !mainWindow || mainWindow.isDestroyed()) return null;
+  const b = mainWindow.getBounds();
+  if (currentDockPosition === 'undocked') return b;
+  const c = getDockCoords(false);
+  return { x: c.x, y: c.y, width: b.width, height: b.height };
 }
 
 /**
@@ -466,23 +448,12 @@ function slideOut() {
   openSnapshot = null; // the snapshot only lives for one visit
   if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(true);
-    if (panelAnchored) {
-      // Opened at the tracker: go straight back to the dock edge rather than sliding across the screen.
-      if (animationInterval) clearInterval(animationInterval);
-      const b = mainWindow.getBounds();
-      mainWindow.setBounds({ x: coords.x, y: coords.y, width: b.width, height: b.height });
-      parkPanel();
-    } else {
-      animateWindow(coords.x, coords.y, 150).then(parkPanel);
-    }
+    animateWindow(coords.x, coords.y, 150).then(parkPanel);
   } else {
     mainWindow.hide(); // if undocked, just hide it
-    if (panelAnchored && undockedSpot) mainWindow.setPosition(undockedSpot.x, undockedSpot.y);
   }
-  panelAnchored = false;
-  undockedSpot = null;
-  // The panel's minimized state: the objectives tracker comes back (or the app shows it for the latest answer).
-  tracker.restore();
+  // The quest log stays as it is; one that stepped off the panel goes back to its own spot.
+  tracker.panelHidden();
   if (!mainWindow.isDestroyed()) {
     mainWindow.webContents.send('panel-hidden');
     console.log('[panel] hidden: sent panel-hidden to the app');
@@ -627,8 +598,9 @@ app.whenReady().then(() => {
   tracker.init({
     app, ipcMain, screen, globalShortcut,
     getMainWindow: () => mainWindow,
-    isPanelOpen: () => isAppVisible,
-    onOpenPanel: (bounds) => openPanelAtTracker(bounds),
+    // The book icon opens the panel at its dock; the quest log stays where it is.
+    onOpenPanel: () => { if (!isAppVisible) slideIn(); },
+    getPanelRect: () => panelRect(),
     // A new tracker opens on the game's screen: the one the last screenshot came from.
     getDisplay: () => lastCaptureDisplay,
     // Processor share while it's open, next to the markers' (startPerfLog).
@@ -659,9 +631,8 @@ app.whenReady().then(() => {
       if (isAppVisible) {
         slideOut();
       } else {
-        // With the objectives tracker on screen, open the panel at it (a pad can't press Ctrl+G or click its title).
-        const at = tracker.isShowing() ? tracker.getBounds() : null;
-        Promise.resolve(at ? openPanelAtTracker(at) : slideIn()).then(() => {
+        // The panel at its dock; the quest log stays as it is.
+        Promise.resolve(slideIn()).then(() => {
           if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-activated');
         });
       }
@@ -1036,7 +1007,7 @@ ipcMain.on('set-dock-position', (event, pos) => {
       spine.hide();
     } else {
       const coords = getDockCoords(!isAppVisible);
-      animateWindow(coords.x, coords.y, 150);
+      animateWindow(coords.x, coords.y, 150).then(() => { if (isAppVisible) tracker.panelShown(); });
       if (!isAppVisible) spine.show(); // the spine moves to the new dock edge
     }
   }

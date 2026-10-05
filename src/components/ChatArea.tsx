@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
@@ -90,6 +90,87 @@ interface ChatAreaProps {
   onToggleFontMenu?: () => void;
 }
 
+/**
+ * The question box keeps its own text: typing re-renders only this box, never the conversation above it (with a long
+ * conversation, re-rendering every message's markdown on each key made typing lag by most of a second). ChatArea reads
+ * and sets the text through the ref, and hears only when it goes from empty to not (for the send button).
+ */
+type AskTextareaHandle = { get: () => string; set: (text: string) => void };
+type AskTextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange' | 'defaultValue'> & {
+  onHasTextChange: (hasText: boolean) => void;
+  onEnter: () => void;
+  /** Text set before the box was on screen (a prefilled question while the guide was showing). */
+  takeInitial: () => string;
+};
+const AskTextarea = forwardRef<AskTextareaHandle, AskTextareaProps>(function AskTextarea({ onHasTextChange, onEnter, takeInitial, ...rest }, ref) {
+  const [value, setValue] = useState(takeInitial);
+  const valueRef = useRef(value);
+  const had = useRef(!!value.trim());
+  const report = (v: string) => {
+    const h = !!v.trim();
+    if (h !== had.current) {
+      had.current = h;
+      onHasTextChange(h);
+    }
+  };
+  useEffect(() => {
+    onHasTextChange(had.current);
+  }, []);
+  useImperativeHandle(ref, () => ({
+    get: () => valueRef.current,
+    set: (v: string) => {
+      valueRef.current = v;
+      setValue(v);
+      report(v);
+    },
+  }), []);
+  return (
+    <textarea
+      {...rest}
+      data-qc-ask-input
+      value={value}
+      onChange={(e) => {
+        valueRef.current = e.target.value;
+        setValue(e.target.value);
+        report(e.target.value);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          onEnter();
+        }
+      }}
+    />
+  );
+});
+
+/**
+ * Whether the question box has text, kept here rather than in ChatArea: the send button follows it without the
+ * conversation re-rendering when the box goes from empty to not (the first key of every question).
+ */
+type HasTextHandle = { set: (hasText: boolean) => void };
+const HasTextGate = forwardRef<HasTextHandle, { children: (hasText: boolean) => React.ReactNode }>(function HasTextGate({ children }, ref) {
+  const [hasText, setHasText] = useState(false);
+  useImperativeHandle(ref, () => ({ set: setHasText }), []);
+  return <>{children(hasText)}</>;
+});
+
+const REMARK_PLUGINS = [remarkGfm];
+/**
+ * A message's markdown, parsed again only when its text or its marker badges change (not on every render of the
+ * conversation: a tick, a streamed answer, a panel resize).
+ */
+const MessageMarkdown = React.memo(
+  function MessageMarkdown({ text, link }: { text: string; link: (props: any) => React.ReactNode; markerKey: string }) {
+    return (
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={{ a: link as any }}>
+        {text}
+      </ReactMarkdown>
+    );
+  },
+  (a, b) => a.text === b.text && a.markerKey === b.markerKey,
+);
+
 export const ChatArea: React.FC<ChatAreaProps> = ({
   markersOn = true,
   activeTab,
@@ -120,7 +201,26 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onSetStory,
 }) => {
   const t = useT();
-  const [inputQuestion, setInputQuestion] = useState('');
+  // The question box's text lives in AskTextarea (typing never re-renders the conversation); this reads and sets it.
+  const askRef = useRef<AskTextareaHandle>(null);
+  // Enter in the box submits with the latest handleSubmit (updated every render).
+  const submitRef = useRef<() => void>(() => {});
+  const pendingText = useRef('');
+  const hasTextRef = useRef<HasTextHandle>(null);
+  const setHasText = useCallback((h: boolean) => hasTextRef.current?.set(h), []);
+  const getInputQuestion = () => askRef.current?.get() ?? pendingText.current;
+  const setInputQuestion = useCallback((v: string) => {
+    if (askRef.current) askRef.current.set(v);
+    else {
+      pendingText.current = v;
+      setHasText(!!v.trim());
+    }
+  }, []);
+  const takeInitialText = useCallback(() => {
+    const v = pendingText.current;
+    pendingText.current = '';
+    return v;
+  }, []);
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   // Ask (the conversation) or Guide (the game's guide, open at where you are). The question box works in both; asking
   // switches back to the answer. The guide stays loaded once opened, so switching back and forth keeps your place.
@@ -381,7 +481,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       window.removeEventListener('qc-ask', handleControllerAsk);
       window.removeEventListener('qc-set-input', handleControllerInput);
     };
-  }, [isRecording, soundEnabled, attachedImage, onSendMessage, inputQuestion, isLoading]);
+  }, [isRecording, soundEnabled, attachedImage, onSendMessage, isLoading]);
 
   // Live Screen Capture from Game Window (WebRTC DisplayMedia or File Upload Fallback)
   const captureGameScreen = async (): Promise<string | null> => {
@@ -537,7 +637,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     // In electron, we auto-capture if no image is attached
     const isElectron = !!(typeof window !== 'undefined' && (window as any).electronAPI);
     let finalImage = overrideImage !== undefined ? overrideImage : attachedImage;
-    let finalQuestion = overrideText !== undefined ? overrideText : inputQuestion.trim();
+    let finalQuestion = overrideText !== undefined ? overrideText : getInputQuestion().trim();
     
     // We only block submission if it's empty AND we can't auto-capture
     if (!finalQuestion && !finalImage && !isElectron) return;
@@ -913,6 +1013,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const isDesktopApp = typeof window !== 'undefined' && !!(window as any).electronAPI;
   const gameLabel = activeGame?.name || activeTab?.activeSteamGame?.name || '';
 
+  submitRef.current = () => {
+    void handleSubmit();
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-[#0d0e14] via-[#090a0f] to-[#07070b] relative crt-grid">
       {/* Conversation header: which compendium, which game, which persona */}
@@ -1266,10 +1370,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   )}
                   {!isDesktopApp && markerCard(false)}
                   <div style={{ fontFamily: 'var(--chat-font-family)' }} className="qc-md leading-relaxed break-words space-y-2.5 [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_strong]:text-white [&_strong]:font-semibold [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[var(--accent-color)] [&_h1]:border-b [&_h1]:border-white/10 [&_h1]:pb-1 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-[var(--accent-color)] [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-white [&_code]:bg-black/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-purple-300 [&_code]:font-code [&_code]:text-xs [&_pre]:bg-black/80 [&_pre]:border [&_pre]:border-white/10 [&_pre]:p-3.5 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_th]:border [&_th]:border-white/15 [&_th]:p-2 [&_th]:bg-white/[0.06] [&_th]:font-semibold [&_th]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:p-2 [&_td]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--accent-color)] [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-zinc-400">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        a: ({ href, children, node, ...rest }: any) => {
+                    <MessageMarkdown
+                      markerKey={!isUser && markersOn && msg.points?.length ? `${msg.points.length}:${(msg.donePoints ?? []).join(',')}` : ''}
+                      link={({ href, children, node, ...rest }: any) => {
                           const m = typeof href === 'string' ? href.match(/^#qc-marker-(\d+)$/) : null;
                           if (m && !isUser && msg.points) {
                             const i = Number(m[1]) - 1;
@@ -1295,11 +1398,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               {children}
                             </a>
                           );
-                        },
-                      }}
-                    >
-                      {!isUser && markersOn && msg.points?.length ? withMarkerBadges(msg.text, msg.points) : msg.text}
-                    </ReactMarkdown>
+                        }}
+                      text={!isUser && markersOn && msg.points?.length ? withMarkerBadges(msg.text, msg.points) : msg.text}
+                    />
                   </div>
                   {isDesktopApp && markerCard(true)}
 
@@ -1495,17 +1596,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {/* Floating HUD Input Form Bar */}
       <form onSubmit={handleSubmit} className="p-3 sm:p-4 bg-[#0a0b10]/90 border-t border-white/[0.08] backdrop-blur-2xl">
         <div className="relative flex items-center rounded-2xl bg-[#13141d] border border-white/15 focus-within:border-[var(--accent-color)] focus-within:shadow-[0_0_20px_var(--accent-glow)] transition-all shadow-lg">
-          <textarea
-            data-qc-ask-input
-            value={inputQuestion}
-            onChange={(e) => setInputQuestion(e.target.value)}
+          <AskTextarea
+            ref={askRef}
+            takeInitial={takeInitialText}
+            onHasTextChange={setHasText}
+            onEnter={() => submitRef.current()}
             onPaste={handleTextareaPaste}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
             placeholder={
               isRecording 
                 ? t('chat.listening') 
@@ -1605,19 +1701,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </button>
             )}
 
-            {/* Submit Send Button */}
+            {/* Submit Send Button (follows whether the box has text without re-rendering the conversation) */}
+            <HasTextGate ref={hasTextRef}>{(hasText) => (
             <button
               type="submit"
               aria-label={t('chat.send')}
               disabled={
-                (!inputQuestion.trim() && !attachedImage && !(typeof window !== 'undefined' && (window as any).electronAPI)) ||
+                (!hasText && !attachedImage && !(typeof window !== 'undefined' && (window as any).electronAPI)) ||
                 isLoading ||
                 isCapturingScreen
               }
               title={
                 isCapturingScreen
                   ? t('chat.snapping')
-                  : !inputQuestion.trim() && !attachedImage && typeof window !== 'undefined' && (window as any).electronAPI
+                  : !hasText && !attachedImage && typeof window !== 'undefined' && (window as any).electronAPI
                     ? t('chat.snapSend')
                     : t('chat.send')
               }
@@ -1629,6 +1726,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <Send className="w-4 h-4" />
               )}
             </button>
+            )}</HasTextGate>
           </div>
         </div>
         <div className="mt-2 text-center text-[10px] font-mono uppercase text-zinc-500">

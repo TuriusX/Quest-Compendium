@@ -695,20 +695,13 @@ export default function App() {
   useEffect(() => {
     if (trackerPickRef.current) pickTracked(null);
   }, [latestTrackedId]);
-  // Hiding the panel (any route) shows the tracker; with no place known and no answer with markers, nothing happens.
-  useEffect(() => {
-    const api = (window as any).electronAPI;
-    api?.onPanelHidden?.(() => {
-      const p = trackerPayloadRef.current;
-      if (!p) {
-        console.log('[panel] panel-hidden: no place known and no answer with markers in this tab, no tracker');
-        return;
-      }
-      const counts = p.data.sections.map((x) => `${x.id} ${x.items.length}`).join(', ') || 'no sections';
-      console.log(`[panel] panel-hidden: showing the tracker at "${p.data.place?.name || '?'}" (${counts}), quest "${p.data.quest}"`);
-      api.showObjectivesTracker?.(p.data, p.gameKey);
-    });
-  }, []);
+  // The quest log is independent of the panel: hiding or showing the panel never shows or hides it. Only its own
+  // controls (send away, the ribbon) and the header's "Quest log" toggle do; its state comes back as tracker events.
+  const [questLogVisible, setQuestLogVisible] = useState(false);
+  const toggleQuestLog = () => {
+    const p = trackerPayloadRef.current;
+    (window as any).electronAPI?.toggleQuestLog?.(p?.data, p?.gameKey);
+  };
   // Kept current: a new place, ticks anywhere (the guide page, the checklist, the tracker), a new answer.
   const trackerJson = trackerPayload ? JSON.stringify(trackerPayload.data) : '';
   useEffect(() => {
@@ -723,13 +716,22 @@ export default function App() {
       return;
     }
     pickTracked(null);
-    (window as any).electronAPI?.hideObjectivesTracker?.();
+    const api = (window as any).electronAPI;
+    api?.hideObjectivesTracker?.();
+    // ...then the new tab's quest log, if there's one and it's shown for that game (this runs after the update effect
+    // above in the same render, so without it the new tab's log would stay closed until its data next changed).
+    const p = trackerPayloadRef.current;
+    if (p) api?.updateObjectivesTracker?.(p.data, p.gameKey);
   }, [activeTabId]);
   // Ticks, the place confirmed and "I'm here now" on the tracker, handled like the checklist, guide page and PlaceBar.
   const trackerEventRef = useRef<(e: any) => void>(() => {});
   trackerEventRef.current = (e: any) => {
     if (!e || typeof e.type !== 'string') return;
     const api = (window as any).electronAPI;
+    if (e.type === 'visibility') {
+      setQuestLogVisible(!!e.visible);
+      return;
+    }
     if (e.type === 'tick' && typeof e.item === 'string') {
       const id: string = e.item;
       if (id.startsWith('s:')) {
@@ -793,10 +795,15 @@ export default function App() {
   useEffect(() => {
     (window as any).electronAPI?.onTrackerEvent?.((e: any) => trackerEventRef.current(e));
   }, []);
-  /** "Track on screen" under an answer: that answer goes on the tracker and the panel hides. */
+  /** "Track on screen" under an answer: that answer goes on the quest log (shown if it was away) and the panel hides. */
   const handleTrackOnScreen = (msgId: string) => {
     pickTracked(msgId);
-    (window as any).electronAPI?.toggleSlide?.();
+    // Once the tracker data has been rebuilt for the picked answer (the next render).
+    setTimeout(() => {
+      const p = trackerPayloadRef.current;
+      (window as any).electronAPI?.showQuestLog?.(p?.data, p?.gameKey);
+      (window as any).electronAPI?.toggleSlide?.();
+    }, 0);
   };
 
   /**
@@ -1946,7 +1953,9 @@ export default function App() {
               (window as any).electronAPI.setDockPosition(newPos);
             }
           }}
-          onMinimize={isDesktop ? () => (window as any).electronAPI?.toggleSlide?.() : undefined}
+          onToggleQuestLog={isDesktop ? toggleQuestLog : undefined}
+          questLogVisible={questLogVisible}
+          questLogReady={!!trackerPayload}
           theme={settings.theme}
           onSync={syncDiagnostics?.triggerSyncNow}
         />

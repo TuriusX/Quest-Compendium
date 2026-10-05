@@ -5,12 +5,14 @@
  * mouse is over the text, so the game keeps playing underneath. Position, view (full / collapsed / away), text size,
  * transparency and backdrop are remembered per game in userData/tracker.json.
  *
- * It's the panel's minimized state: its window is closed while the panel is open (the data, settings and position
- * stay here) and a fresh one opens when the panel hides. A window reused across panel cycles lost the button-down of
- * every click after the first hide/show, so it's never reused that way. The book icon at
- * the right end of its header asks the app to open the panel (deps.onOpenPanel, with the tracker's bounds); clicking
- * the title folds the log to its header line. The show/hide shortcut (Ctrl+Space by default) opens the panel too, and
- * the hint names that shortcut (setKeys). The tracker holds no keys itself. An entry's expanded details can open the
+ * It's independent of the panel: showing or hiding the panel (the shortcut, the spine, the tray, the controller) never
+ * shows or hides it. Only its own controls do: send it away (a ribbon bookmark at the screen edge; the ribbon brings it
+ * back) and the panel header's "Quest log" toggle (toggle(), which also shows it the first time for a game). Its window
+ * stays open across panel cycles (never hidden and shown again: that lost the button-down of every later click). While
+ * the panel is open and covers it, it moves just outside the panel's edge (panelShown) and goes back to its own spot when
+ * the panel hides (panelHidden); its saved spot never changes for that. The book icon at the right end of its header
+ * opens the panel at its dock (deps.onOpenPanel); clicking the title folds the log to its header line. The hint names
+ * the panel's show/hide shortcut (setKeys). The tracker holds no keys itself. An entry's expanded details can open the
  * panel at that guide entry (open-entry) or with a question about it in the box (ask-about).
  *
  * Wire it up from main.cjs:
@@ -26,8 +28,7 @@ const { formatAccelerator } = require('./accelerator.cjs');
 let deps = null;
 let win = null;
 let current = null; // { data, gameKey }
-let suspended = false; // the panel is open: no window, the data waits in current (hideTemporarily / restore)
-let lastSpot = null; // where the window was when the panel opened: the fresh window opens there
+let displaced = false; // moved off the open panel (panelShown); goes back to its own spot when the panel hides
 let creating = null; // the window being created (its page load), shared by show() and restore()
 let revealPending = false, revealTimer = null; // a new window shows once its page has reported its size
 let captureHidden = false; // invisible (opacity 0) for a moment while the app takes a screenshot for the AI
@@ -49,7 +50,9 @@ const MARGIN = 0;
 // Per game: collapsed (sections folded by their heading: { [section id]: true }), hidden (entries hidden with their ×,
 // by id: ids carry the area, so it's per area), limits (entries shown per section: 3, 6 or 0 = all; unset = 12),
 // backdrop (how dark the soft backdrop is, 0 = off to 95).
-const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: 45, x: null, y: null, edge: 'right', collapsed: {}, hidden: [], limits: {} };
+// shown: the quest log has been shown for this game (the header toggle shows it the first time); until then the app's
+// data waits without a window.
+const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: 45, x: null, y: null, edge: 'right', collapsed: {}, hidden: [], limits: {}, shown: false };
 const MAX_HIDDEN = 600;
 /** The tracker grows with its content up to this share of the screen's height, then scrolls inside. */
 const MAX_HEIGHT_SHARE = 0.7;
@@ -68,7 +71,10 @@ function saveStore() {
   }, 400);
 }
 function settingsFor(gameKey) {
-  const s = { ...DEFAULTS, ...(loadStore()[gameKey || '_default'] || {}) };
+  const saved = loadStore()[gameKey || '_default'];
+  const s = { ...DEFAULTS, ...(saved || {}) };
+  // Games with settings from before the toggle had their quest log shown already.
+  if (saved && typeof saved.shown !== 'boolean') s.shown = true;
   // Saved before the backdrop slider: on was the old fixed shade (45%), off is 0.
   if (typeof s.backdrop === 'boolean') s.backdrop = s.backdrop ? 45 : 0;
   s.backdrop = Number.isFinite(s.backdrop) ? Math.max(0, Math.min(95, Math.round(s.backdrop))) : DEFAULTS.backdrop;
@@ -186,7 +192,7 @@ function createWindow(x, y) {
   return new Promise((resolve) => { w.webContents.once('did-finish-load', resolve); w.once('closed', resolve); });
 }
 
-/** Close the window but keep the data (current), the settings and suspended: the panel opened, or a reset. */
+/** Close the window but keep the data (current) and the settings: put away, another game, or a reset. */
 function dropWindow() {
   const w = win;
   win = null;
@@ -199,7 +205,7 @@ function dropWindow() {
   }
 }
 
-/** Where a new window opens: the spot it had when the panel opened, else the game's saved spot, else the default. */
+/** Where a new window opens: the game's saved spot, else the default. */
 function spotFor(spot) {
   if (spot) return { x: spot.x, y: spot.y };
   const wa = startDisplay().workArea;
@@ -213,8 +219,8 @@ function spotFor(spot) {
 }
 
 /**
- * Make sure there's a window showing current (unless the panel is open): create one if needed (one at a time, shared
- * by show() and restore()), hand it the data and settings, and show it once its page has laid out.
+ * Make sure there's a window showing current: create one if needed (one at a time), hand it the data and settings, and
+ * show it once its page has laid out.
  */
 async function open(spot) {
   if (!alive() && !creating) {
@@ -223,7 +229,7 @@ async function open(spot) {
   }
   if (creating) await creating;
   if (!alive() || !current) return false;
-  if (suspended) { lastSpot = lastSpot || win.getBounds(); dropWindow(); return false; } // the panel opened meanwhile
+  if (!settingsFor(current.gameKey).shown) { dropWindow(); return false; } // put away meanwhile
   const s = settingsFor(current.gameKey);
   js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel(), collapsed: s.collapsed || {}, hidden: s.hidden, limits: s.limits, maxHeight: maxHeight() })})`);
   if (!win.isVisible() && !revealPending) {
@@ -237,9 +243,11 @@ async function open(spot) {
 /** Show the new window (its size report arrived): no flash at a default spot or size first. */
 function reveal() {
   revealPending = false; clearTimeout(revealTimer);
-  if (!alive() || suspended || captureHidden || win.isVisible()) return;
+  if (!alive() || captureHidden || win.isVisible()) return;
   win.showInactive();
   afterShow();
+  avoidPanel();
+  sendVisibility();
 }
 
 /** What the page gets: only known fields, trimmed to length. */
@@ -304,7 +312,7 @@ function cleanDetail(d) {
 
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
 const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
-  'hintBook', 'hintBookNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
+  'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint'];
 function cleanLabels(labels) {
   const out = {};
@@ -323,91 +331,144 @@ function onScreen(s, wa) {
  * data: { id, quest, place?: {name, story, sure}, sections: [{id, title, tone?, icon?, items: [{id, label, where?, done?,
  *         missable?, badge?, tick?}]}], next?: {name}, warning?, accent, labels }
  */
+const hasContent = (d) => !!d && (d.sections.length || !!d.quest || !!d.place);
+
+/**
+ * The app's data for the active game (a new place, ticks, a newer answer): replaces what's shown entirely, so nothing
+ * from the previous place or answer stays. Shown only if the quest log is shown for this game; otherwise it waits.
+ */
 async function show(data, gameKey) {
   if (!deps) throw new Error('tracker.init() first');
   const clean = cleanData(data);
-  if (!clean.sections.length && !clean.quest && !clean.place) { hide(); return false; }
-  current = { data: clean, gameKey: gameKey || '_default' };
-  // While the panel is open there's no window: the data waits for restore().
-  if (deps.isPanelOpen && deps.isPanelOpen()) {
-    suspended = true;
-    if (alive()) { lastSpot = win.getBounds(); dropWindow(); }
-    return true;
-  }
-  suspended = false;
+  if (!hasContent(clean)) { hide(); return false; }
+  const key = gameKey || '_default';
+  const sameGame = !!current && current.gameKey === key;
+  current = { data: clean, gameKey: key };
+  if (!settingsFor(key).shown) { dropWindow(); sendVisibility(); return false; }
+  if (alive() && sameGame) { js(`window.qcTrackerShow(${JSON.stringify(clean)})`); return true; }
+  if (alive()) dropWindow(); // another game's window
   return open(null);
 }
-
-/**
- * New data (a new place, ticks, a newer answer): replaces what's shown entirely, cleaned like show(), so nothing from
- * the previous place or answer stays. Kept while the panel is open (no window).
- */
 function update(patch, gameKey) {
-  if (!current) {
-    // No tracker data yet (or it was put away), and the panel is open: keep this, so a newly finished answer is on the
-    // tracker the moment the panel hides (and the app's next show() starts from it).
-    if (deps.isPanelOpen && deps.isPanelOpen() && gameKey) {
-      const clean = cleanData(patch || {});
-      if (clean.sections.length || clean.quest || clean.place) {
-        current = { data: clean, gameKey };
-        suspended = true;
-        console.log(`[tracker] data kept while the panel is open (${clean.sections.map((x) => `${x.id} ${x.items.length}`).join(', ') || 'no sections'})`);
-      }
-    }
-    return;
-  }
-  current.data = cleanData(patch || {});
-  js(`window.qcTrackerShow(${JSON.stringify(current.data)})`);
-  if (suspended) console.log(`[tracker] updated while the panel is open (${current.data.sections.map((x) => `${x.id} ${x.items.length}`).join(', ') || 'no sections'})`);
+  show(patch || {}, gameKey).catch((err) => console.warn('[tracker] update failed:', err && err.message));
 }
 
 function hide() {
-  current = null; suspended = false; lastSpot = null;
+  current = null; displaced = false;
   dropWindow();
+  sendVisibility();
 }
 
-/** The panel opened: close the window, keeping the data, settings and position for restore(). */
-function hideTemporarily() {
-  suspended = true;
-  pressed = false;
-  if (!alive()) return;
-  lastSpot = win.getBounds();
-  dropWindow();
-}
-
-/** The panel hid again: a fresh window, where the last one was. */
-function restore() {
-  if (!suspended) return;
-  suspended = false;
-  if (!current) return;
-  const spot = lastSpot;
-  lastSpot = null;
-  open(spot).then((ok) => {
-    if (!ok) return;
-    // Once the panel has finished sliding back to its dock (150 ms), log where both are; the panel must not cover it.
-    setTimeout(() => {
-      if (!alive() || suspended) return;
-      const t = win.getBounds();
-      const m = deps.getMainWindow && deps.getMainWindow();
-      const p = m && !m.isDestroyed() ? m.getBounds() : null;
-      console.log(`[tracker] restored at ${t.x},${t.y} (${t.width}x${t.height}); panel at ${p ? `${p.x},${p.y} (${p.width}x${p.height})` : 'none'}${overlaps(t, p) ? ': the panel overlaps the tracker (the tracker is kept on top)' : ''}`);
-    }, 300);
-  }).catch((err) => console.warn('[tracker] restore failed:', err && err.message));
-}
-
-/** Header click (or the controller's open button): open the panel at the tracker. */
-function openPanel() {
-  if (alive() && deps.onOpenPanel) deps.onOpenPanel(win.getBounds());
+/** Visible as the full or folded log (not away as the ribbon, not closed). */
+const logVisible = () => !!current && alive() && settingsFor(current.gameKey).shown && settingsFor(current.gameKey).view !== 'away';
+/** The panel header's toggle shows whether the quest log is out. */
+function sendVisibility() {
+  tell({ type: 'visibility', visible: logVisible(), hasData: !!current });
 }
 
 /**
- * Around a screenshot for the AI: out of the picture, then back. Separate from hideTemporarily/restore, so a capture
+ * The panel header's "Quest log" toggle: shown (full) if it's away or was never shown for this game, else sent away to
+ * the ribbon. data / gameKey: the app's current data (so it works before any update arrived). Returns the new state.
+ */
+async function toggle(data, gameKey) {
+  if (data) {
+    const clean = cleanData(data);
+    if (hasContent(clean)) current = { data: clean, gameKey: gameKey || '_default' };
+  }
+  if (!current) return 'empty';
+  const key = current.gameKey;
+  const s = settingsFor(key);
+  if (logVisible()) {
+    patchSettings(key, { view: 'away' });
+    js(`window.qcTrackerSettings(${JSON.stringify({ view: 'away' })})`);
+    sendVisibility();
+    return 'away';
+  }
+  const view = !s.shown || s.view === 'away' ? 'full' : s.view;
+  patchSettings(key, { shown: true, view });
+  if (alive()) {
+    js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view })})`);
+    backToSpot();
+    setTimeout(avoidPanel, 80);
+  } else await open(null);
+  sendVisibility();
+  return 'shown';
+}
+
+/** Put the quest log on screen for this data ("Track on screen" under an answer): shown, full if it was away. */
+async function showLog(data, gameKey) {
+  if (data) {
+    const clean = cleanData(data);
+    if (hasContent(clean)) current = { data: clean, gameKey: gameKey || '_default' };
+  }
+  if (!current) return 'empty';
+  if (logVisible()) { js(`window.qcTrackerShow(${JSON.stringify(current.data)})`); return 'shown'; }
+  return toggle(null);
+}
+
+/** Back to the game's saved spot (from the ribbon, or off the panel). */
+function backToSpot() {
+  if (!alive() || !current) return;
+  const s = settingsFor(current.gameKey);
+  if (Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
+  displaced = false;
+}
+
+/**
+ * Never behind the panel: while the panel is open and covers the quest log (or its ribbon), move it just outside the
+ * panel's edge, on the side with room (left or right, else above or below), nearest first. Its saved spot is kept.
+ */
+function avoidPanel() {
+  if (!alive() || !win.isVisible()) return;
+  const p = deps.getPanelRect ? deps.getPanelRect() : null;
+  const t = win.getBounds();
+  if (!p || !overlaps(t, p)) { win.moveTop(); return; }
+  const wa = display().workArea;
+  const GAP = 8;
+  const fitsX = (x) => x >= wa.x && x + t.width <= wa.x + wa.width;
+  const fitsY = (y) => y >= wa.y && y + t.height <= wa.y + wa.height;
+  const left = p.x - t.width - GAP, right = p.x + p.width + GAP;
+  const above = p.y - t.height - GAP, below = p.y + p.height + GAP;
+  const clampY = Math.max(wa.y, Math.min(t.y, wa.y + wa.height - t.height));
+  const clampX = Math.max(wa.x, Math.min(t.x, wa.x + wa.width - t.width));
+  const options = [
+    fitsX(left) && { x: left, y: clampY }, fitsX(right) && { x: right, y: clampY },
+    fitsY(above) && { x: clampX, y: above }, fitsY(below) && { x: clampX, y: below },
+  ].filter(Boolean);
+  if (!options.length) { win.moveTop(); return; }
+  options.sort((a, b) => Math.hypot(a.x - t.x, a.y - t.y) - Math.hypot(b.x - t.x, b.y - t.y));
+  win.setPosition(Math.round(options[0].x), Math.round(options[0].y));
+  displaced = true;
+  win.moveTop();
+  console.log(`[tracker] moved off the panel to ${Math.round(options[0].x)},${Math.round(options[0].y)} (its own spot is kept for when the panel hides)`);
+}
+
+/** The panel opened (or moved): keep the quest log clear of it and on top. */
+function panelShown() {
+  avoidPanel();
+}
+/** The panel hid: a quest log moved off it goes back to its own spot (the ribbon back to its edge). */
+function panelHidden() {
+  if (!alive() || !displaced) return;
+  displaced = false;
+  const view = current ? settingsFor(current.gameKey).view : 'full';
+  if (view === 'away') placeWindow('away');
+  else backToSpot();
+}
+
+/** The book icon (or an entry's buttons): open the panel at its dock; the quest log stays where it is. */
+function openPanel() {
+  if (deps.onOpenPanel) deps.onOpenPanel();
+}
+
+/**
+ * Around a screenshot for the AI: out of the picture, then back. Separate from showing and putting away, so a capture
  * while the panel is opening never brings the tracker back on top of the panel. Returns whether it was hidden.
  * Fully transparent rather than hidden: a hide()/showInactive() cycle loses the button-down of every later click (the
  * same failure as reusing the window across panel cycles), and captures happen often (the markers' nearby check).
  */
 function hideForCapture() {
-  if (!alive() || suspended || captureHidden || !win.isVisible()) return false;
+  if (!alive() || captureHidden || !win.isVisible()) return false;
   captureHidden = true;
   pressed = false;
   win.setOpacity(0);
@@ -416,12 +477,12 @@ function hideForCapture() {
 function showAfterCapture() {
   if (!captureHidden) return;
   captureHidden = false;
-  if (alive() && !suspended) win.setOpacity(1);
+  if (alive()) win.setOpacity(1);
 }
 
 /** Put the tracker above other always-on-top windows (the hidden panel's spine never covers it). */
 function raise() {
-  if (alive() && !suspended && win.isVisible()) win.moveTop();
+  if (alive() && win.isVisible()) win.moveTop();
 }
 
 /** The accent colour and the spine's hover label, in the app's language (from the last tracker data). */
@@ -432,7 +493,7 @@ function getLook() {
 
 /** Where the tracker is on screen, or null when it's closed or hidden (for the sticky markers' exclude list). */
 function getBounds() {
-  return alive() && !suspended && !captureHidden && win.isVisible() ? win.getBounds() : null;
+  return alive() && !captureHidden && win.isVisible() ? win.getBounds() : null;
 }
 
 /** The markers' "show in recordings" setting: off hides the tracker from all screen capture. */
@@ -470,6 +531,7 @@ function onMessage(event, msg) {
       placeWindow(msg.view);
       // A new window's first layout with the data: show it now, already at its size and spot.
       if (revealPending && msg.hasData) reveal();
+      else avoidPanel();
       break;
     }
     case 'press':
@@ -488,15 +550,17 @@ function onMessage(event, msg) {
       // Remember the spot, and which edge the away tab should use (the closer one).
       patchSettings(gameKey, { x: b.x, y: b.y, edge: b.x + b.width / 2 < wa.x + wa.width / 2 ? 'left' : 'right' });
       js(`window.qcTrackerEdge(${JSON.stringify(settingsFor(gameKey).edge)})`);
+      // Dropped where it is now: its own spot. Dropped on the open panel: it steps just outside (the spot is kept).
+      displaced = false;
+      avoidPanel();
       break;
     }
     case 'view':
       if (['full', 'collapsed', 'away'].includes(msg.view)) {
-        patchSettings(gameKey, { view: msg.view });
-        if (msg.view !== 'away') {
-          const s = settingsFor(gameKey);
-          if (Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
-        }
+        patchSettings(gameKey, { view: msg.view, shown: true });
+        if (msg.view !== 'away') backToSpot();
+        sendVisibility();
+        setTimeout(avoidPanel, 60); // once the page has resized for the new view
       }
       break;
     case 'settings': {
@@ -568,7 +632,7 @@ function onMessage(event, msg) {
       break;
     case 'open-entry':
     case 'ask-about': {
-      // An expanded entry's buttons: the panel opens at the tracker, then the app shows the entry in the guide, or puts a
+      // An expanded entry's buttons: the panel opens (at its dock), then the app shows the entry in the guide, or puts a
       // question about it in the question box (not sent).
       const item = current && current.data.sections.flatMap((x) => x.items).find((o) => o.id === msg.item);
       if (!item) break;
@@ -588,14 +652,17 @@ function init(d) {
   d.ipcMain.handle('tracker-show', (e, payload) => show(payload && payload.data, payload && payload.gameKey).catch((err) => { console.warn('[tracker]', err && err.message); return false; }));
   d.ipcMain.on('tracker-update', (e, p) => update(p && p.data ? p.data : p, p && p.gameKey));
   d.ipcMain.on('tracker-hide', () => hide());
+  // The panel header's "Quest log" toggle, and "Track on screen" under an answer.
+  d.ipcMain.handle('tracker-toggle', (e, p) => toggle(p && p.data, p && p.gameKey).catch((err) => { console.warn('[tracker]', err && err.message); return 'empty'; }));
+  d.ipcMain.handle('tracker-show-log', (e, p) => showLog(p && p.data, p && p.gameKey).catch((err) => { console.warn('[tracker]', err && err.message); return 'empty'; }));
   d.ipcMain.on('tracker-peek', () => js('window.qcTrackerPeek()'));
   d.app.on('will-quit', hide);
 }
 
 module.exports = {
-  init, show, update, hide, hideTemporarily, restore, setKeys, hideForCapture, showAfterCapture, getBounds,
+  init, show, update, hide, toggle, showLog, panelShown, panelHidden, setKeys, hideForCapture, showAfterCapture, getBounds,
   setVisibleInRecordings, setScale, openPanel, raise, getLook,
   isOpen: () => alive(),
   /** On screen right now (not hidden behind the open panel). */
-  isShowing: () => alive() && !suspended && win.isVisible(),
+  isShowing: () => alive() && win.isVisible(),
 };

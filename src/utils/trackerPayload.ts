@@ -91,7 +91,7 @@ const LABEL_KEYS = [
   'title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size',
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
   'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
-  'hintBook', 'hintBookNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
+  'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'secBattle', 'nextTurn', 'nextTurnHint',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>

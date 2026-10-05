@@ -316,7 +316,7 @@
     limitHint: 'Click: show 3, 6 or all', prevArea: 'Previous area', nextArea: 'Next area', areaList: 'All areas in the guide',
     locate: 'Locate me', locating: 'Locating…',
     nextTurn: 'Next turn (asks a question)', nextTurnHint: 'Takes a new screenshot and asks what to do this turn',
-    hintBook: '{keys} or the book icon: open the Compendium', hintBookNoKeys: 'The book icon opens the Compendium',
+    hintPanel: '{keys} or the book icon: open the Compendium. This log stays where you put it.', hintPanelNoKeys: 'The book icon opens the Compendium. This log stays where you put it.',
     headFold: 'Click: fold the log to this line or open it. Drag: move.', openBook: 'Open the Compendium',
     foldHint: 'Click to fold or open', detWhere: 'Where', detHow: 'How', detMissable: 'Missable', detNotes: 'Notes',
     openInGuide: 'Open in guide', askAbout: 'Ask about this', expandHint: 'Click for details',
@@ -344,8 +344,8 @@
     $('bdWrap').title = L('backdrop');
     tab.title = L('tabHint');
     // The show/hide shortcut (state.keys), or a hint without one when none is registered.
-    if (!state.keys) { $('hint').textContent = L('hintBookNoKeys'); return; }
-    const [before, after] = L('hintBook').split('{keys}');
+    if (!state.keys) { $('hint').textContent = L('hintPanelNoKeys'); return; }
+    const [before, after] = L('hintPanel').split('{keys}');
     $('hint').innerHTML = after === undefined ? esc(before) : `${esc(before)}<kbd>${esc(state.keys)}</kbd>${esc(after)}`;
   }
 

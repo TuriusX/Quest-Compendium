@@ -5,7 +5,7 @@ import {
   Globe, 
   Settings as SettingsIcon, 
   Type, 
-  Minimize2, 
+  ScrollText, 
   Maximize2, 
   Gamepad2, 
   Sparkles,
@@ -49,7 +49,12 @@ interface HeaderBarProps {
   isDocked: boolean;
   onToggleDock: () => void;
   /** Desktop: hide the panel; the objectives tracker shows the latest answer's markers over the game. */
-  onMinimize?: () => void;
+  /** The quest log over the game (desktop): show it (if away or never shown) or send it away. */
+  onToggleQuestLog?: () => void;
+  /** The quest log is out (not away as the ribbon). */
+  questLogVisible?: boolean;
+  /** There's something to put on the quest log (a known place, or an answer with steps). */
+  questLogReady?: boolean;
   theme: ColorTheme;
   onSync?: () => Promise<boolean>;
 }
@@ -75,7 +80,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   soundEnabled,
   isDocked,
   onToggleDock,
-  onMinimize,
+  onToggleQuestLog,
+  questLogVisible = false,
+  questLogReady = true,
   theme,
   onSync,
 }) => {
@@ -315,15 +322,17 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             {/* Vertical Divider */}
             <div className="h-4 w-[1px] bg-white/10 mx-0.5 hidden sm:block" />
 
-            {onMinimize && (
+            {onToggleQuestLog && (
               <button
                 style={{ WebkitAppRegion: "no-drag" } as any}
-                onClick={onMinimize}
-                title={t('header.minimizeHint')}
-                aria-label={t('header.minimize')}
-                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                onClick={onToggleQuestLog}
+                disabled={!questLogReady}
+                aria-pressed={questLogVisible}
+                title={!questLogReady ? t('header.questLogEmpty') : questLogVisible ? t('header.questLogHide') : t('header.questLogShow')}
+                aria-label={t('header.questLog')}
+                className={`p-2 rounded-xl transition-all cursor-pointer disabled:opacity-40 disabled:cursor-default ${questLogVisible ? 'text-[var(--accent-color)] bg-[var(--accent-dim)] hover:bg-white/10' : 'text-zinc-400 hover:text-white hover:bg-white/10'}`}
               >
-                <Minimize2 className="w-4 h-4" />
+                <ScrollText className="w-4 h-4" />
               </button>
             )}
 
