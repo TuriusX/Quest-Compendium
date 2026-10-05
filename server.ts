@@ -25,7 +25,7 @@ import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideFightNotes, 
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerDiscord } from './discord';
 import { STEPS_RULES, extractSteps } from './steps';
-import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT } from './answerBar';
+import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
@@ -985,7 +985,7 @@ Describe things the way the game does. A door is a door, not a "secret passage";
 
 [ON-SCREEN POINTERS]
 When your answer refers to specific things that are visible in the game world in the screenshot (an item, container, lever, switch, door, character, enemy or enemy weak point, place, or the path to take), point at them so the player can see exactly where they are. After your answer, add ONE block in exactly this format:
-<qc-points>[{"y": 512, "x": 300, "label": "<item, action or person>", "where": "<which object it is among similar ones>", "category": "<one category>", "note": "<what it is: why it matters>", "detail": "<optional extra facts>"}]</qc-points>
+<qc-points>[{"y": 512, "x": 300, "label": "<item, action or person>", "where": "<which object it is among similar ones>", "category": "<one category>", "note": "<what it is: why it matters>", "detail": "<optional extra facts>", "id": "<label | unique | guess: only for a character or a specific name>", "generic": "<the same thing described with no name>"}]</qc-points>
 The <...> parts are placeholders: always write your own values. Never copy the placeholder text or any example wording from these instructions into a marker.
 - "y" and "x" are the center of the thing in the screenshot, normalized to 0-1000 (y from the top edge, x from the left edge).
 - Game world only: markers are for things in the game world (items, containers, enemies, characters, doors, levers, switches, paths and places). Never put a marker on the game's own interface: battle menus, command lists, HP, MP or ATB bars, inventory screens or other HUD elements. Advice about which command to use, whose turn it is, or what to do next belongs in your answer text, not on a marker. The only exception: if the player explicitly asks where something is in a menu, you may point at that menu item.
@@ -998,7 +998,8 @@ The <...> parts are placeholders: always write your own values. Never copy the p
 - Top-down games: exits are often just a gap or a doormat at the bottom edge of the room, and the player's own character may be standing on or in front of it. Stairs, ladders and wall openings are not the exit unless you can see they lead out. If you're not sure where the exit is, don't mark it and don't name a specific spot in your answer; just say to leave the room and which way to go.
 - Labels: 1 to 4 words, in the player's language.
 - "where": a few words that pick out exactly which object it is among similar ones nearby (for example its position: lower-right of the three, second from the left), in the player's language.
-- Label each point with what the player cares about, not with what the object is: the item inside a container (not "Barrel" or "Chest"), the action to take ("Pull lever", "Save here"), or who it is ("Talk to <name>"). Only fall back to naming the object when you don't know anything more useful about it.
+- Label each point with what the player cares about, not with what the object is: the item inside a container (not "Barrel" or "Chest"), the action to take ("Pull lever", "Save here"), or who it is ("Talk to <name>", only when the name is on screen or they're unmistakable: see below). Only fall back to naming the object when you don't know anything more useful about it.
+${IDENTITY_RULES}
 - "category": exactly one of these, matching the thing itself: weapon (weapons), armor (armor, shields, clothing, rings, amulets), consumable (potions, scrolls, food, ammo, and items spent as currency such as Soul Coins), key (keys and key items needed to progress or open something), quest (quest objectives and quest givers), lore (books, notes and readables), secret (hidden switches, passages and stashes), character (people to talk to), enemy, danger (traps and hazards), action (something to do: a lever to pull, a spot to jump), place (exits, waypoints, save points).
 - "note": ONE short line (at most 8 words, it's shown under the marker on screen) saying what it is and why the player should care. No filler, no repeating the label. Leave it out on duplicate markers (see above).
 - "detail": optional, 1 or 2 short sentences with the most useful extra facts (what it does, who needs it, when to use it, whether it's missable). Leave it out rather than repeating the note.
@@ -1149,6 +1150,7 @@ Many games reuse near-identical rooms and tiles, so never assume a specific plac
   - If a confirmed story point is given above and the screen still fits it, repeat it with storySure true.
   - Leave the line out entirely for menus, title screens, battles, loading screens, or anything that isn't a place.
 ${DONE_RULES}
+${ANSWER_IDENTITY}
 - Markers and on-screen people: only mark people and things you can actually see in this screenshot right now. Never
   mark someone who "should" be there (an NPC from a story event); if you can't see them, don't mark them.
   In pixel art, look for an actual character sprite (a head and a body). A cushioned chair, a statue or a coat on a
@@ -1751,12 +1753,20 @@ percentages:
             const where = String(p?.where ?? '').trim().slice(0, 100);
             if (Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= 1000 && y >= 0 && y <= 1000 && label) {
               const category = String(p?.category ?? '').trim().toLowerCase();
-              const note = String(p?.note ?? '').trim().slice(0, 140);
-              const detail = String(p?.detail ?? '').trim().slice(0, 400);
+              // Who it names: a guessed name never shows (the nameless description instead, or no marker at all).
+              const named = checkIdentity({
+                label, category,
+                note: String(p?.note ?? '').trim().slice(0, 140),
+                detail: String(p?.detail ?? '').trim().slice(0, 400),
+                id: p?.id, generic: p?.generic,
+              });
+              if (!named) continue;
+              const note = named.note || '';
+              const detail = named.detail || '';
               // Obvious low-value things (a corpse in plain view with minor supplies) never become markers.
               if (!combat && isTrivialMarker({ label, note, detail, category, missable: p?.missable === true })) continue;
               // "Climb here" when the answer says to jump: the label names the game's own action.
-              const sharp = sharpenAction(label, cleaned);
+              const sharp = sharpenAction(named.label, cleaned);
               points.push({
                 x: Math.round(x) / 1000,
                 y: Math.round(y) / 1000,

@@ -67,6 +67,52 @@ export function sharpenAction(text: string, answerText: string): { text: string;
   return { text: t.replace(CLIMB_LIKE, 'Jump up'), changed: true };
 }
 
+/**
+ * Who or what a marker names. A specific name only when it's on screen or unmistakable: a marker named "Talk to
+ * Nettie" on a druid who was really Loic (no name on screen, just an assumption) sends the player to the wrong person.
+ */
+export const IDENTITY_RULES = `- Names on markers: name a specific character only if their name is visible on screen right now (a name label, a hover
+  or target bar, a dialogue box) or they're unmistakable (a party companion, or a unique character whose look can't be
+  confused with anyone else). The same for a named place or object: use its name only if it's on screen or
+  unmistakable; otherwise describe it ("Stone archway", "Robed druid").
+- Every marker on a character, and every marker whose label uses a specific name, adds "id": "label" (the name is on
+  screen), "unique" (unmistakable) or "guess" (anything else), and "generic": a short description with no name in it
+  ("Robed druid", "Arched doorway with banners").
+- If the answer is about a character you can't verify on screen, don't mark a guess: mark the place or the way to them
+  ("Enclave Library entrance: up the stairs north"), say in the answer where to find them ("Nettie is inside the
+  library"), and, if it helps, suggest hovering over a character to check who they are.`;
+
+/** The same rule for the answer's text (with or without markers). */
+export const ANSWER_IDENTITY = `- People on screen: don't call someone on screen by a specific name unless the name is visible (a label, a hover or
+  target bar, a dialogue box) or they're unmistakable (a party companion, a unique character). When the answer is about
+  a character you can't verify, say where to find them ("Nettie is inside the library") and suggest hovering over a
+  character to check who they are. Named places and objects the same: the name only if it's on screen or unmistakable.`;
+
+const NAME_VERB = /^(talk|speak)\s+(to|with)\s+|^(ask|find|meet|follow|see)\s+/i;
+const clip = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+
+/**
+ * A marker's label, note and detail after checking how its subject was identified ("label" | "unique" | "guess"). A
+ * guess never shows a name: the marker takes its nameless description ("Robed druid"), and its note and detail go if
+ * they repeat the name; with no description it's dropped (null). A character marker that doesn't say how it was
+ * identified counts as a guess.
+ */
+export function checkIdentity(p: { label: string; note?: string; detail?: string; category?: string; id?: unknown; generic?: unknown }): { label: string; note?: string; detail?: string } | null {
+  const how = String(p.id ?? '').trim().toLowerCase();
+  const character = p.category === 'character' || NAME_VERB.test(p.label);
+  const guess = how === 'guess' || (character && how !== 'label' && how !== 'unique');
+  if (!guess) return { label: p.label, note: p.note, detail: p.detail };
+  const generic = clip(p.generic, 40);
+  if (!generic) return null;
+  const name = p.label.replace(NAME_VERB, '').trim();
+  const mentions = (t?: string) => !!t && name.length >= 3 && t.toLowerCase().includes(name.toLowerCase());
+  return {
+    label: generic.charAt(0).toUpperCase() + generic.slice(1),
+    ...(p.note && !mentions(p.note) ? { note: p.note } : {}),
+    ...(p.detail && !mentions(p.detail) ? { detail: p.detail } : {}),
+  };
+}
+
 /** On-screen markers per answer: 5 normally; a fight gets every important enemy and the key positions. */
 export const MARKER_LIMIT = 5;
 export const COMBAT_MARKER_LIMIT = 8;
