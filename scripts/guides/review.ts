@@ -210,10 +210,10 @@ function cleanReview(raw: any, base: Pick<Review, 'buildMode' | 'pageCount' | 'm
   };
 }
 
-type Reviewer = { tier: ReviewTier; model: string; kind: ProKind };
-const reviewerFor = (tier: ReviewTier, kind: ProKind): Reviewer => ({ tier, kind, model: tier === 'pro' ? PRO_MODEL : FLASH_REVIEW_MODEL });
+export type Reviewer = { tier: ReviewTier; model: string; kind: ProKind };
+export const reviewerFor = (tier: ReviewTier, kind: ProKind): Reviewer => ({ tier, kind, model: tier === 'pro' ? PRO_MODEL : FLASH_REVIEW_MODEL });
 /** A reviewer call. Pro requests are counted first (ProQuotaWait when today's are used up) and never retried elsewhere. */
-async function call(rv: Reviewer, request: any): Promise<any> {
+export async function call(rv: Reviewer, request: any): Promise<any> {
   if (rv.tier === 'pro') await takePro(rv.kind);
   try {
     return await gemini().models.generateContent({ ...request, model: rv.model });

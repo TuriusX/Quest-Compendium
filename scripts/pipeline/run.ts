@@ -46,9 +46,17 @@
  *   PIPELINE_LANGS                languages to translate into (default es,pt,de,fr,ru,ja,ko,zh)
  *   PIPELINE_FEATURED             guides to translate into every language even before players ask, separated by |
  *                                 (default: the five checked guides: FF VI, Chrono Trigger, DQ XI, BG3, The Witcher 3)
+ *   PIPELINE_DAILY_DOLLARS        hard spending cap per day, Chicago time (default 8): each step may only spend what's
+ *                                 left (its scripts refuse further AI calls past it), and nothing starts below $0.25
+ *   PIPELINE_RUN_ALERT_DOLLARS    a Discord alert as soon as one run has spent this much (default 5)
+ *   PIPELINE_SEARCH_DOLLARS       what a search costs (default 0.014: $14 per 1,000, no free allowance assumed)
+ *   Costs are real: each step's "Usage:" line (common.ts ledger: every response's tokens, thinking included, and its
+ *   searches). The monthly AI cap counts both.
  *   NETLIFY_AUTH_TOKEN, NETLIFY_SITE_ID   to deploy the website (skipped if missing)
  *   DISCORD_WEBHOOK_URL           where the summary goes (skipped if missing)
  * Off switch: set `enabled: false` on system/pipeline in Firestore (or PIPELINE_ENABLED=false).
+ * Pause switch for the repair queue and careful builds: set `queuePaused` on system/pipeline (anything truthy, e.g.
+ * { at, why }); delete it to resume. Everything else (translations, quick guides, corrections) still runs, under the caps.
  */
 import { spawnSync } from 'child_process';
 import fs from 'fs';
@@ -58,6 +66,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { deployToNetlify } from './netlify';
 import { steamCandidates } from './steam';
 import { promote } from '../guides/promote';
+import { SEARCH_DOLLARS } from '../../usage';
 
 const env = (k: string, d: number) => (Number.isFinite(Number(process.env[k])) && process.env[k] !== '' ? Number(process.env[k]) : d);
 const DRY = process.argv.includes('--dry-run');
@@ -78,6 +87,11 @@ const QUICK_MIN = 5;
 type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade' | 'fights' | 'missables' | 'queries' | 'info'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string };
 /** Minutes the repair queue may run before the rest of the run (the job's limit is 3 hours). */
 const QUEUE_MINUTES = env('PIPELINE_QUEUE_MINUTES', 120);
+/** Hard spending cap per day (Chicago time), and the one-run total that sends a Discord alert. Real dollars. */
+const DAILY_CAP = env('PIPELINE_DAILY_DOLLARS', 8);
+const RUN_ALERT = env('PIPELINE_RUN_ALERT_DOLLARS', 5);
+/** What may still be spent (set by main from the daily and monthly caps); each script gets it as its hard limit. */
+let spendLeft = () => Infinity;
 const LANGS = (process.env.PIPELINE_LANGS || 'es,pt,de,fr,ru,ja,ko,zh').split(',').map((s) => s.trim()).filter(Boolean);
 const LANG_BY_NAME: Record<string, string> = {
   Spanish: 'es', 'Brazilian Portuguese': 'pt', German: 'de', French: 'fr', Russian: 'ru', Japanese: 'ja', Korean: 'ko', 'Simplified Chinese': 'zh',
@@ -105,15 +119,24 @@ const FEATURED = (process.env.PIPELINE_FEATURED ||
 
 type Action = { kind: 'build' | 'build-checked' | 'revisit' | 'upgrade' | 'translate' | 'achievements'; game: string; key: string; lang?: string; searches: number; why: string; wish?: boolean };
 
-/** Run one of the guide scripts and read what it spent from its summary line. */
+/**
+ * Run one of the guide scripts, under what may still be spent (PIPELINE_STEP_DOLLARS), and read what it really spent
+ * from its "Usage:" line (tokens with thinking, and searches, from the API's usage data).
+ */
 function runScript(args: string[]): { ok: boolean; searches: number; dollars: number; summary: string; out: string } {
   console.log(`$ npx tsx ${args.join(' ')}`);
-  const r = spawnSync('npx', ['tsx', ...args], { encoding: 'utf8', timeout: 45 * 60_000, maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32' });
+  const limit = spendLeft();
+  const env = { ...process.env, ...(Number.isFinite(limit) ? { PIPELINE_STEP_DOLLARS: Math.max(0.01, limit).toFixed(2) } : {}) };
+  const r = spawnSync('npx', ['tsx', ...args], { encoding: 'utf8', timeout: 45 * 60_000, maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32', env });
   const out = `${r.stdout || ''}\n${r.stderr || ''}`;
   process.stdout.write(out.slice(-4000));
-  const searches = Number((out.match(/(\d+) searches used/) || [])[1] || 0);
+  const usage = out.match(/^Usage: \d+ call\(s\), .*? searches=(\d+), .*? = \$(\d+(?:\.\d+)?)/m);
+  const reported = Number((out.match(/(\d+) searches used/) || [])[1] || 0);
   // The number ends at its last digit ("≈ $0.178." must not read as "0.178.", which would make the total NaN).
-  const dollars = Number((out.match(/cost ≈ \$(\d+(?:\.\d+)?)/i) || [])[1] || 0);
+  const tokenGuess = Number((out.match(/cost ≈ \$(\d+(?:\.\d+)?)/i) || [])[1] || 0);
+  // A script without a Usage line (no AI calls, or an older one): its token estimate plus its searches, priced.
+  const searches = usage ? Number(usage[1]) : reported;
+  const dollars = usage ? Number(usage[2]) : tokenGuess + reported * SEARCH_DOLLARS;
   // The script's "Done" line, without the "Done." prefix and its "Next: …" hint.
   const summary = (out.match(/^Done[^\n]*$/m) || [''])[0].replace(/^Done[.:]?\s*/, '').replace(/\s*Next:.*$/, '').slice(0, 300);
   return { ok: r.status === 0, searches, dollars, summary, out };
@@ -132,6 +155,14 @@ async function main() {
   // A total that isn't a number (an earlier bad read) would switch the budget check off, so it counts as 0.
   if (!Number.isFinite(state.dollars)) state.dollars = 0;
   if (!Number.isFinite(state.searches)) state.searches = 0;
+  // Real costs from now on. A month counted before searches were priced gets them added once (they were billed).
+  if (state.costBasis !== 'billed') {
+    state.dollars += state.searches * SEARCH_DOLLARS;
+    state.costBasis = 'billed';
+  }
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+  if (state.spend?.day !== today || !Number.isFinite(state.spend?.dollars)) state.spend = { day: today, dollars: 0 };
+  const paused = !!state.queuePaused;
   const enabled = state.enabled !== false && process.env.PIPELINE_ENABLED !== 'false';
   const report: string[] = [];
   if (!enabled) {
@@ -247,7 +278,31 @@ async function main() {
   const appUsed = await appSearchesThisMonth(month);
   let searchRoom = Math.min(SEARCH_CAP - (state.searches || 0), APP_CAP - RESERVE - appUsed);
   let aiRoom = AI_CAP - (state.dollars || 0);
-  console.log(`Budget: ${Math.max(0, searchRoom)} searches and $${Math.max(0, aiRoom).toFixed(2)} of AI left for the pipeline this month. ${plan.length} candidate action(s).`);
+  // ---- spending: every step is charged its real cost; the daily cap is hard (each script gets what's left as its
+  // limit, and its searches are capped to fit), and one run passing RUN_ALERT dollars posts an alert ----
+  let runDollars = 0, alerted = false;
+  const dayRoom = () => DAILY_CAP - state.spend.dollars;
+  const room = () => Math.min(aiRoom, dayRoom());
+  spendLeft = room;
+  const capReached = () => (dayRoom() <= aiRoom ? `today's $${DAILY_CAP} spending cap is reached` : 'the monthly AI budget is used up');
+  /** Searches a step may run: its own cap, and what's left of the money (80% of it, the rest for tokens). */
+  const affordable = (cap: number) => Math.max(0, Math.min(cap, Math.floor((Math.max(0, room() - 0.3) * 0.8) / SEARCH_DOLLARS)));
+  const charge = async (r: { searches: number; dollars: number }) => {
+    state.searches = (state.searches || 0) + r.searches;
+    state.dollars = (state.dollars || 0) + r.dollars;
+    state.spend.dollars += r.dollars;
+    aiRoom -= r.dollars;
+    runDollars += r.dollars;
+    if (!DRY) await stateRef.set({ spend: state.spend, dollars: state.dollars, searches: state.searches, costBasis: 'billed' }, { merge: true }).catch(() => {});
+    if (!alerted && runDollars >= RUN_ALERT) {
+      alerted = true;
+      const msg = `⚠️ **Guide pipeline spending alert**: this run has spent $${runDollars.toFixed(2)} (alert at $${RUN_ALERT}). Today: $${state.spend.dollars.toFixed(2)} of the $${DAILY_CAP} daily cap; this month: $${state.dollars.toFixed(2)}.`;
+      report.push(msg.replace(/^⚠️ /, '🚨 '));
+      if (process.env.DISCORD_WEBHOOK_URL && !DRY)
+        await fetch(process.env.DISCORD_WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: msg }) }).catch((e) => console.warn(`Discord alert failed: ${e?.message}`));
+    }
+  };
+  console.log(`Budget: ${Math.max(0, searchRoom)} searches and $${Math.max(0, aiRoom).toFixed(2)} left this month, $${Math.max(0, dayRoom()).toFixed(2)} left today. ${plan.length} candidate action(s).`);
   let changed = false, done = 0;
 
   // ---- 3a. decisions made on the review queue page (/admin/reviews) ----
@@ -289,10 +344,9 @@ async function main() {
   // (up to 8 searches an entry, within the player reserve) and written into the guides through the review gate ----
   // ---- 3a'. Search Console, weekly (scripts/pipeline/searchConsole.ts): the pull, the summary, page checks and the
   // plan (repairs queued only when SEARCH_CONSOLE_REPAIRS=on), the wish list from searches and the Discord summary ----
-  if (!DRY && Date.now() - Number(state.searchConsoleAt || 0) > 6.5 * DAY && aiRoom >= 0.25) {
+  if (!DRY && Date.now() - Number(state.searchConsoleAt || 0) > 6.5 * DAY && room() >= 0.25) {
     const sc = runScript(['scripts/pipeline/searchConsole.ts', '--weekly']);
-    state.dollars = (state.dollars || 0) + sc.dollars;
-    aiRoom -= sc.dollars;
+    await charge(sc);
     if (sc.ok) state.searchConsoleAt = Date.now();
     report.push(`${sc.ok ? '🔎' : '⚠️'} ${sc.summary || 'Search Console pull failed (see the job log)'}`);
     // Its repairs may have joined the queue.
@@ -300,14 +354,12 @@ async function main() {
     if (Array.isArray(fresh.carefulQueue)) { queue.length = 0; queue.push(...fresh.carefulQueue); state.carefulQueue = fresh.carefulQueue; }
   }
   let correctionSearches = 0;
-  if (!DRY && aiRoom >= 0.25) {
-    const room = Math.min(120, APP_CAP - RESERVE - appUsed);
-    if (room >= 8) {
-      const c = runScript(['scripts/guides/corrections.ts', '--max-searches', String(room)]);
+  if (!DRY && room() >= 0.25) {
+    const cRoom = affordable(Math.min(120, APP_CAP - RESERVE - appUsed));
+    if (cRoom >= 8) {
+      const c = runScript(['scripts/guides/corrections.ts', '--max-searches', String(cRoom)]);
       correctionSearches = c.searches;
-      state.searches = (state.searches || 0) + c.searches;
-      state.dollars = (state.dollars || 0) + c.dollars;
-      aiRoom -= c.dollars;
+      await charge(c);
       if (/[1-9]\d* applied/.test(c.summary)) changed = true;
       if (!/^corrections: 0 verified, 0 applied, 0 dismissed, 0 waiting/.test(c.summary)) report.push(`${c.ok ? '🧭' : '⚠️'} ${c.summary || 'corrections check failed (see the job log)'}`);
     }
@@ -315,30 +367,30 @@ async function main() {
   let queueRoom = Math.min(QUEUE_DAILY, APP_CAP - RESERVE - appUsed) - correctionSearches;
   const waiting: QueueItem[] = [];
   const queueStart = Date.now();
-  while (queue.length && !DRY) {
+  if (paused && queue.length) report.push(`⏸️ Repair queue paused (${queue.length} waiting, careful builds too); delete system/pipeline.queuePaused to resume.`);
+  while (queue.length && !DRY && !paused) {
     const item = queue.shift()!;
     const action = item.mode === 'quick' ? 'outline' : item.mode;
     // Careful builds, and outline rebuilds of new releases (careful too), need real search room; fixes and quick
     // rebuilds search little (spot-checks, careful pages of new games).
     const big = action === 'careful' || action === 'extend' || action === 'upgrade' || !!item.newRelease;
     const need = big ? QUEUE_MIN : 60;
-    if (aiRoom < 0.25 || Date.now() - queueStart > QUEUE_MINUTES * 60_000) {
+    if (room() < 0.25 || Date.now() - queueStart > QUEUE_MINUTES * 60_000) {
+      if (room() < 0.25) report.push(`⏸️ Repair queue stopped: ${capReached()}.`);
       waiting.push(item, ...queue);
       queue.length = 0;
       break;
     }
-    if (queueRoom < need) {
+    if (queueRoom < need || affordable(need) < need) {
       waiting.push(item);
       continue;
     }
     // Key fights search one call a page (a big guide needs about 300): the careful cap, without needing careful room.
-    const cap = big || ['fights', 'missables', 'queries', 'info'].includes(action) ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom);
+    const cap = affordable(big || ['fights', 'missables', 'queries', 'info'].includes(action) ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom));
     console.log(`\n▶ queue ${action} ${item.game} (up to ${cap} searches)`);
     const r = runScript(['scripts/guides/repair.ts', '--game', item.game, '--action', action, '--max-searches', String(cap), ...(item.report ? ['--report', item.report] : [])]);
-    state.searches = (state.searches || 0) + r.searches;
-    state.dollars = (state.dollars || 0) + r.dollars;
+    await charge(r);
     queueRoom -= r.searches;
-    aiRoom -= r.dollars;
     const g = await guideInfo(item.game);
     guideCache.delete(g.key);
     const gate = (r.out.match(/^Gate: [^\n]*/m) || [''])[0];
@@ -351,14 +403,16 @@ async function main() {
       }
       report.push(`✅ queue ${action} **${item.game}**: ${gate.replace(/^Gate: /, '')}`);
       // Its achievement guide, searched (the AI doesn't know new games well enough for quick tips).
-      if (!fresh.hasAch && fresh.info?.appId && queueRoom >= 30 && aiRoom >= 0.25) {
-        const a = runScript(['scripts/guides/achievements.ts', '--game', item.game, '--max-searches', String(Math.min(120, queueRoom))]);
-        state.searches = (state.searches || 0) + a.searches;
-        state.dollars = (state.dollars || 0) + a.dollars;
+      if (!fresh.hasAch && fresh.info?.appId && queueRoom >= 30 && affordable(30) >= 30) {
+        const a = runScript(['scripts/guides/achievements.ts', '--game', item.game, '--max-searches', String(affordable(Math.min(120, queueRoom)))]);
+        await charge(a);
         queueRoom -= a.searches;
-        aiRoom -= a.dollars;
         report.push(`${a.ok ? '✅' : '⚠️'} achievements **${item.game}**: ${a.summary || (a.ok ? '' : 'failed (see the job log)')}`.trim());
       }
+    } else if (/^Repair: blocked/m.test(r.out)) {
+      // Another rebuild of this guide is staged (one waiting for a decision, say): nothing was written or searched.
+      waiting.push(item);
+      report.push(`⏸️ queue ${action} **${item.game}**: ${((r.out.match(/^Repair: blocked: ([^\n]*)/m) || [])[1] || 'waits for another staged rebuild').replace(/;.*$/, '')}; nothing searched.`);
     } else if (/^Gate: waiting/m.test(r.out)) {
       // A careful build's gate needs the Pro reviewer, whose daily requests are used up: reviewed on the next run.
       waiting.push(item);
@@ -386,11 +440,13 @@ async function main() {
   for (const a of plan) {
     if (done >= MAX_ACTIONS) break;
     if (!a.wish && others >= otherSlots) continue;
-    if (aiRoom < 0.25) {
-      report.push('Stopped: the monthly AI budget is used up.');
+    if (room() < 0.25) {
+      report.push(`Stopped: ${capReached()}.`);
       break;
     }
-    if (a.searches > 0 && a.searches > searchRoom) continue; // try cheaper actions instead
+    // Careful builds wait with the repair queue while it's paused.
+    if (paused && (a.kind === 'build-checked' || a.kind === 'revisit' || a.kind === 'upgrade')) continue;
+    if (a.searches > 0 && (a.searches > searchRoom || affordable(a.searches) < Math.min(a.searches, 30))) continue; // try cheaper actions instead
     console.log(`\n▶ ${a.kind} ${a.game}${a.lang ? ` (${a.lang})` : ''}: ${a.why}`);
     if (DRY) {
       report.push(`(dry run) would ${a.kind} ${a.game}${a.lang ? ` → ${a.lang}` : ''}: ${a.why}`);
@@ -415,27 +471,25 @@ async function main() {
       }
     } else if (a.kind === 'build-checked' || a.kind === 'revisit') {
       // A new release, built (or, 3 weeks on, extended) with research in a staged copy, through the review gate.
-      const cap = Math.min(a.searches, Math.max(50, searchRoom));
+      const cap = affordable(Math.min(a.searches, Math.max(50, searchRoom)));
       r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', a.kind === 'revisit' ? 'extend' : 'careful', '--max-searches', String(cap)]);
       await guideRef.set({ pipeline: { ...g.pipeline, newRelease: g.pipeline.newRelease || a.kind === 'build-checked', builtAt: g.pipeline.builtAt || Date.now(), ...(a.kind === 'revisit' ? { revisited: Date.now() } : {}) } }, { merge: true });
       if ((/continues on the next run/.test(r.out) || /^Gate: waiting/m.test(r.out)) && !state.carefulQueue.some((x: QueueItem) => gameKey(x.game) === g.key))
         state.carefulQueue.push({ game: a.game, mode: a.kind === 'revisit' ? 'extend' : 'careful', newRelease: true, addedAt: Date.now(), why: 'a new release; its careful build continues (or waits for the Pro reviewer)' });
     } else if (a.kind === 'upgrade') {
-      r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', 'upgrade', '--max-searches', String(Math.min(a.searches, Math.max(50, searchRoom)))]);
+      r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', 'upgrade', '--max-searches', String(affordable(Math.min(a.searches, Math.max(50, searchRoom))))]);
       // Its gate waits for the Pro reviewer: the queue reviews it on the next run.
       if (/^Gate: waiting/m.test(r.out) && !state.carefulQueue.some((x: QueueItem) => gameKey(x.game) === g.key))
         state.carefulQueue.push({ game: a.game, mode: 'upgrade', addedAt: Date.now(), why: 'upgraded; its review waits for the Pro reviewer' });
     } else if (a.kind === 'achievements') {
-      r = runScript(['scripts/guides/achievements.ts', '--game', a.game, '--max-searches', String(Math.min(120, Math.max(30, searchRoom)))]);
+      r = runScript(['scripts/guides/achievements.ts', '--game', a.game, '--max-searches', String(affordable(Math.min(120, Math.max(30, searchRoom))))]);
       // Not every game has Steam achievements; don't keep retrying one that failed.
       if (!r.ok) await guideRef.set({ pipeline: { ...g.pipeline, achTried: Date.now() } }, { merge: true });
     } else if (a.kind === 'translate') {
       r = runScript(['scripts/guides/translate-guide.ts', '--game', a.game, '--lang', a.lang!]);
     }
-    state.searches = (state.searches || 0) + r.searches;
-    state.dollars = (state.dollars || 0) + r.dollars;
+    await charge(r);
     searchRoom -= r.searches;
-    aiRoom -= r.dollars;
     changed = changed || r.ok;
     done++;
     if (!a.wish) others++;
@@ -458,13 +512,12 @@ async function main() {
         await d.ref.set({ translationsDue: null }, { merge: true });
         continue;
       }
-      if (aiRoom < 0.25) {
-        report.push(`⏳ translations: ${due.length - synced} guide(s) wait for the next run (AI budget).`);
+      if (room() < 0.25) {
+        report.push(`⏳ translations: ${due.length - synced} guide(s) wait for the next run (${capReached()}).`);
         break;
       }
       const r = runScript(['scripts/guides/translate-guide.ts', '--game', String(info.game || d.id), '--lang', langs.join(',')]);
-      state.dollars = (state.dollars || 0) + r.dollars;
-      aiRoom -= r.dollars;
+      await charge(r);
       cost += r.dollars;
       if (r.ok) {
         await d.ref.set({ translationsDue: null }, { merge: true });
@@ -518,7 +571,7 @@ async function main() {
   state.lastRun = Date.now();
   state.lastReport = report;
   if (!DRY) await stateRef.set(state, { merge: true });
-  const footer = `This month: ${state.searches || 0}/${SEARCH_CAP} pipeline searches, $${(state.dollars || 0).toFixed(2)}/$${AI_CAP} AI.`;
+  const footer = `This run: $${runDollars.toFixed(2)}. Today: $${state.spend.dollars.toFixed(2)}/$${DAILY_CAP}. This month: $${(state.dollars || 0).toFixed(2)}/$${AI_CAP} (tokens and searches), ${state.searches || 0}/${SEARCH_CAP} pipeline searches.`;
   const text = `**Quest Compendium guide pipeline**${DRY ? ' (dry run)' : ''}\n${report.map((l) => `• ${l}`).join('\n')}\n${footer}`;
   console.log(`\n${text}`);
   if (process.env.DISCORD_WEBHOOK_URL && !DRY) {

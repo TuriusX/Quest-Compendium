@@ -16,16 +16,38 @@ const RATES: Record<string, { input: number; output: number }> = {
   // gemini-3.8-flash-lite-tts: priced below Flash TTS; logged without an estimate until its rate is confirmed
 };
 const SEARCH_COST = 14 / 1000; // after the monthly free allowance
+/**
+ * What the pipeline counts a search as: billed in full (no free allowance assumed, since the project's credits ran out
+ * and the free 5,000 are shared with players). PIPELINE_SEARCH_DOLLARS overrides it.
+ */
+export const SEARCH_DOLLARS = Number.isFinite(Number(process.env.PIPELINE_SEARCH_DOLLARS)) && process.env.PIPELINE_SEARCH_DOLLARS ? Number(process.env.PIPELINE_SEARCH_DOLLARS) : SEARCH_COST;
+/** Prompts over 200k tokens are billed at a higher rate on Pro (input and output). */
+const LONG_PROMPT = 200_000;
+const LONG_RATES: Record<string, { input: number; output: number }> = {
+  'gemini-3.1-pro-preview': { input: 4.0, output: 18.0 },
+};
 export const BANNER_IMAGE_COST = 0.0336; // one 1K image from the Flash-Lite image model
 
 /** Estimated cost of one response in dollars (tokens only, searches excluded), or null for a model without a known rate. */
 export function estimateCost(model: string, response: any): number | null {
   const u = response?.usageMetadata;
-  const rate = RATES[model];
-  if (!u || !rate) return null;
+  if (!u || !RATES[model]) return null;
   const input = Number(u.promptTokenCount ?? 0);
+  const rate = (input > LONG_PROMPT && LONG_RATES[model]) || RATES[model];
   const out = Number(u.candidatesTokenCount ?? 0) + Number(u.thoughtsTokenCount ?? 0);
   return (input * rate.input + out * rate.output) / 1_000_000;
+}
+
+/** One response's usage as billed: tokens (thinking included) and searches, with their cost (searches at SEARCH_DOLLARS). */
+export function billedUsage(model: string, response: any) {
+  const u = response?.usageMetadata || {};
+  const q = response?.candidates?.[0]?.groundingMetadata?.webSearchQueries;
+  const searches = Array.isArray(q) ? q.length : 0;
+  const tokens = estimateCost(model, response);
+  return {
+    input: Number(u.promptTokenCount ?? 0), output: Number(u.candidatesTokenCount ?? 0), thinking: Number(u.thoughtsTokenCount ?? 0),
+    searches, tokenDollars: tokens ?? 0, searchDollars: searches * SEARCH_DOLLARS, priced: tokens !== null,
+  };
 }
 
 export function logUsage(feature: string, model: string, response: any): void {

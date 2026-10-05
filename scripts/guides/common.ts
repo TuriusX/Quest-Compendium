@@ -6,16 +6,58 @@ import dotenv from 'dotenv';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { GoogleGenAI } from '@google/genai';
+import { billedUsage } from '../../usage';
 
 dotenv.config();
 if (!getApps().length) initializeApp({ projectId: 'quest-compendium-1bccf' });
 
 export const db = () => getFirestore();
 
+/**
+ * What this process has spent on Gemini, from each response's usage data (tokens with thinking, and searches), plus
+ * what its child scripts reported (addChildUsage). Printed as a "Usage:" line when the process exits, which the
+ * pipeline reads as the step's real cost. PIPELINE_STEP_DOLLARS, when set, is a hard limit: once this process has
+ * spent it, every further call is refused.
+ */
+export const ledger = { calls: 0, input: 0, output: 0, thinking: 0, searches: 0, tokenDollars: 0, searchDollars: 0, unpriced: 0 };
+export const ledgerDollars = () => ledger.tokenDollars + ledger.searchDollars;
+const STEP_LIMIT = Number(process.env.PIPELINE_STEP_DOLLARS || 0);
+let ledgerPrinted = false;
+const printLedgerOnExit = () => {
+  if (ledgerPrinted) return;
+  ledgerPrinted = true;
+  process.on('exit', () => console.log(usageLine()));
+};
+export const usageLine = () =>
+  `Usage: ${ledger.calls} call(s), in=${ledger.input} out=${ledger.output} thinking=${ledger.thinking} searches=${ledger.searches}, ` +
+  `tokens $${ledger.tokenDollars.toFixed(4)} + searches $${ledger.searchDollars.toFixed(4)} = $${ledgerDollars().toFixed(4)}${ledger.unpriced ? ` (${ledger.unpriced} unpriced call(s))` : ''}`;
+/** A child script's "Usage:" line, added to this process's ledger (repair.ts runs build.ts as a child). */
+export function addChildUsage(out: string) {
+  const m = String(out).match(/^Usage: (\d+) call\(s\), in=(\d+) out=(\d+) thinking=(\d+) searches=(\d+), tokens \$([\d.]+) \+ searches \$([\d.]+)/m);
+  if (!m) return;
+  ledger.calls += +m[1]; ledger.input += +m[2]; ledger.output += +m[3]; ledger.thinking += +m[4]; ledger.searches += +m[5];
+  ledger.tokenDollars += +m[6]; ledger.searchDollars += +m[7];
+  printLedgerOnExit();
+}
+/** What a child script may still spend under this process's limit (for its PIPELINE_STEP_DOLLARS); '' = no limit. */
+export const stepDollarsLeft = () => (STEP_LIMIT ? String(Math.max(0.0001, STEP_LIMIT - ledgerDollars()).toFixed(4)) : '');
+
 export function gemini(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY is missing from .env');
-  return new GoogleGenAI({ apiKey });
+  const client = new GoogleGenAI({ apiKey });
+  const generate = client.models.generateContent.bind(client.models);
+  (client.models as any).generateContent = async (request: any) => {
+    if (STEP_LIMIT && ledgerDollars() >= STEP_LIMIT) throw new Error(`spending cap: this step has spent its $${STEP_LIMIT.toFixed(2)}`);
+    const res = await generate(request);
+    const u = billedUsage(String(request?.model || ''), res);
+    ledger.calls++; ledger.input += u.input; ledger.output += u.output; ledger.thinking += u.thinking; ledger.searches += u.searches;
+    ledger.tokenDollars += u.tokenDollars; ledger.searchDollars += u.searchDollars;
+    if (!u.priced) ledger.unpriced++;
+    printLedgerOnExit();
+    return res;
+  };
+  return client;
 }
 
 export const MODEL = process.env.GUIDE_MODEL || process.env.MAIN_MODEL || 'gemini-3.8-flash';

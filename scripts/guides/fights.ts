@@ -42,9 +42,11 @@ export function parseFightLines(text: string, sources: string[] = []): GuideFigh
     if (!m) continue;
     const f = m[1].replace(/\[S\d+\]/g, '').split('|').map((x) => x.replace(/\*\*/g, '').trim());
     if (none(f[0])) continue;
-    const v = (i: number) => (none(f[i]) ? undefined : f[i].slice(0, 400));
+    // Blank fields are left out entirely: Firestore refuses undefined values.
+    const fields = { enemies: f[1], threats: f[2], weaknesses: f[3], tactics: f[4], rewards: f[5] };
     out.push({
-      id: `f${out.length + 1}`, name: f[0].slice(0, 100), enemies: v(1), threats: v(2), weaknesses: v(3), tactics: v(4), rewards: v(5),
+      id: `f${out.length + 1}`, name: f[0].slice(0, 100),
+      ...Object.fromEntries(Object.entries(fields).filter(([, x]) => !none(x)).map(([k, x]) => [k, x.slice(0, 400)])),
       ...(sources.length ? { sources: sources.slice(0, 5) } : {}),
     });
   }

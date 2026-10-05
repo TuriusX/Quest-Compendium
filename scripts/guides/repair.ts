@@ -32,13 +32,16 @@
  *            the next run (the staged pages are kept); only a finished build goes to the gate.
  * A guide can override its outline for outline and careful rebuilds: guides/{key}.outline = { layout, extraPages:
  * [{ name, story, note }] } (extra pages go first). The gate (review.ts): a pass promotes the staged build to the live guide; a fail puts it on the review queue.
+ * Page passes (fights, missables, queries, info) are gated on their changes only (scopedGate.ts: wrong or invented
+ * entries taken out, plus a check that nothing else changed), not by re-grading the whole guide.
+ *            --regate           page passes: gate the finished staged pass again (no writing); --gate-dry: report only
  * Logs "N searches used" and "cost ≈ $x" for the pipeline.
  */
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { ThinkingLevel } from '@google/genai';
-import { db, gemini, gameKey, arg, parseJson, guideRelease, releasedAfter, stageKey, liveKey, QUICK_MODEL_CUTOFF } from './common';
+import { db, gemini, gameKey, arg, parseJson, guideRelease, releasedAfter, stageKey, liveKey, QUICK_MODEL_CUTOFF, addChildUsage, stepDollarsLeft } from './common';
 import { estimateCost } from '../../usage';
 import { stageCopy, discard } from './promote';
 import { reviewGuide, gateGuide, type Review } from './review';
@@ -47,6 +50,7 @@ import { writeFights } from './fights';
 import { writeMissables } from './missables';
 import { writeQueryFixes } from './queryRepair';
 import { writeAreaInfo } from './areaInfo';
+import { scopedReview, type PassAction } from './scopedGate';
 
 // Page fixes are Flash work (reviewerQuota.ts): the fix plan and the fixed guide's gate.
 const PLAN_MODEL = FLASH_REVIEW_MODEL;
@@ -60,6 +64,11 @@ const quickOnly = arg('quick-only') === 'true';
 const reportText = arg('report') && arg('report') !== 'true' ? arg('report')!.slice(0, 1000) : '';
 const planOnly = arg('plan-only') === 'true';
 const maxSearches = Math.max(30, Number(arg('max-searches', '300')));
+/** Page passes: gate the staged copy that's already there (no writing), e.g. one an older whole-guide gate failed. */
+const regate = arg('regate') === 'true';
+/** With --regate: grade the changes and report, but change nothing (no drops, no promotion, no review queue). */
+const gateDry = arg('gate-dry') === 'true';
+const PAGE_PASSES = ['fights', 'missables', 'queries', 'info'];
 const CAREFUL_PAGE_SEARCHES = 40; // a careful page rewrite: research plus fact-check
 
 let searches = 0;
@@ -68,8 +77,11 @@ let dollars = 0;
 /** Run build.ts (directly with node, so names with spaces need no shell quoting) and read what it spent. */
 function build(args: string[]): { ok: boolean; out: string } {
   const cli = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
-  const r = spawnSync(process.execPath, [cli, 'scripts/guides/build.ts', ...args], { encoding: 'utf8', timeout: 45 * 60_000, maxBuffer: 64 * 1024 * 1024 });
+  // The child spends under what's left of this step's limit, and its usage counts as this step's.
+  const left = stepDollarsLeft();
+  const r = spawnSync(process.execPath, [cli, 'scripts/guides/build.ts', ...args], { encoding: 'utf8', timeout: 45 * 60_000, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, ...(left ? { PIPELINE_STEP_DOLLARS: left } : {}) } });
   const out = `${r.stdout || ''}\n${r.stderr || ''}`;
+  addChildUsage(out);
   searches += Number((out.match(/(\d+) searches used/) || [])[1] || 0);
   dollars += Number((out.match(/cost ≈ \$(\d+(?:\.\d+)?)/i) || [])[1] || 0);
   // Not build.ts's own "Done" line: the pipeline reads this run's totals from repair's Done line.
@@ -217,9 +229,10 @@ async function main() {
   const waiting: any = (await db().collection('guides').doc(stageKey(key)).get()).data();
   // Key fights: Pro when any page was searched (it ends up Checked), Flash when every page was quick.
   if (['fights', 'missables', 'queries', 'info'].includes(action) && waiting?.passTier) tier = waiting.passTier;
-  const gateOnly = !!waiting?.awaitingGate && waiting.repair === action;
+  const gateOnly = (!!waiting?.awaitingGate || (regate && PAGE_PASSES.includes(action) && waiting?.passPending !== true)) && waiting?.repair === action;
+  if (regate && !gateOnly) throw new Error(`--regate: no finished staged ${action} pass for ${key}`);
   let ready = true;
-  if (gateOnly) console.log('Repair: built earlier; its review waited for the Pro reviewer, so it goes straight to the gate.');
+  if (gateOnly) console.log(regate ? `Repair: re-gating the staged ${action} pass on its changes.` : 'Repair: built earlier; its review waited for the Pro reviewer, so it goes straight to the gate.');
   else if (action === 'fights' || action === 'missables' || action === 'queries' || action === 'info') {
     // Page passes: key fights added, missables rewritten to the standard, or search queries answered, page by page in
     // a staged copy.
@@ -230,7 +243,7 @@ async function main() {
     // Another rebuild of this guide is staged (a careful build part-way, say): never thrown away for a page pass.
     if (staged && staged.repair && staged.repair !== action) {
       ready = false;
-      console.log(`Repair: a ${staged.repair} rebuild of this guide is staged; ${what} wait and continues on the next run.`);
+      console.log(`Repair: blocked: a ${staged.repair} rebuild of this guide is staged${staged.awaitingGate === false || !staged.passPending ? ' and waits for a decision on /admin/reviews' : ''}; ${what} wait for it (nothing searched).`);
     } else {
       // A run that stopped at the search cap carries on in its staged copy; otherwise a fresh copy of the live guide.
       const resume = staged?.repair === action && staged?.passPending === true;
@@ -309,7 +322,23 @@ async function main() {
       }
     }
   }
-  if (ready) {
+  if (ready && PAGE_PASSES.includes(action)) {
+    // Page passes are judged on what they changed, with a check that nothing else got worse (scopedGate.ts).
+    try {
+      const r = await scopedReview(key, game, action as PassAction, tier, { dryRun: gateDry });
+      dollars += r.dollars;
+      console.log(`Review: ${r.review.score}/100 on ${r.changes} change(s) (pass mark ${r.review.passMark}, ${tier} reviewer), ${r.dropped} taken out${r.regressions.length ? `, regressions: ${r.regressions.join('; ')}` : ''}.`);
+      if (gateDry) console.log(`Gate: dry run (${r.review.pass ? 'would pass' : 'would fail'}); nothing changed.`);
+      else {
+        await db().collection('guides').doc(stageKey(key)).set({ awaitingGate: false }, { merge: true }).catch(() => {});
+        console.log(await gateGuide(stageKey(key), game, r.review));
+      }
+    } catch (e: any) {
+      if (!(e instanceof ProQuotaWait)) throw e;
+      await db().collection('guides').doc(stageKey(key)).set({ awaitingGate: true, repair: action }, { merge: true });
+      console.log(`Gate: waiting (${e.message}); the staged build is reviewed on the next run.`);
+    }
+  } else if (ready) {
     try {
       const r = await reviewGuide(stageKey(key), { save: true, verify: false, tier, proKind: 'careful' });
       dollars += r.dollars;
