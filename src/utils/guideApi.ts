@@ -34,4 +34,6 @@ export type GuidePage = {
   sections?: { title: string; check: boolean; entries: { id: string; text: string }[] }[];
   /** Key fights: bosses and set-piece battles in this area, with what it takes to win them. */
   fights?: { id: string; name: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
+  /** The summary box and the way here: region, levels, quests, services, enemy types, directions, connected areas, coordinates. */
+  info?: { region?: string; levels?: string; quests?: string[]; services?: string[]; enemyTypes?: string[]; directions?: string; connected?: string[]; coords?: string };
 };

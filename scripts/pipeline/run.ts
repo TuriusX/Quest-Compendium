@@ -75,7 +75,7 @@ const QUEUE_MIN = 150;
 /** A quick guide needs at least this many pages to be published (build.ts does the same). */
 const QUICK_MIN = 5;
 /** The repair queue's items: careful builds, fixes and outline rebuilds (scripts/guides/repair.ts). 'quick' = outline. */
-type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade' | 'fights' | 'missables' | 'queries'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string };
+type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade' | 'fights' | 'missables' | 'queries' | 'info'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string };
 /** Minutes the repair queue may run before the rest of the run (the job's limit is 3 hours). */
 const QUEUE_MINUTES = env('PIPELINE_QUEUE_MINUTES', 120);
 const LANGS = (process.env.PIPELINE_LANGS || 'es,pt,de,fr,ru,ja,ko,zh').split(',').map((s) => s.trim()).filter(Boolean);
@@ -332,7 +332,7 @@ async function main() {
       continue;
     }
     // Key fights search one call a page (a big guide needs about 300): the careful cap, without needing careful room.
-    const cap = big || action === 'fights' || action === 'missables' || action === 'queries' ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom);
+    const cap = big || ['fights', 'missables', 'queries', 'info'].includes(action) ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom);
     console.log(`\n▶ queue ${action} ${item.game} (up to ${cap} searches)`);
     const r = runScript(['scripts/guides/repair.ts', '--game', item.game, '--action', action, '--max-searches', String(cap), ...(item.report ? ['--report', item.report] : [])]);
     state.searches = (state.searches || 0) + r.searches;

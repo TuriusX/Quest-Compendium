@@ -24,6 +24,7 @@ type Page = {
   items: Entry[]; secrets: Entry[]; enemies: Entry[]; shops: Entry[]; tips: string[];
   sections?: { title: string; check: boolean; entries: { id: string; text: string }[] }[];
   fights?: { id: string; name: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
+  info?: { region?: string; levels?: string; quests?: string[]; services?: string[]; enemyTypes?: string[]; directions?: string; connected?: string[]; coords?: string };
 };
 type View = { view: 'games' } | { view: 'game'; key: string; game?: string } | { view: 'area'; key: string; slug: string; game?: string } | { view: 'ach'; key: string; game?: string };
 
@@ -523,6 +524,27 @@ function AreaPage({
         )}
       </div>
       {pg.overview && <p className="mt-3 text-sm leading-relaxed text-zinc-300">{pg.overview}</p>}
+      {/* The summary box: what this place is and how to get there. */}
+      {pg.info && (pg.info.region || pg.info.directions || pg.info.connected?.length || pg.info.quests?.length || pg.info.services?.length || pg.info.enemyTypes?.length || pg.info.levels || pg.info.coords) && (
+        <dl className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs">
+          {([
+            ['qcg.infoRegion', pg.info.region],
+            ['qcg.infoLevels', pg.info.levels],
+            ['qcg.infoWay', pg.info.directions ? `${pg.info.directions}${pg.info.coords ? ` (${pg.info.coords})` : ''}` : pg.info.coords],
+            ['qcg.infoConnected', pg.info.connected?.join(', ')],
+            ['qcg.infoQuests', pg.info.quests?.join(' · ')],
+            ['qcg.infoServices', pg.info.services?.join(' · ')],
+            ['qcg.infoEnemies', pg.info.enemyTypes?.join(' · ')],
+          ] as const).map(([k, v]) =>
+            v ? (
+              <div key={k} className="flex gap-2 py-0.5">
+                <dt className="w-24 shrink-0 text-zinc-500">{t(k)}</dt>
+                <dd className="min-w-0 text-zinc-200">{v}</dd>
+              </div>
+            ) : null,
+          )}
+        </dl>
+      )}
 
       {missIds.length > 0 && (
         <section className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] p-2">

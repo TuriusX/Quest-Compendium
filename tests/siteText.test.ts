@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/siteText.test.ts)
 import assert from "node:assert/strict";
-import { shortGame, relatedQuests } from "../scripts/guides/siteText";
+import { shortGame, relatedQuests, achFlags } from "../scripts/guides/siteText";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -31,6 +31,16 @@ test("related quests: quoted names next to a quest word, once each", () => {
   };
   assert.deepEqual(relatedQuests(a), ["Man's Best Friend", "Missing Brother"]); // in page order: items, secrets, tips
   assert.deepEqual(relatedQuests({ ...a, tips: [], items: [], secrets: [] }), []);
+});
+
+test("achievement labels: the builder's own, plus what the text makes plain", () => {
+  assert.deepEqual(achFlags({ desc: "Collect all Gwent cards.", missable: true }), ["missable", "collectible"]);
+  assert.deepEqual(achFlags({ desc: "Kill 100 drowners." }), ["cumulative"]);
+  assert.deepEqual(achFlags({ desc: "Finish the game on Death March difficulty." }), ["difficulty"]);
+  assert.deepEqual(achFlags({ desc: "Win a match.", how: "Play an online co-op session." }), ["online"]);
+  assert.deepEqual(achFlags({ desc: "Open the door.", how: "Known bug: may not unlock; reload the save." }), ["buggy"]);
+  assert.deepEqual(achFlags({ desc: "Reach the Grove.", labels: ["collectible", "nonsense"] }), ["collectible"]);
+  assert.deepEqual(achFlags({ desc: "Defeat the dragon." }), []);
 });
 
 console.log(`\n${passed} tests passed`);

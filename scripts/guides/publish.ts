@@ -13,7 +13,7 @@ import path from 'path';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
-import { shortGame, relatedQuests } from './siteText';
+import { shortGame, relatedQuests, achFlags, ACH_FLAGS, type AchFlag } from './siteText';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 import { GENERATED as GUIDE_UI_GEN } from './guide-ui.generated';
@@ -88,6 +88,7 @@ function localize(a: GuideArea, t?: any): GuideArea {
     enemies: merge(a.enemies, t.enemies),
     shops: merge(a.shops, t.shops),
     fights: merge(a.fights || [], t.fights),
+    ...(a.info && t.info ? { info: { ...a.info, ...t.info, levels: a.info.levels, coords: a.info.coords } } : {}),
     tips: Array.isArray(t.tips) && t.tips.length === (a.tips || []).length ? t.tips : a.tips,
     sections: (a.sections || []).map((x, i) => ({
       ...x,
@@ -166,6 +167,14 @@ const SCRIPT = `
     el.textContent=n>=t?'\u2713':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
   });};
   progress();
+  // Achievement labels filter (one at a time; "To do" = not ticked yet), and the spoiler switch / tap-to-reveal.
+  var ff=document.querySelector('[data-flag-filter]');
+  if(ff){ff.addEventListener('click',function(e){var b=e.target.closest('button[data-flag]');if(!b)return;var f=b.getAttribute('data-flag');
+    ff.querySelectorAll('button[data-flag]').forEach(function(x){var on=x===b;x.classList.toggle('bg-[#a87ffb]/15',on);x.classList.toggle('border-[#a87ffb]/50',on);x.classList.toggle('text-white',on);});
+    var dk=K?'qcw:'+K+':achievements':'',dn=dk?load(dk):new Set();
+    document.querySelectorAll('[data-flags]').forEach(function(r){var show=!f||(f==='todo'?!dn.has(r.getAttribute('data-ach')):(' '+r.getAttribute('data-flags')+' ').indexOf(' '+f+' ')>=0);r.classList.toggle('qc-off',!show);});});}
+  var sp=document.querySelector('[data-spoilers]');if(sp)sp.addEventListener('change',function(){b.classList.toggle('qc-spoilers',sp.checked);});
+  document.addEventListener('click',function(e){var s=e.target.closest('.qc-spoiler');if(s){s.classList.add('is-shown');e.preventDefault();}});
   // "On this page" links: a section that's folded opens when its link is used (or the page opens at it).
   var openAt=function(){var id=location.hash.slice(1);if(!id)return;var el=document.getElementById(id);if(el&&el.tagName==='DETAILS')el.open=true;};
   window.addEventListener('hashchange',openAt);openAt();
@@ -264,6 +273,11 @@ function page(opts: { title: string; description: string; depth: number; canonic
     [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
     [data-progress].is-complete { color: #34d399; }
     .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
+    /* Hidden achievements: blurred until tapped, or all shown with the page's spoiler switch. */
+    .qc-spoiler { filter: blur(5px); cursor: pointer; transition: filter .15s; }
+    .qc-spoiler.is-shown, body.qc-spoilers .qc-spoiler { filter: none; }
+    /* The achievement filter hides rows with this class (the search box uses the hidden attribute: both apply). */
+    .qc-off { display: none !important; }
     /* Search hides entries with the hidden attribute; layout classes like "flex" would otherwise keep them showing. */
     [hidden] { display: none !important; }
   </style>
@@ -392,7 +406,27 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const jump = sectionLinks.length > 2
     ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">${esc(ui('onThisPage'))}:</span>${sectionLinks.map(([id, label]) => `<a href="#${id}" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(label)}</a>`).join('')}</nav>`
     : '';
-  const quests = relatedQuests(a);
+  // Prefer the page's own quest list (its summary box) over names found in the entries.
+  const quests = a.info?.quests?.length ? [] : relatedQuests(a);
+  // The summary box: what this place is and how to get there. Connected areas link to their guide pages.
+  const info = a.info;
+  const areaLink = (name: string) => {
+    const l = areas.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    return l ? `<a class="text-[#a87ffb] hover:text-white" href="../${esc(l.slug)}/index.html">${esc(name)}</a>` : esc(name);
+  };
+  const infoRow = (label: string, html: string) => `<div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">${esc(label)}</dt><dd class="min-w-0 text-zinc-200">${html}</dd></div>`;
+  const infoBox = info && (info.region || info.levels || info.quests?.length || info.services?.length || info.enemyTypes?.length || info.directions || info.connected?.length || info.coords)
+    ? `<dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm">${[
+        info.region && infoRow(ui('infoRegion'), esc(info.region)),
+        info.levels && infoRow(ui('infoLevels'), esc(info.levels)),
+        info.directions && infoRow(ui('infoWay'), `${esc(info.directions)}${info.coords ? ` <span class="text-zinc-500">(${esc(info.coords)})</span>` : ''}`),
+        !info.directions && info.coords && infoRow(ui('infoCoords'), esc(info.coords)),
+        info.connected?.length && infoRow(ui('infoConnected'), info.connected.map(areaLink).join(', ')),
+        info.quests?.length && infoRow(ui('relatedQuests'), info.quests.map(esc).join(' · ')),
+        info.services?.length && infoRow(ui('infoServices'), info.services.map(esc).join(' · ')),
+        info.enemyTypes?.length && infoRow(ui('infoEnemies'), info.enemyTypes.map(esc).join(' · ')),
+      ].filter(Boolean).join('')}</dl>`
+    : '';
   // What this page doesn't list, said plainly (a section that's simply missing reads as an oversight).
   const empty = [!a.items.length && ui('items'), !a.secrets.length && ui('secrets'), !a.enemies.length && ui('enemies'), !a.shops.length && ui('shops')].filter(Boolean) as string[];
   const notListed = empty.length && a.items.length + a.secrets.length + a.enemies.length + a.shops.length > 0
@@ -439,6 +473,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       </div>
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
       ${a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${esc(a.overview)}</p>` : ''}
+      ${infoBox}
       ${jump}
       ${quests.length ? `<p class="mt-3 text-sm text-zinc-400"><span class="text-zinc-500">${esc(ui('relatedQuests'))}:</span> ${quests.map((q) => `<span class="inline-block rounded-md bg-white/[0.05] px-2 py-0.5 text-zinc-200 mr-1 mb-1">${esc(q)}</span>`).join('')}</p>` : ''}
       ${dontMiss}
@@ -718,13 +753,52 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
   const r = ach.roadmap || {};
   const stat = (v: string, label: string) => (v ? `<div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-lg font-bold text-white">${esc(v)}</div><div class="text-xs text-zinc-500">${esc(label)}</div></div>` : '');
   const areaName = (slug?: string) => links.find((l) => l.slug === slug)?.name;
+  // Labels per achievement (the builder's, plus what its text makes plain), their counts and the filter.
+  const flagsOf = new Map<any, AchFlag[]>(list.map((x) => [x, achFlags(x)]));
+  const flagCount = (f: AchFlag) => list.filter((x) => flagsOf.get(x)!.includes(f)).length;
+  const achId = (name: string) => `ach-${String(name).toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)}`;
+  // The roadmap's steps, numbered; each step's achievements are the ones it names, or whose area it names ("Emerald
+  // Grove & Hollow: …"). An achievement belongs to the first step that has it.
+  const steps: string[] = Array.isArray(r.steps) ? r.steps : [];
+  const lc = (s: string) => String(s || '').toLowerCase();
+  const stepOf = new Map<any, number>();
+  const stepAchs = steps.map((st, i) => {
+    const head = st.includes(':') && st.indexOf(':') < 70 ? st.slice(0, st.indexOf(':')) : '';
+    const mine = list.filter((x) => lc(st).includes(lc(x.name)) || (!!head && !!x.area && !!areaName(x.area) && lc(head).includes(lc(areaName(x.area)!))));
+    for (const x of mine) if (!stepOf.has(x)) stepOf.set(x, i);
+    return mine;
+  });
+  const stepsHtml = steps.length
+    ? `<section id="roadmap" class="mt-6 scroll-mt-20"><h2 class="mb-2 text-lg font-bold text-white">${esc(ui('rmSteps'))}</h2><ol class="space-y-2">${steps.map((st, i) => {
+        const colon = st.includes(':') && st.indexOf(':') < 70 ? st.indexOf(':') : -1;
+        const head = colon > 0 ? st.slice(0, colon) : '';
+        const text = colon > 0 ? st.slice(colon + 1).trim() : st;
+        const mine = stepAchs[i].filter((x) => stepOf.get(x) === i);
+        const miss = mine.filter((x) => x.missable);
+        const link = (x: any) => `<a class="text-[#a87ffb] hover:text-white" href="#${achId(x.name)}">${esc(x.name)}</a>`;
+        return `<li id="step-${i + 1}" class="scroll-mt-20 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          <div class="flex items-baseline gap-2"><span class="shrink-0 rounded-md bg-[#a87ffb]/20 px-1.5 text-xs font-bold text-[#a87ffb]">${esc(ui('rmStep', { n: i + 1 }))}</span>${head ? `<span class="font-semibold text-white">${esc(head)}</span>` : ''}</div>
+          <p class="mt-1 text-sm text-zinc-300">${esc(text)}</p>
+          ${miss.length ? `<div class="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-sm"><div class="flex items-center gap-1.5 font-semibold text-amber-200">${ICON.warn} ${esc(ui('rmMissHere'))}</div><ul class="mt-1 space-y-1 text-zinc-200">${miss.map((x) => `<li>${link(x)}${x.how && !x.hidden ? `<span class="text-zinc-400">: ${esc(String(x.how).split(/(?<=[.!?])\s/)[0])}</span>` : ''}</li>`).join('')}</ul></div>` : ''}
+          ${mine.length > miss.length ? `<p class="mt-2 text-xs text-zinc-500">${esc(ui('rmAlsoHere'))}: ${mine.filter((x) => !x.missable).map(link).join(', ')}</p>` : ''}
+        </li>`;
+      }).join('')}</ol></section>`
+    : '';
+  const flagLabel = (f: AchFlag) => ui(`achFlag_${f}`);
+  const flagChips = ACH_FLAGS.filter((f) => flagCount(f) > 0);
+  const filterHtml = flagChips.length
+    ? `<div class="mb-2 flex flex-wrap items-center gap-1.5 text-xs" data-flag-filter><button type="button" data-flag="" class="qc-flag rounded-md border border-[#a87ffb]/50 bg-[#a87ffb]/15 px-2 py-1 text-white">${esc(ui('achFilterAll'))}</button>${flagChips.map((f) => `<button type="button" data-flag="${f}" class="qc-flag rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300">${esc(flagLabel(f))} <span class="text-zinc-500">${flagCount(f)}</span></button>`).join('')}<button type="button" data-flag="todo" class="qc-flag rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300">${esc(ui('achFilterTodo'))}</button>${list.some((x) => x.hidden) ? `<label class="ml-auto flex items-center gap-1.5 text-zinc-400"><input type="checkbox" data-spoilers class="accent-[#a87ffb]"> ${esc(ui('achSpoilers'))}</label>` : ''}</div>`
+    : '';
   const row = (x: any) => {
     const where = x.area && areaName(x.area) ? `<a class="text-[#a87ffb] hover:text-white" href="../${esc(x.area)}/index.html">${esc(ui('achInArea', { area: areaName(x.area)! }))}</a>` : '';
-    const body = `<strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${x.rarity != null ? ` <span class="text-zinc-500 text-xs">${esc(ui('achRarity', { n: x.rarity }))}</span>` : ''}
-      ${x.hidden && !x.how ? '' : x.desc ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.desc)}</span>` : ''}
-      ${x.how ? (x.hidden ? `<details class="mt-1"><summary class="cursor-pointer text-xs text-zinc-500">${esc(ui('achHidden'))}</summary><span class="block text-zinc-300 text-sm mt-1">${esc(x.how)}</span></details>` : `<span class="block text-zinc-300 text-sm mt-1">${esc(x.how)}</span>`) : ''}
-      ${where ? `<span class="block text-xs mt-1">${where}</span>` : ''}`;
-    return `<div data-search="${esc(`${x.name} ${x.hidden ? '' : x.desc || ''} ${areaName(x.area) || ''}`)}">${checkRow(`ach:${x.name}`, body)}</div>`;
+    const flags = flagsOf.get(x)!;
+    const tags = flags.filter((f) => f !== 'missable').map((f) => ` <span class="rounded bg-white/[0.06] px-1.5 text-[10px] font-semibold uppercase text-zinc-400">${esc(flagLabel(f))}</span>`).join('');
+    const step = stepOf.has(x) ? `<a class="text-zinc-500 hover:text-white" href="#step-${stepOf.get(x)! + 1}">${esc(ui('rmStep', { n: stepOf.get(x)! + 1 }))}</a>` : '';
+    const body = `<strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${tags}${x.rarity != null ? ` <span class="text-zinc-500 text-xs">${esc(ui('achRarity', { n: x.rarity }))}</span>` : ''}
+      ${x.hidden ? (x.how ? `<span class="block text-[11px] uppercase tracking-wide text-zinc-500 mt-0.5">${esc(ui('achHiddenTag'))}</span>` : '') : x.desc ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.desc)}</span>` : ''}
+      ${x.how ? (x.hidden ? `<span class="qc-spoiler block text-zinc-300 text-sm mt-1" title="${esc(ui('achHidden'))}">${esc(x.how)}</span>` : `<span class="block text-zinc-300 text-sm mt-1">${esc(x.how)}</span>`) : ''}
+      ${where || step ? `<span class="block text-xs mt-1">${[where, step].filter(Boolean).join(' · ')}</span>` : ''}`;
+    return `<div id="${achId(x.name)}" class="scroll-mt-20" data-flags="${esc(flags.join(' '))}" data-ach="${esc(`ach:${x.name}`)}" data-search="${esc(`${x.name} ${x.hidden ? '' : x.desc || ''} ${areaName(x.area) || ''}`)}">${checkRow(`ach:${x.name}`, body)}</div>`;
   };
   fs.writeFileSync(
     path.join(dir, 'index.html'),
@@ -746,9 +820,12 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
         <h1 class="text-3xl font-bold text-white">${esc(ui('achH1', { game: gameName }))}</h1>
         <p class="text-zinc-400 mt-2">${esc(ui('achIntro'))}</p>
         <div class="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">${stat(r.time, ui('rmTime'))}${stat(r.difficulty, ui('rmDifficulty'))}${stat(r.playthroughs, ui('rmPlaythroughs'))}${stat(String(list.filter((x) => x.missable).length || r.missables || ''), ui('rmMissables'))}</div>
+        ${flagChips.filter((f) => f !== 'missable').length ? `<p class="mt-2 text-xs text-zinc-400">${flagChips.filter((f) => f !== 'missable').map((f) => `<span class="mr-3"><strong class="text-zinc-200">${flagCount(f)}</strong> ${esc(flagLabel(f).toLowerCase())}</span>`).join('')}</p>` : ''}
+        ${steps.length ? `<nav class="mt-4 flex flex-wrap gap-1.5 text-xs"><a href="#roadmap" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white">${esc(ui('rmSteps'))}</a><a href="#all-achievements" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white">${esc(ui('achAll'))}</a></nav>` : ''}
         ${r.noReturn?.length ? `<section class="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-4"><h2 class="flex items-center gap-2 text-base font-bold text-amber-200">${ICON.warn} ${esc(ui('rmNoReturn'))}</h2><ul class="mt-2 space-y-1.5 text-sm text-zinc-200">${r.noReturn.map((n: any) => `<li><strong class="text-white">${esc(n.point)}</strong>: ${esc(n.lost)}</li>`).join('')}</ul></section>` : ''}
-        ${r.steps?.length ? fold(ui('rmSteps'), ICON.list, `<ol class="list-decimal pl-8 space-y-1.5 text-sm text-zinc-300">${r.steps.map((st: string) => `<li>${esc(st)}</li>`).join('')}</ol>`, { open: true }) : ''}
-        <h2 class="mt-8 mb-2 text-lg font-bold text-white">${esc(ui('achAll'))} <span class="text-sm font-normal text-zinc-500" data-count="${esc(list.map((x) => `ach:${x.name}`).join(','))}">0/${list.length}</span></h2>
+        ${stepsHtml}
+        <h2 id="all-achievements" class="mt-8 mb-2 scroll-mt-20 text-lg font-bold text-white">${esc(ui('achAll'))} <span class="text-sm font-normal text-zinc-500" data-count="${esc(list.map((x) => `ach:${x.name}`).join(','))}">0/${list.length}</span></h2>
+        ${filterHtml}
         <input type="search" data-filter="#qc-ach-rows" data-empty="#qc-ach-empty" placeholder="${esc(ui('searchAch'))}" class="w-full mb-2 px-4 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
         <div id="qc-ach-rows">${list.map(row).join('')}</div>
         <p id="qc-ach-empty" hidden class="mt-3 text-sm text-zinc-500">${esc(ui('noMatches'))}</p>

@@ -36,6 +36,7 @@ type Tr = {
   enemies: { id: string; name?: string; weakness?: string; steal?: string; notes?: string }[];
   shops: { id: string; name?: string; sells?: string }[];
   fights?: { id: string; name?: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
+  info?: { region?: string; quests?: string[]; services?: string[]; enemyTypes?: string[]; directions?: string; connected?: string[] };
   tips: string[];
   sections: { title: string; entries: { id: string; text: string }[] }[];
   src: number;
@@ -50,6 +51,7 @@ function source(a: GuideArea) {
     enemies: a.enemies.map((e) => ({ id: e.id, name: e.name, weakness: e.weakness, steal: e.steal, notes: e.notes })),
     shops: a.shops.map((e) => ({ id: e.id, name: e.name, sells: e.sells })),
     fights: (a.fights || []).map((e) => ({ id: e.id, name: e.name, enemies: e.enemies, threats: e.threats, weaknesses: e.weaknesses, tactics: e.tactics, rewards: e.rewards })),
+    ...(a.info ? { info: { region: a.info.region, quests: a.info.quests, services: a.info.services, enemyTypes: a.info.enemyTypes, directions: a.info.directions, connected: a.info.connected } } : {}),
     tips: a.tips || [],
     sections: (a.sections || []).map((x) => ({ title: x.title, entries: x.entries.map((e) => ({ id: e.id, text: e.text })) })),
   };

@@ -25,7 +25,9 @@ if (!game) {
   process.exit(1);
 }
 
-type Ach = { name: string; desc: string; rarity: number | null; icon: string; hidden: boolean; missable?: boolean; how?: string; area?: string; areaName?: string };
+type Ach = { name: string; desc: string; rarity: number | null; icon: string; hidden: boolean; missable?: boolean; how?: string; area?: string; areaName?: string; labels?: string[] };
+/** Labels an achievement can carry (the page shows and filters on them; missable is its own field). */
+const LABELS = ['collectible', 'cumulative', 'difficulty', 'online', 'buggy'];
 
 // Steam sometimes sends Windows-1252 control bytes as characters: 0x85 is "…" ("That Is the Evilest Thing…"); the rest
 // of that range is dropped.
@@ -121,17 +123,20 @@ async function main() {
       `For the video game "${info.game || game}", explain how to unlock each of these Steam achievements. ${areaHint}${versionNote} ` +
         (quick ? 'Use what you know; leave a field empty if unsure. ' : 'Search the web; do not answer from memory. ') +
         `Write everything in English, in your own words. ${MISSABLE}Reply with one line per achievement, exactly:\n` +
-        'ACH: achievement name | missable: yes or no | the guide area where it happens, using an area name from the list above (or empty) | how to unlock it, in one or two short sentences\n' +
+        'ACH: achievement name | missable: yes or no | the guide area where it happens, using an area name from the list above (or empty) | labels: any of collectible (find or collect all of something), cumulative (do something many times), difficulty (needs a difficulty setting or a no-death run), online (needs online or co-op play), buggy (known to sometimes not unlock), separated by commas, or none | how to unlock it, in one or two short sentences\n' +
         batch.map((a) => `- ${a.name}: ${a.desc || '(hidden achievement)'}`).join('\n'),
       label,
     );
     for (const line of text.split('\n')) {
-      const m = line.match(/^\s*[-*]?\s*ACH:\s*(.+?)\s*\|\s*missable:\s*(yes|no)\s*\|\s*([^|]*?)\s*\|\s*(.+)$/i);
+      // Labels between the area and the how-to (older replies without them still read).
+      const m = line.match(/^\s*[-*]?\s*ACH:\s*(.+?)\s*\|\s*missable:\s*(yes|no)\s*\|\s*([^|]*?)\s*\|\s*(?:labels?:\s*([^|]*?)\s*\|\s*)?(.+)$/i);
       if (!m) continue;
       const a = batch.find((x) => norm(x.name) === norm(m[1]));
       if (!a) continue;
       a.missable = /yes/i.test(m[2]);
-      a.how = m[4].trim().slice(0, 400);
+      a.how = m[5].trim().slice(0, 400);
+      const labels = String(m[4] || '').toLowerCase().split(/\s*,\s*/).filter((l) => LABELS.includes(l));
+      if (labels.length) a.labels = labels;
       const area = areaBySlugName.get(norm(m[3]));
       if (area) {
         a.area = area.slug;

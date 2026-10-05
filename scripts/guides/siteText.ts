@@ -33,3 +33,25 @@ export function relatedQuests(a: GuideArea): string[] {
   }
   return [...found.values()].slice(0, 8);
 }
+
+/** What an achievement is like: the labels its page shows and filters on. */
+export type AchFlag = 'missable' | 'collectible' | 'cumulative' | 'difficulty' | 'online' | 'buggy';
+export const ACH_FLAGS: AchFlag[] = ['missable', 'collectible', 'cumulative', 'difficulty', 'online', 'buggy'];
+
+/**
+ * An achievement's labels: the builder's own (labels), plus what its text makes plain (older guides have no labels):
+ * collect or find all / N things; do something many times; a difficulty or no-death run; online or co-op; reported as
+ * glitched. Missable comes from the guide.
+ */
+export function achFlags(a: { desc?: string; how?: string; missable?: boolean; labels?: string[] }): AchFlag[] {
+  const desc = String(a.desc || ''), all = `${desc} ${a.how || ''}`;
+  const out = new Set<AchFlag>();
+  for (const l of a.labels || []) if ((ACH_FLAGS as string[]).includes(l)) out.add(l as AchFlag);
+  if (a.missable) out.add('missable');
+  if (/\b(collect|find|obtain|gather|discover|read|unlock|acquire)\b[^.]{0,40}\b(all|every|each)\b|\b(all|every)\s+(\d+\s+)?(collectibles?|cards?|pages?|books?|notes?|letters?|maps?|treasures?|relics?|tarot)\b/i.test(desc)) out.add('collectible');
+  if (/\b(\d{2,}|[3-9])\s+(times|enemies|kills|creatures|opponents|games|matches|battles|hits|days|quests|contracts|races)\b|\b(kill|defeat|slay|win|complete|craft|earn|deal|travel|open|destroy|loot|sell|buy)\b[^.]{0,25}?\b(\d{2,}|[3-9])\b|\b(in total|cumulative)\b/i.test(desc)) out.add('cumulative');
+  if (/\b(difficulty|hard mode|honou?r mode|tactician|nightmare|death ?march|blood and broken bones|without dying|permadeath|ironman)\b/i.test(all)) out.add('difficulty');
+  if (/\b(online|multiplayer|co-?op|pvp)\b/i.test(all)) out.add('online');
+  if (/\b(glitch(ed|y)?|bugged|buggy|may not unlock|doesn'?t always unlock|known bug)\b/i.test(all)) out.add('buggy');
+  return ACH_FLAGS.filter((f) => out.has(f));
+}

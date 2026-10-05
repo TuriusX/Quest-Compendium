@@ -46,6 +46,7 @@
 import {
   db, gemini, MODEL, gameKey, arg, editionOf, editionNote, searchesIn, visitName, cleanAreaName, resolveArea, normalizeVisits, isLayout,
   LAYOUTS, LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, guideRelease, releasedAfter, stageKey, MISSABLE_STANDARD, parseItem,
+  INFO_FORMAT, WAY_FORMAT, parseInfoFields, parseWayFields, hasInfo, type GuideInfo,
   type GuideArea, type GuideEntry, type GuideSection, type GuideFight, type Layout,
 } from './common';
 import { stageCopy } from './promote';
@@ -302,6 +303,8 @@ type Parsed = {
   extra: Record<string, GuideEntry[]>;
   /** FIGHT lines: the area's key fights (bosses and set-piece battles). */
   fights: GuideFight[];
+  /** INFO and WAY lines: the summary box and the way here. */
+  info: GuideInfo | null;
 };
 
 /** What a page is about, in words the writing prompt can use. */
@@ -330,6 +333,8 @@ const detailFormats = () =>
   'SECRET: hidden thing and how to find it\n' +
   'ENEMY: enemy name | weakness (empty if it has none or the game has no weaknesses) | what can be stolen, or a notable drop (only if the game has stealing or drops worth noting; otherwise empty) | short note\n' +
   'SHOP: shop or NPC name | what they sell or offer\n' +
+  `${INFO_FORMAT} (one line)\n` +
+  `${WAY_FORMAT} (one line)\n` +
   'FIGHT: name of a boss or major set-piece battle here | the enemies | their notable abilities and threats | weaknesses and resistances | the tactics and positions that win it | the rewards (one line per key fight; never ordinary enemies; leave out if there are none)\n' +
   'TIP: short practical tip';
 
@@ -355,10 +360,10 @@ async function research(area: { name: string; story: string; group?: string }): 
 
 /** Read the one-detail-per-line reply. `real` = the websites backing each line (empty lists in quick mode). */
 function parseDetails(text: string, real: Set<string>[]): Parsed {
-  const out: Parsed = { overview: null, items: [], secrets: [], enemies: [], shops: [], tips: [], extra: {}, fights: [] };
+  const out: Parsed = { overview: null, items: [], secrets: [], enemies: [], shops: [], tips: [], extra: {}, fights: [], info: null };
   let n = 0;
   text.split('\n').forEach((line, k) => {
-    const m = line.match(/^\s*[-*]?\s*(OVERVIEW|ITEM|SECRET|ENEMY|SHOP|TIP|DEADLINE|MISSABLE|LINK|ACTIVITY|FIGHT):\s*(.+)$/i);
+    const m = line.match(/^\s*[-*]?\s*(OVERVIEW|ITEM|SECRET|ENEMY|SHOP|TIP|DEADLINE|MISSABLE|LINK|ACTIVITY|FIGHT|INFO|WAY):\s*(.+)$/i);
     if (!m) return;
     const f = m[2].split('|').map((x) => x.trim());
     const sources = [...(real[k] || [])];
@@ -373,6 +378,12 @@ function parseDetails(text: string, real: Set<string>[]): Parsed {
       case 'FIGHT': {
         const v = (i: number) => (f[i] && !/^(none|n\/a|-|unknown)$/i.test(f[i]) ? f[i].slice(0, 400) : undefined);
         if (f[0]) out.fights.push({ id: `f${n}`, name: f[0].slice(0, 100), enemies: v(1), threats: v(2), weaknesses: v(3), tactics: v(4), rewards: v(5), sources });
+        break;
+      }
+      case 'INFO':
+      case 'WAY': {
+        const merged = (m[1].toUpperCase() === 'INFO' ? parseInfoFields : parseWayFields)(f, out.info || {});
+        out.info = { ...merged, sources: [...new Set([...(out.info?.sources || []), ...sources])] };
         break;
       }
       case 'LINK': (out.extra.LINK ||= []).push({ id, name: f[0], text: f.slice(1).join(' | '), sources }); break;
@@ -584,6 +595,7 @@ async function mainQuick() {
         tips: d.tips.map((t) => t.text!).slice(0, 6),
         ...(sections.length ? { sections } : {}),
         ...(d.fights.length ? { fights: d.fights.slice(0, 6).map(({ sources: _s, ...x }) => x) } : {}),
+        ...(hasInfo(d.info) ? { info: (({ sources: _s, ...x }) => x)(d.info!) } : {}),
         ...(area.group ? { group: area.group } : {}),
         sources: [],
         // Drafts at first even with --auto-publish: published at the end, only if the guide gets enough pages.
@@ -689,7 +701,7 @@ async function main() {
       const toCheck = claimsFor(area.name, {
         overview: null,
         items: data.items.filter(oneSource), secrets: data.secrets.filter(oneSource),
-        enemies: data.enemies.filter(oneSource), shops: data.shops.filter(oneSource), tips: [], extra: {}, fights: [],
+        enemies: data.enemies.filter(oneSource), shops: data.shops.filter(oneSource), tips: [], extra: {}, fights: [], info: null,
       });
       const supported = toCheck.length ? await factCheck(area.name, toCheck) : new Set<string>();
       const keep = (e: GuideEntry) => twoSources(e) || (oneSource(e) && supported.has(e.id));
@@ -715,6 +727,8 @@ async function main() {
         ...(sections.length ? { sections } : {}),
         // Key fights a real source backs (they're advice as much as facts, so one source is enough, like tips).
         ...(data.fights.some((x) => (x.sources || []).length >= 1) ? { fights: data.fights.filter((x) => (x.sources || []).length >= 1).slice(0, 6) } : {}),
+        // The summary box and the way here, when a real source backs them.
+        ...(hasInfo(data.info) && (data.info!.sources || []).length >= 1 ? { info: data.info! } : {}),
         ...(area.group ? { group: area.group } : {}),
         sources: usedSources.slice(0, 8),
         status: heldReason ? 'held' : (autoPublish || upgrade) && !stage ? 'published' : 'draft',

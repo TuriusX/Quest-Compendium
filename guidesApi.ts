@@ -104,6 +104,8 @@ function localizePage(p: any, t: any) {
     enemies: merge(p.enemies, x.enemies),
     shops: merge(p.shops, x.shops),
     fights: merge(p.fights || [], x.fights),
+    // The summary box and the way here: the translation's words, the original's levels and coordinates.
+    ...(p.info && x.info ? { info: { ...p.info, ...x.info, levels: p.info.levels, coords: p.info.coords } } : {}),
     tips: Array.isArray(x.tips) && x.tips.length === p.tips.length ? x.tips : p.tips,
     sections: p.sections.map((sec: any, i: number) => ({
       ...sec,
@@ -260,6 +262,8 @@ export function registerGuidesApi(app: Express): void {
           tips: Array.isArray(a.tips) ? a.tips : [],
           // Key fights: bosses and set-piece battles, with what it takes to win them.
           fights: (Array.isArray(a.fights) ? a.fights : []).map(({ sources, updatedFrom, ...x }: any) => x).filter((x: any) => x && x.name),
+          // The summary box and the way here (region, levels, quests, services, enemy types, directions, coordinates).
+          ...(a.info && typeof a.info === 'object' ? { info: (({ sources, ...x }: any) => x)(a.info) } : {}),
           // Structure-specific sections (a calendar page's deadlines, missable events, social links, activities).
           sections: Array.isArray(a.sections)
             ? a.sections.map((x: any) => ({ title: String(x.title || ''), check: !!x.check, entries: (x.entries || []).map((e: any) => ({ id: String(e.id), text: String(e.text || '') })) }))
@@ -330,6 +334,8 @@ export type GuidePageForPlace = {
   sections: { title: string; check: boolean; entries: { id: string; text: string }[] }[];
   /** Key fights (bosses and set-piece battles). */
   fights: { id: string; name: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
+  /** The summary box and the way here. */
+  info?: { region?: string; levels?: string; quests?: string[]; services?: string[]; enemyTypes?: string[]; directions?: string; connected?: string[]; coords?: string };
 };
 
 /**
@@ -362,6 +368,7 @@ export async function guidePageFor(game: string | undefined, place: string | und
         tips: Array.isArray(a.tips) ? a.tips : [],
         sections: Array.isArray(a.sections) ? a.sections : [],
         fights: Array.isArray(a.fights) ? a.fights.filter((x: any) => x && x.name) : [],
+        ...(a.info && typeof a.info === 'object' ? { info: a.info } : {}),
       };
     });
   } catch {
@@ -385,6 +392,10 @@ export function guideNotesForPrompt(pg: GuidePageForPlace): string {
   for (const e of pg.shops.slice(0, 6)) lines.push(`Shop/NPC: ${e.name}${!blankish(e.sells) ? `: ${e.sells}` : ''}`);
   for (const t of pg.tips.slice(0, 5)) lines.push(`Tip: ${t}`);
   for (const f of (pg.fights || []).slice(0, 4)) lines.push(`Key fight: ${f.name}${f.enemies ? ` (${f.enemies})` : ''}`);
+  if (pg.info?.region) lines.push(`Region: ${pg.info.region}${pg.info.levels ? ` (levels ${pg.info.levels})` : ''}`);
+  if (pg.info?.directions) lines.push(`Getting there: ${pg.info.directions}${pg.info.coords ? ` (map ${pg.info.coords})` : ''}`);
+  if (pg.info?.connected?.length) lines.push(`Connects to: ${pg.info.connected.join(', ')}`);
+  if (pg.info?.quests?.length) lines.push(`Quests here: ${pg.info.quests.join('; ')}`);
   const body = lines.map((l) => `- ${l}`).join('\n').slice(0, 2400);
   return pg.verified
     ? `[GUIDE NOTES FOR ${pg.name} (from the Quest Compendium guide, checked against sources): use these]\n${body}`

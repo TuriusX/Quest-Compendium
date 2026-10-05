@@ -236,6 +236,53 @@ export const MISSABLE_STANDARD =
   '"missable because" says what locks it out ("lost once you leave for Act 2", "gone if you side with the goblins").';
 
 /**
+ * An area page's summary box and the way to it: what the place is (region or parent area, level range, quests,
+ * services and important NPCs, enemy types) and how to get there (directions from a named neighbouring place, the
+ * areas it connects to, map coordinates when the game shows them).
+ */
+export type GuideInfo = {
+  region?: string; levels?: string; quests?: string[]; services?: string[]; enemyTypes?: string[];
+  directions?: string; connected?: string[]; coords?: string; sources?: string[];
+};
+
+/** The builders' INFO and WAY lines (and the fill-in repair's). */
+export const INFO_FORMAT =
+  'INFO: region or parent area | level range (empty if the game has no levels) | quests here (separated by ;) | services and important NPCs (separated by ;) | enemy types (separated by ;)';
+export const WAY_FORMAT =
+  'WAY: how to get here, starting from a named neighbouring place, waypoint or landmark (e.g. "north-east of Mulbrydale, over the bridge") | areas this one connects to (separated by ;) | the map coordinates if the game shows them (empty otherwise)';
+
+const infoText = (v: string | undefined, n: number) => {
+  const t = String(v || '').replace(/\s+/g, ' ').trim();
+  return !t || /^(none|n\/a|-|unknown|empty|no levels?)\.?$/i.test(t) ? undefined : t.slice(0, n);
+};
+const infoList = (v: string | undefined) =>
+  String(v || '').split(/\s*;\s*/).map((x) => infoText(x, 80)).filter(Boolean).slice(0, 8) as string[];
+
+/** An INFO line's fields, merged into the page's info. */
+export function parseInfoFields(f: string[], into: GuideInfo = {}): GuideInfo {
+  const out: GuideInfo = { ...into };
+  const region = infoText(f[0], 100), levels = infoText(f[1], 40);
+  const quests = infoList(f[2]), services = infoList(f[3]), enemyTypes = infoList(f[4]);
+  if (region) out.region = region;
+  if (levels) out.levels = levels;
+  if (quests.length) out.quests = quests;
+  if (services.length) out.services = services;
+  if (enemyTypes.length) out.enemyTypes = enemyTypes;
+  return out;
+}
+/** A WAY line's fields, merged into the page's info. */
+export function parseWayFields(f: string[], into: GuideInfo = {}): GuideInfo {
+  const out: GuideInfo = { ...into };
+  const directions = infoText(f[0], 300), connected = infoList(f[1]), coords = infoText(f[2], 60);
+  if (directions) out.directions = directions;
+  if (connected.length) out.connected = connected;
+  if (coords && /\d/.test(coords)) out.coords = coords;
+  return out;
+}
+/** Has the info anything to show? */
+export const hasInfo = (i: GuideInfo | undefined | null) => !!i && !!(i.region || i.levels || i.quests?.length || i.services?.length || i.enemyTypes?.length || i.directions || i.connected?.length || i.coords);
+
+/**
  * An ITEM line's fields: name | where | how | missable because. The older name | where | missable: yes/no still reads.
  * An item is missable when it has a lockout (or an older "yes").
  */
@@ -294,6 +341,8 @@ export type GuideArea = {
   sections?: GuideSection[];
   /** Key fights here: bosses and major set-piece battles, with what it takes to win them. */
   fights?: GuideFight[];
+  /** The summary box and the way here (INFO and WAY lines): region, levels, quests, services, enemy types, directions. */
+  info?: GuideInfo;
   /** A clearer search-result title and description (from the weekly Search Console check), English pages. */
   seoTitle?: string;
   seoDescription?: string;

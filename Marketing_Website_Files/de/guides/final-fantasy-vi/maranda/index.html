@@ -37,6 +37,11 @@
     [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
     [data-progress].is-complete { color: #34d399; }
     .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
+    /* Hidden achievements: blurred until tapped, or all shown with the page's spoiler switch. */
+    .qc-spoiler { filter: blur(5px); cursor: pointer; transition: filter .15s; }
+    .qc-spoiler.is-shown, body.qc-spoilers .qc-spoiler { filter: none; }
+    /* The achievement filter hides rows with this class (the search box uses the hidden attribute: both apply). */
+    .qc-off { display: none !important; }
     /* Search hides entries with the hidden attribute; layout classes like "flex" would otherwise keep them showing. */
     [hidden] { display: none !important; }
   </style>
@@ -65,6 +70,7 @@
       </div>
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> Alle Gebiete in diesem Guide</a>
       <p class="mt-5 text-zinc-300 leading-relaxed">Nachdem die Gruppe einer Brieftaube vom Jungfernflug der Falcon gefolgt ist, landet sie in Maranda und besucht Lolas Haus auf der Ostseite der Stadt. Beim Lesen des Briefwechsels auf ihrem Schreibtisch offenbart sich eine unverwechselbare, hochgestochene Ausdrucksweise, die darauf hindeutet, dass Cyan noch am Leben ist und ihr heimlich anstelle ihres gefallenen Partners aus Mobliz schreibt. Wenn man Lolas Antwort nimmt und sie der Brieftaube draußen anhängt, fliegt der Vogel in Richtung Zozo und verrät so den Aufenthaltsort des nächsten Ziels.</p>
+      
       <nav aria-label="Auf dieser Seite" class="mt-4 flex flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">Auf dieser Seite:</span><a href="#items" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Gegenstände</a><a href="#secrets" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Geheimnisse</a><a href="#tips" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Tipps</a></nav>
       
       
@@ -137,6 +143,14 @@
     el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
   });};
   progress();
+  // Achievement labels filter (one at a time; "To do" = not ticked yet), and the spoiler switch / tap-to-reveal.
+  var ff=document.querySelector('[data-flag-filter]');
+  if(ff){ff.addEventListener('click',function(e){var b=e.target.closest('button[data-flag]');if(!b)return;var f=b.getAttribute('data-flag');
+    ff.querySelectorAll('button[data-flag]').forEach(function(x){var on=x===b;x.classList.toggle('bg-[#a87ffb]/15',on);x.classList.toggle('border-[#a87ffb]/50',on);x.classList.toggle('text-white',on);});
+    var dk=K?'qcw:'+K+':achievements':'',dn=dk?load(dk):new Set();
+    document.querySelectorAll('[data-flags]').forEach(function(r){var show=!f||(f==='todo'?!dn.has(r.getAttribute('data-ach')):(' '+r.getAttribute('data-flags')+' ').indexOf(' '+f+' ')>=0);r.classList.toggle('qc-off',!show);});});}
+  var sp=document.querySelector('[data-spoilers]');if(sp)sp.addEventListener('change',function(){b.classList.toggle('qc-spoilers',sp.checked);});
+  document.addEventListener('click',function(e){var s=e.target.closest('.qc-spoiler');if(s){s.classList.add('is-shown');e.preventDefault();}});
   // "On this page" links: a section that's folded opens when its link is used (or the page opens at it).
   var openAt=function(){var id=location.hash.slice(1);if(!id)return;var el=document.getElementById(id);if(el&&el.tagName==='DETAILS')el.open=true;};
   window.addEventListener('hashchange',openAt);openAt();
