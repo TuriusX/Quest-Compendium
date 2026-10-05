@@ -538,11 +538,17 @@ async function program() {
     let stopped = false;
     const queue = order.filter((o) => usable.has(o.slug) && !pg.done.includes(o.slug) && !pg.failed.some((f) => f.slug === o.slug));
     let reserved = 0; // money held for pages being built right now
+    // Google's spend-based rate limit (429 RESOURCE_EXHAUSTED) is the account's, shared with players: the page goes back
+    // in the queue and everything waits 2 minutes; after 3 of them the run stops (next run carries on). Never the
+    // page's fault, so it isn't counted as a try.
+    let rateLimits = 0, pausedUntil = 0;
+    const rateLimited = (e: any) => /RESOURCE_EXHAUSTED|spend-based rate limit|429/i.test(String(e?.message || e));
     const worker = async () => {
       while (queue.length && !stopped) {
         const need = Math.max(1, measured * 2);
         if (room() - reserved < need) { if (!stopped) console.log(`\nBudget: $${room().toFixed(2)} left for today or in all; next run carries on.`); stopped = true; break; }
         if (Date.now() - started > MINUTES * 60_000) { if (!stopped) console.log('\nTime limit for this run; next run carries on.'); stopped = true; break; }
+        if (Date.now() < pausedUntil) { await new Promise((r) => setTimeout(r, pausedUntil - Date.now())); continue; }
         const o = queue.shift()!;
         reserved += need;
         const scope = { dollars: 0, searches: 0 };
@@ -554,6 +560,17 @@ async function program() {
           const reviewAgain = prior?.walkthrough?.length && (prior.status === 'waiting' || (!prior.status && pg.source !== 'stage'));
           r = await usageScope.run(scope, () => (reviewAgain ? reviewOnly(g.key, game, o.slug, order, prior, src) : buildPage(g.key, game, o.slug, order, src)));
         } catch (e: any) {
+          if (rateLimited(e)) {
+            reserved -= need;
+            charge(scope.dollars);
+            queue.unshift(o);
+            rateLimits++;
+            if (rateLimits >= 3) { if (!stopped) console.log(`
+Google's spend-based rate limit, ${rateLimits} times: stopped; next run carries on.`); stopped = true; st.rateLimitedAt = Date.now(); await save(); break; }
+            console.log(`  ${o.name}: Google's spend-based rate limit; waiting 2 minutes (${rateLimits} of 3).`);
+            pausedUntil = Date.now() + 120_000;
+            continue;
+          }
           pg.tries = pg.tries || {};
           pg.tries[o.slug] = (pg.tries[o.slug] || 0) + 1;
           console.log(`  ${o.name}: failed to build (${e?.message || e})${pg.tries[o.slug] >= 2 ? '; counted as failed' : '; tried again next run'}`);
