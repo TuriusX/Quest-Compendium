@@ -78,6 +78,20 @@ function sameShape(src: ReturnType<typeof source>, tr: any): boolean {
   );
 }
 
+/**
+ * The translation laid onto the original's exact structure: a translated string where the AI gave one in the same
+ * place, the English otherwise; ids, numbers and extra keys from the AI never get through. sameShape only checks the
+ * ids, so a reply with, say, an info list or a tip turned into a list of lists would otherwise reach Firestore, which
+ * refuses the whole language ("invalid nested entity").
+ */
+function fit(s: any, t: any): any {
+  if (typeof s === 'string') return typeof t === 'string' && t.trim() ? t : s;
+  if (Array.isArray(s)) return Array.isArray(t) && t.length === s.length ? s.map((x, i) => fit(x, t[i])) : s;
+  if (s && typeof s === 'object')
+    return Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined).map(([k, v]) => [k, k === 'id' ? v : fit(v, t?.[k])]));
+  return s;
+}
+
 async function main() {
   const key = gameKey(game!);
   const ref = db().collection('guides').doc(key);
@@ -156,7 +170,8 @@ async function main() {
             inconsistent++;
             console.warn(`  ${p.name}: doesn't use the glossary name for ${misses.join(', ')}`);
           }
-          areas[p.slug] = { ...tr, name: glossary[p.name] || tr.name, src: p.updatedAt || Date.now() };
+          const page = fit(src, tr);
+          areas[p.slug] = { ...page, name: glossary[p.name] || page.name, src: p.updatedAt || Date.now() };
           ok = true;
         } catch (e: any) {
           if (attempt) console.warn(`  ${p.name}: ${e?.message}`);
@@ -229,7 +244,7 @@ async function main() {
             try {
               const src = JSON.stringify({ time: ach.roadmap.time, difficulty: ach.roadmap.difficulty, playthroughs: ach.roadmap.playthroughs, steps: ach.roadmap.steps || [], noReturn: ach.roadmap.noReturn || [] });
               const r = await call(`${RULES(lang)}${placeNames(src)} This is a roadmap to 100% achievements. Reply with the same JSON object, translated.\n${src}`);
-              if (r && Array.isArray(r.steps)) roadmap = r;
+              if (r && Array.isArray(r.steps)) roadmap = fit(JSON.parse(src), r);
             } catch {
               /* the roadmap stays in English */
             }
