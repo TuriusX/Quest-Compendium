@@ -3,21 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Guía y walkthrough de CHRONO TRIGGER® | Quest Compendium</title>
-  <meta name="description" content="Guía zona por zona de CHRONO TRIGGER® con listas de objetos, secretos, cosas que puedes perderte y debilidades enemigas.">
+  <title>Guía y walkthrough de CHRONO TRIGGER | Quest Compendium</title>
+  <meta name="description" content="Guía zona por zona de CHRONO TRIGGER con listas de objetos, secretos, cosas que puedes perderte y debilidades enemigas.">
   <link rel="canonical" href="https://questcompendium.com/es/guides/chrono-trigger/">
   <link rel="alternate" hreflang="en" href="https://questcompendium.com/guides/chrono-trigger/">
   <link rel="alternate" hreflang="es" href="https://questcompendium.com/es/guides/chrono-trigger/">
   <link rel="alternate" hreflang="pt-BR" href="https://questcompendium.com/pt/guides/chrono-trigger/">
   
-  <meta property="og:title" content="Guía y walkthrough de CHRONO TRIGGER® | Quest Compendium">
-  <meta property="og:description" content="Guía zona por zona de CHRONO TRIGGER® con listas de objetos, secretos, cosas que puedes perderte y debilidades enemigas.">
+  <meta property="og:title" content="Guía y walkthrough de CHRONO TRIGGER | Quest Compendium">
+  <meta property="og:description" content="Guía zona por zona de CHRONO TRIGGER con listas de objetos, secretos, cosas que puedes perderte y debilidades enemigas.">
   <meta property="og:image" content="https://questcompendium.com/icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../../../favicon-192.png">
   <link rel="icon" type="image/png" sizes="96x96" href="../../../favicon-96.png">
   <link rel="icon" href="../../../favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="icon" type="image/svg+xml" href="../../../icon.svg">
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Guías","item":"https://questcompendium.com/es/guides/"},{"@type":"ListItem","position":2,"name":"CHRONO TRIGGER","item":"https://questcompendium.com/es/guides/chrono-trigger/"}]}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"Guía y walkthrough de CHRONO TRIGGER | Quest Compendium","url":"https://questcompendium.com/es/guides/chrono-trigger/","inLanguage":"es","about":{"@type":"VideoGame","name":"CHRONO TRIGGER®"}}</script>
+  <link rel="stylesheet" href="/assets/site.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
@@ -246,6 +248,9 @@
     el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
   });};
   progress();
+  // "On this page" links: a section that's folded opens when its link is used (or the page opens at it).
+  var openAt=function(){var id=location.hash.slice(1);if(!id)return;var el=document.getElementById(id);if(el&&el.tagName==='DETAILS')el.open=true;};
+  window.addEventListener('hashchange',openAt);openAt();
   // Search boxes: hide entries that don't match, and section headings left with nothing under them.
   var norm=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');};
   document.querySelectorAll('[data-filter]').forEach(function(inp){

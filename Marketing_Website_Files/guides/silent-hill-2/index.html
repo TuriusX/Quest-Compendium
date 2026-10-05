@@ -15,7 +15,9 @@
   <link rel="icon" type="image/png" sizes="96x96" href="../../favicon-96.png">
   <link rel="icon" href="../../favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="icon" type="image/svg+xml" href="../../icon.svg">
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Guides","item":"https://questcompendium.com/guides/"},{"@type":"ListItem","position":2,"name":"SILENT HILL 2","item":"https://questcompendium.com/guides/silent-hill-2/"}]}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"SILENT HILL 2 Guide and Walkthrough | Quest Compendium","url":"https://questcompendium.com/guides/silent-hill-2/","inLanguage":"en","about":{"@type":"VideoGame","name":"SILENT HILL 2"}}</script>
+  <link rel="stylesheet" href="/assets/site.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
@@ -156,6 +158,9 @@
     el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
   });};
   progress();
+  // "On this page" links: a section that's folded opens when its link is used (or the page opens at it).
+  var openAt=function(){var id=location.hash.slice(1);if(!id)return;var el=document.getElementById(id);if(el&&el.tagName==='DETAILS')el.open=true;};
+  window.addEventListener('hashchange',openAt);openAt();
   // Search boxes: hide entries that don't match, and section headings left with nothing under them.
   var norm=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');};
   document.querySelectorAll('[data-filter]').forEach(function(inp){

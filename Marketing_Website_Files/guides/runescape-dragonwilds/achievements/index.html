@@ -15,7 +15,9 @@
   <link rel="icon" type="image/png" sizes="96x96" href="../../../favicon-96.png">
   <link rel="icon" href="../../../favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="icon" type="image/svg+xml" href="../../../icon.svg">
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Guides","item":"https://questcompendium.com/guides/"},{"@type":"ListItem","position":2,"name":"RuneScape: Dragonwilds","item":"https://questcompendium.com/guides/runescape-dragonwilds/"},{"@type":"ListItem","position":3,"name":"Achievement guide and roadmap","item":"https://questcompendium.com/guides/runescape-dragonwilds/achievements/"}]}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"RuneScape: Dragonwilds Achievement Guide & Roadmap: All 50 Achievements","description":"All 50 RuneScape: Dragonwilds achievements: how to unlock each one, which are missable, and a roadmap to 100%.","mainEntityOfPage":"https://questcompendium.com/guides/runescape-dragonwilds/achievements/","inLanguage":"en","about":{"@type":"VideoGame","name":"RuneScape: Dragonwilds"},"publisher":{"@type":"Organization","name":"Quest Compendium","url":"https://questcompendium.com","logo":{"@type":"ImageObject","url":"https://questcompendium.com/icon.png"}}}</script>
+  <link rel="stylesheet" href="/assets/site.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
@@ -52,7 +54,7 @@
         <p class="text-zinc-400 mt-2">How to unlock every achievement, which ones you can miss, and the best order to get them all. Tick them off as you go.</p>
         <div class="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2"><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-lg font-bold text-white">50-70 hours</div><div class="text-xs text-zinc-500">Time to 100%</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-lg font-bold text-white">4/10</div><div class="text-xs text-zinc-500">Difficulty</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-lg font-bold text-white">1</div><div class="text-xs text-zinc-500">Playthroughs</div></div><div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-lg font-bold text-white">0</div><div class="text-xs text-zinc-500">Missable achievements</div></div></div>
         
-        <details class="qc-fold mt-3" open>
+        <details class="qc-fold mt-3 scroll-mt-20" open>
     <summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10"><svg class="qc-caret w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg><svg class="w-4 h-4 text-[#a87ffb]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg><h2 class="flex-1 text-sm sm:text-base font-bold text-white">Recommended order</h2></summary>
     <div class="mt-2"><ol class="list-decimal pl-8 space-y-1.5 text-sm text-zinc-300"><li>Establish your camp in Temple Woods, chop wood, mine ore, plant crops, and craft basic gear to clear tutorial and early survival tasks.</li><li>Venture into Bramblemead Valley and Whispering Swamp, looting the local Kara vaults for cores, practicing combat parries, and completing local secondary quests.</li><li>Progress into Fractured Plains and Stormtouched Highlands, unlocking utility spells and defeating regional bosses including the Black Knight Titan.</li><li>Explore Bloodblight Swamp and Bleakfields Valley while upgrading your weapons with enchantments and whetstones.</li><li>Traverse the Lake of Lost Souls and Hope&#39;s Fall, tackling high-tier vaults and continuing side quest completions.</li><li>Journey through Alcarrid Oasis, Dunes of Uzzer, and The Burning Spire, defeating the Umbral Sands regional boss.</li><li>Enter the Scorned Wilderness, summon General Velgar at the Dragon Altar, and slay Queen Kuldra.</li><li>Finish any remaining gold agility course medals, complete 3 secondary quests per zone, and grind combat and artisan skills to Level 99.</li></ol></div>
   </details>
@@ -257,6 +259,9 @@
     el.textContent=n>=t?'✓':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
   });};
   progress();
+  // "On this page" links: a section that's folded opens when its link is used (or the page opens at it).
+  var openAt=function(){var id=location.hash.slice(1);if(!id)return;var el=document.getElementById(id);if(el&&el.tagName==='DETAILS')el.open=true;};
+  window.addEventListener('hashchange',openAt);openAt();
   // Search boxes: hide entries that don't match, and section headings left with nothing under them.
   var norm=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');};
   document.querySelectorAll('[data-filter]').forEach(function(inp){

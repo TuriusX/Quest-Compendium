@@ -13,6 +13,9 @@ import path from 'path';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
+import { shortGame, relatedQuests } from './siteText';
+import { compile, optimize } from '@tailwindcss/node';
+import { Scanner } from '@tailwindcss/oxide';
 import { GENERATED as GUIDE_UI_GEN } from './guide-ui.generated';
 
 // ---- languages ----
@@ -97,6 +100,27 @@ function localize(a: GuideArea, t?: any): GuideArea {
 
 const SITE = 'https://questcompendium.com';
 const OUT = path.resolve('Marketing_Website_Files');
+/** The site's stylesheet, built from the pages' Tailwind classes at the end of a publish (buildSiteCss). */
+const CSS_HREF = '/assets/site.css';
+
+/** "Items, Secrets & Missables". */
+const joinAnd = (parts: string[]) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} & ${parts[parts.length - 1]}`);
+/** Cut at a word boundary to fit a search snippet. */
+const snippet = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, n - 1).replace(/\s+\S*$/, '')}…`);
+/** Structured data: the breadcrumb trail (search results show it instead of the bare URL). */
+const breadcrumb = (items: { name: string; url: string }[]) => ({
+  '@context': 'https://schema.org', '@type': 'BreadcrumbList',
+  itemListElement: items.map((x, i) => ({ '@type': 'ListItem', position: i + 1, name: x.name, item: x.url })),
+});
+/** Structured data: a guide page about a game. */
+const guideArticle = (o: { headline: string; description: string; url: string; game: string; modified?: number }) => ({
+  '@context': 'https://schema.org', '@type': 'Article', headline: o.headline.slice(0, 110), description: o.description,
+  mainEntityOfPage: o.url, inLanguage: LANG_TAG[LANG], about: { '@type': 'VideoGame', name: o.game },
+  publisher: { '@type': 'Organization', name: 'Quest Compendium', url: SITE, logo: { '@type': 'ImageObject', url: `${SITE}/icon.png` } },
+  ...(o.modified ? { dateModified: new Date(o.modified).toISOString() } : {}),
+});
+
+
 const withDrafts = arg('drafts') === 'true';
 const approve = arg('approve');
 
@@ -142,6 +166,9 @@ const SCRIPT = `
     el.textContent=n>=t?'\u2713':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
   });};
   progress();
+  // "On this page" links: a section that's folded opens when its link is used (or the page opens at it).
+  var openAt=function(){var id=location.hash.slice(1);if(!id)return;var el=document.getElementById(id);if(el&&el.tagName==='DETAILS')el.open=true;};
+  window.addEventListener('hashchange',openAt);openAt();
   // Search boxes: hide entries that don't match, and section headings left with nothing under them.
   var norm=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');};
   document.querySelectorAll('[data-filter]').forEach(function(inp){
@@ -189,7 +216,7 @@ const SCRIPT = `
   }
 })();`;
 
-function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string; entries?: { id: string; label: string }[] }) {
+function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string; entries?: { id: string; label: string }[]; ld?: object[] }) {
   // "Spot a mistake?": on an area page, the form can say which entry is wrong (its id goes to the server).
   const entryPicker = opts.entries && opts.entries.length
     ? `<label class="block text-sm text-zinc-400" for="qc-report-entry">${esc(ui('reportEntry'))}</label>
@@ -221,7 +248,8 @@ function page(opts: { title: string; description: string; depth: number; canonic
   <link rel="icon" type="image/png" sizes="96x96" href="${up}favicon-96.png">
   <link rel="icon" href="${up}favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="icon" type="image/svg+xml" href="${up}icon.svg">
-  <script src="https://cdn.tailwindcss.com"></script>
+  ${(opts.ld || []).map((x) => `<script type="application/ld+json">${JSON.stringify(x).replace(/</g, '\\u003c')}</script>`).join('\n  ')}
+  <link rel="stylesheet" href="${CSS_HREF}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
@@ -301,9 +329,9 @@ const checkRow = (id: string, html: string) =>
   `<label class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer" data-check="${esc(id)}"><input type="checkbox" aria-label="${esc(ui('gotIt'))}"><span class="text-sm leading-snug text-zinc-300">${html}</span></label>`;
 
 /** A folding section: the header shows its progress; content stays in the page for search engines. */
-function fold(title: string, icon: string, body: string, opts: { ids?: string[]; open?: boolean } = {}) {
+function fold(title: string, icon: string, body: string, opts: { ids?: string[]; open?: boolean; id?: string } = {}) {
   if (!body) return '';
-  return `<details class="qc-fold mt-3"${opts.open ? ' open' : ''}>
+  return `<details class="qc-fold mt-3 scroll-mt-20"${opts.id ? ` id="${esc(opts.id)}"` : ''}${opts.open ? ' open' : ''}>
     <summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10">${ICON.caret}${icon}<h2 class="flex-1 text-sm sm:text-base font-bold text-white">${esc(title)}</h2>${opts.ids?.length ? `<span class="text-xs text-zinc-500" data-count="${esc(opts.ids.join(','))}">0/${opts.ids.length}</span>` : ''}</summary>
     <div class="mt-2">${body}</div>
   </details>`;
@@ -349,8 +377,29 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const missGroups = merged.filter((g) => g.missable);
   const restGroups = merged.filter((g) => !g.missable);
   const missIds = [...missGroups.flatMap((g) => g.ids), ...miss.map((e) => e.id), ...missSec.flatMap((x) => x.entries.map((e) => e.id))];
+  // On this page: links to each section that has something (a closed section opens when its link is used).
+  const sectionLinks: [string, string][] = [
+    ...(missIds.length ? [['dont-miss', ui('dontMiss')] as [string, string]] : []),
+    ...otherSec.map((x, i) => [`sec-${i + 1}`, x.title] as [string, string]),
+    ...((a.fights || []).length ? [['fights', ui('fights')] as [string, string]] : []),
+    ...(achs.length ? [['achievements', ui('achHere')] as [string, string]] : []),
+    ...(rest.length || restGroups.length ? [['items', ui('items')] as [string, string]] : []),
+    ...(secretsLeft.length ? [['secrets', ui('secrets')] as [string, string]] : []),
+    ...(a.enemies.length ? [['enemies', ui('enemies')] as [string, string]] : []),
+    ...(a.shops.length ? [['shops', ui('shops')] as [string, string]] : []),
+    ...(a.tips.length ? [['tips', ui('tips')] as [string, string]] : []),
+  ];
+  const jump = sectionLinks.length > 2
+    ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">${esc(ui('onThisPage'))}:</span>${sectionLinks.map(([id, label]) => `<a href="#${id}" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(label)}</a>`).join('')}</nav>`
+    : '';
+  const quests = relatedQuests(a);
+  // What this page doesn't list, said plainly (a section that's simply missing reads as an oversight).
+  const empty = [!a.items.length && ui('items'), !a.secrets.length && ui('secrets'), !a.enemies.length && ui('enemies'), !a.shops.length && ui('shops')].filter(Boolean) as string[];
+  const notListed = empty.length && a.items.length + a.secrets.length + a.enemies.length + a.shops.length > 0
+    ? `<p class="mt-4 text-xs text-zinc-500">${esc(ui('notListed', { list: empty.map((x) => x.toLowerCase()).join(', ') }))}</p>`
+    : '';
   const dontMiss = missIds.length
-    ? `<section class="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
+    ? `<section id="dont-miss" class="mt-6 scroll-mt-20 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
         <h2 class="flex items-center gap-2 px-1 pb-1 text-base font-bold text-amber-200">${ICON.warn} ${esc(ui('dontMiss'))} <span class="text-xs font-normal text-amber-200/70" data-count="${esc(missIds.join(','))}">0/${missIds.length}</span></h2>
         ${missGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g))).join('')}${miss.map((e) => checkRow(e.id, itemHtml(e))).join('')}${missSec.flatMap((x) => x.entries.map((e) => checkRow(e.id, esc(e.text)))).join('')}
       </section>`
@@ -390,22 +439,26 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       </div>
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
       ${a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${esc(a.overview)}</p>` : ''}
+      ${jump}
+      ${quests.length ? `<p class="mt-3 text-sm text-zinc-400"><span class="text-zinc-500">${esc(ui('relatedQuests'))}:</span> ${quests.map((q) => `<span class="inline-block rounded-md bg-white/[0.05] px-2 py-0.5 text-zinc-200 mr-1 mb-1">${esc(q)}</span>`).join('')}</p>` : ''}
       ${dontMiss}
       ${otherSec
         .map((x) =>
           fold(x.title, ICON.list, x.check ? x.entries.map((e) => checkRow(e.id, esc(e.text))).join('') : `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${x.entries.map((e) => `<li>${esc(e.text)}</li>`).join('')}</ul>`, {
             ids: x.check ? x.entries.map((e) => e.id) : undefined,
             open: true,
+            id: `sec-${otherSec.indexOf(x) + 1}`,
           }),
         )
         .join('')}
-      ${achs.length ? fold(ui('achHere'), ICON.list, achs.slice().sort((x, y) => Number(!!y.missable) - Number(!!x.missable)).map((x) => `<div class="px-3 py-2 text-sm text-zinc-300"><strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${x.how ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.how)}</span>` : ''}</div>`).join('') + `<p class="px-3 pt-1 text-xs"><a class="text-[#a87ffb] hover:text-white" href="../achievements/index.html">${esc(ui('achLink'))} &rarr;</a></p>`, { open: achs.some((x) => x.missable) }) : ''}
-      ${fold(ui('items'), ICON.items, restGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g))).join('') + rest.map((e) => checkRow(e.id, itemHtml(e))).join(''), { ids: [...restGroups.flatMap((g) => g.ids), ...rest.map((e) => e.id)], open: true })}
-      ${fold(ui('secrets'), ICON.secrets, secretsLeft.map((e) => checkRow(e.id, esc(e.text))).join(''), { ids: secretsLeft.map((e) => e.id), open: true })}
-      ${fold(ui('fights'), ICON.enemies, fights, { open: true })}
-      ${fold(ui('enemies'), ICON.enemies, enemies)}
-      ${fold(ui('shops'), ICON.shops, shops)}
-      ${fold(ui('tips'), ICON.tips, tips, { open: true })}
+      ${achs.length ? fold(ui('achHere'), ICON.list, achs.slice().sort((x, y) => Number(!!y.missable) - Number(!!x.missable)).map((x) => `<div class="px-3 py-2 text-sm text-zinc-300"><strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${x.how ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.how)}</span>` : ''}</div>`).join('') + `<p class="px-3 pt-1 text-xs"><a class="text-[#a87ffb] hover:text-white" href="../achievements/index.html">${esc(ui('achLink'))} &rarr;</a></p>`, { open: achs.some((x) => x.missable), id: 'achievements' }) : ''}
+      ${fold(ui('items'), ICON.items, restGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g))).join('') + rest.map((e) => checkRow(e.id, itemHtml(e))).join(''), { ids: [...restGroups.flatMap((g) => g.ids), ...rest.map((e) => e.id)], open: true, id: 'items' })}
+      ${fold(ui('secrets'), ICON.secrets, secretsLeft.map((e) => checkRow(e.id, esc(e.text))).join(''), { ids: secretsLeft.map((e) => e.id), open: true, id: 'secrets' })}
+      ${fold(ui('fights'), ICON.enemies, fights, { open: true, id: 'fights' })}
+      ${fold(ui('enemies'), ICON.enemies, enemies, { id: 'enemies' })}
+      ${fold(ui('shops'), ICON.shops, shops, { id: 'shops' })}
+      ${fold(ui('tips'), ICON.tips, tips, { open: true, id: 'tips' })}
+      ${notListed}
       ${prev || next ? `<div class="mt-8 flex gap-3">${navCard(prev, 'prev')}${navCard(next, 'next')}</div>` : ''}
       ${cta(up, game)}
       ${a.sources.length ? `<p class="mt-6 text-xs text-zinc-500">${esc(ui('sourcesChecked', { list: a.sources.join(', ') }))}</p>` : ''}
@@ -561,21 +614,34 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
     const adir = path.join(dir, o.slug);
     fs.mkdirSync(adir, { recursive: true });
     let title: string, description: string;
+    const sg = shortGame(gameName);
     if (LANG === 'en') {
-      title = a.seoTitle ? `${a.seoTitle} | Quest Compendium` : `${a.name} – ${gameName} Guide: Items, Secrets & Enemies | Quest Compendium`;
-      const firsts = [...a.items.map((e) => e.name), ...a.secrets.map(() => 'secrets')].filter(Boolean).slice(0, 4).join(', ');
-      description = (a.seoDescription || `${gameName} ${a.name} guide: ${a.items.length} items${a.secrets.length ? `, ${a.secrets.length} secrets` : ''}${a.enemies.length ? `, enemy weaknesses` : ''}. ${firsts ? `Includes ${firsts}.` : ''}`).slice(0, 158);
+      // Place first, then what the page has (search results cut titles at about 60 characters).
+      const missN = a.items.filter((e) => e.missable).length + (a.sections || []).filter((x) => x.check && /miss/i.test(x.title)).reduce((n, x) => n + x.entries.length, 0);
+      const has = [a.items.length && 'Items', a.secrets.length && 'Secrets', missN ? 'Missables' : (a.fights || []).length ? 'Key Fights' : a.enemies.length ? 'Enemies' : ''].filter(Boolean) as string[];
+      const base = `${a.name} – ${sg}${has.length ? `: ${joinAnd(has)}` : ' Guide'}`;
+      title = a.seoTitle ? `${a.seoTitle} | Quest Compendium` : base.length + 19 <= 70 ? `${base} | Quest Compendium` : base;
+      const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+      const counts = [a.items.length && plural(a.items.length, 'item'), missN && plural(missN, 'missable'), a.secrets.length && plural(a.secrets.length, 'secret'), (a.fights || []).length && `key fights (${(a.fights || []).slice(0, 2).map((f) => f.name).join(', ')})`].filter(Boolean).join(', ');
+      const lead = String(a.overview || '').split(/(?<=[.!?])\s+/)[0] || '';
+      description = snippet(a.seoDescription || `Where to find everything in ${a.name} (${sg})${counts ? `: ${counts}` : ''}. ${lead}`.trim(), 158);
     } else {
-      title = ui('areaTitle', { area: a.name, game: gameName });
-      description = ui('areaDesc', { area: a.name, game: gameName }).slice(0, 158);
+      title = ui('areaTitle', { area: a.name, game: sg });
+      description = ui('areaDesc', { area: a.name, game: sg }).slice(0, 158);
     }
+    const url = `${SITE}/${LP}guides/${key}/${o.slug}/`;
+    const ld = [
+      breadcrumb([{ name: ui('navGuides'), url: `${SITE}/${LP}guides/` }, { name: sg, url: `${SITE}/${LP}guides/${key}/` }, { name: a.name, url }]),
+      guideArticle({ headline: title.replace(/ \| Quest Compendium$/, ''), description, url, game: gameName, modified: Number((a as any).updatedAt) || undefined }),
+    ];
     fs.writeFileSync(
       path.join(adir, 'index.html'),
       page({
         title,
         description,
         depth: 3 + extra,
-        canonical: `${SITE}/${LP}guides/${key}/${o.slug}/`,
+        canonical: url,
+        ld,
         body: areaBody(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra), achHere ? (achHere.list || []).filter((x: any) => x.area === o.slug) : []),
         draft,
         guide: key,
@@ -613,10 +679,14 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   fs.writeFileSync(
     path.join(dir, 'index.html'),
     page({
-      title: ui('gameTitle', { game: gameName }),
-      description: ui('gameDesc', { game: gameName }),
+      title: ui('gameTitle', { game: shortGame(gameName) }),
+      description: ui('gameDesc', { game: shortGame(gameName) }),
       depth: 2 + extra,
       canonical: `${SITE}/${LP}guides/${key}/`,
+      ld: [
+        breadcrumb([{ name: ui('navGuides'), url: `${SITE}/${LP}guides/` }, { name: shortGame(gameName), url: `${SITE}/${LP}guides/${key}/` }]),
+        { '@context': 'https://schema.org', '@type': 'CollectionPage', name: ui('gameTitle', { game: shortGame(gameName) }), url: `${SITE}/${LP}guides/${key}/`, inLanguage: LANG_TAG[LANG], about: { '@type': 'VideoGame', name: gameName } },
+      ],
       guide: key,
       langs,
       path: `guides/${key}/`,
@@ -659,10 +729,14 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
   fs.writeFileSync(
     path.join(dir, 'index.html'),
     page({
-      title: ui('achTitle', { game: gameName, n: list.length }),
-      description: ui('achDesc', { game: gameName, n: list.length }).slice(0, 158),
+      title: ui('achTitle', { game: shortGame(gameName), n: list.length }),
+      description: ui('achDesc', { game: shortGame(gameName), n: list.length }).slice(0, 158),
       depth: LANG === 'en' ? 3 : 4,
       canonical: `${SITE}/${LP}guides/${key}/achievements/`,
+      ld: [
+        breadcrumb([{ name: ui('navGuides'), url: `${SITE}/${LP}guides/` }, { name: shortGame(gameName), url: `${SITE}/${LP}guides/${key}/` }, { name: ui('achLink'), url: `${SITE}/${LP}guides/${key}/achievements/` }]),
+        guideArticle({ headline: ui('achTitle', { game: shortGame(gameName), n: list.length }).replace(/ \| Quest Compendium$/, ''), description: ui('achDesc', { game: shortGame(gameName), n: list.length }).slice(0, 158), url: `${SITE}/${LP}guides/${key}/achievements/`, game: gameName }),
+      ],
       guide: key,
       area: 'achievements',
       langs,
@@ -722,6 +796,42 @@ function indexBody(list: { key: string; game: string; count: number; players?: n
     ${letters.length > 5 ? `<div data-hide-when-searching class="flex flex-wrap gap-1 mb-4">${letters.map((l) => `<button type="button" data-letter="${l}" class="w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-[#a87ffb]/20 text-sm text-zinc-300 hover:text-white">${l}</button>`).join('')}</div>` : ''}
     <div data-games class="grid grid-cols-2 lg:grid-cols-4 gap-3">${cards}</div>
     <p id="qc-games-empty" hidden class="mt-3 text-sm text-zinc-500">${esc(ui('noMatches'))}</p>`;
+}
+
+/**
+ * The site's stylesheet: only the Tailwind classes its pages use, built once at publish time (about 30 KB), instead of
+ * Tailwind's in-browser development script (which compiled the CSS on every page view). Pages written by hand or by
+ * translate-site.ts (the home pages) get the same link in place of the old script. Kept from Tailwind 3, the site's
+ * classes' first version: a light grey default border colour, grey placeholders and pointer buttons.
+ */
+async function buildSiteCss() {
+  const input = `@import "tailwindcss";
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button { border-color: var(--color-gray-200, currentColor); }
+  input::placeholder, textarea::placeholder { color: var(--color-gray-400); }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+}`;
+  const scanner = new Scanner({ sources: [{ base: OUT, pattern: '**/*.html', negated: false }] });
+  const compiler = await compile(input, { base: path.resolve('.'), onDependency: () => {} });
+  const css = optimize(compiler.build(scanner.scan()), { minify: true }).code;
+  fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(OUT, 'assets', 'site.css'), css);
+  // Any page still loading the development script (the home pages) gets the stylesheet instead.
+  let fixed = 0;
+  const walk = (dir: string) => {
+    for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, f.name);
+      if (f.isDirectory()) walk(p);
+      else if (f.name.endsWith('.html')) {
+        const html = fs.readFileSync(p, 'utf8');
+        if (!html.includes('cdn.tailwindcss.com')) continue;
+        fs.writeFileSync(p, html.replace(/<script src="https:\/\/cdn\.tailwindcss\.com[^"]*"><\/script>/g, `<link rel="stylesheet" href="${CSS_HREF}">`));
+        fixed++;
+      }
+    }
+  };
+  walk(OUT);
+  console.log(`Stylesheet: assets/site.css (${Math.round(css.length / 1024)} KB)${fixed ? `; ${fixed} page(s) moved off the development script` : ''}.`);
 }
 
 async function main() {
@@ -813,6 +923,7 @@ async function main() {
   fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`);
   updateHomepage(games.filter((g) => g.published > 0));
   updateVersion();
+  await buildSiteCss();
   console.log(`Built ${games.reduce((n, g) => n + g.count, 0)} guide page(s) for ${games.length} game(s)${withDrafts ? ' (drafts included, marked DRAFT and hidden from search)' : ''}.`);
   console.log(`Open ${path.join(OUT, 'guides', 'index.html')} in your browser to look them over.`);
   process.exit(0);
