@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { GoogleGenAI } from '@google/genai';
+import { AsyncLocalStorage } from 'async_hooks';
 import { billedUsage } from '../../usage';
 
 dotenv.config();
@@ -21,6 +22,11 @@ export const db = () => getFirestore();
  */
 export const ledger = { calls: 0, input: 0, output: 0, thinking: 0, searches: 0, tokenDollars: 0, searchDollars: 0, unpriced: 0 };
 export const ledgerDollars = () => ledger.tokenDollars + ledger.searchDollars;
+/**
+ * Per-task usage when several run at once (flagship pages in parallel): calls made inside usageScope.run(scope, ...)
+ * are added to that scope as well as to the process ledger.
+ */
+export const usageScope = new AsyncLocalStorage<{ dollars: number; searches: number }>();
 const STEP_LIMIT = Number(process.env.PIPELINE_STEP_DOLLARS || 0);
 let ledgerPrinted = false;
 const printLedgerOnExit = () => {
@@ -54,6 +60,8 @@ export function gemini(): GoogleGenAI {
     ledger.calls++; ledger.input += u.input; ledger.output += u.output; ledger.thinking += u.thinking; ledger.searches += u.searches;
     ledger.tokenDollars += u.tokenDollars; ledger.searchDollars += u.searchDollars;
     if (!u.priced) ledger.unpriced++;
+    const scope = usageScope.getStore();
+    if (scope) { scope.dollars += u.tokenDollars + u.searchDollars; scope.searches += u.searches; }
     printLedgerOnExit();
     return res;
   };

@@ -17,6 +17,9 @@
  * The flagship program (system/flagship), run daily by the guide-flagship job:
  *   npx tsx scripts/guides/flagship.ts --program              build the next pages of the programme's guides, in order
  *   npx tsx scripts/guides/flagship.ts --program --estimate   what's left and what it would cost (nothing built)
+ *     --only <key>        just that guide        --concurrency N   pages built at once (default 1, at most 6)
+ * system/flagship: budget.dayOverrides { "2026-10-05": 30 } raises one day's cap; pauseAfter <key> pauses the
+ * programme (paused) once that guide is done; paused stops it until it's cleared.
  * Each guide in turn: an outline rebuild into staging first when the programme says so (guides/{key}.outline: layout and
  * note; repair.ts --action outline --stage-only), then every page built to the flagship standard. A page goes live
  * only when the Pro reviewer's verdict is a pass: straight into the live page for a guide keeping its outline, or into
@@ -30,7 +33,7 @@ import path from 'path';
 import { spawnSync } from 'child_process';
 import { ThinkingLevel } from '@google/genai';
 import {
-  db, gemini, MODEL, arg, searchesIn, sourcesIn, parseItem, ledger, ledgerDollars, MISSABLE_STANDARD, stageKey, addChildUsage,
+  db, gemini, MODEL, arg, searchesIn, sourcesIn, parseItem, ledger, ledgerDollars, usageScope, MISSABLE_STANDARD, stageKey, addChildUsage,
   type GuideEntry, type GuideStep, type GuideChoice, type GuideAdvice, type GuideFight, type GuideInfo,
 } from './common';
 import { recordMonthly } from '../../searchGuard';
@@ -40,6 +43,7 @@ import { call, reviewerFor } from './review';
 import { ProQuotaWait } from './reviewerQuota';
 import { promote, stageCopy } from './promote';
 import { deployToNetlify } from '../pipeline/netlify';
+import { FieldValue } from 'firebase-admin/firestore';
 
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const none = (v: string | undefined) => !v || /^(none|n\/a|-+|no|nothing)\.?$/i.test(v.trim());
@@ -303,7 +307,7 @@ type Verdict = { status: 'passed' | 'failed' | 'waiting'; reason?: string };
 /** The Pro consistency review with its verdict: fixes applied to the draft, and pass / fail (waiting: no Pro request). */
 async function proReview(game: string, p: any, neighbours: string[], draft: Draft): Promise<Verdict & { fixed: number; dropped: number }> {
   try {
-    const res: any = await call(reviewerFor('pro', 'other'), {
+    const res: any = await call(reviewerFor('pro', 'careful'), {
       contents: [{ role: 'user', parts: [{ text: consistencyPrompt(game, p, neighbours, draft) }] }],
       config: { temperature: 0.1, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
@@ -323,7 +327,8 @@ async function proReview(game: string, p: any, neighbours: string[], draft: Draf
  * build on (the live guide, or its staged rebuild). Returns its searches, real cost and verdict.
  */
 async function buildPage(key: string, game: string, slug: string, order: { slug: string; name: string }[], from = key) {
-  const before = { searches: ledger.searches, dollars: ledgerDollars() };
+  const scope = usageScope.getStore();
+  const before = scope ? { ...scope } : { searches: ledger.searches, dollars: ledgerDollars() };
   const p: any = (await db().collection('guides').doc(from).collection('areas').doc(slug).get()).data();
   if (!p) throw new Error(`no page ${slug}`);
   console.log(`\n${p.name}`);
@@ -390,7 +395,7 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
   }
   const placed = new Set(steps.flatMap((s) => s.entries || []));
   const unplaced = [...items, ...secrets].filter((e) => !placed.has(e.id)).map((e) => e.name || cut(e.text, 40));
-  const spent = { searches: ledger.searches - before.searches, dollars: ledgerDollars() - before.dollars };
+  const spent = scope ? { searches: scope.searches - before.searches, dollars: scope.dollars - before.dollars } : { searches: ledger.searches - before.searches, dollars: ledgerDollars() - before.dollars };
   const proto = {
     key, slug, game, name: p.name, walkthrough: steps, choices, advice, items, secrets, fights, ...(info ? { info } : {}),
     sources: [...sources].slice(0, 12), newEntries: news.length, unplaced, cost: spent, model: MODEL, at: Date.now(),
@@ -407,7 +412,8 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
 
 /** A prototype built before verdicts existed: only the Pro review (fixes and verdict), no rebuilding. */
 async function reviewOnly(key: string, game: string, slug: string, order: { slug: string; name: string }[], pr: any) {
-  const before = ledgerDollars();
+  const scope = usageScope.getStore();
+  const before = scope ? scope.dollars : ledgerDollars();
   const i = order.findIndex((o) => o.slug === slug);
   const neighbours = order.slice(Math.max(0, i - 3), i + 4).map((o) => o.name).filter((n) => n !== pr.name);
   const draft: Draft = { steps: pr.walkthrough || [], news: [], choices: pr.choices || [], advice: pr.advice || { matters: [], skip: [], mistakes: [] }, old: [...(pr.items || []).map((e: any) => ({ entry: e, kind: 'item' as const })), ...(pr.secrets || []).map((e: any) => ({ entry: e, kind: 'secret' as const }))] };
@@ -415,7 +421,7 @@ async function reviewOnly(key: string, game: string, slug: string, order: { slug
   const clean = tidyProto({ ...pr, walkthrough: draft.steps, choices: draft.choices, advice: draft.advice, items: draft.old.filter((o) => o.kind === 'item').map((o) => o.entry), secrets: draft.old.filter((o) => o.kind === 'secret').map((o) => o.entry), status: verdict.status, ...(verdict.reason ? { reason: verdict.reason } : { reason: null }), from: key, at: Date.now() });
   await db().collection('guidePrototypes').doc(`${key}__${slug}`).set(JSON.parse(JSON.stringify(clean)));
   console.log(`\n${pr.name}: review only: ${verdict.status}${verdict.reason ? ` (${verdict.reason})` : ''}, ${verdict.fixed} corrected, ${verdict.dropped} dropped`);
-  return { searches: 0, dollars: ledgerDollars() - before, verdict, proto: clean };
+  return { searches: 0, dollars: (scope ? scope.dollars : ledgerDollars()) - before, verdict, proto: clean };
 }
 
 /** The flagship fields written onto a page (the live guide's, or the staged rebuild's). */
@@ -440,7 +446,13 @@ async function program() {
   const st: any = (await ref.get()).data();
   if (!st?.guides?.length) { console.log('No flagship programme (system/flagship.guides).'); return; }
   const budget = { total: 90, daily: 15, stopAt: 100, ...(st.budget || {}) };
+  // One day's cap raised (budget.dayOverrides { "2026-10-05": 30 }), from the same total.
+  const dayCap = Number(budget.dayOverrides?.[today()]) || budget.daily;
+  budget.daily = dayCap;
   if (st.day !== today()) Object.assign(st, { day: today(), spentToday: 0, runPages: [], runFailures: [] });
+  if (st.paused && arg('estimate') !== 'true') { console.log(`The flagship programme is paused (${st.paused.why || 'until the owner says go'}). Nothing to do.`); return; }
+  const only = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
+  const concurrency = Math.max(1, Math.min(6, Number(arg('concurrency', '1')) || 1));
   st.spent = Number(st.spent || 0); st.spentToday = Number(st.spentToday || 0);
   st.progress = st.progress || {};
   st.runPages = st.runPages || []; st.runFailures = st.runFailures || [];
@@ -477,6 +489,7 @@ async function program() {
   let wentLive = false;
   for (const g of st.guides) {
     const pg: GuideProgress = st.progress[g.key];
+    if (only && g.key !== only) continue;
     if (pg.phase === 'done') continue;
     const info: any = (await db().collection('guides').doc(g.key).get()).data();
     const game = String(info?.game || g.key);
@@ -513,45 +526,54 @@ async function program() {
     const pages = (await db().collection('guides').doc(src).collection('areas').get()).docs;
     const usable = new Set(pages.filter((d) => (pg.source === 'stage' ? ['draft', 'published'] : ['published']).includes(d.data().status)).map((d) => d.id));
     let stopped = false;
-    for (const o of order) {
-      if (!usable.has(o.slug) || pg.done.includes(o.slug) || pg.failed.some((f) => f.slug === o.slug)) continue;
-      if (room() < Math.max(1, measured * 2)) { stopped = true; console.log(`\nBudget: $${room().toFixed(2)} left for today or in all; next run carries on.`); break; }
-      if (Date.now() - started > MINUTES * 60_000) { stopped = true; console.log('\nTime limit for this run; next run carries on.'); break; }
-      const before = ledgerDollars();
-      let r: Awaited<ReturnType<typeof buildPage>> | null = null;
-      try {
-        const prior: any = (await db().collection('guidePrototypes').doc(`${g.key}__${o.slug}`).get()).data();
-        // A prototype from before verdicts (built on the live guide) only needs its review.
-        r = prior && !prior.status && prior.walkthrough?.length && pg.source !== 'stage' ? await reviewOnly(g.key, game, o.slug, order, prior) : await buildPage(g.key, game, o.slug, order, src);
-      } catch (e: any) {
-        pg.tries = pg.tries || {};
-        pg.tries[o.slug] = (pg.tries[o.slug] || 0) + 1;
-        console.log(`  ${o.name}: failed to build (${e?.message || e})${pg.tries[o.slug] >= 2 ? '; counted as failed' : '; tried again next run'}`);
-        if (pg.tries[o.slug] >= 2) { pg.failed.push({ slug: o.slug, name: o.name, reason: `could not be built: ${cut(e?.message || e, 120)}` }); st.runFailures.push({ key: g.key, slug: o.slug, name: o.name, reason: 'could not be built' }); }
+    const queue = order.filter((o) => usable.has(o.slug) && !pg.done.includes(o.slug) && !pg.failed.some((f) => f.slug === o.slug));
+    let reserved = 0; // money held for pages being built right now
+    const worker = async () => {
+      while (queue.length && !stopped) {
+        const need = Math.max(1, measured * 2);
+        if (room() - reserved < need) { if (!stopped) console.log(`\nBudget: $${room().toFixed(2)} left for today or in all; next run carries on.`); stopped = true; break; }
+        if (Date.now() - started > MINUTES * 60_000) { if (!stopped) console.log('\nTime limit for this run; next run carries on.'); stopped = true; break; }
+        const o = queue.shift()!;
+        reserved += need;
+        const scope = { dollars: 0, searches: 0 };
+        let r: Awaited<ReturnType<typeof buildPage>> | null = null;
+        try {
+          const prior: any = (await db().collection('guidePrototypes').doc(`${g.key}__${o.slug}`).get()).data();
+          // A prototype from before verdicts (built on the live guide) only needs its review.
+          r = await usageScope.run(scope, () => (prior && !prior.status && prior.walkthrough?.length && pg.source !== 'stage' ? reviewOnly(g.key, game, o.slug, order, prior) : buildPage(g.key, game, o.slug, order, src)));
+        } catch (e: any) {
+          pg.tries = pg.tries || {};
+          pg.tries[o.slug] = (pg.tries[o.slug] || 0) + 1;
+          console.log(`  ${o.name}: failed to build (${e?.message || e})${pg.tries[o.slug] >= 2 ? '; counted as failed' : '; tried again next run'}`);
+          if (pg.tries[o.slug] >= 2) { pg.failed.push({ slug: o.slug, name: o.name, reason: `could not be built: ${cut(e?.message || e, 120)}` }); st.runFailures.push({ key: g.key, slug: o.slug, name: o.name, reason: 'could not be built' }); }
+        }
+        reserved -= need;
+        charge(scope.dollars);
+        if (r) {
+          st.pagesBuilt = Number(st.pagesBuilt || 0) + 1;
+          st.pageDollars = Number(st.pageDollars || 0) + scope.dollars;
+          if (r.verdict.status === 'passed') {
+            await writePage(src, o.slug, r.proto);
+            if (pg.source !== 'stage') {
+              // Live now: its translations are brought up to date by the pipeline (translationsDue).
+              await db().collection('guides').doc(g.key).set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(o.slug) } }, { merge: true });
+              wentLive = true;
+            }
+            pg.done.push(o.slug);
+            st.runPages.push({ key: g.key, slug: o.slug });
+          } else if (r.verdict.status === 'failed') {
+            pg.failed.push({ slug: o.slug, name: o.name, reason: r.verdict.reason || 'failed review' });
+            st.runFailures.push({ key: g.key, slug: o.slug, name: o.name, reason: r.verdict.reason || 'failed review' });
+          } // waiting: tried again next run
+        }
+        console.log(`  [${pg.done.length + pg.failed.length}/${usable.size}] ${o.name}: ${r ? r.verdict.status : 'not built'}, $${scope.dollars.toFixed(3)}; programme $${st.spent.toFixed(2)} ($${st.spentToday.toFixed(2)} today)`);
+        await save();
       }
-      const spent = ledgerDollars() - before;
-      charge(spent);
-      if (r) {
-        st.pagesBuilt = Number(st.pagesBuilt || 0) + 1;
-        st.pageDollars = Number(st.pageDollars || 0) + spent;
-        if (r.verdict.status === 'passed') {
-          await writePage(src, o.slug, r.proto);
-          if (pg.source !== 'stage') {
-            // Live now: its translations are brought up to date by the pipeline (translationsDue).
-            const gi: any = (await db().collection('guides').doc(g.key).get()).data() || {};
-            await db().collection('guides').doc(g.key).set({ translationsDue: { at: Date.now(), pages: [...new Set([...(gi.translationsDue?.pages || []), o.slug])].slice(0, 500) } }, { merge: true });
-            wentLive = true;
-          }
-          pg.done.push(o.slug);
-          st.runPages.push({ key: g.key, slug: o.slug });
-        } else if (r.verdict.status === 'failed') {
-          pg.failed.push({ slug: o.slug, name: o.name, reason: r.verdict.reason || 'failed review' });
-          st.runFailures.push({ key: g.key, slug: o.slug, name: o.name, reason: r.verdict.reason || 'failed review' });
-        } // waiting: tried again next run
-      }
-      await save();
-    }
+    };
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
     if (stopped) break;
+    const open = [...usable].filter((slug) => !pg.done.includes(slug) && !pg.failed.some((f) => f.slug === slug));
+    if (open.length) { console.log(`\n${game}: ${open.length} page(s) still waiting for a review; next run carries on.`); break; }
     // A rebuilt guide goes live when all its pages are reviewed: pages that failed are held back.
     if (pg.source === 'stage') {
       for (const f of pg.failed) await db().collection('guides').doc(src).collection('areas').doc(f.slug).set({ status: 'held', heldReason: `flagship review: ${f.reason}` }, { merge: true }).catch(() => {});
@@ -560,6 +582,13 @@ async function program() {
       wentLive = true;
     }
     pg.phase = 'done';
+    // Paused once this guide is done (pauseAfter): the next guides wait for the owner's go.
+    if (st.pauseAfter === g.key) {
+      st.paused = { after: g.key, at: Date.now(), why: `${game} is finished: waiting for the owner's review before the next guides` };
+      console.log(`\nPaused after ${game}: the next guides wait for the owner's go.`);
+      await save();
+      break;
+    }
     await save();
   }
   st.lastRun = Date.now();
