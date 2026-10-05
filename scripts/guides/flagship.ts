@@ -307,10 +307,20 @@ type Verdict = { status: 'passed' | 'failed' | 'waiting'; reason?: string };
 /** The Pro consistency review with its verdict: fixes applied to the draft, and pass / fail (waiting: no Pro request). */
 async function proReview(game: string, p: any, neighbours: string[], draft: Draft): Promise<Verdict & { fixed: number; dropped: number }> {
   try {
-    const res: any = await call(reviewerFor('pro', 'careful'), {
-      contents: [{ role: 'user', parts: [{ text: consistencyPrompt(game, p, neighbours, draft) }] }],
-      config: { temperature: 0.1, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
-    });
+    // A network failure ("fetch failed") is retried, after 5 and 20 seconds; the quota running out is not.
+    let res: any;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        res = await call(reviewerFor('pro', 'careful'), {
+          contents: [{ role: 'user', parts: [{ text: consistencyPrompt(game, p, neighbours, draft) }] }],
+          config: { temperature: 0.1, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+        });
+        break;
+      } catch (e: any) {
+        if (e instanceof ProQuotaWait || attempt >= 2) throw e;
+        await new Promise((r) => setTimeout(r, attempt ? 20_000 : 5_000));
+      }
+    }
     const text = String(res?.text || '');
     const t = applyFixes(text, draft);
     const v = text.split('\n').map((l) => fields(l, 'VERDICT')).filter(Boolean).pop();
@@ -411,14 +421,14 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
 }
 
 /** A prototype built before verdicts existed: only the Pro review (fixes and verdict), no rebuilding. */
-async function reviewOnly(key: string, game: string, slug: string, order: { slug: string; name: string }[], pr: any) {
+async function reviewOnly(key: string, game: string, slug: string, order: { slug: string; name: string }[], pr: any, from = key) {
   const scope = usageScope.getStore();
   const before = scope ? scope.dollars : ledgerDollars();
   const i = order.findIndex((o) => o.slug === slug);
   const neighbours = order.slice(Math.max(0, i - 3), i + 4).map((o) => o.name).filter((n) => n !== pr.name);
   const draft: Draft = { steps: pr.walkthrough || [], news: [], choices: pr.choices || [], advice: pr.advice || { matters: [], skip: [], mistakes: [] }, old: [...(pr.items || []).map((e: any) => ({ entry: e, kind: 'item' as const })), ...(pr.secrets || []).map((e: any) => ({ entry: e, kind: 'secret' as const }))] };
   const verdict = await proReview(game, { name: pr.name }, neighbours, draft);
-  const clean = tidyProto({ ...pr, walkthrough: draft.steps, choices: draft.choices, advice: draft.advice, items: draft.old.filter((o) => o.kind === 'item').map((o) => o.entry), secrets: draft.old.filter((o) => o.kind === 'secret').map((o) => o.entry), status: verdict.status, ...(verdict.reason ? { reason: verdict.reason } : { reason: null }), from: key, at: Date.now() });
+  const clean = tidyProto({ ...pr, walkthrough: draft.steps, choices: draft.choices, advice: draft.advice, items: draft.old.filter((o) => o.kind === 'item').map((o) => o.entry), secrets: draft.old.filter((o) => o.kind === 'secret').map((o) => o.entry), status: verdict.status, ...(verdict.reason ? { reason: verdict.reason } : { reason: null }), from, at: Date.now() });
   await db().collection('guidePrototypes').doc(`${key}__${slug}`).set(JSON.parse(JSON.stringify(clean)));
   console.log(`\n${pr.name}: review only: ${verdict.status}${verdict.reason ? ` (${verdict.reason})` : ''}, ${verdict.fixed} corrected, ${verdict.dropped} dropped`);
   return { searches: 0, dollars: (scope ? scope.dollars : ledgerDollars()) - before, verdict, proto: clean };
@@ -540,7 +550,9 @@ async function program() {
         try {
           const prior: any = (await db().collection('guidePrototypes').doc(`${g.key}__${o.slug}`).get()).data();
           // A prototype from before verdicts (built on the live guide) only needs its review.
-          r = await usageScope.run(scope, () => (prior && !prior.status && prior.walkthrough?.length && pg.source !== 'stage' ? reviewOnly(g.key, game, o.slug, order, prior) : buildPage(g.key, game, o.slug, order, src)));
+          // A page whose review couldn't run last time (waiting) is only reviewed again, not rebuilt.
+          const reviewAgain = prior?.walkthrough?.length && (prior.status === 'waiting' || (!prior.status && pg.source !== 'stage'));
+          r = await usageScope.run(scope, () => (reviewAgain ? reviewOnly(g.key, game, o.slug, order, prior, src) : buildPage(g.key, game, o.slug, order, src)));
         } catch (e: any) {
           pg.tries = pg.tries || {};
           pg.tries[o.slug] = (pg.tries[o.slug] || 0) + 1;
