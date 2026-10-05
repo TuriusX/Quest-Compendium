@@ -294,6 +294,9 @@ export type GuideArea = {
   sections?: GuideSection[];
   /** Key fights here: bosses and major set-piece battles, with what it takes to win them. */
   fights?: GuideFight[];
+  /** A clearer search-result title and description (from the weekly Search Console check), English pages. */
+  seoTitle?: string;
+  seoDescription?: string;
   /** false = a quick page, written from the AI's own knowledge and not yet fact-checked. Missing = checked (older pages). */
   verified?: boolean;
   /** When an --upgrade run last tried this quick page and couldn't confirm it (later upgrades skip it). */

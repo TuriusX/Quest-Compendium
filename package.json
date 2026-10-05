@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test:sync": "npx -y tsx tests/tabMerge.test.ts && npx -y tsx tests/placeName.test.ts && npx -y tsx tests/trackerPayload.test.ts && npx -y tsx tests/guideMatch.test.ts && npx -y tsx tests/questLog.test.ts && npx -y tsx tests/corrections.test.ts && npx -y tsx tests/reviewer.test.ts && npx -y tsx tests/discord.test.ts && npx -y tsx tests/steps.test.ts && npx -y tsx tests/answerBar.test.ts && npx -y tsx tests/questPolish.test.ts && npx -y tsx tests/combat.test.ts && npx -y tsx tests/fights.test.ts && npx -y tsx tests/combatScreen.test.ts && npx -y tsx tests/progress.test.ts && npx -y tsx tests/missables.test.ts && npx -y tsx tests/translationSync.test.ts && npx -y tsx tests/identity.test.ts",
+    "test:sync": "npx -y tsx tests/tabMerge.test.ts && npx -y tsx tests/placeName.test.ts && npx -y tsx tests/trackerPayload.test.ts && npx -y tsx tests/guideMatch.test.ts && npx -y tsx tests/questLog.test.ts && npx -y tsx tests/corrections.test.ts && npx -y tsx tests/reviewer.test.ts && npx -y tsx tests/discord.test.ts && npx -y tsx tests/steps.test.ts && npx -y tsx tests/answerBar.test.ts && npx -y tsx tests/questPolish.test.ts && npx -y tsx tests/combat.test.ts && npx -y tsx tests/fights.test.ts && npx -y tsx tests/combatScreen.test.ts && npx -y tsx tests/progress.test.ts && npx -y tsx tests/missables.test.ts && npx -y tsx tests/translationSync.test.ts && npx -y tsx tests/identity.test.ts && npx -y tsx tests/searchConsole.test.ts",
     "pipeline": "tsx scripts/pipeline/run.ts",
     "guides:build": "tsx scripts/guides/build.ts",
     "guides:publish": "tsx scripts/guides/publish.ts",

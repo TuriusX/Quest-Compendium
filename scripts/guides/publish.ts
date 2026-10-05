@@ -562,9 +562,9 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
     fs.mkdirSync(adir, { recursive: true });
     let title: string, description: string;
     if (LANG === 'en') {
-      title = `${a.name} – ${gameName} Guide: Items, Secrets & Enemies | Quest Compendium`;
+      title = a.seoTitle ? `${a.seoTitle} | Quest Compendium` : `${a.name} – ${gameName} Guide: Items, Secrets & Enemies | Quest Compendium`;
       const firsts = [...a.items.map((e) => e.name), ...a.secrets.map(() => 'secrets')].filter(Boolean).slice(0, 4).join(', ');
-      description = `${gameName} ${a.name} guide: ${a.items.length} items${a.secrets.length ? `, ${a.secrets.length} secrets` : ''}${a.enemies.length ? `, enemy weaknesses` : ''}. ${firsts ? `Includes ${firsts}.` : ''}`.slice(0, 158);
+      description = (a.seoDescription || `${gameName} ${a.name} guide: ${a.items.length} items${a.secrets.length ? `, ${a.secrets.length} secrets` : ''}${a.enemies.length ? `, enemy weaknesses` : ''}. ${firsts ? `Includes ${firsts}.` : ''}`).slice(0, 158);
     } else {
       title = ui('areaTitle', { area: a.name, game: gameName });
       description = ui('areaDesc', { area: a.name, game: gameName }).slice(0, 158);

@@ -23,6 +23,9 @@
  *   missables Only the missable entries, rewritten to the standard (findable anchor, exact final step, what locks it
  *            out; scripts/guides/missables.ts), in a staged copy: quick pages of older games without searches, the rest
  *            with searches.
+ *   queries  The pages the weekly Search Console check planned (system/searchConsole): entries that answer players'
+ *            searches vaguely rewritten, missing answers added, and a clearer title and description for pages ranking
+ *            5-20 (scripts/guides/queryRepair.ts), in a staged copy.
  *   careful  A fresh staged build with research, up to the search cap. A build that stops at the cap continues on
  *            the next run (the staged pages are kept); only a finished build goes to the gate.
  * A guide can override its outline for outline and careful rebuilds: guides/{key}.outline = { layout, extraPages:
@@ -40,12 +43,13 @@ import { reviewGuide, gateGuide, type Review } from './review';
 import { FLASH_REVIEW_MODEL, ProQuotaWait, type ReviewTier } from './reviewerQuota';
 import { writeFights } from './fights';
 import { writeMissables } from './missables';
+import { writeQueryFixes } from './queryRepair';
 
 // Page fixes are Flash work (reviewerQuota.ts): the fix plan and the fixed guide's gate.
 const PLAN_MODEL = FLASH_REVIEW_MODEL;
 const key = liveKey(arg('key') || (arg('game') && arg('game') !== 'true' ? gameKey(arg('game')!) : ''));
-const ACTIONS = ['fix', 'outline', 'careful', 'extend', 'upgrade', 'fights', 'missables'];
-const action = arg('action') as 'fix' | 'outline' | 'careful' | 'extend' | 'upgrade' | 'fights' | 'missables';
+const ACTIONS = ['fix', 'outline', 'careful', 'extend', 'upgrade', 'fights', 'missables', 'queries'];
+const action = arg('action') as 'fix' | 'outline' | 'careful' | 'extend' | 'upgrade' | 'fights' | 'missables' | 'queries';
 const gameArg = arg('game') && arg('game') !== 'true' ? arg('game')! : '';
 /** outline only: a game newer than the quick cutoff isn't built (the pipeline queues a careful build instead). */
 const quickOnly = arg('quick-only') === 'true';
@@ -187,7 +191,7 @@ async function fix(game: string, review: Review, newer: boolean): Promise<boolea
 
 async function main() {
   if (!key || !ACTIONS.includes(action)) {
-    console.log('Usage: npx tsx scripts/guides/repair.ts --key key [--game "Name"] --action fix|outline|careful|extend|upgrade|fights|missables [--plan-only] [--quick-only] [--report "text"] [--max-searches 300]');
+    console.log('Usage: npx tsx scripts/guides/repair.ts --key key [--game "Name"] --action fix|outline|careful|extend|upgrade|fights|missables|queries [--plan-only] [--quick-only] [--report "text"] [--max-searches 300]');
     process.exit(1);
   }
   const live: any = (await db().collection('guides').doc(key).get()).data();
@@ -209,14 +213,15 @@ async function main() {
   let tier: ReviewTier = action === 'fix' || (action === 'outline' && !newer) ? 'flash' : 'pro';
   const waiting: any = (await db().collection('guides').doc(stageKey(key)).get()).data();
   // Key fights: Pro when any page was searched (it ends up Checked), Flash when every page was quick.
-  if ((action === 'fights' || action === 'missables') && waiting?.passTier) tier = waiting.passTier;
+  if ((action === 'fights' || action === 'missables' || action === 'queries') && waiting?.passTier) tier = waiting.passTier;
   const gateOnly = !!waiting?.awaitingGate && waiting.repair === action;
   let ready = true;
   if (gateOnly) console.log('Repair: built earlier; its review waited for the Pro reviewer, so it goes straight to the gate.');
-  else if (action === 'fights' || action === 'missables') {
-    // Page passes: key fights added, or missables rewritten to the standard, page by page in a staged copy.
+  else if (action === 'fights' || action === 'missables' || action === 'queries') {
+    // Page passes: key fights added, missables rewritten to the standard, or search queries answered, page by page in
+    // a staged copy.
     if (!live) throw new Error(`no guide ${key}`);
-    const what = action === 'fights' ? 'key fights' : 'missables';
+    const what = action === 'fights' ? 'key fights' : action === 'missables' ? 'missables' : 'search query answers';
     const stageRef = db().collection('guides').doc(stageKey(key));
     const staged: any = (await stageRef.get()).data();
     // Another rebuild of this guide is staged (a careful build part-way, say): never thrown away for a page pass.
@@ -230,7 +235,9 @@ async function main() {
         await discard(key);
         await stageCopy(key);
       }
-      const r = action === 'fights' ? await writeFights(key, game, live, maxSearches) : await writeMissables(key, game, live, maxSearches);
+      const r = action === 'fights' ? await writeFights(key, game, live, maxSearches)
+        : action === 'missables' ? await writeMissables(key, game, live, maxSearches)
+          : await writeQueryFixes(key, game, maxSearches);
       searches += r.searches;
       dollars += r.dollars;
       const found = (resume ? Number(staged.passFound || 0) : 0) + r.found;
@@ -243,7 +250,7 @@ async function main() {
       } else if (!found) {
         ready = false;
         await discard(key);
-        console.log(`Gate: skipped (no ${what} to ${action === 'fights' ? 'add' : 'rewrite'}).`);
+        console.log(`Gate: skipped (no ${what} to ${action === 'fights' ? 'add' : 'write'}).`);
       }
     }
   } else if (action === 'fix') {

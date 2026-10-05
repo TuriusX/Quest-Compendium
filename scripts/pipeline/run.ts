@@ -75,7 +75,7 @@ const QUEUE_MIN = 150;
 /** A quick guide needs at least this many pages to be published (build.ts does the same). */
 const QUICK_MIN = 5;
 /** The repair queue's items: careful builds, fixes and outline rebuilds (scripts/guides/repair.ts). 'quick' = outline. */
-type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade' | 'fights' | 'missables'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string };
+type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade' | 'fights' | 'missables' | 'queries'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string };
 /** Minutes the repair queue may run before the rest of the run (the job's limit is 3 hours). */
 const QUEUE_MINUTES = env('PIPELINE_QUEUE_MINUTES', 120);
 const LANGS = (process.env.PIPELINE_LANGS || 'es,pt,de,fr,ru,ja,ko,zh').split(',').map((s) => s.trim()).filter(Boolean);
@@ -213,7 +213,10 @@ async function main() {
   }
   const have = new Set(allGuides.map((d) => d.id));
   let wished = 0;
-  for (const name of wishlist()) {
+  // The wish list file, then games people search for on Google without a guide (searchConsole.ts, most impressions
+  // first; at least 20 impressions in 28 days).
+  const searchWishes: string[] = (Array.isArray(state.searchWishes) ? state.searchWishes : []).filter((w: any) => w && w.game && w.impressions >= 20).map((w: any) => String(w.game));
+  for (const name of [...wishlist(), ...searchWishes]) {
     if (wished >= WISH_SLOTS) break;
     if (have.has(gameKey(name))) continue;
     add({ kind: 'build', game: name, key: gameKey(name), searches: 0, why: 'from the wish list', wish: true });
@@ -284,6 +287,18 @@ async function main() {
   // after PIPELINE_QUEUE_MINUTES so the rest of the run still fits in the job's time limit.
   // ---- 3b'. player corrections (scripts/guides/corrections.ts): reports from conversations, checked against sources
   // (up to 8 searches an entry, within the player reserve) and written into the guides through the review gate ----
+  // ---- 3a'. Search Console, weekly (scripts/pipeline/searchConsole.ts): the pull, the summary, page checks and the
+  // plan (repairs queued only when SEARCH_CONSOLE_REPAIRS=on), the wish list from searches and the Discord summary ----
+  if (!DRY && Date.now() - Number(state.searchConsoleAt || 0) > 6.5 * DAY && aiRoom >= 0.25) {
+    const sc = runScript(['scripts/pipeline/searchConsole.ts', '--weekly']);
+    state.dollars = (state.dollars || 0) + sc.dollars;
+    aiRoom -= sc.dollars;
+    if (sc.ok) state.searchConsoleAt = Date.now();
+    report.push(`${sc.ok ? '🔎' : '⚠️'} ${sc.summary || 'Search Console pull failed (see the job log)'}`);
+    // Its repairs may have joined the queue.
+    const fresh: any = (await stateRef.get()).data() || {};
+    if (Array.isArray(fresh.carefulQueue)) { queue.length = 0; queue.push(...fresh.carefulQueue); state.carefulQueue = fresh.carefulQueue; }
+  }
   let correctionSearches = 0;
   if (!DRY && aiRoom >= 0.25) {
     const room = Math.min(120, APP_CAP - RESERVE - appUsed);
@@ -317,7 +332,7 @@ async function main() {
       continue;
     }
     // Key fights search one call a page (a big guide needs about 300): the careful cap, without needing careful room.
-    const cap = big || action === 'fights' || action === 'missables' ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom);
+    const cap = big || action === 'fights' || action === 'missables' || action === 'queries' ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom);
     console.log(`\n▶ queue ${action} ${item.game} (up to ${cap} searches)`);
     const r = runScript(['scripts/guides/repair.ts', '--game', item.game, '--action', action, '--max-searches', String(cap), ...(item.report ? ['--report', item.report] : [])]);
     state.searches = (state.searches || 0) + r.searches;

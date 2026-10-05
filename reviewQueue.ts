@@ -99,6 +99,15 @@ export function registerReviewQueue(app: Express, deps: Deps) {
 
   const requireAdmin: Mw = (req, res, next) => (isAdmin((req as any).user) ? next() : res.status(403).json({ error: 'Not an admin.' }));
 
+  // The weekly Search Console summary (scripts/pipeline/searchConsole.ts): the Search tab.
+  app.get('/api/admin/search-console', deps.requireAuth, requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      res.json((await getFirestore().collection('system').doc('searchConsole').get()).data() || {});
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || 'Could not load the Search Console summary.' });
+    }
+  });
+
   app.get('/api/admin/review-queue', deps.requireAuth, requireAdmin, async (_req: Request, res: Response) => {
     try {
       const snap = await queue().orderBy('updatedAt', 'desc').limit(300).get();
@@ -184,7 +193,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
 <body>
 <header>
   <h1>Guide review queue</h1>
-  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button></nav>
+  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button></nav>
   <select id="filter" aria-label="Show"><option value="all">All open</option><option value="review">Failed reviews</option><option value="report">Player reports</option></select>
   <button id="signin" class="primary">Sign in with Google</button>
 </header>
@@ -192,6 +201,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   <p id="msg">Sign in to see the queue. Decisions are carried out by the next guide pipeline run (daily, 9:00 Chicago time); a dismissal is immediate.</p>
   <div id="list"></div>
   <div id="corr" hidden></div>
+  <div id="search" hidden></div>
   <details id="decidedBox" hidden><summary>Recently decided</summary><div id="decided"></div></details>
 </main>
 <script type="module">
@@ -234,15 +244,36 @@ function adminPage(firebaseConfig: Record<string, string>): string {
       + (corr.decided.length ? '<details><summary>Recently decided</summary>' + corr.decided.map((g) => '<div class="card"><div class="row"><span class="game">' + esc(g.game) + ' · ' + esc(g.areaName) + ' · ' + esc(g.entryName) + '</span>' + (g.entryKind === 'fight' ? '<span class="chip fight">Missing fight</span>' : '') + '<span class="chip">' + esc(g.status) + '</span></div>' + (g.verifiedText ? '<div class="said">' + esc(g.verifiedText.fight ? [g.verifiedText.fight.name, g.verifiedText.fight.enemies, g.verifiedText.fight.tactics].filter(Boolean).join(' · ') : [g.verifiedText.where, g.verifiedText.how, g.verifiedText.notes].filter(Boolean).join(' ')) + '</div>' : '') + '</div>').join('') + '</details>' : '');
     if (tab === 'corr') $('msg').textContent = corr.open.length + ' correction(s) waiting. Apply writes it into the guide on the next pipeline run (through the review gate); dismiss is immediate.';
   }
+  // Search: the weekly Search Console summary (last 28 days), the pages planned for a repair, games from searches.
+  let sc = {};
+  function renderSearch() {
+    if (!sc.pulledAt) { $('search').innerHTML = '<p class="dim">No Search Console data yet: the pipeline pulls it weekly.</p>'; if (tab === 'search') $('msg').textContent = ''; return; }
+    const t = sc.totals || {};
+    const pct = (x) => (Math.round((x || 0) * 1000) / 10) + '%';
+    const table = (head, rows) => '<table style="width:100%;border-collapse:collapse;font-size:13px"><tr>' + head.map((h) => '<th style="text-align:left;padding:4px;border-bottom:1px solid var(--line)">' + esc(h) + '</th>').join('') + '</tr>' + rows.map((r) => '<tr>' + r.map((c) => '<td style="padding:4px;border-bottom:1px solid var(--line)">' + c + '</td>').join('') + '</tr>').join('') + '</table>';
+    const est = sc.estimate || {};
+    $('search').innerHTML =
+      '<div class="card"><div class="row"><span class="game">' + esc(sc.site || '') + '</span><span class="dim">' + esc((sc.range || {}).start || '') + ' to ' + esc((sc.range || {}).end || '') + '</span></div>'
+      + '<div>' + (t.impressions || 0).toLocaleString() + ' impressions, ' + (t.clicks || 0).toLocaleString() + ' clicks, CTR ' + pct(t.ctr) + '</div></div>'
+      + '<div class="card"><b>Plan</b> ' + (sc.repairsOn ? '(repairs on: queued weekly)' : '(repairs off: nothing queued yet)') + ': ' + (est.pages || 0) + ' page(s) in ' + (est.guides || 0) + ' guide(s), about ' + (est.searches || 0) + ' searches and $' + (est.dollars || 0) + ' a week'
+      + ((sc.plan || []).length ? table(['Page', 'Impressions', 'Position', 'What to answer'], sc.plan.map((p) => [esc(p.game + ' / ' + p.name) + (p.striking ? ' <span class="chip queued">5-20</span>' : ''), String(p.impressions), String(p.position), esc(p.fixes.map((f) => '"' + f.query + '" ' + f.verdict).join('; ') || 'title and description')])) : '') + '</div>'
+      + '<div class="card"><b>Top queries</b>' + table(['Query', 'Impressions', 'Clicks', 'Position'], (sc.topQueries || []).slice(0, 25).map((q) => [esc(q.query), String(q.impressions), String(q.clicks), String(q.position)])) + '</div>'
+      + '<div class="card"><b>Top guide pages</b>' + table(['Page', 'Impressions', 'Clicks', 'CTR', 'Position', 'Top query'], (sc.topPages || []).slice(0, 25).map((p) => [esc(p.key + '/' + p.slug), String(p.impressions), String(p.clicks), pct(p.ctr), String(p.position), esc(p.topQuery || '')])) + '</div>'
+      + ((sc.gained || []).length ? '<div class="card"><b>Gained clicks this week</b> ' + sc.gained.map((g) => esc(g.key + '/' + g.slug) + ' +' + g.gain).join(', ') + '</div>' : '')
+      + ((sc.wishes || []).length ? '<div class="card"><b>Games people search for without a guide</b> (on the wish list) ' + sc.wishes.slice(0, 20).map((w) => esc(w.game) + ' (' + w.impressions + ')').join(', ') + '</div>' : '');
+    if (tab === 'search') $('msg').textContent = 'Search Console, pulled ' + new Date(sc.pulledAt).toLocaleString() + '.';
+  }
   function showTab(t) {
     tab = t;
     $('tabGuides').classList.toggle('on', t === 'guides');
     $('tabCorr').classList.toggle('on', t === 'corr');
+    $('tabSearch').classList.toggle('on', t === 'search');
     $('list').hidden = t !== 'guides';
     $('decidedBox').hidden = t !== 'guides' || !data.decided.length;
     $('filter').hidden = t !== 'guides';
     $('corr').hidden = t !== 'corr';
-    if (t === 'corr') renderCorr(); else render();
+    $('search').hidden = t !== 'search';
+    if (t === 'corr') renderCorr(); else if (t === 'search') renderSearch(); else render();
   }
 
   async function api(path, body) {
@@ -279,7 +310,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   }
   async function load() {
     try {
-      [data, corr] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections')]);
+      [data, corr, sc] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections'), api('/api/admin/search-console').catch(() => ({}))]);
       render();
       renderCorr();
       showTab(tab);
@@ -303,6 +334,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   $('filter').addEventListener('change', render);
   $('tabGuides').addEventListener('click', () => showTab('guides'));
   $('tabCorr').addEventListener('click', () => showTab('corr'));
+  $('tabSearch').addEventListener('click', () => showTab('search'));
   $('signin').addEventListener('click', () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => { $('msg').textContent = 'Sign-in failed: ' + (e.code || e.message); }));
   onAuthStateChanged(auth, (u) => { $('signin').hidden = !!u; if (u) load(); });
 </script>
