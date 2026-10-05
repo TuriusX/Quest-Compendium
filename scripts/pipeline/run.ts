@@ -109,6 +109,8 @@ const LANG_BY_NAME: Record<string, string> = {
   Spanish: 'es', 'Brazilian Portuguese': 'pt', German: 'de', French: 'fr', Russian: 'ru', Japanese: 'ja', Korean: 'ko', 'Simplified Chinese': 'zh',
 };
 const DAY = 86_400_000;
+/** A game's name without trademark signs and edition suffixes, for summary lines. */
+const shortName = (g: string) => String(g || '').replace(/[™®©]/g, '').replace(/\s+[-–—]\s+.*(edition|remastered).*$/i, '').replace(/:\s*wild hunt$/i, '').trim();
 /** Languages the featured guides go into before players ask (the biggest non-English audiences; others on demand). */
 const FEATURED_LANGS = (process.env.PIPELINE_FEATURED_LANGS || 'es,pt').split(',').map((s) => s.trim()).filter(Boolean);
 /** Games to add as quick guides, a couple per run (scripts/pipeline/wishlist.txt, one Steam name per line). */
@@ -386,6 +388,14 @@ async function main() {
   const waiting: QueueItem[] = [];
   const queueStart = Date.now();
   if (paused && queue.length) report.push(`⏸️ Repair queue paused (${queue.length} waiting, careful builds too); delete system/pipeline.queuePaused to resume.`);
+  // Guides in the flagship programme (system/flagship) get their pages rebuilt there: their page passes leave the queue.
+  const flagship: any = (await db().collection('system').doc('flagship').get()).data() || {};
+  const flagKeys = new Set<string>((flagship.guides || []).filter((g: any) => flagship.progress?.[g.key]?.phase !== 'done').map((g: any) => g.key));
+  const covered = queue.filter((q) => flagKeys.has(gameKey(q.game)) && ['fights', 'missables', 'info', 'queries'].includes(q.mode));
+  if (covered.length) {
+    queue.splice(0, queue.length, ...queue.filter((q) => !covered.includes(q)));
+    report.push(`🏰 ${covered.length} repair(s) dropped from the queue: the flagship build covers ${[...new Set(covered.map((q) => q.game))].join(', ')}.`);
+  }
   const held = hold ? queue.filter((q) => !q.approved) : [];
   if (held.length) {
     queue.splice(0, queue.length, ...queue.filter((q) => q.approved));
@@ -593,6 +603,22 @@ async function main() {
     console.warn(`Activity summary skipped: ${e?.message}`);
   }
 
+  // ---- the flagship programme (scripts/guides/flagship.ts, its own job and budget): pages live per guide, its cost,
+  // and pages that failed review since the last summary ----
+  if (flagship.guides?.length) {
+    const fb = { total: 90, daily: 15, ...(flagship.budget || {}) };
+    const names: Record<string, string> = {};
+    for (const g of flagship.guides) names[g.key] = String((await db().collection('guides').doc(g.key).get()).data()?.game || g.key);
+    const per = flagship.guides.map((g: any) => {
+      const pg = flagship.progress?.[g.key];
+      if (!pg) return `${shortName(names[g.key])} waiting`;
+      if (pg.phase === 'outline') return `${shortName(names[g.key])} outline rebuild`;
+      return `${shortName(names[g.key])} ${pg.done.length}/${pg.total || '?'}${pg.phase === 'done' ? ' ✓' : ''}${pg.failed.length ? ` (${pg.failed.length} failed)` : ''}`;
+    });
+    report.push(`🏰 Flagship guides: ${per.join(' · ')}. $${Number(flagship.spent || 0).toFixed(2)} of $${fb.total} spent ($${Number(flagship.spentToday || 0).toFixed(2)} of $${fb.daily} on ${flagship.day || '?'}), estimate to finish $${Number(flagship.estimate || 0).toFixed(2)}.${flagship.halted ? ` ⚠️ Stopped: ${flagship.halted}.` : ''}`);
+    const fails = (flagship.runFailures || []).slice(0, 6);
+    if (fails.length) report.push(`⚠️ Flagship pages that failed review: ${fails.map((f: any) => `${shortName(names[f.key] || f.key)} / ${f.name}: ${String(f.reason).slice(0, 90)}`).join('; ')}.`);
+  }
   // ---- costs: what this run spent, by kind of work (the biggest steps named), and the day's and month's totals ----
   if (costs.length) {
     const kind = (l: string) => l.replace(/^(queue (re-gate )?\w+|achievements|translations|translate|build-checked|revisit|upgrade|build|corrections|Search Console weekly).*$/, '$1');

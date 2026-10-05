@@ -13,17 +13,33 @@
  *   - the important choices: options and what each leads to (shown as spoilers)
  *   - a fact-check of all of that against sources, which corrects or drops what it can't back up
  * Prints each page's searches and real cost (the API's usage data: tokens with thinking, and searches).
+ *
+ * The flagship program (system/flagship), run daily by the guide-flagship job:
+ *   npx tsx scripts/guides/flagship.ts --program              build the next pages of the programme's guides, in order
+ *   npx tsx scripts/guides/flagship.ts --program --estimate   what's left and what it would cost (nothing built)
+ * Each guide in turn: an outline rebuild into staging first when the programme says so (guides/{key}.outline: layout and
+ * note; repair.ts --action outline --stage-only), then every page built to the flagship standard. A page goes live
+ * only when the Pro reviewer's verdict is a pass: straight into the live page for a guide keeping its outline, or into
+ * the staged copy for a rebuilt one, which is promoted when all its pages are reviewed (failed pages held back). Its
+ * own budget (budget.total, budget.daily; separate from the pipeline's caps): a page starts only with room for it, and
+ * the programme stops when the estimate to finish passes budget.stopAt. Its searches don't count toward the app's
+ * monthly search total (SEARCH_BUDGET_EXEMPT=1 on the job).
  */
 import fs from 'fs';
+import path from 'path';
+import { spawnSync } from 'child_process';
 import { ThinkingLevel } from '@google/genai';
 import {
-  db, gemini, MODEL, arg, searchesIn, sourcesIn, parseItem, ledger, ledgerDollars, MISSABLE_STANDARD,
+  db, gemini, MODEL, arg, searchesIn, sourcesIn, parseItem, ledger, ledgerDollars, MISSABLE_STANDARD, stageKey, addChildUsage,
   type GuideEntry, type GuideStep, type GuideChoice, type GuideAdvice, type GuideFight, type GuideInfo,
 } from './common';
 import { recordMonthly } from '../../searchGuard';
 import { infoForPage } from './areaInfo';
 import { fightsForPage } from './fights';
 import { call, reviewerFor } from './review';
+import { ProQuotaWait } from './reviewerQuota';
+import { promote, stageCopy } from './promote';
+import { deployToNetlify } from '../pipeline/netlify';
 
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const none = (v: string | undefined) => !v || /^(none|n\/a|-+|no|nothing)\.?$/i.test(v.trim());
@@ -64,7 +80,11 @@ const STEP_FORMAT = 'STEP: short title | 2-5 connected sentences in the second p
 const NEW_FORMAT = 'NEW: item or secret | name | where: from a findable anchor to the exact spot | how: the exact final step, or - | missable because, or - | the number of the step it belongs to';
 const CHOICE_FORMAT = 'CHOICE: short title | when it comes up | option => what it leads to ;; option => what it leads to (2-4 options) | the option most players should pick, or - | one note (a timer, a point of no return, an approval change), or -';
 
-type Draft = { steps: GuideStep[]; news: { entry: GuideEntry; kind: 'item' | 'secret'; step: number }[]; choices: GuideChoice[]; advice: GuideAdvice };
+type Draft = {
+  steps: GuideStep[]; news: { entry: GuideEntry; kind: 'item' | 'secret'; step: number }[]; choices: GuideChoice[]; advice: GuideAdvice;
+  /** The page's own items and secrets: checked like the rest (a wrong one corrected, an invented one dropped). */
+  old: { entry: GuideEntry; kind: 'item' | 'secret' }[];
+};
 
 function researchPrompt(game: string, p: any, neighbours: string[]) {
   return [
@@ -121,6 +141,7 @@ function draftLines(d: Draft, part: 'walk' | 'choices' | 'all') {
   return [
     ...(part !== 'choices' ? d.steps.map((s, i) => `S${i + 1}: ${s.title} | ${s.text}${s.tip ? ` | tip: ${s.tip}` : ''}${s.warn ? ` | warning: ${s.warn}` : ''}`) : []),
     ...(part !== 'choices' ? d.news.map((n, i) => `N${i + 1}: ${n.kind} | ${n.entry.name || n.entry.text} | ${n.entry.where || ''}${n.entry.how ? ` | how: ${n.entry.how}` : ''}${n.entry.lockout ? ` | missable because: ${n.entry.lockout}` : ''}`) : []),
+    ...(part !== 'choices' ? d.old.slice(0, 30).map((o, i) => `E${i + 1}: ${o.kind} | ${o.kind === 'item' ? `${o.entry.name} | ${o.entry.where || ''}${o.entry.how ? ` | how: ${o.entry.how}` : ''}${o.entry.lockout ? ` | missable because: ${o.entry.lockout}` : ''}` : o.entry.text}`) : []),
     ...(part !== 'walk' ? d.choices.map((c, i) => `C${i + 1}: ${c.title} | ${c.when || '-'} | ${c.options.map((o) => `${o.label} => ${o.outcome}`).join(' ;; ')} | ${c.recommended || '-'} | ${c.note || '-'}`) : []),
     ...(part !== 'walk' ? advice.map((a, i) => `A${i + 1}: ${a}`) : []),
   ];
@@ -128,7 +149,7 @@ function draftLines(d: Draft, part: 'walk' | 'choices' | 'all') {
 
 const FIX_RULES = [
   'For each line that is wrong (a wrong place, order, name, check, reward, outcome or lockout), reply with one line:',
-  'FIX: the label (e.g. S3, N2, C1, A2) | the corrected line, in the same format as the original (S: title | text; N: name | where | how | missable because; C: title | when | options | recommended | note; A: the line)',
+  'FIX: the label (e.g. S3, N2, E4, C1, A2) | the corrected line, in the same format as the original (S: title | text; N and E items: name | where | how | missable because; E secrets: the text; C: title | when | options | recommended | note; A: the line)',
   'For a line the sources do not support at all (invented), or that belongs to a different area, reply: DROP: the label | why',
   'Lines that are right need no reply. If everything is right, reply OK.',
 ];
@@ -147,6 +168,7 @@ function consistencyPrompt(game: string, p: any, neighbours: string[], d: Draft)
     `You are the final reviewer of a guide page for the video game "${game}": the area "${p.name}"${p.story ? ` (${p.story})` : ''}. Neighbouring areas: ${neighbours.join(', ') || 'unknown'}.`,
     'Check it as an expert on this game: lines that contradict each other, events or characters that are really in a neighbouring area, a wrong order, wrong facts you are sure of. Do not rewrite style.',
     ...FIX_RULES,
+    'Finish with one line: "VERDICT: pass" if, with your fixes applied, the page is accurate, consistent and useful to a player; or "VERDICT: fail | the main reason" if too much is wrong or doubtful to fix line by line.',
     '',
     ...draftLines(d, 'all'),
   ].join('\n');
@@ -159,8 +181,8 @@ function applyFixes(text: string, d: Draft): { fixed: number; dropped: number } 
   const drop = new Set<string>();
   for (const line of String(text || '').split('\n')) {
     const fx = fields(line, 'FIX'), dr = fields(line, 'DROP');
-    const label = String((fx || dr || [])[0] || '').toUpperCase().replace(/[^SNCA0-9]/g, '');
-    const m = label.match(/^([SNCA])(\d+)$/);
+    const label = String((fx || dr || [])[0] || '').toUpperCase().replace(/[^SNCAE0-9]/g, '');
+    const m = label.match(/^([SNCAE])(\d+)$/);
     if (!m) continue;
     const n = Number(m[2]) - 1;
     if (dr) { drop.add(label); dropped++; continue; }
@@ -176,8 +198,21 @@ function applyFixes(text: string, d: Draft): { fixed: number; dropped: number } 
       const body2 = /^(item|secret)\s*\|/i.test(body) ? body.replace(/^(item|secret)\s*\|\s*/i, '') : body;
       const again = parseNew(`NEW: ${d.news[n].kind} | ${body2} | ${d.news[n].step}`, d.news[n].entry.sources || [])[0];
       if (again) { d.news[n] = { ...again, entry: { ...again.entry, id: d.news[n].entry.id } }; fixed++; }
+    } else if (m[1] === 'E' && d.old[n]) {
+      const o = d.old[n];
+      const body2 = body.replace(/^(item|secret)\s*\|\s*/i, '');
+      if (o.kind === 'secret') { d.old[n] = { ...o, entry: { ...o.entry, text: cut(body2, 600) } }; fixed++; }
+      else {
+        const f = body2.split('|').map((x) => x.trim());
+        const e = parseItem([f[0] || String(o.entry.name), f[1] || String(o.entry.where || ''), f[2] || '', f[3] || ''], o.entry.id, o.entry.sources || []);
+        d.old[n] = { ...o, entry: { ...o.entry, name: e.name || o.entry.name, where: e.where || o.entry.where, how: e.how, lockout: e.lockout, missable: e.missable || !!o.entry.missable, ...({ updatedFrom: 'flagship check' } as any) } }; fixed++;
+      }
     } else if (m[1] === 'A' && adv[n]) { adv[n] = [adv[n][0], cut(body, 300)]; fixed++; }
   }
+  // A dropped entry of the page's own leaves its list and its step.
+  const goneIds = new Set(d.old.filter((_o, i) => drop.has(`E${i + 1}`)).map((o) => o.entry.id));
+  d.old = d.old.filter((o) => !goneIds.has(o.entry.id));
+  if (goneIds.size) d.steps = d.steps.map((st) => ({ ...st, entries: (st.entries || []).filter((x) => !goneIds.has(x)) }));
   d.steps = d.steps.filter((_s, i) => !drop.has(`S${i + 1}`));
   d.news = d.news.filter((_e, i) => !drop.has(`N${i + 1}`));
   d.choices = d.choices.filter((_c, i) => !drop.has(`C${i + 1}`));
@@ -263,10 +298,33 @@ export function tidyProto(pr: any) {
   };
 }
 
-/** One flagship page, written to guidePrototypes/{key}__{slug}. Returns its searches and real cost. */
-async function buildPage(key: string, game: string, slug: string, order: { slug: string; name: string }[]) {
+type Verdict = { status: 'passed' | 'failed' | 'waiting'; reason?: string };
+
+/** The Pro consistency review with its verdict: fixes applied to the draft, and pass / fail (waiting: no Pro request). */
+async function proReview(game: string, p: any, neighbours: string[], draft: Draft): Promise<Verdict & { fixed: number; dropped: number }> {
+  try {
+    const res: any = await call(reviewerFor('pro', 'other'), {
+      contents: [{ role: 'user', parts: [{ text: consistencyPrompt(game, p, neighbours, draft) }] }],
+      config: { temperature: 0.1, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    });
+    const text = String(res?.text || '');
+    const t = applyFixes(text, draft);
+    const v = text.split('\n').map((l) => fields(l, 'VERDICT')).filter(Boolean).pop();
+    if (!v) return { status: 'failed', reason: 'the reviewer gave no verdict', ...t };
+    return /^pass/i.test(v[0]) ? { status: 'passed', ...t } : { status: 'failed', reason: cut(v.slice(1).join(' | ') || v[0].replace(/^fail\s*/i, ''), 300) || 'failed review', ...t };
+  } catch (e: any) {
+    if (e instanceof ProQuotaWait) return { status: 'waiting', reason: 'no Pro reviewer requests left today', fixed: 0, dropped: 0 };
+    return { status: 'waiting', reason: cut(e?.message || e, 200), fixed: 0, dropped: 0 };
+  }
+}
+
+/**
+ * One flagship page, written to guidePrototypes/{key}__{slug} with the reviewer's verdict. `from` is the guide copy to
+ * build on (the live guide, or its staged rebuild). Returns its searches, real cost and verdict.
+ */
+async function buildPage(key: string, game: string, slug: string, order: { slug: string; name: string }[], from = key) {
   const before = { searches: ledger.searches, dollars: ledgerDollars() };
-  const p: any = (await db().collection('guides').doc(key).collection('areas').doc(slug).get()).data();
+  const p: any = (await db().collection('guides').doc(from).collection('areas').doc(slug).get()).data();
   if (!p) throw new Error(`no page ${slug}`);
   console.log(`\n${p.name}`);
   const i = order.findIndex((o) => o.slug === slug);
@@ -303,6 +361,7 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
     news: parseNew(w.text, w.sources),
     advice: parseAdvice(w.text),
     choices: [],
+    old: [...(p.items || []).map((e: GuideEntry) => ({ entry: e, kind: 'item' as const })), ...(p.secrets || []).map((e: GuideEntry) => ({ entry: e, kind: 'secret' as const }))],
   };
   const c = await grounded(choicePrompt(game, p, notes.text), 'choices', true);
   if (c) { draft.choices = parseChoices(c.text); c.sources.forEach((s) => sources.add(s)); }
@@ -317,24 +376,14 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
   if (k2) { k2.sources.forEach((s) => sources.add(s)); add(applyFixes(k2.text, draft)); }
   // 4. A consistency review by the Pro reviewer (no searches): contradictions between lines, things that happen in a
   //    neighbouring area, a wrong order.
-  let pro = 'skipped';
-  try {
-    const res: any = await call(reviewerFor('pro', 'other'), {
-      contents: [{ role: 'user', parts: [{ text: consistencyPrompt(game, p, neighbours, draft) }] }],
-      config: { temperature: 0.1, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
-    });
-    const t = applyFixes(String(res?.text || ''), draft);
-    add(t);
-    pro = `${t.fixed} corrected, ${t.dropped} dropped`;
-  } catch (e: any) {
-    pro = `did not run (${e?.message || e})`;
-  }
-  console.log(`  fact-checks: ${tally.fixed} corrected, ${tally.dropped} dropped (Pro consistency review: ${pro})`);
+  const verdict = await proReview(game, p, neighbours, draft);
+  add(verdict);
+  console.log(`  fact-checks: ${tally.fixed} corrected, ${tally.dropped} dropped; Pro review: ${verdict.status}${verdict.reason ? ` (${verdict.reason})` : ''}`);
   let { steps, news, choices, advice } = draft;
 
-  // New entries go onto the page's lists and into their step.
-  const items = [...(p.items || []), ...news.filter((n) => n.kind === 'item').map((n) => ({ ...n.entry, updatedFrom: 'flagship' }))];
-  const secrets = [...(p.secrets || []), ...news.filter((n) => n.kind === 'secret').map((n) => ({ ...n.entry, updatedFrom: 'flagship' }))];
+  // The page's own entries (as checked), then the new ones, onto the lists and into their step.
+  const items = [...draft.old.filter((o) => o.kind === 'item').map((o) => o.entry), ...news.filter((n) => n.kind === 'item').map((n) => ({ ...n.entry, updatedFrom: 'flagship' }))];
+  const secrets = [...draft.old.filter((o) => o.kind === 'secret').map((o) => o.entry), ...news.filter((n) => n.kind === 'secret').map((n) => ({ ...n.entry, updatedFrom: 'flagship' }))];
   for (const n of news) {
     const s = steps[Math.min(steps.length, n.step) - 1];
     if (s) s.entries = [...(s.entries || []), n.entry.id];
@@ -345,6 +394,7 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
   const proto = {
     key, slug, game, name: p.name, walkthrough: steps, choices, advice, items, secrets, fights, ...(info ? { info } : {}),
     sources: [...sources].slice(0, 12), newEntries: news.length, unplaced, cost: spent, model: MODEL, at: Date.now(),
+    status: verdict.status, ...(verdict.reason ? { reason: verdict.reason } : {}), from,
   };
   const clean = tidyProto(proto);
   await db().collection('guidePrototypes').doc(`${key}__${slug}`).set(JSON.parse(JSON.stringify(clean)));
@@ -352,10 +402,190 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
   fs.writeFileSync(`scratchpad/flagship/${key}__${slug}.json`, JSON.stringify(clean, null, 1));
   console.log(`  ${steps.length} steps, ${choices.length} choices, ${news.length} new entries${unplaced.length ? `, not placed in a step: ${unplaced.join('; ')}` : ''}`);
   console.log(`  cost: ${spent.searches} searches, $${spent.dollars.toFixed(3)} (tokens and searches)`);
-  return spent;
+  return { ...spent, verdict, proto: clean };
+}
+
+/** A prototype built before verdicts existed: only the Pro review (fixes and verdict), no rebuilding. */
+async function reviewOnly(key: string, game: string, slug: string, order: { slug: string; name: string }[], pr: any) {
+  const before = ledgerDollars();
+  const i = order.findIndex((o) => o.slug === slug);
+  const neighbours = order.slice(Math.max(0, i - 3), i + 4).map((o) => o.name).filter((n) => n !== pr.name);
+  const draft: Draft = { steps: pr.walkthrough || [], news: [], choices: pr.choices || [], advice: pr.advice || { matters: [], skip: [], mistakes: [] }, old: [...(pr.items || []).map((e: any) => ({ entry: e, kind: 'item' as const })), ...(pr.secrets || []).map((e: any) => ({ entry: e, kind: 'secret' as const }))] };
+  const verdict = await proReview(game, { name: pr.name }, neighbours, draft);
+  const clean = tidyProto({ ...pr, walkthrough: draft.steps, choices: draft.choices, advice: draft.advice, items: draft.old.filter((o) => o.kind === 'item').map((o) => o.entry), secrets: draft.old.filter((o) => o.kind === 'secret').map((o) => o.entry), status: verdict.status, ...(verdict.reason ? { reason: verdict.reason } : { reason: null }), from: key, at: Date.now() });
+  await db().collection('guidePrototypes').doc(`${key}__${slug}`).set(JSON.parse(JSON.stringify(clean)));
+  console.log(`\n${pr.name}: review only: ${verdict.status}${verdict.reason ? ` (${verdict.reason})` : ''}, ${verdict.fixed} corrected, ${verdict.dropped} dropped`);
+  return { searches: 0, dollars: ledgerDollars() - before, verdict, proto: clean };
+}
+
+/** The flagship fields written onto a page (the live guide's, or the staged rebuild's). */
+async function writePage(target: string, slug: string, pr: any) {
+  await db().collection('guides').doc(target).collection('areas').doc(slug).set(JSON.parse(JSON.stringify({
+    walkthrough: pr.walkthrough, choices: pr.choices, advice: pr.advice, items: pr.items, secrets: pr.secrets, fights: pr.fights || [],
+    ...(pr.info ? { info: pr.info } : {}), sources: pr.sources || [], verified: true,
+    flagship: { at: Date.now(), cost: pr.cost?.dollars ?? null, model: pr.model }, updatedAt: Date.now(),
+  })), { merge: true });
+}
+
+// ---------- the programme ----------
+const DAY_TZ = 'America/Chicago';
+const today = () => new Date().toLocaleDateString('en-CA', { timeZone: DAY_TZ });
+type GuideProgress = { phase: 'outline' | 'pages' | 'done'; source?: 'live' | 'stage'; total?: number; done: string[]; failed: { slug: string; name: string; reason: string }[]; tries?: Record<string, number>; outlineTries?: number };
+/** Estimated cost per page until the programme has measured its own, and for an outline rebuild. */
+const PAGE_GUESS = 0.42, OUTLINE_GUESS = 0.5;
+const MINUTES = Number(process.env.FLAGSHIP_MINUTES || 150);
+
+async function program() {
+  const ref = db().collection('system').doc('flagship');
+  const st: any = (await ref.get()).data();
+  if (!st?.guides?.length) { console.log('No flagship programme (system/flagship.guides).'); return; }
+  const budget = { total: 90, daily: 15, stopAt: 100, ...(st.budget || {}) };
+  if (st.day !== today()) Object.assign(st, { day: today(), spentToday: 0, runPages: [], runFailures: [] });
+  st.spent = Number(st.spent || 0); st.spentToday = Number(st.spentToday || 0);
+  st.progress = st.progress || {};
+  st.runPages = st.runPages || []; st.runFailures = st.runFailures || [];
+  const save = () => ref.set(JSON.parse(JSON.stringify(st)), { merge: true });
+  const measured = Number(st.pagesBuilt || 0) >= 5 ? Number(st.pageDollars || 0) / Number(st.pagesBuilt) : PAGE_GUESS;
+
+  // What's left, and the estimate to finish.
+  const plan: { key: string; game: string; left: number; total: number; outline: boolean }[] = [];
+  for (const g of st.guides) {
+    const pg: GuideProgress = st.progress[g.key] || { phase: g.outline ? 'outline' : 'pages', done: [], failed: [] };
+    st.progress[g.key] = pg;
+    const info: any = (await db().collection('guides').doc(g.key).get()).data() || {};
+    const src = pg.source === 'stage' ? stageKey(g.key) : g.key;
+    const order: { slug: string }[] = ((await db().collection('guides').doc(src).get()).data()?.areas || []);
+    const left = pg.phase === 'done' ? 0 : pg.phase === 'outline' ? Number(g.pagesGuess || 30) : order.filter((o) => !pg.done.includes(o.slug) && !pg.failed.some((f) => f.slug === o.slug)).length;
+    plan.push({ key: g.key, game: String(info.game || g.key), left, total: pg.phase === 'outline' ? Number(g.pagesGuess || 30) : order.length, outline: pg.phase === 'outline' });
+  }
+  const estimate = st.spent + plan.reduce((n, x) => n + x.left * measured + (x.outline ? OUTLINE_GUESS : 0), 0);
+  st.estimate = Math.round(estimate * 100) / 100;
+  console.log(`Flagship programme: $${st.spent.toFixed(2)} of $${budget.total} spent ($${st.spentToday.toFixed(2)} of $${budget.daily} today); estimate to finish $${estimate.toFixed(2)} at $${measured.toFixed(2)} a page.`);
+  for (const x of plan) console.log(`  ${x.game}: ${x.outline ? `outline rebuild first, about ${x.left} pages` : `${x.left} of ${x.total} pages left`}`);
+  if (arg('estimate') === 'true') { await save(); return; }
+  if (estimate > budget.stopAt) {
+    st.halted = `the estimate to finish ($${estimate.toFixed(2)}) is over $${budget.stopAt}: stopped for a decision`;
+    console.log(`Stopped: ${st.halted}.`);
+    await save();
+    return;
+  }
+  st.halted = null;
+
+  const started = Date.now();
+  const room = () => Math.min(budget.total - st.spent, budget.daily - st.spentToday);
+  const charge = (d: number) => { st.spent += d; st.spentToday += d; };
+  let wentLive = false;
+  for (const g of st.guides) {
+    const pg: GuideProgress = st.progress[g.key];
+    if (pg.phase === 'done') continue;
+    const info: any = (await db().collection('guides').doc(g.key).get()).data();
+    const game = String(info?.game || g.key);
+
+    // An outline rebuild into staging first (no whole-guide gate: each page is gated by its review).
+    if (pg.phase === 'outline') {
+      if (room() < 1) break;
+      await db().collection('guides').doc(g.key).set({ outline: { layout: g.outline.layout, note: g.outline.note || '' } }, { merge: true });
+      console.log(`\n${game}: outline rebuild (${g.outline.layout}) into staging`);
+      const cli = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
+      const r = spawnSync(process.execPath, [cli, 'scripts/guides/repair.ts', '--game', game, '--action', 'outline', '--stage-only', '--max-searches', '300'], { encoding: 'utf8', timeout: 60 * 60_000, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, PIPELINE_STEP_DOLLARS: Math.max(0.5, room()).toFixed(2) } });
+      const out = `${r.stdout || ''}\n${r.stderr || ''}`;
+      process.stdout.write(out.slice(-3000));
+      const before = ledgerDollars();
+      addChildUsage(out);
+      charge(ledgerDollars() - before);
+      const staged: any = (await db().collection('guides').doc(stageKey(g.key)).get()).data();
+      if (staged?.areas?.length && /Gate: skipped \(built into staging only/.test(out)) {
+        Object.assign(pg, { phase: 'pages', source: 'stage', total: staged.areas.length });
+        console.log(`  staged outline: ${staged.areas.length} pages`);
+      } else {
+        pg.outlineTries = (pg.outlineTries || 0) + 1;
+        st.runFailures.push({ key: g.key, slug: '(outline)', name: `${game} outline`, reason: /continues on the next run/.test(out) ? 'continues next run' : 'the outline rebuild did not finish (see the job log)' });
+      }
+      await save();
+      if ((pg.phase as string) !== 'pages') break; // carries on next run, before later guides
+    }
+
+    // The pages, in guide order.
+    const src = pg.source === 'stage' ? stageKey(g.key) : g.key;
+    const srcDoc: any = (await db().collection('guides').doc(src).get()).data() || {};
+    const order: { slug: string; name: string }[] = srcDoc.areas || [];
+    pg.total = order.length;
+    const pages = (await db().collection('guides').doc(src).collection('areas').get()).docs;
+    const usable = new Set(pages.filter((d) => (pg.source === 'stage' ? ['draft', 'published'] : ['published']).includes(d.data().status)).map((d) => d.id));
+    let stopped = false;
+    for (const o of order) {
+      if (!usable.has(o.slug) || pg.done.includes(o.slug) || pg.failed.some((f) => f.slug === o.slug)) continue;
+      if (room() < Math.max(1, measured * 2)) { stopped = true; console.log(`\nBudget: $${room().toFixed(2)} left for today or in all; next run carries on.`); break; }
+      if (Date.now() - started > MINUTES * 60_000) { stopped = true; console.log('\nTime limit for this run; next run carries on.'); break; }
+      const before = ledgerDollars();
+      let r: Awaited<ReturnType<typeof buildPage>> | null = null;
+      try {
+        const prior: any = (await db().collection('guidePrototypes').doc(`${g.key}__${o.slug}`).get()).data();
+        // A prototype from before verdicts (built on the live guide) only needs its review.
+        r = prior && !prior.status && prior.walkthrough?.length && pg.source !== 'stage' ? await reviewOnly(g.key, game, o.slug, order, prior) : await buildPage(g.key, game, o.slug, order, src);
+      } catch (e: any) {
+        pg.tries = pg.tries || {};
+        pg.tries[o.slug] = (pg.tries[o.slug] || 0) + 1;
+        console.log(`  ${o.name}: failed to build (${e?.message || e})${pg.tries[o.slug] >= 2 ? '; counted as failed' : '; tried again next run'}`);
+        if (pg.tries[o.slug] >= 2) { pg.failed.push({ slug: o.slug, name: o.name, reason: `could not be built: ${cut(e?.message || e, 120)}` }); st.runFailures.push({ key: g.key, slug: o.slug, name: o.name, reason: 'could not be built' }); }
+      }
+      const spent = ledgerDollars() - before;
+      charge(spent);
+      if (r) {
+        st.pagesBuilt = Number(st.pagesBuilt || 0) + 1;
+        st.pageDollars = Number(st.pageDollars || 0) + spent;
+        if (r.verdict.status === 'passed') {
+          await writePage(src, o.slug, r.proto);
+          if (pg.source !== 'stage') {
+            // Live now: its translations are brought up to date by the pipeline (translationsDue).
+            const gi: any = (await db().collection('guides').doc(g.key).get()).data() || {};
+            await db().collection('guides').doc(g.key).set({ translationsDue: { at: Date.now(), pages: [...new Set([...(gi.translationsDue?.pages || []), o.slug])].slice(0, 500) } }, { merge: true });
+            wentLive = true;
+          }
+          pg.done.push(o.slug);
+          st.runPages.push({ key: g.key, slug: o.slug });
+        } else if (r.verdict.status === 'failed') {
+          pg.failed.push({ slug: o.slug, name: o.name, reason: r.verdict.reason || 'failed review' });
+          st.runFailures.push({ key: g.key, slug: o.slug, name: o.name, reason: r.verdict.reason || 'failed review' });
+        } // waiting: tried again next run
+      }
+      await save();
+    }
+    if (stopped) break;
+    // A rebuilt guide goes live when all its pages are reviewed: pages that failed are held back.
+    if (pg.source === 'stage') {
+      for (const f of pg.failed) await db().collection('guides').doc(src).collection('areas').doc(f.slug).set({ status: 'held', heldReason: `flagship review: ${f.reason}` }, { merge: true }).catch(() => {});
+      const pr = await promote(stageKey(g.key));
+      console.log(`\n${game}: rebuilt guide promoted (${pr?.published || 0} pages live, ${pg.failed.length} held back).`);
+      wentLive = true;
+    }
+    pg.phase = 'done';
+    await save();
+  }
+  st.lastRun = Date.now();
+  await save();
+
+  // The website, when anything went live.
+  if (wentLive && arg('no-publish') !== 'true') {
+    const cli = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
+    spawnSync(process.execPath, [cli, 'scripts/guides/publish.ts'], { encoding: 'utf8', timeout: 30 * 60_000, maxBuffer: 64 * 1024 * 1024, stdio: 'inherit' });
+    if (process.env.NETLIFY_AUTH_TOKEN && process.env.NETLIFY_SITE_ID) {
+      try {
+        const n = await deployToNetlify('Marketing_Website_Files', process.env.NETLIFY_SITE_ID, process.env.NETLIFY_AUTH_TOKEN);
+        console.log(`Deployed to Netlify (${n.uploaded} changed file(s)).`);
+      } catch (e: any) {
+        console.log(`Netlify deploy failed: ${e?.message}`);
+      }
+    }
+  }
+  console.log(`\nDone: flagship programme, $${st.spentToday.toFixed(2)} today, $${st.spent.toFixed(2)} of $${budget.total} in all.`);
 }
 
 async function main() {
+  if (arg('program') === 'true') {
+    await program();
+    return setTimeout(() => process.exit(0), 1000);
+  }
   const key = arg('key') || '';
   const pages = String(arg('pages') || '').split(',').map((s) => s.trim()).filter(Boolean);
   if (!key || !pages.length) {

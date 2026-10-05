@@ -353,6 +353,10 @@ export function translatableText(p: any): string {
     pick(p?.fights, ['id', 'name', 'enemies', 'threats', 'weaknesses', 'tactics', 'rewards']),
     Array.isArray(p?.tips) ? p.tips : [],
     (Array.isArray(p?.sections) ? p.sections : []).map((x: any) => [x?.title ?? '', pick(x?.entries, ['id', 'text'])]),
+    // Flagship pages only (other pages' signatures stay as they were): the walkthrough, the choices, the short version.
+    ...(Array.isArray(p?.walkthrough) && p.walkthrough.length
+      ? [pick(p.walkthrough, ['id', 'title', 'text', 'tip', 'warn']), (p.choices || []).map((c: any) => [c?.id, c?.title, c?.when ?? '', (c?.options || []).map((o: any) => [o?.label, o?.outcome]), c?.recommended ?? '', c?.note ?? '']), p.advice ?? null]
+      : []),
   ]);
 }
 

@@ -34,6 +34,7 @@
  * [{ name, story, note }] } (extra pages go first). The gate (review.ts): a pass promotes the staged build to the live guide; a fail puts it on the review queue.
  * Page passes (fights, missables, queries, info) are gated on their changes only (scopedGate.ts: wrong or invented
  * entries taken out, plus a check that nothing else changed), not by re-grading the whole guide.
+ *            --stage-only       outline / careful: build into staging and stop (no whole-guide gate)
  *            --regate           page passes: gate the finished staged pass again (no writing); --gate-dry: report only
  * Logs "N searches used" and "cost ≈ $x" for the pipeline.
  */
@@ -69,6 +70,8 @@ const regate = arg('regate') === 'true';
 /** With --regate: grade the changes and report, but change nothing (no drops, no promotion, no review queue). */
 const gateDry = arg('gate-dry') === 'true';
 const PAGE_PASSES = ['fights', 'missables', 'queries', 'info'];
+/** outline / careful: build into staging and stop, without the whole-guide gate (the flagship build gates each page). */
+const stageOnly = arg('stage-only') === 'true';
 const CAREFUL_PAGE_SEARCHES = 40; // a careful page rewrite: research plus fact-check
 
 let searches = 0;
@@ -296,7 +299,9 @@ async function main() {
     // The guide's outline override (guides/{key}.outline: { layout, extraPages }) wins over the review's outline.
     const layout = live?.outline?.layout || review?.layout;
     const quick = quickBuild;
-    const r = build(['--game', game, '--stage', ...(layout ? ['--layout', layout] : []), '--part', 'the whole game, in story order', '--areas', '40',
+    // The guide's outline note (guides/{key}.outline.note): what the page list must look like (one page per chapter, say).
+    const outlineNote = String(live?.outline?.note || '').slice(0, 1200);
+    const r = build(['--game', game, '--stage', ...(layout ? ['--layout', layout] : []), ...(outlineNote ? ['--note', outlineNote] : []), '--part', 'the whole game, in story order', '--areas', '40',
       ...(quick ? ['--quick'] : ['--max-searches', String(maxSearches)])]);
     await db().collection('guides').doc(stageKey(key)).set({ repair: action }, { merge: true }).catch(() => {});
     if (/Stopping: search cap/.test(r.out)) {
@@ -338,6 +343,8 @@ async function main() {
       await db().collection('guides').doc(stageKey(key)).set({ awaitingGate: true, repair: action }, { merge: true });
       console.log(`Gate: waiting (${e.message}); the staged build is reviewed on the next run.`);
     }
+  } else if (ready && stageOnly) {
+    console.log('Gate: skipped (built into staging only; the flagship build gates each page).');
   } else if (ready) {
     try {
       const r = await reviewGuide(stageKey(key), { save: true, verify: false, tier, proKind: 'careful' });

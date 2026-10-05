@@ -93,6 +93,20 @@ function localize(a: GuideArea, t?: any): GuideArea {
     fights: merge(a.fights || [], t.fights),
     ...(a.info && t.info ? { info: { ...a.info, ...t.info, levels: a.info.levels, coords: a.info.coords } } : {}),
     tips: Array.isArray(t.tips) && t.tips.length === (a.tips || []).length ? t.tips : a.tips,
+    // Flagship pages: translated words, with the original's ids, entries and fights (by id, options by position).
+    ...(a.walkthrough?.length
+      ? {
+          walkthrough: a.walkthrough.map((st) => {
+            const x = (t.walkthrough || []).find((y: any) => y?.id === st.id) || {};
+            return { ...st, title: x.title || st.title, text: x.text || st.text, ...(st.tip ? { tip: x.tip || st.tip } : {}), ...(st.warn ? { warn: x.warn || st.warn } : {}) };
+          }),
+          choices: (a.choices || []).map((c) => {
+            const x = (t.choices || []).find((y: any) => y?.id === c.id) || {};
+            return { ...c, title: x.title || c.title, when: x.when || c.when, recommended: x.recommended || c.recommended, note: x.note || c.note, options: c.options.map((o, i) => ({ label: x.options?.[i]?.label || o.label, outcome: x.options?.[i]?.outcome || o.outcome })) };
+          }),
+          ...(a.advice ? { advice: { matters: t.advice?.matters?.length === a.advice.matters.length ? t.advice.matters : a.advice.matters, skip: t.advice?.skip?.length === a.advice.skip.length ? t.advice.skip : a.advice.skip, mistakes: t.advice?.mistakes?.length === a.advice.mistakes.length ? t.advice.mistakes : a.advice.mistakes } } : {}),
+        }
+      : {}),
     sections: (a.sections || []).map((x, i) => ({
       ...x,
       orig: x.title, // kept for recognizing the "Don't miss" section

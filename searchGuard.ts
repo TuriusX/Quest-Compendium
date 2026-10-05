@@ -66,6 +66,8 @@ export async function monthlyBudgetOk(): Promise<boolean> {
 /** Add searches to the monthly count (fire-and-forget). */
 export function recordMonthly(n: number): void {
   if (!n) return;
+  // Separately funded work (the flagship guide builds) keeps its own budget and doesn't use up the players' searches.
+  if (process.env.SEARCH_BUDGET_EXEMPT === '1') return;
   const m = thisMonth();
   if (monthly.month !== m) monthly = { month: m, count: 0, readAt: 0 };
   monthly.count += n;

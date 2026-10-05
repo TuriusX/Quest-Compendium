@@ -54,6 +54,14 @@ function source(a: GuideArea) {
     ...(a.info ? { info: { region: a.info.region, quests: a.info.quests, services: a.info.services, enemyTypes: a.info.enemyTypes, directions: a.info.directions, connected: a.info.connected } } : {}),
     tips: a.tips || [],
     sections: (a.sections || []).map((x) => ({ title: x.title, entries: x.entries.map((e) => ({ id: e.id, text: e.text })) })),
+    // Flagship pages: the walkthrough, the choices and the short version.
+    ...((a.walkthrough || []).length
+      ? {
+          walkthrough: (a.walkthrough || []).map((s) => ({ id: s.id, title: s.title, text: s.text, ...(s.tip ? { tip: s.tip } : {}), ...(s.warn ? { warn: s.warn } : {}) })),
+          choices: (a.choices || []).map((c) => ({ id: c.id, title: c.title, ...(c.when ? { when: c.when } : {}), options: c.options.map((o) => ({ label: o.label, outcome: o.outcome })), ...(c.recommended ? { recommended: c.recommended } : {}), ...(c.note ? { note: c.note } : {}) })),
+          advice: { matters: a.advice?.matters || [], skip: a.advice?.skip || [], mistakes: a.advice?.mistakes || [] },
+        }
+      : {}),
   };
 }
 
@@ -65,7 +73,8 @@ function sameShape(src: ReturnType<typeof source>, tr: any): boolean {
     ids(tr.items) === ids(src.items) && ids(tr.secrets) === ids(src.secrets) && ids(tr.enemies) === ids(src.enemies) &&
     ids(tr.shops) === ids(src.shops) && ids(tr.fights || []) === ids(src.fights) && Array.isArray(tr.tips) && tr.tips.length === src.tips.length &&
     Array.isArray(tr.sections) && tr.sections.length === src.sections.length &&
-    tr.sections.every((x: any, i: number) => ids(x?.entries) === ids(src.sections[i].entries))
+    tr.sections.every((x: any, i: number) => ids(x?.entries) === ids(src.sections[i].entries)) &&
+    (!src.walkthrough || (ids(tr.walkthrough) === ids(src.walkthrough) && ids(tr.choices || []) === ids(src.choices || [])))
   );
 }
 
