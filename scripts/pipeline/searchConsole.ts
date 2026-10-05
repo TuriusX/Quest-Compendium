@@ -236,6 +236,8 @@ async function weekly() {
   };
   const candidates = sum.pages.filter((p) => p.impressions >= MIN_IMPRESSIONS).sort((a, b) => Number(isStriking(b)) - Number(isStriking(a)) || b.impressions - a.impressions).slice(0, MAX_PAGES);
   const plan: PlanPage[] = [];
+  // Every page checked this week, for the summary: answered, or what it's missing.
+  const checked: { page: string; impressions: number; result: string }[] = [];
   for (const s of candidates) {
     const live = await guideOf(s.key);
     if (!live || live.unpublished) continue;
@@ -246,6 +248,7 @@ async function weekly() {
       const r = await checkPage(game, page, s);
       dollars += r.dollars;
       const striking = isStriking(s);
+      checked.push({ page: `${game} / ${page.name}`, impressions: s.impressions, result: r.fixes.length ? r.fixes.map((f) => `"${f.query}" ${f.verdict}`).join('; ') : 'answers its searches' });
       if (!r.fixes.length && !striking) continue;
       const newer = releasedAfter(await guideRelease(game, live), QUICK_MODEL_CUTOFF, !!live?.pipeline?.newRelease);
       plan.push({
@@ -308,7 +311,7 @@ async function weekly() {
     await stateRef.set({
       site, range: { start: iso(start), end: iso(end) }, pulledAt: Date.now(), totals: sum.totals,
       topQueries: sum.queries.slice(0, 50), topPages: sum.pages.slice(0, 50).map(({ queries, ...p }) => ({ ...p, topQuery: queries[0]?.query || '' })),
-      plan, estimate, repairsOn: REPAIRS_ON, queued, wishes, gained, pageClicks,
+      plan, checked, estimate, repairsOn: REPAIRS_ON, queued, wishes, gained, pageClicks,
     });
     // The wish-list games, and when this ran (the daily pipeline runs it again a week later).
     await db().collection('system').doc('pipeline').set({ searchWishes: wishes, searchConsoleAt: Date.now() }, { merge: true });
@@ -318,9 +321,13 @@ async function weekly() {
   const lines = [
     `**Search Console, last 28 days** (${iso(start)} to ${iso(end)}): ${sum.totals.impressions.toLocaleString()} impressions, ${sum.totals.clicks.toLocaleString()} clicks (CTR ${(sum.totals.ctr * 100).toFixed(1)}%)`,
     `Top queries: ${sum.queries.slice(0, 8).map((q) => `"${q.query}" ${q.impressions}`).join(', ') || 'none yet'}`,
+    // What got checked (pages with at least MIN_IMPRESSIONS) and what got queued.
+    checked.length
+      ? `Checked ${checked.length} page(s) (${MIN_IMPRESSIONS}+ impressions): ${checked.slice(0, 10).map((c) => `${c.page} (${c.impressions}): ${c.result}`).join(' | ')}${checked.length > 10 ? ` | +${checked.length - 10} more` : ''}`
+      : `Checked: no page had ${MIN_IMPRESSIONS}+ impressions yet.`,
     plan.length
-      ? `${REPAIRS_ON ? 'Queued' : 'Planned (repairs off)'}: ${plan.length} page(s) in ${byGuide.size} guide(s), ≈ ${estimate.searches} searches, ≈ $${estimate.dollars}${queued.length ? ` (${queued.join(', ')})` : ''}`
-      : 'Every checked page answers its top queries.',
+      ? `${REPAIRS_ON ? 'Queued' : 'Planned (repairs off)'}: ${plan.length} page(s) in ${byGuide.size} guide(s), ≈ ${estimate.searches} searches, ≈ $${estimate.dollars}${queued.length ? ` (${queued.join(', ')})` : REPAIRS_ON ? ' (already in the queue)' : ''}`
+      : checked.length ? 'Queued: nothing (every checked page answers its searches).' : '',
     gained.length ? `Gained clicks: ${gained.map((p) => `${p.key}/${p.slug} +${p.gain}`).join(', ')}` : '',
     wishes.length ? `Wish list from searches: ${wishes.slice(0, 6).map((w) => `${w.game} (${w.impressions})`).join(', ')}` : '',
   ].filter(Boolean);
