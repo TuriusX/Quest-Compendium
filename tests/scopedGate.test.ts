@@ -57,6 +57,15 @@ test("a summary box replacing an existing one is a regression; a new one is a ch
   assert.equal(changesOf("info", withInfo, staged).length, 2);
 });
 
+test("a correction may add a fight beside existing ones but not lose one", () => {
+  const withFight = new Map([...live].map(([k, p]) => [k, { ...p, fights: [{ id: "f1", name: "Old Boss" }] }]));
+  const added = new Map([...withFight].map(([k, p]) => [k, { ...p, fights: [...p.fights, { id: "f-gate", name: "Gate Battle" }] }]));
+  assert.deepEqual(regressions("correction", withFight, added, order, order), []);
+  assert.deepEqual(changesOf("correction", withFight, added).map((c) => c.name), ["Gate Battle", "Gate Battle"]);
+  const lost = new Map([...withFight].map(([k, p]) => [k, { ...p, fights: [] }]));
+  assert.ok(regressions("correction", withFight, lost, order, order).some((x) => /key fight "Old Boss" lost/.test(x)));
+});
+
 test("FIGHT lines leave blank fields out (Firestore refuses undefined)", () => {
   const [f] = parseFightLines("FIGHT: The Caretaker | The Caretaker | Shovel heals him | none | Yrden | none");
   assert.ok(!("rewards" in f) && !("weaknesses" in f));

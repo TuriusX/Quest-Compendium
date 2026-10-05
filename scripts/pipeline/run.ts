@@ -70,7 +70,15 @@ import { SEARCH_DOLLARS } from '../../usage';
 
 const env = (k: string, d: number) => (Number.isFinite(Number(process.env[k])) && process.env[k] !== '' ? Number(process.env[k]) : d);
 const DRY = process.argv.includes('--dry-run');
-const AI_CAP = env('PIPELINE_MONTHLY_AI_DOLLARS', 10);
+/**
+ * The monthly AI cap (real dollars): PIPELINE_MONTHLY_AI_DOLLARS, or for a given month PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH
+ * ("2026-10:100,2026-11:40"), so a one-month raise ends by itself.
+ */
+const AI_CAP = (() => {
+  const month = new Date().toISOString().slice(0, 7);
+  const m = (process.env.PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH || '').split(',').map((x) => x.trim().split(':')).find(([k]) => k === month);
+  return m && Number.isFinite(Number(m[1])) ? Number(m[1]) : env('PIPELINE_MONTHLY_AI_DOLLARS', 10);
+})();
 const SEARCH_CAP = env('PIPELINE_MONTHLY_SEARCHES', 1500);
 const RESERVE = env('PIPELINE_PLAYER_RESERVE', 2000);
 const APP_CAP = env('MONTHLY_SEARCH_CAP', 5000);
@@ -84,7 +92,11 @@ const QUEUE_MIN = 150;
 /** A quick guide needs at least this many pages to be published (build.ts does the same). */
 const QUICK_MIN = 5;
 /** The repair queue's items: careful builds, fixes and outline rebuilds (scripts/guides/repair.ts). 'quick' = outline. */
-type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade' | 'fights' | 'missables' | 'queries' | 'info'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string };
+type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade' | 'fights' | 'missables' | 'queries' | 'info'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string;
+  /** Page passes: gate the finished staged pass again (repair.ts --regate), without writing anything. */
+  regate?: boolean;
+  /** Approved by the owner: the only items that run while the queue is on hold (system/pipeline.queueHold). */
+  approved?: boolean };
 /** Minutes the repair queue may run before the rest of the run (the job's limit is 3 hours). */
 const QUEUE_MINUTES = env('PIPELINE_QUEUE_MINUTES', 120);
 /** Hard spending cap per day (Chicago time), and the one-run total that sends a Discord alert. Real dollars. */
@@ -163,6 +175,9 @@ async function main() {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
   if (state.spend?.day !== today || !Number.isFinite(state.spend?.dollars)) state.spend = { day: today, dollars: 0 };
   const paused = !!state.queuePaused;
+  // On hold until a month (system/pipeline.queueHold = { until: '2026-11' }): only approved queue items run, and no
+  // new careful builds, upgrades or searched achievement guides start; everything else waits for that month.
+  const hold = !!state.queueHold?.until && month < String(state.queueHold.until);
   const enabled = state.enabled !== false && process.env.PIPELINE_ENABLED !== 'false';
   const report: string[] = [];
   if (!enabled) {
@@ -287,7 +302,10 @@ async function main() {
   const capReached = () => (dayRoom() <= aiRoom ? `today's $${DAILY_CAP} spending cap is reached` : 'the monthly AI budget is used up');
   /** Searches a step may run: its own cap, and what's left of the money (80% of it, the rest for tokens). */
   const affordable = (cap: number) => Math.max(0, Math.min(cap, Math.floor((Math.max(0, room() - 0.3) * 0.8) / SEARCH_DOLLARS)));
-  const charge = async (r: { searches: number; dollars: number }) => {
+  /** This run's costs, step by step, for the summary. */
+  const costs: { label: string; dollars: number; searches: number }[] = [];
+  const charge = async (r: { searches: number; dollars: number }, label: string) => {
+    costs.push({ label, dollars: r.dollars, searches: r.searches });
     state.searches = (state.searches || 0) + r.searches;
     state.dollars = (state.dollars || 0) + r.dollars;
     state.spend.dollars += r.dollars;
@@ -325,7 +343,7 @@ async function main() {
       } else if (['fix', 'outline', 'careful'].includes(it.action)) {
         const rest = queue.filter((q) => gameKey(q.game) !== it.key);
         queue.length = 0;
-        queue.push({ game, mode: it.action, addedAt: Date.now(), why: 'admin decision on the review queue', ...(it.kind === 'report' ? { report: `${it.pageName ? `on the page "${it.pageName}": ` : ''}${it.text}` } : {}) }, ...rest);
+        queue.push({ game, mode: it.action, approved: true, addedAt: Date.now(), why: 'admin decision on the review queue', ...(it.kind === 'report' ? { report: `${it.pageName ? `on the page "${it.pageName}": ` : ''}${it.text}` } : {}) }, ...rest);
         resolution = `handed to the repair queue (${it.action})`;
       }
       await d.ref.set({ status: 'done', resolution, updatedAt: Date.now() }, { merge: true });
@@ -346,7 +364,7 @@ async function main() {
   // plan (repairs queued only when SEARCH_CONSOLE_REPAIRS=on), the wish list from searches and the Discord summary ----
   if (!DRY && Date.now() - Number(state.searchConsoleAt || 0) > 6.5 * DAY && room() >= 0.25) {
     const sc = runScript(['scripts/pipeline/searchConsole.ts', '--weekly']);
-    await charge(sc);
+    await charge(sc, 'Search Console weekly');
     if (sc.ok) state.searchConsoleAt = Date.now();
     report.push(`${sc.ok ? '🔎' : '⚠️'} ${sc.summary || 'Search Console pull failed (see the job log)'}`);
     // Its repairs may have joined the queue.
@@ -359,7 +377,7 @@ async function main() {
     if (cRoom >= 8) {
       const c = runScript(['scripts/guides/corrections.ts', '--max-searches', String(cRoom)]);
       correctionSearches = c.searches;
-      await charge(c);
+      await charge(c, 'corrections');
       if (/[1-9]\d* applied/.test(c.summary)) changed = true;
       if (!/^corrections: 0 verified, 0 applied, 0 dismissed, 0 waiting/.test(c.summary)) report.push(`${c.ok ? '🧭' : '⚠️'} ${c.summary || 'corrections check failed (see the job log)'}`);
     }
@@ -368,6 +386,11 @@ async function main() {
   const waiting: QueueItem[] = [];
   const queueStart = Date.now();
   if (paused && queue.length) report.push(`⏸️ Repair queue paused (${queue.length} waiting, careful builds too); delete system/pipeline.queuePaused to resume.`);
+  const held = hold ? queue.filter((q) => !q.approved) : [];
+  if (held.length) {
+    queue.splice(0, queue.length, ...queue.filter((q) => q.approved));
+    report.push(`⏸️ ${held.length} queue item(s) on hold until ${state.queueHold.until}; ${queue.length} approved item(s) run.`);
+  }
   while (queue.length && !DRY && !paused) {
     const item = queue.shift()!;
     const action = item.mode === 'quick' ? 'outline' : item.mode;
@@ -388,8 +411,8 @@ async function main() {
     // Key fights search one call a page (a big guide needs about 300): the careful cap, without needing careful room.
     const cap = affordable(big || ['fights', 'missables', 'queries', 'info'].includes(action) ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom));
     console.log(`\n▶ queue ${action} ${item.game} (up to ${cap} searches)`);
-    const r = runScript(['scripts/guides/repair.ts', '--game', item.game, '--action', action, '--max-searches', String(cap), ...(item.report ? ['--report', item.report] : [])]);
-    await charge(r);
+    const r = runScript(['scripts/guides/repair.ts', '--game', item.game, '--action', action, '--max-searches', String(cap), ...(item.report ? ['--report', item.report] : []), ...(item.regate ? ['--regate'] : [])]);
+    await charge(r, `queue ${item.regate ? 're-gate ' : ''}${action} ${item.game}`);
     queueRoom -= r.searches;
     const g = await guideInfo(item.game);
     guideCache.delete(g.key);
@@ -405,7 +428,7 @@ async function main() {
       // Its achievement guide, searched (the AI doesn't know new games well enough for quick tips).
       if (!fresh.hasAch && fresh.info?.appId && queueRoom >= 30 && affordable(30) >= 30) {
         const a = runScript(['scripts/guides/achievements.ts', '--game', item.game, '--max-searches', String(affordable(Math.min(120, queueRoom)))]);
-        await charge(a);
+        await charge(a, `achievements ${item.game}`);
         queueRoom -= a.searches;
         report.push(`${a.ok ? '✅' : '⚠️'} achievements **${item.game}**: ${a.summary || (a.ok ? '' : 'failed (see the job log)')}`.trim());
       }
@@ -430,7 +453,7 @@ async function main() {
       report.push(`⚠️ queue ${action} **${item.game}**: the repair failed${item.tries < 2 ? '; trying again next run' : ' twice; dropped'} (see the job log).`);
     }
   }
-  state.carefulQueue = [...waiting, ...queue];
+  state.carefulQueue = [...waiting, ...queue, ...held];
   if (state.carefulQueue.length) report.push(`⏳ Repair queue: ${state.carefulQueue.length} waiting (next: ${state.carefulQueue[0].game}).`);
   searchRoom = Math.min(SEARCH_CAP - (state.searches || 0), APP_CAP - RESERVE - (await appSearchesThisMonth(month)));
   // Wish-list guides have their own slots, so the long queue of achievement guides doesn't hold them back; slots the
@@ -446,6 +469,8 @@ async function main() {
     }
     // Careful builds wait with the repair queue while it's paused.
     if (paused && (a.kind === 'build-checked' || a.kind === 'revisit' || a.kind === 'upgrade')) continue;
+    // On hold: no new careful builds or upgrades, and no searched achievement guides.
+    if (hold && (a.kind === 'build-checked' || a.kind === 'revisit' || a.kind === 'upgrade' || a.kind === 'achievements')) continue;
     if (a.searches > 0 && (a.searches > searchRoom || affordable(a.searches) < Math.min(a.searches, 30))) continue; // try cheaper actions instead
     console.log(`\n▶ ${a.kind} ${a.game}${a.lang ? ` (${a.lang})` : ''}: ${a.why}`);
     if (DRY) {
@@ -488,7 +513,7 @@ async function main() {
     } else if (a.kind === 'translate') {
       r = runScript(['scripts/guides/translate-guide.ts', '--game', a.game, '--lang', a.lang!]);
     }
-    await charge(r);
+    await charge(r, `${a.kind} ${a.game}${a.lang ? ` → ${a.lang}` : ''}`);
     searchRoom -= r.searches;
     changed = changed || r.ok;
     done++;
@@ -517,7 +542,7 @@ async function main() {
         break;
       }
       const r = runScript(['scripts/guides/translate-guide.ts', '--game', String(info.game || d.id), '--lang', langs.join(',')]);
-      await charge(r);
+      await charge(r, `translations ${info.game || d.id}`);
       cost += r.dollars;
       if (r.ok) {
         await d.ref.set({ translationsDue: null }, { merge: true });
@@ -568,6 +593,18 @@ async function main() {
     console.warn(`Activity summary skipped: ${e?.message}`);
   }
 
+  // ---- costs: what this run spent, by kind of work (the biggest steps named), and the day's and month's totals ----
+  if (costs.length) {
+    const kind = (l: string) => l.replace(/^(queue (re-gate )?\w+|achievements|translations|translate|build-checked|revisit|upgrade|build|corrections|Search Console weekly).*$/, '$1');
+    const byKind = new Map<string, { dollars: number; searches: number; n: number }>();
+    for (const c of costs) {
+      const k = byKind.get(kind(c.label)) || { dollars: 0, searches: 0, n: 0 };
+      byKind.set(kind(c.label), { dollars: k.dollars + c.dollars, searches: k.searches + c.searches, n: k.n + 1 });
+    }
+    const parts = [...byKind].sort((a, b) => b[1].dollars - a[1].dollars).map(([k, v]) => `${k}${v.n > 1 ? ` ×${v.n}` : ''} $${v.dollars.toFixed(2)}${v.searches ? ` (${v.searches} searches)` : ''}`);
+    const top = costs.filter((c) => c.dollars >= 0.5).sort((a, b) => b.dollars - a.dollars).slice(0, 5).map((c) => `${c.label} $${c.dollars.toFixed(2)}`);
+    report.push(`💰 Costs this run: $${runDollars.toFixed(2)}: ${parts.join(', ')}.${top.length ? ` Biggest: ${top.join('; ')}.` : ''} Today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; ${new Date().toLocaleString('en-US', { month: 'long' })} $${(state.dollars || 0).toFixed(2)} of $${AI_CAP}.`);
+  }
   state.lastRun = Date.now();
   state.lastReport = report;
   if (!DRY) await stateRef.set(state, { merge: true });

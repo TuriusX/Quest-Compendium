@@ -33,7 +33,8 @@ import { estimateCost } from '../../usage';
 import { recordMonthly } from '../../searchGuard';
 import { reporterCount } from '../../corrections';
 import { stageCopy, discard } from './promote';
-import { reviewGuide, gateGuide } from './review';
+import { gateGuide } from './review';
+import { scopedReview } from './scopedGate';
 import { FLASH_REVIEW_MODEL } from './reviewerQuota';
 
 // Corrections never use the Pro reviewer (its daily requests are kept for careful rebuilds): Gemini 3.8 Flash checks the
@@ -251,10 +252,10 @@ async function applyToGuide(gameKey: string, game: string, groups: { id: string;
       : { sections: (page.sections || []).map((s: any) => ({ ...s, entries: fix(s.entries) })) };
     await ref.update({ ...patch, updatedAt: Date.now() });
   }
-  const r = await reviewGuide(stageKey(gameKey), { save: true, verify: false, tier: 'flash' });
+  // Judged on the corrections only, with a check that nothing else changed (scopedGate.ts), not by re-grading the guide.
+  const r = await scopedReview(gameKey, game, 'correction', 'flash');
   dollars += r.dollars;
-  searches += r.searches;
-  return r.review ? gateGuide(stageKey(gameKey), game, r.review) : 'Gate: failed (nothing to review).';
+  return r.changes ? gateGuide(stageKey(gameKey), game, r.review) : 'Gate: failed (nothing to review).';
 }
 
 /**

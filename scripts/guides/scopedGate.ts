@@ -20,14 +20,18 @@ import { estimateCost } from '../../usage';
 import { call, reviewerFor, passMark, type Review } from './review';
 import type { ReviewTier } from './reviewerQuota';
 
-export type PassAction = 'fights' | 'missables' | 'info' | 'queries';
+export type PassAction = 'fights' | 'missables' | 'info' | 'queries' | 'correction';
 /** The fields each pass may change on a page. */
 export const PASS_FIELDS: Record<PassAction, string[]> = {
   fights: ['fights'],
   missables: ['items', 'sections'],
   info: ['info'],
   queries: ['items', 'secrets', 'seoTitle', 'seoDescription'],
+  // Player corrections (corrections.ts): an entry rewritten, or a missing fight added.
+  correction: ['fights', 'items', 'secrets', 'sections'],
 };
+/** Passes that rewrite existing entries (which must not be lost or renamed). */
+const REWRITES: PassAction[] = ['missables', 'queries', 'correction'];
 /** Page fields that only record what a run did. */
 const bookkeeping = (k: string) => ['status', 'staged', 'updatedAt', 'order', 'heldReason', 'unpublishedAt'].includes(k) || /Checked$/.test(k);
 /** At most this share of the changes may be taken out (wrong, invented or worse) for the pass to go live. */
@@ -57,7 +61,11 @@ export function regressions(action: PassAction, live: Map<string, any>, staged: 
     }
     if ((action === 'fights' || action === 'info') && lp[action] && (!Array.isArray(lp[action]) || lp[action].length) && !same(lp[action], sp[action]))
       out.push(`${name}: existing ${action === 'fights' ? 'key fights' : 'summary box'} replaced`);
-    if (action === 'missables' || action === 'queries') {
+    if (action === 'correction') {
+      const now = new Set((sp.fights || []).map((f: any) => String(f.id)));
+      for (const f of lp.fights || []) if (!now.has(String(f.id))) out.push(`${name}: key fight "${cut(f.name, 60)}" lost`);
+    }
+    if (REWRITES.includes(action)) {
       for (const f of ['items', 'secrets'] as const) {
         const now = new Map((sp[f] || []).map((e: any) => [String(e.id), e]));
         for (const e of lp[f] || []) {
@@ -92,11 +100,12 @@ export function changesOf(action: PassAction, live: Map<string, any>, staged: Ma
     const sp = staged.get(slug);
     if (!sp) continue;
     const page = cut(lp.name || slug, 60);
-    if (action === 'fights' && !same(lp.fights, sp.fights)) {
-      for (const f of sp.fights || []) out.push({ page, slug, kind: 'fight', id: String(f.id), name: cut(f.name, 100), text: fightText(f) + (f.sources?.length ? ` [sources: ${f.sources.slice(0, 3).join(', ')}]` : '') });
+    if ((action === 'fights' || action === 'correction') && !same(lp.fights, sp.fights)) {
+      const was = new Map((lp.fights || []).map((f: any) => [String(f.id), f]));
+      for (const f of sp.fights || []) if (!same(was.get(String(f.id)), f)) out.push({ page, slug, kind: 'fight', id: String(f.id), name: cut(f.name, 100), text: fightText(f) + (f.sources?.length ? ` [sources: ${f.sources.slice(0, 3).join(', ')}]` : '') });
     }
     if (action === 'info' && sp.info && !same(lp.info, sp.info)) out.push({ page, slug, kind: 'info', id: 'info', name: 'summary box', text: infoText(sp.info), ...(lp.info ? { before: infoText(lp.info) } : {}) });
-    if (action === 'missables' || action === 'queries') {
+    if (REWRITES.includes(action)) {
       const before = new Map((lp.items || []).map((e: any) => [String(e.id), e]));
       for (const e of sp.items || []) {
         const b: any = before.get(String(e.id));
@@ -130,6 +139,7 @@ const WHAT: Record<PassAction, string> = {
   missables: 'missable entries were rewritten so players can find them',
   info: 'each page got a summary box (region, levels, quests, services and people, enemy types) and directions',
   queries: 'entries were rewritten or added to answer what players search for, with clearer search titles and descriptions',
+  correction: 'entries players reported as wrong were corrected, and fights players reported missing were added, each checked against sources',
 };
 
 type Verdict = { verdict: 'ok' | 'vague' | 'wrong' | 'invented' | 'worse'; reason: string };
@@ -139,7 +149,7 @@ async function judge(game: string, released: string, newer: boolean, action: Pas
   const text = [
     `You are checking one repair of a video game guide before it goes live. Game: "${game}" (released ${released}). In this repair, ${WHAT[action]}.`,
     'Judge ONLY the changes listed below. The rest of the guide (its outline, coverage, page choice and every other entry) is not part of this check.',
-    ...(action === 'missables' || action === 'queries' ? [MISSABLE_STANDARD] : []),
+    ...(REWRITES.includes(action) ? [MISSABLE_STANDARD] : []),
     'Give each change a verdict:',
     '- ok: right for this game and this place, and specific enough to act on',
     '- vague: plausible but too generic to act on (no names, positions, steps or numbers)',
@@ -188,7 +198,10 @@ async function dropChanges(key: string, live: Map<string, any>, staged: Map<stri
     const sp = staged.get(slug) || {};
     const ids = (kind: string) => new Set(cs.filter((c) => c.kind === kind).map((c) => c.id));
     const patch: any = {};
-    if (cs.some((c) => c.kind === 'fight')) patch.fights = (sp.fights || []).filter((f: any) => !ids('fight').has(String(f.id)));
+    if (cs.some((c) => c.kind === 'fight')) {
+      const was = new Map((lp.fights || []).map((f: any) => [String(f.id), f]));
+      patch.fights = (sp.fights || []).flatMap((f: any) => (!ids('fight').has(String(f.id)) ? [f] : was.has(String(f.id)) ? [was.get(String(f.id))] : []));
+    }
     if (cs.some((c) => c.kind === 'info')) patch.info = lp.info ?? FieldValue.delete();
     const revert = (field: 'items' | 'secrets', kind: string) => {
       const bad = ids(kind);
