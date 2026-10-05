@@ -268,4 +268,23 @@ test("chat: enrichFromLocal preserves newly added local messages even if cloud t
   assert.equal(r.merged.tabs[0].messages[1].text, "local unsynced question");
 });
 
+// ---------------------------------------------------------------- deleted messages
+const msg = (id: string, ts: number, text = id) => ({ id, role: "user", text, timestamp: ts });
+test("deleted messages stay deleted: a device still holding them can't add them back as unsynced", () => {
+  const keep = [msg("m1", 100), msg("m4", 400)];
+  const all = [msg("m1", 100), msg("m2", 200), msg("m3", 300), msg("m4", 400)];
+  const deleted = { m2: 5000, m3: 5000 };
+  // This device deleted them (and has the record); the cloud copy is older and still has them.
+  const a = mergeTabState(S([tab("t", { messages: keep, lastActive: 5000 })], deleted), S([tab("t", { messages: all, lastActive: 4000 })]));
+  assert.deepEqual(a.merged.tabs[0].messages.map((m: any) => m.id), ["m1", "m4"]);
+  assert.equal(a.cloudChanged, true);
+  // Another device (old copy, newer edit) still has them locally; the record came from the cloud: dropped there too.
+  const b = mergeTabState(S([tab("t", { messages: [...all, msg("m5", 6000)], lastActive: 6000 })]), S([tab("t", { messages: keep, lastActive: 5000 })], deleted));
+  assert.deepEqual(b.merged.tabs[0].messages.map((m: any) => m.id), ["m1", "m4", "m5"]);
+  assert.equal(b.merged.deleted.m2, 5000);
+  // A message written after the record (an id reused) isn't touched.
+  const c = mergeTabState(S([tab("t", { messages: [msg("m2", 9000)] })], { m2: 5000 }), S([]));
+  assert.deepEqual(c.merged.tabs[0].messages.map((m: any) => m.id), ["m2"]);
+});
+
 console.log(`\n${passed} tests passed` + (process.exitCode ? " (WITH FAILURES)" : ""));

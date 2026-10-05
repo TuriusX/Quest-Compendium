@@ -7,7 +7,7 @@
  *
  * It's independent of the panel: showing or hiding the panel (the shortcut, the spine, the tray, the controller) never
  * shows or hides it. Only its own controls do: send it away (a ribbon bookmark at the screen edge; the ribbon brings it
- * back) and the panel header's "Quest log" toggle (toggle(), which also shows it the first time for a game). Its window
+ * back) and the panel header's "Quest log" toggle (toggle()). It's shown by default for a game with no history. Its window
  * stays open across panel cycles (never hidden and shown again: that lost the button-down of every later click). While
  * the panel is open and covers it, it moves just outside the panel's edge (panelShown) and goes back to its own spot when
  * the panel hides (panelHidden); its saved spot never changes for that. The book icon at the right end of its header
@@ -50,9 +50,9 @@ const MARGIN = 0;
 // Per game: collapsed (sections folded by their heading: { [section id]: true }), hidden (entries hidden with their ×,
 // by id: ids carry the area, so it's per area), limits (entries shown per section: 3, 6 or 0 = all; unset = 12),
 // backdrop (how dark the soft backdrop is, 0 = off to 95).
-// shown: the quest log has been shown for this game (the header toggle shows it the first time); until then the app's
-// data waits without a window.
-const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: 45, x: null, y: null, edge: 'right', collapsed: {}, hidden: [], limits: {}, shown: false };
+// shown: the quest log is up for this game. A game with no quest log history starts with it shown (new players see it
+// without finding the header button); after that, up or away is remembered per game.
+const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: 45, x: null, y: null, edge: 'right', collapsed: {}, hidden: [], limits: {}, shown: true };
 const MAX_HIDDEN = 600;
 /** The tracker grows with its content up to this share of the screen's height, then scrolls inside. */
 const MAX_HEIGHT_SHARE = 0.7;

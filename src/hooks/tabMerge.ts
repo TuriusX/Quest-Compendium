@@ -69,7 +69,10 @@ export function sanitizeTabsForCloud(tabs: GameTab[]): GameTab[] {
 
 // ---------- tombstones ----------
 
-/** tabId -> time (ms) it was deleted */
+/**
+ * id -> time (ms) it was deleted: a tab's id, or a message's id (a deleted message: every copy drops it in the merge, so
+ * a device still holding it can't put it back).
+ */
 export type Tombstones = Record<string, number>;
 
 const TOMBSTONE_KEY = 'quest_tab_tombstones';
@@ -209,6 +212,19 @@ function enrichFromLocal(cloudTab: GameTab, localTab: GameTab): GameTab {
   return out;
 }
 
+/** The tab without messages that were deleted (by id, deleted after they were written). */
+export function withoutDeletedMessages(tab: GameTab, deleted: Tombstones): GameTab {
+  if (!Array.isArray(tab.messages) || !tab.messages.some(m => m && deleted[m.id] !== undefined)) return tab;
+  return { ...tab, messages: tab.messages.filter(m => !(m && deleted[m.id] !== undefined && deleted[m.id] >= (m.timestamp || 0))) };
+}
+
+/** Call when the user deletes messages from a conversation (recorded like a deleted tab, so it syncs). */
+export function recordDeletedMessages(ids: string[], now: number = Date.now()): void {
+  const t = readTombstones();
+  for (const id of ids) t[id] = now;
+  writeTombstones(t);
+}
+
 function isAlive(tab: GameTab, deleted: Tombstones): boolean {
   const ts = deleted[tab.id];
   return ts === undefined || tabTime(tab) > ts;
@@ -237,8 +253,9 @@ export function mergeTabState(local: TabState, cloud: TabState): MergeOutcome {
     else if (l && c) chosen.set(id, compareVersions(l, c) >= 0 ? l : enrichFromLocal(c, l));
   }
 
-  // 3. Alive tabs, in a deterministic order.
-  const mergedTabs = [...chosen.values()].filter(t => isAlive(t, deleted)).sort(byOrder);
+  // 3. Alive tabs, in a deterministic order, without deleted messages (a device that still had them would add them
+  // back as "unsynced" otherwise).
+  const mergedTabs = [...chosen.values()].filter(t => isAlive(t, deleted)).map(t => withoutDeletedMessages(t, deleted)).sort(byOrder);
   const merged: TabState = { tabs: mergedTabs, deleted };
 
   // 4. Change detection. Compare the SANITIZED views so heavy local-only data never looks like a difference.
