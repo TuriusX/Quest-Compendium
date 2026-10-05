@@ -4,6 +4,9 @@
  *   npx tsx scripts/guides/publish.ts --drafts                  preview: include drafts (marked DRAFT) so you can look them over
  *   npx tsx scripts/guides/publish.ts --approve "Final Fantasy VI"   publish that game's drafts, then build
  *   npx tsx scripts/guides/publish.ts                           build published pages only (what goes live)
+ *   npx tsx scripts/guides/publish.ts --preview scratchpad/flagship-site --only baldur-s-gate-3
+ *                                   a local preview of one game, with its flagship prototypes (guidePrototypes) on
+ *                                   their pages, written to that folder only (the website files are not touched)
  *
  * Then upload Marketing_Website_Files to Netlify as usual. Writes one page per area, a page per game, a guides index,
  * sitemap.xml and robots.txt. Pages that were held back by the checks are never published.
@@ -100,7 +103,10 @@ function localize(a: GuideArea, t?: any): GuideArea {
 }
 
 const SITE = 'https://questcompendium.com';
-const OUT = path.resolve('Marketing_Website_Files');
+/** --preview <dir>: a local preview of one game (--only key) with its flagship prototypes, outside the website files. */
+const PREVIEW = arg('preview') && arg('preview') !== 'true' ? String(arg('preview')) : '';
+const ONLY = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
+const OUT = path.resolve(PREVIEW || 'Marketing_Website_Files');
 /** The site's stylesheet, built from the pages' Tailwind classes at the end of a publish (buildSiteCss). */
 const CSS_HREF = '/assets/site.css';
 
@@ -154,11 +160,13 @@ const SCRIPT = `
     try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
     var key='qcw:'+K+':'+S, done=load(key);
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    // The same entry can appear twice (a flagship page's walkthrough and its checklist): every copy follows a tick.
+    var refresh=function(){document.querySelectorAll('[data-check]').forEach(function(el){var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);});};
     document.querySelectorAll('[data-check]').forEach(function(el){
       var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
-      box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);
-      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); refresh(); counts(); progress(); });
     });
+    refresh();
     counts();
   }
   var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
@@ -393,6 +401,8 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const missIds = [...missGroups.flatMap((g) => g.ids), ...miss.map((e) => e.id), ...missSec.flatMap((x) => x.entries.map((e) => e.id))];
   // On this page: links to each section that has something (a closed section opens when its link is used).
   const sectionLinks: [string, string][] = [
+    ...((a.walkthrough || []).length ? [['walkthrough', ui('walkthrough')] as [string, string]] : []),
+    ...((a.choices || []).length ? [['choices', ui('choicesHere')] as [string, string]] : []),
     ...(missIds.length ? [['dont-miss', ui('dontMiss')] as [string, string]] : []),
     ...otherSec.map((x, i) => [`sec-${i + 1}`, x.title] as [string, string]),
     ...((a.fights || []).length ? [['fights', ui('fights')] as [string, string]] : []),
@@ -458,6 +468,58 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     x
       ? `<a href="../${esc(x.slug)}/index.html" class="flex-1 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/40 hover:bg-white/[0.06] px-4 py-3 ${dir === 'next' ? 'text-right' : ''}"><div class="text-[11px] uppercase tracking-wide text-zinc-500">${dir === 'prev' ? `&larr; ${esc(ui('previous'))}` : `${esc(ui('next'))} &rarr;`}</div><div class="text-sm font-semibold text-white truncate">${esc(x.name)}</div></a>`
       : '<span class="flex-1"></span>';
+  // Flagship pages: the short version, the walkthrough (entries ticked where you meet them) and the choices (spoilers).
+  const fightById = new Map((a.fights || []).map((f) => [f.id, f]));
+  const entryRow = (id: string) => {
+    const it = items.find((e) => e.id === id);
+    const isNew = /^fl\d+$/.test(id) ? ` <span class="ml-1 rounded bg-[#a87ffb]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#c4b0ff]">${esc(ui('newEntry'))}</span>` : '';
+    const miss = (m?: boolean) => (m ? ` <span class="text-[10px] font-bold uppercase text-amber-300">${esc(ui('dontMiss'))}</span>` : '');
+    if (it) return checkRow(it.id, itemHtml(it) + miss(it.missable) + isNew);
+    const se = a.secrets.find((e) => e.id === id);
+    if (se) return checkRow(se.id, `<span class="text-zinc-300">${esc(se.text)}</span>${isNew}`);
+    const ce = (a.sections || []).flatMap((x) => x.entries).find((e) => e.id === id);
+    return ce ? checkRow(ce.id, esc(ce.text)) : '';
+  };
+  const walk = (a.walkthrough || []).length
+    ? `<section id="walkthrough" class="mt-8 scroll-mt-20">
+        <h2 class="text-xl font-bold text-white">${esc(ui('walkthrough'))}</h2>
+        <p class="mt-1 text-sm text-zinc-500">${esc(ui('walkthroughIntro'))}</p>
+        <ol class="mt-4 space-y-5">${(a.walkthrough || [])
+          .map((st, i) => `<li id="${esc(st.id)}" class="relative pl-10 scroll-mt-20">
+            <span class="absolute left-0 top-0 flex h-7 w-7 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-sm font-bold text-[#c4b0ff]">${i + 1}</span>
+            <h3 class="font-semibold text-white leading-7">${esc(st.title)}</h3>
+            <p class="mt-1 text-[15px] leading-relaxed text-zinc-300">${esc(st.text)}</p>
+            ${(st.fights || []).map((fid) => fightById.get(fid)).filter(Boolean).map((f) => `<a href="#${esc(f!.id)}" class="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs text-rose-200 hover:border-rose-400/60">${ICON.enemies}<span class="text-rose-300/80">${esc(ui('keyFight'))}:</span> ${esc(f!.name)}</a>`).join(' ')}
+            ${(st.entries || []).length ? `<div class="mt-2 rounded-xl border border-white/5 bg-white/[0.02] py-1">${(st.entries || []).map(entryRow).join('')}</div>` : ''}
+            ${st.tip ? `<p class="mt-2 text-sm text-emerald-200/90"><span class="font-semibold text-emerald-300">${esc(ui('stepTip'))}:</span> ${esc(st.tip)}</p>` : ''}
+            ${st.warn ? `<p class="mt-1.5 text-sm text-amber-200/90"><span class="font-semibold text-amber-300">${esc(ui('stepWarn'))}:</span> ${esc(st.warn)}</p>` : ''}
+          </li>`)
+          .join('')}</ol>
+      </section>`
+    : '';
+  const adv = a.advice;
+  const adviceList = (title: string, list: string[], tone: string) => (list.length ? `<div><h3 class="text-xs font-bold uppercase tracking-wide ${tone}">${esc(title)}</h3><ul class="mt-1.5 space-y-1.5 text-sm text-zinc-300">${list.map((x) => `<li class="flex gap-2"><span class="${tone}">&bull;</span><span>${esc(x)}</span></li>`).join('')}</ul></div>` : '');
+  const shortVersion = adv && (adv.matters.length || adv.mistakes.length)
+    ? `<section class="mt-6 rounded-2xl border border-[#a87ffb]/25 bg-gradient-to-br from-[#a87ffb]/[0.08] to-transparent p-4">
+        <h2 class="text-base font-bold text-white">${esc(ui('shortVersion'))}</h2>
+        <div class="mt-3 grid gap-4 sm:grid-cols-2">${adviceList(ui('adviceMatters'), adv.matters, 'text-[#c4b0ff]')}${adviceList(ui('adviceMistakes'), adv.mistakes, 'text-amber-300')}${adviceList(ui('adviceSkip'), adv.skip, 'text-zinc-400')}</div>
+      </section>`
+    : '';
+  const choices = (a.choices || []).length
+    ? `<section id="choices" class="mt-8 scroll-mt-20">
+        <div class="flex items-center gap-3"><h2 class="flex-1 text-xl font-bold text-white">${esc(ui('choicesHere'))}</h2><label class="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer"><input type="checkbox" data-spoilers class="accent-[#a87ffb]"> ${esc(ui('showSpoilers'))}</label></div>
+        <p class="mt-1 text-sm text-zinc-500">${esc(ui('choicesIntro'))}</p>
+        <div class="mt-4 space-y-3">${(a.choices || [])
+          .map((c) => `<div id="${esc(c.id)}" class="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
+            <h3 class="font-semibold text-white">${esc(c.title)}</h3>
+            ${c.when ? `<p class="text-xs text-zinc-500 mt-0.5">${esc(c.when)}</p>` : ''}
+            <ul class="mt-2.5 space-y-2">${c.options.map((o) => `<li class="text-sm"><span class="font-semibold text-zinc-100">${esc(o.label)}</span><span class="qc-spoiler block mt-0.5 text-zinc-400" title="${esc(ui('choicesIntro'))}">&rarr; ${esc(o.outcome)}</span></li>`).join('')}</ul>
+            ${c.recommended ? `<p class="qc-spoiler mt-2.5 text-xs text-emerald-200/90"><span class="font-semibold text-emerald-300">${esc(ui('recommended'))}:</span> ${esc(c.recommended)}</p>` : ''}
+            ${c.note ? `<p class="qc-spoiler mt-1 text-xs text-amber-200/90">${esc(c.note)}</p>` : ''}
+          </div>`)
+          .join('')}</div>
+      </section>`
+    : '';
   const box = (id: string) => `<input type="search" data-filter="#${id}" placeholder="${esc(ui('searchAreas'))}" class="w-full mb-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">`;
   const sidebar = (id: string) => `<nav aria-label="${esc(game)}" class="qc-scroll">${`<a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>`}${box(id)}<ul id="${id}" class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
 
@@ -474,8 +536,12 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
       ${a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${esc(a.overview)}</p>` : ''}
       ${infoBox}
+      ${shortVersion}
       ${jump}
       ${quests.length ? `<p class="mt-3 text-sm text-zinc-400"><span class="text-zinc-500">${esc(ui('relatedQuests'))}:</span> ${quests.map((q) => `<span class="inline-block rounded-md bg-white/[0.05] px-2 py-0.5 text-zinc-200 mr-1 mb-1">${esc(q)}</span>`).join('')}</p>` : ''}
+      ${walk}
+      ${choices}
+      ${walk ? `<h2 class="mt-10 text-xl font-bold text-white">${esc(ui('checklists'))}</h2>` : ''}
       ${dontMiss}
       ${otherSec
         .map((x) =>
@@ -645,7 +711,8 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   const pageLangs = (slug: string) => langs.filter((c) => c === 'en' || allTr[c]?.areas?.[slug]);
   visible.forEach((o, i) => {
     const a = pageOf(o.slug);
-    const draft = a.status !== 'published';
+    // A local preview is always marked DRAFT (and kept out of search).
+    const draft = a.status !== 'published' || !!PREVIEW;
     const adir = path.join(dir, o.slug);
     fs.mkdirSync(adir, { recursive: true });
     let title: string, description: string;
@@ -913,7 +980,10 @@ async function buildSiteCss() {
 
 async function main() {
   // Staged rebuilds (guides/{key}--next) are never part of the site; review.ts --gate promotes them.
-  const guides = { docs: (await db().collection('guides').get()).docs.filter((d) => !d.id.endsWith('--next')) };
+  const guides = { docs: (await db().collection('guides').get()).docs.filter((d) => !d.id.endsWith('--next') && (!ONLY || d.id === ONLY)) };
+  // A preview carries the game's flagship prototypes (guidePrototypes/{key}__{slug}) on their pages.
+  const protos = new Map<string, any>();
+  if (PREVIEW) for (const d of (await db().collection('guidePrototypes').get()).docs) protos.set(d.id, d.data());
   if (approve) {
     const ref = db().collection('guides').doc(gameKey(approve));
     const drafts = await ref.collection('areas').where('status', '==', 'draft').get();
@@ -941,7 +1011,11 @@ async function main() {
     const info = g.data();
     const order: { slug: string; name: string }[] = info.areas || [];
     const snap = await g.ref.collection('areas').get();
-    const byslug = new Map(snap.docs.map((d) => [d.id, d.data() as GuideArea]));
+    const byslug = new Map(snap.docs.map((d) => {
+      const pr = protos.get(`${g.id}__${d.id}`);
+      const a = d.data() as GuideArea;
+      return [d.id, pr ? { ...a, walkthrough: pr.walkthrough, choices: pr.choices, advice: pr.advice, items: pr.items, secrets: pr.secrets, fights: pr.fights, ...(pr.info ? { info: pr.info } : {}), sources: pr.sources || a.sources } : a];
+    }));
     const visible = order.filter((o) => byslug.has(o.slug) && show(byslug.get(o.slug)!.status));
     if (!visible.length) continue;
     // Languages this game's guide is translated into (translate-guide.ts), published pages only.
@@ -998,6 +1072,13 @@ async function main() {
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemap.map((u) => `  <url><loc>${u}</loc></url>`).join('\n')}\n</urlset>\n`,
   );
   fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`);
+  if (PREVIEW) {
+    // A preview: the site's icons beside it, and its own stylesheet; the website files and the homepage are untouched.
+    for (const f of ['icon.svg', 'favicon.ico', 'favicon-96.png', 'favicon-192.png']) if (fs.existsSync(path.resolve('Marketing_Website_Files', f))) fs.copyFileSync(path.resolve('Marketing_Website_Files', f), path.join(OUT, f));
+    await buildSiteCss();
+    console.log(`Preview: ${OUT}${protos.size ? ` (${protos.size} flagship prototype(s))` : ''}. Nothing published.`);
+    process.exit(0);
+  }
   updateHomepage(games.filter((g) => g.published > 0));
   updateVersion();
   await buildSiteCss();

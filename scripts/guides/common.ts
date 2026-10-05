@@ -364,7 +364,21 @@ export function missableGaps(e: { where?: string; how?: string; lockout?: string
   if (!String(e.lockout || '').trim()) gaps.push('no lockout');
   return gaps;
 }
+/**
+ * A flagship page's walkthrough step: the area in the order a player meets it, as connected text, with the checklist
+ * entries (ids) and key fights (ids) found along the way, a tip and a warning.
+ */
+export type GuideStep = { id: string; title: string; text: string; entries?: string[]; fights?: string[]; tip?: string; warn?: string };
+/** An important choice on a flagship page: when it comes up, its options and what each leads to (spoilers). */
+export type GuideChoice = { id: string; title: string; when?: string; options: { label: string; outcome: string }[]; recommended?: string; note?: string };
+/** A flagship page's short version, from an experienced player: what matters, what to skip, common mistakes. */
+export type GuideAdvice = { matters: string[]; skip: string[]; mistakes: string[] };
+
 export type GuideArea = {
+  /** Flagship pages (prototype): the walkthrough, the choices and the short version. */
+  walkthrough?: GuideStep[];
+  choices?: GuideChoice[];
+  advice?: GuideAdvice;
   name: string;
   slug: string;
   order: number;
