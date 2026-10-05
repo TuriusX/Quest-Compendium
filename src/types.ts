@@ -112,6 +112,10 @@ export interface ChatMessage {
   factsSaved?: number;
   /** Corrections to the guide this answer made (candidates to verify): "That's right" on it confirms their area. */
   correctionIds?: string[];
+  /** The player reported this answer (Report this answer), and why. */
+  reported?: 'harmful' | 'wrong' | 'other';
+  /** Hidden after an "offensive or harmful" report, until the player taps "Show anyway". */
+  collapsed?: boolean;
 }
 
 export interface PlaceGuess {

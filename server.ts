@@ -23,6 +23,7 @@ import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe
 import { DONE_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideFightNotes, guideLinesForPanel, guideAreasWithPages } from './guidesApi';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
+import { registerAnswerReports } from './answerReports';
 import { registerDiscord } from './discord';
 import { STEPS_RULES, extractSteps } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
@@ -322,6 +323,8 @@ async function startServer() {
   registerGuidesApi(app);
   // Player corrections to the guides: candidates from conversations, and the Corrections tab of /admin/reviews.
   registerCorrections(app, { requireAuth, isAdmin });
+  // Reports on AI answers (Store policy 11.16): saved for review, shown on the Reports tab of /admin/reviews.
+  registerAnswerReports(app, { requireAuth, optionalAuth, isAdmin });
   // The guide review queue: failed reviews and players' mistake reports, decided on /admin/reviews (ADMIN_EMAILS).
   registerReviewQueue(app, {
     requireAuth,
@@ -2191,7 +2194,7 @@ percentages:
   <div class="container">
     <div class="badge">Official Legal Document</div>
     <h1>Privacy Policy for Quest Compendium</h1>
-    <div class="updated">Last updated: October 3, 2026</div>
+    <div class="updated">Last updated: October 5, 2026</div>
 
     <p>Welcome to <strong>Quest Compendium</strong> (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;the application&rdquo;). This Privacy Policy explains how personal information and application data are collected, used, and protected when you use our desktop application and web services.</p>
 
@@ -2202,6 +2205,7 @@ percentages:
       <li><strong>Steam Profile & Gameplay Data:</strong> If you link your public Steam ID, we retrieve publicly accessible profile data, game libraries, and achievements via the public Steam Web API to display your in-game statistics and patch notes. We never collect or access your Steam passwords or login credentials.</li>
       <li><strong>User-Submitted Queries & Content:</strong> Questions you ask the AI compendium, chat histories, personal playthrough notes, and quest checklist items you save.</li>
       <li><strong>User-Initiated Audio & Screenshots:</strong> If you explicitly initiate voice input or attach an in-game screenshot for visual puzzle solving, the audio or image data is sent securely to our backend and processed by AI models to fulfill your request. We do not perform background screen recording or passive microphone listening.</li>
+      <li><strong>Reported Answers:</strong> If you report an AI answer (the Report button on an answer), we store the report for review: the reason and any comment you add, the question and the answer, the game and place, the AI model and app version, the date, and an anonymised identifier instead of your account. Reports are used only to review and improve answers and guides, and are deleted on request with your other data.</li>
       <li><strong>Payment Information:</strong> Subscriptions and upgrades are processed securely via Stripe. We do not store or process credit card numbers or financial account details on our servers.</li>
     </ul>
 

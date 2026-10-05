@@ -31,6 +31,7 @@ import {
   AlertCircle,
   BookOpen,
   MapPin,
+  Flag,
 } from './icons';
 import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions } from './ScreenPointers';
 import { areaFindsFor, markersActiveFor } from './pointerStore';
@@ -40,6 +41,7 @@ import { auth } from '../lib/firebase';
 import { playSnapSound, playChimeSound, playBlipSound } from '../utils/audio';
 import { useT } from '../i18n';
 import { QuestLogo } from './QuestLogo';
+import { ReportAnswerModal, type ReportTarget } from './ReportAnswerModal';
 import { PlaceBar } from './PlaceBar';
 import { KnownHere } from './KnownHere';
 import { QcGuidesView } from './QcGuidesView';
@@ -313,6 +315,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   }, [attachedImage]);
   const [isRecording, setIsRecording] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  // "Report this answer" (Store policy 11.16): the answer the dialog is open for.
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [savedNoteMessageId, setSavedNoteMessageId] = useState<string | null>(null);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [audioLoadingId, setAudioLoadingId] = useState<string | null>(null);
@@ -1291,6 +1295,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       : 'bg-[#11121a]/95 border border-white/[0.08] text-zinc-200 shadow-[0_6px_25px_rgba(0,0,0,0.5)]'
                   }`}
                 >
+                  {!isUser && msg.collapsed ? (
+                    <div className="flex items-center gap-2 text-xs text-zinc-400">
+                      <Flag className="w-3.5 h-3.5 text-rose-300 shrink-0" aria-hidden="true" />
+                      <span className="flex-1">{t('report.hidden')}</span>
+                      <button
+                        type="button"
+                        onClick={() => onUpdateMessage?.(msg.id, { collapsed: false })}
+                        className="text-[var(--accent-color)] hover:underline cursor-pointer"
+                      >
+                        {t('report.showAnyway')}
+                      </button>
+                    </div>
+                  ) : (<>
                   {!isUser && msg.bannerImageUrl && (
                     <div 
                       onClick={() => onOpenScreenModal(msg.bannerImageUrl!)}
@@ -1482,6 +1499,26 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             <Copy className="w-3.5 h-3.5" />
                           )}
                         </button>
+
+                        {/* Report this answer (offensive, wrong, other) */}
+                        <button
+                          onClick={() => {
+                            const idx = activeTab.messages.findIndex((m) => m.id === msg.id);
+                            let question = '';
+                            for (let j = idx - 1; j >= 0; j--) if (activeTab.messages[j].role === 'user') { question = activeTab.messages[j].text; break; }
+                            setReportTarget({
+                              messageId: msg.id, answer: msg.text, question,
+                              game: activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name,
+                              place: msg.placeChosen || msg.place?.name || activeTab.place?.name,
+                              model: msg.modelUsed,
+                            });
+                          }}
+                          title={msg.reported ? t('report.reported') : t('report.tooltip')}
+                          aria-label={t('report.tooltip')}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer hover:bg-white/10 ${msg.reported ? 'text-rose-300' : 'text-zinc-400 hover:text-rose-300'}`}
+                        >
+                          <Flag className="w-3.5 h-3.5" fill={msg.reported ? 'currentColor' : 'none'} />
+                        </button>
                       </div>
                     </div>
                   )}
@@ -1501,6 +1538,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       </button>
                     </div>
                   )}
+                  </>)}
                 </div>
 
                 {/* A fight: "Next turn" asks again with a fresh screenshot (a normal question) */}
@@ -1735,6 +1773,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       </form>
 
       {/* Embedded Browser Screen Capture Guidance Modal */}
+      <ReportAnswerModal
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
+        onSent={(reason) => {
+          // An offensive or harmful answer is folded away for the player ("Show anyway" opens it).
+          if (reportTarget) onUpdateMessage?.(reportTarget.messageId, { reported: reason, ...(reason === 'harmful' ? { collapsed: true } : {}) });
+        }}
+      />
       {showIframeCaptureNotice && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-[#0e0e14] border border-amber-500/30 rounded-2xl p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">

@@ -8,7 +8,8 @@
  *                                        anonymous one counting as half a reporter (keyed by a hash of the IP)
  *   GET  /admin/reviews                  the admin page (sign in with Google; only ADMIN_EMAILS get the data)
  *   GET  /api/admin/review-queue         open items, then the last decided ones
- * The page's Corrections tab lists player corrections to the guides (corrections.ts) with apply / dismiss.
+ * The page's Corrections tab lists player corrections to the guides (corrections.ts) with apply / dismiss, and its
+ * Reports tab the players' reports on AI answers (answerReports.ts) with open / reviewed / actioned.
  *   POST /api/admin/review-queue/:id     { action }: publish (a staged rebuild, as it is), fix, outline, careful
  *                                        (repair.ts), unpublish, dismiss, reopen
  *
@@ -187,13 +188,17 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   .chip.approved { color: var(--ok); border-color: #4ade8055; }
   .chip.fight { color: #f87171; border-color: #f8717155; }
   .said { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: #a87ffb10; border-radius: 0 8px 8px 0; }
+  .chip.harmful { color: var(--bad); border-color: #f8717155; }
+  .chip.wrong { color: var(--warn); border-color: #fbbf2455; }
+  .answer { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--line); background: #ffffff06; border-radius: 0 8px 8px 0; white-space: pre-wrap; max-height: 320px; overflow: auto; }
+  input.claim { font: inherit; color: var(--text); background: #1b1b24; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; flex: 1; min-width: 220px; }
   .guide { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--line); background: #ffffff08; border-radius: 0 8px 8px 0; }
 </style>
 </head>
 <body>
 <header>
   <h1>Guide review queue</h1>
-  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button></nav>
+  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button><button id="tabReports" class="tab">Reports</button></nav>
   <select id="filter" aria-label="Show"><option value="all">All open</option><option value="review">Failed reviews</option><option value="report">Player reports</option></select>
   <button id="signin" class="primary">Sign in with Google</button>
 </header>
@@ -202,6 +207,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   <div id="list"></div>
   <div id="corr" hidden></div>
   <div id="search" hidden></div>
+  <div id="reports" hidden></div>
   <details id="decidedBox" hidden><summary>Recently decided</summary><div id="decided"></div></details>
 </main>
 <script type="module">
@@ -244,6 +250,35 @@ function adminPage(firebaseConfig: Record<string, string>): string {
       + (corr.decided.length ? '<details><summary>Recently decided</summary>' + corr.decided.map((g) => '<div class="card"><div class="row"><span class="game">' + esc(g.game) + ' · ' + esc(g.areaName) + ' · ' + esc(g.entryName) + '</span>' + (g.entryKind === 'fight' ? '<span class="chip fight">Missing fight</span>' : '') + '<span class="chip">' + esc(g.status) + '</span></div>' + (g.verifiedText ? '<div class="said">' + esc(g.verifiedText.fight ? [g.verifiedText.fight.name, g.verifiedText.fight.enemies, g.verifiedText.fight.tactics].filter(Boolean).join(' · ') : [g.verifiedText.where, g.verifiedText.how, g.verifiedText.notes].filter(Boolean).join(' ')) + '</div>' : '') + '</div>').join('') + '</details>' : '');
     if (tab === 'corr') $('msg').textContent = corr.open.length + ' correction(s) waiting. Apply writes it into the guide on the next pipeline run (through the review gate); dismiss is immediate.';
   }
+  // Reports: players' reports on AI answers (Store policy 11.16): what was asked and answered, why, and the decision.
+  let reps = { open: [], decided: [] };
+  const REASON = { harmful: 'Offensive or harmful', wrong: 'Wrong or misleading', other: 'Other' };
+  function repCard(r, decided) {
+    const head = '<div class="row"><span class="game">' + esc(r.game || 'No game') + (r.place ? ' · ' + esc(r.place) : '') + '</span>'
+      + '<span class="chip ' + esc(r.reason) + '">' + esc(REASON[r.reason] || r.reason) + '</span>'
+      + (decided ? '<span class="chip">' + esc(r.status) + '</span>' : '')
+      + '<span class="dim">' + esc([r.model, r.client, r.appVersion && 'v' + r.appVersion, r.signedIn ? 'signed in' : 'not signed in'].filter(Boolean).join(' · ')) + '</span>'
+      + '<span class="dim">' + new Date(r.createdAt).toLocaleString() + '</span></div>';
+    const body = (r.comment ? '<blockquote>' + esc(r.comment) + '</blockquote>' : '')
+      + (r.question ? '<div class="guide"><b>Asked:</b> ' + esc(r.question) + '</div>' : '')
+      + '<details' + (decided ? '' : ' open') + '><summary>The answer</summary><div class="answer">' + esc(r.answer) + '</div></details>';
+    const entries = (r.guide && r.guide.entries) || [];
+    const cand = !decided && r.reason === 'wrong' && r.guide
+      ? (entries.length
+        ? '<div class="row" style="margin-top:8px"><span class="dim">Guide page ' + esc(r.guide.name) + ':</span><select data-rentry="' + esc(r.id) + '">' + entries.map((e) => '<option value="' + esc(e.id) + '">' + esc(e.kind + ': ' + e.name) + '</option>').join('') + '</select>'
+          + '<input class="claim" data-rclaim="' + esc(r.id) + '" placeholder="What is correct (becomes a correction candidate)" value="' + esc(r.comment || '') + '"><button data-rid="' + esc(r.id) + '" data-ract="candidate">Make correction candidate</button></div>'
+        : '<div class="dim">Guide page ' + esc(r.guide.name) + ': the answer names none of its entries.</div>')
+      : (r.candidateId ? '<div class="dim">Became correction candidate ' + esc(r.candidateId) + ' (Corrections tab).</div>' : '');
+    const acts = decided ? ['open'] : ['reviewed', 'actioned'];
+    const LBL = { open: 'Reopen', reviewed: 'Reviewed (no action)', actioned: 'Actioned' };
+    const buttons = '<div class="actions">' + acts.map((a) => '<button data-rid="' + esc(r.id) + '" data-ract="' + a + '"' + (a === 'reviewed' ? ' class="primary"' : '') + '>' + LBL[a] + '</button>').join('') + '</div>';
+    return '<div class="card">' + head + body + cand + buttons + '</div>';
+  }
+  function renderReports() {
+    $('reports').innerHTML = (reps.open.length ? reps.open.map((r) => repCard(r, false)).join('') : '<p class="dim">No reports waiting.</p>')
+      + (reps.decided.length ? '<details><summary>Recently decided</summary>' + reps.decided.map((r) => repCard(r, true)).join('') + '</details>' : '');
+    if (tab === 'reports') $('msg').textContent = reps.open.length + ' open report(s) on AI answers. Reviewed: looked at, nothing to change; actioned: something was done about it.';
+  }
   // Search: the weekly Search Console summary (last 28 days), the pages planned for a repair, games from searches.
   let sc = {};
   function renderSearch() {
@@ -268,12 +303,14 @@ function adminPage(firebaseConfig: Record<string, string>): string {
     $('tabGuides').classList.toggle('on', t === 'guides');
     $('tabCorr').classList.toggle('on', t === 'corr');
     $('tabSearch').classList.toggle('on', t === 'search');
+    $('tabReports').classList.toggle('on', t === 'reports');
+    $('reports').hidden = t !== 'reports';
     $('list').hidden = t !== 'guides';
     $('decidedBox').hidden = t !== 'guides' || !data.decided.length;
     $('filter').hidden = t !== 'guides';
     $('corr').hidden = t !== 'corr';
     $('search').hidden = t !== 'search';
-    if (t === 'corr') renderCorr(); else if (t === 'search') renderSearch(); else render();
+    if (t === 'corr') renderCorr(); else if (t === 'search') renderSearch(); else if (t === 'reports') renderReports(); else render();
   }
 
   async function api(path, body) {
@@ -310,14 +347,28 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   }
   async function load() {
     try {
-      [data, corr, sc] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections'), api('/api/admin/search-console').catch(() => ({}))]);
+      [data, corr, sc, reps] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections'), api('/api/admin/search-console').catch(() => ({})), api('/api/admin/answer-reports').catch(() => ({ open: [], decided: [] }))]);
       render();
       renderCorr();
+      renderReports();
       showTab(tab);
     }
     catch (e) { $('msg').textContent = e.message === 'Not an admin.' ? 'This account is not an admin (ADMIN_EMAILS on the server).' : 'Could not load the queue: ' + e.message; }
   }
   document.addEventListener('click', async (e) => {
+    const rb = e.target.closest('button[data-ract]');
+    if (rb) {
+      const id = rb.dataset.rid;
+      const body = { action: rb.dataset.ract };
+      if (body.action === 'candidate') {
+        body.entryId = document.querySelector('select[data-rentry="' + CSS.escape(id) + '"]')?.value;
+        body.claim = document.querySelector('input[data-rclaim="' + CSS.escape(id) + '"]')?.value;
+      }
+      rb.disabled = true;
+      try { await api('/api/admin/answer-reports/' + encodeURIComponent(id), body); await load(); }
+      catch (err) { alert(err.message); rb.disabled = false; }
+      return;
+    }
     const c = e.target.closest('button[data-cact]');
     if (c) {
       c.disabled = true;
@@ -335,6 +386,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   $('tabGuides').addEventListener('click', () => showTab('guides'));
   $('tabCorr').addEventListener('click', () => showTab('corr'));
   $('tabSearch').addEventListener('click', () => showTab('search'));
+  $('tabReports').addEventListener('click', () => showTab('reports'));
   $('signin').addEventListener('click', () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => { $('msg').textContent = 'Sign-in failed: ' + (e.code || e.message); }));
   onAuthStateChanged(auth, (u) => { $('signin').hidden = !!u; if (u) load(); });
 </script>
