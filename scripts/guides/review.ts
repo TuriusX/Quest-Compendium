@@ -366,7 +366,7 @@ export async function gateGuide(key: string, game: string, review: Review): Prom
     if (isStageKey(key)) {
       const r = await promote(key);
       await db().collection('reviewQueue').doc(`review-${liveKey(key)}`).set({ status: 'done', resolution: 'passed review', updatedAt: Date.now() }, { merge: true }).catch(() => {});
-      return `Gate: passed (${review.score}); promoted, ${r?.published || 0} page(s) live.`;
+      return `Gate: passed (${review.score}); promoted, ${r?.published || 0} page(s) live${r?.changed ? `, ${r.changed} changed` : ''}.`;
     }
     const drafts = await db().collection('guides').doc(key).collection('areas').where('status', '==', 'draft').get();
     for (const d of drafts.docs) await d.ref.update({ status: 'published', updatedAt: Date.now() });

@@ -15,6 +15,7 @@
  */
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, gameKey, arg, steamAchievements, type GuideArea } from './common';
+import { estimateCost } from '../../usage';
 
 const LANGS: Record<string, string> = {
   es: 'Spanish (Latin American, neutral)', pt: 'Brazilian Portuguese', de: 'German', fr: 'French', ru: 'Russian',
@@ -76,6 +77,7 @@ async function main() {
   const groups = [...new Set((info.areas || []).map((o: any) => o.group).filter(Boolean))] as string[];
   const ai = gemini();
   let dollars = 0;
+  let translatedPages = 0;
 
   const call = async (prompt: string) => {
     const res: any = await ai.models.generateContent({
@@ -83,8 +85,7 @@ async function main() {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: { responseMimeType: 'application/json', temperature: 0.2, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
-    const u = res?.usageMetadata;
-    if (u) dollars += ((u.promptTokenCount || 0) * 0.5 + ((u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0)) * 3) / 1_000_000;
+    dollars += estimateCost(MODEL, res) || 0;
     return JSON.parse(String(res?.text || '{}').replace(/```json|```/g, '').trim());
   };
   const RULES = (lang: string) =>
@@ -125,6 +126,7 @@ async function main() {
     };
 
     let done = 0, failed = 0, inconsistent = 0;
+    translatedPages += todo.length;
     for (const p of todo) {
       const src = source(p);
       const used = Object.fromEntries(Object.entries(glossary).filter(([e]) => e === p.name || JSON.stringify(src).includes(e)));
@@ -232,7 +234,7 @@ async function main() {
     await ref.set({ languages: [...new Set([...(info.languages || []), lang])] }, { merge: true });
     console.log(`${lang}: ${done} translated, ${failed} left in English, ${Object.keys(areas).length} pages available in this language.`);
   }
-  console.log(`Done. Estimated cost ≈ $${dollars.toFixed(3)}. Next: npx tsx scripts/guides/publish.ts`);
+  console.log(`Done: ${translatedPages} page translation(s) in ${langs.join(', ')}. Estimated cost ≈ $${dollars.toFixed(3)}. Next: npx tsx scripts/guides/publish.ts`);
   setTimeout(() => process.exit(0), 1500);
 }
 

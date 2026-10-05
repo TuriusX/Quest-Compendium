@@ -9,12 +9,12 @@
  * live pages that aren't in the new outline are held back (never deleted). The guide's other data (Steam id,
  * achievement guide, translations, pipeline notes) stays. Then the staging document is deleted. Republish the website.
  */
-import { db, arg, stageKey, liveKey } from './common';
+import { db, arg, stageKey, liveKey, translatableText } from './common';
 
 export const REPLACED = 'replaced by a reviewed rebuild';
 
 /** Returns how many pages went live, or null if there was nothing staged. */
-export async function promote(key: string): Promise<{ published: number; retired: number } | null> {
+export async function promote(key: string): Promise<{ published: number; retired: number; changed: number } | null> {
   const live = liveKey(key);
   const stageRef = db().collection('guides').doc(stageKey(live));
   const stage: any = (await stageRef.get()).data();
@@ -30,9 +30,16 @@ export async function promote(key: string): Promise<{ published: number; retired
     batch = db().batch();
     ops = 0;
   };
+  // A page counts as changed only when its player-facing text changed (or it's new): only those get a new updatedAt,
+  // so translations redo just the changed pages.
+  const livePages = new Map((await liveRef.collection('areas').get()).docs.map((d) => [d.id, d.data() as any]));
+  const changed: string[] = [];
   for (const [i, o] of order.entries()) {
     const { staged, ...page } = pages.get(o.slug);
-    batch.set(liveRef.collection('areas').doc(o.slug), { ...page, order: i, status: 'published', heldReason: null, unpublishedAt: null, updatedAt: Date.now() });
+    const was = livePages.get(o.slug);
+    const same = !!was && ['draft', 'published'].includes(was.status) && translatableText(was) === translatableText(page);
+    if (!same) changed.push(o.slug);
+    batch.set(liveRef.collection('areas').doc(o.slug), { ...page, order: i, status: 'published', heldReason: null, unpublishedAt: null, updatedAt: same ? was.updatedAt || Date.now() : Date.now() });
     if (++ops >= 400) await flush();
   }
   const keep = new Set(order.map((o: any) => o.slug));
@@ -53,12 +60,17 @@ export async function promote(key: string): Promise<{ published: number; retired
     unpublished: null,
     rebuiltAt: Date.now(),
     updatedAt: Date.now(),
+    // Translations fall behind otherwise: the changed pages wait for the pipeline's sync, in the languages this guide
+    // is already translated into (pages added to earlier ones still waiting).
+    ...(changed.length && (before.languages || []).length
+      ? { translationsDue: { at: Date.now(), pages: [...new Set([...(before.translationsDue?.pages || []), ...changed])].slice(0, 500) } }
+      : {}),
     ...(before.createdAt ? {} : { createdAt: Date.now() }),
   }, { merge: true });
   ops++;
   await flush();
   await db().recursiveDelete(stageRef);
-  return { published: order.length, retired };
+  return { published: order.length, retired, changed: changed.length };
 }
 
 /** Start a staged build as a copy of the live guide (its published and draft pages, as drafts), to fix or extend it. */

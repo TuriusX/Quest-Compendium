@@ -249,6 +249,24 @@ export function parseItem(f: string[], id: string, sources: string[] = []): Guid
   return { id, name: f[0], where, ...(how ? { how } : {}), ...(lockout ? { lockout } : {}), missable: !!lockout, sources };
 }
 
+/**
+ * A page's player-facing text, the part translations cover (names, places, steps, notes; not sources or bookkeeping).
+ * Two pages with the same signature need no new translation.
+ */
+export function translatableText(p: any): string {
+  const pick = (list: any[] | undefined, keys: string[]) => (Array.isArray(list) ? list : []).map((e) => keys.map((k) => e?.[k] ?? ''));
+  return JSON.stringify([
+    p?.name ?? '', p?.story ?? '', p?.overview ?? '',
+    pick(p?.items, ['id', 'name', 'where', 'how', 'lockout']),
+    pick(p?.secrets, ['id', 'text']),
+    pick(p?.enemies, ['id', 'name', 'weakness', 'steal', 'notes']),
+    pick(p?.shops, ['id', 'name', 'sells']),
+    pick(p?.fights, ['id', 'name', 'enemies', 'threats', 'weaknesses', 'tactics', 'rewards']),
+    Array.isArray(p?.tips) ? p.tips : [],
+    (Array.isArray(p?.sections) ? p.sections : []).map((x: any) => [x?.title ?? '', pick(x?.entries, ['id', 'text'])]),
+  ]);
+}
+
 /** What a missable entry still lacks against the standard (an anchor can only be judged by reading it). */
 export function missableGaps(e: { where?: string; how?: string; lockout?: string }): string[] {
   const gaps: string[] = [];

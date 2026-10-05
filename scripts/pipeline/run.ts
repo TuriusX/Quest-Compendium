@@ -429,6 +429,38 @@ async function main() {
   }
   if (!done) report.push('Nothing to do within the budget this run.');
 
+  // ---- 3d. translations kept in sync: a guide whose pages changed (repairs, missables, Key fights, corrections,
+  // rebuilds: promote.ts marks translationsDue) gets just the changed pages retranslated, in the languages it's already
+  // translated into (translate-guide.ts redoes only pages newer than their translation). New languages are still only
+  // added where players use them or the guide is featured (step 3 above). ----
+  if (!DRY) {
+    const due = (await db().collection('guides').where('translationsDue.at', '>', 0).get()).docs.filter((d) => !d.id.endsWith('--next'));
+    let synced = 0, pages = 0, cost = 0;
+    for (const d of due) {
+      const info: any = d.data();
+      const langs: string[] = Array.isArray(info.languages) ? info.languages : [];
+      if (!langs.length) {
+        await d.ref.set({ translationsDue: null }, { merge: true });
+        continue;
+      }
+      if (aiRoom < 0.25) {
+        report.push(`⏳ translations: ${due.length - synced} guide(s) wait for the next run (AI budget).`);
+        break;
+      }
+      const r = runScript(['scripts/guides/translate-guide.ts', '--game', String(info.game || d.id), '--lang', langs.join(',')]);
+      state.dollars = (state.dollars || 0) + r.dollars;
+      aiRoom -= r.dollars;
+      cost += r.dollars;
+      if (r.ok) {
+        await d.ref.set({ translationsDue: null }, { merge: true });
+        synced++;
+        pages += Number((r.summary.match(/^(\d+) page translation/) || [])[1] || 0);
+        changed = true;
+      } else report.push(`⚠️ translations **${info.game || d.id}** (${langs.join(', ')}): the update failed; tried again next run.`);
+    }
+    if (synced) report.push(`🌍 translations kept in sync: ${synced} guide(s), ${pages} page translation(s), ≈ $${cost.toFixed(2)}.`);
+  }
+
   // ---- 4. publish and deploy ----
   if (changed && !DRY) {
     runScript(['scripts/guides/steam-ids.ts']); // new guides get their Steam id (for game art); no AI, no cost
