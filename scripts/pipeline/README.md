@@ -39,6 +39,11 @@ server's image only holds the built app.
 
 5. Run it once by hand to check: `gcloud run jobs execute guide-pipeline --region us-east1 --project quest-compendium-1bccf`
 
+   To post the last run's summary again (or just its closing line with `--closing-only`), run another script in the
+   job's image by passing it as `--args` (`tsx` is on the image's PATH; `--args` replaces the whole command):
+
+       gcloud run jobs execute guide-pipeline --region us-east1 --project quest-compendium-1bccf --args=tsx,scripts/pipeline/summary.ts,--post
+
 ## Things to know
 
 - **The website comes from the job's copy of this repo.** The job rebuilds the guide pages from Firestore, but the
@@ -46,9 +51,11 @@ server's image only holds the built app.
   website, rebuild the image (step 1) and redeploy the job (step 3) so it doesn't put an older homepage back.
 - **Steam picks:** only RPG/adventure games with at least `PIPELINE_MIN_STEAM_REVIEWS` Steam reviews (default 2,000)
   count, so small new games don't use up the month's searches.
-- **Budget:** `PIPELINE_MONTHLY_AI_DOLLARS` (default $10) and `PIPELINE_MONTHLY_SEARCHES` (default 1,500), and it always
-  leaves `PIPELINE_PLAYER_RESERVE` (default 2,000) of the app's monthly searches for players. Change them with
-  `gcloud run jobs update guide-pipeline --update-env-vars …`.
+- **Budget:** money: `PIPELINE_DAILY_DOLLARS` (default $8) and `PIPELINE_MONTHLY_AI_DOLLARS` (default $10, or
+  `PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH` for one month), counting tokens and searches ($14 per 1,000). Searches have no
+  separate pipeline limit (`PIPELINE_MONTHLY_SEARCHES` is retired); the pipeline only always leaves
+  `PIPELINE_PLAYER_RESERVE` (default 2,000) of the app's monthly searches (`MONTHLY_SEARCH_CAP`) for players. The
+  run's closing line on Discord shows these limits. Change them with `gcloud run jobs update guide-pipeline --update-env-vars …`.
   - **Set since 2026-10-03, to finish the guide-review rebuilds quickly:** `MONTHLY_SEARCH_CAP=8500` on both the job
     and the server (`gcloud run services update quest-compendium --update-env-vars …`; searches past the free 5,000 a
     month cost $14 per 1,000), `PIPELINE_MONTHLY_AI_DOLLARS=15` and `PIPELINE_QUEUE_MINUTES=160`. The pipeline still

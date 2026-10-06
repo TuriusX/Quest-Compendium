@@ -6,4 +6,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 COPY . .
+# tsx on the PATH, so a run with other arguments (gcloud run jobs execute --args=tsx,scripts/…) starts it directly; without
+# it the node image's entrypoint read "tsx" as a script file and crashed with "Cannot find module '/app/tsx'".
+ENV PATH=/app/node_modules/.bin:$PATH
 CMD ["npx", "tsx", "scripts/pipeline/run.ts"]

@@ -32,13 +32,13 @@
  *      The summary starts with yesterday's activity: questions, signed-in players vs guests, which apps, and sign-ups.
  *
  * Settings (environment variables; all optional):
- *   PIPELINE_MONTHLY_AI_DOLLARS   AI spending cap per month (default 10)
- *   PIPELINE_MONTHLY_SEARCHES     searches the pipeline may use per month (default 1500)
+ *   PIPELINE_MONTHLY_AI_DOLLARS   AI spending cap per month (default 10); searches are paid for out of it (and the daily
+ *                                 cap), so there's no separate pipeline search count to keep under
  *   PIPELINE_PLAYER_RESERVE       searches always left for players under MONTHLY_SEARCH_CAP (default 2000)
  *   MONTHLY_SEARCH_CAP            the app's whole monthly search cap (default 5000; same setting as the server)
  *   PIPELINE_MAX_ACTIONS          actions per run (default 6)
  *   PIPELINE_QUEUE_DAILY_SEARCHES searches the careful-build queue may use per run (default 1500); it also keeps the
- *                                 player reserve, and isn't limited by PIPELINE_MONTHLY_SEARCHES
+ *                                 player reserve
  *   PIPELINE_QUEUE_MINUTES        minutes the repair queue may run each time (default 120; the job's limit is 3 hours)
  *   PIPELINE_WISHLIST_SLOTS      of those, kept for wish-list guides while the wish list has games (default 2)
  *   PIPELINE_FEATURED_LANGS       languages for the featured guides before players ask (default es,pt)
@@ -96,7 +96,6 @@ const AI_CAP = (() => {
   const m = (process.env.PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH || '').split(',').map((x) => x.trim().split(':')).find(([k]) => k === month);
   return m && Number.isFinite(Number(m[1])) ? Number(m[1]) : env('PIPELINE_MONTHLY_AI_DOLLARS', 10);
 })();
-const SEARCH_CAP = env('PIPELINE_MONTHLY_SEARCHES', 1500);
 const RESERVE = env('PIPELINE_PLAYER_RESERVE', 2000);
 const APP_CAP = env('MONTHLY_SEARCH_CAP', 5000);
 const MAX_ACTIONS = env('PIPELINE_MAX_ACTIONS', 6); // most actions are cheap now (see the plan order below)
@@ -318,7 +317,8 @@ async function main() {
 
   // ---- 3. run, inside the budget ----
   const appUsed = await appSearchesThisMonth(month);
-  let searchRoom = Math.min(SEARCH_CAP - (state.searches || 0), APP_CAP - RESERVE - appUsed);
+  // Searches are limited by money (the daily and monthly caps, through affordable()) and the app-wide player reserve.
+  let searchRoom = APP_CAP - RESERVE - appUsed;
   let aiRoom = AI_CAP - (state.dollars || 0);
   // ---- spending: every step is charged its real cost; the daily cap is hard (each script gets what's left as its
   // limit, and its searches are capped to fit), and one run passing RUN_ALERT dollars posts an alert ----
@@ -494,7 +494,8 @@ async function main() {
   }
   state.carefulQueue = [...waiting, ...queue, ...held];
   if (state.carefulQueue.length) report.push(`⏳ Repair queue: ${state.carefulQueue.length} waiting (next: ${state.carefulQueue[0].game}).`);
-  searchRoom = Math.min(SEARCH_CAP - (state.searches || 0), APP_CAP - RESERVE - (await appSearchesThisMonth(month)));
+  const appUsedNow = await appSearchesThisMonth(month);
+  searchRoom = APP_CAP - RESERVE - appUsedNow;
   // Wish-list guides have their own slots, so the long queue of achievement guides doesn't hold them back; slots the
   // wish list can't fill (it ran out) go to everything else.
   const otherSlots = MAX_ACTIONS - Math.min(WISH_SLOTS, plan.filter((a) => a.wish).length);
@@ -686,7 +687,9 @@ async function main() {
     report.push(`💰 Costs this run: $${runDollars.toFixed(2)}: ${parts.join(', ')}.${top.length ? ` Biggest: ${top.join('; ')}.` : ''} Today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; ${new Date().toLocaleString('en-US', { month: 'long' })} $${(state.dollars || 0).toFixed(2)} of $${AI_CAP}.`);
   }
   // The closing line: how the run ended (finished, or stopped by which cap) and what it spent.
-  const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches), ${state.searches || 0} pipeline searches.`;
+  // The limits that apply: the daily and monthly dollar caps, and the app's monthly searches minus the player reserve.
+  const appSearches = await appSearchesThisMonth(month).catch(() => appUsedNow);
+  const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches, ${state.searches || 0} pipeline searches); app searches ${appSearches} of ${APP_CAP} (the pipeline stops at ${APP_CAP - RESERVE}, the rest kept for players).`;
   const closing = RUN.stoppedBy ? `🛑 Run stopped early: ${RUN.stoppedBy}. ${totals}` : `🏁 Run finished. ${totals}`;
   state.lastRun = Date.now();
   state.lastReport = report;
