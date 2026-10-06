@@ -7,7 +7,7 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { GoogleGenAI } from '@google/genai';
 import { AsyncLocalStorage } from 'async_hooks';
-import { billedUsage } from '../../usage';
+import { billedUsage, withOutputCap, maybeBilledFailure, worstCaseDollars } from '../../usage';
 
 dotenv.config();
 if (!getApps().length) initializeApp({ projectId: 'quest-compendium-1bccf' });
@@ -20,7 +20,7 @@ export const db = () => getFirestore();
  * pipeline reads as the step's real cost. PIPELINE_STEP_DOLLARS, when set, is a hard limit: once this process has
  * spent it, every further call is refused.
  */
-export const ledger = { calls: 0, input: 0, output: 0, thinking: 0, searches: 0, tokenDollars: 0, searchDollars: 0, unpriced: 0 };
+export const ledger = { calls: 0, input: 0, output: 0, thinking: 0, searches: 0, tokenDollars: 0, searchDollars: 0, unpriced: 0, failedCalls: 0 };
 export const ledgerDollars = () => ledger.tokenDollars + ledger.searchDollars;
 /**
  * Per-task usage when several run at once (flagship pages in parallel): calls made inside usageScope.run(scope, ...)
@@ -36,7 +36,7 @@ const printLedgerOnExit = () => {
 };
 export const usageLine = () =>
   `Usage: ${ledger.calls} call(s), in=${ledger.input} out=${ledger.output} thinking=${ledger.thinking} searches=${ledger.searches}, ` +
-  `tokens $${ledger.tokenDollars.toFixed(4)} + searches $${ledger.searchDollars.toFixed(4)} = $${ledgerDollars().toFixed(4)}${ledger.unpriced ? ` (${ledger.unpriced} unpriced call(s))` : ''}`;
+  `tokens $${ledger.tokenDollars.toFixed(4)} + searches $${ledger.searchDollars.toFixed(4)} = $${ledgerDollars().toFixed(4)}${ledger.unpriced ? ` (${ledger.unpriced} unpriced call(s))` : ''}${ledger.failedCalls ? ` (tokens include ${ledger.failedCalls} failed call(s) at their worst case)` : ''}`;
 /** A child script's "Usage:" line, added to this process's ledger (repair.ts runs build.ts as a child). */
 export function addChildUsage(out: string) {
   const m = String(out).match(/^Usage: (\d+) call\(s\), in=(\d+) out=(\d+) thinking=(\d+) searches=(\d+), tokens \$([\d.]+) \+ searches \$([\d.]+)/m);
@@ -55,7 +55,21 @@ export function gemini(): GoogleGenAI {
   const generate = client.models.generateContent.bind(client.models);
   (client.models as any).generateContent = async (request: any) => {
     if (STEP_LIMIT && ledgerDollars() >= STEP_LIMIT) throw new Error(`spending cap: this step has spent its $${STEP_LIMIT.toFixed(2)}`);
-    const res = await generate(request);
+    request = withOutputCap(request);
+    let res: any;
+    try {
+      res = await generate(request);
+    } catch (e) {
+      // A call that may have run before failing is counted at its worst case (it's billed; we never see how much).
+      if (maybeBilledFailure(e)) {
+        const worst = worstCaseDollars(request);
+        ledger.failedCalls++; ledger.calls++; ledger.tokenDollars += worst;
+        const scope = usageScope.getStore();
+        if (scope) scope.dollars += worst;
+        printLedgerOnExit();
+      }
+      throw e;
+    }
     const u = billedUsage(String(request?.model || ''), res);
     ledger.calls++; ledger.input += u.input; ledger.output += u.output; ledger.thinking += u.thinking; ledger.searches += u.searches;
     ledger.tokenDollars += u.tokenDollars; ledger.searchDollars += u.searchDollars;

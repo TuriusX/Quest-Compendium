@@ -315,7 +315,8 @@ async function proReview(game: string, p: any, neighbours: string[], draft: Draf
           contents: [{ role: 'user', parts: [{ text: consistencyPrompt(game, p, neighbours, draft) }] }],
           // Pro usually answers in seconds, but a call can hang, or a long page take minutes when Pro is busy: each try
           // gets longer (2, 4, then 7 minutes) before giving up for this run.
-          config: { temperature: 0.1, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }, httpOptions: { timeout: [120_000, 240_000, 420_000][attempt] } },
+          // Fixes and a verdict fit in 4,096 tokens: a review that runs on past that is a runaway (and billed as one).
+          config: { temperature: 0.1, maxOutputTokens: 4096, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }, httpOptions: { timeout: [120_000, 240_000, 420_000][attempt] } },
         });
         break;
       } catch (e: any) {
@@ -324,6 +325,9 @@ async function proReview(game: string, p: any, neighbours: string[], draft: Draf
       }
     }
     const text = String(res?.text || '');
+    if (String(res?.candidates?.[0]?.finishReason || '') === 'MAX_TOKENS') {
+      return { status: 'failed', reason: 'the review ran past its 4,096-token cap (a runaway reply)', fixed: 0, dropped: 0 };
+    }
     const t = applyFixes(text, draft);
     const v = text.split('\n').map((l) => fields(l, 'VERDICT')).filter(Boolean).pop();
     if (!v) return { status: 'failed', reason: 'the reviewer gave no verdict', ...t };
@@ -462,7 +466,7 @@ async function program() {
   const dayCap = Number(budget.dayOverrides?.[today()]) || budget.daily;
   budget.daily = dayCap;
   if (st.day !== today()) Object.assign(st, { day: today(), spentToday: 0, runPages: [], runFailures: [] });
-  if (st.paused && arg('estimate') !== 'true') { console.log(`The flagship programme is paused (${st.paused.why || 'until the owner says go'}). Nothing to do.`); return; }
+  if (st.paused && arg('estimate') !== 'true' && arg('ignore-pause') !== 'true') { console.log(`The flagship programme is paused (${st.paused.why || 'until the owner says go'}). Nothing to do.`); return; }
   const only = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
   const concurrency = Math.max(1, Math.min(6, Number(arg('concurrency', '1')) || 1));
   st.spent = Number(st.spent || 0); st.spentToday = Number(st.spentToday || 0);

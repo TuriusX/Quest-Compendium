@@ -38,6 +38,50 @@ export function estimateCost(model: string, response: any): number | null {
   return (input * rate.input + out * rate.output) / 1_000_000;
 }
 
+/**
+ * Output caps. A call that sets no maxOutputTokens gets one: without it a reply that runs away can go on to the model's
+ * ceiling (65,536 tokens, about $0.79 a call on Pro), and is billed even when our side has given up waiting. Speech and
+ * image models are left alone (their output isn't text).
+ */
+export const OUTPUT_CAP = { pro: 8192, default: 16384 };
+export function withOutputCap<T extends { model?: string; config?: any }>(request: T): T {
+  const model = String(request?.model || '');
+  if (/tts|image/i.test(model) || request?.config?.maxOutputTokens) return request;
+  return { ...request, config: { ...(request?.config || {}), maxOutputTokens: /pro/i.test(model) ? OUTPUT_CAP.pro : OUTPUT_CAP.default } };
+}
+
+/**
+ * A call that failed after it may have run (a timeout, a dropped connection, a 5xx) is billed for whatever it generated,
+ * which we never see: it's counted at its worst case, the prompt plus the full output cap. Calls refused before running
+ * (429 rate limits, 4xx) cost nothing.
+ */
+export function maybeBilledFailure(e: unknown): boolean {
+  const s = String((e as any)?.message || e);
+  if (/RESOURCE_EXHAUSTED|INVALID_ARGUMENT|PERMISSION_DENIED|API key|"code":\s*4\d\d|\b(400|401|403|404|429)\b/i.test(s)) return false;
+  return /fetch failed|timeout|timed out|aborted|DEADLINE_EXCEEDED|INTERNAL|UNAVAILABLE|ECONNRESET|socket|"code":\s*5\d\d|\b50\d\b/i.test(s);
+}
+export function worstCaseDollars(request: { model?: string; contents?: any; config?: any }): number {
+  const model = String(request?.model || '');
+  const rate = RATES[model];
+  if (!rate) return 0;
+  // Text in the prompt at about 4 characters a token; an image is about 1,100 tokens.
+  let chars = 0, images = 0;
+  const walk = (v: any) => {
+    if (!v) return;
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (typeof v === 'string') { chars += v.length; return; }
+    if (typeof v === 'object') {
+      if (v.inlineData) { images++; return; }
+      Object.values(v).forEach(walk);
+    }
+  };
+  walk(request?.contents);
+  const input = chars / 4 + images * 1100;
+  const out = Number(request?.config?.maxOutputTokens) || (/pro/i.test(model) ? OUTPUT_CAP.pro : OUTPUT_CAP.default);
+  const r = (input > LONG_PROMPT && LONG_RATES[model]) || rate;
+  return (input * r.input + out * r.output) / 1_000_000;
+}
+
 /** One response's usage as billed: tokens (thinking included) and searches, with their cost (searches at SEARCH_DOLLARS). */
 export function billedUsage(model: string, response: any) {
   const u = response?.usageMetadata || {};

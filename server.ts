@@ -5,7 +5,7 @@ import express from 'express';
 
 const logDebug = (...args: any[]) => {};
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold, ThinkingLevel } from '@google/genai';
-import { logBanner, logUsage } from './usage';
+import { logBanner, logUsage, withOutputCap, maybeBilledFailure, worstCaseDollars } from './usage';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
 import { initializeApp, getApp } from 'firebase-admin/app';
@@ -196,7 +196,7 @@ function getGeminiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
   
   if (apiKey) {
-    return new GoogleGenAI({
+    const client = new GoogleGenAI({
       apiKey: apiKey,
       httpOptions: {
         headers: {
@@ -204,6 +204,19 @@ function getGeminiClient(): GoogleGenAI {
         },
       },
     });
+    // Every call gets an output cap unless it sets its own (a runaway reply is billed to the model's ceiling), and a call
+    // that fails after it may have run is logged at its worst case, so the logs' costs don't undercount the bill.
+    const generate = client.models.generateContent.bind(client.models);
+    (client.models as any).generateContent = async (request: any) => {
+      const capped = withOutputCap(request);
+      try {
+        return await generate(capped);
+      } catch (e) {
+        if (maybeBilledFailure(e)) console.log(`[usage] failed-call ${capped?.model} worst case ≈ $${worstCaseDollars(capped).toFixed(4)} (${String((e as any)?.message || e).slice(0, 80)})`);
+        throw e;
+      }
+    };
+    return client;
   }
   
   throw new Error('A Gemini API key is required. Please add it in the settings menu.');
