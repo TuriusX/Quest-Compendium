@@ -198,8 +198,20 @@ const SCRIPT = `
   var sp=document.querySelector('[data-spoilers]');if(sp)sp.addEventListener('change',function(){b.classList.toggle('qc-spoilers',sp.checked);});
   document.addEventListener('click',function(e){var s=e.target.closest('.qc-spoiler');if(s){s.classList.add('is-shown');e.preventDefault();}});
   // "On this page" links: a section that's folded opens when its link is used (or the page opens at it).
-  var openAt=function(){var id=location.hash.slice(1);if(!id)return;var el=document.getElementById(id);if(el&&el.tagName==='DETAILS')el.open=true;};
-  window.addEventListener('hashchange',openAt);openAt();
+  // A link or a text fragment (#:~:text=) to something inside a folded section or a spoiler opens it, and the target
+  // gets a short accent highlight. Browsers keep text fragments out of location.hash, so they're read from the
+  // navigation entry; beforematch covers content hidden with hidden="until-found".
+  var reveal=function(el){for(var n=el;n&&n!==document.body;n=n.parentElement){if(n.tagName==='DETAILS')n.open=true;if(n.classList&&n.classList.contains('qc-spoiler'))n.classList.add('is-shown');}if(el.querySelectorAll)el.querySelectorAll('.qc-spoiler').forEach(function(s){s.classList.add('is-shown');});};
+  var flash=function(el){el.classList.remove('qc-hit');void el.offsetWidth;el.classList.add('qc-hit');setTimeout(function(){el.classList.remove('qc-hit');},2600);};
+  var land=function(el){reveal(el);flash(el);setTimeout(function(){el.scrollIntoView({block:'center'});},0);};
+  var openAt=function(){var id=location.hash.slice(1);if(!id||id.indexOf(':~:')===0)return;var el=null;try{el=document.getElementById(decodeURIComponent(id));}catch(e){}if(el)land(el);};
+  var squash=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g,' ').trim();};
+  var textTarget=function(){var nav=(performance.getEntriesByType&&performance.getEntriesByType('navigation')[0])||null;var url=(nav&&nav.name)||location.href;var at=url.indexOf(':~:');if(at<0)return;
+    url.slice(at+3).split('&').forEach(function(d){if(d.indexOf('text=')!==0)return;var parts=d.slice(5).split(',').map(function(x){try{return decodeURIComponent(x);}catch(e){return x;}}).filter(function(x){return x.slice(-1)!=='-'&&x.charAt(0)!=='-';});var want=squash(parts[0]);if(!want)return;
+      var hit=null;document.querySelectorAll('main [data-check], main li, main p, main h2, main h3, main dd, main .qc-spoiler, main [id]').forEach(function(el){if(!hit&&squash(el.textContent).indexOf(want)>=0&&!Array.prototype.some.call(el.children,function(c){return squash(c.textContent).indexOf(want)>=0;}))hit=el;});
+      if(hit)land(hit.closest('[data-check],li,[id]')||hit);});};
+  document.addEventListener('beforematch',function(e){reveal(e.target);flash(e.target);});
+  window.addEventListener('hashchange',openAt);openAt();textTarget();
   // Search boxes: hide entries that don't match, and section headings left with nothing under them.
   var norm=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');};
   document.querySelectorAll('[data-filter]').forEach(function(inp){
@@ -302,6 +314,10 @@ function page(opts: { title: string; description: string; depth: number; canonic
     .qc-off { display: none !important; }
     /* Search hides entries with the hidden attribute; layout classes like "flex" would otherwise keep them showing. */
     [hidden] { display: none !important; }
+    /* The entry a link or text fragment points at: a short accent highlight that fades (no layout change). */
+    .qc-hit { animation: qc-hit 2.4s ease-out; border-radius: .5rem; }
+    @keyframes qc-hit { from { background-color: rgba(168, 127, 251, .2); box-shadow: 0 0 0 1px rgba(168, 127, 251, .55); } to { background-color: transparent; box-shadow: 0 0 0 1px transparent; } }
+    ::target-text { background-color: rgba(168, 127, 251, .35); color: inherit; }
   </style>
 </head>
 <body class="min-h-screen"${opts.guide ? ` data-guide="${esc(opts.guide)}"` : ''}${opts.area ? ` data-area="${esc(opts.area)}"` : ''}>
@@ -361,8 +377,16 @@ const ICON = {
   caret: '<svg class="qc-caret w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
 };
 
-const checkRow = (id: string, html: string) =>
-  `<label class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer" data-check="${esc(id)}"><input type="checkbox" aria-label="${esc(ui('gotIt'))}"><span class="text-sm leading-snug text-zinc-300">${html}</span></label>`;
+/**
+ * A tickable row. anchor: the entry's canonical row (in its checklist) carries its stable id, "e-" + the entry id (rows
+ * ticked together carry one id each), so links and text fragments can land on it; copies (a flagship walkthrough's)
+ * don't, so ids stay unique.
+ */
+const checkRow = (id: string, html: string, anchor = false) => {
+  const ids = id.split('+');
+  const extra = anchor ? ids.slice(1).map((x) => `<span id="e-${esc(x)}"></span>`).join('') : '';
+  return `<label${anchor ? ` id="e-${esc(ids[0])}"` : ''} class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer${anchor ? ' scroll-mt-20' : ''}" data-check="${esc(id)}"><input type="checkbox" aria-label="${esc(ui('gotIt'))}">${extra}<span class="text-sm leading-snug text-zinc-300">${html}</span></label>`;
+};
 
 /** A folding section: the header shows its progress; content stays in the page for search engines. */
 function fold(title: string, icon: string, body: string, opts: { ids?: string[]; open?: boolean; id?: string } = {}) {
@@ -459,14 +483,14 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const dontMiss = missIds.length
     ? `<section id="dont-miss" class="mt-6 scroll-mt-20 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
         <h2 class="flex items-center gap-2 px-1 pb-1 text-base font-bold text-amber-200">${ICON.warn} ${esc(ui('dontMiss'))} <span class="text-xs font-normal text-amber-200/70" data-count="${esc(missIds.join(','))}">0/${missIds.length}</span></h2>
-        ${missGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g))).join('')}${miss.map((e) => checkRow(e.id, itemHtml(e))).join('')}${missSec.flatMap((x) => x.entries.map((e) => checkRow(e.id, esc(e.text)))).join('')}
+        ${missGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g), true)).join('')}${miss.map((e) => checkRow(e.id, itemHtml(e), true)).join('')}${missSec.flatMap((x) => x.entries.map((e) => checkRow(e.id, esc(e.text), true))).join('')}
       </section>`
     : '';
   const foes = a.enemies.map(cleanEntry);
   const chip = (label: string, v?: string) => (v ? `<span class="inline-flex items-center gap-1 rounded-md bg-white/[0.05] px-2 py-0.5 text-xs text-zinc-300"><span class="text-zinc-500">${label}</span> ${esc(v)}</span>` : '');
   const enemies = foes.length
     ? `<div class="grid sm:grid-cols-2 gap-2">${foes
-        .map((e) => `<div class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white text-sm">${esc(e.name)}</div><div class="mt-1.5 flex flex-wrap gap-1.5">${chip(ui('weakTo'), e.weakness)}${chip(ui('stealDrop'), e.steal)}</div>${e.notes ? `<p class="mt-1.5 text-xs text-zinc-400">${esc(e.notes)}</p>` : ''}</div>`)
+        .map((e) => `<div id="e-${esc(e.id)}" class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5 scroll-mt-20"><div class="font-semibold text-white text-sm">${esc(e.name)}</div><div class="mt-1.5 flex flex-wrap gap-1.5">${chip(ui('weakTo'), e.weakness)}${chip(ui('stealDrop'), e.steal)}</div>${e.notes ? `<p class="mt-1.5 text-xs text-zinc-400">${esc(e.notes)}</p>` : ''}</div>`)
         .join('')}</div>`
     : '';
   // Key fights: one card per boss or set-piece battle, its details as labelled lines.
@@ -476,8 +500,8 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         .map((f) => `<div id="${esc(f.id)}" class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white">${esc(f.name)}</div>${fightRow(ui('fightEnemies'), f.enemies)}${fightRow(ui('fightThreats'), f.threats)}${fightRow(ui('fightWeak'), f.weaknesses)}${fightRow(ui('fightTactics'), f.tactics)}${fightRow(ui('fightRewards'), f.rewards)}</div>`)
         .join('')}</div>`
     : '';
-  const shops = a.shops.length ? `<ul class="space-y-1.5 px-3">${a.shops.map(cleanEntry).map((e) => `<li class="text-sm"><strong class="text-white">${esc(e.name)}</strong>${e.sells ? `<span class="text-zinc-400">: ${esc(e.sells)}</span>` : ''}</li>`).join('')}</ul>` : '';
-  const tips = a.tips.length ? `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${a.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '';
+  const shops = a.shops.length ? `<ul class="space-y-1.5 px-3">${a.shops.map(cleanEntry).map((e) => `<li id="e-${esc(e.id)}" class="text-sm scroll-mt-20"><strong class="text-white">${esc(e.name)}</strong>${e.sells ? `<span class="text-zinc-400">: ${esc(e.sells)}</span>` : ''}</li>`).join('')}</ul>` : '';
+  const tips = a.tips.length ? `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${a.tips.map((t, i) => `<li id="tip-${i + 1}" class="scroll-mt-20">${esc(t)}</li>`).join('')}</ul>` : '';
   const navCard = (x: AreaLink | undefined, dir: 'prev' | 'next') =>
     x
       ? `<a href="../${esc(x.slug)}/index.html" class="flex-1 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/40 hover:bg-white/[0.06] px-4 py-3 ${dir === 'next' ? 'text-right' : ''}"><div class="text-[11px] uppercase tracking-wide text-zinc-500">${dir === 'prev' ? `&larr; ${esc(ui('previous'))}` : `${esc(ui('next'))} &rarr;`}</div><div class="text-sm font-semibold text-white truncate">${esc(x.name)}</div></a>`
@@ -559,7 +583,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       ${dontMiss}
       ${otherSec
         .map((x) =>
-          fold(x.title, ICON.list, x.check ? x.entries.map((e) => checkRow(e.id, esc(e.text))).join('') : `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${x.entries.map((e) => `<li>${esc(e.text)}</li>`).join('')}</ul>`, {
+          fold(x.title, ICON.list, x.check ? x.entries.map((e) => checkRow(e.id, esc(e.text), true)).join('') : `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${x.entries.map((e) => `<li id="e-${esc(e.id)}" class="scroll-mt-20">${esc(e.text)}</li>`).join('')}</ul>`, {
             ids: x.check ? x.entries.map((e) => e.id) : undefined,
             open: true,
             id: `sec-${otherSec.indexOf(x) + 1}`,
@@ -567,8 +591,8 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         )
         .join('')}
       ${achs.length ? fold(ui('achHere'), ICON.list, achs.slice().sort((x, y) => Number(!!y.missable) - Number(!!x.missable)).map((x) => `<div class="px-3 py-2 text-sm text-zinc-300"><strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${x.how ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.how)}</span>` : ''}</div>`).join('') + `<p class="px-3 pt-1 text-xs"><a class="text-[#a87ffb] hover:text-white" href="../achievements/index.html">${esc(ui('achLink'))} &rarr;</a></p>`, { open: achs.some((x) => x.missable), id: 'achievements' }) : ''}
-      ${fold(ui('items'), ICON.items, restGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g))).join('') + rest.map((e) => checkRow(e.id, itemHtml(e))).join(''), { ids: [...restGroups.flatMap((g) => g.ids), ...rest.map((e) => e.id)], open: true, id: 'items' })}
-      ${fold(ui('secrets'), ICON.secrets, secretsLeft.map((e) => checkRow(e.id, esc(e.text))).join(''), { ids: secretsLeft.map((e) => e.id), open: true, id: 'secrets' })}
+      ${fold(ui('items'), ICON.items, restGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g), true)).join('') + rest.map((e) => checkRow(e.id, itemHtml(e), true)).join(''), { ids: [...restGroups.flatMap((g) => g.ids), ...rest.map((e) => e.id)], open: true, id: 'items' })}
+      ${fold(ui('secrets'), ICON.secrets, secretsLeft.map((e) => checkRow(e.id, esc(e.text), true)).join(''), { ids: secretsLeft.map((e) => e.id), open: true, id: 'secrets' })}
       ${fold(ui('fights'), ICON.enemies, fights, { open: true, id: 'fights' })}
       ${fold(ui('enemies'), ICON.enemies, enemies, { id: 'enemies' })}
       ${fold(ui('shops'), ICON.shops, shops, { id: 'shops' })}
