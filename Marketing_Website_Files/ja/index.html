@@ -110,9 +110,8 @@
       <p class="text-sm text-zinc-500 mb-8">Windows用オーバーレイ、各種ブラウザ向けWebアプリ、Steam Deck用プラグインに対応</p>
 
       <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-8 py-3 rounded-full hover:bg-white transition-colors shadow-lg text-lg w-full sm:w-auto">
-          <i data-lucide="download" class="w-5 h-5"></i>
-          Windows版をダウンロード
+        <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-full sm:w-auto">
+          <img src="https://get.microsoft.com/images/ja%20dark.svg" alt="Microsoft Storeからダウンロード" class="h-[52px] w-auto">
         </a>
         <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="external-link" class="w-5 h-5"></i>
@@ -124,6 +123,7 @@
         </a>
       </div>
       <p class="text-sm text-zinc-500 mt-4">バージョン 0.5.1 ベータ (64-bit Windows)。無料でお試し：1日10問まで、クレジットカード不要。</p>
+      <p class="text-sm text-zinc-500 mt-1">直接ダウンロードをご希望ですか？ <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="text-[#a87ffb] hover:text-white">インストーラーをダウンロード</a>してください。Windowsで警告が表示される場合があります（<a href="#faq-smartscreen" class="text-[#a87ffb] hover:text-white">理由は？</a>).</p>
     </header>
 
     <!-- Download options -->
@@ -137,11 +137,11 @@
           <h3 class="text-xl font-bold text-white mb-2">Windows用オーバーレイ</h3>
           <p class="text-zinc-400 text-base mb-6">フル機能を体験：最前面オーバーレイ、画面上マーカー、コントローラー対応、プレイ用メモ帳、Steam連携、音声読み上げを搭載。</p>
           <div class="mt-auto">
-            <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-6 py-2.5 rounded-full hover:bg-white transition-colors w-full">
-              <i data-lucide="download" class="w-4 h-4"></i> インストーラーをダウンロード
+            <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center w-full">
+              <img src="https://get.microsoft.com/images/ja%20dark.svg" alt="Microsoft Storeからダウンロード" class="h-[52px] w-auto">
             </a>
-            <p class="text-sm text-zinc-500 mt-3">GitHubの最新リリース。Microsoft Store版も近日登場予定。</p>
-            <a href="#faq-smartscreen" class="text-sm text-[#a87ffb] hover:text-white transition-colors">Windowsで警告が表示される場合</a>
+            <p class="text-sm text-zinc-500 mt-3">Microsoft Store経由でインストールおよびアップデートされます。</p>
+            <p class="text-sm text-zinc-500 mt-2">または、GitHubから <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="text-[#a87ffb] hover:text-white">インストーラーを直接ダウンロード</a> することもできます。まだコード署名がされていないため、Windowsで警告が表示される場合があります（<a href="#faq-smartscreen" class="text-[#a87ffb] hover:text-white">理由は？</a>).</p>
           </div>
         </div>
 
@@ -389,7 +389,7 @@
         </details>
         <details id="faq-smartscreen" class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Windowsで「WindowsによってPCが保護されました」と出ますが、安全ですか？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
-          <p class="text-zinc-400 mt-3">Quest Compendiumは個人開発者による新しいアプリで、ダイレクトインストーラーがまだコード署名されていないため、Windows SmartScreenの警告が表示されます。問題なければ、 <strong class="text-white">「詳細情報」</strong>をクリックしてから <strong class="text-white">「実行」</strong>を押してください。ソースコードは <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub</a>で公開されています。なお、この警告が出ないMicrosoft Store版も準備中です。</p>
+          <p class="text-zinc-400 mt-3">Quest Compendiumは個人開発者による新しいアプリで、ダイレクトインストーラーがまだコード署名されていないため、Windows SmartScreenの警告が表示されます。問題なければ、 <strong class="text-white">「詳細情報」</strong>をクリックしてから <strong class="text-white">「実行」</strong>を押してください。ソースコードは <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub</a>）。 <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Microsoft Store版</a> ではこの警告は表示されません。</p>
         </details>
         <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Steamアカウントは必要ですか？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>

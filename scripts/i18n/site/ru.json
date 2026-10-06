@@ -151,5 +151,18 @@
   "GitHub: Steam Deck plugin": "GitHub: плагин для Steam Deck",
   "Privacy Policy": "Политика конфиденциальности",
   "Powered by Google Gemini. Quest Compendium is an independent project and is not affiliated with or endorsed by Valve, Steam, Microsoft or Google.": "Работает на базе Google Gemini. Quest Compendium — независимый проект, который не связан с Valve, Steam, Microsoft или Google и не поддерживается ими.",
-  "&copy; 2026 Quest Compendium": "&copy; 2026 Quest Compendium"
+  "&copy; 2026 Quest Compendium": "&copy; 2026 Quest Compendium",
+  "Prefer a direct download?": "Предпочитаете скачать напрямую?",
+  "Download the installer": "Скачайте установщик",
+  ". Windows may show a warning for it (": ". Windows может показать предупреждение (",
+  "why?": "почему?",
+  "Get it from Microsoft": "Скачать из Microsoft",
+  "Installs and updates through the Microsoft Store.": "Установка и обновления через Microsoft Store.",
+  "Or": "Или",
+  "download the installer": "скачайте установщик",
+  "directly from GitHub. It isn't code-signed yet, so Windows may show a warning (": "напрямую с GitHub. У него пока нет цифровой подписи, поэтому Windows может выдать предупреждение (",
+  ". The": ". А версия из",
+  "Microsoft Store version": "Microsoft Store",
+  "doesn't show this warning.": "не показывает это предупреждение.",
+  "Download from the Microsoft Store": "Скачать из Microsoft Store"
 }

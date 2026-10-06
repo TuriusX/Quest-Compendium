@@ -110,9 +110,8 @@
       <p class="text-sm text-zinc-500 mb-8">Overlay für Windows, Web-App für jeden Browser und ein Plugin für Steam Deck</p>
 
       <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-8 py-3 rounded-full hover:bg-white transition-colors shadow-lg text-lg w-full sm:w-auto">
-          <i data-lucide="download" class="w-5 h-5"></i>
-          Für Windows herunterladen
+        <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-full sm:w-auto">
+          <img src="https://get.microsoft.com/images/de%20dark.svg" alt="Im Microsoft Store herunterladen" class="h-[52px] w-auto">
         </a>
         <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="external-link" class="w-5 h-5"></i>
@@ -124,6 +123,7 @@
         </a>
       </div>
       <p class="text-sm text-zinc-500 mt-4">Version 0.5.1 Beta, 64-Bit-Windows. Kostenlos testen: 10 Fragen pro Tag, keine Kreditkarte nötig.</p>
+      <p class="text-sm text-zinc-500 mt-1">Lieber direkt herunterladen? <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="text-[#a87ffb] hover:text-white">Installer herunterladen</a>. Windows zeigt eventuell eine Warnung an (<a href="#faq-smartscreen" class="text-[#a87ffb] hover:text-white">warum?</a>).</p>
     </header>
 
     <!-- Download options -->
@@ -137,11 +137,11 @@
           <h3 class="text-xl font-bold text-white mb-2">Windows-Overlay</h3>
           <p class="text-zinc-400 text-base mb-6">Das volle Erlebnis: Ein Always-on-Top-Overlay mit On-Screen-Markern, Controller-Support, Durchlauf-Notizbuch, Steam-Integration und Sprachausgabe.</p>
           <div class="mt-auto">
-            <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-6 py-2.5 rounded-full hover:bg-white transition-colors w-full">
-              <i data-lucide="download" class="w-4 h-4"></i> Installer herunterladen
+            <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center w-full">
+              <img src="https://get.microsoft.com/images/de%20dark.svg" alt="Im Microsoft Store herunterladen" class="h-[52px] w-auto">
             </a>
-            <p class="text-sm text-zinc-500 mt-3">Neueste Version auf GitHub. Version für den Microsoft Store folgt in Kürze.</p>
-            <a href="#faq-smartscreen" class="text-sm text-[#a87ffb] hover:text-white transition-colors">Windows zeigt eine Warnung an?</a>
+            <p class="text-sm text-zinc-500 mt-3">Wird über den Microsoft Store installiert und aktualisiert.</p>
+            <p class="text-sm text-zinc-500 mt-2">Oder <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="text-[#a87ffb] hover:text-white">den Installer herunterladen</a> , direkt von GitHub. Er ist noch nicht code-signiert, daher zeigt Windows eventuell eine Warnung an (<a href="#faq-smartscreen" class="text-[#a87ffb] hover:text-white">warum?</a>).</p>
           </div>
         </div>
 
@@ -389,7 +389,7 @@
         </details>
         <details id="faq-smartscreen" class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Windows meldet „Der Computer wurde durch Windows geschützt“. Ist die App sicher?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
-          <p class="text-zinc-400 mt-3">Quest Compendium ist eine neue App von einem Indie-Entwickler und der direkte Installer ist noch nicht codesigniert, weshalb Windows SmartScreen eine Warnung anzeigt. Wenn du fortfahren möchtest, klicke auf <strong class="text-white">Weitere Informationen</strong>und dann auf <strong class="text-white">Trotzdem ausführen</strong>. Der Quellcode ist öffentlich auf <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub</a>einsehbar. Eine Version für den Microsoft Store ist bereits in Arbeit – bei der wird diese Warnung nicht mehr erscheinen.</p>
+          <p class="text-zinc-400 mt-3">Quest Compendium ist eine neue App von einem Indie-Entwickler und der direkte Installer ist noch nicht codesigniert, weshalb Windows SmartScreen eine Warnung anzeigt. Wenn du fortfahren möchtest, klicke auf <strong class="text-white">Weitere Informationen</strong>und dann auf <strong class="text-white">Trotzdem ausführen</strong>. Der Quellcode ist öffentlich auf <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub</a>. Die <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Microsoft Store-Version</a> zeigt diese Warnung nicht an.</p>
         </details>
         <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Brauche ich einen Steam-Account?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>

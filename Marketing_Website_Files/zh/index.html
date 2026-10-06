@@ -110,9 +110,8 @@
       <p class="text-sm text-zinc-500 mb-8">支持 Windows 悬浮窗、任意浏览器网页端，以及 Steam Deck 插件</p>
 
       <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-8 py-3 rounded-full hover:bg-white transition-colors shadow-lg text-lg w-full sm:w-auto">
-          <i data-lucide="download" class="w-5 h-5"></i>
-          下载 Windows 版
+        <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-full sm:w-auto">
+          <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" alt="前往 Microsoft Store 下载" class="h-[52px] w-auto">
         </a>
         <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="external-link" class="w-5 h-5"></i>
@@ -124,6 +123,7 @@
         </a>
       </div>
       <p class="text-sm text-zinc-500 mt-4">版本 0.5.1 beta，适用于 64 位 Windows。免费试用：每天可提问 10 次，无需信用卡。</p>
+      <p class="text-sm text-zinc-500 mt-1">更想直接下载？ <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="text-[#a87ffb] hover:text-white">下载安装程序</a>。Windows 可能会弹出安全提示（<a href="#faq-smartscreen" class="text-[#a87ffb] hover:text-white">为什么？</a>).</p>
     </header>
 
     <!-- Download options -->
@@ -137,11 +137,11 @@
           <h3 class="text-xl font-bold text-white mb-2">Windows 悬浮窗</h3>
           <p class="text-zinc-400 text-base mb-6">完整体验：支持始终置顶悬浮窗、屏幕高亮标记、手柄操作、通关随手记、Steam 集成以及语音朗读。</p>
           <div class="mt-auto">
-            <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-6 py-2.5 rounded-full hover:bg-white transition-colors w-full">
-              <i data-lucide="download" class="w-4 h-4"></i> 下载安装程序
+            <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center w-full">
+              <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" alt="前往 Microsoft Store 下载" class="h-[52px] w-auto">
             </a>
-            <p class="text-sm text-zinc-500 mt-3">GitHub 最新发布版。Microsoft Store 版本即将上线。</p>
-            <a href="#faq-smartscreen" class="text-sm text-[#a87ffb] hover:text-white transition-colors">Windows 弹出安全提示？</a>
+            <p class="text-sm text-zinc-500 mt-3">通过 Microsoft Store 安装和更新。</p>
+            <p class="text-sm text-zinc-500 mt-2">或者 <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="text-[#a87ffb] hover:text-white">下载安装程序</a> ，直接从 GitHub 获取。该版本尚未进行代码签名，因此 Windows 可能会弹出警告（<a href="#faq-smartscreen" class="text-[#a87ffb] hover:text-white">为什么？</a>).</p>
           </div>
         </div>
 
@@ -389,7 +389,7 @@
         </details>
         <details id="faq-smartscreen" class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Windows 提示“Windows 已保护你的电脑”，安全吗？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
-          <p class="text-zinc-400 mt-3">Quest Compendium 是独立开发者打造的新应用，直接安装包目前尚未进行代码签名，因此 Windows SmartScreen 会弹出警告。如果你信任该软件，请点击 <strong class="text-white">更多信息</strong>，然后点击 <strong class="text-white">仍要运行</strong>。源码已在 <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub</a>上开源。Microsoft Store 版本正在筹备中，届时将不再出现此提示。</p>
+          <p class="text-zinc-400 mt-3">Quest Compendium 是独立开发者打造的新应用，直接安装包目前尚未进行代码签名，因此 Windows SmartScreen 会弹出警告。如果你信任该软件，请点击 <strong class="text-white">更多信息</strong>，然后点击 <strong class="text-white">仍要运行</strong>。源码已在 <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub</a>。 <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Microsoft Store 版本</a> 则不会出现此提示。</p>
         </details>
         <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">需要 Steam 账号吗？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>

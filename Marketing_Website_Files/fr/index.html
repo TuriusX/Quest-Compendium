@@ -110,9 +110,8 @@
       <p class="text-sm text-zinc-500 mb-8">Overlay pour Windows, appli web pour tout navigateur et plugin pour Steam Deck</p>
 
       <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-8 py-3 rounded-full hover:bg-white transition-colors shadow-lg text-lg w-full sm:w-auto">
-          <i data-lucide="download" class="w-5 h-5"></i>
-          Télécharger pour Windows
+        <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-full sm:w-auto">
+          <img src="https://get.microsoft.com/images/fr%20dark.svg" alt="Télécharger sur le Microsoft Store" class="h-[52px] w-auto">
         </a>
         <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="external-link" class="w-5 h-5"></i>
@@ -124,6 +123,7 @@
         </a>
       </div>
       <p class="text-sm text-zinc-500 mt-4">Version 0.5.1 bêta, Windows 64 bits. Essai gratuit : 10 questions par jour, sans carte bancaire.</p>
+      <p class="text-sm text-zinc-500 mt-1">Tu préfères un téléchargement direct ? <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="text-[#a87ffb] hover:text-white">Télécharge l'installateur</a>. Windows peut afficher un avertissement (<a href="#faq-smartscreen" class="text-[#a87ffb] hover:text-white">pourquoi ?</a>).</p>
     </header>
 
     <!-- Download options -->
@@ -137,11 +137,11 @@
           <h3 class="text-xl font-bold text-white mb-2">Overlay Windows</h3>
           <p class="text-zinc-400 text-base mb-6">L'expérience complète : overlay toujours visible avec marqueurs à l'écran, support manette, carnet de jeu, intégration Steam et narration.</p>
           <div class="mt-auto">
-            <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="inline-flex items-center justify-center gap-2 bg-[#a87ffb] text-black font-bold px-6 py-2.5 rounded-full hover:bg-white transition-colors w-full">
-              <i data-lucide="download" class="w-4 h-4"></i> Télécharger l'installateur
+            <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center w-full">
+              <img src="https://get.microsoft.com/images/fr%20dark.svg" alt="Télécharger sur le Microsoft Store" class="h-[52px] w-auto">
             </a>
-            <p class="text-sm text-zinc-500 mt-3">Dernière version sur GitHub. Bientôt disponible sur le Microsoft Store.</p>
-            <a href="#faq-smartscreen" class="text-sm text-[#a87ffb] hover:text-white transition-colors">Windows affiche un avertissement ?</a>
+            <p class="text-sm text-zinc-500 mt-3">S'installe et se met à jour via le Microsoft Store.</p>
+            <p class="text-sm text-zinc-500 mt-2">Ou <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="text-[#a87ffb] hover:text-white">télécharge l'installateur</a> directement depuis GitHub. Il n'a pas encore de signature numérique, donc Windows peut afficher un avertissement (<a href="#faq-smartscreen" class="text-[#a87ffb] hover:text-white">pourquoi ?</a>).</p>
           </div>
         </div>
 
@@ -389,7 +389,7 @@
         </details>
         <details id="faq-smartscreen" class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Windows affiche « Windows a protégé votre ordinateur ». Est-ce sûr ?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
-          <p class="text-zinc-400 mt-3">Quest Compendium est une nouvelle application développée par un créateur indépendant, et l'installateur direct n'a pas encore de signature numérique : Windows SmartScreen affiche donc un avertissement. Si vous nous faites confiance, cliquez sur <strong class="text-white">Informations complémentaires</strong>, puis sur <strong class="text-white">Exécuter quand même</strong>. Le code source est public sur <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub</a>. Une version Microsoft Store est en préparation et n'affichera pas cet avertissement.</p>
+          <p class="text-zinc-400 mt-3">Quest Compendium est une nouvelle application développée par un créateur indépendant, et l'installateur direct n'a pas encore de signature numérique : Windows SmartScreen affiche donc un avertissement. Si vous nous faites confiance, cliquez sur <strong class="text-white">Informations complémentaires</strong>, puis sur <strong class="text-white">Exécuter quand même</strong>. Le code source est public sur <a href="https://github.com/TuriusX/Quest-Compendium" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub</a>. La <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">version Microsoft Store</a> n'affiche pas cet avertissement.</p>
         </details>
         <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Faut-il un compte Steam ?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
