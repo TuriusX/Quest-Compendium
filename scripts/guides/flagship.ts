@@ -313,7 +313,8 @@ async function proReview(game: string, p: any, neighbours: string[], draft: Draf
       try {
         res = await call(reviewerFor('pro', 'careful'), {
           contents: [{ role: 'user', parts: [{ text: consistencyPrompt(game, p, neighbours, draft) }] }],
-          config: { temperature: 0.1, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+          // Pro answers in seconds; a call that hangs (it happens) is cut off at 90 seconds and retried.
+          config: { temperature: 0.1, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }, httpOptions: { timeout: 90_000 } },
         });
         break;
       } catch (e: any) {
