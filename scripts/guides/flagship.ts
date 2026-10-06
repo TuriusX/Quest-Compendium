@@ -393,7 +393,7 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
   const sources = new Set<string>(p.sources || []);
 
   // Pack mode: the area's facts from the game's wiki (cached), the basis for everything below; no searches to write.
-  const sp: SourcePack | null = opts.pack ? await sourcePack(key, slug) : null;
+  const sp: SourcePack | null = opts.pack ? await sourcePack(key, slug, { from }) : null;
   if (opts.pack && !sp) throw new Error('no source pack (no wiki for this game, or nothing fetchable)');
   // What the page lacks first: the summary box and directions, and key fights.
   // An earlier prototype run's summary box and fights are reused (no need to search for them again).
@@ -560,6 +560,8 @@ const today = () => new Date().toLocaleDateString('en-CA', { timeZone: DAY_TZ })
 type GuideProgress = { phase: 'outline' | 'pages' | 'done'; source?: 'live' | 'stage'; total?: number; done: string[]; failed: { slug: string; name: string; reason: string }[]; tries?: Record<string, number>; outlineTries?: number };
 /** Estimated cost per page until the programme has measured its own, and for an outline rebuild. */
 const PAGE_GUESS = 0.42, OUTLINE_GUESS = 0.5;
+/** The source-pack method's rate (measured on 9 pages: $0.07 with a wiki, $0.12-0.18 from searches). */
+const PACK_PAGE_GUESS = 0.16;
 const MINUTES = Number(process.env.FLAGSHIP_MINUTES || 150);
 const DAY_MS = 86_400_000;
 
@@ -575,13 +577,14 @@ async function program() {
   if (st.paused && arg('estimate') !== 'true' && arg('ignore-pause') !== 'true') { console.log(`The flagship programme is paused (${st.paused.why || 'until the owner says go'}). Nothing to do.`); return; }
   const only = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
   // The traffic-driven rollout, when it's on, replaces the list of whole guides (unless one guide is asked for).
-  if (st.rollout?.enabled && !only) return rollout(st, () => ref.set(JSON.parse(JSON.stringify(st)), { merge: true }));
+  // The traffic-driven rollout takes over once every guide in the list is done (unless one guide is asked for).
+  if (st.rollout?.enabled && !only && st.guides.every((g: any) => st.progress?.[g.key]?.phase === 'done')) return rollout(st, () => ref.set(JSON.parse(JSON.stringify(st)), { merge: true }));
   const concurrency = Math.max(1, Math.min(6, Number(arg('concurrency', '1')) || 1));
   st.spent = Number(st.spent || 0); st.spentToday = Number(st.spentToday || 0);
   st.progress = st.progress || {};
   st.runPages = st.runPages || []; st.runFailures = st.runFailures || [];
   const save = () => ref.set(JSON.parse(JSON.stringify(st)), { merge: true });
-  const measured = Number(st.pagesBuilt || 0) >= 5 ? Number(st.pageDollars || 0) / Number(st.pagesBuilt) : PAGE_GUESS;
+  const measured = Number(st.pagesBuilt || 0) >= 5 ? Number(st.pageDollars || 0) / Number(st.pagesBuilt) : budget.pack !== false ? PACK_PAGE_GUESS : PAGE_GUESS;
 
   // What's left, and the estimate to finish.
   const plan: { key: string; game: string; left: number; total: number; outline: boolean }[] = [];
@@ -672,7 +675,7 @@ async function program() {
           // A prototype from before verdicts (built on the live guide) only needs its review.
           // A page whose review couldn't run last time (waiting) is only reviewed again, not rebuilt.
           const reviewAgain = prior?.walkthrough?.length && (prior.status === 'waiting' || (!prior.status && pg.source !== 'stage'));
-          r = await usageScope.run(scope, () => (reviewAgain ? reviewOnly(g.key, game, o.slug, order, prior, src) : buildPage(g.key, game, o.slug, order, src)));
+          r = await usageScope.run(scope, () => (reviewAgain ? reviewOnly(g.key, game, o.slug, order, prior, src) : buildPage(g.key, game, o.slug, order, src, { pack: budget.pack !== false })));
         } catch (e: any) {
           if (rateLimited(e)) {
             reserved -= need;

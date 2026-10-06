@@ -105,14 +105,15 @@ const PACK_FORMAT = `{"summary": "one sentence", "region": "", "levels": "", "di
  "npcs": [{"name": "", "role": "", "src": 1}], "quests": ["quest name"]}`;
 
 /** The pack for one area: cached, or built from the wiki (its article, and its quests' articles). */
-export async function sourcePack(key: string, slug: string, opts: { rebuild?: boolean } = {}): Promise<SourcePack | null> {
+export async function sourcePack(key: string, slug: string, opts: { rebuild?: boolean; from?: string } = {}): Promise<SourcePack | null> {
   const ref = db().collection('sourcePacks').doc(`${key}__${slug}`);
   if (!opts.rebuild) {
     const cached = (await ref.get()).data() as SourcePack | undefined;
     if (cached?.pack) return cached;
   }
   const wiki = WIKIS[key];
-  const page: any = (await db().collection('guides').doc(key).collection('areas').doc(slug).get()).data();
+  // The page from the copy being built on (a staged rebuild's pages aren't in the live guide yet).
+  const page: any = (await db().collection('guides').doc(opts.from || key).collection('areas').doc(slug).get()).data();
   if (!page) return null;
   if (!wiki) return searchedPack(key, slug, page, ref);
   // The area's own article (its name, then without a bracketed note), then its quests' articles.

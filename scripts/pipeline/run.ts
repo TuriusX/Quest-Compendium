@@ -625,14 +625,16 @@ async function main() {
 
   // ---- the flagship programme (scripts/guides/flagship.ts, its own job and budget): pages live per guide, its cost,
   // and pages that failed review since the last summary ----
-  if (flagship.rollout?.enabled) {
+  const guidesDone = (flagship.guides || []).every((g: any) => flagship.progress?.[g.key]?.phase === 'done');
+  if (flagship.rollout?.enabled && (guidesDone || flagship.rollout.lastRun)) {
     // The traffic-driven rollout: pages live this month against its budget, the last run's pages and failures.
     const r = flagship.rollout;
     const runP = (r.runPages || []) as any[];
     report.push(`🏰 Flagship rollout${flagship.paused ? ' (paused)' : ''}: ${Number(r.pagesMonth || 0)} page(s) live this month, $${Number(r.spentMonth || 0).toFixed(2)} of $${Number(r.monthly || 20)}.${runP.length ? ` Last run: ${runP.map((x) => `${x.name}${x.score != null ? ` (${x.score})` : ''}`).join(', ')}.` : ''}`);
     const fails = (r.runFailures || []).slice(0, 6);
     if (fails.length) report.push(`⚠️ Flagship pages that failed review: ${fails.map((f: any) => `${f.name}: ${String(f.reason).slice(0, 90)}`).join('; ')}.`);
-  } else if (flagship.guides?.length) {
+  }
+  if (flagship.guides?.length && !guidesDone) {
     const fb = { total: 90, daily: 15, ...(flagship.budget || {}) };
     const names: Record<string, string> = {};
     for (const g of flagship.guides) names[g.key] = String((await db().collection('guides').doc(g.key).get()).data()?.game || g.key);
