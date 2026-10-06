@@ -123,6 +123,9 @@ export function applyMap(html: string, map: Record<string, string>): string {
     .join('');
 }
 
+/** The language codes of Microsoft's Store badge images (get.microsoft.com/images/<code> dark.svg). */
+const STORE_BADGE: Record<string, string> = { en: 'en-us', es: 'es', pt: 'pt-br', de: 'de', fr: 'fr', ru: 'ru', ja: 'ja', ko: 'ko', zh: 'zh-cn' };
+
 /** Links in a page one folder down: relative paths get "../". */
 export function rebase(html: string): string {
   return html.replace(/\b(href|src)="(?!https?:|\/\/|#|mailto:|data:|\/)([^"]+)"/g, (_m, a, p) => `${a}="../${p}"`);
@@ -212,7 +215,9 @@ async function main() {
     page = rebase(page)
       .replace(/<html lang="[^"]*"/, `<html lang="${lang.tag}"`)
       .replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${SITE}/${lang.code}/$2`)
-      .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${SITE}/${lang.code}/$2`);
+      .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${SITE}/${lang.code}/$2`)
+      // Microsoft's official "Get it from Microsoft" badge in the page's language (its badge service's language codes).
+      .replace(/get\.microsoft\.com\/images\/en-us%20dark\.svg/g, `get.microsoft.com/images/${STORE_BADGE[lang.code] || 'en-us'}%20dark.svg`);
     page = setBlock(setBlock(page, 'LANGS', langMenu(lang.code, 1)), 'HREFLANG', hreflang());
     const out = path.join(ROOT, lang.code, 'index.html');
     fs.mkdirSync(path.dirname(out), { recursive: true });

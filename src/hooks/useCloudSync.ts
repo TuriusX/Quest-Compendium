@@ -182,8 +182,9 @@ export function useCloudSync(
     }
   };
 
-  // App Version Check
+  // App Version Check (direct-download builds only: the Microsoft Store build is updated by the Store).
   useEffect(() => {
+    if ((window as any).electronAPI?.isStoreBuild) return;
     const configRef = doc(db, 'config', 'desktop_client');
     const unsub = onSnapshot(configRef, (docSnap) => {
       if (docSnap.exists()) {

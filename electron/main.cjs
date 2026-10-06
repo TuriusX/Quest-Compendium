@@ -892,6 +892,11 @@ setInterval(() => {
   }
 }, 3000);
 
+// The Microsoft Store package (MSIX/AppX): the Store updates the app, so it skips the app's own version check.
+ipcMain.on('is-store-build', (event) => {
+  event.returnValue = process.windowsStore === true;
+});
+
 ipcMain.handle('get-active-game', async () => {
   return activeSteamGame;
 });

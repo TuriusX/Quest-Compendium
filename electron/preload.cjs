@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  // Installed from the Microsoft Store: updates come from the Store, not the app's own check.
+  isStoreBuild: (() => { try { return ipcRenderer.sendSync('is-store-build') === true; } catch { return false; } })(),
   getActiveGame: () => ipcRenderer.invoke('get-active-game'),
   fetchAchievementsLocally: (appId, steamId) => ipcRenderer.invoke('fetch-achievements-locally', appId, steamId),
   fetchSteamProfileLocally: (steamId) => ipcRenderer.invoke('fetch-steam-profile-locally', steamId),

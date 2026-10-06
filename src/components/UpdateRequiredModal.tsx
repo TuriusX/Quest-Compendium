@@ -20,7 +20,7 @@ export const UpdateRequiredModal: React.FC = () => {
         </p>
         
         <button
-          onClick={() => window.open('https://github.com/QuestCompendium/releases', '_blank')}
+          onClick={() => window.open('https://questcompendium.com/#download', '_blank')}
           className="w-full flex items-center justify-center gap-2 bg-red-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-red-500 transition-colors"
         >
           Download Latest Version
