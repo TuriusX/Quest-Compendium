@@ -17,10 +17,7 @@ import {
   Check, 
   Eye, 
   Maximize2,
-  Compass,
-  Sword,
-  Shield,
-  Key,
+  ChevronDown,
   Layers,
   Bot,
   User,
@@ -49,9 +46,7 @@ import { GlainIcon } from './GlainIcon';
 import { Walkthrough, walkthroughDone } from './Walkthrough';
 import { samePlace, tipMatches, useAchievementGuide } from '../utils/achievementGuide';
 import { useLocale } from '../i18n';
-
-/** Quick follow-ups offered under the latest answer (sent as a normal question, in the user's language). */
-const FOLLOW_UP_KEYS = ['chat.follow1', 'chat.follow2', 'chat.follow3', 'chat.follow4'];
+import { QUICK_MAIN, QUICK_MORE, QUICK_FOLLOW, type QuickId } from '../utils/quickQuestions';
 
 interface ChatAreaProps {
   /** On-screen markers (Settings, on by default): off, answers show no markers card, checklist or marker badges. */
@@ -76,7 +71,7 @@ interface ChatAreaProps {
   /** Update fields of one message (e.g. which markers were checked off). */
   onUpdateMessage?: (msgId: string, patch: Partial<ChatMessage>) => void;
   activeTab: GameTab | null;
-  onSendMessage: (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash') => Promise<void>;
+  onSendMessage: (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash', quick?: QuickId) => Promise<void>;
   isLoading: boolean;
   aiMode: AiMode;
   activeGame: SteamGameData | null;
@@ -207,6 +202,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const askRef = useRef<AskTextareaHandle>(null);
   // Enter in the box submits with the latest handleSubmit (updated every render).
   const submitRef = useRef<() => void>(() => {});
+  const [showMoreQuick, setShowMoreQuick] = useState(false);
   const pendingText = useRef('');
   const hasTextRef = useRef<HasTextHandle>(null);
   const setHasText = useCallback((h: boolean) => hasTextRef.current?.set(h), []);
@@ -452,10 +448,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   // Controller: a question picked from the quick-questions list or typed on the on-screen keyboard.
   const handleControllerAsk = (e: Event) => {
-    const text = (e as CustomEvent).detail?.text;
+    const { text, quick } = (e as CustomEvent).detail || {};
     if (typeof text === 'string' && text.trim() && !isLoading) {
       setInputQuestion('');
-      handleSubmit(undefined, text.trim());
+      handleSubmit(undefined, text.trim(), undefined, quick);
     }
   };
   const handleControllerInput = (e: Event) => {
@@ -633,7 +629,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
-  const handleSubmit = async (e?: React.FormEvent, overrideText?: string, overrideImage?: string) => {
+  // A quick question (a chip): its label is the question, and the id tells the server what it asks for.
+  const handleSubmit = async (e?: React.FormEvent, overrideText?: string, overrideImage?: string, quick?: QuickId) => {
     if (e) e.preventDefault();
     if (isLoading) return;
     if (mode === 'guide') setMode('ask'); // show the answer
@@ -678,7 +675,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setAttachedImage(null);
     attachedImageRef.current = null;
 
-    await onSendMessage(finalQuestion, finalImage || undefined, undefined, preferredModel);
+    await onSendMessage(finalQuestion, finalImage || undefined, undefined, preferredModel, quick);
     playChimeSound(soundEnabled);
   };
 
@@ -1001,12 +998,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
-  const gamePrompts = [
-    { title: t('chat.p1.title'), desc: t('chat.p1.desc'), icon: Sword, color: 'text-rose-400', query: t('chat.p1.q') },
-    { title: t('chat.p2.title'), desc: t('chat.p2.desc'), icon: Compass, color: 'text-cyan-400', query: t('chat.p2.q') },
-    { title: t('chat.p3.title'), desc: t('chat.p3.desc'), icon: Shield, color: 'text-emerald-400', query: t('chat.p3.q') },
-    { title: t('chat.p4.title'), desc: t('chat.p4.desc'), icon: Key, color: 'text-amber-400', query: t('chat.p4.q') },
-  ];
+  const askQuick = (id: QuickId, image?: string) => {
+    playBlipSound(soundEnabled);
+    handleSubmit(undefined, t(`quick.${id}`), image, id);
+  };
 
   const questionCount = activeTab?.messages?.filter((m) => m.role === 'user').length ?? 0;
   const lastAssistantId = (() => {
@@ -1149,37 +1144,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </p>
             </div>
 
-            {/* Categorized Inquiry Prompts */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left">
-              {gamePrompts.map((p, idx) => {
-                const Icon = p.icon;
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setInputQuestion(p.query);
-                      playBlipSound(soundEnabled);
-                    }}
-                    className="p-3 rounded-xl bg-black/40 hover:bg-white/[0.06] border border-white/[0.08] hover:border-[var(--accent-border)] text-xs text-zinc-300 hover:text-white transition-all cursor-pointer group shadow-sm flex items-start gap-3"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:border-[var(--accent-border)] group-hover:bg-[var(--accent-dim)] transition-colors">
-                      <Icon className={`w-4 h-4 ${p.color} group-hover:scale-110 transition-transform`} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-semibold text-white group-hover:text-[var(--accent-color)] transition-colors mb-0.5 leading-snug">
-                        {p.title}
-                      </div>
-                      <div className="text-[11px] text-zinc-400 leading-snug">
-                        {p.desc}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
             {/* Quick Pro-Tip Bar */}
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-400 font-mono">
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-400 font-mono">
               <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11px]">
                 <Camera className="w-3 h-3 text-[var(--accent-color)]" />
                 {typeof window !== 'undefined' && (window as any).electronAPI ? (
@@ -1556,25 +1522,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   </button>
                 )}
 
-                {/* Suggested follow-ups under the latest answer */}
-                {!isUser && msg.id === lastAssistantId && !isLoading && (
+                {/* Suggested follow-ups under the latest answer. "Show me where on screen" only with markers on and
+                    an answer about a screenshot (the web app sends that screenshot again; the desktop app takes a
+                    fresh one, of what's on screen now). */}
+                {!isUser && msg.id === lastAssistantId && !isLoading && (() => {
+                  let shot: string | undefined;
+                  for (let i = msgIndex - 1; i >= 0; i--) {
+                    const m = activeTab.messages[i];
+                    if (m.role === 'user') { shot = m.imageUrl; break; }
+                  }
+                  const follow = QUICK_FOLLOW.filter((id) => id !== 'where' || (markersOn && !!shot));
+                  return (
                   <div className="mt-2.5 flex flex-wrap gap-2 max-w-[94%] sm:max-w-[88%]">
-                    {FOLLOW_UP_KEYS.map((key) => t(key)).map((f) => (
+                    {follow.map((id) => (
                       <button
-                        key={f}
+                        key={id}
                         type="button"
-                        onClick={() => {
-                          playBlipSound(soundEnabled);
-                          handleSubmit(undefined, f);
-                        }}
+                        onClick={() => askQuick(id, id === 'where' && !isDesktopApp ? shot : undefined)}
                         className="qc-px-frame px-3 py-1.5 rounded-full bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[12px] font-medium text-zinc-200 hover:text-white hover:bg-[var(--accent-border)] transition-colors cursor-pointer flex items-center gap-1.5"
                       >
                         <GlainIcon size={10} />
-                        {f}
+                        {t(`quick.${id}`)}
                       </button>
                     ))}
                   </div>
-                )}
+                  );
+                })()}
               </div>
             );
           })
@@ -1633,6 +1606,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       {/* Floating HUD Input Form Bar */}
       <form onSubmit={handleSubmit} className="p-3 sm:p-4 bg-[#0a0b10]/90 border-t border-white/[0.08] backdrop-blur-2xl">
+        {/* Quick questions: always there, more behind "More" */}
+        <div role="group" aria-label={t('quick.label')} className="mb-2 flex flex-wrap gap-1.5">
+          {[...QUICK_MAIN, ...(showMoreQuick ? QUICK_MORE : [])].map((id) => (
+            <button
+              key={id}
+              type="button"
+              disabled={isLoading}
+              onClick={() => askQuick(id)}
+              className="qc-px-frame px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11.5px] font-medium text-zinc-300 hover:text-white hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default"
+            >
+              {t(`quick.${id}`)}
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-expanded={showMoreQuick}
+            onClick={() => {
+              playBlipSound(soundEnabled);
+              setShowMoreQuick((v) => !v);
+            }}
+            className="qc-px-frame px-2.5 py-1 rounded-full border border-[var(--accent-border)] text-[11.5px] font-semibold text-[var(--accent-color)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer flex items-center gap-1"
+          >
+            {t(showMoreQuick ? 'quick.less' : 'quick.more')}
+            <ChevronDown className={`w-3 h-3 transition-transform ${showMoreQuick ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
         <div className="relative flex items-center rounded-2xl bg-[#13141d] border border-white/15 focus-within:border-[var(--accent-color)] focus-within:shadow-[0_0_20px_var(--accent-glow)] transition-all shadow-lg">
           <AskTextarea
             ref={askRef}

@@ -14,6 +14,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useT } from '../i18n';
+import { QUICK_MAIN, QUICK_MORE } from '../utils/quickQuestions';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
 type PadEvent = { type: 'button'; button: Btn } | { type: 'scroll'; dy: number };
@@ -183,24 +184,9 @@ export function ControllerLayer({ enabled }: { enabled: boolean }) {
   const [desktopPad, setDesktopPad] = useState<boolean | null>(null);
   const focusedRef = useRef<HTMLElement | null>(null);
 
-  const questions = [
-    t('chat.follow2'),
-    t('chat.p1.q'),
-    t('chat.p2.q'),
-    t('chat.p3.q'),
-    t('chat.p4.q'),
-    t('chat.follow1'),
-    t('chat.follow3'),
-  ];
-  const questionLabels = [
-    t('chat.follow2'),
-    t('chat.p1.title'),
-    t('chat.p2.title'),
-    t('chat.p3.title'),
-    t('chat.p4.title'),
-    t('chat.follow1'),
-    t('chat.follow3'),
-  ];
+  // The quick questions (src/utils/quickQuestions.ts): the main four, then the ones behind "More".
+  const quickIds = [...QUICK_MAIN, ...QUICK_MORE];
+  const questionLabels = quickIds.map((id) => t(`quick.${id}`));
 
   // Controller mode shows the focus ring and button hints; any mouse or keyboard use hides them again.
   useEffect(() => {
@@ -288,9 +274,9 @@ export function ControllerLayer({ enabled }: { enabled: boolean }) {
 
       // --- Quick questions panel
       if (panel === 'questions') {
-        if (b === 'up') setQIndex((i) => (i + questions.length - 1) % questions.length);
-        else if (b === 'down') setQIndex((i) => (i + 1) % questions.length);
-        else if (b === 'a') { emit('qc-ask', { text: questions[qIndex] }); setPanel(null); }
+        if (b === 'up') setQIndex((i) => (i + questionLabels.length - 1) % questionLabels.length);
+        else if (b === 'down') setQIndex((i) => (i + 1) % questionLabels.length);
+        else if (b === 'a') { emit('qc-ask', { text: questionLabels[qIndex], quick: quickIds[qIndex] }); setPanel(null); }
         else if (b === 'b' || b === 'y') setPanel(null);
         return;
       }
@@ -348,7 +334,7 @@ export function ControllerLayer({ enabled }: { enabled: boolean }) {
         emit('qc-switch-tab', { delta: b === 'rb' ? 1 : -1 });
       }
     },
-    [enabled, padMode, panel, questions, qIndex, kb, pressKey, openKeyboard, setFocus],
+    [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus],
   );
 
   // Desktop: system-level controller service. Falls back to the Gamepad API if it isn't available.

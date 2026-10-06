@@ -1416,7 +1416,7 @@ export default function App() {
     }
   };
 
-  const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash') => {
+  const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash', quick?: string) => {
     if (!activeTab) return;
 
     if (!user) {
@@ -1515,6 +1515,8 @@ export default function App() {
           audioBase64,
           aiMode: settings.aiMode,
           preferredModel,
+          // A quick question's id (src/utils/quickQuestions.ts): the server adds what it asks for.
+          ...(quick ? { quick } : {}),
           isGameRunningLocally: globalActiveGame !== null,
           activeGame: activeGame ? {
             name: activeGame.name,

@@ -30,6 +30,7 @@ import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, co
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
+import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
@@ -1224,6 +1225,10 @@ percentages:
       if (!searchOk) {
         systemInstruction += `\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. Don't mention search limits to the player.`;
       }
+      // A quick question (a chip in the app): its short label is the question, and this is what it asks for
+      // (src/utils/quickQuestions.ts). "Show me where" only makes sense with markers on.
+      const quick = isQuickId(req.body.quick) && !(req.body.quick === 'where' && !wantMarkers) ? req.body.quick : null;
+      if (quick) systemInstruction += `\n\n[QUICK QUESTION: the player tapped "${String(question || '').slice(0, 80)}"]\n${QUICK_PROMPTS[quick]}`;
 
       // Build Multi-turn Contents
       const contentsPayload: any[] = [];

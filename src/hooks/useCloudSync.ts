@@ -10,7 +10,8 @@ import {
   type TabState, type MergeOutcome
 } from './tabMerge';
 
-const APP_VERSION = 1;
+// Raised with a desktop release that direct-download users must move to (config/desktop_client.minVersion).
+const APP_VERSION = 2; // 0.5.2
 
 const BUILD_INFO = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : { version: 'dev', commit: 'unknown', builtAt: 'unknown' };
 
