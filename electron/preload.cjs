@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeSettingsWindow: () => ipcRenderer.send('close-settings-window'),
   forceFocus: () => ipcRenderer.send('force-focus'),
   updateShortcuts: (shortcuts) => ipcRenderer.send('update-shortcuts', shortcuts),
+  // The "free your mouse" tips' state (settings.mouseTips): the quest log and the book spine show their hint from it.
+  setMouseTips: (tips) => ipcRenderer.send('set-mouse-tips', tips),
   onDesktopAuthSuccess: (callback) => ipcRenderer.on('desktop-auth-success', (event, token) => callback(token)),
   onDesktopSteamSuccess: (callback) => ipcRenderer.on('desktop-steam-success', (event, steamId) => callback(steamId)),
   onActiveGameDetected: (callback) => ipcRenderer.on('active-game-detected', (event, gameData) => callback(gameData)),

@@ -185,6 +185,16 @@
   .hint { margin-top: .5em; font-size: .78em; color: var(--dim); letter-spacing: .04em; transition: opacity 1.2s ease; }
   .hint.fade { opacity: 0; }
   .hint kbd { font-family: inherit; font-weight: 700; color: var(--ink); }
+  /* The mouse tip: many games lock the cursor, and the show/hide shortcut frees it. Prominent for the first appearances
+     (the accent, full size), then a subtle smaller line; its × hides it for good. It never fades. */
+  .hint.tip { display: flex; align-items: center; gap: .5em; }
+  .hint.tip .tt { flex: 1; }
+  .hint.tip.strong { font-size: .86em; color: var(--ink); letter-spacing: .02em; padding: .3em .55em; border-radius: 5px;
+    background: color-mix(in srgb, var(--accent) 22%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); }
+  .hint.tip.strong kbd { color: var(--accent); }
+  .hint.tip.subtle { font-size: .7em; }
+  .hint.tip .tx { cursor: pointer; color: var(--dim); font-weight: 800; padding: 0 .25em; line-height: 1; }
+  .hint.tip .tx:hover { color: var(--ink); }
 
   /* Controls: hidden until the mouse is over the tracker. */
   .ctl { display: flex; align-items: center; gap: .3em; margin-top: .45em; opacity: 0; pointer-events: none;
@@ -317,6 +327,7 @@
     locate: 'Locate me', locating: 'Locating…',
     nextTurn: 'Next turn (asks a question)', nextTurnHint: 'Takes a new screenshot and asks what to do this turn',
     hintPanel: '{keys} or the book icon: open the Compendium. This log stays where you put it.', hintPanelNoKeys: 'The book icon opens the Compendium. This log stays where you put it.',
+    mouseHint: '{keys} to use your mouse here', mouseHintClose: 'Hide this tip',
     headFold: 'Click: fold the log to this line or open it. Drag: move.', openBook: 'Open the Compendium',
     foldHint: 'Click to fold or open', detWhere: 'Where', detHow: 'How', detMissable: 'Missable', detNotes: 'Notes',
     openInGuide: 'Open in guide', askAbout: 'Ask about this', expandHint: 'Click for details',
@@ -343,6 +354,16 @@
     $('alphaWrap').title = L('alpha');
     $('bdWrap').title = L('backdrop');
     tab.title = L('tabHint');
+    // The mouse tip (state.tip, while there's a shortcut): "Ctrl+\ to use your mouse here", with its ×.
+    hint.classList.toggle('tip', tipOn());
+    hint.classList.toggle('strong', tipOn() && state.tip === 'strong');
+    hint.classList.toggle('subtle', tipOn() && state.tip === 'subtle');
+    if (tipOn()) {
+      const [b, a] = L('mouseHint').split('{keys}');
+      hint.innerHTML = `<span class="tt">${a === undefined ? esc(b) : `${esc(b)}<kbd>${esc(state.keys)}</kbd>${esc(a)}`}</span><span class="tx" id="tipX" title="${esc(L('mouseHintClose'))}">×</span>`;
+      hint.classList.remove('fade');
+      return;
+    }
     // The show/hide shortcut (state.keys), or a hint without one when none is registered.
     if (!state.keys) { $('hint').textContent = L('hintPanelNoKeys'); return; }
     const [before, after] = L('hintPanel').split('{keys}');
@@ -536,9 +557,18 @@
     }, PEEK_MS);
   }
 
+  const tipOn = () => !!state.keys && (state.tip === 'strong' || state.tip === 'subtle');
+  // The mouse tip's ×: hidden for good (the app remembers it in its settings).
+  hint.addEventListener('click', (e) => {
+    if (!e.target.closest('#tipX')) return;
+    state.tip = 'off';
+    applyLabels(); showHint();
+    send('tip-dismiss');
+  });
   function showHint() {
     clearTimeout(hintTimer);
     hint.classList.remove('fade');
+    if (tipOn()) return; // the mouse tip stays
     hintTimer = setTimeout(() => hint.classList.add('fade'), 4000);
   }
 
@@ -714,7 +744,7 @@
   window.qcTrackerSettings = (s) => {
     Object.assign(state, s);
     if (s && 'scale' in s) lastSize = ''; // a new UI scale: always report the new size to the app
-    if (s && 'keys' in s && state.data) applyLabels();
+    if (s && ('keys' in s || 'tip' in s) && state.data) { applyLabels(); showHint(); }
     applyView();
   };
   window.qcTrackerPeek = peek;

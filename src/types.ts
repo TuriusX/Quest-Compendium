@@ -179,6 +179,12 @@ export interface AppSettings {
   customApiKey?: string;
   openAiApiKey?: string;
   hideAppShortcut: string;
+  /**
+   * The "free your mouse" tips (many games lock the cursor; the show/hide shortcut frees it): how many times the quest
+   * log's hint has been shown prominently (after 10 it's a subtle line), whether it was dismissed with its ×, and how
+   * many times the panel's "Mouse unlocked" toast has shown (it stops after 10).
+   */
+  mouseTips?: { logSeen?: number; dismissed?: boolean; toastSeen?: number };
   voiceInputShortcut: string;
   autoScreenshotShortcut: string;
   enableThematicBanners?: boolean;

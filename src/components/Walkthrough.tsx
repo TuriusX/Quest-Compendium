@@ -17,7 +17,7 @@ export const walkthroughDone = () => {
   }
 };
 
-export function Walkthrough({ isDesktop, screenshotKeys, onDone }: { isDesktop: boolean; screenshotKeys?: string; onDone: () => void }) {
+export function Walkthrough({ isDesktop, screenshotKeys, hideKeys, onDone }: { isDesktop: boolean; screenshotKeys?: string; hideKeys?: string; onDone: () => void }) {
   const t = useT();
   const [step, setStep] = useState(0);
   const steps = [
@@ -27,6 +27,8 @@ export function Walkthrough({ isDesktop, screenshotKeys, onDone }: { isDesktop: 
     { title: t('tour.4t'), body: t('tour.4b'), icon: '📖' },
     // Desktop: the quest log over the game, independent of the panel.
     ...(isDesktop ? [{ title: t('tour.5t'), body: t('tour.5b'), icon: '📜' }] : []),
+    // Desktop: games that lock the cursor; the show/hide shortcut brings the overlay forward and frees the mouse.
+    ...(isDesktop ? [{ title: t('tour.6t'), body: t('tour.6b', { keys: hideKeys || 'Ctrl+Space' }), icon: '🖱️' }] : []),
   ];
   const finish = () => {
     try {

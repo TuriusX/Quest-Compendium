@@ -53,6 +53,8 @@ interface ChatAreaProps {
   markersOn?: boolean;
   /** The screenshot shortcut from Settings, ready to show ("Ctrl + Shift + S"). */
   screenshotKeys?: string;
+  /** The show/hide shortcut ("Ctrl+\"), for the quick tour's "free your mouse" step. */
+  hideKeys?: string;
   /** Desktop: show an answer's markers in the on-screen objectives tracker (hides the panel). */
   onTrackOnScreen?: (msgId: string) => void;
   /** "Next turn" under a combat answer: a fresh screenshot and a short question for whoever acts now (desktop). */
@@ -176,6 +178,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   aiMode,
   activeGame,
   screenshotKeys,
+  hideKeys,
   onTrackOnScreen,
   onNextTurn,
   soundEnabled,
@@ -1102,7 +1105,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
       )}
 
-      {activeTab && showTour && <Walkthrough isDesktop={isDesktopApp} screenshotKeys={screenshotKeys} onDone={() => setShowTour(false)} />}
+      {activeTab && showTour && <Walkthrough isDesktop={isDesktopApp} screenshotKeys={screenshotKeys} hideKeys={hideKeys} onDone={() => setShowTour(false)} />}
 
       {activeTab && guideLoaded && (
         <div className={mode === 'guide' ? 'flex-1 flex flex-col min-h-0' : 'hidden'}>

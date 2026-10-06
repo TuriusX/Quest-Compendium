@@ -85,6 +85,8 @@ const THEME_STYLES: Record<ColorTheme, { color: string; dim: string; border: str
 
 /** "CmdOrCtrl+Shift+S" -> "Ctrl + Shift + S" (shown as Cmd on a Mac), for sentences (utils/shortcut). */
 const prettyShortcut = (accel?: string): string => formatShortcut(accel, { spaced: true });
+/** The panel's "Mouse unlocked" toast shows the first this-many times the shortcut opens it. */
+const MOUSE_TOAST_TIMES = 10;
 
 /** Apply the interface style: <html data-ui> switches the Lo-fi pixel layer in index.css on or off. */
 function applyUiStyle(style: AppSettings['uiStyle'], accentHex: string) {
@@ -723,11 +725,37 @@ export default function App() {
     const p = trackerPayloadRef.current;
     if (p) api?.updateObjectivesTracker?.(p.data, p.gameKey);
   }, [activeTabId]);
+  // The "free your mouse" tips (settings.mouseTips): the desktop app shows the quest log's and the spine's hint from
+  // this state, and reports back when the log appeared, the hint was dismissed, or the shortcut opened the panel.
+  const [mouseToast, setMouseToast] = useState<string | null>(null);
+  const mouseToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    (window as any).electronAPI?.setMouseTips?.({ logSeen: settings.mouseTips?.logSeen || 0, dismissed: !!settings.mouseTips?.dismissed });
+  }, [settings.mouseTips?.logSeen, settings.mouseTips?.dismissed]);
+  const handleMouseTip = (e: any) => {
+    const tips = settings.mouseTips || {};
+    if (e.what === 'seen') {
+      setSettings((s) => ({ ...s, mouseTips: { ...s.mouseTips, logSeen: (s.mouseTips?.logSeen || 0) + 1 } }));
+    } else if (e.what === 'dismiss') {
+      setSettings((s) => ({ ...s, mouseTips: { ...s.mouseTips, dismissed: true } }));
+    } else if (e.what === 'shortcut-open' && (tips.toastSeen || 0) < MOUSE_TOAST_TIMES && typeof e.keys === 'string' && e.keys) {
+      // "Mouse unlocked · Ctrl+\ to go back to your game", for about 3 seconds, the first 10 times.
+      setSettings((s) => ({ ...s, mouseTips: { ...s.mouseTips, toastSeen: (s.mouseTips?.toastSeen || 0) + 1 } }));
+      setMouseToast(tr('tip.mouseToast', { keys: e.keys }));
+      if (mouseToastTimer.current) clearTimeout(mouseToastTimer.current);
+      mouseToastTimer.current = setTimeout(() => setMouseToast(null), 3200);
+    }
+  };
+
   // Ticks, the place confirmed and "I'm here now" on the tracker, handled like the checklist, guide page and PlaceBar.
   const trackerEventRef = useRef<(e: any) => void>(() => {});
   trackerEventRef.current = (e: any) => {
     if (!e || typeof e.type !== 'string') return;
     const api = (window as any).electronAPI;
+    if (e.type === 'mouse-tip') {
+      handleMouseTip(e);
+      return;
+    }
     if (e.type === 'visibility') {
       setQuestLogVisible(!!e.visible);
       return;
@@ -1927,6 +1955,15 @@ export default function App() {
           boxShadow: '0 0 35px var(--accent-glow)'
         }}
       >
+        {/* "Mouse unlocked": the panel opened with the show/hide shortcut (the first 10 times) */}
+        {mouseToast && (
+          <div role="status" aria-live="polite" className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 z-[80] max-w-[90%] animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="qc-px-frame px-3.5 py-2 rounded-lg bg-[#16101f]/95 border border-[var(--accent-border)] shadow-[0_0_18px_var(--accent-glow)] text-[12.5px] font-semibold text-white text-center">
+              {mouseToast}
+            </div>
+          </div>
+        )}
+
         {/* Header Bar */}
         <HeaderBar
           userData={userData}
@@ -2190,6 +2227,7 @@ export default function App() {
                 aiMode={settings.aiMode}
                 activeGame={activeGame}
                 screenshotKeys={prettyShortcut(settings.autoScreenshotShortcut)}
+                hideKeys={formatShortcut(settings.hideAppShortcut)}
                 soundEnabled={settings.soundEnabled}
                 onAppendToNotes={handleAppendToNotes}
                 markerLifetime={settings.markerLifetime ?? 120}

@@ -594,6 +594,27 @@ app.whenReady().then(() => {
     createWindow();
   }
 
+  // The "free your mouse" tips (settings.mouseTips, sent by the app): many games lock the cursor to steer the camera, and
+  // the show/hide shortcut is how players get it back. The quest log and the book spine name the shortcut, prominently
+  // for the first 10 times the log appears, then as a subtle line, until dismissed. The app keeps the counts: the log's
+  // appearances (at most one a minute) and dismissals are reported to it, and it sends the new state back.
+  const tipMode = () => (mouseTips.dismissed ? 'off' : (mouseTips.logSeen || 0) < MOUSE_TIP_STRONG ? 'strong' : 'subtle');
+  const tellApp = (payload) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tracker-event', payload); };
+  let lastTipSeenAt = 0;
+  const onLogAppear = () => {
+    if (tipMode() !== 'strong' || !hideKeysNow || Date.now() - lastTipSeenAt < 60_000) return;
+    lastTipSeenAt = Date.now();
+    tellApp({ type: 'mouse-tip', what: 'seen' });
+  };
+  ipcMain.on('set-mouse-tips', (event, tips) => {
+    const t = tips && typeof tips === 'object' ? tips : {};
+    const before = tipMode();
+    mouseTips = { logSeen: Math.max(0, Number(t.logSeen) || 0), dismissed: t.dismissed === true };
+    if (tipMode() === before) return;
+    tracker.setMouseTip(tipMode());
+    spine.refresh();
+  });
+
   // The objectives tracker drawn over the game (electron/tracker.cjs).
   tracker.init({
     app, ipcMain, screen, globalShortcut,
@@ -605,7 +626,11 @@ app.whenReady().then(() => {
     getDisplay: () => lastCaptureDisplay,
     // Processor share while it's open, next to the markers' (startPerfLog).
     onWindow: (w) => watchPerf('tracker', w),
+    // The mouse tip: the log appeared (counted toward the prominent hint), or its × was clicked.
+    onAppear: onLogAppear,
+    onTipDismiss: () => tellApp({ type: 'mouse-tip', what: 'dismiss' }),
   });
+  tracker.setMouseTip(tipMode());
   tracker.setVisibleInRecordings(markersInRecordings);
   tracker.setScale(currentUiScale);
   // The hidden panel's book spine on the dock edge (electron/spine.cjs): a click opens the panel.
@@ -620,6 +645,14 @@ app.whenReady().then(() => {
     getTrackerBounds: () => tracker.getBounds(),
     raiseTracker: () => tracker.raise(),
     getLook: () => tracker.getLook(),
+    // The mouse tip along the spine, like the quest log's: the shortcut that frees the mouse, or none.
+    getTip: () => {
+      const mode = tipMode();
+      if (mode === 'off' || !hideKeysNow) return null;
+      const l = tracker.getTipLabels();
+      return { mode, keys: formatAccelerator(hideKeysNow), text: l.mouseHint, close: l.mouseHintClose };
+    },
+    onTipDismiss: () => tellApp({ type: 'mouse-tip', what: 'dismiss' }),
   });
 
   // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
@@ -647,7 +680,11 @@ app.whenReady().then(() => {
   const toggleFromShortcut = (keys) => {
     console.log(`[panel] hide shortcut (${keys}): ${isAppVisible ? 'hiding' : 'showing'} the panel`);
     if (isAppVisible) slideOut();
-    else slideIn();
+    else {
+      slideIn();
+      // The panel's "Mouse unlocked" toast (the app shows it the first 10 times).
+      tellApp({ type: 'mouse-tip', what: 'shortcut-open', keys: formatAccelerator(keys) });
+    }
   };
   const registerHideShortcut = (keys) => {
     let ok = false;
@@ -655,7 +692,8 @@ app.whenReady().then(() => {
     if (!ok) console.warn(`[panel] ${keys} is taken (by another app or shortcut); the show/hide shortcut isn't set`);
     return ok;
   };
-  tracker.setKeys(registerHideShortcut('CommandOrControl+Space') ? 'CommandOrControl+Space' : '');
+  hideKeysNow = registerHideShortcut('CommandOrControl+Space') ? 'CommandOrControl+Space' : '';
+  tracker.setKeys(hideKeysNow);
 
   ipcMain.on('update-shortcuts', (event, shortcuts) => {
     globalShortcut.unregisterAll();
@@ -664,8 +702,11 @@ app.whenReady().then(() => {
     const hideAppCmd = shortcuts.hideAppShortcut || 'CommandOrControl+Space';
     let hideKeys = registerHideShortcut(hideAppCmd) ? hideAppCmd : '';
     if (!hideKeys && hideAppCmd !== 'CommandOrControl+Space' && registerHideShortcut('CommandOrControl+Space')) hideKeys = 'CommandOrControl+Space';
-    // The tracker's hint names the shortcut that opens the panel.
+    // The tracker's hint (and the spine's) names the shortcut that opens the panel.
+    const keysChanged = hideKeys !== hideKeysNow;
+    hideKeysNow = hideKeys;
     tracker.setKeys(hideKeys);
+    if (keysChanged) spine.refresh();
     console.log(`[panel] show/hide shortcut: ${hideKeys || `none (${hideAppCmd} and Ctrl+Space are taken)`}`);
     
     const voiceCmd = shortcuts.voiceInputShortcut || 'CommandOrControl+Shift+V';
@@ -709,6 +750,12 @@ app.on('before-quit', () => {
   if (controllerService) controllerService.stop();
   globalShortcut.unregisterAll();
 });
+
+// The show/hide shortcut as registered ('' = none) and the mouse tips' state (from the app's settings.mouseTips).
+let hideKeysNow = '';
+let mouseTips = { logSeen: 0, dismissed: false };
+const MOUSE_TIP_STRONG = 10;
+const { formatAccelerator } = require('./accelerator.cjs');
 
 const { exec } = require('child_process');
 const fs = require('fs');

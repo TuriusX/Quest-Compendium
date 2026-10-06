@@ -37,6 +37,7 @@ let scale = 1; // the app's UI scale (Settings)
 let store = null;   // per-game settings, loaded once
 let storeFile = '';
 let keys = 'CommandOrControl+Space'; // the show/hide shortcut, named in the hint ('' = none registered)
+let tip = 'strong'; // the mouse tip: 'strong' (the first 10 appearances), 'subtle', or 'off' (dismissed)
 let saveTimer = null;
 // Click-through except while the cursor is over the window. The main process hit-tests the cursor itself: on Windows,
 // setIgnoreMouseEvents(false) fires a mouseleave in the page, so page-driven enter/leave flipped straight back to
@@ -231,7 +232,7 @@ async function open(spot) {
   if (!alive() || !current) return false;
   if (!settingsFor(current.gameKey).shown) { dropWindow(); return false; } // put away meanwhile
   const s = settingsFor(current.gameKey);
-  js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel(), collapsed: s.collapsed || {}, hidden: s.hidden, limits: s.limits, maxHeight: maxHeight() })})`);
+  js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel(), tip, collapsed: s.collapsed || {}, hidden: s.hidden, limits: s.limits, maxHeight: maxHeight() })})`);
   if (!win.isVisible() && !revealPending) {
     revealPending = true;
     clearTimeout(revealTimer);
@@ -248,6 +249,7 @@ function reveal() {
   afterShow();
   avoidPanel();
   sendVisibility();
+  if (deps.onAppear) deps.onAppear();
 }
 
 /** What the page gets: only known fields, trimmed to length. */
@@ -313,7 +315,7 @@ function cleanDetail(d) {
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
 const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
-  'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint'];
+  'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -449,6 +451,8 @@ function panelShown() {
 }
 /** The panel hid: a quest log moved off it goes back to its own spot (the ribbon back to its edge). */
 function panelHidden() {
+  // Back over the game: an appearance, for the mouse tip.
+  if (alive() && win.isVisible() && deps.onAppear) deps.onAppear();
   if (!alive() || !displaced) return;
   displaced = false;
   const view = current ? settingsFor(current.gameKey).view : 'full';
@@ -514,6 +518,18 @@ function setScale(n) {
 const keysLabel = () => formatAccelerator(keys);
 
 /** The show/hide shortcut changed (or couldn't be registered: ''): the hint follows. */
+/** The mouse tip's mode ('strong', 'subtle' or 'off'): the hint line follows. */
+function setMouseTip(mode) {
+  tip = ['strong', 'subtle', 'off'].includes(mode) ? mode : 'off';
+  js(`window.qcTrackerSettings(${JSON.stringify({ tip })})`);
+}
+
+/** The mouse tip's words in the app's language (the spine shows them too), with English until the app sends labels. */
+function getTipLabels() {
+  const l = (current && current.data && current.data.labels) || {};
+  return { mouseHint: l.mouseHint || '{keys} to use your mouse here', mouseHintClose: l.mouseHintClose || 'Hide this tip' };
+}
+
 function setKeys(accelerator) {
   keys = typeof accelerator === 'string' ? accelerator.trim() : '';
   js(`window.qcTrackerSettings(${JSON.stringify({ keys: keysLabel() })})`);
@@ -534,6 +550,9 @@ function onMessage(event, msg) {
       else avoidPanel();
       break;
     }
+    case 'tip-dismiss':
+      if (deps.onTipDismiss) deps.onTipDismiss();
+      break;
     case 'press':
       pressed = !!msg.down;
       if (pressed) setMouse(true);
@@ -660,7 +679,7 @@ function init(d) {
 }
 
 module.exports = {
-  init, show, update, hide, toggle, showLog, panelShown, panelHidden, setKeys, hideForCapture, showAfterCapture, getBounds,
+  init, show, update, hide, toggle, showLog, panelShown, panelHidden, setKeys, setMouseTip, getTipLabels, hideForCapture, showAfterCapture, getBounds,
   setVisibleInRecordings, setScale, openPanel, raise, getLook,
   isOpen: () => alive(),
   /** On screen right now (not hidden behind the open panel). */
