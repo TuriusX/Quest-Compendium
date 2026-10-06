@@ -40,6 +40,7 @@ import { recordMonthly } from '../../searchGuard';
 import { infoForPage } from './areaInfo';
 import { fightsForPage } from './fights';
 import { call, reviewerFor } from './review';
+import { sourcePack, packNotes, type SourcePack } from './sourcePack';
 import { ProQuotaWait } from './reviewerQuota';
 import { promote, stageCopy } from './promote';
 import { deployToNetlify } from '../pipeline/netlify';
@@ -69,6 +70,17 @@ async function grounded(prompt: string, label: string, fromNotes = false): Promi
     return sources.length ? { text: String(res?.text || ''), sources } : null;
   }
   return null;
+}
+
+/** A call without searches (writing and checking from a source pack). */
+async function plain(prompt: string, label: string): Promise<string> {
+  const res: any = await gemini().models.generateContent({
+    model: MODEL,
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: { temperature: 0.3, maxOutputTokens: 8000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+  });
+  console.log(`  [${label}] no searches`);
+  return String(res?.text || '');
 }
 
 /** The page's tickable entries, as the writer sees them (id, kind, name, where). */
@@ -129,6 +141,26 @@ function walkPrompt(game: string, p: any, entries: { line: string }[], fights: G
   ].join('\n');
 }
 
+/** Pack mode: the research notes are the source pack, and nothing is searched while writing. */
+const PACK_RULE = 'Write ONLY from the fact pack below (facts from the game\'s wiki), in your own words: never copy its sentences, and never add a fact it doesn\'t contain.';
+
+/** Pack mode: the draft checked against the same pack; a specific claim it can't settle is a GAP (searched later, capped). */
+function packCheckPrompt(game: string, p: any, d: Draft, notes: string) {
+  return [
+    `Fact-check this draft for the area "${p.name}" of a guide to the video game "${game}" against the FACT PACK below (facts from the game's wiki). Do not search.`,
+    ...FIX_RULES.slice(0, 2),
+    'For a line the pack contradicts, or that it shows belongs to another area: FIX or DROP as above.',
+    'For a line with a specific fact (a name, place, check, reward, outcome) that the pack neither supports nor contradicts: GAP: the label | the exact question to look up. At most 4 GAP lines, the most important first.',
+    'Never DROP a line just because the pack does not mention it: that is a GAP (or no reply, for general advice). Lines the pack supports need no reply. If everything is supported, reply OK.',
+    '',
+    'FACT PACK:',
+    notes.slice(0, 12000),
+    '',
+    'DRAFT:',
+    ...draftLines(d, 'all'),
+  ].join('\n');
+}
+
 function choicePrompt(game: string, p: any, notes: string) {
   return [
     `For the video game "${game}", the area "${p.name}"${p.story ? ` (${p.story})` : ''}: the important choices a player makes here (quests, dialogue, who to side with, who to save).`,
@@ -167,11 +199,15 @@ function checkPrompt(game: string, p: any, d: Draft, part: 'walk' | 'choices') {
   ].join('\n');
 }
 
-function consistencyPrompt(game: string, p: any, neighbours: string[], d: Draft) {
+function consistencyPrompt(game: string, p: any, neighbours: string[], d: Draft, facts = '') {
   return [
     `You are the final reviewer of a guide page for the video game "${game}": the area "${p.name}"${p.story ? ` (${p.story})` : ''}. Neighbouring areas: ${neighbours.join(', ') || 'unknown'}.`,
     'Check it as an expert on this game: lines that contradict each other, events or characters that are really in a neighbouring area, a wrong order, wrong facts you are sure of. Do not rewrite style.',
+    // Pack mode: the facts the page was written from (the game's wiki). A detail that matches them isn't invented,
+    // even if the reviewer doesn't remember it.
+    ...(facts ? [`Facts from the game's wiki that this page was written from (a line that matches them is not invented, even if you don't remember the detail; a line that contradicts them is wrong):`, facts.slice(0, 10000), ''] : []),
     ...FIX_RULES,
+    'Then one line "SCORE: 0-100" for the page with your fixes applied (90+: accurate, specific and useful; 75: usable with a few weak lines; below 60: unreliable).',
     'Finish with one line: "VERDICT: pass" if, with your fixes applied, the page is accurate, consistent and useful to a player; or "VERDICT: fail | the main reason" if too much is wrong or doubtful to fix line by line.',
     '',
     ...draftLines(d, 'all'),
@@ -302,17 +338,17 @@ export function tidyProto(pr: any) {
   };
 }
 
-type Verdict = { status: 'passed' | 'failed' | 'waiting'; reason?: string };
+type Verdict = { status: 'passed' | 'failed' | 'waiting'; reason?: string; score?: number };
 
 /** The Pro consistency review with its verdict: fixes applied to the draft, and pass / fail (waiting: no Pro request). */
-async function proReview(game: string, p: any, neighbours: string[], draft: Draft): Promise<Verdict & { fixed: number; dropped: number }> {
+async function proReview(game: string, p: any, neighbours: string[], draft: Draft, retried = false, facts = ''): Promise<Verdict & { fixed: number; dropped: number }> {
   try {
     // A network failure ("fetch failed") is retried, after 5 and 20 seconds; the quota running out is not.
     let res: any;
     for (let attempt = 0; ; attempt++) {
       try {
         res = await call(reviewerFor('pro', 'careful'), {
-          contents: [{ role: 'user', parts: [{ text: consistencyPrompt(game, p, neighbours, draft) }] }],
+          contents: [{ role: 'user', parts: [{ text: consistencyPrompt(game, p, neighbours, draft, facts) }] }],
           // Pro usually answers in seconds, but a call can hang, or a long page take minutes when Pro is busy: each try
           // gets longer (2, 4, then 7 minutes) before giving up for this run.
           // Fixes and a verdict fit in 4,096 tokens: a review that runs on past that is a runaway (and billed as one).
@@ -326,12 +362,16 @@ async function proReview(game: string, p: any, neighbours: string[], draft: Draf
     }
     const text = String(res?.text || '');
     if (String(res?.candidates?.[0]?.finishReason || '') === 'MAX_TOKENS') {
-      return { status: 'failed', reason: 'the review ran past its 4,096-token cap (a runaway reply)', fixed: 0, dropped: 0 };
+      // A runaway is hit and miss: one more try (capped too) before the page counts as failed.
+      if (!retried) return proReview(game, p, neighbours, draft, true, facts);
+      return { status: 'failed', reason: 'the review ran past its 4,096-token cap twice (a runaway reply)', fixed: 0, dropped: 0 };
     }
     const t = applyFixes(text, draft);
+    const sc = Number((text.match(/SCORE\s*:\s*(\d{1,3})/i) || [])[1]);
+    const score = Number.isFinite(sc) && sc >= 0 && sc <= 100 ? sc : undefined;
     const v = text.split('\n').map((l) => fields(l, 'VERDICT')).filter(Boolean).pop();
-    if (!v) return { status: 'failed', reason: 'the reviewer gave no verdict', ...t };
-    return /^pass/i.test(v[0]) ? { status: 'passed', ...t } : { status: 'failed', reason: cut(v.slice(1).join(' | ') || v[0].replace(/^fail\s*/i, ''), 300) || 'failed review', ...t };
+    if (!v) return { status: 'failed', reason: 'the reviewer gave no verdict', score, ...t };
+    return /^pass/i.test(v[0]) ? { status: 'passed', score, ...t } : { status: 'failed', reason: cut(v.slice(1).join(' | ') || v[0].replace(/^fail\s*/i, ''), 300) || 'failed review', score, ...t };
   } catch (e: any) {
     if (e instanceof ProQuotaWait) return { status: 'waiting', reason: 'no Pro reviewer requests left today', fixed: 0, dropped: 0 };
     return { status: 'waiting', reason: cut(e?.message || e, 200), fixed: 0, dropped: 0 };
@@ -342,7 +382,7 @@ async function proReview(game: string, p: any, neighbours: string[], draft: Draf
  * One flagship page, written to guidePrototypes/{key}__{slug} with the reviewer's verdict. `from` is the guide copy to
  * build on (the live guide, or its staged rebuild). Returns its searches, real cost and verdict.
  */
-async function buildPage(key: string, game: string, slug: string, order: { slug: string; name: string }[], from = key) {
+async function buildPage(key: string, game: string, slug: string, order: { slug: string; name: string }[], from = key, opts: { pack?: boolean; gapSearches?: boolean; protoId?: string } = {}) {
   const scope = usageScope.getStore();
   const before = scope ? { ...scope } : { searches: ledger.searches, dollars: ledgerDollars() };
   const p: any = (await db().collection('guides').doc(from).collection('areas').doc(slug).get()).data();
@@ -352,29 +392,42 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
   const neighbours = order.slice(Math.max(0, i - 3), i + 4).map((o) => o.name).filter((n) => n !== p.name);
   const sources = new Set<string>(p.sources || []);
 
+  // Pack mode: the area's facts from the game's wiki (cached), the basis for everything below; no searches to write.
+  const sp: SourcePack | null = opts.pack ? await sourcePack(key, slug) : null;
+  if (opts.pack && !sp) throw new Error('no source pack (no wiki for this game, or nothing fetchable)');
   // What the page lacks first: the summary box and directions, and key fights.
   // An earlier prototype run's summary box and fights are reused (no need to search for them again).
   const prev: any = (await db().collection('guidePrototypes').doc(`${key}__${slug}`).get()).data();
   let info: GuideInfo | undefined = p.info || prev?.info;
+  if (!info && sp) {
+    const k = sp.pack;
+    info = JSON.parse(JSON.stringify({ region: k.region || undefined, levels: k.levels || undefined, quests: (k.quests || []).slice(0, 8), services: (k.services || []).slice(0, 8), directions: k.directions || undefined, connected: (k.connected || []).slice(0, 8), sources: [sp.wiki] }));
+  }
   if (!info) {
     const r = await infoForPage(game, p, neighbours, false);
     if (r.info) { info = r.info; (r.info.sources || []).forEach((s) => sources.add(s)); }
     console.log(`  summary box: ${r.info ? 'written' : 'nothing confirmed'}`);
   }
   let fights: GuideFight[] = (p.fights || []).length ? p.fights : prev ? prev.fights || [] : [];
-  if (!fights.length && !prev) {
+  if (!fights.length && sp) {
+    fights = sp.pack.fights.slice(0, 6).map((f, i) => JSON.parse(JSON.stringify({ id: `f${i + 1}`, name: cut(f.name, 100), enemies: f.enemies || undefined, threats: f.threats || undefined, weaknesses: f.weaknesses || undefined, tactics: f.tactics || undefined, rewards: f.rewards || undefined, sources: [sp.wiki] })));
+  }
+  if (!fights.length && !prev && !sp) {
     const r = await fightsForPage(game, p, false);
     fights = r.fights;
     console.log(`  key fights: ${fights.map((f) => f.name).join('; ') || 'none'}`);
   }
 
   const entries = entryList(p);
-  // 1. Research: sourced notes on the area, from several searches (the wiki page, its quests, its choices).
-  const notes = await grounded(researchPrompt(game, p, neighbours), 'research');
+  // 1. Research: the source pack (pack mode), or sourced notes from several searches.
+  const notes = sp ? { text: packNotes(sp), sources: [sp.wiki] } : await grounded(researchPrompt(game, p, neighbours), 'research');
   if (!notes) throw new Error('the research reply ran no searches or named no sources');
   notes.sources.forEach((s) => sources.add(s));
-  // 2. The walkthrough, the short version and the choices, written from the notes (searching again where they're thin).
-  const w = await grounded(walkPrompt(game, p, entries, fights, neighbours, notes.text), 'walkthrough', true);
+  // 2. The walkthrough, the short version and the choices, written from the notes (pack mode: from the pack only,
+  //    without searching; otherwise searching again where the notes are thin).
+  const w = sp
+    ? { text: await plain(walkPrompt(game, p, entries, fights, neighbours, notes.text).replace(/Write from the research notes below;[^\n]*/, PACK_RULE).replace('Research notes:', 'FACT PACK:'), 'walkthrough'), sources: [] as string[] }
+    : await grounded(walkPrompt(game, p, entries, fights, neighbours, notes.text), 'walkthrough', true);
   if (!w) throw new Error('the walkthrough reply ran no searches or named no sources');
   w.sources.forEach((s) => sources.add(s));
   const draft: Draft = {
@@ -384,22 +437,59 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
     choices: [],
     old: [...(p.items || []).map((e: GuideEntry) => ({ entry: e, kind: 'item' as const })), ...(p.secrets || []).map((e: GuideEntry) => ({ entry: e, kind: 'secret' as const }))],
   };
-  const c = await grounded(choicePrompt(game, p, notes.text), 'choices', true);
+  const c = sp
+    ? { text: await plain(choicePrompt(game, p, notes.text).replace(/Search guides and wikis to confirm each choice and its outcomes, and write only what the sources say\./, PACK_RULE), 'choices'), sources: [] as string[] }
+    : await grounded(choicePrompt(game, p, notes.text), 'choices', true);
   if (c) { draft.choices = parseChoices(c.text); c.sources.forEach((s) => sources.add(s)); }
 
   // 3. Fact-checks against sources, every line searched: the walkthrough and new entries, then the choices and the
   //    short version. Wrong lines are corrected, unsupported ones dropped.
   const tally = { fixed: 0, dropped: 0 };
   const add = (t: { fixed: number; dropped: number }) => { tally.fixed += t.fixed; tally.dropped += t.dropped; };
-  const k1 = await grounded(checkPrompt(game, p, draft, 'walk'), 'check: walkthrough');
-  if (k1) { k1.sources.forEach((s) => sources.add(s)); add(applyFixes(k1.text, draft)); }
-  const k2 = await grounded(checkPrompt(game, p, draft, 'choices'), 'check: choices');
-  if (k2) { k2.sources.forEach((s) => sources.add(s)); add(applyFixes(k2.text, draft)); }
+  let gaps = 0;
+  if (sp) {
+    // Pack mode: one check against the same pack (no searches); what the pack can't settle is looked up in one capped
+    // searched call (a single attempt), or dropped when gap searches are off.
+    const k = await plain(packCheckPrompt(game, p, draft, notes.text), 'check: pack');
+    const gapLines = k.split('\n').map((l) => fields(l, 'GAP')).filter(Boolean).slice(0, 4) as string[][];
+    gaps = gapLines.length;
+    const before = draftLines(draft, 'all');
+    add(applyFixes(k, draft));
+    if (gapLines.length && opts.gapSearches !== false) {
+      const want = new Set(gapLines.map((g) => String(g[0]).toUpperCase().replace(/[^SNCAE0-9]/g, '')));
+      const lines = before.filter((l) => want.has(l.split(':')[0]));
+      const res: any = await gemini().models.generateContent({
+        model: MODEL,
+        contents: [{ role: 'user', parts: [{ text: [
+          `For the video game "${game}", the area "${p.name}": check these lines of a guide draft with a quick search (two or three searches in all).`,
+          ...FIX_RULES,
+          '', ...gapLines.map((g) => `${g[0]}: ${g.slice(1).join(' | ')}`), '', ...lines,
+        ].join('\n') }] }],
+        config: { tools: [{ googleSearch: {} }], temperature: 0.2, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+      });
+      const n = searchesIn(res);
+      if (n) recordMonthly(n);
+      console.log(`  [gaps: ${gapLines.length}] ${n} searches`);
+      // Only a reply that searched counts (one from memory is no source): otherwise the gap lines are dropped.
+      if (n && sourcesIn(res).length) {
+        sourcesIn(res).forEach((s) => sources.add(s));
+        add(applyFixes(String(res?.text || ''), draft));
+      } else add(applyFixes(gapLines.filter((g) => !/^E/i.test(String(g[0]).trim())).map((g) => `DROP: ${g[0]} | not in the source pack, and not confirmed by a search`).join('\n'), draft));
+    } else if (gapLines.length) {
+      // The page's own entries (E) were checked when they were written: they stay; new lines nothing confirms go.
+      add(applyFixes(gapLines.filter((g) => !/^E/i.test(String(g[0]).trim())).map((g) => `DROP: ${g[0]} | not in the source pack`).join('\n'), draft));
+    }
+  } else {
+    const k1 = await grounded(checkPrompt(game, p, draft, 'walk'), 'check: walkthrough');
+    if (k1) { k1.sources.forEach((s) => sources.add(s)); add(applyFixes(k1.text, draft)); }
+    const k2 = await grounded(checkPrompt(game, p, draft, 'choices'), 'check: choices');
+    if (k2) { k2.sources.forEach((s) => sources.add(s)); add(applyFixes(k2.text, draft)); }
+  }
   // 4. A consistency review by the Pro reviewer (no searches): contradictions between lines, things that happen in a
   //    neighbouring area, a wrong order.
-  const verdict = await proReview(game, p, neighbours, draft);
+  const verdict = await proReview(game, p, neighbours, draft, false, sp ? notes.text : '');
   add(verdict);
-  console.log(`  fact-checks: ${tally.fixed} corrected, ${tally.dropped} dropped; Pro review: ${verdict.status}${verdict.reason ? ` (${verdict.reason})` : ''}`);
+  console.log(`  fact-checks: ${tally.fixed} corrected, ${tally.dropped} dropped${sp ? ` (${gaps} gap(s) beyond the pack)` : ''}; Pro review: ${verdict.status}${verdict.score !== undefined ? `, score ${verdict.score}` : ''}${verdict.reason ? ` (${verdict.reason})` : ''}`);
   let { steps, news, choices, advice } = draft;
 
   // The page's own entries (as checked), then the new ones, onto the lists and into their step.
@@ -415,15 +505,29 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
   const proto = {
     key, slug, game, name: p.name, walkthrough: steps, choices, advice, items, secrets, fights, ...(info ? { info } : {}),
     sources: [...sources].slice(0, 12), newEntries: news.length, unplaced, cost: spent, model: MODEL, at: Date.now(),
-    status: verdict.status, ...(verdict.reason ? { reason: verdict.reason } : {}), from,
+    status: verdict.status, ...(verdict.reason ? { reason: verdict.reason } : {}), ...(verdict.score !== undefined ? { score: verdict.score } : {}), from,
+    // Pack mode: the wiki articles it came from, credited on the page under the wiki's licence.
+    ...(sp ? { mode: 'pack', sourceLinks: { wiki: sp.wiki, license: sp.license, licenseUrl: sp.licenseUrl, pages: sp.sources } } : {}),
   };
   const clean = tidyProto(proto);
-  await db().collection('guidePrototypes').doc(`${key}__${slug}`).set(JSON.parse(JSON.stringify(clean)));
+  // A trial (protoId) is saved apart, so it never replaces the prototype a live page came from.
+  const docId = opts.protoId || `${key}__${slug}`;
+  await db().collection('guidePrototypes').doc(docId).set(JSON.parse(JSON.stringify(clean)));
   fs.mkdirSync('scratchpad/flagship', { recursive: true });
-  fs.writeFileSync(`scratchpad/flagship/${key}__${slug}.json`, JSON.stringify(clean, null, 1));
+  fs.writeFileSync(`scratchpad/flagship/${docId}.json`, JSON.stringify(clean, null, 1));
   console.log(`  ${steps.length} steps, ${choices.length} choices, ${news.length} new entries${unplaced.length ? `, not placed in a step: ${unplaced.join('; ')}` : ''}`);
   console.log(`  cost: ${spent.searches} searches, $${spent.dollars.toFixed(3)} (tokens and searches)`);
   return { ...spent, verdict, proto: clean };
+}
+
+/** The Pro review's score for a page as it stands (its live flagship content), saving nothing: a baseline to compare. */
+async function scoreOnly(key: string, game: string, slug: string, order: { slug: string; name: string }[]) {
+  const a: any = (await db().collection('guides').doc(key).collection('areas').doc(slug).get()).data();
+  if (!a?.walkthrough?.length) return null;
+  const i = order.findIndex((o) => o.slug === slug);
+  const neighbours = order.slice(Math.max(0, i - 3), i + 4).map((o) => o.name).filter((n) => n !== a.name);
+  const draft: Draft = { steps: a.walkthrough, news: [], choices: a.choices || [], advice: a.advice || { matters: [], skip: [], mistakes: [] }, old: [...(a.items || []).map((e: any) => ({ entry: e, kind: 'item' as const })), ...(a.secrets || []).map((e: any) => ({ entry: e, kind: 'secret' as const }))] };
+  return proReview(game, a, neighbours, draft);
 }
 
 /** A prototype built before verdicts existed: only the Pro review (fixes and verdict), no rebuilding. */
@@ -445,7 +549,8 @@ async function writePage(target: string, slug: string, pr: any) {
   await db().collection('guides').doc(target).collection('areas').doc(slug).set(JSON.parse(JSON.stringify({
     walkthrough: pr.walkthrough, choices: pr.choices, advice: pr.advice, items: pr.items, secrets: pr.secrets, fights: pr.fights || [],
     ...(pr.info ? { info: pr.info } : {}), sources: pr.sources || [], verified: true,
-    flagship: { at: Date.now(), cost: pr.cost?.dollars ?? null, model: pr.model }, updatedAt: Date.now(),
+    ...(pr.sourceLinks ? { sourceLinks: pr.sourceLinks } : {}),
+    flagship: { at: Date.now(), cost: pr.cost?.dollars ?? null, model: pr.model, mode: pr.mode || 'searched' }, updatedAt: Date.now(),
   })), { merge: true });
 }
 
@@ -456,6 +561,7 @@ type GuideProgress = { phase: 'outline' | 'pages' | 'done'; source?: 'live' | 's
 /** Estimated cost per page until the programme has measured its own, and for an outline rebuild. */
 const PAGE_GUESS = 0.42, OUTLINE_GUESS = 0.5;
 const MINUTES = Number(process.env.FLAGSHIP_MINUTES || 150);
+const DAY_MS = 86_400_000;
 
 async function program() {
   const ref = db().collection('system').doc('flagship');
@@ -468,6 +574,8 @@ async function program() {
   if (st.day !== today()) Object.assign(st, { day: today(), spentToday: 0, runPages: [], runFailures: [] });
   if (st.paused && arg('estimate') !== 'true' && arg('ignore-pause') !== 'true') { console.log(`The flagship programme is paused (${st.paused.why || 'until the owner says go'}). Nothing to do.`); return; }
   const only = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
+  // The traffic-driven rollout, when it's on, replaces the list of whole guides (unless one guide is asked for).
+  if (st.rollout?.enabled && !only) return rollout(st, () => ref.set(JSON.parse(JSON.stringify(st)), { merge: true }));
   const concurrency = Math.max(1, Math.min(6, Number(arg('concurrency', '1')) || 1));
   st.spent = Number(st.spent || 0); st.spentToday = Number(st.spentToday || 0);
   st.progress = st.progress || {};
@@ -629,20 +737,91 @@ Google's spend-based rate limit, ${rateLimits} times: stopped; next run carries 
   st.lastRun = Date.now();
   await save();
 
-  // The website, when anything went live.
-  if (wentLive && arg('no-publish') !== 'true') {
-    const cli = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
-    spawnSync(process.execPath, [cli, 'scripts/guides/publish.ts'], { encoding: 'utf8', timeout: 30 * 60_000, maxBuffer: 64 * 1024 * 1024, stdio: 'inherit' });
-    if (process.env.NETLIFY_AUTH_TOKEN && process.env.NETLIFY_SITE_ID) {
-      try {
-        const n = await deployToNetlify('Marketing_Website_Files', process.env.NETLIFY_SITE_ID, process.env.NETLIFY_AUTH_TOKEN);
-        console.log(`Deployed to Netlify (${n.uploaded} changed file(s)).`);
-      } catch (e: any) {
-        console.log(`Netlify deploy failed: ${e?.message}`);
-      }
+  if (wentLive) await publishSite();
+  console.log(`\nDone: flagship programme, $${st.spentToday.toFixed(2)} today, $${st.spent.toFixed(2)} of $${budget.total} in all.`);
+}
+
+/** The website, when anything went live: published and deployed to Netlify. */
+async function publishSite() {
+  if (arg('no-publish') === 'true') return;
+  const cli = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
+  spawnSync(process.execPath, [cli, 'scripts/guides/publish.ts'], { encoding: 'utf8', timeout: 30 * 60_000, maxBuffer: 64 * 1024 * 1024, stdio: 'inherit' });
+  if (process.env.NETLIFY_AUTH_TOKEN && process.env.NETLIFY_SITE_ID) {
+    try {
+      const n = await deployToNetlify('Marketing_Website_Files', process.env.NETLIFY_SITE_ID, process.env.NETLIFY_AUTH_TOKEN);
+      console.log(`Deployed to Netlify (${n.uploaded} changed file(s)).`);
+    } catch (e: any) {
+      console.log(`Netlify deploy failed: ${e?.message}`);
     }
   }
-  console.log(`\nDone: flagship programme, $${st.spentToday.toFixed(2)} today, $${st.spent.toFixed(2)} of $${budget.total} in all.`);
+}
+
+/**
+ * The traffic-driven rollout (system/flagship.rollout { enabled, monthly, perDay }): a few pages a day, the most-searched
+ * pages first, across all guides, built from source packs (a wiki we may fetch, or one searched research step) and live
+ * once they pass the Pro review, within a monthly budget. Order: the weekly Search Console pages by impressions, then
+ * the rest of the pages of the guides people search for most, then of the guides players use most in the app. Skipped:
+ * pages already flagship, pages that failed in the last 30 days, and guides with a staged rebuild.
+ */
+async function rollout(st: any, save: () => Promise<any>) {
+  const r = st.rollout;
+  const month = new Date().toISOString().slice(0, 7);
+  if (r.month !== month) Object.assign(r, { month, spentMonth: 0, pagesMonth: 0 });
+  r.failed = r.failed || {};
+  r.runPages = []; r.runFailures = [];
+  const monthly = Number(r.monthly || 20), perDay = Number(r.perDay || 5);
+  const sc: any = (await db().collection('system').doc('searchConsole').get()).data() || {};
+  const top: { key: string; slug: string; impressions: number }[] = sc.topPages || [];
+  const gameImpr = new Map<string, number>();
+  for (const p of top) gameImpr.set(p.key, (gameImpr.get(p.key) || 0) + p.impressions);
+  const players = new Map<string, number>();
+  for (const d of (await db().collection('gameStats').get()).docs) players.set(d.id, Array.isArray(d.data().players) ? d.data().players.length : 0);
+  const guides = (await db().collection('guides').get()).docs.filter((d) => !d.id.endsWith('--next'));
+  const staged = new Set((await db().collection('guides').get()).docs.filter((d) => d.id.endsWith('--next')).map((d) => d.id.replace(/--next$/, '')));
+  const order = guides.map((d) => d.id).filter((k) => !staged.has(k)).sort((a, b) => (gameImpr.get(b) || 0) - (gameImpr.get(a) || 0) || (players.get(b) || 0) - (players.get(a) || 0));
+  const queue: { key: string; slug: string }[] = [...top.filter((p) => !staged.has(p.key)).map((p) => ({ key: p.key, slug: p.slug }))];
+  for (const k of order.slice(0, 30)) for (const o of (guides.find((d) => d.id === k)!.data().areas || []) as { slug: string }[]) queue.push({ key: k, slug: o.slug });
+  const seen = new Set<string>();
+  let built = 0, wentLive = false;
+  const started = Date.now();
+  for (const c of queue) {
+    const id = `${c.key}__${c.slug}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    if (built >= perDay || monthly - r.spentMonth < 0.5 || Date.now() - started > MINUTES * 60_000) break;
+    const f = r.failed[id];
+    if (f && Date.now() - f.at < 30 * DAY_MS) continue;
+    const gref = db().collection('guides').doc(c.key);
+    const page: any = (await gref.collection('areas').doc(c.slug).get()).data();
+    if (!page || page.status !== 'published' || page.flagship) continue;
+    const info: any = (await gref.get()).data() || {};
+    const scope = { dollars: 0, searches: 0 };
+    let res: Awaited<ReturnType<typeof buildPage>> | null = null;
+    try {
+      res = await usageScope.run(scope, () => buildPage(c.key, String(info.game || c.key), c.slug, info.areas || [], c.key, { pack: true }));
+    } catch (e: any) {
+      console.log(`  ${page.name}: not built (${cut(e?.message || e, 120)})`);
+      r.failed[id] = { at: Date.now(), reason: `not built: ${cut(e?.message || e, 100)}` };
+    }
+    r.spentMonth += scope.dollars;
+    built++;
+    if (res?.verdict.status === 'passed') {
+      await writePage(c.key, c.slug, res.proto);
+      await gref.set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(c.slug) } }, { merge: true });
+      r.pagesMonth = Number(r.pagesMonth || 0) + 1;
+      r.runPages.push({ key: c.key, slug: c.slug, name: page.name, score: res.verdict.score ?? null, dollars: Math.round(scope.dollars * 1000) / 1000 });
+      wentLive = true;
+    } else if (res?.verdict.status === 'failed') {
+      r.failed[id] = { at: Date.now(), reason: res.verdict.reason || 'failed review' };
+      r.runFailures.push({ key: c.key, slug: c.slug, name: page.name, reason: res.verdict.reason || 'failed review' });
+    }
+    console.log(`  [rollout] ${info.game} / ${page.name}: ${res ? res.verdict.status : 'not built'}${res?.verdict.score !== undefined ? `, score ${res.verdict.score}` : ''}, $${scope.dollars.toFixed(3)}; $${r.spentMonth.toFixed(2)} of $${monthly} this month`);
+    await save();
+  }
+  r.lastRun = Date.now();
+  await save();
+  if (wentLive) await publishSite();
+  console.log(`\nDone: flagship rollout, ${r.runPages.length} page(s) live this run, $${r.spentMonth.toFixed(2)} of $${monthly} this month.`);
 }
 
 async function main() {
@@ -671,10 +850,23 @@ async function main() {
     }
     return setTimeout(() => process.exit(0), 500);
   }
+  // --score-only: the Pro review's score for pages as they are live (nothing saved), for comparing methods.
+  if (arg('score-only') === 'true') {
+    for (const slug of pages) {
+      const scope = { dollars: 0, searches: 0 };
+      const v = await usageScope.run(scope, () => scoreOnly(key, String(info.game || key), slug, info.areas || []));
+      console.log(`${slug}: ${v ? `score ${v.score ?? '?'}, ${v.status}${v.reason ? ` (${v.reason})` : ''}` : 'no flagship content'}, $${scope.dollars.toFixed(3)}`);
+    }
+    return setTimeout(() => process.exit(0), 500);
+  }
+  // --pack: written from the wiki's source pack, staging only (guidePrototypes), nothing goes live.
+  const packMode = arg('pack') === 'true';
   let total = { searches: 0, dollars: 0 };
   for (const slug of pages) {
-    const s = await buildPage(key, String(info.game || key), slug, info.areas || []);
-    total = { searches: total.searches + s.searches, dollars: total.dollars + s.dollars };
+    const scope = { dollars: 0, searches: 0 };
+    const s = await usageScope.run(scope, () => buildPage(key, String(info.game || key), slug, info.areas || [], key, { pack: packMode, ...(packMode ? { protoId: `${key}__${slug}__pack` } : {}) }));
+    console.log(`  => ${slug}: ${s.verdict.status}${s.verdict.score !== undefined ? `, score ${s.verdict.score}` : ''}, ${scope.searches} searches, $${scope.dollars.toFixed(3)}`);
+    total = { searches: total.searches + scope.searches, dollars: total.dollars + scope.dollars };
   }
   console.log(`\nDone: ${pages.length} flagship page(s) in staging (guidePrototypes), ${total.searches} searches used, cost ≈ $${total.dollars.toFixed(3)}.`);
   setTimeout(() => process.exit(0), 500);

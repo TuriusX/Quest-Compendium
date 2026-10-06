@@ -576,7 +576,10 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       ${notListed}
       ${prev || next ? `<div class="mt-8 flex gap-3">${navCard(prev, 'prev')}${navCard(next, 'next')}</div>` : ''}
       ${cta(up, game)}
-      ${a.sources.length ? `<p class="mt-6 text-xs text-zinc-500">${esc(ui('sourcesChecked', { list: a.sources.join(', ') }))}</p>` : ''}
+      ${a.sourceLinks?.pages?.length
+        ? // A flagship page written from a source pack: the wiki's articles, linked, and its licence.
+          `<p class="mt-6 text-xs text-zinc-500">${ui('sourcesFrom', { wiki: esc(a.sourceLinks.wiki), pages: a.sourceLinks.pages.map((x) => (x.url ? `<a class="text-zinc-400 underline hover:text-white" href="${esc(x.url)}" rel="nofollow noopener" target="_blank">${esc(x.title)}</a>` : esc(x.title))).join(', ') })}${a.sourceLinks.license ? ` ${ui('sourcesLicence', { licence: a.sourceLinks.licenseUrl ? `<a class="text-zinc-400 underline hover:text-white" href="${esc(a.sourceLinks.licenseUrl)}" rel="nofollow noopener" target="_blank">${esc(a.sourceLinks.license)}</a>` : esc(a.sourceLinks.license) })}` : ''}</p>`
+        : a.sources.length ? `<p class="mt-6 text-xs text-zinc-500">${esc(ui('sourcesChecked', { list: a.sources.join(', ') }))}</p>` : ''}
     </article>
   </div>`;
 }

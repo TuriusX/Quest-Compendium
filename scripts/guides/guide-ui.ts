@@ -70,6 +70,8 @@ export const GUIDE_UI_EN: Record<string, string> = {
   keyFight: 'Key fight',
   newEntry: 'New',
   checklists: 'Checklists',
+  sourcesFrom: 'Facts from {wiki} ({pages}), written in our own words.',
+  sourcesLicence: 'Licence: {licence}.',
   stealDrop: 'Steal / drop',
   previous: 'Previous',
   next: 'Next',

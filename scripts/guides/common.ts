@@ -405,6 +405,8 @@ export type GuideArea = {
   walkthrough?: GuideStep[];
   choices?: GuideChoice[];
   advice?: GuideAdvice;
+  /** The pages a flagship page was written from (its source pack): credited with links, under the wiki's licence. */
+  sourceLinks?: { wiki: string; license?: string; licenseUrl?: string; pages: { title: string; url: string }[] };
   name: string;
   slug: string;
   order: number;
