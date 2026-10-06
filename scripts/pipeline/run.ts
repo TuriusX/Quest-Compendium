@@ -67,6 +67,22 @@ import { deployToNetlify } from './netlify';
 import { steamCandidates } from './steam';
 import { promote } from '../guides/promote';
 import { SEARCH_DOLLARS } from '../../usage';
+import { postDiscord, summaryText } from './summary';
+
+/**
+ * The run in progress, for its closing message however it ends: finished, stopped by a cap, crashed, or stopped from
+ * outside (the job's time limit, a cancel).
+ */
+const RUN: { report: string[]; spent: () => number; stoppedBy?: string; posted?: boolean } = { report: [], spent: () => 0 };
+async function postEnd(closing: string) {
+  if (RUN.posted || DRY || !process.env.DISCORD_WEBHOOK_URL) return;
+  RUN.posted = true;
+  await postDiscord(process.env.DISCORD_WEBHOOK_URL, summaryText(RUN.report, closing));
+  await db().collection('system').doc('pipeline').set({ lastReport: RUN.report, lastEnd: closing, lastRun: Date.now() }, { merge: true }).catch(() => {});
+}
+process.on('SIGTERM', () => {
+  postEnd(`⛔ Run stopped from outside (the job's 3-hour limit, or cancelled) after $${RUN.spent().toFixed(2)}. The summary above is what it did until then.`).finally(() => process.exit(1));
+});
 
 const env = (k: string, d: number) => (Number.isFinite(Number(process.env[k])) && process.env[k] !== '' ? Number(process.env[k]) : d);
 const DRY = process.argv.includes('--dry-run');
@@ -182,6 +198,7 @@ async function main() {
   const hold = !!state.queueHold?.until && month < String(state.queueHold.until);
   const enabled = state.enabled !== false && process.env.PIPELINE_ENABLED !== 'false';
   const report: string[] = [];
+  RUN.report = report;
   if (!enabled) {
     console.log('The guide pipeline is switched off (system/pipeline.enabled is false). Nothing to do.');
     process.exit(0);
@@ -298,6 +315,7 @@ async function main() {
   // ---- spending: every step is charged its real cost; the daily cap is hard (each script gets what's left as its
   // limit, and its searches are capped to fit), and one run passing RUN_ALERT dollars posts an alert ----
   let runDollars = 0, alerted = false;
+  RUN.spent = () => runDollars;
   const dayRoom = () => DAILY_CAP - state.spend.dollars;
   const room = () => Math.min(aiRoom, dayRoom());
   spendLeft = room;
@@ -409,7 +427,7 @@ async function main() {
     const big = action === 'careful' || action === 'extend' || action === 'upgrade' || !!item.newRelease;
     const need = big ? QUEUE_MIN : 60;
     if (room() < 0.25 || Date.now() - queueStart > QUEUE_MINUTES * 60_000) {
-      if (room() < 0.25) report.push(`⏸️ Repair queue stopped: ${capReached()}.`);
+      if (room() < 0.25) { report.push(`⏸️ Repair queue stopped: ${capReached()}.`); RUN.stoppedBy = capReached(); }
       waiting.push(item, ...queue);
       queue.length = 0;
       break;
@@ -475,6 +493,7 @@ async function main() {
     if (!a.wish && others >= otherSlots) continue;
     if (room() < 0.25) {
       report.push(`Stopped: ${capReached()}.`);
+      RUN.stoppedBy = capReached();
       break;
     }
     // Careful builds wait with the repair queue while it's paused.
@@ -549,6 +568,7 @@ async function main() {
       }
       if (room() < 0.25) {
         report.push(`⏳ translations: ${due.length - synced} guide(s) wait for the next run (${capReached()}).`);
+        RUN.stoppedBy = capReached();
         break;
       }
       const r = runScript(['scripts/guides/translate-guide.ts', '--game', String(info.game || d.id), '--lang', langs.join(',')]);
@@ -638,23 +658,21 @@ async function main() {
     const top = costs.filter((c) => c.dollars >= 0.5).sort((a, b) => b.dollars - a.dollars).slice(0, 5).map((c) => `${c.label} $${c.dollars.toFixed(2)}`);
     report.push(`💰 Costs this run: $${runDollars.toFixed(2)}: ${parts.join(', ')}.${top.length ? ` Biggest: ${top.join('; ')}.` : ''} Today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; ${new Date().toLocaleString('en-US', { month: 'long' })} $${(state.dollars || 0).toFixed(2)} of $${AI_CAP}.`);
   }
+  // The closing line: how the run ended (finished, or stopped by which cap) and what it spent.
+  const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches), ${state.searches || 0} pipeline searches.`;
+  const closing = RUN.stoppedBy ? `🛑 Run stopped early: ${RUN.stoppedBy}. ${totals}` : `🏁 Run finished. ${totals}`;
   state.lastRun = Date.now();
   state.lastReport = report;
+  state.lastEnd = closing;
   if (!DRY) await stateRef.set(state, { merge: true });
-  const footer = `This run: $${runDollars.toFixed(2)}. Today: $${state.spend.dollars.toFixed(2)}/$${DAILY_CAP}. This month: $${(state.dollars || 0).toFixed(2)}/$${AI_CAP} (tokens and searches), ${state.searches || 0}/${SEARCH_CAP} pipeline searches.`;
-  const text = `**Quest Compendium guide pipeline**${DRY ? ' (dry run)' : ''}\n${report.map((l) => `• ${l}`).join('\n')}\n${footer}`;
-  console.log(`\n${text}`);
-  if (process.env.DISCORD_WEBHOOK_URL && !DRY) {
-    await fetch(process.env.DISCORD_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: text.slice(0, 1900) }),
-    }).catch((e) => console.warn(`Discord post failed: ${e?.message}`));
-  }
+  console.log(`\n${summaryText(report, closing)}`);
+  await postEnd(closing);
   process.exit(0);
 }
 
-main().catch((e) => {
+main().catch(async (e) => {
   console.error('Pipeline failed:', e?.message || e);
+  // A crash still posts what the run did, and the error.
+  await postEnd(`❌ Run crashed after $${RUN.spent().toFixed(2)}: ${String(e?.message || e).slice(0, 300)}`).catch(() => {});
   process.exit(1);
 });
