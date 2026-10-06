@@ -39,6 +39,10 @@
     .qc-off { display: none !important; }
     /* Search hides entries with the hidden attribute; layout classes like "flex" would otherwise keep them showing. */
     [hidden] { display: none !important; }
+    /* The entry a link or text fragment points at: a short accent highlight that fades (no layout change). */
+    .qc-hit { animation: qc-hit 2.4s ease-out; border-radius: .5rem; }
+    @keyframes qc-hit { from { background-color: rgba(168, 127, 251, .2); box-shadow: 0 0 0 1px rgba(168, 127, 251, .55); } to { background-color: transparent; box-shadow: 0 0 0 1px transparent; } }
+    ::target-text { background-color: rgba(168, 127, 251, .35); color: inherit; }
   </style>
 </head>
 <body class="min-h-screen" data-guide="indiana-jones-and-the-great-circle" data-area="achievements">
@@ -330,8 +334,20 @@
   var sp=document.querySelector('[data-spoilers]');if(sp)sp.addEventListener('change',function(){b.classList.toggle('qc-spoilers',sp.checked);});
   document.addEventListener('click',function(e){var s=e.target.closest('.qc-spoiler');if(s){s.classList.add('is-shown');e.preventDefault();}});
   // "On this page" links: a section that's folded opens when its link is used (or the page opens at it).
-  var openAt=function(){var id=location.hash.slice(1);if(!id)return;var el=document.getElementById(id);if(el&&el.tagName==='DETAILS')el.open=true;};
-  window.addEventListener('hashchange',openAt);openAt();
+  // A link or a text fragment (#:~:text=) to something inside a folded section or a spoiler opens it, and the target
+  // gets a short accent highlight. Browsers keep text fragments out of location.hash, so they're read from the
+  // navigation entry; beforematch covers content hidden with hidden="until-found".
+  var reveal=function(el){for(var n=el;n&&n!==document.body;n=n.parentElement){if(n.tagName==='DETAILS')n.open=true;if(n.classList&&n.classList.contains('qc-spoiler'))n.classList.add('is-shown');}if(el.querySelectorAll)el.querySelectorAll('.qc-spoiler').forEach(function(s){s.classList.add('is-shown');});};
+  var flash=function(el){el.classList.remove('qc-hit');void el.offsetWidth;el.classList.add('qc-hit');setTimeout(function(){el.classList.remove('qc-hit');},2600);};
+  var land=function(el){reveal(el);flash(el);setTimeout(function(){el.scrollIntoView({block:'center'});},0);};
+  var openAt=function(){var id=location.hash.slice(1);if(!id||id.indexOf(':~:')===0)return;var el=null;try{el=document.getElementById(decodeURIComponent(id));}catch(e){}if(el)land(el);};
+  var squash=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g,' ').trim();};
+  var textTarget=function(){var nav=(performance.getEntriesByType&&performance.getEntriesByType('navigation')[0])||null;var url=(nav&&nav.name)||location.href;var at=url.indexOf(':~:');if(at<0)return;
+    url.slice(at+3).split('&').forEach(function(d){if(d.indexOf('text=')!==0)return;var parts=d.slice(5).split(',').map(function(x){try{return decodeURIComponent(x);}catch(e){return x;}}).filter(function(x){return x.slice(-1)!=='-'&&x.charAt(0)!=='-';});var want=squash(parts[0]);if(!want)return;
+      var hit=null;document.querySelectorAll('main [data-check], main li, main p, main h2, main h3, main dd, main .qc-spoiler, main [id]').forEach(function(el){if(!hit&&squash(el.textContent).indexOf(want)>=0&&!Array.prototype.some.call(el.children,function(c){return squash(c.textContent).indexOf(want)>=0;}))hit=el;});
+      if(hit)land(hit.closest('[data-check],li,[id]')||hit);});};
+  document.addEventListener('beforematch',function(e){reveal(e.target);flash(e.target);});
+  window.addEventListener('hashchange',openAt);openAt();textTarget();
   // Search boxes: hide entries that don't match, and section headings left with nothing under them.
   var norm=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');};
   document.querySelectorAll('[data-filter]').forEach(function(inp){
