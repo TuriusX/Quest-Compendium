@@ -33,16 +33,16 @@ import path from 'path';
 import { spawnSync } from 'child_process';
 import { ThinkingLevel } from '@google/genai';
 import {
-  db, gemini, MODEL, arg, searchesIn, sourcesIn, parseItem, ledger, ledgerDollars, usageScope, MISSABLE_STANDARD, stageKey, addChildUsage,
+  db, gemini, MODEL, arg, searchesIn, sourcesIn, parseItem, ledger, ledgerDollars, usageScope, MISSABLE_STANDARD, stageKey, addChildUsage, slug as slugOf, LAYOUT_CHOICES, isLayout,
   type GuideEntry, type GuideStep, type GuideChoice, type GuideAdvice, type GuideFight, type GuideInfo,
 } from './common';
 import { recordMonthly } from '../../searchGuard';
 import { infoForPage } from './areaInfo';
 import { fightsForPage } from './fights';
-import { call, reviewerFor } from './review';
+import { call, reviewerFor, queueForReview, MIN_PAGES, type Review } from './review';
 import { sourcePack, packNotes, type SourcePack } from './sourcePack';
 import { ProQuotaWait } from './reviewerQuota';
-import { promote, stageCopy } from './promote';
+import { promote, stageCopy, discard } from './promote';
 import { deployToNetlify } from '../pipeline/netlify';
 import { FieldValue } from 'firebase-admin/firestore';
 
@@ -393,7 +393,7 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
   const sources = new Set<string>(p.sources || []);
 
   // Pack mode: the area's facts from the game's wiki (cached), the basis for everything below; no searches to write.
-  const sp: SourcePack | null = opts.pack ? await sourcePack(key, slug, { from }) : null;
+  const sp: SourcePack | null = opts.pack ? await sourcePack(key, slug, { from, game }) : null;
   if (opts.pack && !sp) throw new Error('no source pack (no wiki for this game, or nothing fetchable)');
   // What the page lacks first: the summary box and directions, and key fights.
   // An earlier prototype run's summary box and fights are reused (no need to search for them again).
@@ -827,6 +827,131 @@ async function rollout(st: any, save: () => Promise<any>) {
   console.log(`\nDone: flagship rollout, ${r.runPages.length} page(s) live this run, $${r.spentMonth.toFixed(2)} of $${monthly} this month.`);
 }
 
+
+// ---- careful builds on the source-pack method (repair.ts --action careful) ----
+
+/** Searches a careful page usually takes (its search pack and a gap check): a page starts only with room for them. */
+const CAREFUL_PAGE_SEARCHES = 10;
+/** At most this many pages in a careful build. */
+const CAREFUL_MAX_PAGES = 20;
+
+/** The guide's pages, from one searched call: the layout that fits the game, then the pages in story order. */
+async function packOutline(game: string, layout?: string, note?: string) {
+  const prompt = [
+    `List the pages of a player's guide for the video game "${game}", in the order a player meets them. Search guides and wikis for this game first.`,
+    layout ? `The guide's outline: ${layout}.` : `First pick the outline that fits the game, one of these:\n${LAYOUT_CHOICES}\nand reply with a line "LAYOUT: <one word>".`,
+    ...(note ? [`How the page list must look: ${note}`] : []),
+    `Then one line per page, at most ${CAREFUL_MAX_PAGES} (the main areas, chapters or regions; never a page for a single room, shop or quest):`,
+    'PAGE: page name | when in the story it comes up',
+  ].join('\n');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res: any = await gemini().models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: [{ text: (attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : '') + prompt }] }],
+      config: { tools: [{ googleSearch: {} }], temperature: 0.2, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    });
+    const n = searchesIn(res);
+    if (n) recordMonthly(n);
+    console.log(`  [outline] ${n} searches`);
+    if (!n) continue;
+    const text = String(res?.text || '');
+    const pickedRaw = (text.match(/LAYOUT:\s*([a-z]+)/i) || [])[1]?.toLowerCase();
+    const picked = layout || (isLayout(pickedRaw) ? pickedRaw : 'area');
+    const pages: { slug: string; name: string; story: string }[] = [];
+    for (const line of text.split('\n')) {
+      const f = fields(line, 'PAGE');
+      if (!f || !f[0] || none(f[0])) continue;
+      const name = cut(f[0], 100);
+      const sl = slugOf(name);
+      if (!sl || pages.some((x) => x.slug === sl)) continue;
+      pages.push({ slug: sl, name, story: cut(f[1] || '', 120) });
+    }
+    return { layout: picked, pages: pages.slice(0, CAREFUL_MAX_PAGES) };
+  }
+  return { layout: layout || 'area', pages: [] as { slug: string; name: string; story: string }[] };
+}
+
+/**
+ * A careful build or rebuild on the source-pack method, into the staged copy (guides/{key}--next): the page list from
+ * one searched call, then each page from its source pack (the game's wiki where we may fetch it, otherwise one searched
+ * research step), written and checked against the pack, and gated by the capped Pro review like a flagship page (a
+ * page that fails is held back). A build that runs out of search room carries on next run. When every page has a
+ * verdict, the guide goes live if at least MIN_PAGES passed; otherwise it goes to the review queue. Returns the gate
+ * line (or "continues on the next run") for the pipeline.
+ */
+export async function packBuildGuide(key: string, game: string, opts: { maxSearches: number; layout?: string; note?: string; newRelease?: boolean }) {
+  const stageRef = db().collection('guides').doc(stageKey(key));
+  let staged: any = (await stageRef.get()).data();
+  const startSearches = ledger.searches;
+  // A pack build already under way carries on; anything else staged is replaced.
+  if (!staged?.packBuild) {
+    if (staged) await discard(key);
+    const o = await packOutline(game, opts.layout, opts.note);
+    if (!o.pages.length) return { line: 'Gate: failed (nothing was built: no page list from searched sources); queued for review: rebuild careful.', done: true };
+    staged = {
+      game, title: `${game} guide`, stagingFor: key, layout: o.layout, repair: 'careful', createdAt: Date.now(),
+      areas: o.pages.map((x) => ({ slug: x.slug, name: x.name, story: x.story })),
+      packBuild: { done: [], failed: [], scores: {} },
+    };
+    await stageRef.set(staged);
+    for (const [i, x] of o.pages.entries()) await stageRef.collection('areas').doc(x.slug).set({ name: x.name, slug: x.slug, story: x.story, order: i, overview: '', items: [], secrets: [], enemies: [], shops: [], tips: [], sources: [], status: 'draft', verified: true, checks: { claims: 0, supported: 0, rejected: 0, singleSource: 0 }, updatedAt: Date.now() });
+    console.log(`  outline (${o.layout}): ${o.pages.map((x) => x.name).join('; ')}`);
+  }
+  const pb = staged.packBuild;
+  const order: { slug: string; name: string }[] = staged.areas || [];
+  for (const o of order) {
+    if (pb.done.includes(o.slug) || pb.failed.some((f: any) => f.slug === o.slug)) continue;
+    if (ledger.searches - startSearches + CAREFUL_PAGE_SEARCHES > opts.maxSearches) {
+      await stageRef.set({ packBuild: pb }, { merge: true });
+      return { line: `Repair: ${order.length - pb.done.length - pb.failed.length} page(s) left at the search cap; the careful build continues on the next run.`, done: false };
+    }
+    try {
+      // The page's facts first (its pack), seeding its items, secrets and overview; then the flagship writing, checks
+      // and the capped Pro review.
+      const sp = await sourcePack(key, o.slug, { from: stageKey(key), game });
+      if (sp) {
+        const k = sp.pack;
+        await stageRef.collection('areas').doc(o.slug).set(JSON.parse(JSON.stringify({
+          overview: cut(k.summary || '', 600),
+          items: (k.items || []).slice(0, 20).map((x, i) => ({ ...parseItem([cut(x.name, 100), cut(x.where, 300), cut(x.how || '', 300), x.missable ? cut(x.lockout || 'missable', 300) : ''], `p${i + 1}`, [sp.wiki]), name: cut(x.name, 100) })),
+          secrets: (k.secrets || []).slice(0, 10).map((x, i) => ({ id: `ps${i + 1}`, text: cut(x.text, 400), sources: [sp.wiki] })),
+        })), { merge: true });
+      }
+      const r = await buildPage(key, game, o.slug, order, stageKey(key), { pack: true, protoId: `${key}__${o.slug}__careful` });
+      if (r.verdict.status === 'passed') {
+        await writePage(stageKey(key), o.slug, r.proto);
+        pb.done.push(o.slug);
+        if (r.verdict.score !== undefined) pb.scores[o.slug] = r.verdict.score;
+      } else if (r.verdict.status === 'failed') {
+        pb.failed.push({ slug: o.slug, name: o.name, reason: r.verdict.reason || 'failed review' });
+        await stageRef.collection('areas').doc(o.slug).set({ status: 'held', heldReason: `review: ${r.verdict.reason || 'failed'}` }, { merge: true });
+      }
+    } catch (e: any) {
+      console.log(`  ${o.name}: not built (${cut(e?.message || e, 160)})`);
+      pb.failed.push({ slug: o.slug, name: o.name, reason: `not built: ${cut(e?.message || e, 100)}` });
+      await stageRef.collection('areas').doc(o.slug).set({ status: 'held', heldReason: 'not built' }, { merge: true });
+    }
+    await stageRef.set({ packBuild: pb }, { merge: true });
+  }
+  // Every page has a verdict: the gate.
+  const scores = Object.values(pb.scores as Record<string, number>);
+  const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+  const passedN = pb.done.length, total = order.length;
+  if (passedN >= Math.min(MIN_PAGES, total) && passedN > 0) {
+    const pr = await promote(stageKey(key));
+    return { line: `Gate: passed (${passedN} of ${total} pages passed the Pro review, average score ${avg}); promoted, ${pr?.published || 0} page(s) live${pb.failed.length ? `, ${pb.failed.length} held back` : ''}.`, done: true, score: avg };
+  }
+  const review: Review = {
+    score: avg, pass: false, recommendation: 'rebuild careful', summary: `Careful build on the source-pack method: only ${passedN} of ${total} pages passed the Pro review.`,
+    layout: staged.layout || 'area', structure: { kind: staged.layout || 'area', consistent: true, problems: [] }, coverage: { expectedPages: String(total), ok: false, problems: [`Only ${passedN} of ${total} pages passed review.`] },
+    depth: { problems: [] }, knowledge: { problems: pb.failed.slice(0, 6).map((f: any) => `${f.name}: ${f.reason}`) }, ordering: { ok: true, problems: [] },
+    pages: pb.failed.slice(0, 15).map((f: any) => ({ name: f.name, verdict: 'failed review', reason: f.reason })),
+    newerThanReviewer: !!opts.newRelease, released: '', buildMode: 'careful', pageCount: total, model: 'pro', tier: 'pro', passMark: 75, at: Date.now(),
+  };
+  await queueForReview(stageKey(key), game, review, true);
+  return { line: `Gate: failed (${avg}, only ${passedN} of ${total} pages passed the Pro review); queued for review: rebuild careful.`, done: true, score: avg };
+}
+
 async function main() {
   if (arg('program') === 'true') {
     await program();
@@ -875,7 +1000,8 @@ async function main() {
   setTimeout(() => process.exit(0), 500);
 }
 
-main().catch((e) => {
+// Run as a script only (repair.ts imports packBuildGuide from here).
+if (/flagship\.ts$/.test(process.argv[1] || '')) main().catch((e) => {
   console.error('flagship failed:', e?.message || e);
   process.exit(1);
 });

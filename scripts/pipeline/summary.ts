@@ -8,6 +8,7 @@
  * flagship programme, costs, alerts, the website) stays as it is.
  *
  *   npx tsx scripts/pipeline/summary.ts --post    post system/pipeline.lastReport again (today's run's summary)
+ *                                      --closing-only   just its closing line
  */
 import { db, arg } from '../guides/common';
 
@@ -132,11 +133,15 @@ async function cli() {
   const s: any = (await db().collection('system').doc('pipeline').get()).data() || {};
   const report: string[] = Array.isArray(s.lastReport) ? s.lastReport : [];
   const when = s.lastRun ? new Date(s.lastRun).toISOString().slice(0, 16).replace('T', ' ') : '?';
-  const text = summaryText(report, s.lastEnd || `🏁 Run of ${when} UTC: summary posted again.`, `**Quest Compendium guide pipeline** (run of ${when} UTC)`);
+  // A run from before closing lines were saved gets one from the saved state: it finished, and what it spent.
+  const closing = s.lastEnd || `🏁 Run finished at ${when} UTC. Today $${Number(s.spend?.dollars || 0).toFixed(2)} of $8; this month $${Number(s.dollars || 0).toFixed(2)} (tokens and searches).`;
+  const text = summaryText(report, closing, `**Quest Compendium guide pipeline** (run of ${when} UTC)`);
   console.log(text);
   if (arg('post') === 'true') {
     if (!process.env.DISCORD_WEBHOOK_URL) { console.log('DISCORD_WEBHOOK_URL is not set.'); process.exit(1); }
-    console.log((await postDiscord(process.env.DISCORD_WEBHOOK_URL, text)) ? `Posted (${splitForDiscord(text).length} message(s)).` : 'Posting failed (see above).');
+    // --closing-only: just the run's closing line (when its summary is already posted without one).
+    const out = arg('closing-only') === 'true' ? `**Quest Compendium guide pipeline** (run of ${when} UTC)\n${closing}` : text;
+    console.log((await postDiscord(process.env.DISCORD_WEBHOOK_URL, out)) ? `Posted (${splitForDiscord(out).length} message(s)).` : 'Posting failed (see above).');
   }
   setTimeout(() => process.exit(0), 300);
 }

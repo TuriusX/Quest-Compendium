@@ -23,6 +23,12 @@ export async function promote(key: string): Promise<{ published: number; retired
   const before: any = (await liveRef.get()).data() || {};
   const pages = new Map((await stageRef.collection('areas').get()).docs.map((d) => [d.id, d.data() as any]));
   const order = (Array.isArray(stage.areas) ? stage.areas : []).filter((o: any) => ['draft', 'published'].includes(pages.get(o.slug)?.status));
+  // Never replace a guide with nothing: a staged copy without a page list (two builds of one guide overlapping can
+  // leave one) is left alone, and the live guide too.
+  if (!order.length) {
+    console.warn(`promote: the staged copy of ${live} has no publishable pages; nothing promoted, the live guide is unchanged.`);
+    return null;
+  }
   let batch = db().batch();
   let ops = 0;
   const flush = async () => {

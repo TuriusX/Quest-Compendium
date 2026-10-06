@@ -42,7 +42,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { ThinkingLevel } from '@google/genai';
-import { db, gemini, gameKey, arg, parseJson, guideRelease, releasedAfter, stageKey, liveKey, QUICK_MODEL_CUTOFF, addChildUsage, stepDollarsLeft } from './common';
+import { db, gemini, gameKey, arg, parseJson, guideRelease, releasedAfter, stageKey, liveKey, QUICK_MODEL_CUTOFF, addChildUsage, stepDollarsLeft, ledger, ledgerDollars } from './common';
 import { estimateCost } from '../../usage';
 import { stageCopy, discard } from './promote';
 import { reviewGuide, gateGuide, type Review } from './review';
@@ -51,6 +51,7 @@ import { writeFights } from './fights';
 import { writeMissables } from './missables';
 import { writeQueryFixes } from './queryRepair';
 import { writeAreaInfo } from './areaInfo';
+import { packBuildGuide } from './flagship';
 import { scopedReview, type PassAction } from './scopedGate';
 
 // Page fixes are Flash work (reviewerQuota.ts): the fix plan and the fixed guide's gate.
@@ -290,6 +291,18 @@ async function main() {
       ...(action === 'upgrade' ? ['--upgrade'] : ['--part', 'the whole game, especially areas not covered yet', '--areas', '25'])]);
     await db().collection('guides').doc(stageKey(key)).set({ repair: action }, { merge: true }).catch(() => {});
     if (!r.ok && !/Done/.test(r.out)) ready = false;
+  } else if (action === 'careful' || (action === 'outline' && newer)) {
+    // Careful builds and rebuilds (and outline rebuilds of games too new for quick pages) on the source-pack method:
+    // each page from the game's wiki or one searched research step, written and checked against it, gated by the
+    // capped Pro review (flagship.ts packBuildGuide). It gates itself, so the whole-guide gate below is skipped.
+    ready = false;
+    const before = { searches: ledger.searches, dollars: ledgerDollars() };
+    const r = await packBuildGuide(key, game, {
+      maxSearches, layout: live?.outline?.layout || review?.layout, note: String(live?.outline?.note || '') || undefined, newRelease: newer,
+    });
+    console.log(r.line);
+    searches += ledger.searches - before.searches;
+    dollars += ledgerDollars() - before.dollars;
   } else {
     // A fresh staged build; a careful one that stopped at the search cap last time just continues.
     const staged = (await db().collection('guides').doc(stageKey(key)).get()).data();
