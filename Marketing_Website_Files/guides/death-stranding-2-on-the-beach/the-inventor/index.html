@@ -66,7 +66,11 @@
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> All areas in this guide</a>
       <p class="mt-5 text-zinc-300 leading-relaxed">The Inventor operates an isolated shelter facility where Sam can deliver recovered lost cargo and sub-orders to incorporate the location into the Chiral Network. Connecting and leveling up your connection rating here rewards advanced fabrication schematics for non-lethal crowd-control gear and unique survival items. Reaching this shelter requires carefully crossing treacherous surrounding water and tar or jumping down from above.</p>
       <dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm"><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Region</dt><dd class="min-w-0 text-zinc-200">Australia (West Coast)</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Getting there</dt><dd class="min-w-0 text-zinc-200">North of Mine North of F1 (north of West Fort Knot), across the shallow water shoals out onto the offshore island <span class="text-zinc-500">(NT-S02-218)</span></dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Connects to</dt><dd class="min-w-0 text-zinc-200">Mine North of F1, West Fort Knot (F1)</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Related quests</dt><dd class="min-w-0 text-zinc-200">Sub-orders and lost cargo deliveries</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Services and people</dt><dd class="min-w-0 text-zinc-200">Delivery terminal · The Inventor</dd></div></dl>
+      
       <nav aria-label="On this page" class="mt-4 flex flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">On this page:</span><a href="#items" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Items</a><a href="#secrets" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Secrets</a><a href="#shops" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Shops and people</a><a href="#tips" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Tips</a></nav>
+      
+      
+      
       
       
       
@@ -128,11 +132,13 @@
     try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
     var key='qcw:'+K+':'+S, done=load(key);
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    // The same entry can appear twice (a flagship page's walkthrough and its checklist): every copy follows a tick.
+    var refresh=function(){document.querySelectorAll('[data-check]').forEach(function(el){var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);});};
     document.querySelectorAll('[data-check]').forEach(function(el){
       var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
-      box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);
-      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); refresh(); counts(); progress(); });
     });
+    refresh();
     counts();
   }
   var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){

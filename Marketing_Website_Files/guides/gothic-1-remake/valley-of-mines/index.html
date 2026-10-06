@@ -66,7 +66,11 @@
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> All areas in this guide</a>
       <p class="mt-5 text-zinc-300 leading-relaxed">After arriving past the Exchange Place beneath the magical barrier, you travel down the rugged wilderness road leading into the heart of the colony toward the Old Camp. Exploring the side trails, abandoned carts, and cliffs yields essential starter gear and weapons, though dangerous wildlife prowls just off the main path. You can take early guidance from camp hunters and scouts before committing to any faction or combat build.</p>
       <dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm"><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Region</dt><dd class="min-w-0 text-zinc-200">Valley of Mines</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Levels</dt><dd class="min-w-0 text-zinc-200">1 - 3</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Getting there</dt><dd class="min-w-0 text-zinc-200">From the Exchange Place landing area where the barrier drops you, follow the descending dirt road south-west down into the open valley floor</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Connects to</dt><dd class="min-w-0 text-zinc-200">Exchange Place, Old Camp outskirts, Western hunting trail to Cavalorn&#39;s hut</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Related quests</dt><dd class="min-w-0 text-zinc-200">The Lost Apprentice</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Services and people</dt><dd class="min-w-0 text-zinc-200">Diego · Ratford · Drax · Cavalorn</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Enemy types</dt><dd class="min-w-0 text-zinc-200">Scavengers · Molerats · Goblins · Bloodflies</dd></div></dl>
+      
       <nav aria-label="On this page" class="mt-4 flex flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">On this page:</span><a href="#secrets" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Secrets</a><a href="#enemies" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Enemies</a><a href="#shops" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Shops and people</a><a href="#tips" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Tips</a></nav>
+      
+      
+      
       
       
       
@@ -128,11 +132,13 @@
     try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
     var key='qcw:'+K+':'+S, done=load(key);
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    // The same entry can appear twice (a flagship page's walkthrough and its checklist): every copy follows a tick.
+    var refresh=function(){document.querySelectorAll('[data-check]').forEach(function(el){var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);});};
     document.querySelectorAll('[data-check]').forEach(function(el){
       var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
-      box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);
-      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); refresh(); counts(); progress(); });
     });
+    refresh();
     counts();
   }
   var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){

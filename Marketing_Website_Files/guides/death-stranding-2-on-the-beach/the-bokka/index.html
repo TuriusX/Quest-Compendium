@@ -66,7 +66,11 @@
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> All areas in this guide</a>
       <p class="mt-5 text-zinc-300 leading-relaxed">The Bokka is an optional prepper bunker facility hidden in the Mexico region that fills in one of the map&#39;s network coverage blind spots. Players seek out lost cargo addressed to him across the area and deliver it to bring him onto the Chiral Network. Leveling up his connection rank rewards Sam with specialized traversal and collection gear, including improved boots and the Sticky Gun.</p>
       <dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm"><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Region</dt><dd class="min-w-0 text-zinc-200">Mexico</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Getting there</dt><dd class="min-w-0 text-zinc-200">West of Ciudad Nudo del Norte (C1) and southeast of Villa Libre, across the flat desert outage zone near the rock ridge <span class="text-zinc-500">(S01-27)</span></dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Connects to</dt><dd class="min-w-0 text-zinc-200">Ciudad Nudo del Norte (C1), Villa Libre</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Related quests</dt><dd class="min-w-0 text-zinc-200">Main Order 005 (prerequisite to unlock cargo spawns)</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Services and people</dt><dd class="min-w-0 text-zinc-200">The Bokka</dd></div><div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">Enemy types</dt><dd class="min-w-0 text-zinc-200">Bandits / MULEs (in nearby camps)</dd></div></dl>
+      
       <nav aria-label="On this page" class="mt-4 flex flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">On this page:</span><a href="#items" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Items</a><a href="#secrets" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Secrets</a><a href="#shops" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Shops and people</a><a href="#tips" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Tips</a></nav>
+      
+      
+      
       
       
       
@@ -128,11 +132,13 @@
     try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
     var key='qcw:'+K+':'+S, done=load(key);
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    // The same entry can appear twice (a flagship page's walkthrough and its checklist): every copy follows a tick.
+    var refresh=function(){document.querySelectorAll('[data-check]').forEach(function(el){var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);});};
     document.querySelectorAll('[data-check]').forEach(function(el){
       var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
-      box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);
-      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); refresh(); counts(); progress(); });
     });
+    refresh();
     counts();
   }
   var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){

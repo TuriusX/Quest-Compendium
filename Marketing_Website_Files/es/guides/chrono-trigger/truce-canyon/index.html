@@ -68,7 +68,11 @@
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> Todas las zonas de esta guía</a>
       <p class="mt-5 text-zinc-300 leading-relaxed">Crono cae a través de la distorsión temporal para llegar solo a un desfiladero rocoso en el 600 d. C., donde debe defenderse de los monstruos que rondan por la zona. Los jugadores recorren los caminos y escaleras que bajan por los acantilados para salir al mapa del mundo del Medioevo y continuar hacia el Castillo de Guardia. Más adelante, el grupo regresa a este cañón para usar la Gate Key de Lucca y reabrir la distorsión que lleva de regreso al 1000 d. C.</p>
       
+      
       <nav aria-label="En esta página" class="mt-4 flex flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">En esta página:</span><a href="#items" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Objetos</a><a href="#enemies" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Enemigos</a><a href="#tips" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Consejos</a></nav>
+      
+      
+      
       
       
       
@@ -127,11 +131,13 @@
     try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
     var key='qcw:'+K+':'+S, done=load(key);
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    // The same entry can appear twice (a flagship page's walkthrough and its checklist): every copy follows a tick.
+    var refresh=function(){document.querySelectorAll('[data-check]').forEach(function(el){var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);});};
     document.querySelectorAll('[data-check]').forEach(function(el){
       var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
-      box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);
-      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); refresh(); counts(); progress(); });
     });
+    refresh();
     counts();
   }
   var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){

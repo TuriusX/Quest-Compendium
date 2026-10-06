@@ -66,7 +66,11 @@
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> All areas in this guide</a>
       <p class="mt-5 text-zinc-300 leading-relaxed">The Spaceport of Greed represents the distorted desires of Kunikazu Okumura, CEO of Okumura Foods. You must infiltrate the futuristic factory, acquire keycards from corporate hierarchy shadows, solve airlock transport puzzles, and defeat waves of factory workers before confronting Shadow Okumura.</p>
       
+      
       <nav aria-label="On this page" class="mt-4 flex flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">On this page:</span><a href="#sec-1" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Deadlines</a><a href="#items" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Items</a><a href="#enemies" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Enemies</a><a href="#tips" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Tips</a></nav>
+      
+      
+      
       
       
       <details class="qc-fold mt-3 scroll-mt-20" id="sec-1" open>
@@ -128,11 +132,13 @@
     try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
     var key='qcw:'+K+':'+S, done=load(key);
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    // The same entry can appear twice (a flagship page's walkthrough and its checklist): every copy follows a tick.
+    var refresh=function(){document.querySelectorAll('[data-check]').forEach(function(el){var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);});};
     document.querySelectorAll('[data-check]').forEach(function(el){
       var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
-      box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);
-      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); refresh(); counts(); progress(); });
     });
+    refresh();
     counts();
   }
   var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){

@@ -74,6 +74,10 @@
       
       
       
+      
+      
+      
+      
       <details class="qc-fold mt-3 scroll-mt-20" id="enemies">
     <summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10"><svg class="qc-caret w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg><svg class="w-4 h-4 text-[#a87ffb]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><path d="M8 20v2h8v-2"/><path d="M16 20a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20"/></svg><h2 class="flex-1 text-sm sm:text-base font-bold text-white">Enemies</h2></summary>
     <div class="mt-2"><div class="grid sm:grid-cols-2 gap-2"><div class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white text-sm">Desert Bandersnatch</div><div class="mt-1.5 flex flex-wrap gap-1.5"></div><p class="mt-1.5 text-xs text-zinc-400">A canine beast that attacks with quick lunges and bites across the sands.</p></div><div class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white text-sm">Velkroy Scorpion</div><div class="mt-1.5 flex flex-wrap gap-1.5"></div><p class="mt-1.5 text-xs text-zinc-400">A desert arachnid that strikes with sweeping claws and a venomous tail barb.</p></div><div class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white text-sm">Sand Dune Bug</div><div class="mt-1.5 flex flex-wrap gap-1.5"></div><p class="mt-1.5 text-xs text-zinc-400">An insectoid predator that burrows and charges at targets.</p></div><div class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white text-sm">Dune Hyena</div><div class="mt-1.5 flex flex-wrap gap-1.5"></div><p class="mt-1.5 text-xs text-zinc-400">Fast-moving pack predators that attempt to flank and overwhelm you.</p></div><div class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white text-sm">The Man in Black (Holy Stalker)</div><div class="mt-1.5 flex flex-wrap gap-1.5"></div><p class="mt-1.5 text-xs text-zinc-400">Elite Magitek automaton encounter encountered in side and exploration content in the desert wastes.</p></div></div></div>
@@ -121,11 +125,13 @@
     try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
     var key='qcw:'+K+':'+S, done=load(key);
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    // The same entry can appear twice (a flagship page's walkthrough and its checklist): every copy follows a tick.
+    var refresh=function(){document.querySelectorAll('[data-check]').forEach(function(el){var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);});};
     document.querySelectorAll('[data-check]').forEach(function(el){
       var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
-      box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);
-      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); refresh(); counts(); progress(); });
     });
+    refresh();
     counts();
   }
   var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){

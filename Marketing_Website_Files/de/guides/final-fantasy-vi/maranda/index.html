@@ -71,7 +71,11 @@
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> Alle Gebiete in diesem Guide</a>
       <p class="mt-5 text-zinc-300 leading-relaxed">Nachdem die Gruppe einer Brieftaube von der Jungfernfahrt der Falken gefolgt ist, landet sie in Maranda und besucht Lolas Haus im Osten der Stadt. Beim Lesen der Briefe auf ihrem Schreibtisch offenbart sich eine unverkennbare, höfliche Ausdrucksweise, die darauf hinweist, dass Cyan noch am Leben ist und ihr heimlich anstelle ihres gefallenen Partners aus Mobliz schreibt. Wenn man Lolas Antwort nimmt und sie an der Brieftaube draußen befestigt, fliegt der Vogel in Richtung Zozo und enthüllt so den Aufenthaltsort des nächsten Ziels.</p>
       
+      
       <nav aria-label="Auf dieser Seite" class="mt-4 flex flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">Auf dieser Seite:</span><a href="#items" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Gegenstände</a><a href="#secrets" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Geheimnisse</a><a href="#tips" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">Tipps</a></nav>
+      
+      
+      
       
       
       
@@ -130,11 +134,13 @@
     try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
     var key='qcw:'+K+':'+S, done=load(key);
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
+    // The same entry can appear twice (a flagship page's walkthrough and its checklist): every copy follows a tick.
+    var refresh=function(){document.querySelectorAll('[data-check]').forEach(function(el){var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);});};
     document.querySelectorAll('[data-check]').forEach(function(el){
       var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
-      box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);
-      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); el.classList.toggle('is-done',box.checked); counts(); progress(); });
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); refresh(); counts(); progress(); });
     });
+    refresh();
     counts();
   }
   var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
