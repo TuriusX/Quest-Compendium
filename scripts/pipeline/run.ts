@@ -68,6 +68,7 @@ import { steamCandidates } from './steam';
 import { promote } from '../guides/promote';
 import { SEARCH_DOLLARS } from '../../usage';
 import { postDiscord, summaryText } from './summary';
+import { waitForGuideLock, isRefusal, lockedLine, SITE_LOCK } from '../guides/guideLock';
 
 /**
  * The run in progress, for its closing message however it ends: finished, stopped by a cap, crashed, or stopped from
@@ -153,6 +154,10 @@ type Action = { kind: 'build' | 'build-checked' | 'revisit' | 'upgrade' | 'trans
  * Run one of the guide scripts, under what may still be spent (PIPELINE_STEP_DOLLARS), and read what it really spent
  * from its "Usage:" line (tokens with thinking, and searches, from the API's usage data).
  */
+// Items a script skipped because another process held the guide's lock (guideLock.ts): its "Skipped (locked): …" lines.
+const LOCKED = new Set<string>();
+const wasLocked = (r: { out: string }) => /Skipped \(locked\)/.test(r.out);
+
 function runScript(args: string[]): { ok: boolean; searches: number; dollars: number; summary: string; out: string } {
   console.log(`$ npx tsx ${args.join(' ')}`);
   const limit = spendLeft();
@@ -168,6 +173,7 @@ function runScript(args: string[]): { ok: boolean; searches: number; dollars: nu
   const searches = usage ? Number(usage[1]) : reported;
   const dollars = usage ? Number(usage[2]) : tokenGuess + reported * SEARCH_DOLLARS;
   // The script's "Done" line, without the "Done." prefix and its "Next: …" hint.
+  for (const m of out.matchAll(/Skipped \(locked\): ([^\n]*)/g)) LOCKED.add(m[1].replace(/\s*\(lock until[^)]*\)/, '').replace(/;\s*tried again next run\.?\s*$/, '').trim());
   const summary = (out.match(/^Done[^\n]*$/m) || [''])[0].replace(/^Done[.:]?\s*/, '').replace(/\s*Next:.*$/, '').slice(0, 300);
   return { ok: r.status === 0, searches, dollars, summary, out };
 }
@@ -178,6 +184,8 @@ async function appSearchesThisMonth(month: string): Promise<number> {
 }
 
 async function main() {
+  // How this run shows up to other processes while it holds a guide's lock (its child scripts share the lock).
+  process.env.GUIDE_LOCK_LABEL ||= 'the daily pipeline';
   const month = new Date().toISOString().slice(0, 7);
   const stateRef = db().collection('system').doc('pipeline');
   const state: any = (await stateRef.get()).data() || {};
@@ -445,7 +453,10 @@ async function main() {
     const g = await guideInfo(item.game);
     guideCache.delete(g.key);
     const gate = (r.out.match(/^Gate: [^\n]*/m) || [''])[0];
-    if (/^Gate: passed/.test(gate)) {
+    if (wasLocked(r)) {
+      // Another process (the flagship job, a manual run) is working on this guide: nothing was done; next run.
+      waiting.push(item);
+    } else if (/^Gate: passed/.test(gate)) {
       changed = true;
       const fresh = await guideInfo(item.game);
       guideCache.delete(g.key);
@@ -515,7 +526,7 @@ async function main() {
       // A new guide: quick, staged and reviewed (repair.ts outline), live only if it passes. A game too new for quick
       // mode, or one that comes out thin, gets a careful build from the repair queue.
       r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', 'outline', '--quick-only']);
-      await guideRef.set({ pipeline: { ...g.pipeline, quickTried: true, builtAt: Date.now() } }, { merge: true });
+      if (!wasLocked(r)) await guideRef.set({ pipeline: { ...g.pipeline, quickTried: true, builtAt: Date.now() } }, { merge: true });
       const tooNew = /Not built: released/.test(r.out);
       const thin = /^Gate: failed \((\d+, only|nothing)/m.test(r.out) || /^Gate: failed.*rebuild careful/m.test(r.out);
       if (tooNew || thin) {
@@ -527,7 +538,7 @@ async function main() {
       // A new release, built (or, 3 weeks on, extended) with research in a staged copy, through the review gate.
       const cap = affordable(Math.min(a.searches, Math.max(50, searchRoom)));
       r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', a.kind === 'revisit' ? 'extend' : 'careful', '--max-searches', String(cap)]);
-      await guideRef.set({ pipeline: { ...g.pipeline, newRelease: g.pipeline.newRelease || a.kind === 'build-checked', builtAt: g.pipeline.builtAt || Date.now(), ...(a.kind === 'revisit' ? { revisited: Date.now() } : {}) } }, { merge: true });
+      if (!wasLocked(r)) await guideRef.set({ pipeline: { ...g.pipeline, newRelease: g.pipeline.newRelease || a.kind === 'build-checked', builtAt: g.pipeline.builtAt || Date.now(), ...(a.kind === 'revisit' ? { revisited: Date.now() } : {}) } }, { merge: true });
       if ((/continues on the next run/.test(r.out) || /^Gate: waiting/m.test(r.out)) && !state.carefulQueue.some((x: QueueItem) => gameKey(x.game) === g.key))
         state.carefulQueue.push({ game: a.game, mode: a.kind === 'revisit' ? 'extend' : 'careful', newRelease: true, addedAt: Date.now(), why: 'a new release; its careful build continues (or waits for the Pro reviewer)' });
     } else if (a.kind === 'upgrade') {
@@ -538,12 +549,17 @@ async function main() {
     } else if (a.kind === 'achievements') {
       r = runScript(['scripts/guides/achievements.ts', '--game', a.game, '--max-searches', String(affordable(Math.min(120, Math.max(30, searchRoom))))]);
       // Not every game has Steam achievements; don't keep retrying one that failed.
-      if (!r.ok) await guideRef.set({ pipeline: { ...g.pipeline, achTried: Date.now() } }, { merge: true });
+      if (!r.ok && !wasLocked(r)) await guideRef.set({ pipeline: { ...g.pipeline, achTried: Date.now() } }, { merge: true });
     } else if (a.kind === 'translate') {
       r = runScript(['scripts/guides/translate-guide.ts', '--game', a.game, '--lang', a.lang!]);
     }
     await charge(r, `${a.kind} ${a.game}${a.lang ? ` → ${a.lang}` : ''}`);
     searchRoom -= r.searches;
+    // Locked by another process: nothing done or recorded; it comes up again next run (listed under 🔒).
+    if (wasLocked(r)) {
+      guideCache.delete(g.key);
+      continue;
+    }
     changed = changed || r.ok;
     done++;
     if (!a.wish) others++;
@@ -585,7 +601,11 @@ async function main() {
   }
 
   // ---- 4. publish and deploy ----
-  if (changed && !DRY) {
+  // One publish and deploy at a time (the flagship job publishes too): waits up to 15 minutes for the site lock.
+  const siteLock = changed && !DRY ? await waitForGuideLock(SITE_LOCK, 'publish and deploy', 15 * 60_000) : null;
+  if (siteLock && isRefusal(siteLock)) {
+    report.push(`🔒 ${lockedLine(siteLock, 'The website')}`);
+  } else if (changed && !DRY) {
     runScript(['scripts/guides/steam-ids.ts']); // new guides get their Steam id (for game art); no AI, no cost
     const p = runScript(['scripts/guides/publish.ts']);
     report.push(p.ok ? '🌐 Website rebuilt.' : '⚠️ Rebuilding the website failed (see the job log).');
@@ -598,6 +618,7 @@ async function main() {
       }
     } else if (p.ok) report.push('(Netlify settings missing, so the site was rebuilt but not deployed.)');
   }
+  if (siteLock && !isRefusal(siteLock)) await siteLock.release();
 
   // ---- 5. yesterday's activity (stats/{day} from the server) and sign-ups (Firebase Auth) ----
   try {
@@ -648,6 +669,10 @@ async function main() {
     const fails = (flagship.runFailures || []).slice(0, 6);
     if (fails.length) report.push(`⚠️ Flagship pages that failed review: ${fails.map((f: any) => `${shortName(names[f.key] || f.key)} / ${f.name}: ${String(f.reason).slice(0, 90)}`).join('; ')}.`);
   }
+  // ---- items skipped because another process held the guide's lock: this run's, and the flagship job's last run ----
+  const flagSkips = [...((flagship.runSkips || []) as any[]), ...((flagship.rollout?.runSkips || []) as any[])].slice(0, 6);
+  if (flagSkips.length) report.push(`🔒 Flagship skipped (another process was working on the guide): ${flagSkips.map((x) => `${x.name} (${String(x.reason).slice(0, 60)})`).join('; ')}.`);
+  if (LOCKED.size) report.push(`🔒 Skipped (another process was working on the guide): ${[...LOCKED].slice(0, 8).join('; ')}. Tried again next run.`);
   // ---- costs: what this run spent, by kind of work (the biggest steps named), and the day's and month's totals ----
   if (costs.length) {
     const kind = (l: string) => l.replace(/^(queue (re-gate )?\w+|achievements|translations|translate|build-checked|revisit|upgrade|build|corrections|Search Console weekly).*$/, '$1');

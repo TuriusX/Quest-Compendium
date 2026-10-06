@@ -16,6 +16,7 @@
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, gameKey, arg, steamAchievements, type GuideArea } from './common';
 import { estimateCost } from '../../usage';
+import { acquireGuideLock, isRefusal, lockedLine, releaseGuideLocks } from './guideLock';
 
 const LANGS: Record<string, string> = {
   es: 'Spanish (Latin American, neutral)', pt: 'Brazilian Portuguese', de: 'German', fr: 'French', ru: 'Russian',
@@ -94,6 +95,12 @@ function fit(s: any, t: any): any {
 
 async function main() {
   const key = gameKey(game!);
+  const lock = await acquireGuideLock(key, 'translation');
+  if (isRefusal(lock)) {
+    console.log(lockedLine(lock, game!));
+    console.log('Done: 0 page translation(s) (skipped: the guide is locked). Estimated cost ≈ $0.000.');
+    return setTimeout(() => process.exit(0), 300);
+  }
   const ref = db().collection('guides').doc(key);
   const info = (await ref.get()).data();
   if (!info) throw new Error(`no guide found for ${game}`);
@@ -261,10 +268,11 @@ async function main() {
     console.log(`${lang}: ${done} translated, ${failed} left in English, ${Object.keys(areas).length} pages available in this language.`);
   }
   console.log(`Done: ${translatedPages} page translation(s) in ${langs.join(', ')}. Estimated cost ≈ $${dollars.toFixed(3)}. Next: npx tsx scripts/guides/publish.ts`);
+  await releaseGuideLocks();
   setTimeout(() => process.exit(0), 1500);
 }
 
 main().catch((e) => {
   console.error('Translating the guide failed:', e?.message || e);
-  process.exit(1);
+  releaseGuideLocks().finally(() => process.exit(1));
 });

@@ -16,6 +16,7 @@ import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, gameKey, arg, searchesIn, editionOf, editionNote } from './common';
 import { estimateCost } from '../../usage';
 import { recordMonthly } from '../../searchGuard';
+import { acquireGuideLock, isRefusal, lockedLine, releaseGuideLocks } from './guideLock';
 
 const game = arg('game');
 const quick = arg('quick') === 'true';
@@ -74,6 +75,12 @@ async function steamList(appId: number): Promise<Ach[]> {
 
 async function main() {
   const key = gameKey(game!);
+  const lock = await acquireGuideLock(key, 'achievement guide');
+  if (isRefusal(lock)) {
+    console.log(lockedLine(lock, game!));
+    console.log('Done: 0 achievements, 0 searches used, estimated AI cost ≈ $0.00 (skipped: the guide is locked)');
+    return setTimeout(() => process.exit(0), 300);
+  }
   const guideRef = db().collection('guides').doc(key);
   const info = (await guideRef.get()).data() || {};
   const appId = Number(arg('appid')) || Number(info.appId) || (await findAppId(game!));
@@ -189,10 +196,11 @@ async function main() {
   });
   await guideRef.set({ appId, hasAchievements: true }, { merge: true });
   console.log(`Done: ${list.length} achievements, ${withTips} with tips, ${list.filter((a) => a.missable).length} missable, ${list.filter((a) => a.area).length} linked to guide areas, ${searches} searches used, estimated AI cost ≈ $${dollars.toFixed(2)}`);
+  await releaseGuideLocks();
   setTimeout(() => process.exit(0), 1500);
 }
 
 main().catch((e) => {
   console.error('Achievement guide failed:', e?.message || e);
-  process.exit(1);
+  releaseGuideLocks().finally(() => process.exit(1));
 });

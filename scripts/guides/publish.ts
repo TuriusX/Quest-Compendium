@@ -20,6 +20,7 @@ import { shortGame, relatedQuests, achFlags, ACH_FLAGS, type AchFlag } from './s
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 import { GENERATED as GUIDE_UI_GEN } from './guide-ui.generated';
+import { waitForGuideLock, isRefusal, lockedLine, releaseGuideLocks, SITE_LOCK } from './guideLock';
 
 // ---- languages ----
 // English pages live at /guides/…; a game translated with translate-guide.ts also gets /<lang>/guides/… pages, with
@@ -1020,6 +1021,15 @@ async function buildSiteCss() {
 }
 
 async function main() {
+  // One publish at a time (the pipeline, the flagship job and manual runs all write the site); re-entrant when the
+  // caller already holds the site lock. A preview writes elsewhere and needs none.
+  if (!PREVIEW) {
+    const lk = await waitForGuideLock(SITE_LOCK, 'publish', 15 * 60_000);
+    if (isRefusal(lk)) {
+      console.log(lockedLine(lk, 'The website'));
+      process.exit(0);
+    }
+  }
   // Staged rebuilds (guides/{key}--next) are never part of the site; review.ts --gate promotes them.
   const guides = { docs: (await db().collection('guides').get()).docs.filter((d) => !d.id.endsWith('--next') && (!ONLY || d.id === ONLY)) };
   // A preview carries the game's flagship prototypes (guidePrototypes/{key}__{slug}) on their pages.
@@ -1125,10 +1135,12 @@ async function main() {
   await buildSiteCss();
   console.log(`Built ${games.reduce((n, g) => n + g.count, 0)} guide page(s) for ${games.length} game(s)${withDrafts ? ' (drafts included, marked DRAFT and hidden from search)' : ''}.`);
   console.log(`Open ${path.join(OUT, 'guides', 'index.html')} in your browser to look them over.`);
+  await releaseGuideLocks();
   process.exit(0);
 }
 
-main().catch((e) => {
+main().catch(async (e) => {
   console.error('Publishing failed:', e?.message || e);
+  await releaseGuideLocks();
   process.exit(1);
 });

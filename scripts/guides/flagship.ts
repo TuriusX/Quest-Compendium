@@ -45,6 +45,7 @@ import { ProQuotaWait } from './reviewerQuota';
 import { promote, stageCopy, discard } from './promote';
 import { deployToNetlify } from '../pipeline/netlify';
 import { FieldValue } from 'firebase-admin/firestore';
+import { acquireGuideLock, waitForGuideLock, isRefusal, lockedLine, releaseGuideLocks, SITE_LOCK, type GuideLock } from './guideLock';
 
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const none = (v: string | undefined) => !v || /^(none|n\/a|-+|no|nothing)\.?$/i.test(v.trim());
@@ -573,7 +574,9 @@ async function program() {
   // One day's cap raised (budget.dayOverrides { "2026-10-05": 30 }), from the same total.
   const dayCap = Number(budget.dayOverrides?.[today()]) || budget.daily;
   budget.daily = dayCap;
+  process.env.GUIDE_LOCK_LABEL = process.env.GUIDE_LOCK_LABEL || 'the flagship job';
   if (st.day !== today()) Object.assign(st, { day: today(), spentToday: 0, runPages: [], runFailures: [] });
+  st.runSkips = [];
   if (st.paused && arg('estimate') !== 'true' && arg('ignore-pause') !== 'true') { console.log(`The flagship programme is paused (${st.paused.why || 'until the owner says go'}). Nothing to do.`); return; }
   const only = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
   // The traffic-driven rollout, when it's on, replaces the list of whole guides (unless one guide is asked for).
@@ -614,12 +617,23 @@ async function program() {
   const room = () => Math.min(budget.total - st.spent, budget.daily - st.spentToday);
   const charge = (d: number) => { st.spent += d; st.spentToday += d; };
   let wentLive = false;
+  let guideLock: GuideLock | null = null;
   for (const g of st.guides) {
     const pg: GuideProgress = st.progress[g.key];
     if (only && g.key !== only) continue;
     if (pg.phase === 'done') continue;
     const info: any = (await db().collection('guides').doc(g.key).get()).data();
     const game = String(info?.game || g.key);
+    // One process at a time per guide (guideLock.ts): another one working on this guide means it waits for next run.
+    if (guideLock) { await guideLock.release(); guideLock = null; }
+    const lk = await acquireGuideLock(g.key, 'flagship build');
+    if (isRefusal(lk)) {
+      console.log(lockedLine(lk, game));
+      st.runSkips.push({ key: g.key, name: game, reason: `in use by ${lk.heldBy}` });
+      await save();
+      continue;
+    }
+    guideLock = lk;
 
     // An outline rebuild into staging first (no whole-guide gate: each page is gated by its review).
     if (pg.phase === 'outline') {
@@ -737,16 +751,26 @@ Google's spend-based rate limit, ${rateLimits} times: stopped; next run carries 
     }
     await save();
   }
+  if (guideLock) await guideLock.release();
   st.lastRun = Date.now();
   await save();
 
   if (wentLive) await publishSite();
+  await releaseGuideLocks();
   console.log(`\nDone: flagship programme, $${st.spentToday.toFixed(2)} today, $${st.spent.toFixed(2)} of $${budget.total} in all.`);
 }
 
 /** The website, when anything went live: published and deployed to Netlify. */
 async function publishSite() {
   if (arg('no-publish') === 'true') return;
+  // The site-wide lock: one publish and deploy at a time (the pipeline's, this job's, a manual one), waiting up to
+  // 15 minutes for another to finish.
+  const lk = await waitForGuideLock(SITE_LOCK, 'publish and deploy', 15 * 60_000);
+  if (isRefusal(lk)) { console.log(lockedLine(lk, 'the website')); return; }
+  try { await publishAndDeploy(); } finally { await lk.release(); }
+}
+
+async function publishAndDeploy() {
   const cli = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
   spawnSync(process.execPath, [cli, 'scripts/guides/publish.ts'], { encoding: 'utf8', timeout: 30 * 60_000, maxBuffer: 64 * 1024 * 1024, stdio: 'inherit' });
   if (process.env.NETLIFY_AUTH_TOKEN && process.env.NETLIFY_SITE_ID) {
@@ -771,7 +795,7 @@ async function rollout(st: any, save: () => Promise<any>) {
   const month = new Date().toISOString().slice(0, 7);
   if (r.month !== month) Object.assign(r, { month, spentMonth: 0, pagesMonth: 0 });
   r.failed = r.failed || {};
-  r.runPages = []; r.runFailures = [];
+  r.runPages = []; r.runFailures = []; r.runSkips = [];
   const monthly = Number(r.monthly || 20), perDay = Number(r.perDay || 5);
   const sc: any = (await db().collection('system').doc('searchConsole').get()).data() || {};
   const top: { key: string; slug: string; impressions: number }[] = sc.topPages || [];
@@ -798,6 +822,12 @@ async function rollout(st: any, save: () => Promise<any>) {
     const page: any = (await gref.collection('areas').doc(c.slug).get()).data();
     if (!page || page.status !== 'published' || page.flagship) continue;
     const info: any = (await gref.get()).data() || {};
+    const lk = await acquireGuideLock(c.key, 'flagship rollout');
+    if (isRefusal(lk)) {
+      console.log(lockedLine(lk, `${info.game} / ${page.name}`));
+      r.runSkips = [...(r.runSkips || []), { key: c.key, name: `${info.game} / ${page.name}`, reason: `in use by ${lk.heldBy}` }];
+      continue;
+    }
     const scope = { dollars: 0, searches: 0 };
     let res: Awaited<ReturnType<typeof buildPage>> | null = null;
     try {
@@ -819,6 +849,7 @@ async function rollout(st: any, save: () => Promise<any>) {
       r.runFailures.push({ key: c.key, slug: c.slug, name: page.name, reason: res.verdict.reason || 'failed review' });
     }
     console.log(`  [rollout] ${info.game} / ${page.name}: ${res ? res.verdict.status : 'not built'}${res?.verdict.score !== undefined ? `, score ${res.verdict.score}` : ''}, $${scope.dollars.toFixed(3)}; $${r.spentMonth.toFixed(2)} of $${monthly} this month`);
+    await lk.release();
     await save();
   }
   r.lastRun = Date.now();
@@ -989,6 +1020,11 @@ async function main() {
   }
   // --pack: written from the wiki's source pack, staging only (guidePrototypes), nothing goes live.
   const packMode = arg('pack') === 'true';
+  const lk = await acquireGuideLock(key, 'flagship pages');
+  if (isRefusal(lk)) {
+    console.log(lockedLine(lk, String(info.game || key)));
+    return setTimeout(() => process.exit(0), 500);
+  }
   let total = { searches: 0, dollars: 0 };
   for (const slug of pages) {
     const scope = { dollars: 0, searches: 0 };
@@ -997,11 +1033,13 @@ async function main() {
     total = { searches: total.searches + scope.searches, dollars: total.dollars + scope.dollars };
   }
   console.log(`\nDone: ${pages.length} flagship page(s) in staging (guidePrototypes), ${total.searches} searches used, cost ≈ $${total.dollars.toFixed(3)}.`);
+  await lk.release();
   setTimeout(() => process.exit(0), 500);
 }
 
 // Run as a script only (repair.ts imports packBuildGuide from here).
-if (/flagship\.ts$/.test(process.argv[1] || '')) main().catch((e) => {
+if (/flagship\.ts$/.test(process.argv[1] || '')) main().catch(async (e) => {
   console.error('flagship failed:', e?.message || e);
+  await releaseGuideLocks();
   process.exit(1);
 });

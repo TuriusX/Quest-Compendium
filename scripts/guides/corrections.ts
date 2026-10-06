@@ -35,6 +35,7 @@ import { reporterCount } from '../../corrections';
 import { stageCopy, discard } from './promote';
 import { gateGuide } from './review';
 import { scopedReview } from './scopedGate';
+import { withGuideLock, lockedLine } from './guideLock';
 import { FLASH_REVIEW_MODEL } from './reviewerQuota';
 
 // Corrections never use the Pro reviewer (its daily requests are kept for careful rebuilds): Gemini 3.8 Flash checks the
@@ -226,6 +227,12 @@ function rewritten(kind: string, e: any, r: Rewrite, checked: boolean) {
 
 /** Write the decided corrections of one guide into a staged copy, then the review gate. Returns the gate line. */
 async function applyToGuide(gameKey: string, game: string, groups: { id: string; g: any; rewrite: Rewrite; checked: boolean }[]): Promise<string> {
+  // One process at a time per guide (guideLock.ts): a locked guide keeps its corrections for the next run.
+  const r = await withGuideLock(gameKey, 'player corrections', () => applyToGuideLocked(gameKey, game, groups));
+  return 'refusal' in r ? lockedLine(r.refusal, game) : r.value;
+}
+
+async function applyToGuideLocked(gameKey: string, game: string, groups: { id: string; g: any; rewrite: Rewrite; checked: boolean }[]): Promise<string> {
   const staged: any = (await db().collection('guides').doc(stageKey(gameKey)).get()).data();
   if (staged && staged.repair !== 'correction') return 'skipped: another rebuild of this guide is staged (tried again next run)';
   await discard(gameKey);

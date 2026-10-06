@@ -52,6 +52,7 @@ import { writeMissables } from './missables';
 import { writeQueryFixes } from './queryRepair';
 import { writeAreaInfo } from './areaInfo';
 import { packBuildGuide } from './flagship';
+import { acquireGuideLock, isRefusal, lockedLine, releaseGuideLocks } from './guideLock';
 import { scopedReview, type PassAction } from './scopedGate';
 
 // Page fixes are Flash work (reviewerQuota.ts): the fix plan and the fixed guide's gate.
@@ -216,6 +217,13 @@ async function main() {
   const live: any = (await db().collection('guides').doc(key).get()).data();
   if (!live && !gameArg) throw new Error(`no guide ${key} (pass --game for a game with no guide yet)`);
   const game = String(live?.game || gameArg);
+  // One process at a time per guide (guideLock.ts): another one working on it means this repair waits for next run.
+  const lock = await acquireGuideLock(key, `repair (${action})`);
+  if (isRefusal(lock)) {
+    console.log(lockedLine(lock, game));
+    console.log(`Done: repair (${action}) of ${game}, 0 searches used, estimated AI cost ≈ $0.00.`);
+    return setTimeout(() => process.exit(0), 300);
+  }
   let review: Review | undefined = live?.review;
   const rel = await guideRelease(game, live);
   const newer = releasedAfter(rel, QUICK_MODEL_CUTOFF, !!live?.pipeline?.newRelease);
@@ -223,6 +231,7 @@ async function main() {
   if (quickOnly && newer && action === 'outline') {
     console.log(`Not built: released ${rel.text}, after the quick model's knowledge cutoff (${QUICK_MODEL_CUTOFF}); it needs a careful build.`);
     console.log(`Done: repair (${action}) of ${game}, 0 searches used, estimated AI cost ≈ $0.00.`);
+    await releaseGuideLocks();
     return setTimeout(() => process.exit(0), 500);
   }
 
@@ -374,10 +383,11 @@ async function main() {
     }
   }
   console.log(`Done: repair (${action}) of ${game}, ${searches} searches used, estimated AI cost ≈ $${dollars.toFixed(2)}.`);
+  await releaseGuideLocks();
   setTimeout(() => process.exit(0), 1500);
 }
 
 main().catch((e) => {
   console.error('Repair failed:', e?.message || e);
-  process.exit(1);
+  releaseGuideLocks().finally(() => process.exit(1));
 });
