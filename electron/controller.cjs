@@ -4,7 +4,9 @@
  * Browser-based apps (Electron included) generally only receive controller input while their own window is
  * focused, so an overlay cannot see a controller while the game has focus. This service reads Xbox-compatible
  * controllers at the system level through XInput (the same API most PC games use), so a controller can:
- *   - show / hide the overlay with a held button chord, even while a game is focused, and
+ *   - show / hide the overlay with a button combo (electron/padCombo.cjs: a 1-second hold or a double-tap), even while a
+ *     game is focused,
+ *   - hold a button to ask out loud (hold-to-talk), and
  *   - drive the overlay (buttons, D-pad / left stick, right-stick scrolling) while it is visible.
  *
  * Windows only. On other systems, or if XInput can't be loaded, `available` is false and the app falls back to
@@ -25,15 +27,6 @@ const SIMPLE = [
   ['ls', BTN.LS], ['rs', BTN.RS],
 ];
 
-/** Show/hide chords (held for HOLD_MS). */
-const CHORDS = {
-  'back+start': BTN.BACK | BTN.START,  // View + Menu
-  'ls+rs': BTN.LS | BTN.RS,            // click both sticks
-  'lb+rb+back': BTN.LB | BTN.RB | BTN.BACK,
-  off: 0,
-};
-
-const HOLD_MS = 450;
 const REPEAT_DELAY_MS = 380;
 const REPEAT_EVERY_MS = 110;
 const STICK_DEADZONE = 0.55;
@@ -80,24 +73,35 @@ function loadXInput() {
   }
 }
 
+const { comboFor, createComboDetector, createHoldToTalk, BITS } = require('./padCombo.cjs');
+
+/** Triggers past this (0-255) count as pressed: they page through long answers. */
+const TRIGGER_DOWN = 128;
+
 /**
  * @param {{ onToggle: () => void, onInput: (evt: object) => void, isVisible: () => boolean, readPad?: (i: number) => object|null, now?: () => number }} opts
+ *
+ * Events sent to the app (onInput): { type: 'button', button } for presses (with key-repeat for directions and the
+ * triggers 'lt' / 'rt'), { type: 'scroll', dy } for the right stick, and { type: 'talk', state: 'start' | 'end' } for
+ * hold-to-talk.
  */
 function createControllerService(opts) {
   const readPad = opts.readPad || loadXInput();
   const now = opts.now || Date.now;
   const available = typeof readPad === 'function';
 
-  let config = { enabled: true, chord: 'back+start' };
+  let config = { enabled: true };
+  let combo = createComboDetector(comboFor('hold-view-menu'));
+  let talk = null; // hold-to-talk on one button (only while the overlay is visible)
+  let talkBit = 0;
   let timer = null;
   const connected = [false, false, false, false];
   let lastScan = -Infinity;
   let prevButtons = 0;
-  let chordSince = null;
-  let chordFired = false;
-  let chordFiredDuringPress = false;
-  const pendingChordPress = new Set(); // chord-member buttons pressed but not yet reported
-  const repeat = { up: null, down: null, left: null, right: null };
+  let firedDuringPress = false;
+  const pendingMember = new Map(); // combo member -> released at (its press waits: it may be the start of the combo)
+  const suppressed = new Set(); // combo members that just fired the combo: ignored until they're let go
+  const repeat = { up: null, down: null, left: null, right: null, lt: null, rt: null };
   let lastScroll = 0;
 
   function tick() {
@@ -111,7 +115,7 @@ function createControllerService(opts) {
 
     // Merge every connected pad into one virtual controller.
     let buttons = 0;
-    let lx = 0, ly = 0, ry = 0;
+    let lx = 0, ly = 0, ry = 0, lt = 0, rt = 0;
     for (let i = 0; i < 4; i++) {
       if (!connected[i]) continue;
       const g = readPad(i);
@@ -123,60 +127,82 @@ function createControllerService(opts) {
       if (Math.abs(g.sThumbLX) > Math.abs(lx)) lx = g.sThumbLX;
       if (Math.abs(g.sThumbLY) > Math.abs(ly)) ly = g.sThumbLY;
       if (Math.abs(g.sThumbRY) > Math.abs(ry)) ry = g.sThumbRY;
+      lt = Math.max(lt, g.bLeftTrigger || 0);
+      rt = Math.max(rt, g.bRightTrigger || 0);
     }
 
-    const chordMask = CHORDS[config.chord] || 0;
-
-    // Show / hide chord, held for HOLD_MS. Works whether or not the overlay is visible.
-    if (chordMask && (buttons & chordMask) === chordMask) {
-      if (chordSince === null) chordSince = t;
-      if (!chordFired && t - chordSince >= HOLD_MS) {
-        chordFired = true;
-        chordFiredDuringPress = true;
-        pendingChordPress.clear();
-        opts.onToggle();
-      }
-    } else {
-      chordSince = null;
-      chordFired = false;
+    // Show / hide combo (a 1-second hold or a double-tap). Works whether or not the overlay is visible.
+    if (combo.step(buttons, t).fire) {
+      firedDuringPress = true;
+      pendingMember.clear();
+      for (const [name, bit] of SIMPLE) if (combo.mask & bit) suppressed.add(name);
+      if (talk) talk.reset();
+      opts.onToggle();
     }
-    if (!chordMask || (buttons & chordMask) === 0) chordFiredDuringPress = false;
+    if ((buttons & combo.mask) === 0 && !combo.pendingUntil()) firedDuringPress = false;
 
     const visible = opts.isVisible();
 
-    // Simple buttons. Chord members report on release (and only if the chord didn't fire), so starting the
-    // chord never triggers their normal action.
+    // Hold to talk: a long press starts listening and the release sends; a tap is the button's normal press.
+    let talkTap = false;
+    if (talk) {
+      let ev = null;
+      if (visible || talk.active()) ev = talk.step(buttons, t);
+      else talk.reset();
+      if (ev === 'start' || ev === 'end') opts.onInput({ type: 'talk', state: ev });
+      else if (ev === 'tap') talkTap = true;
+    }
+
+    // Simple buttons. Combo members report on release (and only if the combo didn't fire; for a double-tap, only once
+    // it can no longer complete), so starting the combo never triggers their normal action. The talk button reports
+    // its taps from the hold-to-talk check above.
     for (const [name, bit] of SIMPLE) {
       const down = (buttons & bit) !== 0;
       const wasDown = (prevButtons & bit) !== 0;
-      const isChordMember = (chordMask & bit) !== 0;
+      const member = (combo.mask & bit) !== 0;
+      if (member && suppressed.has(name)) {
+        if (!down) suppressed.delete(name);
+        continue;
+      }
+      if (bit === talkBit && talk && !member) {
+        if (talkTap && visible) opts.onInput({ type: 'button', button: name });
+        continue;
+      }
       if (down && !wasDown) {
-        if (isChordMember) pendingChordPress.add(name);
+        if (member) pendingMember.set(name, 0);
         else if (visible) opts.onInput({ type: 'button', button: name });
-      } else if (!down && wasDown && isChordMember) {
-        if (pendingChordPress.has(name) && !chordFiredDuringPress && visible) opts.onInput({ type: 'button', button: name });
-        pendingChordPress.delete(name);
+      } else if (!down && wasDown && member && pendingMember.has(name)) {
+        pendingMember.set(name, t); // released: reported once the combo can't complete
       }
     }
+    for (const [name, releasedAt] of pendingMember) {
+      if (!releasedAt) continue;
+      if (firedDuringPress) { pendingMember.delete(name); continue; }
+      if (combo.pendingUntil() > t) continue;
+      pendingMember.delete(name);
+      if (visible) opts.onInput({ type: 'button', button: name });
+    }
 
-    // Directions (D-pad or left stick), with key-repeat while held.
+    // Directions (D-pad or left stick) and the triggers, with key-repeat while held.
     const nx = lx / 32767;
     const ny = ly / 32767;
-    const dirs = {
+    const held = {
       up: (buttons & BTN.UP) !== 0 || ny > STICK_DEADZONE,
       down: (buttons & BTN.DOWN) !== 0 || ny < -STICK_DEADZONE,
       left: (buttons & BTN.LEFT) !== 0 || nx < -STICK_DEADZONE,
       right: (buttons & BTN.RIGHT) !== 0 || nx > STICK_DEADZONE,
+      lt: lt > TRIGGER_DOWN,
+      rt: rt > TRIGGER_DOWN,
     };
-    for (const d of Object.keys(dirs)) {
-      if (!dirs[d] || !visible) {
+    for (const d of Object.keys(held)) {
+      if (!held[d] || !visible) {
         repeat[d] = null;
         continue;
       }
       if (!repeat[d]) {
         repeat[d] = { since: t, last: t };
         opts.onInput({ type: 'button', button: d });
-      } else if (t - repeat[d].since > REPEAT_DELAY_MS && t - repeat[d].last > REPEAT_EVERY_MS) {
+      } else if (t - repeat[d].since > REPEAT_DELAY_MS && t - repeat[d].last > REPEAT_EVERY_MS * (d === 'lt' || d === 'rt' ? 3 : 1)) {
         repeat[d].last = t;
         opts.onInput({ type: 'button', button: d });
       }
@@ -208,11 +234,16 @@ function createControllerService(opts) {
     timer = null;
   }
 
+  /** { enabled, toggle: preset, custom: { buttons, mode }, talk: button name or 'off' } (older apps: { chord }). */
   function setConfig(next) {
-    config = {
-      enabled: next && next.enabled !== false,
-      chord: next && CHORDS[next.chord] !== undefined ? next.chord : 'back+start',
-    };
+    const n = next || {};
+    config = { enabled: n.enabled !== false };
+    combo = createComboDetector(comboFor(n.toggle || n.chord || 'hold-view-menu', n.custom));
+    const tb = n.talk === undefined ? 'y' : n.talk;
+    talkBit = tb && tb !== 'off' && BITS[tb] ? BITS[tb] : 0;
+    talk = talkBit ? createHoldToTalk(talkBit) : null;
+    pendingMember.clear();
+    suppressed.clear();
     if (config.enabled) start();
     else stop();
   }
@@ -221,4 +252,4 @@ function createControllerService(opts) {
   return { available, setConfig, stop, _tick: tick };
 }
 
-module.exports = { createControllerService, BTN, CHORDS };
+module.exports = { createControllerService, BTN };

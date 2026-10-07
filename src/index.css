@@ -284,9 +284,11 @@ html[data-ui="lofi"] .qc-md ul > li::before {
 
 /* ---- Controller mode (shown only while a controller is being used) ---------------------------------------- */
 html.qc-pad .qc-pad-focus {
-  outline: 2px solid var(--accent-color) !important;
+  outline: 3px solid var(--accent-color) !important;
   outline-offset: 2px;
-  box-shadow: 0 0 0 5px var(--accent-glow) !important;
+  box-shadow: 0 0 0 6px var(--accent-glow), 0 0 16px var(--accent-glow) !important;
+  position: relative;
+  z-index: 5;
 }
 html.qc-pad * { cursor: none !important; }
 .qc-glyph {

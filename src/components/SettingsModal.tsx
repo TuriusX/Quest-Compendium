@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatShortcut } from '../utils/shortcut';
 import { keyLabel, shortcutKeys } from '../utils/shortcut';
 import { 
   X, 
@@ -137,6 +138,13 @@ const ShortcutInput: React.FC<{
     </div>
   );
 };
+
+/** Controller show / hide presets (electron/padCombo.cjs); older settings map onto them. */
+const PAD_PRESETS = ['hold-view-menu', 'double-view', 'hold-ls-rs', 'custom', 'off'] as const;
+const padPreset = (v?: string) => (v === 'back+start' || !v ? 'hold-view-menu' : v === 'ls+rs' ? 'hold-ls-rs' : v === 'lb+rb+back' ? 'custom' : v);
+const PAD_BUTTONS = ['a', 'b', 'x', 'y', 'lb', 'rb', 'back', 'start', 'ls', 'rs'] as const;
+/** Same rule as the desktop app: two buttons or more, or View, Menu, L3 or R3 on its own. */
+const customComboOk = (b: string[]) => b.length >= 2 || (b.length === 1 && ['back', 'start', 'ls', 'rs'].includes(b[0]));
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -801,16 +809,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="space-y-2">
                         <div className="text-xs font-semibold text-white">{tr('set.pad.toggle')}</div>
                         <div className="text-[11px] text-zinc-400">{tr('set.pad.toggleDesc')}</div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          {(['back+start', 'ls+rs', 'lb+rb+back', 'off'] as const).map((chord) => {
-                            const selected = (settings.controllerToggle || 'back+start') === chord;
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {PAD_PRESETS.map((preset) => {
+                            const selected = padPreset(settings.controllerToggle) === preset;
                             return (
                               <button
-                                key={chord}
+                                key={preset}
                                 aria-pressed={selected}
                                 onClick={() => {
                                   playBlipSound(soundEnabled);
-                                  onUpdateSettings({ controllerToggle: chord });
+                                  onUpdateSettings({
+                                    controllerToggle: preset,
+                                    ...(preset === 'custom' && !settings.controllerCustom ? { controllerCustom: { buttons: ['lb', 'rb', 'back'], mode: 'hold' as const } } : {}),
+                                  });
                                 }}
                                 className={`p-2.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
                                   selected
@@ -818,17 +829,106 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     : 'bg-black/30 border-white/[0.08] text-zinc-300 hover:border-white/20'
                                 }`}
                               >
-                                {tr(`set.pad.chord.${chord}`)}
+                                {tr(`set.pad.preset.${preset}`)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {padPreset(settings.controllerToggle) === 'custom' && (() => {
+                          const custom = settings.controllerCustom || { buttons: ['lb', 'rb', 'back'], mode: 'hold' as const };
+                          const ok = customComboOk(custom.buttons);
+                          return (
+                            <div className="p-3 rounded-xl bg-black/30 border border-white/[0.08] space-y-2">
+                              <div className="text-[11px] font-semibold text-zinc-300">{tr('set.pad.customButtons')}</div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {PAD_BUTTONS.map((b) => {
+                                  const on = custom.buttons.includes(b);
+                                  return (
+                                    <button
+                                      key={b}
+                                      aria-pressed={on}
+                                      onClick={() => {
+                                        playBlipSound(soundEnabled);
+                                        const buttons = on ? custom.buttons.filter((x) => x !== b) : [...custom.buttons, b].slice(-4);
+                                        onUpdateSettings({ controllerCustom: { ...custom, buttons } });
+                                      }}
+                                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold cursor-pointer ${on ? 'bg-[var(--accent-color)] text-[#16101f] border-transparent' : 'bg-black/30 border-white/[0.12] text-zinc-300'}`}
+                                    >
+                                      {tr(`set.pad.btn.${b}`)}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="text-[11px] font-semibold text-zinc-300 pt-1">{tr('set.pad.customMode')}</div>
+                              <div className="flex gap-1.5">
+                                {(['hold', 'double'] as const).map((m) => (
+                                  <button
+                                    key={m}
+                                    aria-pressed={custom.mode === m}
+                                    onClick={() => {
+                                      playBlipSound(soundEnabled);
+                                      onUpdateSettings({ controllerCustom: { ...custom, mode: m } });
+                                    }}
+                                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold cursor-pointer ${custom.mode === m ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white' : 'bg-black/30 border-white/[0.12] text-zinc-300'}`}
+                                  >
+                                    {tr(`set.pad.mode.${m}`)}
+                                  </button>
+                                ))}
+                              </div>
+                              {!ok && <p className="text-[11px] text-amber-300">{tr('set.pad.customInvalid')}</p>}
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Hold to talk, and immersive read-aloud */}
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-white">{tr('set.pad.talk')}</div>
+                        <div className="text-[11px] text-zinc-400">{tr('set.pad.talkDesc', { keys: formatShortcut(settings.voiceInputShortcut || 'CmdOrCtrl+Shift+V') })}</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(['y', 'x', 'lb', 'rb', 'off'] as const).map((b) => {
+                            const selected = (settings.controllerTalk || 'y') === b;
+                            return (
+                              <button
+                                key={b}
+                                aria-pressed={selected}
+                                onClick={() => {
+                                  playBlipSound(soundEnabled);
+                                  onUpdateSettings({ controllerTalk: b });
+                                }}
+                                className={`px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${selected ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white' : 'bg-black/30 border-white/[0.08] text-zinc-300'}`}
+                              >
+                                {b === 'off' ? tr('set.pad.preset.off') : tr('set.pad.talkHold', { button: tr(`set.pad.btn.${b}`) })}
                               </button>
                             );
                           })}
                         </div>
                       </div>
+                      <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
+                        <div>
+                          <div className="text-xs font-semibold text-white">{tr('set.pad.immersive')}</div>
+                          <div className="text-[11px] text-zinc-400">{tr('set.pad.immersiveDesc')}</div>
+                        </div>
+                        <button
+                          role="switch"
+                          aria-checked={settings.immersiveReadAloud !== false}
+                          aria-label={tr('set.pad.immersive')}
+                          onClick={() => {
+                            playBlipSound(soundEnabled);
+                            onUpdateSettings({ immersiveReadAloud: settings.immersiveReadAloud === false });
+                          }}
+                          className={`w-11 h-6 flex-shrink-0 rounded-full p-0.5 flex transition-colors cursor-pointer ${
+                            settings.immersiveReadAloud !== false ? 'bg-[var(--accent-color)] justify-end' : 'bg-white/15 justify-start'
+                          }`}
+                        >
+                          <span className="w-5 h-5 rounded-full bg-[#16101f]" />
+                        </button>
+                      </div>
 
                       <div className="p-3 rounded-xl bg-black/30 border border-white/[0.08] space-y-1.5">
                         <div className="text-[10px] font-mono uppercase text-zinc-400">{tr('set.pad.controls')}</div>
                         <ul className="grid sm:grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-zinc-300">
-                          {['move', 'a', 'b', 'x', 'y', 'menu', 'view', 'lbrb', 'rs'].map((k) => (
+                          {['move', 'a', 'b', 'x', 'y', 'menu', 'view', 'lbrb', 'lt', 'rs'].map((k) => (
                             <li key={k}>{tr(`set.pad.c.${k}`)}</li>
                           ))}
                         </ul>

@@ -62,6 +62,8 @@ interface ChatAreaProps {
   screenshotKeys?: string;
   /** The show/hide shortcut ("Ctrl+\"), for the quick tour's "free your mouse" step. */
   hideKeys?: string;
+  /** Immersive mode: hold-to-talk answers are read aloud (Settings; default on). */
+  immersiveReadAloud?: boolean;
   /** Desktop: show an answer's markers in the on-screen objectives tracker (hides the panel). */
   onTrackOnScreen?: (msgId: string) => void;
   /** "Next turn" under a combat answer: a fresh screenshot and a short question for whoever acts now (desktop). */
@@ -186,6 +188,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   activeGame,
   screenshotKeys,
   hideKeys,
+  immersiveReadAloud = true,
   onTrackOnScreen,
   onNextTurn,
   soundEnabled,
@@ -398,8 +401,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     };
   }, []);
 
+  // Hold to talk (controller button or the held voice shortcut): immersive mode. Letting go sends the question with a
+  // fresh screenshot, the panel steps aside, and the answer is read aloud (immersiveReadAloud).
+  const immersiveRef = useRef(false);
+  const stopPendingRef = useRef(false);
+  const readAloudPendingRef = useRef(false);
+
   const startVoiceRecording = async () => {
     if (isRecording) return;
+    stopPendingRef.current = false;
 
     playBlipSound(soundEnabled);
     try {
@@ -420,9 +430,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         
         // Auto-capture screenshot if one isn't already attached
         let finalImage = attachedImageRef.current;
+        const immersive = immersiveRef.current;
+        immersiveRef.current = false;
+        const api = (window as any).electronAPI;
+        if (immersive && api?.captureFresh) {
+          // Immersive: the panel steps aside first, so the screenshot is the game as it is now.
+          api.hidePanel?.();
+          await new Promise((r) => setTimeout(r, 250));
+          finalImage = (await api.captureFresh().catch(() => null)) || finalImage;
+        }
         if (!finalImage) {
           finalImage = await captureGameScreen();
         }
+        if (immersive && immersiveReadAloud) readAloudPendingRef.current = true;
 
         reader.readAsDataURL(audioBlob);
         reader.onloadend = () => {
@@ -439,6 +459,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       mediaRecorder.start();
       setIsRecording(true);
+      // Let go before the microphone was ready: send what there is.
+      if (stopPendingRef.current) {
+        stopPendingRef.current = false;
+        setTimeout(() => { if (mediaRecorder.state === 'recording') { playBlipSound(soundEnabled); mediaRecorder.stop(); setIsRecording(false); } }, 300);
+      }
     } catch (err: any) {
       console.warn('Microphone access warning:', err?.message || err);
       setIsRecording(false);
@@ -456,6 +481,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const toggleVoiceRecording = () => {
     if (isRecording) stopVoiceRecording();
     else startVoiceRecording();
+  };
+
+  /** Hold to talk: 'start' while held, 'end' when let go. */
+  const handleTalk = (e: Event) => {
+    const state = (e as CustomEvent).detail?.state;
+    if (state === 'start') {
+      if (isLoading) return;
+      if (mode === 'guide') setMode('ask');
+      immersiveRef.current = true;
+      void startVoiceRecording();
+    } else if (state === 'end') {
+      if (isRecording && mediaRecorderRef.current) stopVoiceRecording();
+      else stopPendingRef.current = true;
+    }
+  };
+
+  /** Bumpers (controller): RB goes Ask -> Guide -> the next game; LB the other way. */
+  const handlePadMode = (e: Event) => {
+    const dir = Number((e as CustomEvent).detail?.dir) || 0;
+    if (dir > 0) {
+      if (mode === 'ask') setMode('guide');
+      else { window.dispatchEvent(new CustomEvent('qc-switch-tab', { detail: { delta: 1 } })); setMode('ask'); }
+    } else if (dir < 0) {
+      if (mode === 'guide') setMode('ask');
+      else window.dispatchEvent(new CustomEvent('qc-switch-tab', { detail: { delta: -1 } }));
+    }
   };
 
   // Controller: a question picked from the quick-questions list or typed on the on-screen keyboard.
@@ -482,6 +533,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     window.addEventListener('trigger-voice-start', startVoiceRecording);
     window.addEventListener('trigger-voice-stop', stopVoiceRecording);
     window.addEventListener('trigger-voice-record', toggleVoiceRecording);
+    window.addEventListener('qc-talk', handleTalk);
+    window.addEventListener('qc-pad-mode', handlePadMode);
     window.addEventListener('trigger-auto-screenshot-submit', handleAutoScreenshotSubmit);
     window.addEventListener('qc-ask', handleControllerAsk);
     window.addEventListener('qc-set-input', handleControllerInput);
@@ -489,11 +542,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       window.removeEventListener('trigger-voice-start', startVoiceRecording);
       window.removeEventListener('trigger-voice-stop', stopVoiceRecording);
       window.removeEventListener('trigger-voice-record', toggleVoiceRecording);
+      window.removeEventListener('qc-talk', handleTalk);
+      window.removeEventListener('qc-pad-mode', handlePadMode);
       window.removeEventListener('trigger-auto-screenshot-submit', handleAutoScreenshotSubmit);
       window.removeEventListener('qc-ask', handleControllerAsk);
       window.removeEventListener('qc-set-input', handleControllerInput);
     };
-  }, [isRecording, soundEnabled, attachedImage, onSendMessage, isLoading]);
+  }, [isRecording, soundEnabled, attachedImage, onSendMessage, isLoading, mode, immersiveReadAloud]);
 
   // Live Screen Capture from Game Window (WebRTC DisplayMedia or File Upload Fallback)
   const captureGameScreen = async (): Promise<string | null> => {
@@ -1039,6 +1094,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   };
 
   const questionCount = activeTab?.messages?.filter((m) => m.role === 'user').length ?? 0;
+  // Immersive mode: a hold-to-talk question's answer is read aloud as soon as it arrives.
+  useEffect(() => {
+    if (isLoading || !readAloudPendingRef.current) return;
+    const msgs = activeTab?.messages ?? [];
+    const last = msgs[msgs.length - 1];
+    if (!last || last.role !== 'assistant') return;
+    readAloudPendingRef.current = false;
+    void handlePlayTTS(last.id, last.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, activeTab?.messages?.length]);
   const lastAssistantId = (() => {
     const msgs = activeTab?.messages ?? [];
     for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].role === 'assistant') return msgs[i].id;

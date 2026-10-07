@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resizeWindow: (width) => ipcRenderer.send('resize-window', width),
   setDockPosition: (pos) => ipcRenderer.send('set-dock-position', pos),
   toggleSlide: () => ipcRenderer.send('toggle-slide'),
+  // Hold to talk: after sending, the panel slides away and the answer is read aloud.
+  hidePanel: () => ipcRenderer.send('hide-panel'),
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   // "Next turn" and "Locate me": a fresh screenshot of the game now (an open panel slides away for it), never the snapshot on open.
   captureFresh: () => ipcRenderer.invoke('capture-fresh'),

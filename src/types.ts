@@ -201,7 +201,17 @@ export interface AppSettings {
   language?: 'en' | 'es' | 'pt' | 'de' | 'fr' | 'ru' | 'ja' | 'ko' | 'zh';
   /** Controller support (on by default) and the held chord that shows / hides the desktop overlay. */
   controllerEnabled?: boolean;
-  controllerToggle?: 'back+start' | 'ls+rs' | 'lb+rb+back' | 'off';
+  /**
+   * How the controller shows / hides the overlay (electron/padCombo.cjs): a 1-second hold of View + Menu (default), a
+   * double-tap of View, a 1-second hold of L3 + R3, a custom combo (controllerCustom), or off. Older values still work.
+   */
+  controllerToggle?: 'hold-view-menu' | 'double-view' | 'hold-ls-rs' | 'custom' | 'off' | 'back+start' | 'ls+rs' | 'lb+rb+back';
+  /** A custom show / hide combo: its buttons (XInput names: a, b, x, y, lb, rb, back, start, ls, rs) and its timing. */
+  controllerCustom?: { buttons: string[]; mode: 'hold' | 'double' };
+  /** Hold to talk on the controller while the overlay is open (default 'y'; 'off' turns it off). */
+  controllerTalk?: 'y' | 'x' | 'lb' | 'rb' | 'off';
+  /** Immersive mode: after a hold-to-talk question the panel steps aside and the answer is read aloud (default on). */
+  immersiveReadAloud?: boolean;
   /** Desktop: screenshot the game just before the overlay opens (for games that pause when they lose focus). */
   snapshotOnOpen?: boolean;
   /**

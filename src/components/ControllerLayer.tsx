@@ -4,23 +4,26 @@
  * Input comes from the desktop app's system-level controller service (electron/controller.cjs) when available,
  * otherwise from the browser Gamepad API (web app, or while the window is focused).
  *
- *   D-pad / left stick  move between buttons        A  select           B  back (closes dialogs, then hides the overlay)
- *   X  voice question (press again to send)          Y  quick questions  Menu  on-screen keyboard
- *   View  screenshot & ask (desktop)                 LB / RB  previous / next game   Right stick  scroll
+ *   D-pad / left stick  move between controls       A  select           B  back (closes dialogs, then hides the overlay)
+ *   X  voice question (press again to send)          Y  quick questions (hold: ask out loud, immersive mode)
+ *   Menu  on-screen keyboard                         View  screenshot & ask (desktop)
+ *   LB / RB  Ask, Guide, then the previous / next game   LT / RT  page through long answers   Right stick  scroll
  *
  * The rest of the app is reached through small window events, so no app logic lives here:
  *   'qc-ask' {text}         send a question        'qc-set-input' {text}   mirror typed text into the question box
  *   'qc-switch-tab' {delta} change compendium      'trigger-voice-record' / 'trigger-auto-screenshot-submit' (existing)
+ *   'qc-talk' {state}       hold to talk           'qc-pad-mode' {dir}     bumpers: Ask / Guide / games
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useT } from '../i18n';
 import { QUICK_MAIN, QUICK_MORE } from '../utils/quickQuestions';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
-type PadEvent = { type: 'button'; button: Btn } | { type: 'scroll'; dy: number };
+type PadEvent = { type: 'button'; button: Btn | 'lt' | 'rt' } | { type: 'scroll'; dy: number } | { type: 'talk'; state: 'start' | 'end' };
 
 const FOCUSABLE =
-  'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, ' +
+  '[role="button"]:not([aria-disabled="true"]), [role="tab"], [role="option"], [role="switch"], [role="menuitem"], [tabindex]:not([tabindex="-1"])';
 
 const electronAPI = () => (typeof window !== 'undefined' ? (window as any).electronAPI : undefined);
 const emit = (name: string, detail?: unknown) => window.dispatchEvent(new CustomEvent(name, { detail }));
@@ -106,14 +109,16 @@ function closeTopDialog(): boolean {
 // ---- Input sources ------------------------------------------------------------------------------------------
 
 /** Browser Gamepad API (standard mapping), with the same repeat behavior as the desktop service. */
-function useGamepadPolling(enabled: boolean, onEvent: (e: PadEvent) => void) {
+function useGamepadPolling(enabled: boolean, talkButton: string, onEvent: (e: PadEvent) => void) {
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
   useEffect(() => {
     if (!enabled || typeof navigator === 'undefined' || !navigator.getGamepads) return;
     const MAP: [number, Btn][] = [[0, 'a'], [1, 'b'], [2, 'x'], [3, 'y'], [4, 'lb'], [5, 'rb'], [8, 'back'], [9, 'start'], [10, 'ls'], [11, 'rs']];
     const prev = new Set<Btn>();
-    const rep: Record<string, { since: number; last: number } | null> = { up: null, down: null, left: null, right: null };
+    const rep: Record<string, { since: number; last: number } | null> = { up: null, down: null, left: null, right: null, lt: null, rt: null };
+    // Hold to talk on one button: held 350 ms starts listening, letting go sends; a tap is its normal press.
+    let talkSince: number | null = null, talking = false;
     let lastScroll = 0;
     let raf = 0;
     const loop = () => {
@@ -133,17 +138,31 @@ function useGamepadPolling(enabled: boolean, onEvent: (e: PadEvent) => void) {
         if (Math.abs(p.axes[0] ?? 0) > Math.abs(lx)) lx = p.axes[0] ?? 0;
         if (Math.abs(p.axes[1] ?? 0) > Math.abs(ly)) ly = p.axes[1] ?? 0;
         if (Math.abs(p.axes[3] ?? 0) > Math.abs(ry)) ry = p.axes[3] ?? 0;
+        if ((p.buttons[6]?.value ?? 0) > 0.5) down.add('lt' as Btn);
+        if ((p.buttons[7]?.value ?? 0) > 0.5) down.add('rt' as Btn);
       }
       if (ly < -0.55) down.add('up');
       if (ly > 0.55) down.add('down');
       if (lx < -0.55) down.add('left');
       if (lx > 0.55) down.add('right');
-      for (const [, name] of MAP) if (down.has(name) && !prev.has(name)) onEventRef.current({ type: 'button', button: name });
-      for (const d of ['up', 'down', 'left', 'right'] as const) {
-        if (!down.has(d)) { rep[d] = null; continue; }
+      const tb = talkButton !== 'off' ? (talkButton as Btn) : null;
+      if (tb) {
+        if (down.has(tb)) {
+          if (talkSince === null) talkSince = t;
+          if (!talking && t - talkSince >= 350) { talking = true; onEventRef.current({ type: 'talk', state: 'start' }); }
+        } else if (talkSince !== null) {
+          if (talking) onEventRef.current({ type: 'talk', state: 'end' });
+          else onEventRef.current({ type: 'button', button: tb });
+          talkSince = null; talking = false;
+        }
+      }
+      for (const [, name] of MAP) if (name !== tb && down.has(name) && !prev.has(name)) onEventRef.current({ type: 'button', button: name });
+      for (const d of ['up', 'down', 'left', 'right', 'lt', 'rt'] as const) {
+        if (!down.has(d as Btn)) { rep[d] = null; continue; }
         const r = rep[d];
+        const every = d === 'lt' || d === 'rt' ? 330 : 110;
         if (!r) { rep[d] = { since: t, last: t }; onEventRef.current({ type: 'button', button: d }); }
-        else if (t - r.since > 380 && t - r.last > 110) { r.last = t; onEventRef.current({ type: 'button', button: d }); }
+        else if (t - r.since > 380 && t - r.last > every) { r.last = t; onEventRef.current({ type: 'button', button: d }); }
       }
       if (Math.abs(ry) > 0.25 && t - lastScroll > 33) { lastScroll = t; onEventRef.current({ type: 'scroll', dy: Math.round(ry * 42) }); }
       prev.clear();
@@ -151,7 +170,7 @@ function useGamepadPolling(enabled: boolean, onEvent: (e: PadEvent) => void) {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [enabled]);
+  }, [enabled, talkButton]);
 }
 
 // ---- On-screen keyboard layouts -----------------------------------------------------------------------------
@@ -173,7 +192,8 @@ type Special = (typeof SPECIALS)[number];
 
 // ---- The layer ----------------------------------------------------------------------------------------------
 
-export function ControllerLayer({ enabled }: { enabled: boolean }) {
+export function ControllerLayer({ enabled, talkButton = 'y' }: { enabled: boolean; talkButton?: string }) {
+  const [talking, setTalking] = useState(false);
   const t = useT();
   const locale = useLocale();
   const [padMode, setPadMode] = useState(false);
@@ -270,7 +290,20 @@ export function ControllerLayer({ enabled }: { enabled: boolean }) {
         if (el) el.scrollBy({ top: e.dy });
         return;
       }
+      // Hold to talk (immersive mode): the chat listens while held and sends when let go.
+      if (e.type === 'talk') {
+        setPanel(null);
+        setTalking(e.state === 'start');
+        emit('qc-talk', { state: e.state });
+        return;
+      }
       const b = e.button;
+      // Triggers page through long answers (and lists), most of a screen at a time.
+      if (b === 'lt' || b === 'rt') {
+        const el = scrollableIn(topScope());
+        if (el) el.scrollBy({ top: (b === 'rt' ? 1 : -1) * Math.round(el.clientHeight * 0.8), behavior: 'smooth' });
+        return;
+      }
 
       // --- Quick questions panel
       if (panel === 'questions') {
@@ -331,7 +364,8 @@ export function ControllerLayer({ enabled }: { enabled: boolean }) {
       } else if (b === 'back') {
         if (electronAPI()) emit('trigger-auto-screenshot-submit');
       } else if (b === 'lb' || b === 'rb') {
-        emit('qc-switch-tab', { delta: b === 'rb' ? 1 : -1 });
+        // Ask -> Guide -> the next game (RB), and back (LB). Inside a dialog: nothing.
+        if (scope === document.body) emit('qc-pad-mode', { dir: b === 'rb' ? 1 : -1 });
       }
     },
     [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus],
@@ -359,7 +393,7 @@ export function ControllerLayer({ enabled }: { enabled: boolean }) {
       .catch(() => setDesktopPad(false));
   }, [setFocus]);
 
-  useGamepadPolling(enabled && desktopPad === false, (evt) => handleRef.current(evt));
+  useGamepadPolling(enabled && desktopPad === false, talkButton, (evt) => handleRef.current(evt));
 
   if (!enabled || !padMode) return null;
 
@@ -467,8 +501,10 @@ export function ControllerLayer({ enabled }: { enabled: boolean }) {
             <Hint b="b" label={t('pad.back')} />
             <Hint b="x" label={t('pad.voice')} />
             <Hint b="y" label={t('pad.questions')} />
+            {talkButton !== 'off' && <Hint b={talkButton} label={talking ? t('pad.listening') : t('pad.talk')} />}
             <Hint b="menu" label={t('pad.keyboard')} />
             <Hint b="lb" label={t('pad.games')} />
+            <Hint b="rt" label={t('pad.page')} />
           </>
         )}
       </div>

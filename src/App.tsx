@@ -485,9 +485,11 @@ export default function App() {
   useEffect(() => {
     (window as any).electronAPI?.setControllerConfig?.({
       enabled: settings.controllerEnabled !== false,
-      chord: settings.controllerToggle || 'back+start',
+      toggle: settings.controllerToggle || 'hold-view-menu',
+      custom: settings.controllerCustom,
+      talk: settings.controllerTalk || 'y',
     });
-  }, [settings.controllerEnabled, settings.controllerToggle]);
+  }, [settings.controllerEnabled, settings.controllerToggle, settings.controllerCustom, settings.controllerTalk]);
 
   // Snapshot on open (desktop): capture the game before the overlay takes focus.
   useEffect(() => {
@@ -1086,16 +1088,17 @@ export default function App() {
 
   useEffect(() => {
     if ((window as any).electronAPI?.onTriggerVoiceInputStart) {
+      // Hold to talk with the keyboard (the voice shortcut held down): immersive, like the controller's.
       (window as any).electronAPI.onTriggerVoiceInputStart(() => {
         setIsBrowserMode(false);
         setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('trigger-voice-start'));
+          window.dispatchEvent(new CustomEvent('qc-talk', { detail: { state: 'start' } }));
         }, 100);
       });
     }
     if ((window as any).electronAPI?.onTriggerVoiceInputStop) {
       (window as any).electronAPI.onTriggerVoiceInputStop(() => {
-        window.dispatchEvent(new CustomEvent('trigger-voice-stop'));
+        window.dispatchEvent(new CustomEvent('qc-talk', { detail: { state: 'end' } }));
       });
     }
     if ((window as any).electronAPI?.onTriggerVoiceInput) {
@@ -2233,6 +2236,7 @@ export default function App() {
                 activeGame={activeGame}
                 screenshotKeys={prettyShortcut(settings.autoScreenshotShortcut)}
                 hideKeys={formatShortcut(settings.hideAppShortcut)}
+                immersiveReadAloud={settings.immersiveReadAloud !== false}
                 soundEnabled={settings.soundEnabled}
                 onAppendToNotes={handleAppendToNotes}
                 markerLifetime={settings.markerLifetime ?? 120}
@@ -2353,7 +2357,7 @@ export default function App() {
       )}
 
       {/* Controller support: focus navigation, quick questions, on-screen keyboard, button hints */}
-      <ControllerLayer enabled={settings.controllerEnabled !== false} />
+      <ControllerLayer enabled={settings.controllerEnabled !== false} talkButton={settings.controllerTalk || 'y'} />
 
       {/* Quick Game Search & Switcher Modal */}
       <QuickGameSearchModal

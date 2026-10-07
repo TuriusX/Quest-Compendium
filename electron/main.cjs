@@ -711,11 +711,7 @@ app.whenReady().then(() => {
     
     const voiceCmd = shortcuts.voiceInputShortcut || 'CommandOrControl+Shift+V';
     try {
-      globalShortcut.register(voiceCmd, () => {
-        if (mainWindow) {
-          mainWindow.webContents.send('trigger-voice-input');
-        }
-      });
+      globalShortcut.register(voiceCmd, () => onVoiceKey());
     } catch (err) {
       console.error("Failed to register voiceInputShortcut", err);
     }
@@ -750,6 +746,43 @@ app.on('before-quit', () => {
   if (controllerService) controllerService.stop();
   globalShortcut.unregisterAll();
 });
+
+// Hold to talk with the keyboard (the voice shortcut, Settings): a global shortcut only reports presses, but while the
+// keys are held Windows repeats them, so presses arriving close together mean "held". Holding starts a voice question
+// and letting go sends it (with a fresh screenshot; the answer is read aloud: immersive mode). A single tap without
+// repeats still works as before: tap to start, tap again to send.
+const voiceKey = { active: false, held: false, last: 0, releaseTimer: null };
+function onVoiceKey() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const t = Date.now();
+  const send = (state) => mainWindow.webContents.send(state === 'start' ? 'trigger-voice-input-start' : 'trigger-voice-input-stop');
+  const finish = () => {
+    clearTimeout(voiceKey.releaseTimer);
+    voiceKey.active = false; voiceKey.held = false;
+    send('stop');
+  };
+  if (!voiceKey.active) {
+    Object.assign(voiceKey, { active: true, held: false, last: t });
+    send('start');
+    return;
+  }
+  const gap = t - voiceKey.last;
+  voiceKey.last = t;
+  if (voiceKey.held || gap < 150) {
+    // Key repeat: still held. Sent when the repeats stop (the keys were let go).
+    voiceKey.held = true;
+    clearTimeout(voiceKey.releaseTimer);
+    voiceKey.releaseTimer = setTimeout(finish, 350);
+    return;
+  }
+  // The first repeat comes after the keyboard's repeat delay; a deliberate second tap looks the same until the next
+  // press shows whether more repeats follow.
+  clearTimeout(voiceKey.releaseTimer);
+  voiceKey.releaseTimer = setTimeout(() => { if (!voiceKey.held) finish(); }, 160);
+}
+
+// The panel slides away (hold-to-talk sends and goes back to the game; the answer is read aloud).
+ipcMain.on('hide-panel', () => { if (isAppVisible) slideOut(); });
 
 // The show/hide shortcut as registered ('' = none) and the mouse tips' state (from the app's settings.mouseTips).
 let hideKeysNow = '';
