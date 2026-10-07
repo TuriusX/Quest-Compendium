@@ -64,7 +64,7 @@ test("redirects: moved pages 301 to their replacement, per language, never from 
     { key: "ff6", from: "crumbling-house", to: "tzen" },
     { key: "ff6", from: "narshe", to: "tzen" }, // live again in English: only the German URL redirects
     { key: "ff6", from: "gone", to: "not-on-site" },
-  ], live, ["en", "de"], S);
+  ], live, ["en", "de", "fr"], S); // fr: the guide isn't in French, so no French redirects
   assert.deepEqual(lines, [
     "/guides/ff6/burning-home/ /guides/ff6/thamasa/ 301",
     "/de/guides/ff6/burning-home/ /de/guides/ff6/thamasa/ 301",

@@ -787,6 +787,9 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
       description = ui('areaDesc', { area: a.name, game: sg }).slice(0, 158);
     }
     const url = `${SITE}/${LP}guides/${key}/${o.slug}/`;
+    // A page not translated yet shows the English text in this language's folder: it names the English page as
+    // canonical and stays out of the sitemap and the hreflang set until its translation is published.
+    const untranslated = LANG !== 'en' && !t?.areas?.[o.slug];
     const ld = [
       breadcrumb([{ name: ui('navGuides'), url: `${SITE}/${LP}guides/` }, { name: sg, url: `${SITE}/${LP}guides/${key}/` }, { name: a.name, url }]),
       guideArticle({ headline: title.replace(/ \| Quest Compendium$/, ''), description, url, game: gameName, modified: Number((a as any).updatedAt) || undefined }),
@@ -797,7 +800,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
         title,
         description,
         depth: 3 + extra,
-        canonical: url,
+        canonical: untranslated ? `${SITE}/guides/${key}/${o.slug}/` : url,
         ld,
         body: areaBody(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra), achHere ? (achHere.list || []).filter((x: any) => x.area === o.slug) : []),
         draft,
@@ -809,11 +812,11 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           ...a.secrets.map((e) => ({ id: e.id, label: String(e.text || e.name || '').slice(0, 70) })),
           ...(a.sections || []).filter((x) => x.check).flatMap((x) => x.entries.map((e) => ({ id: e.id, label: String(e.text || '').slice(0, 70) }))),
         ].filter((e) => e.id && e.label),
-        langs: pageLangs(o.slug),
+        langs: untranslated ? [] : pageLangs(o.slug),
         path: `guides/${key}/${o.slug}/`,
       }),
     );
-    if (!draft) sitemap.push(`${SITE}/${LP}guides/${key}/${o.slug}/`);
+    if (!draft && !untranslated) sitemap.push(`${SITE}/${LP}guides/${key}/${o.slug}/`);
   });
   const checked = visible.filter((o) => byslug.get(o.slug)!.verified !== false).length;
   const totalChecks = links.reduce((n, l) => n + l.total, 0);
