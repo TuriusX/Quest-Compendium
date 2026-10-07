@@ -1217,11 +1217,11 @@ percentages:
       if (knownFacts) systemInstruction += `\n\n${knownFacts}`;
       // The guide page for where the player is: background notes for this answer only (never saved as facts).
       const guidePage = await guidePageFor(effectiveGame?.name, place?.name);
-      // A checked or flagship page: its entries come first, preferred over the model's own knowledge, and the answer
+      // A checked page (its entries verified; search-pack pages awaiting re-verification are not): its entries come first, preferred over the model's own knowledge, and the answer
       // says which it used (the "From the guide" badge links to them).
       let guideTags: Record<string, GuideRef> = {};
       if (guidePage) {
-        if (guidePage.verified || guidePage.flagship) {
+        if (guidePage.verified) {
           const g = guideGroundingForPrompt(guidePage);
           guideTags = g.refs;
           systemInstruction += `\n\n${g.text}`;
