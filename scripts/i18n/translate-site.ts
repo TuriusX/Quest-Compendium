@@ -15,6 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import { finalLinks } from '../guides/siteText';
 
 dotenv.config();
 const SITE = 'https://questcompendium.com';
@@ -128,12 +129,12 @@ const STORE_BADGE: Record<string, string> = { en: 'en-us', es: 'es', pt: 'pt-br'
 
 /** Links in a page one folder down: relative paths get "../". */
 export function rebase(html: string): string {
-  return html.replace(/\b(href|src)="(?!https?:|\/\/|#|mailto:|data:|\/)([^"]+)"/g, (_m, a, p) => `${a}="../${p}"`);
+  return html.replace(/\b(href|src)="(?!https?:|\/\/|#|mailto:|data:|\/)([^"]+)"/g, (_m, a, p) => `${a}="../${p.replace(/^\.\//, '')}"`);
 }
 
 function langMenu(current: string, depth: number): string {
   const up = depth ? '../' : '';
-  const link = (l: (typeof SITE_LANGS)[number]) => `${up}${l.code === 'en' ? '' : `${l.code}/`}index.html`;
+  const link = (l: (typeof SITE_LANGS)[number]) => `${up}${l.code === 'en' ? '' : `${l.code}/`}` || './';
   const cur = SITE_LANGS.find((l) => l.code === current)!;
   return `<!-- QC-LANGS:START -->
       <details class="relative">
@@ -167,7 +168,7 @@ async function main() {
 
   // The English page gets the menu and hreflang tags too. Every page keeps the English page's line endings.
   const eol = eolOf(srcFile);
-  src = withEol(setBlock(setBlock(src, 'LANGS', langMenu('en', 0)), 'HREFLANG', hreflang()), eol);
+  src = withEol(finalLinks(setBlock(setBlock(src, 'LANGS', langMenu('en', 0)), 'HREFLANG', hreflang())), eol);
   fs.writeFileSync(srcFile, src);
 
   const strings = [...collect(src)];
@@ -218,7 +219,7 @@ async function main() {
       .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${SITE}/${lang.code}/$2`)
       // Microsoft's official "Get it from Microsoft" badge in the page's language (its badge service's language codes).
       .replace(/get\.microsoft\.com\/images\/en-us%20dark\.svg/g, `get.microsoft.com/images/${STORE_BADGE[lang.code] || 'en-us'}%20dark.svg`);
-    page = setBlock(setBlock(page, 'LANGS', langMenu(lang.code, 1)), 'HREFLANG', hreflang());
+    page = finalLinks(setBlock(setBlock(page, 'LANGS', langMenu(lang.code, 1)), 'HREFLANG', hreflang()));
     const out = path.join(ROOT, lang.code, 'index.html');
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, withEol(page, eolOf(out, eol)));

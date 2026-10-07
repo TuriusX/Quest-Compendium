@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/siteText.test.ts)
 import assert from "node:assert/strict";
-import { shortGame, relatedQuests, achFlags } from "../scripts/guides/siteText";
+import { shortGame, relatedQuests, achFlags, finalLinks, redirectLines } from "../scripts/guides/siteText";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -41,6 +41,37 @@ test("achievement labels: the builder's own, plus what the text makes plain", ()
   assert.deepEqual(achFlags({ desc: "Open the door.", how: "Known bug: may not unlock; reload the save." }), ["buggy"]);
   assert.deepEqual(achFlags({ desc: "Reach the Grove.", labels: ["collectible", "nonsense"] }), ["collectible"]);
   assert.deepEqual(achFlags({ desc: "Defeat the dragon." }), []);
+});
+
+test("links use final URLs: no index.html, trailing slash kept, anchors kept", () => {
+  assert.equal(finalLinks('<a href="../limgrave/index.html#items">'), '<a href="../limgrave/#items">');
+  assert.equal(finalLinks('<a href="index.html">'), '<a href="./">');
+  assert.equal(finalLinks('<a href="index.html#download">'), '<a href="./#download">');
+  assert.equal(finalLinks('<a href="../../de/guides/index.html">'), '<a href="../../de/guides/">');
+  assert.equal(finalLinks('<a href="guides/elden-ring/index.html">'), '<a href="guides/elden-ring/">');
+  assert.equal(finalLinks('<a href="https://questcompendium.com/guides/index.html">'), '<a href="https://questcompendium.com/guides/">');
+  assert.equal(finalLinks('<a href="/index.html">'), '<a href="/">');
+  // Other sites and other files are left alone.
+  assert.equal(finalLinks('<a href="https://example.com/index.html">'), '<a href="https://example.com/index.html">');
+  assert.equal(finalLinks('<a href="privacy.html">'), '<a href="privacy.html">');
+});
+
+test("redirects: moved pages 301 to their replacement, per language, never from a live page", () => {
+  const S = "https://questcompendium.com";
+  const live = new Set([`${S}/guides/ff6/thamasa/`, `${S}/de/guides/ff6/thamasa/`, `${S}/guides/ff6/tzen/`, `${S}/guides/ff6/narshe/`]);
+  const lines = redirectLines([
+    { key: "ff6", from: "burning-home", to: "thamasa" },
+    { key: "ff6", from: "crumbling-house", to: "tzen" },
+    { key: "ff6", from: "narshe", to: "tzen" }, // live again in English: only the German URL redirects
+    { key: "ff6", from: "gone", to: "not-on-site" },
+  ], live, ["en", "de"], S);
+  assert.deepEqual(lines, [
+    "/guides/ff6/burning-home/ /guides/ff6/thamasa/ 301",
+    "/de/guides/ff6/burning-home/ /de/guides/ff6/thamasa/ 301",
+    "/guides/ff6/crumbling-house/ /guides/ff6/tzen/ 301",
+    "/de/guides/ff6/crumbling-house/ /guides/ff6/tzen/ 301",
+    "/de/guides/ff6/narshe/ /guides/ff6/tzen/ 301",
+  ]);
 });
 
 console.log(`\n${passed} tests passed`);

@@ -1,0 +1,336 @@
+{
+  "avowed": {
+    "the-coastal-reach": "dawnshore",
+    "the-shattered-passage": "fort-northreach",
+    "the-shattered-scarp": "shatterscarp"
+  },
+  "black-myth-wukong": {
+    "black-bear-guai-chapter-1": "chapter-1-black-wind-mountain",
+    "black-wind-mountain": "chapter-1-black-wind-mountain",
+    "bull-king-chapter-5": "chapter-5-flaming-mountains",
+    "elder-jinchi-chapter-1": "chapter-1-black-wind-mountain",
+    "flaming-mountains": "chapter-5-flaming-mountains",
+    "hundred-eyed-daoist-master-chapter-4": "chapter-4-the-webbed-hollow",
+    "mount-huaguo": "chapter-6-mount-huaguo",
+    "sun-wukong-chapter-6": "chapter-6-mount-huaguo",
+    "the-destined-one-chapter-1": "chapter-1-black-wind-mountain",
+    "the-destined-one-chapter-2": "chapter-2-yellow-wind-ridge",
+    "the-destined-one-chapter-3": "chapter-3-the-new-west",
+    "the-destined-one-chapter-4": "chapter-4-the-webbed-hollow",
+    "the-destined-one-chapter-5": "chapter-5-flaming-mountains",
+    "the-destined-one-chapter-6": "chapter-6-mount-huaguo",
+    "the-new-west": "chapter-3-the-new-west",
+    "the-webbed-hollow": "chapter-4-the-webbed-hollow",
+    "tiger-vanguard-chapter-2": "chapter-2-yellow-wind-ridge",
+    "yellow-wind-ridge": "chapter-2-yellow-wind-ridge",
+    "yellow-wind-sage-chapter-2": "chapter-2-yellow-wind-ridge",
+    "yellowbrow-chapter-3": "chapter-3-the-new-west"
+  },
+  "chrono-cross-the-radical-dreamers-edition": {
+    "cape-howl-another-world": "cape-howl",
+    "guldove-another-world": "guldove",
+    "terra-tower-another-world": "terra-tower",
+    "the-dead-sea": "dead-sea",
+    "viper-manor-another-world": "viper-manor-home-world"
+  },
+  "chrono-trigger": {
+    "giants-claw-600-a-d": "giants-claw",
+    "guardia-castle-600-a-d": "guardia-castle-1000-a-d",
+    "medina-village-1000-a-d": "medina-village",
+    "rainbow-shell": "giants-claw"
+  },
+  "control-ultimate-edition": {
+    "communications-department": "executive-affairs",
+    "eagle-limited-awe-boss-fight-era": "eagle-limited-awe",
+    "foundation": "crossroads"
+  },
+  "dark-souls-iii": {
+    "the-ringed-city": "the-dreg-heap"
+  },
+  "dead-space": {
+    "aegis-vii": "chapter-12-dead-space",
+    "comms-hub": "chapter-8-search-and-rescue",
+    "crew-quarters": "chapter-10-end-of-days",
+    "hydroponics-deck": "chapter-6-environmental-hazard",
+    "isaac-chapter-1": "chapter-1-new-arrivals",
+    "isaac-chapter-10": "chapter-10-end-of-days",
+    "isaac-chapter-11": "chapter-11-alternate-solutions",
+    "isaac-chapter-12": "chapter-12-dead-space",
+    "isaac-chapter-2": "chapter-2-intensive-care",
+    "isaac-chapter-3": "chapter-3-course-correction",
+    "isaac-chapter-4": "chapter-4-obliteration-imminent",
+    "isaac-chapter-5": "chapter-5-lethal-devotion",
+    "isaac-chapter-6": "chapter-6-environmental-hazard",
+    "isaac-chapter-7": "chapter-7-into-the-void",
+    "isaac-chapter-8": "chapter-8-search-and-rescue",
+    "isaac-chapter-9": "chapter-9-dead-on-arrival",
+    "mining-deck": "chapter-7-into-the-void",
+    "usm-valor": "chapter-9-dead-on-arrival"
+  },
+  "devil-may-cry-5": {
+    "mission-01": "mission-01-nero",
+    "mission-02": "mission-02-qliphoth",
+    "mission-03": "mission-03-flying-hunter",
+    "mission-04": "mission-04-v",
+    "mission-05": "mission-05-the-devil-sword-sparda",
+    "mission-07": "mission-07-united-front",
+    "mission-08": "mission-08-demon-king",
+    "mission-09": "mission-09-genesis",
+    "mission-10": "mission-10-awaken",
+    "mission-11": "mission-11-reason",
+    "mission-12": "mission-12-yamato",
+    "mission-13": "mission-13-three-warriors",
+    "mission-14": "mission-14-diverging-point-v",
+    "mission-15": "mission-15-diverging-point-nero",
+    "mission-16": "mission-16-diverging-point-dante",
+    "mission-18": "mission-18-awakening"
+  },
+  "divinity-original-sin-2-definitive-edition": {
+    "driftwood-tavern-cellar": "driftwood-arena",
+    "school": "arx"
+  },
+  "dragon-quest-viii": {
+    "tower-of-alexandria": "tower-of-alexandra",
+    "trodain-castle": "castle-trodain"
+  },
+  "elden-ring": {
+    "bonny-village": "scadu-altus",
+    "caelid-radahn-festival": "caelid",
+    "castle-morne": "weeping-peninsula",
+    "castle-sol": "mountaintops-of-the-giants",
+    "church-district": "shadow-keep",
+    "elden-throne": "leyndell-royal-capital",
+    "elphael-brace-of-the-haligtree": "miquellas-haligtree",
+    "leyndell-ashen-capital": "leyndell-royal-capital",
+    "leyndell-ashen-capital-leyndell-ashen-capital": "leyndell-royal-capital",
+    "limgrave-post-godrick": "limgrave",
+    "liurnia-of-the-lakes-post-rennala": "liurnia-of-the-lakes",
+    "midras-manse": "abyssal-woods",
+    "ordina-liturgical-town": "consecrated-snowfield",
+    "redmane-castle": "caelid",
+    "storehouse-first-floor": "shadow-keep",
+    "stormhill": "limgrave",
+    "stormveil-castle-post-godrick": "stormveil-castle",
+    "yelough-anix-tunnel": "consecrated-snowfield"
+  },
+  "fallout-new-vegas": {
+    "dead-horses-camp": "angel-cave",
+    "ranger-station-golf": "camp-golf"
+  },
+  "final-fantasy-ix": {
+    "lindblum-disc-3-disc-4": "lindblum-disc-3"
+  },
+  "final-fantasy-v": {
+    "ancient-library": "library-of-the-ancients",
+    "ancient-library-merged-world": "library-of-the-ancients",
+    "crescent-merged-world": "crescent",
+    "jachol-cave-merged-world": "jachol-cave",
+    "karnak": "town-of-karnak",
+    "karnak-merged-world": "town-of-karnak",
+    "kelb": "quelb",
+    "kelb-merged-world": "quelb",
+    "pirate-cove": "pirates-hideout",
+    "steamship": "fire-powered-ship",
+    "surgate-castle-merged-world": "surgate-castle",
+    "tule-merged-world": "tule",
+    "walse": "town-of-walse",
+    "walse-merged-world": "town-of-walse",
+    "walse-tower": "tower-of-walse",
+    "walse-tower-merged-world": "tower-of-walse",
+    "wind-drakes-den": "north-mountain",
+    "wind-shrine-merged-world": "wind-shrine"
+  },
+  "final-fantasy-vi": {
+    "burning-home": "thamasa",
+    "crumbling-house": "tzen",
+    "owzers-mansion": "jidoor-world-of-ruin",
+    "zone-eaters-interior": "triangle-island"
+  },
+  "final-fantasy-vii": {
+    "cave-of-the-gi": "cosmo-canyon",
+    "don-corneos-mansion": "wall-market",
+    "midgar-underground": "midgar",
+    "northern-cave-final-battle": "northern-cave",
+    "sector-5-slums-aeriths-house": "sector-5-slums",
+    "sector-7-slums-7th-heaven": "sector-7-slums",
+    "shinra-building-sister-ray-era": "midgar",
+    "submarine-dock": "underwater-reactor"
+  },
+  "final-fantasy-vii-remake-intergrade": {
+    "corneo-colosseum": "chapter-9-the-town-that-never-sleeps",
+    "corneo-colosseum-chapter-14": "chapter-14-in-search-of-hope",
+    "highway": "chapter-18-destinys-crossroads",
+    "mako-reactor-1": "chapter-1-the-destruction-of-mako-reactor-1",
+    "sector-1-slums": "chapter-2-fateful-encounters",
+    "sector-1-station": "chapter-1-the-destruction-of-mako-reactor-1",
+    "sector-5-slums": "chapter-8-budding-bodyguard",
+    "sector-5-slums-chapter-14": "chapter-14-in-search-of-hope",
+    "sector-5-station": "chapter-5-dogged-pursuit",
+    "sector-5-undercity": "chapter-5-dogged-pursuit",
+    "sector-5-undercity-chapter-13": "chapter-13-a-broken-world",
+    "sector-5-undercity-chapter-8": "chapter-8-budding-bodyguard",
+    "sector-6-slums": "chapter-9-the-town-that-never-sleeps",
+    "sector-6-slums-chapter-10": "chapter-10-rough-waters",
+    "sector-6-undercity": "chapter-9-the-town-that-never-sleeps",
+    "sector-6-undercity-chapter-14": "chapter-14-in-search-of-hope",
+    "sector-7-pillar": "chapter-12-fight-for-survival",
+    "sector-7-plate": "chapter-4-mad-dash",
+    "sector-7-sewers": "chapter-10-rough-waters",
+    "sector-7-slums": "chapter-3-home-sweet-slum",
+    "sector-7-slums-chapter-12": "chapter-12-fight-for-survival",
+    "sector-7-slums-chapter-14": "chapter-14-in-search-of-hope",
+    "sector-7-slums-intermission": "intermission-chapter-1-wutais-finest",
+    "sector-7-undercity": "chapter-3-home-sweet-slum",
+    "sector-7-undercity-chapter-12": "chapter-12-fight-for-survival",
+    "sector-7-undercity-chapter-14": "chapter-14-in-search-of-hope",
+    "sector-7-undercity-chapter-4": "chapter-4-mad-dash",
+    "sector-8": "chapter-2-fateful-encounters",
+    "shinra-building": "chapter-16-the-belly-of-the-beast",
+    "shinra-building-intermission": "intermission-chapter-2-covert-ops",
+    "train-graveyard": "chapter-11-haunted",
+    "underground-test-site": "chapter-13-a-broken-world",
+    "wall-market": "chapter-9-the-town-that-never-sleeps",
+    "wall-market-chapter-14": "chapter-14-in-search-of-hope"
+  },
+  "final-fantasy-viii": {
+    "balamb": "balamb-town",
+    "balamb-town-balamb-town-returning-from-the-field-exam": "balamb-town",
+    "d-district-prison": "galbadia-prison",
+    "deling-city-deling-city-arriving-to-assassinate-the-sorceress": "deling-city",
+    "dollet-dollet-the-seed-field-exam-mission": "dollet",
+    "esthar-city-esthar-city-squall-arrives-in-the-futuristic-city": "esthar-city",
+    "trabia-garden-trabia-garden-squall-visits-the-ruins-of-his-childhood-home": "trabia-garden",
+    "winhill-winhill-lagunas-flashback-sequence": "winhill"
+  },
+  "god-of-war": {
+    "helheim-second-visit": "helheim",
+    "the-mountain-interior": "the-mountain"
+  },
+  "gothic-1-remake": {
+    "the-outer-ring": "old-camp",
+    "the-rice-fields": "new-camp"
+  },
+  "hades": {
+    "asphodel-post-escape": "asphodel",
+    "elysium-post-escape": "elysium",
+    "tartarus-post-escape": "tartarus",
+    "the-house-of-hades": "house-of-hades",
+    "the-house-of-hades-post-epilogue": "house-of-hades",
+    "the-house-of-hades-post-escape": "house-of-hades",
+    "the-temple-of-styx": "styx",
+    "the-temple-of-styx-post-escape": "styx"
+  },
+  "half-life-2": {
+    "citadel": "our-benefactors",
+    "city-17-canals": "route-kanal",
+    "city-17-nexus": "follow-freeman",
+    "city-17-plaza-city-17-uprising": "anticitizen-one",
+    "city-17-streets": "anticitizen-one",
+    "coastal-highway": "highway-17"
+  },
+  "indiana-jones-and-the-great-circle": {
+    "sukhothai": "the-blessed-pearl",
+    "the-great-sphinx": "the-idol-of-ra",
+    "the-great-sphinx-revisit": "the-idol-of-ra",
+    "vatican-city": "the-stolen-cat-mummy"
+  },
+  "metroid-prime": {
+    "frigate-orpheon-crashed-frigate": "tallon-overworld"
+  },
+  "octopath-traveler": {
+    "cave-of-origin": "ophilia-chapter-1",
+    "forest-of-no-return": "alfyn-chapter-4",
+    "grandport-sewers": "grandport",
+    "morlocks-manse": "tressa-chapter-1",
+    "mountain-pass": "olberic-chapter-1",
+    "murkwood": "alfyn-chapter-1",
+    "obsidian-parlor": "primrose-chapter-3",
+    "ruins-of-eld": "haanit-chapter-2",
+    "shrine-of-the-flamebearer": "ophilia-chapter-4",
+    "sunshade-catacombs": "primrose-chapter-1",
+    "town-of-swarkii": "swarkii",
+    "victors-hollow-arena": "olberic-chapter-2"
+  },
+  "persona-3-reload": {
+    "elizabeths-requests": "requests",
+    "monad-depths": "tartarus",
+    "tartarus-adamah": "tartarus",
+    "tartarus-arqa": "tartarus",
+    "tartarus-harabah": "tartarus",
+    "tartarus-tziah": "tartarus",
+    "tartarus-yabbashah": "tartarus"
+  },
+  "persona-4-golden": {
+    "bathhouse": "steamy-bathhouse",
+    "castle": "yukikos-castle",
+    "magatsu-inaba": "magatsu-inaba-and-magatsu-mandala"
+  },
+  "persona-5-royal": {
+    "akihabara": "june",
+    "hawaii": "august",
+    "leblanc": "november",
+    "leblanc-third-semester": "january",
+    "mementos-depths-of-mementos": "december",
+    "mementos-third-semester": "february",
+    "shibuya": "april",
+    "shibuya-the-true-ending": "february",
+    "shibuya-third-semester": "january",
+    "shinjuku": "june",
+    "shujin-academy": "april",
+    "yongen-jaya": "april",
+    "yongen-jaya-the-true-ending": "february",
+    "yongen-jaya-third-semester": "january"
+  },
+  "portal-2": {
+    "aperture-science-facility": "aperture-science-enrichment-center",
+    "old-aperture": "old-aperture-cave-johnsons-era",
+    "wheatleys-boss-arena": "aperture-science-enrichment-center-gladoss-domain",
+    "wheatleys-testing-chambers": "aperture-science-enrichment-center-wheatleys-domain"
+  },
+  "prey": {
+    "apex-typhon": "talos-i-exterior-endgame",
+    "transtar-apartment": "neuromod-division"
+  },
+  "ratchet-clank-rift-apart": {
+    "ardolis-return-visit": "ardolis",
+    "blizar-prime-return-visit": "blizar-prime",
+    "cordelion-return-visit": "cordelion",
+    "torren-iv-return-visit": "torren-iv",
+    "viceron-return-visit": "viceron"
+  },
+  "sekiro-shadows-die-twice-goty-edition": {
+    "ashina-castle-late-game": "ashina-castle-shinobi-invasion",
+    "ashina-castle-post-fountainhead-palace": "ashina-castle-interior-ministry-invasion",
+    "ashina-outskirts-late-game": "ashina-outskirts-interior-ministry-invasion",
+    "ashina-reservoir-late-game": "ashina-reservoir-interior-ministry-invasion",
+    "dilapidated-temple-post-fountainhead-palace": "dilapidated-temple",
+    "hirata-estate-revisited": "hirata-estate-fathers-memory",
+    "hirata-estate-second-memory": "hirata-estate-fathers-memory",
+    "mibu-village": "ashina-depths"
+  },
+  "star-wars-knights-of-the-old-republic": {
+    "tatooine-dune-sea": "tatooine-eastern-dune-sea"
+  },
+  "stellar-blade": {
+    "orbit-elevator": "spire-4"
+  },
+  "the-elder-scrolls-v-skyrim-special-edition": {
+    "whiterun-stables": "whiterun"
+  },
+  "the-last-of-us-part-i": {
+    "resort-town": "lakeside-resort"
+  },
+  "the-legend-of-zelda-ocarina-of-time": {
+    "temple-of-time": "temple-of-time-adult-era"
+  },
+  "the-witcher-3-wild-hunt-complete-edition": {
+    "hanse-base": "mont-crane-castle"
+  },
+  "trails-in-the-sky-1st-chapter": {
+    "city-of-rolent": "rolent"
+  },
+  "trails-in-the-sky-2nd-chapter": {
+    "le-locle": "le-locle-canyon",
+    "royal-city-of-grancel": "city-of-grancel"
+  }
+}

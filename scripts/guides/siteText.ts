@@ -55,3 +55,36 @@ export function achFlags(a: { desc?: string; how?: string; missable?: boolean; l
   if (/\b(glitch(ed|y)?|bugged|buggy|may not unlock|doesn'?t always unlock|known bug)\b/i.test(all)) out.add('buggy');
   return ACH_FLAGS.filter((f) => out.has(f));
 }
+
+/**
+ * Links with their final URLs: a relative or questcompendium.com link to ".../index.html" becomes the folder URL
+ * ("../limgrave/index.html#items" -> "../limgrave/#items", "index.html" -> "./"), which is what the site serves without a
+ * redirect and what the canonical tags name.
+ */
+export function finalLinks(html: string): string {
+  return html
+    .replace(/href="(https:\/\/questcompendium\.com\/(?:[^"#?]*\/)?)index\.html([#?][^"]*)?"/g, (_m, p, rest = '') => `href="${p}${rest}"`)
+    .replace(/href="((?:\/|(?:\.\.?\/)*)(?:[^"#?:/][^"#?:]*\/)?)index\.html([#?][^"]*)?"/g, (_m, p, rest = '') => `href="${p || './'}${rest}"`);
+}
+
+/**
+ * Netlify _redirects lines for pages that moved: each old page (and its language versions) 301s to the page that
+ * replaced it, in the same language when that page is translated, else in English. Old pages that are live again,
+ * and moves to a page that isn't on the site, are left out. live: the site's URLs (the sitemap).
+ */
+export function redirectLines(moved: { key: string; from: string; to: string }[], live: Set<string>, langs: string[], site = 'https://questcompendium.com'): string[] {
+  const out = new Map<string, string>();
+  for (const m of moved) {
+    if (!m.from || !m.to || m.from === m.to) continue;
+    for (const code of langs) {
+      const pre = code === 'en' ? '' : `${code}/`;
+      const from = `/${pre}guides/${m.key}/${m.from}/`;
+      if (live.has(`${site}${from}`) || out.has(from)) continue;
+      const same = `/${pre}guides/${m.key}/${m.to}/`;
+      const en = `/guides/${m.key}/${m.to}/`;
+      const to = live.has(`${site}${same}`) ? same : live.has(`${site}${en}`) ? en : '';
+      if (to) out.set(from, to);
+    }
+  }
+  return [...out].map(([from, to]) => `${from} ${to} 301`);
+}

@@ -16,7 +16,7 @@ import path from 'path';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
-import { shortGame, relatedQuests, achFlags, ACH_FLAGS, type AchFlag } from './siteText';
+import { shortGame, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, type AchFlag } from './siteText';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 import { GENERATED as GUIDE_UI_GEN } from './guide-ui.generated';
@@ -118,6 +118,8 @@ function localize(a: GuideArea, t?: any): GuideArea {
 }
 
 const SITE = 'https://questcompendium.com';
+/** Old page -> the page that replaced it, per guide (pages merged or replaced by rebuilds): 301s in _redirects. */
+const SITE_REDIRECTS: Record<string, Record<string, string>> = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), 'site-redirects.json'), 'utf8'));
 /** --preview <dir>: a local preview of one game (--only key) with its flagship prototypes, outside the website files. */
 const PREVIEW = arg('preview') && arg('preview') !== 'true' ? String(arg('preview')) : '';
 const ONLY = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
@@ -260,6 +262,13 @@ const SCRIPT = `
   }
 })();`;
 
+/** Netlify's _redirects: the moved pages' old URLs, 301 to the pages that replaced them. */
+function writeRedirects(moved: { key: string; from: string; to: string }[], live: Set<string>) {
+  const lines = redirectLines(moved, live, Object.keys(LANG_TAG), SITE);
+  fs.writeFileSync(path.join(OUT, '_redirects'), `# Made by scripts/guides/publish.ts: pages that moved (scripts/guides/site-redirects.json, guide aliases).\n${lines.join('\n')}\n`);
+  console.log(`Redirects: ${lines.length} old URL(s) to the pages that replaced them.`);
+}
+
 function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string; entries?: { id: string; label: string }[]; ld?: object[] }) {
   // "Spot a mistake?": on an area page, the form can say which entry is wrong (its id goes to the server).
   const entryPicker = opts.entries && opts.entries.length
@@ -269,7 +278,8 @@ function page(opts: { title: string; description: string; depth: number; canonic
   const up = '../'.repeat(opts.depth);
   // Other languages of this same page: a menu in the top bar and hreflang tags for search engines.
   const langs = opts.langs && opts.langs.length > 1 && opts.path !== undefined ? opts.langs : [];
-  const hreflang = langs.map((c) => `<link rel="alternate" hreflang="${LANG_TAG[c]}" href="${SITE}/${langPath(c)}${opts.path}">`).join('\n  ');
+  // Every language version (this one included), and x-default: the English page.
+  const hreflang = [...langs.map((c) => `<link rel="alternate" hreflang="${LANG_TAG[c]}" href="${SITE}/${langPath(c)}${opts.path}">`), ...(langs.includes('en') ? [`<link rel="alternate" hreflang="x-default" href="${SITE}/${opts.path}">`] : [])].join('\n  ');
   const menu = langs.length
     ? `<details class="relative"><summary class="list-none cursor-pointer select-none hover:text-white" aria-label="${esc(ui('language'))}">${esc(LANG_LABEL[LANG])} &#9662;</summary><div class="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-[#0c0d14] p-1 shadow-xl z-50">${langs
         .map((c) => `<a href="${up}${langPath(c)}${opts.path}index.html" hreflang="${LANG_TAG[c]}" lang="${LANG_TAG[c]}" class="block px-3 py-1.5 rounded-lg ${c === LANG ? 'text-white bg-white/10' : 'text-zinc-300 hover:bg-white/5 hover:text-white'}">${esc(LANG_LABEL[c])}</a>`)
@@ -1058,6 +1068,8 @@ async function main() {
     /* no popularity data */
   }
   const show = (s: string) => s === 'published' || (withDrafts && s === 'draft');
+  // Pages that moved (merged into another page, or replaced by a rebuild): their old URLs get 301s in _redirects.
+  const moved: { key: string; from: string; to: string }[] = Object.entries(SITE_REDIRECTS).flatMap(([key, m]) => Object.entries(m).map(([from, to]) => ({ key, from, to })));
   // Translated guides are rebuilt from scratch too.
   for (const code of Object.keys(LANG_TAG)) if (code !== 'en') fs.rmSync(path.join(OUT, code, 'guides'), { recursive: true, force: true });
 
@@ -1071,6 +1083,8 @@ async function main() {
       return [d.id, pr ? { ...a, walkthrough: pr.walkthrough, choices: pr.choices, advice: pr.advice, items: pr.items, secrets: pr.secrets, fights: pr.fights, ...(pr.info ? { info: pr.info } : {}), sources: pr.sources || a.sources } : a];
     }));
     const visible = order.filter((o) => byslug.has(o.slug) && show(byslug.get(o.slug)!.status));
+    // A merged or renamed page (an alias saved on the guide): its old URL redirects to the page that has it now.
+    for (const [from, to] of Object.entries((info.aliases || {}) as Record<string, string>)) moved.push({ key: g.id, from, to });
     if (!visible.length) continue;
     // Languages this game's guide is translated into (translate-guide.ts), published pages only.
     const trs: Record<string, any> = {};
@@ -1135,6 +1149,23 @@ async function main() {
   }
   updateHomepage(games.filter((g) => g.published > 0));
   updateVersion();
+  writeRedirects(moved, new Set(sitemap));
+  // Links use the final URLs (/guides/x/, not /guides/x/index.html), so nothing a visitor or crawler follows redirects
+  // or shows the same page under a second URL.
+  let relinked = 0;
+  const walkHtml = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walkHtml(p);
+      else if (e.name.endsWith('.html')) {
+        const s = fs.readFileSync(p, 'utf8');
+        const t = finalLinks(s);
+        if (t !== s) { fs.writeFileSync(p, t); relinked++; }
+      }
+    }
+  };
+  walkHtml(OUT);
+  console.log(`Links: final URLs in ${relinked} page(s).`);
   await buildSiteCss();
   console.log(`Built ${games.reduce((n, g) => n + g.count, 0)} guide page(s) for ${games.length} game(s)${withDrafts ? ' (drafts included, marked DRAFT and hidden from search)' : ''}.`);
   console.log(`Open ${path.join(OUT, 'guides', 'index.html')} in your browser to look them over.`);
