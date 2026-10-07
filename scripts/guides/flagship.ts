@@ -950,7 +950,7 @@ async function program() {
     // in the queue and everything waits 2 minutes; after 3 of them the run stops (next run carries on). Never the
     // page's fault, so it isn't counted as a try.
     let rateLimits = 0, pausedUntil = 0;
-    const rateLimited = (e: any) => /RESOURCE_EXHAUSTED|spend-based rate limit|429/i.test(String(e?.message || e));
+    const rateLimited = (e: any) => /RESOURCE_EXHAUSTED|spend-based rate limit|\b429\b/i.test(String(e?.message || e));
     const worker = async () => {
       while (queue.length && !stopped) {
         const need = Math.max(1, measured * 2);
