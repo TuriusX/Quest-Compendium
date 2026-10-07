@@ -42,6 +42,7 @@ import { fightsForPage } from './fights';
 import { call, reviewerFor, queueForReview, MIN_PAGES, type Review } from './review';
 import { sourcePack, packNotes, type SourcePack } from './sourcePack';
 import { ProQuotaWait } from './reviewerQuota';
+import { apiLimits, searchesToday, pipelineRoom, SearchDayWait } from '../../apiLimits';
 import { promote, stageCopy, discard } from './promote';
 import { deployToNetlify } from '../pipeline/netlify';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -680,6 +681,9 @@ async function program() {
         if (room() - reserved < need) { if (!stopped) console.log(`\nBudget: $${room().toFixed(2)} left for today or in all; next run carries on.`); stopped = true; break; }
         if (Date.now() - started > MINUTES * 60_000) { if (!stopped) console.log('\nTime limit for this run; next run carries on.'); stopped = true; break; }
         if (Date.now() < pausedUntil) { await new Promise((r) => setTimeout(r, pausedUntil - Date.now())); continue; }
+        // Google's daily search limit (config/apiLimits): a page needs a few searches; with the pipeline's share of today's
+        // nearly gone, the programme stops for the day (next run carries on).
+        if (pipelineRoom(await apiLimits(), await searchesToday(true)) < 15) { if (!stopped) console.log("\nToday's pipeline searches are used up (search day limit); next run carries on."); stopped = true; break; }
         const o = queue.shift()!;
         reserved += need;
         const scope = { dollars: 0, searches: 0 };
@@ -691,6 +695,16 @@ async function program() {
           const reviewAgain = prior?.walkthrough?.length && (prior.status === 'waiting' || (!prior.status && pg.source !== 'stage'));
           r = await usageScope.run(scope, () => (reviewAgain ? reviewOnly(g.key, game, o.slug, order, prior, src) : buildPage(g.key, game, o.slug, order, src, { pack: budget.pack !== false })));
         } catch (e: any) {
+          if (e instanceof SearchDayWait || /search day limit/.test(String(e?.message || e))) {
+            // Not the page's fault: back in the queue, and the run stops for today.
+            reserved -= need;
+            charge(scope.dollars);
+            queue.unshift(o);
+            if (!stopped) console.log(`
+${o.name}: today's pipeline searches ran out (search day limit); next run carries on.`);
+            stopped = true;
+            break;
+          }
           if (rateLimited(e)) {
             reserved -= need;
             charge(scope.dollars);

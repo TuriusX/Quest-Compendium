@@ -17,6 +17,7 @@
  * are corrected.
  */
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { apiLimits, searchesToday, recordSearchDay, playerSearchOk } from './apiLimits';
 
 const num = (v: string | undefined, d: number) => (v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
 const FREE_DAILY = () => num(process.env.FREE_DAILY_SEARCHES, 3);
@@ -107,13 +108,39 @@ export async function searchAllowed(opts: { uid: string; isGuest: boolean; fullA
     used = opts.userData?.searchDay === today() ? Number(opts.userData?.searchesToday) || 0 : 0;
   }
   if (used >= limit) return false;
-  return monthlyBudgetOk();
+  return (await playerSearchesToday()) && monthlyBudgetOk();
+}
+
+let warnedDay = '';
+/**
+ * Google's daily search limit (config/apiLimits searchDaily, 1,500, shared with the pipeline): once it's reached,
+ * answers run without search until midnight Pacific time instead of failing.
+ */
+export async function playerSearchesToday(): Promise<boolean> {
+  try {
+    const [l, d] = await Promise.all([apiLimits(), searchesToday()]);
+    if (playerSearchOk(l, d)) return true;
+    if (warnedDay !== d.day) {
+      warnedDay = d.day;
+      console.warn(`[search] Today's ${l.searchDaily} searches are used up (${d.total}): answers run without Google Search until midnight Pacific time.`);
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/** Searches players' features ran (chat, the Steam Deck's web search): the month's count and today's. */
+export function recordPlayerSearches(n: number): void {
+  if (!n) return;
+  recordMonthly(n);
+  void recordSearchDay(n, 'players');
 }
 
 /** Count the searches a question used, for the player and for the month. */
 export function recordSearches(opts: { uid: string; isGuest: boolean; userData: any }, n: number): void {
   if (!n) return;
-  recordMonthly(n);
+  recordPlayerSearches(n);
   const day = today();
   if (opts.isGuest) {
     const g = guestUse.get(opts.uid);

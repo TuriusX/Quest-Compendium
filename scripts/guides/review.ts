@@ -14,7 +14,7 @@
  *                            promoted to the live guide (promote.ts) or a guide's drafts are published; on a fail the
  *                            guide goes to the review queue (reviewQueue in Firestore, shown on /admin/reviews)
  *            --tier flash   review with Gemini 3.8 Flash (bulk audits); the default is Pro, counted against its daily
- *                           allowance as an "other" use (200 of the 250 are kept for careful rebuilds)
+ *                           allowance as an "other" use (proCarefulReserve of config/apiLimits is kept for careful rebuilds)
  *            --max-dollars N stop --all before the estimate passes N (default 15)
  *            --concurrency N guides graded at once with --all (default 4)
  *            --no-save       grade and write the report file, but don't save the result on the guide

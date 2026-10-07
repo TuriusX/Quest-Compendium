@@ -34,7 +34,7 @@ import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifie
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
-import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
+import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, playerSearchesToday, recordPlayerSearches, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
  * Firestore security rules don't restrict. That's what lets the rules lock Premium and quota fields so that players
@@ -335,7 +335,7 @@ async function startServer() {
   });
 
   // The Deck's web search runs Google searches too, so it shares the monthly search budget.
-  registerWebSearch(app, { requireAuth, getGeminiClient, searchBudget: { allowed: monthlyBudgetOk, record: recordMonthly } });
+  registerWebSearch(app, { requireAuth, getGeminiClient, searchBudget: { allowed: async () => (await playerSearchesToday()) && monthlyBudgetOk(), record: recordPlayerSearches } });
   // Published guides as JSON for the Steam Deck plugin, which shows them natively (public, read-only).
   registerGuidesApi(app);
   // Player corrections to the guides: candidates from conversations, and the Corrections tab of /admin/reviews.
@@ -1475,7 +1475,8 @@ percentages:
             config: {
               systemInstruction,
               thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-              ...(searchOk ? { tools: [{ googleSearch: {} }] } : {}),
+              // Google's daily search limit (or any quota) refused the first try: answer without search.
+              ...(searchOk && !/\b429\b|RESOURCE_EXHAUSTED|quota/i.test(String(primaryErr?.message || '')) ? { tools: [{ googleSearch: {} }] } : {}),
               safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },

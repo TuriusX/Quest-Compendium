@@ -16,6 +16,7 @@ import type { Express, Request, Response, NextFunction } from 'express';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { playerHash } from './corrections';
 import { QUESTION_TYPES } from './src/utils/questionType';
+import { apiLimits, searchesToday, quotaDay } from './apiLimits';
 
 type Mw = (req: Request, res: Response, next: NextFunction) => any;
 
@@ -106,6 +107,17 @@ export function registerAnswerFeedback(app: Express, deps: { requireAuth: Mw; op
   });
 
   const requireAdmin: Mw = (req, res, next) => (deps.isAdmin((req as any).user) ? next() : res.status(403).json({ error: 'Not an admin.' }));
+
+  // Today's use of Google's daily limits (config/apiLimits): searches against searchDaily, Pro requests against proDaily.
+  app.get('/api/admin/limits', deps.requireAuth, requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const [l, d] = await Promise.all([apiLimits(), searchesToday(true)]);
+      const p: any = (await db().collection('system').doc('proBudget').get()).data() || {};
+      res.json({ limits: l, searches: d, pro: p.day === quotaDay() ? Number(p.count || 0) : 0 });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || 'Could not load the limits.' });
+    }
+  });
 
   app.get('/api/admin/answer-quality', deps.requireAuth, requireAdmin, async (_req: Request, res: Response) => {
     try {

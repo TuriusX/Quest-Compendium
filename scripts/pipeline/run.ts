@@ -20,7 +20,7 @@
  *   Player corrections (scripts/guides/corrections.ts): reports from conversations that a guide entry is wrong are
  *   checked against sources (up to 8 searches an entry) and the reviewer, and written into the guides through the
  *   review gate; ones sources can't settle need 3+ different players. Decided before the repair queue.
- *   The reviewer (scripts/guides/reviewerQuota.ts): Gemini 3.1 Pro (250 requests a day, counted in system/proBudget,
+ *   The reviewer (scripts/guides/reviewerQuota.ts): Gemini 3.1 Pro (50,000 requests a day, config/apiLimits; counted in system/proBudget,
  *   200 kept for careful rebuilds) for careful builds' final gates, which wait for the next day when it's used up;
  *   Gemini 3.8 Flash for everything else (page fixes, quick builds, corrections), pass mark 80 for quick guides.
  *   The review gate: every build, fix, extension and upgrade is made in a staged copy (scripts/guides/repair.ts) and
@@ -69,6 +69,7 @@ import { promote } from '../guides/promote';
 import { SEARCH_DOLLARS } from '../../usage';
 import { postDiscord, summaryText } from './summary';
 import { waitForGuideLock, isRefusal, lockedLine, SITE_LOCK } from '../guides/guideLock';
+import { apiLimits, searchesToday, pipelineRoom, searchDayLine } from '../../apiLimits';
 
 /**
  * The run in progress, for its closing message however it ends: finished, stopped by a cap, crashed, or stopped from
@@ -156,6 +157,8 @@ type Action = { kind: 'build' | 'build-checked' | 'revisit' | 'upgrade' | 'trans
 // Items a script skipped because another process held the guide's lock (guideLock.ts): its "Skipped (locked): …" lines.
 const LOCKED = new Set<string>();
 const wasLocked = (r: { out: string }) => /Skipped \(locked\)/.test(r.out);
+/** A step stopped by Google's daily search limit (the pipeline's share): deferred, not failed. */
+const searchDayHit = (r: { out: string }) => /search day limit/.test(r.out);
 
 function runScript(args: string[]): { ok: boolean; searches: number; dollars: number; summary: string; out: string } {
   console.log(`$ npx tsx ${args.join(' ')}`);
@@ -328,12 +331,22 @@ async function main() {
   const room = () => Math.min(aiRoom, dayRoom());
   spendLeft = room;
   const capReached = () => (dayRoom() <= aiRoom ? `today's $${DAILY_CAP} spending cap is reached` : 'the monthly AI budget is used up');
-  /** Searches a step may run: its own cap, and what's left of the money (80% of it, the rest for tokens). */
-  const affordable = (cap: number) => Math.max(0, Math.min(cap, Math.floor((Math.max(0, room() - 0.3) * 0.8) / SEARCH_DOLLARS)));
+  // Google's daily search limit (config/apiLimits): the pipeline's share of today's searches, read before each step.
+  let searchDay = Infinity;
+  const refreshSearchDay = async () => {
+    try { searchDay = pipelineRoom(await apiLimits(), await searchesToday(true)); } catch { /* keep the last value */ }
+  };
+  await refreshSearchDay();
+  /**
+   * Searches a step may run: its own cap, what's left of the money (80% of it, the rest for tokens), and what's left of
+   * the pipeline's searches today (work that needs more waits for the next run).
+   */
+  const affordable = (cap: number) => Math.max(0, Math.min(cap, searchDay, Math.floor((Math.max(0, room() - 0.3) * 0.8) / SEARCH_DOLLARS)));
   /** This run's costs, step by step, for the summary. */
   const costs: { label: string; dollars: number; searches: number }[] = [];
   const charge = async (r: { searches: number; dollars: number }, label: string) => {
     costs.push({ label, dollars: r.dollars, searches: r.searches });
+    await refreshSearchDay();
     state.searches = (state.searches || 0) + r.searches;
     state.dollars = (state.dollars || 0) + r.dollars;
     state.spend.dollars += r.dollars;
@@ -456,6 +469,10 @@ async function main() {
     if (wasLocked(r)) {
       // Another process (the flagship job, a manual run) is working on this guide: nothing was done; next run.
       waiting.push(item);
+    } else if (searchDayHit(r)) {
+      // The pipeline's searches for today ran out mid-step: what it built is kept; the rest waits for the next run.
+      waiting.push(item);
+      report.push(`⏳ queue ${action} **${item.game}**: today's pipeline searches ran out; continues next run.`);
     } else if (/^Gate: passed/.test(gate)) {
       changed = true;
       const fresh = await guideInfo(item.game);
@@ -540,7 +557,7 @@ async function main() {
       const cap = affordable(Math.min(a.searches, Math.max(50, searchRoom)));
       r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', a.kind === 'revisit' ? 'extend' : 'careful', '--max-searches', String(cap)]);
       if (!wasLocked(r)) await guideRef.set({ pipeline: { ...g.pipeline, newRelease: g.pipeline.newRelease || a.kind === 'build-checked', builtAt: g.pipeline.builtAt || Date.now(), ...(a.kind === 'revisit' ? { revisited: Date.now() } : {}) } }, { merge: true });
-      if ((/continues on the next run/.test(r.out) || /^Gate: waiting/m.test(r.out)) && !state.carefulQueue.some((x: QueueItem) => gameKey(x.game) === g.key))
+      if ((/continues on the next run/.test(r.out) || /^Gate: waiting/m.test(r.out) || searchDayHit(r)) && !state.carefulQueue.some((x: QueueItem) => gameKey(x.game) === g.key))
         state.carefulQueue.push({ game: a.game, mode: a.kind === 'revisit' ? 'extend' : 'careful', newRelease: true, addedAt: Date.now(), why: 'a new release; its careful build continues (or waits for the Pro reviewer)' });
     } else if (a.kind === 'upgrade') {
       r = runScript(['scripts/guides/repair.ts', '--game', a.game, '--action', 'upgrade', '--max-searches', String(affordable(Math.min(a.searches, Math.max(50, searchRoom))))]);
@@ -550,14 +567,15 @@ async function main() {
     } else if (a.kind === 'achievements') {
       r = runScript(['scripts/guides/achievements.ts', '--game', a.game, '--max-searches', String(affordable(Math.min(120, Math.max(30, searchRoom))))]);
       // Not every game has Steam achievements; don't keep retrying one that failed.
-      if (!r.ok && !wasLocked(r)) await guideRef.set({ pipeline: { ...g.pipeline, achTried: Date.now() } }, { merge: true });
+      if (!r.ok && !wasLocked(r) && !searchDayHit(r)) await guideRef.set({ pipeline: { ...g.pipeline, achTried: Date.now() } }, { merge: true });
     } else if (a.kind === 'translate') {
       r = runScript(['scripts/guides/translate-guide.ts', '--game', a.game, '--lang', a.lang!]);
     }
     await charge(r, `${a.kind} ${a.game}${a.lang ? ` → ${a.lang}` : ''}`);
     searchRoom -= r.searches;
-    // Locked by another process: nothing done or recorded; it comes up again next run (listed under 🔒).
-    if (wasLocked(r)) {
+    // Locked by another process, or stopped by today's search limit: nothing recorded; it comes up again next run.
+    if (wasLocked(r) || searchDayHit(r)) {
+      if (searchDayHit(r)) report.push(`⏳ ${a.kind} **${a.game}**: today's pipeline searches ran out; continues next run.`);
       guideCache.delete(g.key);
       continue;
     }
@@ -673,6 +691,11 @@ async function main() {
   // ---- items skipped because another process held the guide's lock: this run's, and the flagship job's last run ----
   const flagSkips = [...((flagship.runSkips || []) as any[]), ...((flagship.rollout?.runSkips || []) as any[])].slice(0, 6);
   if (flagSkips.length) report.push(`🔒 Flagship skipped (another process was working on the guide): ${flagSkips.map((x) => `${x.name} (${String(x.reason).slice(0, 60)})`).join('; ')}.`);
+  // Google's daily search limit, shared with players.
+  try {
+    const sl = await apiLimits(), sd = await searchesToday(true);
+    report.push(`🔎 Searches today (Pacific day): ${searchDayLine(sl, sd)}.${pipelineRoom(sl, sd) <= 0 ? ' The pipeline reached its share; searching work waits for tomorrow.' : ''}`);
+  } catch { /* no count */ }
   if (LOCKED.size) report.push(`🔒 Skipped (another process was working on the guide): ${[...LOCKED].slice(0, 8).join('; ')}. Tried again next run.`);
   // ---- costs: what this run spent, by kind of work (the biggest steps named), and the day's and month's totals ----
   if (costs.length) {

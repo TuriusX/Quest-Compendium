@@ -5,6 +5,7 @@
 import dotenv from 'dotenv';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { apiLimits, searchesToday, recordSearchDay, pipelineRoom, SearchDayWait } from '../../apiLimits';
 import { GoogleGenAI } from '@google/genai';
 import { AsyncLocalStorage } from 'async_hooks';
 import { billedUsage, withOutputCap, maybeBilledFailure, worstCaseDollars } from '../../usage';
@@ -55,6 +56,11 @@ export function gemini(): GoogleGenAI {
   const generate = client.models.generateContent.bind(client.models);
   (client.models as any).generateContent = async (request: any) => {
     if (STEP_LIMIT && ledgerDollars() >= STEP_LIMIT) throw new Error(`spending cap: this step has spent its $${STEP_LIMIT.toFixed(2)}`);
+    // Google's daily search limit (config/apiLimits): the pipeline's share used up, a searching call waits for tomorrow.
+    if ((request?.config?.tools || []).some((t: any) => t && t.googleSearch)) {
+      const [l, d] = await Promise.all([apiLimits(), searchesToday()]);
+      if (pipelineRoom(l, d) <= 0) throw new SearchDayWait(`search day limit: the pipeline's ${l.pipelineSearchDaily} searches for today are used up (${d.pipeline} pipeline, ${d.total} of ${l.searchDaily} in all)`);
+    }
     request = withOutputCap(request);
     let res: any;
     try {
@@ -71,6 +77,7 @@ export function gemini(): GoogleGenAI {
       throw e;
     }
     const u = billedUsage(String(request?.model || ''), res);
+    if (u.searches) await recordSearchDay(u.searches, 'pipeline');
     ledger.calls++; ledger.input += u.input; ledger.output += u.output; ledger.thinking += u.thinking; ledger.searches += u.searches;
     ledger.tokenDollars += u.tokenDollars; ledger.searchDollars += u.searchDollars;
     if (!u.priced) ledger.unpriced++;

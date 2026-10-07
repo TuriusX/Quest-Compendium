@@ -203,6 +203,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   <button id="signin" class="primary">Sign in with Google</button>
 </header>
 <main>
+  <p id="limits" class="dim" hidden></p>
   <p id="msg">Sign in to see the queue. Decisions are carried out by the next guide pipeline run (daily, 9:00 Chicago time); a dismissal is immediate.</p>
   <div id="list"></div>
   <div id="corr" hidden></div>
@@ -382,6 +383,12 @@ function adminPage(firebaseConfig: Record<string, string>): string {
       renderCorr();
       renderReports();
       showTab(tab);
+      // Google's daily limits, today (Pacific day): searches shared by players and the pipeline, and Pro requests.
+      api('/api/admin/limits').then((x) => {
+        const n = (v) => Number(v || 0).toLocaleString('en-US');
+        $('limits').textContent = 'Today (Pacific): ' + n(x.searches.total) + ' of ' + n(x.limits.searchDaily) + ' searches (pipeline ' + n(x.searches.pipeline) + ' of ' + n(x.limits.pipelineSearchDaily) + ', players ' + n(x.searches.players) + '), ' + n(x.pro) + ' of ' + n(x.limits.proDaily) + ' Pro requests.';
+        $('limits').hidden = false;
+      }).catch(() => {});
     }
     catch (e) { $('msg').textContent = e.message === 'Not an admin.' ? 'This account is not an admin (ADMIN_EMAILS on the server).' : 'Could not load the queue: ' + e.message; }
   }
