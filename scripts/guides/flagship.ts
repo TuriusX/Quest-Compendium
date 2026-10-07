@@ -41,6 +41,7 @@ import { infoForPage } from './areaInfo';
 import { fightsForPage } from './fights';
 import { call, reviewerFor, queueForReview, MIN_PAGES, type Review } from './review';
 import { sourcePack, packNotes, type SourcePack } from './sourcePack';
+import { buildEvidencePack, evidenceText, claimCheck, claimReview, claimSlots, sentencesOf, pageRules, type ClaimVerdict, type ClaimPage } from './claimCheck';
 import { ProQuotaWait } from './reviewerQuota';
 import { apiLimits, searchesToday, pipelineRoom, SearchDayWait } from '../../apiLimits';
 import { promote, stageCopy, discard } from './promote';
@@ -520,6 +521,171 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
   console.log(`  ${steps.length} steps, ${choices.length} choices, ${news.length} new entries${unplaced.length ? `, not placed in a step: ${unplaced.join('; ')}` : ''}`);
   console.log(`  cost: ${spent.searches} searches, $${spent.dollars.toFixed(3)} (tokens and searches)`);
   return { ...spent, verdict, proto: clean };
+}
+
+// ---------- the evidence method: claim-level checks against sourced sentences (claimCheck.ts) ----------
+
+/** The draft as the claim check sees it (claimCheck.ts cuts it into claim slots). */
+function claimPage(d: Draft, services: string[], fights: GuideFight[]): ClaimPage {
+  return {
+    steps: d.steps,
+    entries: [...d.old.map((o) => o.entry), ...d.news.map((n) => n.entry)] as any,
+    choices: d.choices, advice: [...d.advice.matters, ...d.advice.skip, ...d.advice.mistakes], services, fights,
+  };
+}
+
+/**
+ * Remove what the claim check couldn't support (or found contradicted): the step sentence, the entry's place in a step,
+ * the entry itself (or only its "missable because" when just that is unsupported), the choice, advice line, service or
+ * fight. A contradicted sentence or location is corrected instead when the evidence says how. Returns the claims removed.
+ */
+function applyClaimVerdicts(d: Draft, verdicts: ClaimVerdict[], services: string[], fights: GuideFight[]) {
+  const removed: { label: string; kind: string; claim: string; verdict: string; why?: string; fixedTo?: string }[] = [];
+  const items = [...d.old.map((o) => o.entry), ...d.news.map((n) => n.entry)];
+  const dropEntry = new Set<string>(), dropChoice = new Set<number>(), dropAdvice = new Set<number>(), dropService = new Set<number>(), dropFight = new Set<number>();
+  const cutSentence = new Map<number, Map<number, string | null>>(); // step -> sentence -> replacement (null: removed)
+  const advice = [...d.advice.matters.map((x) => ['matters', x]), ...d.advice.skip.map((x) => ['skip', x]), ...d.advice.mistakes.map((x) => ['mistakes', x])] as [keyof GuideAdvice, string][];
+  for (const v of verdicts) {
+    if (v.verdict === 'supported' || v.verdict === 'general') continue;
+    const n = Number(v.label.slice(1)) - 1;
+    const fix = v.verdict === 'contradicted' && v.fix && v.evidence.length ? v.fix : undefined;
+    const note = { label: v.label, kind: v.kind, claim: v.text, verdict: v.verdict, ...(v.why ? { why: v.why } : {}), ...(fix ? { fixedTo: fix } : {}) };
+    if (v.kind === 'sentence' && d.steps[n] && v.sentence !== undefined) {
+      if (!cutSentence.has(n)) cutSentence.set(n, new Map());
+      cutSentence.get(n)!.set(v.sentence, fix ? fix.replace(/[^.!?]$/, '$&.') : null);
+      removed.push(note);
+    } else if (v.kind === 'placement' && d.steps[n] && v.entry) {
+      d.steps[n].entries = (d.steps[n].entries || []).filter((x) => x !== v.entry);
+      removed.push(note);
+    } else if (v.kind === 'how' && v.entry) {
+      const e = items.find((x) => x.id === v.entry);
+      if (e) { delete e.how; removed.push(note); }
+    } else if (v.kind === 'missable' && v.entry) {
+      const e = items.find((x) => x.id === v.entry);
+      if (e) { delete e.lockout; e.missable = false; removed.push(note); }
+    } else if (v.kind === 'location' && v.entry) {
+      const e = items.find((x) => x.id === v.entry);
+      // The slot is the location and its "how" together: a corrected location replaces both (the old how went with the wrong place).
+      if (e && fix && e.name) { e.where = fix; delete e.how; removed.push(note); }
+      else if (e) { dropEntry.add(e.id); removed.push(note); }
+    } else if (v.kind === 'consequence' && d.choices[n]) { dropChoice.add(n); removed.push(note); }
+    else if (v.kind === 'advice' && advice[n]) { dropAdvice.add(n); removed.push(note); }
+    else if (v.kind === 'merchant' && services[n]) { dropService.add(n); removed.push(note); }
+    else if (v.kind === 'fight' && fights[n]) { dropFight.add(n); removed.push(note); }
+    else if (v.kind === 'fight-rewards' && fights[n]) { fights[n] = { ...fights[n], rewards: undefined }; removed.push(note); }
+    else if (v.kind === 'fight-weaknesses' && fights[n]) { fights[n] = { ...fights[n], weaknesses: undefined }; removed.push(note); }
+  }
+  d.steps = d.steps.map((s, i) => {
+    const cuts = cutSentence.get(i);
+    const text = cuts ? sentencesOf(s.text).map((x, j) => (cuts.has(j) ? cuts.get(j) : x)).filter((x): x is string => !!x).join(' ') : s.text;
+    return { ...s, text, entries: (s.entries || []).filter((id) => !dropEntry.has(id)) };
+  }).filter((s) => s.text.trim().length > 20 || (s.entries || []).length);
+  d.old = d.old.filter((o) => !dropEntry.has(o.entry.id));
+  d.news = d.news.filter((x) => !dropEntry.has(x.entry.id));
+  d.choices = d.choices.filter((_c, i) => !dropChoice.has(i));
+  const keep = advice.filter((_a, i) => !dropAdvice.has(i));
+  d.advice = { matters: keep.filter((a) => a[0] === 'matters').map((a) => a[1]), skip: keep.filter((a) => a[0] === 'skip').map((a) => a[1]), mistakes: keep.filter((a) => a[0] === 'mistakes').map((a) => a[1]) };
+  return { removed, services: services.filter((_s, i) => !dropService.has(i)), fights: fights.filter((_f, i) => !dropFight.has(i)) };
+}
+
+/** A live page (its flagship content) as the claim review sees it: to measure a page as it stands. */
+export function pageClaimPage(a: any): ClaimPage {
+  return {
+    steps: a.walkthrough || [], entries: [...(a.items || []), ...(a.secrets || [])],
+    choices: a.choices || [], advice: [...(a.advice?.matters || []), ...(a.advice?.skip || []), ...(a.advice?.mistakes || [])],
+    services: a.info?.services || [], fights: a.fights || [],
+  };
+}
+
+/**
+ * One flagship page by the evidence method, into staging only (guidePrototypes/{key}__{slug}__evidence): the evidence
+ * pack, the walkthrough and choices written from it, every claim checked (unsupported ones removed), the rules, then
+ * the claim-by-claim review. Nothing goes live. Returns the page, what was removed and the cost.
+ */
+async function buildPageEvidence(key: string, game: string, slug: string, order: { slug: string; name: string }[], from = key) {
+  const scope = usageScope.getStore();
+  const before = scope ? { ...scope } : { searches: ledger.searches, dollars: ledgerDollars() };
+  const p: any = (await db().collection('guides').doc(from).collection('areas').doc(slug).get()).data();
+  if (!p) throw new Error(`no page ${slug}`);
+  console.log(`\n${p.name} (evidence method)`);
+  const i = order.findIndex((o) => o.slug === slug);
+  const neighbours = order.slice(Math.max(0, i - 3), i + 4).map((o) => o.name).filter((n) => n !== p.name);
+
+  // 1. Evidence: only sentences a trusted source supports.
+  const ev = await buildEvidencePack(key, slug, game, p.name, neighbours, { rebuild: arg('rebuild') === 'true', entries: [...(p.items || []).map((e: any) => e.name), ...(p.secrets || []).map((e: any) => cut(e.text, 60))] });
+  console.log(`  evidence: ${ev.evidence.length} sourced sentences from ${ev.sites.length} sites`);
+  if (ev.evidence.length < 8) throw new Error(`too little evidence (${ev.evidence.length} sourced sentences)`);
+  const evText = evidenceText(ev);
+  const EVIDENCE_RULE = 'Write ONLY from the EVIDENCE below (sentences from sources, each with an id), in your own words: never copy a sentence, never add a fact it does not contain, and never place a thing in this area or in a step unless the evidence does. An item or character the evidence puts in another area does not belong here. Do not list items the player starts with or receives automatically.';
+
+  // 2. Write from the evidence (the page's own entries are offered, and checked like everything else).
+  const entries = entryList(p);
+  const fights0: GuideFight[] = (p.fights || []).length ? p.fights : [];
+  const w = await plain(walkPrompt(game, p, entries, fights0, neighbours, evText).replace(/Write from the research notes below;[^\n]*/, EVIDENCE_RULE).replace('Research notes:', 'EVIDENCE:'), 'walkthrough');
+  const draft: Draft = {
+    steps: parseSteps(w, new Set(entries.map((e) => e.id)), new Set(fights0.map((f) => f.id))),
+    news: parseNew(w, ev.sites.slice(0, 5)),
+    advice: parseAdvice(w),
+    choices: parseChoices(await plain(choicePrompt(game, p, evText).replace(/Search guides and wikis to confirm each choice and its outcomes, and write only what the sources say\./, EVIDENCE_RULE), 'choices')),
+    old: [...(p.items || []).map((e: GuideEntry) => ({ entry: { ...e }, kind: 'item' as const })), ...(p.secrets || []).map((e: GuideEntry) => ({ entry: { ...e }, kind: 'secret' as const }))],
+  };
+  for (const n of draft.news) {
+    const s = draft.steps[Math.min(draft.steps.length, n.step) - 1];
+    if (s) s.entries = [...(s.entries || []), n.entry.id];
+  }
+  // Services and people, from the evidence only (each must cite a line).
+  const sv = await plain([
+    `From the EVIDENCE about "${p.name}" in the video game "${game}", list every merchant, trader, service and notable NPC that the evidence places IN ${p.name}, one line each:`,
+    'SERVICE: name | what they offer or do | where in the area | evidence id(s)',
+    'Only what the evidence says; nothing it places elsewhere. If it has none, reply NONE.', '', 'EVIDENCE:', evText,
+  ].join('\n'), 'services');
+  const evIds = new Set(ev.evidence.map((e) => e.id));
+  let services = sv.split('\n').map((l) => fields(l, 'SERVICE')).filter((f): f is string[] => !!f && f.length >= 4 && String(f[3]).split(/[,\s]+/).some((x) => evIds.has(x)))
+    .map((f) => cut(`${f[0]}: ${f[1]} (${f[2]})`, 160));
+
+  // 3. Every claim checked against the evidence; unsupported or contradicted ones are removed.
+  const verdicts = await claimCheck(game, p.name, claimSlots(claimPage(draft, services, fights0)), ev);
+  const applied = applyClaimVerdicts(draft, verdicts, services, fights0);
+  services = applied.services;
+  console.log(`  claim check: ${verdicts.length} claims, ${verdicts.filter((v) => v.verdict === 'supported').length} supported, ${verdicts.filter((v) => v.verdict === 'general').length} general, ${applied.removed.length} removed or corrected`);
+
+  // 4. The rules (starting items, garbled text, services completeness).
+  const proto: any = {
+    key, slug, game, name: p.name, walkthrough: draft.steps, choices: draft.choices, advice: draft.advice, fights: applied.fights,
+    items: [...draft.old.filter((o) => o.kind === 'item').map((o) => o.entry), ...draft.news.filter((n) => n.kind === 'item').map((n) => ({ ...n.entry, updatedFrom: 'flagship' }))],
+    secrets: [...draft.old.filter((o) => o.kind === 'secret').map((o) => o.entry), ...draft.news.filter((n) => n.kind === 'secret').map((n) => ({ ...n.entry, updatedFrom: 'flagship' }))],
+    info: { ...(p.info || {}), services, sources: ev.sites.slice(0, 6) },
+  };
+  const rules = pageRules(proto, ev);
+  // 5. The review, claim by claim (Pro), on the page as it will be.
+  const review = await claimReview(game, p.name, pageClaimPage(proto), ev);
+  console.log(`  review: ${review.status}, ${review.supported}/${review.total} specific claims supported (score ${review.score})${review.reason ? `: ${review.reason}` : ''}`);
+  // What the reviewer couldn't support goes too (the page never keeps a claim the review found unsupported).
+  const rd: Draft = {
+    steps: proto.walkthrough, news: [], choices: proto.choices, advice: proto.advice,
+    old: [...proto.items.map((e: any) => ({ entry: e, kind: 'item' as const })), ...proto.secrets.map((e: any) => ({ entry: e, kind: 'secret' as const }))],
+  };
+  const second = applyClaimVerdicts(rd, review.claims, proto.info.services, proto.fights);
+  Object.assign(proto, {
+    walkthrough: rd.steps, choices: rd.choices, advice: rd.advice, fights: second.fights,
+    items: rd.old.filter((o) => o.kind === 'item').map((o) => o.entry), secrets: rd.old.filter((o) => o.kind === 'secret').map((o) => o.entry),
+    info: { ...proto.info, services: second.services },
+  });
+  applied.removed.push(...second.removed.map((r) => ({ ...r, why: `review: ${r.why || ''}`.trim() })));
+  if (second.removed.length) console.log(`  review removed ${second.removed.length} more claim(s)`);
+  const spent = scope ? { searches: scope.searches - before.searches, dollars: scope.dollars - before.dollars } : { searches: ledger.searches - before.searches, dollars: ledgerDollars() - before.dollars };
+  const out = tidyProto({
+    ...proto, mode: 'evidence', sources: ev.sites.slice(0, 12), cost: spent, model: MODEL, at: Date.now(),
+    status: review.status, score: review.score, ...(review.reason ? { reason: review.reason } : {}),
+    claims: { checked: verdicts.length, removed: applied.removed, rules: rules.removed, cleaned: rules.cleaned, review: { supported: review.supported, total: review.total, contradicted: review.contradicted, unsupported: review.unsupported } },
+    sourceLinks: { wiki: ev.sites.slice(0, 3).join(', '), license: 'facts from the sources named, in our own words', licenseUrl: '', pages: [] },
+  });
+  const docId = `${key}__${slug}__evidence`;
+  await db().collection('guidePrototypes').doc(docId).set(JSON.parse(JSON.stringify(out)));
+  fs.mkdirSync('scratchpad/flagship', { recursive: true });
+  fs.writeFileSync(`scratchpad/flagship/${docId}.json`, JSON.stringify(out, null, 1));
+  console.log(`  cost: ${spent.searches} searches, $${spent.dollars.toFixed(3)}`);
+  return { proto: out, review, removed: applied.removed, rules: rules.removed, spent };
 }
 
 /** The Pro review's score for a page as it stands (its live flagship content), saving nothing: a baseline to compare. */
@@ -1029,6 +1195,29 @@ async function main() {
       const scope = { dollars: 0, searches: 0 };
       const v = await usageScope.run(scope, () => scoreOnly(key, String(info.game || key), slug, info.areas || []));
       console.log(`${slug}: ${v ? `score ${v.score ?? '?'}, ${v.status}${v.reason ? ` (${v.reason})` : ''}` : 'no flagship content'}, $${scope.dollars.toFixed(3)}`);
+    }
+    return setTimeout(() => process.exit(0), 500);
+  }
+  // --calibrate: the claim-by-claim review of the live pages as they stand (nothing saved): the owner's examples must fail.
+  if (arg('calibrate') === 'true') {
+    for (const slug of pages) {
+      const a: any = (await db().collection('guides').doc(key).collection('areas').doc(slug).get()).data();
+      const i = (info.areas || []).findIndex((o: any) => o.slug === slug);
+      const neighbours = (info.areas || []).slice(Math.max(0, i - 3), i + 4).map((o: any) => o.name).filter((n: string) => n !== a.name);
+      const scope = { dollars: 0, searches: 0 };
+      const r = await usageScope.run(scope, async () => claimReview(String(info.game || key), a.name, pageClaimPage(a), await buildEvidencePack(key, slug, String(info.game || key), a.name, neighbours)));
+      fs.mkdirSync('scratchpad/flagship', { recursive: true });
+      fs.writeFileSync(`scratchpad/flagship/${key}__${slug}__calibration.json`, JSON.stringify(r, null, 1));
+      console.log(`${slug}: ${r.status}, ${r.supported}/${r.total} supported (score ${r.score})${r.reason ? `: ${r.reason}` : ''}; $${scope.dollars.toFixed(3)}`);
+      for (const c of [...r.contradicted, ...r.unsupported].slice(0, 60)) console.log(`   ${c.verdict === 'contradicted' ? 'CONTRADICTED' : 'unsupported '} ${c.label} ${c.kind}: ${cut(c.text, 140)}${c.why ? ` (${c.why})` : ''}`);
+    }
+    return setTimeout(() => process.exit(0), 500);
+  }
+  // --evidence: the evidence method (claim-level checks), staging only (guidePrototypes/..__evidence), nothing goes live.
+  if (arg('evidence') === 'true') {
+    for (const slug of pages) {
+      const scope = { dollars: 0, searches: 0 };
+      await usageScope.run(scope, () => buildPageEvidence(key, String(info.game || key), slug, info.areas || [], key));
     }
     return setTimeout(() => process.exit(0), 500);
   }
