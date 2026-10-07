@@ -776,6 +776,8 @@ async function reverifyPhase(st: any, budget: any, save: () => Promise<any>, cha
   const started = Date.now();
   const need = Math.max(0.5, rv.stats.pages >= 3 ? (rv.stats.dollars / rv.stats.pages) * 1.5 : 0.6);
   let wentLive = false;
+  // Temporary API failures in a row: Gemini is down, so the run stops instead of walking every page.
+  let transientRow = 0;
   for (const key of rv.order as string[]) {
     const pg = (rv.progress[key] ||= { done: [], failed: [] });
     if (pg.complete) continue;
@@ -805,9 +807,15 @@ async function reverifyPhase(st: any, budget: any, save: () => Promise<any>, cha
         } catch (e: any) {
           if (e instanceof SearchDayWait || /search day limit/.test(String(e?.message || e))) { charge(scope.dollars); stopped = true; break; }
           // A temporary API failure (after retries) isn't the page's fault: it's tried again next run.
-          if (isTransient(e)) { charge(scope.dollars); console.log(`  [re-verify] ${game} / ${name}: temporary API failure (${cut(e?.message || e, 80)}); next run`); continue; }
+          if (isTransient(e)) {
+            charge(scope.dollars);
+            console.log(`  [re-verify] ${game} / ${name}: temporary API failure (${cut(e?.message || e, 80)}); next run`);
+            if (++transientRow >= 3) { console.log('\nThe API keeps failing (3 pages in a row); stopping, next run carries on.'); stopped = true; break; }
+            continue;
+          }
           pg.failed.push({ slug, name, reason: `not built: ${cut(e?.message || e, 120)}` });
         }
+        transientRow = 0;
         charge(scope.dollars);
         rv.stats.pages++; rv.stats.dollars += scope.dollars;
         if (r?.review.status === 'passed') {
