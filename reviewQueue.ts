@@ -198,7 +198,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
 <body>
 <header>
   <h1>Guide review queue</h1>
-  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button><button id="tabReports" class="tab">Reports</button></nav>
+  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button><button id="tabReports" class="tab">Reports</button><button id="tabQuality" class="tab">Quality</button></nav>
   <select id="filter" aria-label="Show"><option value="all">All open</option><option value="review">Failed reviews</option><option value="report">Player reports</option></select>
   <button id="signin" class="primary">Sign in with Google</button>
 </header>
@@ -208,6 +208,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   <div id="corr" hidden></div>
   <div id="search" hidden></div>
   <div id="reports" hidden></div>
+  <div id="quality" hidden></div>
   <details id="decidedBox" hidden><summary>Recently decided</summary><div id="decided"></div></details>
 </main>
 <script type="module">
@@ -279,6 +280,33 @@ function adminPage(firebaseConfig: Record<string, string>): string {
       + (reps.decided.length ? '<details><summary>Recently decided</summary>' + reps.decided.map((r) => repCard(r, true)).join('') + '</details>' : '');
     if (tab === 'reports') $('msg').textContent = reps.open.length + ' open report(s) on AI answers. Reviewed: looked at, nothing to change; actioned: something was done about it.';
   }
+  // Quality: players' 👍 / 👎 on answers (last 30 days) per game, question type and model, recent 👎s with their
+  // answers, and how often the markers' close-up check drops a marker, per game.
+  let qual = {};
+  const WHY = { place: 'Wrong place', info: 'Wrong info', marker: 'Marker off', unhelpful: 'Not helpful' };
+  function renderQuality() {
+    const tbl = (title, rows, first) => '<div class="card"><b>' + esc(title) + '</b>' + (rows && rows.length
+      ? '<table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;padding:4px">' + esc(first) + '</th><th style="text-align:right;padding:4px">👍</th><th style="text-align:right;padding:4px">👎</th><th style="text-align:right;padding:4px">👍 rate</th></tr>'
+        + rows.map((r) => '<tr><td style="padding:4px;border-top:1px solid var(--line)">' + esc(r.key) + '</td><td style="text-align:right;padding:4px;border-top:1px solid var(--line)">' + r.up + '</td><td style="text-align:right;padding:4px;border-top:1px solid var(--line)">' + r.down + '</td><td style="text-align:right;padding:4px;border-top:1px solid var(--line)"><b>' + r.rate + '%</b></td></tr>').join('') + '</table>'
+      : '<p class="dim">No votes yet.</p>') + '</div>';
+    const t = qual.total || {};
+    const reasons = Object.entries(qual.reasons || {}).filter(([, n]) => n).map(([k, n]) => esc(WHY[k] || k) + ' ' + n).join(' · ');
+    const mk = qual.markers || [];
+    const markers = '<div class="card"><b>Markers dropped by the close-up check</b>' + (mk.length
+      ? '<table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;padding:4px">Game</th><th style="text-align:right;padding:4px">Checked</th><th style="text-align:right;padding:4px">Dropped</th><th style="text-align:right;padding:4px">Drop rate</th></tr>'
+        + mk.map((m) => '<tr><td style="padding:4px;border-top:1px solid var(--line)">' + esc(m.game) + '</td><td style="text-align:right;padding:4px;border-top:1px solid var(--line)">' + m.checked + '</td><td style="text-align:right;padding:4px;border-top:1px solid var(--line)">' + m.dropped + '</td><td style="text-align:right;padding:4px;border-top:1px solid var(--line)"><b>' + m.rate + '%</b></td></tr>').join('') + '</table>'
+      : '<p class="dim">No checks counted yet.</p>') + '</div>';
+    const downs = (qual.recentDown || []).map((r) => '<div class="card"><div class="row"><span class="game">' + esc(r.game || 'No game') + '</span>'
+      + (r.reason ? '<span class="chip wrong">' + esc(WHY[r.reason] || r.reason) + '</span>' : '')
+      + '<span class="dim">' + esc([r.qtype, r.model, r.markers ? 'markers shown' : '', r.client].filter(Boolean).join(' · ')) + '</span>'
+      + '<span class="dim">' + new Date(r.at).toLocaleString() + '</span></div>'
+      + (r.question ? '<div class="guide"><b>Asked:</b> ' + esc(r.question) + '</div>' : '')
+      + '<details><summary>The answer</summary><div class="answer">' + esc(r.answer || '') + '</div></details></div>').join('');
+    $('quality').innerHTML = '<div class="card"><b>Last 30 days:</b> ' + (t.up || 0) + ' 👍, ' + (t.down || 0) + ' 👎' + (t.rate != null ? ', <b>' + t.rate + '%</b> 👍' : '') + (reasons ? '<div class="dim">What was wrong: ' + reasons + '</div>' : '') + '</div>'
+      + tbl('Per question type', qual.byType, 'Type') + tbl('Per model', qual.byModel, 'Model') + tbl('With and without markers', qual.byMarkers, 'Markers') + tbl('Per game', qual.byGame, 'Game')
+      + markers + '<h3>Recent 👎</h3>' + (downs || '<p class="dim">None.</p>');
+    if (tab === 'quality') $('msg').textContent = 'Answer quality from players’ votes, and marker drops from the close-up check.';
+  }
   // Search: the weekly Search Console summary (last 28 days), the pages planned for a repair, games from searches.
   let sc = {};
   function renderSearch() {
@@ -304,13 +332,15 @@ function adminPage(firebaseConfig: Record<string, string>): string {
     $('tabCorr').classList.toggle('on', t === 'corr');
     $('tabSearch').classList.toggle('on', t === 'search');
     $('tabReports').classList.toggle('on', t === 'reports');
+    $('tabQuality').classList.toggle('on', t === 'quality');
     $('reports').hidden = t !== 'reports';
+    $('quality').hidden = t !== 'quality';
     $('list').hidden = t !== 'guides';
     $('decidedBox').hidden = t !== 'guides' || !data.decided.length;
     $('filter').hidden = t !== 'guides';
     $('corr').hidden = t !== 'corr';
     $('search').hidden = t !== 'search';
-    if (t === 'corr') renderCorr(); else if (t === 'search') renderSearch(); else if (t === 'reports') renderReports(); else render();
+    if (t === 'corr') renderCorr(); else if (t === 'search') renderSearch(); else if (t === 'reports') renderReports(); else if (t === 'quality') renderQuality(); else render();
   }
 
   async function api(path, body) {
@@ -347,7 +377,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   }
   async function load() {
     try {
-      [data, corr, sc, reps] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections'), api('/api/admin/search-console').catch(() => ({})), api('/api/admin/answer-reports').catch(() => ({ open: [], decided: [] }))]);
+      [data, corr, sc, reps, qual] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections'), api('/api/admin/search-console').catch(() => ({})), api('/api/admin/answer-reports').catch(() => ({ open: [], decided: [] })), api('/api/admin/answer-quality').catch(() => ({}))]);
       render();
       renderCorr();
       renderReports();
@@ -387,6 +417,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   $('tabCorr').addEventListener('click', () => showTab('corr'));
   $('tabSearch').addEventListener('click', () => showTab('search'));
   $('tabReports').addEventListener('click', () => showTab('reports'));
+  $('tabQuality').addEventListener('click', () => showTab('quality'));
   $('signin').addEventListener('click', () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => { $('msg').textContent = 'Sign-in failed: ' + (e.code || e.message); }));
   onAuthStateChanged(auth, (u) => { $('signin').hidden = !!u; if (u) load(); });
 </script>

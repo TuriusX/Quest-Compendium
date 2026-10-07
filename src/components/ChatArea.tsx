@@ -29,6 +29,8 @@ import {
   BookOpen,
   MapPin,
   Flag,
+  ThumbsUp,
+  ThumbsDown,
 } from './icons';
 import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions } from './ScreenPointers';
 import { areaFindsFor, markersActiveFor } from './pointerStore';
@@ -47,6 +49,11 @@ import { Walkthrough, walkthroughDone } from './Walkthrough';
 import { samePlace, tipMatches, useAchievementGuide } from '../utils/achievementGuide';
 import { useLocale } from '../i18n';
 import { QUICK_MAIN, QUICK_MORE, QUICK_FOLLOW, type QuickId } from '../utils/quickQuestions';
+declare const __APP_BUILD__: { version: string } | undefined;
+const BUILD = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : { version: 'dev' };
+
+/** What a 👎 can say was wrong (optional). */
+const VOTE_REASONS = ['place', 'info', 'marker', 'unhelpful'] as const;
 
 interface ChatAreaProps {
   /** On-screen markers (Settings, on by default): off, answers show no markers card, checklist or marker badges. */
@@ -205,6 +212,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const askRef = useRef<AskTextareaHandle>(null);
   // Enter in the box submits with the latest handleSubmit (updated every render).
   const submitRef = useRef<() => void>(() => {});
+  // The answer whose 👎 is asking "What was wrong?".
+  const [voteAsk, setVoteAsk] = useState<string | null>(null);
   const [showMoreQuick, setShowMoreQuick] = useState(false);
   const pendingText = useRef('');
   const hasTextRef = useRef<HasTextHandle>(null);
@@ -680,6 +689,29 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     await onSendMessage(finalQuestion, finalImage || undefined, undefined, preferredModel, quick);
     playChimeSound(soundEnabled);
+  };
+
+  /** A 👍 / 👎 (or 'none': taken back) on an answer, with what it was about, for the Quality numbers. */
+  const sendVote = async (msg: ChatMessage, vote: 'up' | 'down' | 'none', reason?: string) => {
+    try {
+      const msgs = activeTab?.messages ?? [];
+      const idx = msgs.findIndex((m) => m.id === msg.id);
+      let question = '';
+      for (let j = idx - 1; j >= 0; j--) if (msgs[j].role === 'user') { question = msgs[j].text; break; }
+      const token = auth.currentUser ? await auth.currentUser.getIdToken().catch(() => null) : null;
+      await fetch(`${getApiBaseUrl()}/api/answer-feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          messageId: msg.id, vote, ...(reason ? { reason } : {}), qtype: msg.qtype, model: msg.modelUsed,
+          game: activeTab?.activeSteamGame?.name || activeGame?.name || activeTab?.name || '',
+          markers: !!(markersOn && msg.points && msg.points.length), question, answer: msg.text,
+          client: isDesktopApp ? 'desktop' : 'web', appVersion: BUILD.version,
+        }),
+      });
+    } catch {
+      /* a vote that didn't send is just not counted */
+    }
   };
 
   const handleCopyMessage = (msgId: string, text: string) => {
@@ -1469,6 +1501,31 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           )}
                         </button>
 
+                        {/* 👍 / 👎: one tap; a 👎 then offers "What was wrong?" (optional) */}
+                        {(['up', 'down'] as const).map((v) => {
+                          const on = msg.vote === v;
+                          const Icon = v === 'up' ? ThumbsUp : ThumbsDown;
+                          return (
+                            <button
+                              key={v}
+                              onClick={() => {
+                                playBlipSound(soundEnabled);
+                                const next = on ? undefined : v;
+                                onUpdateMessage?.(msg.id, { vote: next, voteReason: undefined });
+                                if (next === 'down') setVoteAsk(msg.id);
+                                else if (voteAsk === msg.id) setVoteAsk(null);
+                                void sendVote(msg, next ?? 'none');
+                              }}
+                              title={t(v === 'up' ? 'vote.up' : 'vote.down')}
+                              aria-label={t(v === 'up' ? 'vote.up' : 'vote.down')}
+                              aria-pressed={on}
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer hover:bg-white/10 ${on ? (v === 'up' ? 'text-emerald-300' : 'text-amber-300') : 'text-zinc-400 hover:text-white'}`}
+                            >
+                              <Icon className="w-3.5 h-3.5" fill={on ? 'currentColor' : 'none'} />
+                            </button>
+                          );
+                        })}
+
                         {/* Report this answer (offensive, wrong, other) */}
                         <button
                           onClick={() => {
@@ -1490,6 +1547,53 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         </button>
                       </div>
                     </div>
+                  )}
+
+                  {/* After a 👎: what was wrong (optional, one tap) */}
+                  {!isUser && voteAsk === msg.id && msg.vote === 'down' && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]" role="group" aria-label={t('vote.whatWrong')}>
+                      <span className="text-zinc-400 mr-0.5">{t('vote.whatWrong')}</span>
+                      {VOTE_REASONS.map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => {
+                            playBlipSound(soundEnabled);
+                            onUpdateMessage?.(msg.id, { voteReason: r });
+                            setVoteAsk(null);
+                            void sendVote(msg, 'down', r);
+                          }}
+                          className="qc-px-frame px-2 py-0.5 rounded-full border border-white/15 text-zinc-300 hover:text-white hover:border-[var(--accent-border)] cursor-pointer"
+                        >
+                          {t(`vote.reason.${r}`)}
+                        </button>
+                      ))}
+                      <button type="button" onClick={() => setVoteAsk(null)} aria-label={t('vote.skip')} className="px-1 text-zinc-500 hover:text-white cursor-pointer">×</button>
+                    </div>
+                  )}
+
+                  {/* "From the guide": the answer used checked guide entries; each opens the guide at that entry */}
+                  {!isUser && msg.guideRefs && msg.guideRefs.length > 0 && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {msg.guideRefs.map((r, i) => (
+                        <button
+                          key={`${r.slug}:${r.entry || i}`}
+                          type="button"
+                          onClick={() => window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug: r.slug, entry: r.entry } }))}
+                          title={t('guideBadge.open', { name: r.name, area: r.area })}
+                          className="qc-px-frame inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-400/30 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20 cursor-pointer"
+                        >
+                          <BookOpen className="w-3 h-3" />
+                          {i === 0 ? t('guideBadge.label') : ''}
+                          <span className="font-normal text-emerald-100/80 max-w-[14rem] truncate">{i === 0 ? `· ${r.name}` : r.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Every marker was dropped by the close-up check: what they were and where, in words */}
+                  {!isUser && msg.removedMarkers && msg.removedMarkers.length > 0 && !(msg.points && msg.points.length) && (
+                    <p className="mt-2 text-[11px] leading-snug text-zinc-400">{t('chat.unmarked', { list: msg.removedMarkers.join('; ') })}</p>
                   )}
 
                   {/* TTS Error / Connection diagnostic notification if speech failed */}

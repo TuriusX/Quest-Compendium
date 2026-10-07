@@ -21,9 +21,12 @@ import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
 import { DONE_RULES, extractDone } from './src/utils/progressMemory';
-import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideFightNotes, guideLinesForPanel, guideAreasWithPages } from './guidesApi';
+import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, type GuideRef } from './guidesApi';
+import { routing, route, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
+import { questionType } from './src/utils/questionType';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerAnswerReports } from './answerReports';
+import { registerAnswerFeedback, recordMarkerCheck } from './answerFeedback';
 import { registerDiscord } from './discord';
 import { STEPS_RULES, extractSteps } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
@@ -339,6 +342,8 @@ async function startServer() {
   registerCorrections(app, { requireAuth, isAdmin });
   // Reports on AI answers (Store policy 11.16): saved for review, shown on the Reports tab of /admin/reviews.
   registerAnswerReports(app, { requireAuth, optionalAuth, isAdmin });
+  // Players' 👍 / 👎 on answers and the marker drop counts: the Quality tab of /admin/reviews.
+  registerAnswerFeedback(app, { requireAuth, optionalAuth, isAdmin });
   // The guide review queue: failed reviews and players' mistake reports, decided on /admin/reviews (ADMIN_EMAILS).
   registerReviewQueue(app, {
     requireAuth,
@@ -390,7 +395,7 @@ async function startServer() {
   registerLocate(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed });
   // "Locate me" (the tracker and the PlaceBar): its own daily limit, never the player's questions.
   registerLocateMe(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST, updateUserDoc: updateFirestoreDocREST, loadGuide: guideAreasWithPages });
-  registerRefine(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed });
+  registerRefine(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed, onChecked: (game, checked, kept) => void recordMarkerCheck(game, checked, kept) });
 
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {
@@ -1212,8 +1217,15 @@ percentages:
       if (knownFacts) systemInstruction += `\n\n${knownFacts}`;
       // The guide page for where the player is: background notes for this answer only (never saved as facts).
       const guidePage = await guidePageFor(effectiveGame?.name, place?.name);
+      // A checked or flagship page: its entries come first, preferred over the model's own knowledge, and the answer
+      // says which it used (the "From the guide" badge links to them).
+      let guideTags: Record<string, GuideRef> = {};
       if (guidePage) {
-        systemInstruction += `\n\n${guideNotesForPrompt(guidePage)}`;
+        if (guidePage.verified || guidePage.flagship) {
+          const g = guideGroundingForPrompt(guidePage);
+          guideTags = g.refs;
+          systemInstruction += `\n\n${g.text}`;
+        } else systemInstruction += `\n\n${guideNotesForPrompt(guidePage)}`;
         // This area's fights and enemies in full, for a battle plan when the screenshot shows a fight.
         const fights = imageBase64 ? guideFightNotes(guidePage) : '';
         if (fights) systemInstruction += `\n\n${fights}`;
@@ -1229,6 +1241,12 @@ percentages:
       // (src/utils/quickQuestions.ts). "Show me where" only makes sense with markers on.
       const quick = isQuickId(req.body.quick) && !(req.body.quick === 'where' && !wantMarkers) ? req.body.quick : null;
       if (quick) systemInstruction += `\n\n[QUICK QUESTION: the player tapped "${String(question || '').slice(0, 80)}"]\n${QUICK_PROMPTS[quick]}`;
+      // The kind of question, and the model it gets (chatRouting.ts, config/chatRouting): Pro only where it's switched
+      // on and players' share of today's Pro requests isn't used up; otherwise the usual model.
+      let qtype = questionType(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null));
+      const routingCfg = await routing();
+      const plan = route(routingCfg, { premium: isPremium && !routingCfg.testAsFree, type: qtype, image: Boolean(imageBase64) });
+      const usePro = plan.answer === 'pro' && (await takePlayerPro(routingCfg));
 
       // Build Multi-turn Contents
       const contentsPayload: any[] = [];
@@ -1398,8 +1416,10 @@ percentages:
             responseText = 'No response received. Please try asking again.';
           }
         } else {
+          const answerModel = usePro ? PRO_CHAT_MODEL : targetModel;
+          if (usePro) modelUsed = 'Gemini 3.1 Pro';
           const fallbackCall = ai.models.generateContent({
-            model: targetModel,
+            model: answerModel,
             contents: contentsPayload,
             config: {
               systemInstruction,
@@ -1411,11 +1431,12 @@ percentages:
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
               ],
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
-              ...(targetModel === MAIN_MODEL ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } } : {}),
+              ...(usePro ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : targetModel === MAIN_MODEL ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } } : {}),
             }
           });
-          const response = await withTimeout(fallbackCall, 25000, 'Flash query') as any;
-          logUsage('chat', targetModel, response);
+          // Pro: no longer than the routing allows, then the Flash fallback below answers (players never wait on Pro).
+          const response = await withTimeout(fallbackCall, usePro ? routingCfg.proTimeoutMs : 25000, usePro ? 'Pro query' : 'Flash query') as any;
+          logUsage(usePro ? `chat-pro:${qtype}` : 'chat', answerModel, response);
           searchesUsed += countSearches(response);
           searchSourcesSeen = searchSources(response);
           groundedSeen = groundedText(response);
@@ -1549,10 +1570,37 @@ percentages:
 
       responseText = stripSearchCitations(responseText);
 
+      // Free players' screenshot questions (when switched on): a Pro step places the markers on the Flash answer.
+      // Slow or failed, or no Pro requests left: the answer keeps its own markers.
+      let markersBy = '';
+      if (plan.markers && wantMarkers && imageBase64 && !usePro && /<qc-points>/i.test(responseText) && (await takePlayerPro(routingCfg))) {
+        try {
+          const shown = responseText.replace(/<qc-points>[\s\S]*?<\/qc-points>/gi, '').slice(0, 6000);
+          const markerCall = ai.models.generateContent({
+            model: PRO_CHAT_MODEL,
+            contents: [{ role: 'user', parts: [...currentParts.filter((p: any) => p.inlineData), { text: `${promptText}\n\n[THE ANSWER ALREADY GIVEN]\n${shown}\n\n[TASK] Reply with only the <qc-points> block for this answer and this screenshot, following the marker rules exactly: point at what the answer tells the player to look at, and only at things you can actually see.` }] }],
+            config: { systemInstruction, temperature: 0.2, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+          });
+          const mr: any = await withTimeout(markerCall, Math.min(20000, routingCfg.proTimeoutMs), 'Pro marker step');
+          logUsage('chat-pro-markers', PRO_CHAT_MODEL, mr);
+          const block = String(mr?.text || '').match(/<qc-points>[\s\S]*?<\/qc-points>/i);
+          if (block) {
+            responseText = `${responseText.replace(/(?:```[a-z]*\s*)?<qc-points>[\s\S]*?<\/qc-points>(?:\s*```)?/gi, '')}\n${block[0]}`;
+            markersBy = 'Gemini 3.1 Pro';
+          }
+        } catch (e: any) {
+          console.log('[chat] Pro marker step skipped:', e?.message);
+        }
+      }
+      // The guide entries the answer used (a checked or flagship page's tags).
+      const guideParsed = extractGuideRefs(responseText, guideTags);
+      responseText = guideParsed.text;
+
       // On-screen pointers: pull the <qc-points> block out of the answer.
       // A fight on screen (the model's <qc-combat/>): enemy and tactical markers are never dropped as low-value.
       const combatParsed = extractCombat(responseText);
       responseText = combatParsed.text;
+      if (combatParsed.combat && qtype === 'general') qtype = 'fight';
       const { text: answerText, points, nearby } = extractScreenPoints(responseText, Boolean(imageBase64), combatParsed.combat);
       responseText = answerText;
       // The quest-log title for the on-screen objectives tracker (any in-game answer, markers or not).
@@ -1661,6 +1709,11 @@ percentages:
         ...(combatParsed.combat && combatParsed.fight ? { fight: combatParsed.fight } : {}),
         ...(factsSaved ? { factsSaved } : {}),
         ...(correctionIds.length ? { correctionIds } : {}),
+        // The kind of question (for the player's feedback and the Quality numbers), the guide entries the answer used,
+        // and who placed the markers when that wasn't the answer's model.
+        qtype,
+        ...(guideParsed.used.length ? { guideRefs: guideParsed.used } : {}),
+        ...(markersBy && points.length ? { markersBy } : {}),
         userData: {
           isPremium: userData.isPremium === true,
           proQueriesAvailable: userData.proQueriesAvailable,

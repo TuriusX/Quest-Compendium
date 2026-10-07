@@ -114,6 +114,13 @@ export interface ChatMessage {
   correctionIds?: string[];
   /** The player reported this answer (Report this answer), and why. */
   reported?: 'harmful' | 'wrong' | 'other';
+  /** The kind of question this answers (src/utils/questionType.ts), for the player's 👍 / 👎. */
+  qtype?: string;
+  /** The player's 👍 / 👎 on this answer, and what was wrong (a 👎's optional reason). */
+  vote?: 'up' | 'down';
+  voteReason?: 'place' | 'info' | 'marker' | 'unhelpful';
+  /** Guide entries the answer used (a checked or flagship page): the "From the guide" badge links to them. */
+  guideRefs?: { key: string; slug: string; area: string; entry?: string; name: string }[];
   /** Hidden after an "offensive or harmful" report, until the player taps "Show anyway". */
   collapsed?: boolean;
 }

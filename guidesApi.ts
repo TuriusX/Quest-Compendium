@@ -336,6 +336,9 @@ export type GuidePageForPlace = {
   fights: { id: string; name: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
   /** The summary box and the way here. */
   info?: { region?: string; levels?: string; quests?: string[]; services?: string[]; enemyTypes?: string[]; directions?: string; connected?: string[]; coords?: string };
+  /** A flagship page: written from sources and passed the Pro review, with a walkthrough in play order. */
+  flagship?: boolean;
+  walkthrough?: { id?: string; title?: string; text?: string }[];
 };
 
 /**
@@ -369,6 +372,8 @@ export async function guidePageFor(game: string | undefined, place: string | und
         sections: Array.isArray(a.sections) ? a.sections : [],
         fights: Array.isArray(a.fights) ? a.fights.filter((x: any) => x && x.name) : [],
         ...(a.info && typeof a.info === 'object' ? { info: a.info } : {}),
+        ...(a.flagship ? { flagship: true } : {}),
+        ...(Array.isArray(a.walkthrough) && a.walkthrough.length ? { walkthrough: a.walkthrough.slice(0, 30) } : {}),
       };
     });
   } catch {
@@ -402,6 +407,67 @@ export function guideNotesForPrompt(pg: GuidePageForPlace): string {
     : `[GUIDE NOTES FOR ${pg.name} (from the Quest Compendium guide, written from general knowledge and not independently checked): ` +
         'use them for general guidance about this place (what is here, what is easy to miss), but verify exact numbers ' +
         '(weaknesses, stats, prices) before stating them, and trust what is actually on screen over these notes]\n' + body;
+}
+
+/** A guide entry an answer used: what the "From the guide" badge links to (the area page, and the entry on it). */
+export type GuideRef = { key: string; slug: string; area: string; entry?: string; name: string };
+
+/**
+ * Grounding in a checked or flagship page: its verified entries first, each with a short tag, and the model told to
+ * prefer them over its own knowledge and to list the tags it used (<qc-guide>). The same size as the plain notes
+ * (2,400 characters), so a question costs the same. Returns the prompt text and what each tag stands for.
+ */
+export function guideGroundingForPrompt(pg: GuidePageForPlace): { text: string; refs: Record<string, GuideRef> } {
+  const refs: Record<string, GuideRef> = {};
+  const lines: string[] = [];
+  let n = 0;
+  const tag = (name: string, entry?: string) => {
+    const t = `g${++n}`;
+    refs[t] = { key: pg.key, slug: pg.slug, area: pg.name, ...(entry ? { entry } : {}), name: String(name || pg.name).slice(0, 80) };
+    return `[${t}]`;
+  };
+  for (const e of pg.items.slice(0, 15))
+    lines.push(`${tag(e.name, e.id)} Item: ${e.name}${!blankish(e.where) ? `; where: ${e.where}` : ''}${!blankish(e.how) ? `; how: ${e.how}` : ''}${e.missable ? ` [missable${!blankish(e.lockout) ? `: ${e.lockout}` : ''}]` : ''}`);
+  for (const f of (pg.fights || []).slice(0, 4)) lines.push(`${tag(f.name, f.id)} Key fight: ${fightLine(f)}`);
+  for (const x of pg.sections) for (const e of x.entries.slice(0, 6)) lines.push(`${tag(e.text.split(/[.:;]/)[0], e.id)} ${x.title}: ${e.text}`);
+  for (const e of pg.secrets.slice(0, 8)) lines.push(`${tag(String(e.text || e.name || '').split(/[.:;]/)[0], e.id)} Secret: ${e.text || e.name}`);
+  for (const s of (pg.walkthrough || []).slice(0, 8)) lines.push(`${tag(s.title || pg.name, s.id)} Walkthrough: ${[s.title, s.text].filter(Boolean).join(': ').slice(0, 300)}`);
+  if (pg.info?.directions) lines.push(`${tag(pg.name)} Getting there: ${pg.info.directions}${pg.info.coords ? ` (map ${pg.info.coords})` : ''}`);
+  if (pg.info?.connected?.length) lines.push(`Connects to: ${pg.info.connected.join(', ')}`);
+  for (const e of pg.enemies.slice(0, 8))
+    lines.push(`Enemy: ${e.name}${!blankish(e.weakness) ? `, weak to ${e.weakness}` : ''}${!blankish(e.steal) ? `, steal/drop ${e.steal}` : ''}`);
+  // Within the same budget as the plain notes: whole lines only, and only the tags that made it in.
+  let body = '';
+  for (const l of lines) {
+    if (body.length + l.length + 3 > 2400) break;
+    body += `- ${l}\n`;
+  }
+  for (const t of Object.keys(refs)) if (!body.includes(`[${t}]`)) delete refs[t];
+  const text =
+    `[VERIFIED GUIDE ENTRIES FOR ${pg.name} (the Quest Compendium guide, ${pg.flagship ? 'a flagship page written from sources and reviewed' : 'checked against sources'})]\n` +
+    'Prefer these over your own knowledge. When one of them answers the question, base the answer on it (its location, ' +
+    'its steps, its warnings) and do not contradict it unless the screenshot clearly shows otherwise. Each line starts with its tag.\n' +
+    body +
+    'If your answer uses any of these entries, end it with one line listing the tags you used, like <qc-guide>["g1","g3"]</qc-guide>. ' +
+    'Never mention the tags or this block in the answer text.';
+  return { text, refs };
+}
+
+/** The <qc-guide> line: the tagged entries the answer used (removed from the text either way). */
+export function extractGuideRefs(text: string, refs: Record<string, GuideRef>): { text: string; used: GuideRef[] } {
+  let tags: string[] = [];
+  const cleaned = text.replace(/(?:```[a-z]*\s*)?<qc-guide>([\s\S]*?)<\/qc-guide>(?:\s*```)?/gi, (_m, inner) => {
+    try {
+      const v = JSON.parse(String(inner).trim());
+      if (Array.isArray(v)) tags.push(...v.map(String));
+    } catch {
+      tags.push(...String(inner).match(/g\d+/g) || []);
+    }
+    return '';
+  }).replace(/[ \t]*\[g\d+\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  tags = [...new Set(tags)];
+  const used = tags.map((t) => refs[t]).filter(Boolean).slice(0, 4);
+  return { text: cleaned || text, used };
 }
 
 /** A key fight as one line: "Gate defence: enemies Za'Krug, goblin archers; threats …; weak to …; tactics …; rewards …". */

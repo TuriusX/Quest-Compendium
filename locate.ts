@@ -26,6 +26,8 @@ export interface LocateDeps {
   now?: () => number;
   /** Whether this player gets marker AI features (Premium, or everyone during the beta). Default: yes. */
   allowed?: (req: Request) => Promise<boolean>;
+  /** The close-up check looked at `checked` markers and kept `kept` (marker drop counts per game). */
+  onChecked?: (game: string, checked: number, kept: number) => void;
 }
 
 export interface LocateTarget {
@@ -276,6 +278,8 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
           console.warn('[refine] people check skipped:', e?.message); // keep the first check's result
         }
       }
+      // Markers the check looked at and couldn't find are dropped by the app: counted per game.
+      if (deps.onChecked) deps.onChecked(game, crops.length, new Set(found.map((f: any) => f.index)).size);
       return res.json({ found });
     } catch (err: any) {
       console.warn('[refine] failed:', err?.message);

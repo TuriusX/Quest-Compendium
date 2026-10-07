@@ -272,7 +272,7 @@ export function AnnotatedShot({
       </ul>}
 
       {removed && removed.length > 0 && (
-        <p className="mt-2 text-[11px] leading-snug text-zinc-500">{t('chat.removedMarkers', { list: removed.join(', ') })}</p>
+        <p className="mt-2 text-[11px] leading-snug text-zinc-500">{t('chat.unmarked', { list: removed.join(', ') })}</p>
       )}
       {watching.length > 0 && (
         <p className="text-[11px] text-zinc-400 leading-relaxed">
