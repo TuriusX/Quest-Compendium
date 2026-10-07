@@ -842,7 +842,7 @@ async function program() {
   // One day's cap raised (budget.dayOverrides { "2026-10-05": 30 }), from the same total.
   const dayCap = Number(budget.dayOverrides?.[today()]) || budget.daily;
   budget.daily = dayCap;
-  process.env.GUIDE_LOCK_LABEL = process.env.GUIDE_LOCK_LABEL || 'the flagship job';
+  process.env.GUIDE_LOCK_LABEL = process.env.GUIDE_LOCK_LABEL || `the flagship job${process.env.CLOUD_RUN_EXECUTION ? ` (${process.env.CLOUD_RUN_EXECUTION})` : ''}`; // which run holds a lock (a cancelled run's lock expires after 45 minutes)
   if (st.day !== today()) Object.assign(st, { day: today(), spentToday: 0, runPages: [], runFailures: [] });
   st.runSkips = [];
   if (st.paused && arg('estimate') !== 'true' && arg('ignore-pause') !== 'true') { console.log(`The flagship programme is paused (${st.paused.why || 'until the owner says go'}). Nothing to do.`); return; }
