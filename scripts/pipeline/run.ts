@@ -677,6 +677,15 @@ async function main() {
     }
     const rate = st.pages ? Math.round((st.passed / st.pages) * 100) : 0;
     report.push(`🔎 Flagship re-verification (evidence method)${rv.done ? ' done' : ''}: ${per.join(' · ')}. Pass rate ${rate}% (${st.passed} of ${st.pages}), $${st.pages ? (st.dollars / st.pages).toFixed(2) : '0.00'} a page, $${Number(st.dollars || 0).toFixed(2)} in all.`);
+    // Pages that failed keep their old content without the badge: listed so the owner can decide on retries.
+    const failedPages: string[] = [];
+    for (const k of rv.order as string[]) {
+      const fl = (rv.progress?.[k]?.failed || []) as any[];
+      if (!fl.length) continue;
+      const name = shortName(String((await db().collection('guides').doc(k).get()).data()?.game || k));
+      for (const f of fl) failedPages.push(`${name} / ${f.name}${f.score != null ? ` (${f.score})` : ''}: ${String(f.reason || 'failed review').slice(0, 80)}`);
+    }
+    if (failedPages.length) report.push(`⚠️ Re-verification failed (old content kept, no badge; ${failedPages.length} page(s), say which to retry): ${failedPages.slice(0, 25).join('; ')}${failedPages.length > 25 ? `; and ${failedPages.length - 25} more` : ''}.`);
   }
   const guidesDone = (flagship.guides || []).every((g: any) => flagship.progress?.[g.key]?.phase === 'done');
   if (flagship.rollout?.enabled && (guidesDone || flagship.rollout.lastRun)) {
