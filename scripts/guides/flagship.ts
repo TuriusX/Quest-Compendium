@@ -40,8 +40,10 @@ import { recordMonthly } from '../../searchGuard';
 import { infoForPage } from './areaInfo';
 import { fightsForPage } from './fights';
 import { call, reviewerFor, queueForReview, MIN_PAGES, type Review } from './review';
-import { sourcePack, packNotes, type SourcePack } from './sourcePack';
-import { buildEvidencePack, evidenceText, claimCheck, claimReview, claimSlots, sentencesOf, pageRules, type ClaimVerdict, type ClaimPage } from './claimCheck';
+import { sourcePack, packNotes, WIKIS, type SourcePack } from './sourcePack';
+/** Wikis we fetch directly (a page written from one counts as checked). */
+const WIKI_HOSTS = new Set(Object.values(WIKIS).map((w) => w.name));
+import { buildEvidencePack, buildGameEvidence, evidenceText, claimCheck, claimReview, claimSlots, sentencesOf, pageRules, type ClaimVerdict, type ClaimPage } from './claimCheck';
 import { ProQuotaWait } from './reviewerQuota';
 import { apiLimits, searchesToday, pipelineRoom, SearchDayWait } from '../../apiLimits';
 import { promote, stageCopy, discard } from './promote';
@@ -612,7 +614,11 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   const neighbours = order.slice(Math.max(0, i - 3), i + 4).map((o) => o.name).filter((n) => n !== p.name);
 
   // 1. Evidence: only sentences a trusted source supports.
-  const ev = await buildEvidencePack(key, slug, game, p.name, neighbours, { rebuild: arg('rebuild') === 'true', entries: [...(p.items || []).map((e: any) => e.name), ...(p.secrets || []).map((e: any) => cut(e.text, 60))] });
+  // The game's evidence (merchants, NPCs, bosses, key items, missables) for this page's group of 6 areas in guide order,
+  // researched once and shared by those pages; the page itself only researches its order of play and its own entries.
+  const g0 = Math.floor(Math.max(0, i) / 6) * 6;
+  const gameEv = await buildGameEvidence(key, game, order.slice(g0, g0 + 6).map((o) => o.name));
+  const ev = await buildEvidencePack(key, slug, game, p.name, neighbours, { rebuild: arg('rebuild') === 'true', gameEvidence: gameEv, entries: [...(p.items || []).map((e: any) => e.name), ...(p.secrets || []).map((e: any) => cut(e.text, 60))] });
   console.log(`  evidence: ${ev.evidence.length} sourced sentences from ${ev.sites.length} sites`);
   if (ev.evidence.length < 8) throw new Error(`too little evidence (${ev.evidence.length} sourced sentences)`);
   const evText = evidenceText(ev);
@@ -680,12 +686,30 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
     claims: { checked: verdicts.length, removed: applied.removed, rules: rules.removed, cleaned: rules.cleaned, review: { supported: review.supported, total: review.total, contradicted: review.contradicted, unsupported: review.unsupported } },
     sourceLinks: { wiki: ev.sites.slice(0, 3).join(', '), license: 'facts from the sources named, in our own words', licenseUrl: '', pages: [] },
   });
+  // Sections the sources couldn't fully cover (something had to be removed, or no source lists them all): marked
+  // "may be incomplete" on the page instead of looking finished.
+  const itemIds = new Set((out.items || []).map((e: any) => e.id));
+  const SECTION: Record<string, string> = { sentence: 'walkthrough', placement: 'walkthrough', consequence: 'choices', merchant: 'services', advice: 'advice', fight: 'fights', 'fight-rewards': 'fights', 'fight-weaknesses': 'fights' };
+  const incomplete = new Set<string>();
+  for (const r of applied.removed) {
+    const v = verdicts.find((x) => x.label === r.label && x.text === r.claim) || review.claims.find((x) => x.label === r.label && x.text === r.claim);
+    const sec = SECTION[r.kind] || (v?.entry && !itemIds.has(v.entry) && /^(E|N)/.test(r.label) ? 'secrets' : 'items');
+    incomplete.add(sec);
+  }
+  if (!ev.servicesComplete) incomplete.add('services');
+  out.incomplete = [...incomplete];
   const docId = `${key}__${slug}__evidence`;
   await db().collection('guidePrototypes').doc(docId).set(JSON.parse(JSON.stringify(out)));
   fs.mkdirSync('scratchpad/flagship', { recursive: true });
   fs.writeFileSync(`scratchpad/flagship/${docId}.json`, JSON.stringify(out, null, 1));
   console.log(`  cost: ${spent.searches} searches, $${spent.dollars.toFixed(3)}`);
   return { proto: out, review, removed: applied.removed, rules: rules.removed, spent };
+}
+
+/** The evidence method in the shape the programme and rollout use for a built page ({ verdict, proto }). */
+async function evidenceAsBuild(key: string, game: string, slug: string, order: { slug: string; name: string }[], from = key) {
+  const r = await buildPageEvidence(key, game, slug, order, from);
+  return { searches: r.spent.searches, dollars: r.spent.dollars, verdict: { status: r.review.status, score: r.review.score, ...(r.review.reason ? { reason: r.review.reason } : {}), fixed: 0, dropped: r.removed.length } as Verdict & { fixed: number; dropped: number }, proto: r.proto };
 }
 
 /** The Pro review's score for a page as it stands (its live flagship content), saving nothing: a baseline to compare. */
@@ -714,9 +738,14 @@ async function reviewOnly(key: string, game: string, slug: string, order: { slug
 
 /** The flagship fields written onto a page (the live guide's, or the staged rebuild's). */
 async function writePage(target: string, slug: string, pr: any) {
+  // "Checked against sources" only for a page that passed the evidence method, or one written from a wiki we fetch; a
+  // search-pack page (the old method the owner found inaccurate) is never marked checked.
+  const verified = pr.mode === 'evidence' ? pr.status === 'passed' : pr.mode !== 'pack' || WIKI_HOSTS.has(String(pr.sourceLinks?.wiki || ''));
   await db().collection('guides').doc(target).collection('areas').doc(slug).set(JSON.parse(JSON.stringify({
     walkthrough: pr.walkthrough, choices: pr.choices, advice: pr.advice, items: pr.items, secrets: pr.secrets, fights: pr.fights || [],
-    ...(pr.info ? { info: pr.info } : {}), sources: pr.sources || [], verified: true,
+    ...(pr.info ? { info: pr.info } : {}), sources: pr.sources || [], verified,
+    ...(pr.mode === 'evidence' ? { incomplete: pr.incomplete || [], reverify: verified ? null : { at: Date.now(), why: pr.reason || 'did not pass the evidence review' } } : {}),
+    ...(!verified && pr.mode === 'pack' ? { reverify: { at: Date.now(), why: 'built from a search pack', was: 'search pack' } } : {}),
     ...(pr.sourceLinks ? { sourceLinks: pr.sourceLinks } : {}),
     flagship: { at: Date.now(), cost: pr.cost?.dollars ?? null, model: pr.model, mode: pr.mode || 'searched' }, updatedAt: Date.now(),
   })), { merge: true });
@@ -733,6 +762,76 @@ const PACK_PAGE_GUESS = 0.16;
 const MINUTES = Number(process.env.FLAGSHIP_MINUTES || 150);
 const DAY_MS = 86_400_000;
 
+/**
+ * Re-verification (system/flagship.reverify { order, progress, stats }): the pages built from search packs (unchecked
+ * since the owner's review) rebuilt with the evidence method, guide by guide in the owner's order, within the daily and
+ * total caps. A page that passes replaces the live one and gets "Checked against sources" back; one that fails keeps
+ * its old content, unchecked, and is listed for the summary. When every guide is through, the programme moves on.
+ */
+async function reverifyPhase(st: any, budget: any, save: () => Promise<any>, charge: (d: number) => void, room: () => number) {
+  const rv = st.reverify;
+  rv.progress = rv.progress || {};
+  rv.stats = rv.stats || { pages: 0, passed: 0, failed: 0, dollars: 0 };
+  st.runPages = st.runPages || []; st.runFailures = st.runFailures || [];
+  const started = Date.now();
+  const need = Math.max(0.5, rv.stats.pages >= 3 ? (rv.stats.dollars / rv.stats.pages) * 1.5 : 0.6);
+  let wentLive = false;
+  for (const key of rv.order as string[]) {
+    const pg = (rv.progress[key] ||= { done: [], failed: [] });
+    if (pg.complete) continue;
+    const gref = db().collection('guides').doc(key);
+    const info: any = (await gref.get()).data() || {};
+    const game = String(info.game || key);
+    const order: { slug: string; name: string }[] = info.areas || [];
+    const pages = (await gref.collection('areas').get()).docs
+      .filter((d) => { const a: any = d.data(); return a.status === 'published' && a.reverify && a.verified === false; })
+      .map((d) => d.id)
+      .filter((slug) => !pg.done.includes(slug) && !pg.failed.some((f: any) => f.slug === slug))
+      .sort((a, b) => order.findIndex((o) => o.slug === a) - order.findIndex((o) => o.slug === b));
+    if (!pages.length) { pg.complete = true; await save(); console.log(`${game}: re-verification complete (${pg.done.length} passed, ${pg.failed.length} failed).`); continue; }
+    const lk = await acquireGuideLock(key, 'flagship re-verification');
+    if (isRefusal(lk)) { console.log(lockedLine(lk, game)); st.runSkips.push({ key, name: game, reason: `in use by ${lk.heldBy}` }); continue; }
+    let stopped = false;
+    try {
+      for (const slug of pages) {
+        if (room() < need) { console.log(`\nBudget: $${room().toFixed(2)} left for today or in all; next run carries on.`); stopped = true; break; }
+        if (Date.now() - started > MINUTES * 60_000) { console.log('\nTime limit for this run; next run carries on.'); stopped = true; break; }
+        if (pipelineRoom(await apiLimits(), await searchesToday(true)) < 15) { console.log("\nToday's pipeline searches are used up (search day limit); next run carries on."); stopped = true; break; }
+        const name = order.find((o) => o.slug === slug)?.name || slug;
+        const scope = { dollars: 0, searches: 0 };
+        let r: Awaited<ReturnType<typeof buildPageEvidence>> | null = null;
+        try {
+          r = await usageScope.run(scope, () => buildPageEvidence(key, game, slug, order, key));
+        } catch (e: any) {
+          if (e instanceof SearchDayWait || /search day limit/.test(String(e?.message || e))) { charge(scope.dollars); stopped = true; break; }
+          pg.failed.push({ slug, name, reason: `not built: ${cut(e?.message || e, 120)}` });
+        }
+        charge(scope.dollars);
+        rv.stats.pages++; rv.stats.dollars += scope.dollars;
+        if (r?.review.status === 'passed') {
+          await writePage(key, slug, r.proto);
+          await gref.set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(slug) } }, { merge: true });
+          pg.done.push(slug); rv.stats.passed++; wentLive = true;
+          st.runPages.push({ key, slug, name, score: r.review.score, dollars: Math.round(scope.dollars * 1000) / 1000, reverify: true });
+        } else if (r) {
+          pg.failed.push({ slug, name, reason: r.review.reason || 'failed review', score: r.review.score });
+          rv.stats.failed++;
+          st.runFailures.push({ key, slug, name, reason: r.review.reason || 'failed review' });
+        }
+        console.log(`  [re-verify] ${game} / ${name}: ${r ? `${r.review.status}, score ${r.review.score}` : 'not built'}, $${scope.dollars.toFixed(3)}; programme $${st.spent.toFixed(2)} ($${st.spentToday.toFixed(2)} today)`);
+        await save();
+      }
+    } finally {
+      await lk.release();
+    }
+    if (stopped) break;
+  }
+  rv.done = (rv.order as string[]).every((k) => rv.progress[k]?.complete);
+  await save();
+  if (wentLive) await publishSite();
+  return rv.done;
+}
+
 async function program() {
   const ref = db().collection('system').doc('flagship');
   const st: any = (await ref.get()).data();
@@ -748,6 +847,15 @@ async function program() {
   const only = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
   // The traffic-driven rollout, when it's on, replaces the list of whole guides (unless one guide is asked for).
   // The traffic-driven rollout takes over once every guide in the list is done (unless one guide is asked for).
+  // Re-verification of the search-pack pages comes first (system/flagship.reverify), then the guide list, then the
+  // traffic-driven rollout.
+  if (st.reverify && !st.reverify.done && !only) {
+    st.spent = Number(st.spent || 0); st.spentToday = Number(st.spentToday || 0);
+    const saveRv = () => ref.set(JSON.parse(JSON.stringify(st)), { merge: true });
+    const roomRv = () => Math.min(budget.total - st.spent, budget.daily - st.spentToday);
+    const done = await reverifyPhase(st, budget, saveRv, (d) => { st.spent += d; st.spentToday += d; }, roomRv);
+    if (!done) return;
+  }
   if (st.rollout?.enabled && !only && st.guides.every((g: any) => st.progress?.[g.key]?.phase === 'done')) return rollout(st, () => ref.set(JSON.parse(JSON.stringify(st)), { merge: true }));
   const concurrency = Math.max(1, Math.min(6, Number(arg('concurrency', '1')) || 1));
   st.spent = Number(st.spent || 0); st.spentToday = Number(st.spentToday || 0);
@@ -859,7 +967,7 @@ async function program() {
           // A prototype from before verdicts (built on the live guide) only needs its review.
           // A page whose review couldn't run last time (waiting) is only reviewed again, not rebuilt.
           const reviewAgain = prior?.walkthrough?.length && (prior.status === 'waiting' || (!prior.status && pg.source !== 'stage'));
-          r = await usageScope.run(scope, () => (reviewAgain ? reviewOnly(g.key, game, o.slug, order, prior, src) : buildPage(g.key, game, o.slug, order, src, { pack: budget.pack !== false })));
+          r = await usageScope.run(scope, () => (budget.method !== 'pack' ? evidenceAsBuild(g.key, game, o.slug, order, src) : reviewAgain ? reviewOnly(g.key, game, o.slug, order, prior, src) : buildPage(g.key, game, o.slug, order, src, { pack: budget.pack !== false })));
         } catch (e: any) {
           if (e instanceof SearchDayWait || /search day limit/.test(String(e?.message || e))) {
             // Not the page's fault: back in the queue, and the run stops for today.
@@ -1011,7 +1119,8 @@ async function rollout(st: any, save: () => Promise<any>) {
     const scope = { dollars: 0, searches: 0 };
     let res: Awaited<ReturnType<typeof buildPage>> | null = null;
     try {
-      res = await usageScope.run(scope, () => buildPage(c.key, String(info.game || c.key), c.slug, info.areas || [], c.key, { pack: true }));
+      // The evidence method (claim-level checks) since the owner's review of the search-pack pages.
+      res = await usageScope.run(scope, () => evidenceAsBuild(c.key, String(info.game || c.key), c.slug, info.areas || [], c.key));
     } catch (e: any) {
       console.log(`  ${page.name}: not built (${cut(e?.message || e, 120)})`);
       r.failed[id] = { at: Date.now(), reason: `not built: ${cut(e?.message || e, 100)}` };

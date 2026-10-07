@@ -390,10 +390,13 @@ const checkRow = (id: string, html: string, anchor = false) => {
 };
 
 /** A folding section: the header shows its progress; content stays in the page for search engines. */
-function fold(title: string, icon: string, body: string, opts: { ids?: string[]; open?: boolean; id?: string } = {}) {
+/** "May be incomplete" next to a section the sources couldn't fully cover. */
+const incompleteTag = () => ` <span class="ml-1 align-middle rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200" title="${esc(ui('mayBeIncompleteHint'))}">${esc(ui('mayBeIncomplete'))}</span>`;
+
+function fold(title: string, icon: string, body: string, opts: { ids?: string[]; open?: boolean; id?: string; incomplete?: boolean } = {}) {
   if (!body) return '';
   return `<details class="qc-fold mt-3 scroll-mt-20"${opts.id ? ` id="${esc(opts.id)}"` : ''}${opts.open ? ' open' : ''}>
-    <summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10">${ICON.caret}${icon}<h2 class="flex-1 text-sm sm:text-base font-bold text-white">${esc(title)}</h2>${opts.ids?.length ? `<span class="text-xs text-zinc-500" data-count="${esc(opts.ids.join(','))}">0/${opts.ids.length}</span>` : ''}</summary>
+    <summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10">${ICON.caret}${icon}<h2 class="flex-1 text-sm sm:text-base font-bold text-white">${esc(title)}${opts.incomplete ? incompleteTag() : ''}</h2>${opts.ids?.length ? `<span class="text-xs text-zinc-500" data-count="${esc(opts.ids.join(','))}">0/${opts.ids.length}</span>` : ''}</summary>
     <div class="mt-2">${body}</div>
   </details>`;
 }
@@ -472,7 +475,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         !info.directions && info.coords && infoRow(ui('infoCoords'), esc(info.coords)),
         info.connected?.length && infoRow(ui('infoConnected'), info.connected.map(areaLink).join(', ')),
         info.quests?.length && infoRow(ui('relatedQuests'), info.quests.map(esc).join(' · ')),
-        info.services?.length && infoRow(ui('infoServices'), info.services.map(esc).join(' · ')),
+        info.services?.length && infoRow(ui('infoServices'), info.services.map(esc).join(' · ') + ((a.incomplete || []).includes('services') ? incompleteTag() : '')),
         info.enemyTypes?.length && infoRow(ui('infoEnemies'), info.enemyTypes.map(esc).join(' · ')),
       ].filter(Boolean).join('')}</dl>`
     : '';
@@ -521,7 +524,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   };
   const walk = (a.walkthrough || []).length
     ? `<section id="walkthrough" class="mt-8 scroll-mt-20">
-        <h2 class="text-xl font-bold text-white">${esc(ui('walkthrough'))}</h2>
+        <h2 class="text-xl font-bold text-white">${esc(ui('walkthrough'))}${(a.incomplete || []).includes('walkthrough') ? incompleteTag() : ''}</h2>
         <p class="mt-1 text-sm text-zinc-500">${esc(ui('walkthroughIntro'))}</p>
         <ol class="mt-4 space-y-5">${(a.walkthrough || [])
           .map((st, i) => `<li id="${esc(st.id)}" class="relative pl-10 scroll-mt-20">
@@ -546,7 +549,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     : '';
   const choices = (a.choices || []).length
     ? `<section id="choices" class="mt-8 scroll-mt-20">
-        <div class="flex items-center gap-3"><h2 class="flex-1 text-xl font-bold text-white">${esc(ui('choicesHere'))}</h2><label class="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer"><input type="checkbox" data-spoilers class="accent-[#a87ffb]"> ${esc(ui('showSpoilers'))}</label></div>
+        <div class="flex items-center gap-3"><h2 class="flex-1 text-xl font-bold text-white">${esc(ui('choicesHere'))}${(a.incomplete || []).includes('choices') ? incompleteTag() : ''}</h2><label class="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer"><input type="checkbox" data-spoilers class="accent-[#a87ffb]"> ${esc(ui('showSpoilers'))}</label></div>
         <p class="mt-1 text-sm text-zinc-500">${esc(ui('choicesIntro'))}</p>
         <div class="mt-4 space-y-3">${(a.choices || [])
           .map((c) => `<div id="${esc(c.id)}" class="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
@@ -592,9 +595,9 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         )
         .join('')}
       ${achs.length ? fold(ui('achHere'), ICON.list, achs.slice().sort((x, y) => Number(!!y.missable) - Number(!!x.missable)).map((x) => `<div class="px-3 py-2 text-sm text-zinc-300"><strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${x.how ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.how)}</span>` : ''}</div>`).join('') + `<p class="px-3 pt-1 text-xs"><a class="text-[#a87ffb] hover:text-white" href="../achievements/index.html">${esc(ui('achLink'))} &rarr;</a></p>`, { open: achs.some((x) => x.missable), id: 'achievements' }) : ''}
-      ${fold(ui('items'), ICON.items, restGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g), true)).join('') + rest.map((e) => checkRow(e.id, itemHtml(e), true)).join(''), { ids: [...restGroups.flatMap((g) => g.ids), ...rest.map((e) => e.id)], open: true, id: 'items' })}
-      ${fold(ui('secrets'), ICON.secrets, secretsLeft.map((e) => checkRow(e.id, esc(e.text), true)).join(''), { ids: secretsLeft.map((e) => e.id), open: true, id: 'secrets' })}
-      ${fold(ui('fights'), ICON.enemies, fights, { open: true, id: 'fights' })}
+      ${fold(ui('items'), ICON.items, restGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g), true)).join('') + rest.map((e) => checkRow(e.id, itemHtml(e), true)).join(''), { ids: [...restGroups.flatMap((g) => g.ids), ...rest.map((e) => e.id)], open: true, id: 'items', incomplete: (a.incomplete || []).includes('items') })}
+      ${fold(ui('secrets'), ICON.secrets, secretsLeft.map((e) => checkRow(e.id, esc(e.text), true)).join(''), { ids: secretsLeft.map((e) => e.id), open: true, id: 'secrets', incomplete: (a.incomplete || []).includes('secrets') })}
+      ${fold(ui('fights'), ICON.enemies, fights, { open: true, id: 'fights', incomplete: (a.incomplete || []).includes('fights') })}
       ${fold(ui('enemies'), ICON.enemies, enemies, { id: 'enemies' })}
       ${fold(ui('shops'), ICON.shops, shops, { id: 'shops' })}
       ${fold(ui('tips'), ICON.tips, tips, { open: true, id: 'tips' })}

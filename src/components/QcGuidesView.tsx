@@ -22,6 +22,8 @@ type Entry = { id: string; name?: string; text?: string; where?: string; weaknes
 type Page = {
   key: string; slug: string; name: string; story: string; overview: string;
   items: Entry[]; secrets: Entry[]; enemies: Entry[]; shops: Entry[]; tips: string[];
+  /** Sections the sources couldn't fully cover (items, secrets, fights, ...): marked "may be incomplete". */
+  incomplete?: string[];
   sections?: { title: string; check: boolean; entries: { id: string; text: string }[] }[];
   fights?: { id: string; name: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
   info?: { region?: string; levels?: string; quests?: string[]; services?: string[]; enemyTypes?: string[]; directions?: string; connected?: string[]; coords?: string };
@@ -479,7 +481,12 @@ function AreaPage({
         >
           {isOpen ? <ChevronDown className="w-4 h-4 text-zinc-400" /> : <ChevronRight className="w-4 h-4 text-zinc-400" />}
           {icon}
-          <span className="flex-1 text-sm font-bold text-white">{title}</span>
+          <span className="flex-1 text-sm font-bold text-white">
+            {title}
+            {(pg.incomplete || []).includes(k) && (
+              <span title={t('qcg.incompleteHint')} className="ml-2 align-middle rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-amber-200">{t('qcg.incomplete')}</span>
+            )}
+          </span>
           {total !== undefined && <span className="text-xs text-zinc-500">{count}/{total}</span>}
         </button>
         {isOpen && <div className="mt-1.5 pl-1">{body}</div>}

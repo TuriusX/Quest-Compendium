@@ -84,6 +84,8 @@ export const GUIDE_UI_EN: Record<string, string> = {
   sourcesChecked: 'Sources checked: {list}',
   guideOf: '{game} guide',
   checkedBadge: 'Checked against sources',
+  mayBeIncomplete: 'May be incomplete',
+  mayBeIncompleteHint: 'Our sources did not cover all of this, so some things may be missing.',
   allAreas: 'All areas in this guide',
   areaTitle: '{area} – {game} Guide: Items, Secrets & Enemies | Quest Compendium',
   areaDesc: '{game} {area} guide: items, secrets, missables and enemy weaknesses.',

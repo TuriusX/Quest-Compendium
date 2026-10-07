@@ -439,6 +439,8 @@ export type GuideArea = {
   seoDescription?: string;
   /** false = a quick page, written from the AI's own knowledge and not yet fact-checked. Missing = checked (older pages). */
   verified?: boolean;
+  /** Sections the sources couldn't fully cover (walkthrough, items, secrets, choices, fights, services, advice): shown as "may be incomplete". */
+  incomplete?: string[];
   /** When an --upgrade run last tried this quick page and couldn't confirm it (later upgrades skip it). */
   upgradeTried?: string;
   checks: { claims: number; supported: number; rejected: number; singleSource: number };

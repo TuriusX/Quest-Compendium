@@ -64,8 +64,67 @@ function supportedSegments(res: any): { text: string; sites: string[] }[] {
   return out;
 }
 
+// ---------------- the game's evidence (researched once, reused by every page) ----------------
+
+/** Game-wide topics, researched for groups of areas at a time; every line names the area it belongs to. */
+const GAME_TOPICS: { topic: string; ask: (game: string, areas: string) => string }[] = [
+  { topic: 'people', ask: (g, a) => `In the video game "${g}", for each of these areas: ${a}. List every merchant, trader, vendor and service (shops, blacksmiths, upgrades) in it, and where exactly in the area each one is.` },
+  { topic: 'people', ask: (g, a) => `In the video game "${g}", for each of these areas: ${a}. List the notable NPCs and quest characters found there, and where exactly in the area each one is.` },
+  { topic: 'fights', ask: (g, a) => `In the video game "${g}", for each of these areas: ${a}. List the bosses and notable fights, where each one is in the area, and what it drops.` },
+  { topic: 'items', ask: (g, a) => `In the video game "${g}", for each of these areas: ${a}. List the key items and notable equipment found there and exactly where each one is (not starting items or automatic rewards).` },
+  { topic: 'missables', ask: (g, a) => `In the video game "${g}", for each of these areas: ${a}. List what can be permanently missed there, and exactly what locks it out, only where a source says so.` },
+];
+const GAME_GROUP = 6;
+
+export type GameEvidence = { key: string; game: string; evidence: (Evidence & { area: string })[]; areas: string[]; searches: number; at: number };
+const normArea = (s: string) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * The game's evidence for these areas: merchants, NPCs, bosses, key items and missables, researched in groups of areas
+ * (each searched line tagged with its area) and cached in gameEvidence/{key}; areas already researched aren't redone.
+ */
+export async function buildGameEvidence(key: string, game: string, areas: string[]): Promise<GameEvidence> {
+  const ref = db().collection('gameEvidence').doc(key);
+  const have: GameEvidence = ((await ref.get()).data() as GameEvidence) || { key, game, evidence: [], areas: [], searches: 0, at: 0 };
+  const done = new Set(have.areas.map(normArea));
+  const todo = areas.filter((a) => !done.has(normArea(a)));
+  for (let i = 0; i < todo.length; i += GAME_GROUP) {
+    const group = todo.slice(i, i + GAME_GROUP);
+    const byNorm = new Map(group.map((a) => [normArea(a), a]));
+    for (const t of GAME_TOPICS) {
+      const res: any = await gemini().models.generateContent({
+        model: MODEL,
+        contents: [{ role: 'user', parts: [{ text: `${t.ask(game, group.join('; '))}\nRun several searches (the game's wikis and guides). One fact per line, only what the sources say, and START EVERY LINE with the area's name in square brackets, exactly as written above, e.g. "[${group[0]}] ...". Leave out anything that is in none of these areas.` }] }],
+        config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 6000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+      });
+      have.searches += searchesIn(res);
+      for (const seg of supportedSegments(res)) {
+        const m = seg.text.match(/^\[([^\]]+)\]\s*[:\-–]?\s*(.+)$/s);
+        const area = m ? byNorm.get(normArea(m[1])) : undefined;
+        if (!m || !area) continue; // a line that names no area of the group can't be filed
+        const text = cut(m[2], 400);
+        if (have.evidence.some((e) => e.text === text && e.area === area)) continue;
+        have.evidence.push({ id: `g${have.evidence.length + 1}`, text, sources: seg.sites.slice(0, 4), topic: t.topic, area });
+      }
+    }
+    have.areas.push(...group);
+    have.at = Date.now();
+    await ref.set(JSON.parse(JSON.stringify(have)));
+    console.log(`  game evidence: ${group.length} area(s) researched (${have.evidence.length} lines, ${have.searches} searches in all)`);
+  }
+  return have;
+}
+
+/** The game evidence that belongs to one page: its area's lines, and lines naming one of its entries. */
+export function gameLinesFor(g: GameEvidence, area: string, entries: string[]): Evidence[] {
+  const a = normArea(area);
+  const names = entries.map(normArea).filter((n) => n.length >= 5);
+  return g.evidence.filter((e) => normArea(e.area) === a || names.some((n) => normArea(e.text).includes(n)))
+    .map((e) => ({ id: e.id, text: e.area && normArea(e.area) !== a ? `(in ${e.area}) ${e.text}` : e.text, sources: e.sources, topic: e.topic }));
+}
+
 /** The area's evidence: only sentences a source supports (cached; rebuild with opts.rebuild). */
-export async function buildEvidencePack(key: string, slug: string, game: string, area: string, neighbours: string[], opts: { rebuild?: boolean; entries?: string[] } = {}): Promise<EvidencePack> {
+export async function buildEvidencePack(key: string, slug: string, game: string, area: string, neighbours: string[], opts: { rebuild?: boolean; entries?: string[]; gameEvidence?: GameEvidence } = {}): Promise<EvidencePack> {
   const ref = db().collection('evidencePacks').doc(`${key}__${slug}`);
   // The page's own entries, asked about by name (so a true entry the general research didn't mention keeps its support).
   const names = (opts.entries || []).filter(Boolean).slice(0, 30);
@@ -73,13 +132,16 @@ export async function buildEvidencePack(key: string, slug: string, game: string,
   let have: EvidencePack | undefined;
   if (!opts.rebuild) {
     have = (await ref.get()).data() as EvidencePack | undefined;
-    if (have?.evidence?.length && (!entryTopic.length || have.evidence.some((e) => e.topic === 'entries'))) return trusted(have);
+    if (have?.evidence?.length && (opts.gameEvidence ? have.evidence.some((e) => e.topic === 'order') : !entryTopic.length || have.evidence.some((e) => e.topic === 'entries'))) return trusted(withGame(have, opts.gameEvidence, area, names));
   }
   const evidence: Evidence[] = have?.evidence?.length ? [...have.evidence] : [];
   const sites = new Set<string>(have?.sites || []);
   let searches = have?.searches || 0, servicesComplete = !!have?.servicesComplete;
-  // A cached pack only needs the entries topic added.
-  const topics = have?.evidence?.length ? entryTopic : [...TOPICS, ...entryTopic];
+  // With the game's evidence, the page researches only what's its own: the order of play and its entries (merchants,
+  // NPCs, bosses, key items and missables come from the game's evidence). A cached pack only needs the entries topic added.
+  // One call for both, held to a few searches (searches are most of the cost).
+  const pageTopic = { topic: 'order', ask: (g: string, a: string, n: string) => `${TOPICS[0].ask(g, a, n)}${names.length ? ` Then, for each of these, where exactly it is found (and whether it is really in ${a} at all), how to get it, and only if a source says so whether it can be permanently missed and why: ${names.join('; ')}.` : ''} Use at most five searches.` };
+  const topics = opts.gameEvidence ? (have?.evidence?.length && have.evidence.some((e) => e.topic === 'order') ? [] : [pageTopic]) : have?.evidence?.length ? entryTopic : [...TOPICS, ...entryTopic];
   for (const t of topics) {
     const res: any = await gemini().models.generateContent({
       model: MODEL,
@@ -97,7 +159,14 @@ export async function buildEvidencePack(key: string, slug: string, game: string,
   }
   const pack: EvidencePack = { key, slug, game, area, evidence, sites: [...sites], servicesComplete, searches, at: Date.now() };
   await ref.set(JSON.parse(JSON.stringify(pack)));
-  return trusted(pack);
+  return trusted(withGame(pack, opts.gameEvidence, area, names));
+}
+
+/** The page's own evidence plus the game's lines for it (game lines keep their g-ids, so ids never clash). */
+function withGame(p: EvidencePack, g: GameEvidence | undefined, area: string, entries: string[]): EvidencePack {
+  if (!g) return p;
+  const lines = gameLinesFor(g, area, entries).filter((e) => !p.evidence.some((x) => x.text === e.text));
+  return { ...p, evidence: [...p.evidence, ...lines], sites: [...new Set([...p.sites, ...lines.flatMap((e) => e.sources)])] };
 }
 
 /** The evidence as the writer and the checkers see it: "e12 [fextralife.com, ign.com] (people): text". */

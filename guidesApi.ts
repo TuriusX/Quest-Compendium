@@ -260,6 +260,8 @@ export function registerGuidesApi(app: Express): void {
           key, slug, name: a.name, story: a.story || '', overview: a.overview || '',
           items: clean(a.items), secrets: clean(a.secrets), enemies: clean(a.enemies), shops: clean(a.shops),
           tips: Array.isArray(a.tips) ? a.tips : [],
+          // Sections the sources couldn't fully cover: the app marks them "may be incomplete".
+          incomplete: Array.isArray(a.incomplete) ? a.incomplete : [],
           // Key fights: bosses and set-piece battles, with what it takes to win them.
           fights: (Array.isArray(a.fights) ? a.fights : []).map(({ sources, updatedFrom, ...x }: any) => x).filter((x: any) => x && x.name),
           // The summary box and the way here (region, levels, quests, services, enemy types, directions, coordinates).

@@ -665,12 +665,27 @@ async function main() {
 
   // ---- the flagship programme (scripts/guides/flagship.ts, its own job and budget): pages live per guide, its cost,
   // and pages that failed review since the last summary ----
+  // Re-verification of the search-pack pages with the evidence method: per guide, the pass rate and the cost per page.
+  const rv = flagship.reverify;
+  if (rv?.order?.length) {
+    const st = rv.stats || { pages: 0, passed: 0, failed: 0, dollars: 0 };
+    const per: string[] = [];
+    for (const k of rv.order as string[]) {
+      const p = rv.progress?.[k] || { done: [], failed: [] };
+      const name = shortName(String((await db().collection('guides').doc(k).get()).data()?.game || k));
+      per.push(`${name} ${(p.done || []).length} passed${(p.failed || []).length ? `, ${(p.failed || []).length} failed` : ''}${p.complete ? ' ✓' : ''}`);
+    }
+    const rate = st.pages ? Math.round((st.passed / st.pages) * 100) : 0;
+    report.push(`🔎 Flagship re-verification (evidence method)${rv.done ? ' done' : ''}: ${per.join(' · ')}. Pass rate ${rate}% (${st.passed} of ${st.pages}), $${st.pages ? (st.dollars / st.pages).toFixed(2) : '0.00'} a page, $${Number(st.dollars || 0).toFixed(2)} in all.`);
+  }
   const guidesDone = (flagship.guides || []).every((g: any) => flagship.progress?.[g.key]?.phase === 'done');
   if (flagship.rollout?.enabled && (guidesDone || flagship.rollout.lastRun)) {
     // The traffic-driven rollout: pages live this month against its budget, the last run's pages and failures.
     const r = flagship.rollout;
     const runP = (r.runPages || []) as any[];
-    report.push(`🏰 Flagship rollout${flagship.paused ? ' (paused)' : ''}: ${Number(r.pagesMonth || 0)} page(s) live this month, $${Number(r.spentMonth || 0).toFixed(2)} of $${Number(r.monthly || 20)}.${runP.length ? ` Last run: ${runP.map((x) => `${x.name}${x.score != null ? ` (${x.score})` : ''}`).join(', ')}.` : ''}`);
+    const tried = runP.length + (r.runFailures || []).length;
+    const costs = runP.map((x) => Number(x.dollars || 0)).filter((x) => x > 0);
+    report.push(`🏰 Flagship rollout${flagship.paused ? ' (paused)' : ''}${r.enabled === false ? ' (off)' : ''}: ${Number(r.pagesMonth || 0)} page(s) live this month, $${Number(r.spentMonth || 0).toFixed(2)} of $${Number(r.monthly || 20)}.${tried ? ` Last run: ${runP.length} of ${tried} passed${costs.length ? `, $${(costs.reduce((a, b) => a + b, 0) / costs.length).toFixed(2)} a page` : ''}${runP.length ? ` (${runP.map((x) => `${x.name}${x.score != null ? ` ${x.score}` : ''}`).join(', ')})` : ''}.` : ''}`);
     const fails = (r.runFailures || []).slice(0, 6);
     if (fails.length) report.push(`⚠️ Flagship pages that failed review: ${fails.map((f: any) => `${f.name}: ${String(f.reason).slice(0, 90)}`).join('; ')}.`);
   }
