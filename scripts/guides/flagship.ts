@@ -43,7 +43,7 @@ import { call, reviewerFor, queueForReview, MIN_PAGES, type Review } from './rev
 import { sourcePack, packNotes, WIKIS, type SourcePack } from './sourcePack';
 /** Wikis we fetch directly (a page written from one counts as checked). */
 const WIKI_HOSTS = new Set(Object.values(WIKIS).map((w) => w.name));
-import { buildEvidencePack, buildGameEvidence, evidenceText, claimCheck, claimReview, claimSlots, sentencesOf, pageRules, type ClaimVerdict, type ClaimPage } from './claimCheck';
+import { isTransient, buildEvidencePack, buildGameEvidence, evidenceText, claimCheck, claimReview, claimSlots, sentencesOf, pageRules, type ClaimVerdict, type ClaimPage } from './claimCheck';
 import { ProQuotaWait } from './reviewerQuota';
 import { apiLimits, searchesToday, pipelineRoom, SearchDayWait } from '../../apiLimits';
 import { promote, stageCopy, discard } from './promote';
@@ -804,6 +804,8 @@ async function reverifyPhase(st: any, budget: any, save: () => Promise<any>, cha
           r = await usageScope.run(scope, () => buildPageEvidence(key, game, slug, order, key));
         } catch (e: any) {
           if (e instanceof SearchDayWait || /search day limit/.test(String(e?.message || e))) { charge(scope.dollars); stopped = true; break; }
+          // A temporary API failure (after retries) isn't the page's fault: it's tried again next run.
+          if (isTransient(e)) { charge(scope.dollars); console.log(`  [re-verify] ${game} / ${name}: temporary API failure (${cut(e?.message || e, 80)}); next run`); continue; }
           pg.failed.push({ slug, name, reason: `not built: ${cut(e?.message || e, 120)}` });
         }
         charge(scope.dollars);

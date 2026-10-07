@@ -252,16 +252,28 @@ function claimPrompt(game: string, area: string, slots: ClaimSlot[], evidence: s
   ].join('\n');
 }
 
+/** A temporary API failure (overloaded, rate limited, timed out, connection dropped): worth retrying. */
+export const isTransient = (e: any) => /\b(500|502|503|504|429)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|DEADLINE_EXCEEDED|overloaded|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up/i.test(String(e?.message || e));
+/** A call retried twice (after 10 and 30 seconds) on a temporary failure. */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try { return await fn(); } catch (e) {
+      if (attempt >= 2 || !isTransient(e)) throw e;
+      await new Promise((r) => setTimeout(r, attempt ? 30_000 : 10_000));
+    }
+  }
+}
+
 /** The model judges every slot against the evidence (in batches, so a long page fits). A slot it skips is unsupported. */
 export async function claimCheck(game: string, area: string, slots: ClaimSlot[], ev: EvidencePack, model = MODEL): Promise<ClaimVerdict[]> {
   const out: ClaimVerdict[] = [];
   for (let i = 0; i < slots.length; i += 60) {
     const batch = slots.slice(i, i + 60);
-    const res: any = await gemini().models.generateContent({
+    const res: any = await withRetry(() => gemini().models.generateContent({
       model,
       contents: [{ role: 'user', parts: [{ text: claimPrompt(game, area, batch, evidenceText(ev)) }] }],
       config: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 12000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
-    });
+    }));
     out.push(...parseClaims(String(res?.text || ''), batch, ev));
   }
   return out;
