@@ -760,6 +760,8 @@ const PAGE_GUESS = 0.42, OUTLINE_GUESS = 0.5;
 /** The source-pack method's rate (measured on 9 pages: $0.07 with a wiki, $0.12-0.18 from searches). */
 const PACK_PAGE_GUESS = 0.16;
 const MINUTES = Number(process.env.FLAGSHIP_MINUTES || 150);
+/** When this run started: the time limit covers the whole run (re-verification, guide builds and re-verification again). */
+const RUN_STARTED = Date.now();
 const DAY_MS = 86_400_000;
 
 /**
@@ -768,12 +770,12 @@ const DAY_MS = 86_400_000;
  * total caps. A page that passes replaces the live one and gets "Checked against sources" back; one that fails keeps
  * its old content, unchecked, and is listed for the summary. When every guide is through, the programme moves on.
  */
-async function reverifyPhase(st: any, budget: any, save: () => Promise<any>, charge: (d: number) => void, room: () => number) {
+async function reverifyPhase(st: any, budget: any, save: () => Promise<any>, charge: (d: number) => void, room: () => number): Promise<boolean | { build: string }> {
   const rv = st.reverify;
   rv.progress = rv.progress || {};
   rv.stats = rv.stats || { pages: 0, passed: 0, failed: 0, dollars: 0 };
   st.runPages = st.runPages || []; st.runFailures = st.runFailures || [];
-  const started = Date.now();
+  const started = RUN_STARTED;
   const need = Math.max(0.5, rv.stats.pages >= 3 ? (rv.stats.dollars / rv.stats.pages) * 1.5 : 0.6);
   let wentLive = false;
   // Temporary API failures in a row: Gemini is down, so the run stops instead of walking every page.
@@ -781,6 +783,14 @@ async function reverifyPhase(st: any, budget: any, save: () => Promise<any>, cha
   for (const key of rv.order as string[]) {
     const pg = (rv.progress[key] ||= { done: [], failed: [] });
     if (pg.complete) continue;
+    // A guide from the guide list (its remaining pages still to build) in the order: the guide loop builds it here,
+    // then re-verification carries on with the next one.
+    if ((st.guides || []).some((g: any) => g.key === key)) {
+      if (st.progress?.[key]?.phase === 'done') { pg.complete = true; await save(); continue; }
+      await save();
+      if (wentLive) await publishSite();
+      return { build: key };
+    }
     const gref = db().collection('guides').doc(key);
     const info: any = (await gref.get()).data() || {};
     const game = String(info.game || key);
@@ -839,7 +849,7 @@ async function reverifyPhase(st: any, budget: any, save: () => Promise<any>, cha
   rv.done = (rv.order as string[]).every((k) => rv.progress[k]?.complete);
   await save();
   if (wentLive) await publishSite();
-  return rv.done;
+  return rv.done as boolean | { build: string };
 }
 
 async function program() {
@@ -854,7 +864,8 @@ async function program() {
   if (st.day !== today()) Object.assign(st, { day: today(), spentToday: 0, runPages: [], runFailures: [] });
   st.runSkips = [];
   if (st.paused && arg('estimate') !== 'true' && arg('ignore-pause') !== 'true') { console.log(`The flagship programme is paused (${st.paused.why || 'until the owner says go'}). Nothing to do.`); return; }
-  const only = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
+  let only = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
+  let buildStep = '';
   // The traffic-driven rollout, when it's on, replaces the list of whole guides (unless one guide is asked for).
   // The traffic-driven rollout takes over once every guide in the list is done (unless one guide is asked for).
   // Re-verification of the search-pack pages comes first (system/flagship.reverify), then the guide list, then the
@@ -864,7 +875,8 @@ async function program() {
     const saveRv = () => ref.set(JSON.parse(JSON.stringify(st)), { merge: true });
     const roomRv = () => Math.min(budget.total - st.spent, budget.daily - st.spentToday);
     const done = await reverifyPhase(st, budget, saveRv, (d) => { st.spent += d; st.spentToday += d; }, roomRv);
-    if (!done) return;
+    if (typeof done === 'object') { only = buildStep = done.build; console.log(`\nNext in the re-verification order: the rest of ${done.build}'s pages (guide build).`); }
+    else if (!done) return;
   }
   if (st.rollout?.enabled && !only && st.guides.every((g: any) => st.progress?.[g.key]?.phase === 'done')) return rollout(st, () => ref.set(JSON.parse(JSON.stringify(st)), { merge: true }));
   const concurrency = Math.max(1, Math.min(6, Number(arg('concurrency', '1')) || 1));
@@ -898,7 +910,7 @@ async function program() {
   }
   st.halted = null;
 
-  const started = Date.now();
+  const started = RUN_STARTED;
   const room = () => Math.min(budget.total - st.spent, budget.daily - st.spentToday);
   const charge = (d: number) => { st.spent += d; st.spentToday += d; };
   let wentLive = false;
@@ -1056,6 +1068,8 @@ Google's spend-based rate limit, ${rateLimits} times: stopped; next run carries 
   if (wentLive) await publishSite();
   await releaseGuideLocks();
   console.log(`\nDone: flagship programme, $${st.spentToday.toFixed(2)} today, $${st.spent.toFixed(2)} of $${budget.total} in all.`);
+  // A guide built as a step of the re-verification order: once it's done, the order carries on in this run.
+  if (buildStep && st.progress?.[buildStep]?.phase === 'done' && room() >= 0.5 && Date.now() - RUN_STARTED < MINUTES * 60_000) return program();
 }
 
 /** The website, when anything went live: published and deployed to Netlify. */
