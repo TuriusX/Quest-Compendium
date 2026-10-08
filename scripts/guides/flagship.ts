@@ -783,10 +783,11 @@ async function reverifyPhase(st: any, budget: any, save: () => Promise<any>, cha
   for (const key of rv.order as string[]) {
     const pg = (rv.progress[key] ||= { done: [], failed: [] });
     if (pg.complete) continue;
-    // A guide from the guide list (its remaining pages still to build) in the order: the guide loop builds it here,
-    // then re-verification carries on with the next one.
-    if ((st.guides || []).some((g: any) => g.key === key)) {
-      if (st.progress?.[key]?.phase === 'done') { pg.complete = true; await save(); continue; }
+    // A guide from the guide list whose build isn't finished (its remaining pages, or its outline) in the order: the
+    // guide loop builds it here, then re-verification carries on with the next one. A guide whose build is done (Elden
+    // Ring, The Witcher 3) re-verifies its search-pack pages below like any other.
+    const listed = (st.guides || []).find((g: any) => g.key === key);
+    if (listed && (st.progress?.[key]?.phase || (listed.outline ? 'outline' : 'pages')) !== 'done') {
       await save();
       if (wentLive) await publishSite();
       return { build: key };
@@ -1225,7 +1226,7 @@ async function packOutline(game: string, layout?: string, note?: string) {
  * verdict, the guide goes live if at least MIN_PAGES passed; otherwise it goes to the review queue. Returns the gate
  * line (or "continues on the next run") for the pipeline.
  */
-export async function packBuildGuide(key: string, game: string, opts: { maxSearches: number; layout?: string; note?: string; newRelease?: boolean }) {
+export async function packBuildGuide(key: string, game: string, opts: { maxSearches: number; layout?: string; note?: string; newRelease?: boolean; stageOnly?: boolean }) {
   const stageRef = db().collection('guides').doc(stageKey(key));
   let staged: any = (await stageRef.get()).data();
   const startSearches = ledger.searches;
@@ -1243,6 +1244,9 @@ export async function packBuildGuide(key: string, game: string, opts: { maxSearc
     for (const [i, x] of o.pages.entries()) await stageRef.collection('areas').doc(x.slug).set({ name: x.name, slug: x.slug, story: x.story, order: i, overview: '', items: [], secrets: [], enemies: [], shops: [], tips: [], sources: [], status: 'draft', verified: true, checks: { claims: 0, supported: 0, rejected: 0, singleSource: 0 }, updatedAt: Date.now() });
     console.log(`  outline (${o.layout}): ${o.pages.map((x) => x.name).join('; ')}`);
   }
+  // Staging only (the flagship programme's outline step): the page list is staged and the evidence method builds and
+  // reviews each page; nothing is built or promoted here.
+  if (opts.stageOnly) return { line: 'Gate: skipped (built into staging only; the flagship build gates each page).', done: true };
   const pb = staged.packBuild;
   const order: { slug: string; name: string }[] = staged.areas || [];
   for (const o of order) {

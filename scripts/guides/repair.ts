@@ -308,6 +308,8 @@ async function main() {
     const before = { searches: ledger.searches, dollars: ledgerDollars() };
     const r = await packBuildGuide(key, game, {
       maxSearches, layout: live?.outline?.layout || review?.layout, note: String(live?.outline?.note || '') || undefined, newRelease: newer,
+      // The flagship programme's outline step: the page list only, into staging (it builds each page with the evidence method).
+      stageOnly: stageOnly && action === 'outline',
     });
     console.log(r.line);
     searches += ledger.searches - before.searches;
