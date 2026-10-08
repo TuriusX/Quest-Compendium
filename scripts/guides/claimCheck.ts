@@ -306,9 +306,15 @@ export function parseClaims(text: string, slots: ClaimSlot[], ev: EvidencePack):
 // ---------------- rules (plain code) ----------------
 
 /** Things a player starts with or gets automatically: never a checkbox. */
-const AUTOMATIC = /\b(starting (funds|money|equipment|gear|items?|cash)|you start (the game )?with|start(s)? with|received automatically|automatic(ally)? (given|awarded|received|reward)|given to you at the start|story reward|default (weapon|equipment))\b/i;
-export const isAutomatic = (e: { name?: string; where?: string; how?: string; text?: string }) =>
-  AUTOMATIC.test([e.name, e.where, e.how, e.text].filter(Boolean).join(' '));
+const AUTOMATIC = /\b(starting (funds|money|equipment|gear|items?|cash)|you start (the game )?with|start(s)? with|received automatically|automatic(ally)? (given|awarded|received|reward|added|granted)|given to you at the start|story reward|default (weapon|equipment))\b/i;
+/** "Arthur receives it automatically from Charles", "is handed to you automatically", "added to your inventory automatically". */
+const AUTO_HANDED = /\b(receives?|received|gets?|got|obtains?|is given|are given|is handed|are handed|handed|hands?|gives?|given|is added|are added|is granted|unlocks?)\b[^.;]{0,60}\bautomatically\b|\bautomatically\b[^.;]{0,40}\b(receives?|received|given|handed|added|granted|obtained|awarded)\b/i;
+export const isAutomatic = (e: { name?: string; where?: string; how?: string; text?: string; missable?: boolean; lockout?: string }) => {
+  // Something a player can miss (cut a tail, make a choice) keeps its checkbox, even if the item then arrives on its own.
+  if (e.missable || e.lockout) return false;
+  const t = [e.name, e.where, e.how, e.text].filter(Boolean).join(' ');
+  return AUTOMATIC.test(t) || AUTO_HANDED.test(t);
+};
 
 /** Garbled text: a repeated field label, a leaked draft label, or a broken fragment. Returns the cleaned text, or '' if unusable. */
 export function cleanEntryText(v: unknown, label = ''): string {

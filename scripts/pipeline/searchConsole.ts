@@ -24,6 +24,7 @@ import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, parseJson, gameKey, guideRelease, releasedAfter, QUICK_MODEL_CUTOFF } from '../guides/common';
 import { estimateCost } from '../../usage';
 import { monthCosts, summarizeCosts, costMonth } from '../../playerCosts';
+import { demandEntities } from '../guides/compendium';
 
 const SITES = ['sc-domain:questcompendium.com', 'https://questcompendium.com/', 'https://www.questcompendium.com/'];
 const SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
@@ -319,6 +320,21 @@ async function weekly() {
   }
 
   // What players cost this month (playerCosts.ts): Premium's average and heaviest player, and free players' average.
+  // Entity pages by demand (compendium.ts): queries that land on a missing or weak page get an entity page, most
+  // searched first, within config/compendium.monthly ($10 a month by default).
+  let entityLine = '', entityBuilt = 0, entityDollars = 0;
+  try {
+    const demand = rows.map((r) => ({ query: r.query, impressions: r.impressions, ...(pageRefOf(r.page) || { key: '' }) })).filter((r: any) => r.key);
+    const d = await demandEntities(demand as any, { dry });
+    entityBuilt = d.built.filter((b) => b.status === 'published').length;
+    entityDollars = d.built.reduce((n, b) => n + b.dollars, 0);
+    entityLine = d.built.length || d.skipped.length
+      ? `**Entity pages by demand:** ${d.built.length ? d.built.map((b) => `${b.name} (${b.key}, ${b.status}, $${b.dollars.toFixed(2)})`).join(', ') : 'none built'}; $${entityDollars.toFixed(2)} this week, $${d.spent.toFixed(2)} of $${d.monthly} this month${d.skipped.length ? `; skipped ${d.skipped.length}: ${d.skipped.slice(0, 5).join('; ')}` : ''}`
+      : '**Entity pages by demand:** no queries landed on a missing or weak page.';
+  } catch (e: any) {
+    entityLine = `**Entity pages by demand:** failed (${String(e?.message || e).slice(0, 120)})`;
+  }
+
   let costLine = '';
   try {
     const c = summarizeCosts(await monthCosts());
@@ -340,13 +356,14 @@ async function weekly() {
       : checked.length ? 'Queued: nothing (every checked page answers its searches).' : '',
     gained.length ? `Gained clicks: ${gained.map((p) => `${p.key}/${p.slug} +${p.gain}`).join(', ')}` : '',
     wishes.length ? `Wish list from searches: ${wishes.slice(0, 6).map((w) => `${w.game} (${w.impressions})`).join(', ')}` : '',
+    entityLine,
     costLine,
   ].filter(Boolean);
   console.log(lines.join('\n'));
   if (process.env.DISCORD_WEBHOOK_URL && !dry) {
     await fetch(process.env.DISCORD_WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: lines.join('\n').slice(0, 1900) }) }).catch(() => {});
   }
-  console.log(`Done: search console: ${plan.length} page(s) planned, ${queued.length} guide(s) queued, 0 searches used, estimated AI cost ≈ $${dollars.toFixed(2)}.`);
+  console.log(`Done: search console: ${plan.length} page(s) planned, ${queued.length} guide(s) queued, ${entityBuilt} entity page(s) published ($${entityDollars.toFixed(2)}), estimated AI cost ≈ $${(dollars + entityDollars).toFixed(2)}.`);
 }
 
 if (/searchConsole\.ts$/.test(process.argv[1] || '')) {

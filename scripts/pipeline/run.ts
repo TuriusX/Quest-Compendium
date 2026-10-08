@@ -408,6 +408,8 @@ async function main() {
     await charge(sc, 'Search Console weekly');
     if (sc.ok) state.searchConsoleAt = Date.now();
     report.push(`${sc.ok ? '🔎' : '⚠️'} ${sc.summary || 'Search Console pull failed (see the job log)'}`);
+    // New entity pages by demand go live with this run's publish.
+    if (/[1-9]\d* entity page\(s\) published/.test(sc.summary || '')) changed = true;
     // Its repairs may have joined the queue.
     const fresh: any = (await stateRef.get()).data() || {};
     if (Array.isArray(fresh.carefulQueue)) { queue.length = 0; queue.push(...fresh.carefulQueue); state.carefulQueue = fresh.carefulQueue; }

@@ -76,15 +76,16 @@ export function redirectLines(moved: { key: string; from: string; to: string }[]
   const out = new Map<string, string>();
   const liveUrls = [...live];
   for (const m of moved) {
-    if (!m.from || !m.to || m.from === m.to) continue;
+    // to '' is the guide's front page.
+    if (!m.from || m.from === m.to) continue;
     for (const code of langs) {
       const pre = code === 'en' ? '' : `${code}/`;
       // Only languages the guide is published in (an untranslated guide never had a /de/ URL to redirect).
       if (code !== 'en' && !liveUrls.some((u) => u.startsWith(`${site}/${pre}guides/${m.key}/`))) continue;
       const from = `/${pre}guides/${m.key}/${m.from}/`;
       if (live.has(`${site}${from}`) || out.has(from)) continue;
-      const same = `/${pre}guides/${m.key}/${m.to}/`;
-      const en = `/guides/${m.key}/${m.to}/`;
+      const same = `/${pre}guides/${m.key}/${m.to ? `${m.to}/` : ''}`;
+      const en = `/guides/${m.key}/${m.to ? `${m.to}/` : ''}`;
       const to = live.has(`${site}${same}`) ? same : live.has(`${site}${en}`) ? en : '';
       if (to) out.set(from, to);
     }

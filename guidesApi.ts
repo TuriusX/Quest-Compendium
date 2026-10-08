@@ -235,7 +235,22 @@ export function registerGuidesApi(app: Express): void {
     try {
       const g = await gameAreas(gameKey(String(req.params.key)));
       if (!g) return res.status(404).json({ error: 'No guide for this game yet.' });
-      send(res, localizeAreas(g, await translation(g.key, langOf(req.query.lang))));
+      // The guide's published entity pages (compendium.ts), for the apps' links and their compendium list.
+      const entities = (await compendiumOf(g.key)).map((e) => ({ slug: e.slug, name: e.name, type: e.typeLabel, region: e.summary?.region || '', line: String(e.overview || '').split(/(?<=[.!?])\s/)[0] || '' }));
+      send(res, { ...localizeAreas(g, await translation(g.key, langOf(req.query.lang))), ...(entities.length ? { entities } : {}) });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
+  // One entity page (published), for the apps' guide view.
+  app.get('/api/guides/:key/entity/:slug', async (req, res) => {
+    try {
+      const key = gameKey(String(req.params.key));
+      const slug = String(req.params.slug).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 120);
+      const e = (await compendiumOf(key)).find((x) => x.slug === slug);
+      if (!e) return res.status(404).json({ error: 'No such page.' });
+      send(res, { key, slug: e.slug, name: e.name, type: e.typeLabel, title: e.title, overview: e.overview, summary: e.summary });
     } catch (e) {
       fail(res, e);
     }
@@ -325,6 +340,14 @@ export async function guideAreasWithPages(game: string): Promise<{ areas: { slug
       };
     }
     return areas.length ? { areas, pages } : null;
+  });
+}
+
+/** A guide's published entity pages (guideCompendium/{key}/entities, status published), cached. */
+async function compendiumOf(key: string): Promise<any[]> {
+  return cached(`compendium:${key}`, async () => {
+    const snap = await getFirestore().collection('guideCompendium').doc(key).collection('entities').where('status', '==', 'published').get();
+    return snap.docs.map((d) => d.data());
   });
 }
 

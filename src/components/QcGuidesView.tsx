@@ -6,6 +6,7 @@ import { GUIDE_DONE_EVENT, readDone, writeDone } from '../utils/guideProgress';
 import { useLocale, useT } from '../i18n';
 import { tipMatches, useAchievementGuideByKey, type AchievementGuide } from '../utils/achievementGuide';
 import { samePlace } from '../utils/placeName';
+import { entitySegments } from '../../scripts/guides/siteText';
 import type { Achievement } from '../types';
 
 /**
@@ -29,7 +30,33 @@ type Page = {
   fights?: { id: string; name: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
   info?: { region?: string; levels?: string; quests?: string[]; services?: string[]; enemyTypes?: string[]; directions?: string; connected?: string[]; coords?: string };
 };
-type View = { view: 'games' } | { view: 'game'; key: string; game?: string } | { view: 'area'; key: string; slug: string; game?: string } | { view: 'ach'; key: string; game?: string };
+type View = { view: 'games' } | { view: 'game'; key: string; game?: string } | { view: 'area'; key: string; slug: string; game?: string } | { view: 'ach'; key: string; game?: string } | { view: 'entity'; key: string; slug: string; game?: string };
+/** A guide's entity page (the compendium), as the guide's area list sends it. */
+type Ent = { slug: string; name: string; type: string; region?: string; line?: string };
+
+/**
+ * Guide text with mentions of the guide's entity pages as links (a click opens the page; hovering shows its type, region
+ * and first line), the same matching as the website (apostrophes optional, whole words).
+ */
+function Linked({ text, ents, onEntity, self }: { text?: string; ents?: Ent[]; onEntity?: (slug: string) => void; self?: string }) {
+  const list = (ents || []).filter((e) => e.slug !== self);
+  if (!text) return null;
+  if (!list.length || !onEntity) return <>{text}</>;
+  return (
+    <>
+      {entitySegments(text, list).map((sg, i) => {
+        if (!sg.slug) return <React.Fragment key={i}>{sg.text}</React.Fragment>;
+        const e = list.find((x) => x.slug === sg.slug)!;
+        return (
+          <button key={i} type="button" onClick={() => onEntity(sg.slug!)} title={`${e.type}${e.region ? ` · ${e.region}` : ''}${e.line ? `\n${e.line}` : ''}`}
+            className="inline p-0 m-0 bg-transparent border-0 text-[var(--accent-color)] underline decoration-dotted underline-offset-2 hover:text-white cursor-pointer">
+            {sg.text}
+          </button>
+        );
+      })}
+    </>
+  );
+}
 
 // The guide's language follows the app's (a translated guide where one exists, English otherwise). Fetches are shared
 // with the objectives tracker (utils/guideApi).
@@ -150,6 +177,7 @@ export function QcGuidesView({
           {view.view === 'game' && (
             <AreaList
               key={view.key}
+              onEntity={(slug) => go({ view: 'entity', key: view.key, slug, game: view.game })}
               gameKey={view.key}
               here={hereArea?.slug}
               onPick={(a, game) => go({ view: 'area', key: view.key, slug: a.slug, game })}
@@ -165,8 +193,12 @@ export function QcGuidesView({
               onArea={(slug) => go({ view: 'area', key: view.key, slug, game: view.game })}
             />
           )}
+          {view.view === 'entity' && (
+            <EntityPage key={`${view.key}/e/${view.slug}`} gameKey={view.key} slug={view.slug} onEntity={(slug) => go({ view: 'entity', key: view.key, slug, game: view.game })} />
+          )}
           {view.view === 'area' && (
             <AreaPage
+              onEntity={(slug) => go({ view: 'entity', key: view.key, slug, game: view.game })}
               key={`${view.key}/${view.slug}`}
               gameKey={view.key}
               slug={view.slug}
@@ -301,6 +333,7 @@ function GamesList({ current, onPick }: { current?: string; onPick: (g: Game) =>
 
 function AreaList({
   gameKey,
+  onEntity,
   here,
   onPick,
   ach,
@@ -308,6 +341,7 @@ function AreaList({
   onAchievements,
 }: {
   gameKey: string;
+  onEntity?: (slug: string) => void;
   here?: string;
   onPick: (a: Area, game: string) => void;
   ach?: AchievementGuide | null;
@@ -315,7 +349,7 @@ function AreaList({
   onAchievements?: () => void;
 }) {
   const t = useT();
-  const s = useApi<{ game: string; areas: Area[]; art?: string }>(`/api/guides/${encodeURIComponent(gameKey)}`);
+  const s = useApi<{ game: string; areas: Area[]; art?: string; entities?: Ent[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
   const [q, setQ] = useState('');
   if (s.loading) return <Note>{t('qcg.loading')}</Note>;
   if (s.error || !s.data) return <Note>{t('qcg.none')}</Note>;
@@ -367,6 +401,20 @@ function AreaList({
           {cont && jump(cont, <Play className="w-4 h-4 text-[var(--accent-color)] flex-shrink-0" />, t('qcg.continue'))}
         </div>
       )}
+      {/* The compendium: the guide's entity pages (places, characters, collectibles), by type. */}
+      {!needle && !!s.data.entities?.length && onEntity && (
+        <div className="pb-2">
+          <h3 className="pt-1 pb-1.5 text-xs font-bold uppercase tracking-wide text-zinc-400">{t('qcg.compendium')}</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {s.data.entities.map((e) => (
+              <button key={e.slug} type="button" onClick={() => onEntity(e.slug)} title={`${e.type}${e.region ? ` · ${e.region}` : ''}`}
+                className="px-2.5 py-1 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-dim)] text-xs font-semibold text-zinc-100 hover:brightness-125 cursor-pointer">
+                {e.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {areas.map((a, i) => (
         <React.Fragment key={a.slug}>
           {/* Chapter and calendar guides: a heading where the group changes (a character, "Calendar", "Reference"). */}
@@ -385,9 +433,42 @@ function AreaList({
   );
 }
 
+/** One entity page: its summary box (type, region, where, getting there, what's there, missions) and notes. */
+function EntityPage({ gameKey, slug, onEntity }: { gameKey: string; slug: string; onEntity: (slug: string) => void }) {
+  const t = useT();
+  const s = useApi<any>(`/api/guides/${encodeURIComponent(gameKey)}/entity/${encodeURIComponent(slug)}`);
+  const all = useApi<{ entities?: Ent[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
+  if (s.loading) return <Note>{t('qcg.loading')}</Note>;
+  if (s.error || !s.data) return <Note>{t('qcg.none')}</Note>;
+  const e = s.data;
+  const sm = e.summary || {};
+  const ents = all.data?.entities;
+  const row = (label: string, body: React.ReactNode) => (body ? <div className="flex gap-3 py-1.5 border-t border-white/5 first:border-0"><dt className="w-28 flex-shrink-0 text-zinc-500">{label}</dt><dd className="min-w-0 text-zinc-200">{body}</dd></div> : null);
+  const named = (xs: any[], f: string) => (xs?.length ? <ul className="space-y-1">{xs.map((x, i) => <li key={i}><strong className="text-white">{x.name}</strong>{x[f] ? <span className="text-zinc-400">: {x[f]}</span> : null}</li>)}</ul> : null);
+  return (
+    <div>
+      <span className="inline-block px-2 py-0.5 rounded-md bg-[var(--accent-dim)] text-[11px] font-semibold text-[var(--accent-color)]">{e.type}</span>
+      <h2 className="mt-1 text-xl font-bold text-white">{e.name}</h2>
+      {e.overview && <p className="mt-2 text-sm leading-relaxed text-zinc-300"><Linked text={e.overview} ents={ents} onEntity={onEntity} self={slug} /></p>}
+      <dl className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2 text-sm">
+        {row(t('qcg.infoRegion'), sm.region)}
+        {row(t('qcg.entWhere'), sm.where)}
+        {row(t('qcg.infoWay'), sm.gettingThere ? <Linked text={sm.gettingThere} ents={ents} onEntity={onEntity} self={slug} /> : null)}
+        {row(t('qcg.shops'), named(sm.shops, 'what'))}
+        {row(t('qcg.infoServices'), sm.services?.length ? sm.services.join(' · ') : null)}
+        {row(t('qcg.entThere'), named(sm.places, 'what'))}
+        {row(t('qcg.entCollectibles'), named(sm.collectibles, 'where'))}
+        {row(t('qcg.infoQuests'), sm.quests?.length ? <ul className="space-y-1">{sm.quests.map((q: any, i: number) => <li key={i}><strong className="text-white">{q.name}</strong><span className="text-zinc-400">{q.kind ? ` · ${q.kind}` : ''}{q.chapter ? ` · ${q.chapter}` : ''}</span></li>)}</ul> : null)}
+      </dl>
+      {!!sm.notes?.length && <ul className="mt-3 space-y-1.5 text-sm text-zinc-300">{sm.notes.map((n: string, i: number) => <li key={i} className="flex gap-2"><span className="text-[var(--accent-color)]">•</span><span><Linked text={n} ents={ents} onEntity={onEntity} self={slug} /></span></li>)}</ul>}
+    </div>
+  );
+}
+
 function AreaPage({
   gameKey,
   slug,
+  onEntity,
   onGo,
   onAsk,
   achHere = [],
@@ -398,6 +479,7 @@ function AreaPage({
   slug: string;
   /** An entry to show: its section opens, it scrolls into view and is highlighted for a moment. ach:<name> = an achievement. */
   focus?: { id: string; n: number } | null;
+  onEntity?: (slug: string) => void;
   onGo: (a: Area) => void;
   onAsk?: (q: string) => void;
   achHere?: { name: string; desc: string; missable?: boolean; how?: string; icon?: string }[];
@@ -405,7 +487,7 @@ function AreaPage({
 }) {
   const t = useT();
   const s = useApi<Page>(`/api/guides/${encodeURIComponent(gameKey)}/${encodeURIComponent(slug)}`);
-  const order = useApi<{ areas: Area[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
+  const order = useApi<{ areas: Area[]; entities?: Ent[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
   const [done, setDone] = useState<Set<string>>(() => readDone(gameKey, slug));
   const [open, setOpen] = useState<Set<string>>(new Set());
   // Sections opened to show a focused entry (on top of the ones the player opened or closed).
@@ -567,7 +649,7 @@ function AreaPage({
           </button>
         )}
       </div>
-      {pg.overview && <p className="mt-3 text-sm leading-relaxed text-zinc-300">{pg.overview}</p>}
+      {pg.overview && <p className="mt-3 text-sm leading-relaxed text-zinc-300"><Linked text={pg.overview} ents={order.data?.entities} onEntity={onEntity} /></p>}
       {/* The summary box: what this place is and how to get there. */}
       {pg.info && (pg.info.region || pg.info.directions || pg.info.connected?.length || pg.info.quests?.length || pg.info.services?.length || pg.info.enemyTypes?.length || pg.info.levels || pg.info.coords) && (
         <dl className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs">
@@ -721,7 +803,7 @@ function AreaPage({
           'tips',
           t('qcg.tips'),
           <Sparkles className="w-4 h-4 text-[var(--accent-color)]" />,
-          <ul className="list-disc pl-6 space-y-1 text-sm text-zinc-300">{pg.tips.map((tip, i) => <li key={i}>{tip}</li>)}</ul>,
+          <ul className="list-disc pl-6 space-y-1 text-sm text-zinc-300">{pg.tips.map((tip, i) => <li key={i}><Linked text={tip} ents={order.data?.entities} onEntity={onEntity} /></li>)}</ul>,
         )}
 
       {(prev || next) && (

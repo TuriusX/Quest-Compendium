@@ -43,6 +43,7 @@ import { call, reviewerFor, queueForReview, MIN_PAGES, type Review } from './rev
 import { sourcePack, packNotes, WIKIS, type SourcePack } from './sourcePack';
 /** Wikis we fetch directly (a page written from one counts as checked). */
 const WIKI_HOSTS = new Set(Object.values(WIKIS).map((w) => w.name));
+import { structuredPeople } from './compendium';
 import { isTransient, buildEvidencePack, buildGameEvidence, evidenceText, claimCheck, claimReview, claimSlots, sentencesOf, pageRules, type ClaimVerdict, type ClaimPage } from './claimCheck';
 import { ProQuotaWait } from './reviewerQuota';
 import { apiLimits, searchesToday, pipelineRoom, SearchDayWait } from '../../apiLimits';
@@ -698,6 +699,15 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   }
   if (!ev.servicesComplete) incomplete.add('services');
   out.incomplete = [...incomplete];
+  // "Services and people" as grouped cards (Merchants, Quest NPCs, Invaders and enemies, Services), from the same
+  // evidence, each person checked (compendium.ts structuredPeople).
+  try {
+    const listed = [...(out.info?.services || []), ...(out.shops || []).map((x: any) => `${x.name}${x.sells ? `: ${x.sells}` : ''}`)].map((x: any) => String(x).slice(0, 200));
+    const pp = await structuredPeople(game, p.name, listed, ev);
+    if (pp.groups.length) out.people = { groups: pp.groups, at: Date.now() };
+  } catch (e: any) {
+    console.log(`  services and people: skipped (${String(e?.message || e).slice(0, 80)})`);
+  }
   const docId = `${key}__${slug}__evidence`;
   await db().collection('guidePrototypes').doc(docId).set(JSON.parse(JSON.stringify(out)));
   fs.mkdirSync('scratchpad/flagship', { recursive: true });
@@ -743,7 +753,7 @@ async function writePage(target: string, slug: string, pr: any) {
   const verified = pr.mode === 'evidence' ? pr.status === 'passed' : pr.mode !== 'pack' || WIKI_HOSTS.has(String(pr.sourceLinks?.wiki || ''));
   await db().collection('guides').doc(target).collection('areas').doc(slug).set(JSON.parse(JSON.stringify({
     walkthrough: pr.walkthrough, choices: pr.choices, advice: pr.advice, items: pr.items, secrets: pr.secrets, fights: pr.fights || [],
-    ...(pr.info ? { info: pr.info } : {}), sources: pr.sources || [], verified,
+    ...(pr.info ? { info: pr.info } : {}), ...(pr.people ? { people: pr.people } : {}), sources: pr.sources || [], verified,
     ...(pr.mode === 'evidence' ? { incomplete: pr.incomplete || [], reverify: verified ? null : { at: Date.now(), why: pr.reason || 'did not pass the evidence review' } } : {}),
     ...(!verified && pr.mode === 'pack' ? { reverify: { at: Date.now(), why: 'built from a search pack', was: 'search pack' } } : {}),
     ...(pr.sourceLinks ? { sourceLinks: pr.sourceLinks } : {}),

@@ -43,6 +43,13 @@ test("achievement labels: the builder's own, plus what the text makes plain", ()
   assert.deepEqual(achFlags({ desc: "Defeat the dragon." }), []);
 });
 
+test("redirects: a page with no replacement goes to the guide's front page", () => {
+  const S = "https://questcompendium.com";
+  const live = new Set([`${S}/guides/rdr2/`, `${S}/guides/rdr2/chapter-2/`]);
+  assert.deepEqual(redirectLines([{ key: "rdr2", from: "valentine", to: "chapter-2" }, { key: "rdr2", from: "lakay", to: "" }], live, ["en"], S),
+    ["/guides/rdr2/valentine/ /guides/rdr2/chapter-2/ 301", "/guides/rdr2/lakay/ /guides/rdr2/ 301"]);
+});
+
 test("links use final URLs: no index.html, trailing slash kept, anchors kept", () => {
   assert.equal(finalLinks('<a href="../limgrave/index.html#items">'), '<a href="../limgrave/#items">');
   assert.equal(finalLinks('<a href="index.html">'), '<a href="./">');

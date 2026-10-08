@@ -273,6 +273,30 @@ function writeGuideIndex(games: { key: string; game: string; areas: number; art?
   console.log(`Guide index: ${list.length} game(s) in guides/index.json.`);
 }
 
+/**
+ * Redirects for a guide's held pages (taken down by a rebuild, repair or outline change), each to its replacement: an
+ * entity page or a live page with its name, else the first live page (in guide order) whose text mentions it, else the
+ * guide's front page (to ''). Pages held because the whole guide was unpublished get none while the guide is down
+ * (publish skips guides with no live pages).
+ */
+export let heldRedirectCount = 0;
+function heldRedirects(key: string, docs: any[], visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, entities: { slug: string; name: string }[]) {
+  const live = new Set(visible.map((o) => o.slug));
+  const norm = (x: string) => String(x || '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const text = (a: GuideArea) => [a.name, a.overview, ...(a.walkthrough || []).flatMap((s) => [s.title, s.text]), ...(a.items || []).map((e) => `${e.name} ${e.where || ''}`)].filter(Boolean).join(' ');
+  const out: { key: string; from: string; to: string }[] = [];
+  for (const d of docs) {
+    if (d.status !== 'held' || live.has(d.slug) || entities.some((e) => e.slug === d.slug)) continue;
+    const name = String(d.name || d.slug);
+    const ent = entities.find((e) => norm(e.name) === norm(name));
+    const same = visible.find((o) => norm(byslug.get(o.slug)?.name || o.name) === norm(name));
+    const mention = name.length >= 4 ? visible.find((o) => entitySegments(text(byslug.get(o.slug)!), [{ name, slug: 'x' }]).some((sg) => sg.slug)) : undefined;
+    out.push({ key, from: d.slug, to: ent?.slug || same?.slug || mention?.slug || '' });
+  }
+  heldRedirectCount += out.length;
+  return out;
+}
+
 /** Netlify's _redirects: the moved pages' old URLs, 301 to the pages that replaced them. */
 function writeRedirects(moved: { key: string; from: string; to: string }[], live: Set<string>) {
   const lines = redirectLines(moved, live, Object.keys(LANG_TAG), SITE);
@@ -437,10 +461,12 @@ function areaList(gameKey: string, areas: AreaLink[], current: string | null, ba
     .join('');
 }
 
-// ---- The compendium (PROTOTYPE, previews only: scripts/guides/compendium.ts) ----
-// Entity pages next to the guide, links from every mention in the guide's text (with a hover preview), a forgiving search
-// over every entity, page, step and entry, and "Services and people" as grouped cards. Only in a preview (--preview).
+// ---- The compendium (scripts/guides/compendium.ts) ----
+// Entity pages next to the guide (published ones; a preview shows all), links from every mention in the guide's text
+// (with a hover preview), a forgiving search over every entity, page, step and entry, and "Services and people" as
+// grouped cards. COMP is the guide being rendered (set per guide in main).
 type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any };
+const COMPS = new Map<string, NonNullable<typeof COMP>>();
 let COMP: { taxonomy: any[]; entities: CompEntity[]; people: Record<string, { groups: { group: string; people: { name: string; role: string; where?: string }[] }[] }> } | null = null;
 const compLinkable = () => (COMP?.entities || []).map((e) => ({ name: e.name, slug: e.slug }));
 /** Guide text with entity mentions linked to their pages (prefix: the path from this page to the guide's folder). */
@@ -464,8 +490,8 @@ p.innerHTML='<div class="text-[11px] uppercase tracking-wide text-[#c4b0ff]">'+e
 var r=a.getBoundingClientRect();p.style.left=Math.min(window.innerWidth-330,Math.max(8,r.left))+'px';p.style.top=(r.bottom+8)+'px';p.hidden=false;});})();</script>`;
 }
 /** "Services and people" as grouped cards (Merchants, Quest NPCs, Invaders and enemies, Services). */
-function peopleCards(slug: string): string {
-  const pp = COMP?.people?.[slug];
+function peopleCards(slug: string, own?: { groups?: any[] }): string {
+  const pp = own?.groups?.length ? own : COMP?.people?.[slug];
   if (!pp?.groups?.length) return '';
   const card = (g: { group: string; people: { name: string; role: string; where?: string }[] }) => `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3">
       <h3 class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(g.group)} <span class="text-zinc-500 font-normal">${g.people.length}</span></h3>
@@ -533,7 +559,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         !info.directions && info.coords && infoRow(ui('infoCoords'), esc(info.coords)),
         info.connected?.length && infoRow(ui('infoConnected'), info.connected.map(areaLink).join(', ')),
         info.quests?.length && infoRow(ui('relatedQuests'), info.quests.map(esc).join(' · ')),
-        info.services?.length && !COMP?.people?.[a.slug] && infoRow(ui('infoServices'), info.services.map(esc).join(' · ') + ((a.incomplete || []).includes('services') ? incompleteTag() : '')),
+        info.services?.length && !(a as any).people?.groups?.length && !COMP?.people?.[a.slug] && infoRow(ui('infoServices'), info.services.map(esc).join(' · ') + ((a.incomplete || []).includes('services') ? incompleteTag() : '')),
         info.enemyTypes?.length && infoRow(ui('infoEnemies'), info.enemyTypes.map(esc).join(' · ')),
       ].filter(Boolean).join('')}</dl>`
     : '';
@@ -636,7 +662,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
       ${a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${rich(a.overview)}</p>` : ''}
       ${infoBox}
-      ${peopleCards(a.slug)}
+      ${peopleCards(a.slug, (a as any).people)}
       ${shortVersion}
       ${jump}
       ${quests.length ? `<p class="mt-3 text-sm text-zinc-400"><span class="text-zinc-500">${esc(ui('relatedQuests'))}:</span> ${quests.map((q) => `<span class="inline-block rounded-md bg-white/[0.05] px-2 py-0.5 text-zinc-200 mr-1 mb-1">${esc(q)}</span>`).join('')}</p>` : ''}
@@ -918,7 +944,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   );
   if (visible.some((o) => byslug.get(o.slug)!.status === 'published')) sitemap.push(`${SITE}/${LP}guides/${key}/`);
   if (achHere?.list?.length) renderAchievements(key, gameName, achHere, links, sitemap, achLangs);
-  if (COMP?.entities.length && LANG === 'en') renderEntities(key, gameName, visible, byslug);
+  if (COMP?.entities.length && LANG === 'en') renderEntities(key, gameName, visible, byslug, sitemap);
 }
 
 /** The achievement guide page: roadmap, then every achievement (missable first), with ticks saved in the browser. */
@@ -955,12 +981,12 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
   function e(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
   q.addEventListener('input',function(){var v=q.value.trim();if(!v){out.innerHTML='';return;}var r=idx.map(function(x){var b=fuzzyScore(v,x.l);return{x:x,s:b&&b+(x.k==='Guide page'||x.k.indexOf('Location')>=0?0.5:0)};}).filter(function(y){return y.s>0;}).sort(function(a,b){return b.s-a.s;}).slice(0,12);
   out.innerHTML=r.length?r.map(function(y){return '<li><a class="flex items-baseline gap-2 rounded-lg px-3 py-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10" href="'+e(y.x.h)+'"><span class="font-semibold text-white">'+e(y.x.l)+'</span><span class="text-xs text-[#c4b0ff]">'+e(y.x.k)+'</span><span class="ml-auto text-xs text-zinc-500 truncate">'+e(y.x.c)+'</span></a></li>';}).join(''):'<li class="text-sm text-zinc-500 px-1">Nothing matches that search.</li>';});})();</script>
-  <h2 class="mt-8 text-lg font-bold text-white">Compendium <span class="text-xs font-normal text-zinc-500">prototype</span></h2>
+  <h2 class="mt-8 text-lg font-bold text-white">Compendium</h2>
   <div class="mt-3 grid gap-3 sm:grid-cols-2">${types}</div>`;
 }
 
 /** The compendium's entity pages (previews only): a summary box made for search, linked back to the guide. */
-function renderEntities(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>) {
+function renderEntities(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, sitemap: string[]) {
   const pageText = (a: GuideArea) => [a.overview, ...(a.walkthrough || []).flatMap((s) => [s.title, s.text, s.tip, s.warn]), ...(a.items || []).map((e) => `${e.name} ${e.where || ''}`), ...(a.tips || [])].filter(Boolean).join(' ');
   for (const e of COMP!.entities) {
     // Backlinks: the guide pages that mention it (found by the same linker), plus the chapters the page names.
@@ -975,7 +1001,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
       <h1 class="text-3xl font-bold text-white leading-tight">${esc(e.name)}</h1>
       <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400"><span class="rounded-md bg-[#a87ffb]/15 px-2 py-0.5 text-[#c4b0ff]">${esc(e.typeLabel)}</span><span>${esc(gameName)}</span>
         ${e.review ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))} · ${e.review.supported}/${e.review.total}</span>` : ''}
-        <span class="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-semibold text-amber-200">Prototype preview</span></div>
+        ${PREVIEW ? '<span class="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-semibold text-amber-200">Preview</span>' : ''}</div>
       ${e.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${rich(e.overview, '../', e.slug)}</p>` : ''}
       <dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm">
         ${row('Type', esc(e.typeLabel))}
@@ -992,9 +1018,12 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
       ${(sm.notes || []).length ? `<ul class="mt-4 space-y-1.5 text-sm text-zinc-300">${sm.notes.map((x: string) => `<li class="flex gap-2"><span class="text-[#c4b0ff]">&bull;</span><span>${rich(x, '../', e.slug)}</span></li>`).join('')}</ul>` : ''}
       ${(e.sources || []).length ? `<p class="mt-6 text-xs text-zinc-500">Sources: ${e.sources.map(esc).join(', ')}</p>` : ''}
     </article>`;
-    fs.writeFileSync(path.join(dir, 'index.html'), page({ title: e.title || `${e.name} – ${gameName}`, description: e.description || '', depth: 3, canonical: `${SITE}/guides/${key}/${e.slug}/`, body: body + entPreview(), draft: true, guide: key }));
+    const url = `${SITE}/guides/${key}/${e.slug}/`;
+    const ld = [breadcrumb([{ name: ui('navGuides'), url: `${SITE}/guides/` }, { name: shortGame(gameName), url: `${SITE}/guides/${key}/` }, { name: e.name, url }])];
+    fs.writeFileSync(path.join(dir, 'index.html'), page({ title: e.title || `${e.name} – ${gameName}`, description: e.description || '', depth: 3, canonical: url, ld, body: body + entPreview(), draft: !!PREVIEW, guide: key }));
+    if (!PREVIEW) sitemap.push(url);
   }
-  console.log(`Compendium preview: ${COMP!.entities.length} entity page(s) for ${gameName}.`);
+  console.log(`Compendium: ${COMP!.entities.length} entity page(s) for ${gameName}.`);
 }
 
 function renderAchievements(key: string, gameName: string, ach: any, links: AreaLink[], sitemap: string[], langs: string[] = ['en']) {
@@ -1177,17 +1206,15 @@ async function main() {
   // A preview carries the game's flagship prototypes (guidePrototypes/{key}__{slug}) on their pages.
   const protos = new Map<string, any>();
   if (PREVIEW) for (const d of (await db().collection('guidePrototypes').get()).docs) protos.set(d.id, d.data());
-  // The compendium prototype (scripts/guides/compendium.ts) for the previewed game.
-  if (PREVIEW && ONLY) {
-    const cref = db().collection('guideCompendium').doc(ONLY);
-    const c: any = (await cref.get()).data();
-    if (c || (await cref.collection('people').limit(1).get()).size) {
-      const entities = (await cref.collection('entities').get()).docs.map((d) => d.data() as CompEntity);
-      const people = Object.fromEntries((await cref.collection('people').get()).docs.map((d) => [d.id, d.data() as any]));
-      COMP = { taxonomy: c?.taxonomy || [], entities, people };
-      console.log(`Compendium prototype: ${entities.length} entity page(s), people for ${Object.keys(people).length} page(s).`);
-    }
+  // The compendium (scripts/guides/compendium.ts): each guide's published entity pages (a preview shows all of them).
+  for (const cd of (await db().collection('guideCompendium').get()).docs) {
+    if (ONLY && cd.id !== ONLY) continue;
+    const c: any = cd.data();
+    const entities = (await cd.ref.collection('entities').get()).docs.map((d) => d.data() as any).filter((e) => PREVIEW || e.status === 'published') as CompEntity[];
+    const people = PREVIEW ? Object.fromEntries((await cd.ref.collection('people').get()).docs.map((d) => [d.id, d.data() as any])) : {};
+    if (entities.length || Object.keys(people).length) COMPS.set(cd.id, { taxonomy: c?.taxonomy || [], entities, people });
   }
+  if (COMPS.size) console.log(`Compendium: ${[...COMPS].map(([k, v]) => `${k} ${v.entities.length}`).join(', ')} entity page(s).`);
   if (approve) {
     const ref = db().collection('guides').doc(gameKey(approve));
     const drafts = await ref.collection('areas').where('status', '==', 'draft').get();
@@ -1228,6 +1255,11 @@ async function main() {
     // A merged or renamed page (an alias saved on the guide): its old URL redirects to the page that has it now.
     for (const [from, to] of Object.entries((info.aliases || {}) as Record<string, string>)) moved.push({ key: g.id, from, to });
     if (!visible.length) continue;
+    COMP = COMPS.get(g.id) || null;
+    // Never a broken indexed URL: a page a rebuild, repair or outline change took down (held) redirects to what replaced
+    // it: an entity page with its name, a page with the same name, the first page that mentions it, else the guide's
+    // front page. (An entity page with the same URL brings the URL back, so it needs none.)
+    if (!PREVIEW) moved.push(...heldRedirects(g.id, snap.docs.map((d) => ({ slug: d.id, ...(d.data() as any) })), visible, byslug, COMP?.entities || []));
     // Languages this game's guide is translated into (translate-guide.ts), published pages only.
     const trs: Record<string, any> = {};
     for (const code of Array.isArray(info.languages) ? info.languages : []) {
@@ -1257,6 +1289,7 @@ async function main() {
       renderGame(g.id, String(info.game || g.id), pages, byslug, t, langs, sitemap, trs, ach, Number(info.appId) || undefined);
     }
     setLang('en');
+    COMP = null;
   }
 
   for (const code of Object.keys(LANG_TAG)) {

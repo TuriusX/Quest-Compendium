@@ -72,4 +72,21 @@ test("evidence only forums or videos back is dropped (the invented Henricus lock
   assert.deepEqual(t.evidence[0].sources, ["ign.com"]);
 });
 
+test("no checkbox for things the game hands you automatically (Arthur's Bow in RDR2 Chapter 1)", () => {
+  assert.ok(isAutomatic({ name: "Bow", where: 'Arthur receives it automatically from Charles Smith at the beginning of the mission "The Aftermath of Genesis"' }));
+  assert.ok(isAutomatic({ name: "Lantern", how: "It is added to your inventory automatically after the prologue" }));
+  assert.ok(isAutomatic({ name: "Map", where: "Handed to you automatically by Dutch" }));
+  assert.ok(isAutomatic({ name: "Satchel", how: "automatically received when the chapter starts" }));
+  // Things a player has to go and get still get a checkbox, even near the word "automatically".
+  assert.ok(!isAutomatic({ name: "Rare Shotgun", where: "In a chest on the Aberdeen Pig Farm; the door opens automatically once the farmhands are gone" }));
+  assert.ok(!isAutomatic({ name: "Legendary Buck", where: "Near Bacchus Station; track it with Eagle Eye" }));
+  // Missable: it keeps its checkbox (Moonlight Greatsword: cut Seath's tail first).
+  assert.ok(!isAutomatic({ name: "Moonlight Greatsword", where: "automatically added to inventory upon severing Seath the Scaleless's middle tail", missable: true }));
+  // pageRules drops them from the lists and the walkthrough steps.
+  const pr: any = { items: [{ id: "i1", name: "Bow", where: "Arthur receives it automatically from Charles Smith" }, { id: "i2", name: "Pamphlet", where: "On the table in Colter's cabin" }], secrets: [], walkthrough: [{ title: "s", text: "t", entries: ["i1", "i2"] }] };
+  pageRules(pr, null);
+  assert.deepEqual(pr.items.map((e: any) => e.id), ["i2"]);
+  assert.deepEqual(pr.walkthrough[0].entries, ["i2"]);
+});
+
 console.log(`\n${passed} passed`);
