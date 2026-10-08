@@ -123,6 +123,15 @@ export function QcGuidesView({
   }, [gameName, guideLang]);
 
   const [focus, setFocus] = useState<{ slug: string; id: string; n: number } | null>(null);
+  // A search result: its page (or entity page), at the exact entry (highlighted, its section opened).
+  const openHit = (hit: SearchHit, game?: string) => {
+    const m = hit.h.match(/\/guides\/([^/]+)\/([^/]+)\/(?:#(.+))?$/);
+    if (!m) return;
+    const [, k, slug, anchor] = m;
+    if (hit.e) return go({ view: 'entity', key: k, slug, game });
+    openArea(k, slug, game);
+    setFocus(anchor ? { slug, id: anchor.replace(/^e-/, ''), n: Date.now() } : null);
+  };
   useEffect(() => {
     if (!openRequest?.slug || !guide) return;
     openArea(guide.key, openRequest.slug, guide.game);
@@ -177,6 +186,7 @@ export function QcGuidesView({
           {view.view === 'game' && (
             <AreaList
               key={view.key}
+              onHit={(hit) => openHit(hit, view.game)}
               onEntity={(slug) => go({ view: 'entity', key: view.key, slug, game: view.game })}
               gameKey={view.key}
               here={hereArea?.slug}
@@ -198,6 +208,7 @@ export function QcGuidesView({
           )}
           {view.view === 'area' && (
             <AreaPage
+              onHit={(hit) => openHit(hit, view.game)}
               onEntity={(slug) => go({ view: 'entity', key: view.key, slug, game: view.game })}
               key={`${view.key}/${view.slug}`}
               gameKey={view.key}
@@ -263,6 +274,65 @@ function SearchBox({ value, onChange, placeholder }: { value: string; onChange: 
       placeholder={placeholder}
       className="w-full mb-3 px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[var(--accent-border)]"
     />
+  );
+}
+
+/** A guide's search index (published with the website: guides/{key}/search.json, per language), loaded once. */
+type SearchHit = { l: string; k: string; c: string; h: string; p?: number; e?: number };
+const searchIndexes = new Map<string, Promise<SearchHit[]>>();
+function guideSearchIndex(key: string): Promise<SearchHit[]> {
+  const path = `https://questcompendium.com/${guideLang === 'en' ? '' : `${guideLang}/`}guides/${encodeURIComponent(key)}/search.json`;
+  if (!searchIndexes.has(path)) {
+    const p = fetch(path).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then((j) => (Array.isArray(j) ? j : []));
+    p.catch(() => searchIndexes.delete(path));
+    searchIndexes.set(path, p);
+  }
+  return searchIndexes.get(path)!;
+}
+
+/**
+ * The guide-wide search (one per view, the same as the website's): every chapter or area, step, item, secret, shop,
+ * enemy, fight and entity page, matched forgivingly (apostrophes, plurals, small typos; exact names first), each result
+ * "Name · Type · Chapter". Picking one opens it at the exact entry.
+ */
+function GuideSearch({ gameKey, value, onChange, onPick }: { gameKey: string; value: string; onChange: (v: string) => void; onPick: (hit: SearchHit) => void }) {
+  const t = useT();
+  const [index, setIndex] = useState<SearchHit[] | null>(null);
+  const load = () => {
+    if (!index) guideSearchIndex(gameKey).then(setIndex).catch(() => setIndex([]));
+  };
+  useEffect(() => {
+    if (value) load();
+  }, [value]);
+  const v = value.trim();
+  const hits = v && index ? index.map((x) => ({ x, s: fuzzyScore(v, x.l) })).filter((y) => y.s > 0).map((y) => ({ ...y, s: y.s + (y.x.p ? 0.5 : 0) })).sort((a, b) => b.s - a.s).slice(0, 15) : [];
+  return (
+    <div className="mb-3">
+      <input
+        type="search"
+        value={value}
+        onFocus={load}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={t('qcg.searchAll')}
+        className="w-full px-3.5 py-2 rounded-xl bg-white/[0.04] border border-[var(--accent-border)] text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[var(--accent-color)]"
+      />
+      {v && (
+        <div className="mt-2 space-y-1">
+          {!index && <Note>{t('qcg.loading')}</Note>}
+          {index && !hits.length && <Note>{t('qcg.noMatches')}</Note>}
+          {hits.map(({ x }, i) => (
+            <button key={i} type="button" className={rowCls} onClick={() => onPick(x)}>
+              <span className="flex-1 min-w-0 text-sm">
+                <span className="font-semibold text-zinc-100">{x.l}</span>
+                <span className="text-xs text-[var(--accent-color)]"> · {x.k}</span>
+                {x.c && <span className="text-xs text-zinc-500"> · {x.c}</span>}
+              </span>
+              <ChevronRight className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -333,6 +403,7 @@ function GamesList({ current, onPick }: { current?: string; onPick: (g: Game) =>
 
 function AreaList({
   gameKey,
+  onHit,
   onEntity,
   here,
   onPick,
@@ -341,6 +412,7 @@ function AreaList({
   onAchievements,
 }: {
   gameKey: string;
+  onHit: (hit: SearchHit) => void;
   onEntity?: (slug: string) => void;
   here?: string;
   onPick: (a: Area, game: string) => void;
@@ -357,9 +429,8 @@ function AreaList({
   if (s.error || !s.data) return <Note>{t('qcg.none')}</Note>;
   const needle = fold(q.trim());
   // Search by area name, story note, or anything on the page (items, secrets, enemies).
-  const qq = q.trim();
-  const areas = s.data.areas.filter((a) => !needle || fold(`${a.name} ${a.story} ${a.search || ''}`).includes(needle) || fuzzyScore(qq, `${a.name} ${a.story}`) > 0);
-  const entHits = needle ? (s.data.entities || []).filter((e) => fuzzyScore(qq, e.name) > 0) : [];
+  // With a query, the guide-wide results replace the list (GuideSearch); empty, the list is back.
+  const areas = needle ? [] : s.data.areas;
   const lastSlug = ls.get(`qc-guide-last:${gameKey}`);
   const cont = areas.find((a) => a.slug === lastSlug && a.slug !== here);
   const hereA = areas.find((a) => a.slug === here);
@@ -382,17 +453,7 @@ function AreaList({
   return (
     <div className="space-y-2">
       {!needle && <GameArt game={s.data.game} art={s.data.art} className="rounded-xl border border-white/10 mb-1" />}
-      <SearchBox value={q} onChange={setQ} placeholder={t('qcg.searchAreas')} />
-      {!areas.length && !entHits.length && <Note>{t('qcg.noMatches')}</Note>}
-      {entHits.length > 0 && onEntity && entHits.map((e) => (
-        <button key={e.slug} type="button" className={rowCls} onClick={() => onEntity(e.slug)}>
-          <span className="flex-1 min-w-0">
-            <span className="block text-sm font-semibold text-zinc-100">{e.name}</span>
-            <span className="block text-xs text-[var(--accent-color)]">{e.type}{e.region ? ` · ${e.region}` : ''}</span>
-          </span>
-          <ChevronRight className="w-4 h-4 text-zinc-500" />
-        </button>
-      ))}
+      <GuideSearch gameKey={gameKey} value={q} onChange={setQ} onPick={onHit} />
       {!needle && ach && onAchievements && (
         <button type="button" className={`${rowCls} !border-amber-500/30 !bg-amber-500/[0.07] hover:!bg-amber-500/[0.12]`} onClick={onAchievements}>
           <Sparkles className="w-4 h-4 text-amber-300 flex-shrink-0" />
@@ -495,6 +556,7 @@ function EntityPage({ gameKey, slug, onEntity }: { gameKey: string; slug: string
 function AreaPage({
   gameKey,
   slug,
+  onHit,
   onEntity,
   onGo,
   onAsk,
@@ -506,6 +568,7 @@ function AreaPage({
   slug: string;
   /** An entry to show: its section opens, it scrolls into view and is highlighted for a moment. ach:<name> = an achievement. */
   focus?: { id: string; n: number } | null;
+  onHit: (hit: SearchHit) => void;
   onEntity?: (slug: string) => void;
   onGo: (a: Area) => void;
   onAsk?: (q: string) => void;
@@ -519,6 +582,8 @@ function AreaPage({
   const [open, setOpen] = useState<Set<string>>(new Set());
   // Sections opened to show a focused entry (on top of the ones the player opened or closed).
   const [forced, setForced] = useState<Set<string>>(new Set());
+  // The guide-wide search at the top of the page.
+  const [q, setQ] = useState('');
   useEffect(() => ls.set(`qc-guide-last:${gameKey}`, slug), [gameKey, slug]);
   // Ticks made on the objectives tracker show here too (and ours show there: writeDone tells everyone).
   useEffect(() => {
@@ -660,6 +725,7 @@ function AreaPage({
 
   return (
     <div>
+      <GuideSearch gameKey={gameKey} value={q} onChange={setQ} onPick={(hit) => { setQ(''); onHit(hit); }} />
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <h2 className="text-xl font-bold text-white leading-tight">{pg.name}</h2>

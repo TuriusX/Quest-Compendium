@@ -131,7 +131,7 @@ export function entitySegments(text: string, entities: LinkEntity[]): { text: st
 /**
  * How well a guide search query matches a text (0 = not at all; higher is better). Forgiving the way players type:
  * case, accents and apostrophes don't matter ("thieves landing", "keira metz house"), plurals match singulars, every
- * query word must match a word of the text (as a prefix, or within one typo for words of 5+ letters). Written without
+ * query word must match a word of the text (as a prefix, or within one typo for words of 4+ letters). Written without
  * outside helpers: the website's search runs this same function (fuzzyScore.toString()).
  */
 export function fuzzyScore(query: string, text: string): number {
@@ -156,7 +156,7 @@ export function fuzzyScore(query: string, text: string): number {
     for (const t of words) {
       if (t === w) best = Math.max(best, 3);
       else if (t.startsWith(w) && w.length >= 2) best = Math.max(best, 2);
-      else if (w.length >= 5 && near(w, t)) best = Math.max(best, 1);
+      else if (w.length >= 4 && near(w, t)) best = Math.max(best, 1);
     }
     if (!best) return 0;
     score += best;

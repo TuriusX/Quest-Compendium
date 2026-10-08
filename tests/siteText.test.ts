@@ -96,6 +96,7 @@ test("guide search: forgiving matches (apostrophes, plurals, one typo), exact na
   assert.ok(fuzzyScore("legendary bears", "Legendary Bharati Grizzly Bear") > 0);
   assert.ok(fuzzyScore("wreckers cave", "Wrecker's Cave") > 0);
   assert.ok(fuzzyScore("tumblweed", "Tumbleweed") > 0); // one typo
+  assert.ok(fuzzyScore("rolling blok rifles", "Rolling Block Rifle") > 0); // a typo in a short word, and a plural
   assert.equal(fuzzyScore("saint denis", "Chapter 1: Colter"), 0);
   assert.ok(fuzzyScore("colter", "Colter") > fuzzyScore("colter", "Chapter 1: Colter"));
 });

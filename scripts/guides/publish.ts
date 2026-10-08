@@ -269,7 +269,7 @@ const SCRIPT = `
 function writeGuideIndex(games: { key: string; game: string; areas: number; art?: string; checked: number; players: number; langs: string[] }[]) {
   const list = games.slice().sort((a, b) => a.game.localeCompare(b.game));
   fs.writeFileSync(path.join(OUT, 'guides', 'index.json'), JSON.stringify({ v: 1, updated: Date.now(), games: list }));
-  fs.writeFileSync(path.join(OUT, '_headers'), '# Made by scripts/guides/publish.ts\n/guides/index.json\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n');
+  fs.writeFileSync(path.join(OUT, '_headers'), '# Made by scripts/guides/publish.ts\n/guides/index.json\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n/guides/*/search.json\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n/:lang/guides/*/search.json\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n');
   console.log(`Guide index: ${list.length} game(s) in guides/index.json.`);
 }
 
@@ -652,7 +652,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       </section>`
     : '';
   const box = (id: string) => `<input type="search" data-filter="#${id}" placeholder="${esc(ui('searchAreas'))}" class="w-full mb-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">`;
-  const sidebar = (id: string) => `<nav aria-label="${esc(game)}" class="qc-scroll">${`<a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>`}${box(id)}<ul id="${id}" class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
+  const sidebar = (id: string) => `<nav aria-label="${esc(game)}" class="qc-scroll">${`<a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>`}${guideSearchBox(gameKey, `#${id}`, 'mb-2')}<ul id="${id}" class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
 
   return `
   <div class="lg:grid lg:grid-cols-[16rem_1fr] lg:gap-8">
@@ -938,16 +938,19 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, one(links.length, 'statAreas'))}${stat(totalChecks, one(totalChecks, 'statThings'))}${stat(missables, one(missables, 'statMissables'))}${checked ? stat(checked === links.length ? ui('statAll') : checked, one(checked, 'statChecked')) : ''}</div>
           ${achHere ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${(achHere.list || []).length} · ${(achHere.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
           <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
+          ${guideSearchBox(key, '#qc-area-list')}
+          <div id="qc-area-list">
           ${compSearch(key, visible, byslug)}
-          ${COMP?.entities.length ? '' : `<input type="search" data-filter="#qc-area-rows" data-empty="#qc-area-empty" placeholder="${esc(ui('searchAreas'))}" class="mt-6 w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">`}
           <div id="qc-area-rows" class="mt-3">${rows}</div>
-          <p id="qc-area-empty" hidden class="mt-3 text-sm text-zinc-500">${esc(ui('noMatches'))}</p>
+          </div>
           ${cta('../'.repeat(2 + extra), gameName)}
         </div>`,
       draft: visible.some((o) => byslug.get(o.slug)!.status !== 'published'),
     }),
   );
   if (visible.some((o) => byslug.get(o.slug)!.status === 'published')) sitemap.push(`${SITE}/${LP}guides/${key}/`);
+  // The guide's search index, read by every guide page's search box and the apps.
+  fs.writeFileSync(path.join(dir, 'search.json'), JSON.stringify(guideSearchIndex(key, visible, byslug)));
   if (achHere?.list?.length) renderAchievements(key, gameName, achHere, links, sitemap, achLangs);
   if (COMP?.entities.length && LANG === 'en') renderEntities(key, gameName, visible, byslug, sitemap);
 }
@@ -958,41 +961,64 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
  * (fuzzyScore: apostrophes, plurals, one typo), each result a jump to its page and spot. And the compendium's entities by
  * type. Previews only.
  */
-function compSearch(key: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>): string {
-  if (!COMP?.entities.length) return '';
-  const idx: { l: string; k: string; c: string; h: string; p?: number }[] = [];
-  for (const e of COMP.entities) idx.push({ l: e.name, k: e.typeLabel, c: e.summary?.region || '', h: entHref(e.slug), p: 1 });
+/**
+ * The guide's search index (guides/{key}/search.json, per language): every chapter or area, walkthrough step, item,
+ * secret, shop or NPC, enemy, key fight and entity page, each with its type, its chapter and a link to the exact spot
+ * (the page's anchors; arriving there opens the section and highlights the entry). Read by the website's search box on
+ * every guide page and by the apps.
+ */
+function guideSearchIndex(key: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>) {
+  const idx: { l: string; k: string; c: string; h: string; p?: number; e?: number }[] = [];
+  const base = `/${LP}guides/${key}/`;
+  for (const e of COMP?.entities || []) idx.push({ l: e.name, k: e.typeLabel, c: e.summary?.region || '', h: entHref(e.slug), p: 1, e: 1 });
   for (const o of visible) {
     const a = byslug.get(o.slug)!;
     const isChapter = /^(chapter|prologue|epilogue|act|part|episode|day)\b/i.test(a.name);
-    idx.push({ l: a.name, k: ui(isChapter ? 'kindChapter' : 'kindArea'), c: a.story || '', h: `${o.slug}/index.html`, p: 1 });
-    for (const st of a.walkthrough || []) idx.push({ l: st.title, k: ui('kindStep'), c: a.name, h: `${o.slug}/index.html#${st.id}` });
-    for (const e of a.items || []) idx.push({ l: e.name || '', k: ui('kindItem'), c: a.name, h: `${o.slug}/index.html#e-${e.id}` });
-    for (const e of a.secrets || []) idx.push({ l: String(e.text || '').slice(0, 90), k: ui('kindSecret'), c: a.name, h: `${o.slug}/index.html#e-${e.id}` });
-    for (const e of a.shops || []) idx.push({ l: e.name || '', k: ui('kindShop'), c: a.name, h: `${o.slug}/index.html#e-${e.id}` });
-    for (const e of a.enemies || []) idx.push({ l: e.name || '', k: ui('kindEnemy'), c: a.name, h: `${o.slug}/index.html#e-${e.id}` });
-    for (const f of a.fights || []) idx.push({ l: f.name, k: ui('kindFight'), c: a.name, h: `${o.slug}/index.html#${f.id}` });
+    const at = (anchor = '') => `${base}${o.slug}/${anchor ? `#${anchor}` : ''}`;
+    idx.push({ l: a.name, k: ui(isChapter ? 'kindChapter' : 'kindArea'), c: a.story || '', h: at(), p: 1 });
+    for (const st of a.walkthrough || []) if (st.title) idx.push({ l: st.title, k: ui('kindStep'), c: a.name, h: at(st.id) });
+    for (const e of a.items || []) if (e.name) idx.push({ l: e.name, k: ui('kindItem'), c: a.name, h: at(`e-${e.id}`) });
+    for (const e of a.secrets || []) if (e.text) idx.push({ l: String(e.text).slice(0, 90), k: ui('kindSecret'), c: a.name, h: at(`e-${e.id}`) });
+    for (const e of a.shops || []) if (e.name) idx.push({ l: e.name, k: ui('kindShop'), c: a.name, h: at(`e-${e.id}`) });
+    for (const e of a.enemies || []) if (e.name) idx.push({ l: e.name, k: ui('kindEnemy'), c: a.name, h: at(`e-${e.id}`) });
+    for (const f of a.fights || []) if (f.name) idx.push({ l: f.name, k: ui('kindFight'), c: a.name, h: at(f.id) });
+    for (const x of a.sections || []) for (const e of x.entries || []) if (e.text) idx.push({ l: String(e.text).slice(0, 90), k: x.title, c: a.name, h: at(`e-${e.id}`) });
   }
+  return idx;
+}
+
+/**
+ * The guide-wide search box (one per page): loads the guide's search.json the first time it's used, matches forgivingly
+ * (fuzzyScore: apostrophes, plurals, small typos; exact names first) and lists "Name · Type · Chapter", each a link to
+ * the exact spot. While there's a query, the list under it (the chapter list) is hidden; empty, it's back.
+ */
+function guideSearchBox(key: string, listSel: string, cls = 'mt-6'): string {
+  return `<div class="${cls}">
+    <input type="search" id="qc-gsearch" autocomplete="off" placeholder="${esc(ui('searchAll'))}" class="w-full px-3.5 py-2 rounded-xl bg-white/[0.04] border border-[#a87ffb]/40 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]">
+    <ul id="qc-gresults" class="mt-2 space-y-1"></ul>
+  </div>
+  <script>(function(){var __name=function(f){return f;};var fuzzyScore=${fuzzyScore.toString()};
+  var q=document.getElementById('qc-gsearch'),out=document.getElementById('qc-gresults'),sel=${JSON.stringify(listSel)},idx=null,busy=null;
+  function e(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function load(){if(idx)return Promise.resolve(idx);if(!busy)busy=fetch(${JSON.stringify(`/${LP}guides/${key}/search.json`)}).then(function(r){return r.json();}).then(function(j){idx=j;return j;}).catch(function(){idx=[];return idx;});return busy;}
+  function run(){var v=q.value.trim(),list=document.querySelector(sel);if(list)list.hidden=!!v;if(!v){out.innerHTML='';return;}load().then(function(ix){if(q.value.trim()!==v)return;
+    var r=ix.map(function(x){var b=fuzzyScore(v,x.l);return{x:x,s:b&&b+(x.p?0.5:0)};}).filter(function(y){return y.s>0;}).sort(function(a,b){return b.s-a.s;}).slice(0,15);
+    out.innerHTML=r.length?r.map(function(y){return '<li><a class="block rounded-lg px-3 py-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10" href="'+e(y.x.h)+'"><span class="font-semibold text-white">'+e(y.x.l)+'</span> <span class="text-xs text-[#c4b0ff]">· '+e(y.x.k)+'</span>'+(y.x.c?' <span class="text-xs text-zinc-500">· '+e(y.x.c)+'</span>':'')+'</a></li>';}).join(''):'<li class="text-sm text-zinc-500 px-1">'+e(${JSON.stringify(ui('noMatches'))})+'</li>';});}
+  q.addEventListener('focus',load);q.addEventListener('input',run);})();</script>`;
+}
+
+function compSearch(key: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>): string {
+  if (!COMP?.entities.length) return '';
   const types = (COMP.taxonomy || []).map((t: any) => {
     const built = COMP!.entities.filter((e) => e.type === t.id);
     const more = (t.examples || []).filter((x: string) => !built.some((e) => e.name.toLowerCase() === x.toLowerCase())).slice(0, 6);
     return `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(t.label)}</div>
       <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => `<a href="${esc(entHref(e.slug))}" class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(e.name)}</a>`).join('')}${more.map((x: string) => `<span class="qc-soon rounded-md border border-dashed border-white/10 px-2 py-0.5 text-sm text-zinc-500 cursor-help select-none" tabindex="0" aria-disabled="true" title="${esc(ui('comingSoon'))}" data-soon="${esc(ui('comingSoon'))}">${esc(x)}</span>`).join('')}</div></div>`;
   }).join('');
-  return `<div class="mt-6">
-    <input type="search" id="qc-gsearch" autocomplete="off" placeholder="${esc(ui('searchAll'))}" class="w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-[#a87ffb]/40 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]">
-    <ul id="qc-gresults" class="mt-2 space-y-1"></ul>
-  </div>
-  <script type="application/json" id="qc-gidx">${JSON.stringify(idx).replace(/</g, '\\u003c')}</script>
-  <script>(function(){var __name=function(f){return f;};var fuzzyScore=${fuzzyScore.toString()};var idx=JSON.parse(document.getElementById('qc-gidx').textContent),q=document.getElementById('qc-gsearch'),out=document.getElementById('qc-gresults');
-  function e(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-  q.addEventListener('input',function(){var v=q.value.trim();if(!v){out.innerHTML='';return;}var r=idx.map(function(x){var b=fuzzyScore(v,x.l);return{x:x,s:b&&b+(x.p?0.5:0)};}).filter(function(y){return y.s>0;}).sort(function(a,b){return b.s-a.s;}).slice(0,12);
-  out.innerHTML=r.length?r.map(function(y){return '<li><a class="flex items-baseline gap-2 rounded-lg px-3 py-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10" href="'+e(y.x.h)+'"><span class="font-semibold text-white">'+e(y.x.l)+'</span><span class="text-xs text-[#c4b0ff]">'+e(y.x.k)+'</span><span class="ml-auto text-xs text-zinc-500 truncate">'+e(y.x.c)+'</span></a></li>';}).join(''):'<li class="text-sm text-zinc-500 px-1">'+e(${JSON.stringify(ui('noMatches'))})+'</li>';});
-  /* A tap on a coming-soon entry shows its tooltip text for a moment (touch screens have no hover). */
-  document.querySelectorAll('.qc-soon').forEach(function(s){s.addEventListener('click',function(){var t=s.textContent;s.textContent=s.getAttribute('data-soon');setTimeout(function(){s.textContent=t;},1400);});});})();</script>
-  <h2 class="mt-8 text-lg font-bold text-white">${esc(ui('compendium'))}</h2>
+  return `<h2 class="mt-8 text-lg font-bold text-white">${esc(ui('compendium'))}</h2>
   ${types.includes('qc-soon') ? `<p class="mt-1 text-xs text-zinc-500">${esc(ui('comingSoonNote'))}</p>` : ''}
-  <div class="mt-3 grid gap-3 sm:grid-cols-2">${types}</div>`;
+  <div class="mt-3 grid gap-3 sm:grid-cols-2">${types}</div>
+  <script>document.querySelectorAll('.qc-soon').forEach(function(s){s.addEventListener('click',function(){var t=s.textContent;s.textContent=s.getAttribute('data-soon');setTimeout(function(){s.textContent=t;},1400);});});</script>`;
 }
 
 /** The compendium's entity pages (previews only): a summary box made for search, linked back to the guide. */
