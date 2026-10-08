@@ -192,26 +192,24 @@ const SCRIPT = `
     el.textContent=n>=t?'\u2713':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
   });};
   progress();
-  // Achievement labels filter (one at a time; "To do" = not ticked yet), and the spoiler switch / tap-to-reveal.
+  // Achievement labels filter (one at a time; "To do" = not ticked yet).
   var ff=document.querySelector('[data-flag-filter]');
   if(ff){ff.addEventListener('click',function(e){var b=e.target.closest('button[data-flag]');if(!b)return;var f=b.getAttribute('data-flag');
     ff.querySelectorAll('button[data-flag]').forEach(function(x){var on=x===b;x.classList.toggle('bg-[#a87ffb]/15',on);x.classList.toggle('border-[#a87ffb]/50',on);x.classList.toggle('text-white',on);});
     var dk=K?'qcw:'+K+':achievements':'',dn=dk?load(dk):new Set();
     document.querySelectorAll('[data-flags]').forEach(function(r){var show=!f||(f==='todo'?!dn.has(r.getAttribute('data-ach')):(' '+r.getAttribute('data-flags')+' ').indexOf(' '+f+' ')>=0);r.classList.toggle('qc-off',!show);});});}
-  var sp=document.querySelector('[data-spoilers]');if(sp)sp.addEventListener('change',function(){b.classList.toggle('qc-spoilers',sp.checked);});
-  document.addEventListener('click',function(e){var s=e.target.closest('.qc-spoiler');if(s){s.classList.add('is-shown');e.preventDefault();}});
   // "On this page" links: a section that's folded opens when its link is used (or the page opens at it).
-  // A link or a text fragment (#:~:text=) to something inside a folded section or a spoiler opens it, and the target
+  // A link or a text fragment (#:~:text=) to something inside a folded section opens it, and the target
   // gets a short accent highlight. Browsers keep text fragments out of location.hash, so they're read from the
   // navigation entry; beforematch covers content hidden with hidden="until-found".
-  var reveal=function(el){for(var n=el;n&&n!==document.body;n=n.parentElement){if(n.tagName==='DETAILS')n.open=true;if(n.classList&&n.classList.contains('qc-spoiler'))n.classList.add('is-shown');}if(el.querySelectorAll)el.querySelectorAll('.qc-spoiler').forEach(function(s){s.classList.add('is-shown');});};
+  var reveal=function(el){for(var n=el;n&&n!==document.body;n=n.parentElement){if(n.tagName==='DETAILS')n.open=true;}};
   var flash=function(el){el.classList.remove('qc-hit');void el.offsetWidth;el.classList.add('qc-hit');setTimeout(function(){el.classList.remove('qc-hit');},2600);};
   var land=function(el){reveal(el);flash(el);setTimeout(function(){el.scrollIntoView({block:'center'});},0);};
   var openAt=function(){var id=location.hash.slice(1);if(!id||id.indexOf(':~:')===0)return;var el=null;try{el=document.getElementById(decodeURIComponent(id));}catch(e){}if(el)land(el);};
   var squash=function(s){return (s||'').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g,' ').trim();};
   var textTarget=function(){var nav=(performance.getEntriesByType&&performance.getEntriesByType('navigation')[0])||null;var url=(nav&&nav.name)||location.href;var at=url.indexOf(':~:');if(at<0)return;
     url.slice(at+3).split('&').forEach(function(d){if(d.indexOf('text=')!==0)return;var parts=d.slice(5).split(',').map(function(x){try{return decodeURIComponent(x);}catch(e){return x;}}).filter(function(x){return x.slice(-1)!=='-'&&x.charAt(0)!=='-';});var want=squash(parts[0]);if(!want)return;
-      var hit=null;document.querySelectorAll('main [data-check], main li, main p, main h2, main h3, main dd, main .qc-spoiler, main [id]').forEach(function(el){if(!hit&&squash(el.textContent).indexOf(want)>=0&&!Array.prototype.some.call(el.children,function(c){return squash(c.textContent).indexOf(want)>=0;}))hit=el;});
+      var hit=null;document.querySelectorAll('main [data-check], main li, main p, main h2, main h3, main dd, main [id]').forEach(function(el){if(!hit&&squash(el.textContent).indexOf(want)>=0&&!Array.prototype.some.call(el.children,function(c){return squash(c.textContent).indexOf(want)>=0;}))hit=el;});
       if(hit)land(hit.closest('[data-check],li,[id]')||hit);});};
   document.addEventListener('beforematch',function(e){reveal(e.target);flash(e.target);});
   window.addEventListener('hashchange',openAt);openAt();textTarget();
@@ -355,9 +353,6 @@ function page(opts: { title: string; description: string; depth: number; canonic
     [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
     [data-progress].is-complete { color: #34d399; }
     .qc-scroll { scrollbar-width: thin; scrollbar-color: #2a2a35 transparent; }
-    /* Hidden achievements: blurred until tapped, or all shown with the page's spoiler switch. */
-    .qc-spoiler { filter: blur(5px); cursor: pointer; transition: filter .15s; }
-    .qc-spoiler.is-shown, body.qc-spoilers .qc-spoiler { filter: none; }
     /* The achievement filter hides rows with this class (the search box uses the hidden attribute: both apply). */
     .qc-off { display: none !important; }
     /* Search hides entries with the hidden attribute; layout classes like "flex" would otherwise keep them showing. */
@@ -599,7 +594,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     x
       ? `<a href="../${esc(x.slug)}/index.html" class="flex-1 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/40 hover:bg-white/[0.06] px-4 py-3 ${dir === 'next' ? 'text-right' : ''}"><div class="text-[11px] uppercase tracking-wide text-zinc-500">${dir === 'prev' ? `&larr; ${esc(ui('previous'))}` : `${esc(ui('next'))} &rarr;`}</div><div class="text-sm font-semibold text-white truncate">${esc(x.name)}</div></a>`
       : '<span class="flex-1"></span>';
-  // Flagship pages: the short version, the walkthrough (entries ticked where you meet them) and the choices (spoilers).
+  // Flagship pages: the short version, the walkthrough (entries ticked where you meet them) and the choices.
   const fightById = new Map((a.fights || []).map((f) => [f.id, f]));
   const entryRow = (id: string) => {
     const it = items.find((e) => e.id === id);
@@ -638,15 +633,15 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     : '';
   const choices = (a.choices || []).length
     ? `<section id="choices" class="mt-8 scroll-mt-20">
-        <div class="flex items-center gap-3"><h2 class="flex-1 text-xl font-bold text-white">${esc(ui('choicesHere'))}${(a.incomplete || []).includes('choices') ? incompleteTag() : ''}</h2><label class="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer"><input type="checkbox" data-spoilers class="accent-[#a87ffb]"> ${esc(ui('showSpoilers'))}</label></div>
+        <div class="flex items-center gap-3"><h2 class="flex-1 text-xl font-bold text-white">${esc(ui('choicesHere'))}${(a.incomplete || []).includes('choices') ? incompleteTag() : ''}</h2></div>
         <p class="mt-1 text-sm text-zinc-500">${esc(ui('choicesIntro'))}</p>
         <div class="mt-4 space-y-3">${(a.choices || [])
           .map((c) => `<div id="${esc(c.id)}" class="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
             <h3 class="font-semibold text-white">${esc(c.title)}</h3>
             ${c.when ? `<p class="text-xs text-zinc-500 mt-0.5">${esc(c.when)}</p>` : ''}
-            <ul class="mt-2.5 space-y-2">${c.options.map((o) => `<li class="text-sm"><span class="font-semibold text-zinc-100">${esc(o.label)}</span><span class="qc-spoiler block mt-0.5 text-zinc-400" title="${esc(ui('choicesIntro'))}">&rarr; ${esc(o.outcome)}</span></li>`).join('')}</ul>
-            ${c.recommended ? `<p class="qc-spoiler mt-2.5 text-xs text-emerald-200/90"><span class="font-semibold text-emerald-300">${esc(ui('recommended'))}:</span> ${esc(c.recommended)}</p>` : ''}
-            ${c.note ? `<p class="qc-spoiler mt-1 text-xs text-amber-200/90">${esc(c.note)}</p>` : ''}
+            <ul class="mt-2.5 space-y-2">${c.options.map((o) => `<li class="text-sm"><span class="font-semibold text-zinc-100">${esc(o.label)}</span><span class="block mt-0.5 text-zinc-400">&rarr; ${esc(o.outcome)}</span></li>`).join('')}</ul>
+            ${c.recommended ? `<p class="mt-2.5 text-xs text-emerald-200/90"><span class="font-semibold text-emerald-300">${esc(ui('recommended'))}:</span> ${esc(c.recommended)}</p>` : ''}
+            ${c.note ? `<p class="mt-1 text-xs text-amber-200/90">${esc(c.note)}</p>` : ''}
           </div>`)
           .join('')}</div>
       </section>`
@@ -1103,7 +1098,7 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
   const flagLabel = (f: AchFlag) => ui(`achFlag_${f}`);
   const flagChips = ACH_FLAGS.filter((f) => flagCount(f) > 0);
   const filterHtml = flagChips.length
-    ? `<div class="mb-2 flex flex-wrap items-center gap-1.5 text-xs" data-flag-filter><button type="button" data-flag="" class="qc-flag rounded-md border border-[#a87ffb]/50 bg-[#a87ffb]/15 px-2 py-1 text-white">${esc(ui('achFilterAll'))}</button>${flagChips.map((f) => `<button type="button" data-flag="${f}" class="qc-flag rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300">${esc(flagLabel(f))} <span class="text-zinc-500">${flagCount(f)}</span></button>`).join('')}<button type="button" data-flag="todo" class="qc-flag rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300">${esc(ui('achFilterTodo'))}</button>${list.some((x) => x.hidden) ? `<label class="ml-auto flex items-center gap-1.5 text-zinc-400"><input type="checkbox" data-spoilers class="accent-[#a87ffb]"> ${esc(ui('achSpoilers'))}</label>` : ''}</div>`
+    ? `<div class="mb-2 flex flex-wrap items-center gap-1.5 text-xs" data-flag-filter><button type="button" data-flag="" class="qc-flag rounded-md border border-[#a87ffb]/50 bg-[#a87ffb]/15 px-2 py-1 text-white">${esc(ui('achFilterAll'))}</button>${flagChips.map((f) => `<button type="button" data-flag="${f}" class="qc-flag rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300">${esc(flagLabel(f))} <span class="text-zinc-500">${flagCount(f)}</span></button>`).join('')}<button type="button" data-flag="todo" class="qc-flag rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300">${esc(ui('achFilterTodo'))}</button></div>`
     : '';
   const row = (x: any) => {
     const where = x.area && areaName(x.area) ? `<a class="text-[#a87ffb] hover:text-white" href="../${esc(x.area)}/index.html">${esc(ui('achInArea', { area: areaName(x.area)! }))}</a>` : '';
@@ -1111,8 +1106,8 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
     const tags = flags.filter((f) => f !== 'missable').map((f) => ` <span class="rounded bg-white/[0.06] px-1.5 text-[10px] font-semibold uppercase text-zinc-400">${esc(flagLabel(f))}</span>`).join('');
     const step = stepOf.has(x) ? `<a class="text-zinc-500 hover:text-white" href="#step-${stepOf.get(x)! + 1}">${esc(ui('rmStep', { n: stepOf.get(x)! + 1 }))}</a>` : '';
     const body = `<strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${tags}${x.rarity != null ? ` <span class="text-zinc-500 text-xs">${esc(ui('achRarity', { n: x.rarity }))}</span>` : ''}
-      ${x.hidden ? (x.how ? `<span class="block text-[11px] uppercase tracking-wide text-zinc-500 mt-0.5">${esc(ui('achHiddenTag'))}</span>` : '') : x.desc ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.desc)}</span>` : ''}
-      ${x.how ? (x.hidden ? `<span class="qc-spoiler block text-zinc-300 text-sm mt-1" title="${esc(ui('achHidden'))}">${esc(x.how)}</span>` : `<span class="block text-zinc-300 text-sm mt-1">${esc(x.how)}</span>`) : ''}
+      ${x.hidden ? `<span class="block text-[11px] uppercase tracking-wide text-zinc-500 mt-0.5">${esc(ui('achHiddenTag'))}</span>` : ''}${x.desc ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.desc)}</span>` : ''}
+      ${x.how ? `<span class="block text-zinc-300 text-sm mt-1">${esc(x.how)}</span>` : ''}
       ${where || step ? `<span class="block text-xs mt-1">${[where, step].filter(Boolean).join(' · ')}</span>` : ''}`;
     return `<div id="${achId(x.name)}" class="scroll-mt-20" data-flags="${esc(flags.join(' '))}" data-ach="${esc(`ach:${x.name}`)}" data-search="${esc(`${x.name} ${x.hidden ? '' : x.desc || ''} ${areaName(x.area) || ''}`)}">${checkRow(`ach:${x.name}`, body)}</div>`;
   };

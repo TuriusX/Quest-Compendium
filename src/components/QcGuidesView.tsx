@@ -926,7 +926,6 @@ function AchievementsPage({ ach, achievements = [], onArea }: { ach: Achievement
   const t = useT();
   const [onlyMissable, setOnlyMissable] = useState(false);
   const [q, setQ] = useState('');
-  const [reveal, setReveal] = useState<Set<string>>(new Set());
   const r = ach.roadmap || {};
   const mine = (name: string, tipName: string) => achievements.find((a) => tipMatches({ name: tipName, englishName: name } as any, a.name) || tipMatches({ name, englishName: tipName } as any, a.name));
   const list = ach.list
@@ -999,7 +998,6 @@ function AchievementsPage({ ach, achievements = [], onArea }: { ach: Achievement
       <div className="space-y-1.5">
         {list.map((x) => {
           const m = mine(x.englishName || x.name, x.name);
-          const hiddenTip = x.hidden && !reveal.has(x.name);
           return (
             <div key={x.name} className={`px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/5 ${m?.unlocked ? 'opacity-60' : ''}`}>
               <div className="flex items-center gap-2 flex-wrap">
@@ -1007,15 +1005,8 @@ function AchievementsPage({ ach, achievements = [], onArea }: { ach: Achievement
                 {x.missable && !m?.unlocked && <span className="text-[10px] font-bold uppercase text-amber-300">{t('ach.missable')}</span>}
                 {x.rarity != null && <span className="text-[11px] text-zinc-500">{x.rarity}%</span>}
               </div>
-              {!x.hidden && x.desc && <p className="text-xs text-zinc-400 mt-0.5">{x.desc}</p>}
-              {x.how &&
-                (hiddenTip ? (
-                  <button type="button" onClick={() => setReveal((p) => new Set(p).add(x.name))} className="mt-1 text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer">
-                    {t('ach.reveal')}
-                  </button>
-                ) : (
-                  <p className="text-sm text-zinc-300 mt-1">{x.how}</p>
-                ))}
+              {x.desc && <p className="text-xs text-zinc-400 mt-0.5">{x.desc}</p>}
+              {x.how && <p className="text-sm text-zinc-300 mt-1">{x.how}</p>}
               {x.area && (
                 <button type="button" onClick={() => onArea(x.area!)} className="mt-1 text-xs font-semibold text-[var(--accent-color)] hover:brightness-125 cursor-pointer">
                   {t('ach.inGuide', { area: x.areaName || x.area })} →
