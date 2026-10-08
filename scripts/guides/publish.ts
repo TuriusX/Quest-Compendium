@@ -262,6 +262,17 @@ const SCRIPT = `
   }
 })();`;
 
+/**
+ * guides/index.json: the apps' guide list (the Deck plugin and the desktop app), a few KB, served by Netlify so the first
+ * load never waits on the server. _headers lets the apps fetch it from anywhere and caches it for 5 minutes.
+ */
+function writeGuideIndex(games: { key: string; game: string; areas: number; art?: string; checked: number; players: number; langs: string[] }[]) {
+  const list = games.slice().sort((a, b) => a.game.localeCompare(b.game));
+  fs.writeFileSync(path.join(OUT, 'guides', 'index.json'), JSON.stringify({ v: 1, updated: Date.now(), games: list }));
+  fs.writeFileSync(path.join(OUT, '_headers'), '# Made by scripts/guides/publish.ts\n/guides/index.json\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n');
+  console.log(`Guide index: ${list.length} game(s) in guides/index.json.`);
+}
+
 /** Netlify's _redirects: the moved pages' old URLs, 301 to the pages that replaced them. */
 function writeRedirects(moved: { key: string; from: string; to: string }[], live: Set<string>) {
   const lines = redirectLines(moved, live, Object.keys(LANG_TAG), SITE);
@@ -1072,6 +1083,8 @@ async function main() {
   }
   const show = (s: string) => s === 'published' || (withDrafts && s === 'draft');
   // Pages that moved (merged into another page, or replaced by a rebuild): their old URLs get 301s in _redirects.
+  // The apps' guide list (guides/index.json): one small line per game, read from the website instead of the server.
+  const guideIndex: { key: string; game: string; areas: number; art?: string; checked: number; players: number; langs: string[] }[] = [];
   const moved: { key: string; from: string; to: string }[] = Object.entries(SITE_REDIRECTS).flatMap(([key, m]) => Object.entries(m).map(([from, to]) => ({ key, from, to })));
   // Translated guides are rebuilt from scratch too.
   for (const code of Object.keys(LANG_TAG)) if (code !== 'en') fs.rmSync(path.join(OUT, code, 'guides'), { recursive: true, force: true });
@@ -1105,6 +1118,11 @@ async function main() {
       appId: Number(info.appId) || undefined,
     });
     if (info.appId && String(info.art || '').includes(`/apps/${info.appId}/`)) ART.set(Number(info.appId), String(info.art));
+    const live = visible.filter((o) => byslug.get(o.slug)!.status === 'published');
+    if (live.length) {
+      const art = String(info.art || '') || (info.appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${info.appId}/header.jpg` : '');
+      guideIndex.push({ key: g.id, game: String(info.game || g.id), areas: live.length, ...(art ? { art } : {}), checked: live.filter((o) => byslug.get(o.slug)!.verified !== false).length, players: playersBy.get(g.id) || 0, langs });
+    }
     for (const code of langs) {
       setLang(code);
       const t = trs[code];
@@ -1153,6 +1171,7 @@ async function main() {
   updateHomepage(games.filter((g) => g.published > 0));
   updateVersion();
   writeRedirects(moved, new Set(sitemap));
+  writeGuideIndex(guideIndex);
   // Links use the final URLs (/guides/x/, not /guides/x/index.html), so nothing a visitor or crawler follows redirects
   // or shows the same page under a second URL.
   let relinked = 0;

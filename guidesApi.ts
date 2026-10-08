@@ -120,10 +120,13 @@ export function guideList(): Promise<{ key: string; game: string; areas: number;
   return cached('list', async () => {
     const docs = await getFirestore().collection('guides').get();
     const out: { key: string; game: string; areas: number; art?: string }[] = [];
-    for (const d of docs.docs) {
-      if (d.id.endsWith('--next')) continue; // a staged rebuild, not a guide (scripts/guides/promote.ts)
-      const g = await gameAreas(d.id);
-      if (g) out.push({ key: g.key, game: g.game, areas: g.areas.length, art: g.art });
+    // A staged rebuild (--next) isn't a guide (scripts/guides/promote.ts). 12 guides at a time: one after another took
+    // over 20 seconds with 100+ guides and a cold cache (the apps now read guides/index.json from the website first).
+    const keys = docs.docs.map((d) => d.id).filter((k) => !k.endsWith('--next'));
+    for (let i = 0; i < keys.length; i += 12) {
+      for (const g of await Promise.all(keys.slice(i, i + 12).map((k) => gameAreas(k)))) {
+        if (g) out.push({ key: g.key, game: g.game, areas: g.areas.length, art: g.art });
+      }
     }
     return out.sort((a, b) => a.game.localeCompare(b.game));
   });

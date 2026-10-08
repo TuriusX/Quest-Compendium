@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Check, ChevronDown, ChevronRight, ArrowLeft, Gem, Skull, Sparkles, TriangleAlert, MapPin, Play, MessageCircleQuestion } from './icons';
 import { guideApi } from '../utils/guideApi';
+import { orderGuides, readRecentGuides, rememberGuideOpened, useGuideIndex, type GuideIndexGame, type GuideSort } from '../utils/guideIndex';
 import { GUIDE_DONE_EVENT, readDone, writeDone } from '../utils/guideProgress';
 import { useLocale, useT } from '../i18n';
 import { tipMatches, useAchievementGuideByKey, type AchievementGuide } from '../utils/achievementGuide';
@@ -16,7 +17,7 @@ import type { Achievement } from '../types';
  *   - "Ask" on any item or area hands a ready-made question to the Compendium
  * Ticks and the last page are saved on this computer. Every control is a button, so it works with a controller.
  */
-type Game = { key: string; game: string; areas: number; art?: string };
+type Game = GuideIndexGame;
 type Area = { slug: string; name: string; story: string; group?: string; total?: number; search?: string };
 type Entry = { id: string; name?: string; text?: string; where?: string; weakness?: string; steal?: string; sells?: string; notes?: string; missable?: boolean; how?: string; lockout?: string };
 type Page = {
@@ -137,7 +138,15 @@ export function QcGuidesView({
       </div>
       <div className="flex-1 overflow-y-auto custom-scrollbar" data-qc-scroll>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4">
-          {view.view === 'games' && <GamesList current={guide?.key} onPick={(g) => go({ view: 'game', key: g.key, game: g.game })} />}
+          {view.view === 'games' && (
+            <GamesList
+              current={guide?.key}
+              onPick={(g) => {
+                rememberGuideOpened(g.key);
+                go({ view: 'game', key: g.key, game: g.game });
+              }}
+            />
+          )}
           {view.view === 'game' && (
             <AreaList
               key={view.key}
@@ -234,25 +243,53 @@ const rowCls =
 
 function GamesList({ current, onPick }: { current?: string; onPick: (g: Game) => void }) {
   const t = useT();
-  const s = useApi<{ games: Game[] }>('/api/guides');
+  // The website's small guide index (kept on this computer, refreshed in the background), not the server's full list.
+  const s = useGuideIndex();
   const [q, setQ] = useState('');
-  if (s.loading) return <Note>{t('qcg.loading')}</Note>;
-  if (s.error || !s.data?.games?.length) return <Note>{t('qcg.none')}</Note>;
-  const sortName = (n: string) => n.replace(/^(the|a|an)\s+/i, '').toLowerCase();
-  const games = s.data.games
-    .slice()
-    .sort((a, b) => (a.key === current ? -1 : b.key === current ? 1 : sortName(a.game).localeCompare(sortName(b.game))))
-    .filter((g) => !q.trim() || fold(g.game).includes(fold(q.trim())));
+  const [sort, setSort] = useState<GuideSort>(() => (ls.get('qc-guide-sort') === 'popular' ? 'popular' : 'az'));
+  const pickSort = (v: GuideSort) => {
+    setSort(v);
+    ls.set('qc-guide-sort', v);
+  };
+  if (!s.games) {
+    if (s.loading) return <Note>{t('qcg.loading')}</Note>;
+    return (
+      <div className="py-4 space-y-3">
+        <p className="text-sm text-zinc-400">{t('qcg.loadFailed')}</p>
+        <button type="button" onClick={s.retry} className="h-8 px-3 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-sm font-semibold text-zinc-100 cursor-pointer">
+          {t('qcg.retry')}
+        </button>
+      </div>
+    );
+  }
+  const games = orderGuides(s.games, { current, recent: readRecentGuides(), sort, q });
+  const sortBtn = (v: GuideSort, label: string) => (
+    <button
+      type="button"
+      onClick={() => pickSort(v)}
+      aria-pressed={sort === v}
+      className={`h-7 px-2.5 rounded-lg border text-xs font-semibold cursor-pointer ${sort === v ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white' : 'bg-white/[0.03] border-white/10 text-zinc-400 hover:text-white'}`}
+    >
+      {label}
+    </button>
+  );
   return (
     <div className="space-y-2">
       <SearchBox value={q} onChange={setQ} placeholder={t('qcg.searchGames')} />
+      <div className="flex items-center gap-1.5 -mt-1 mb-1">
+        {sortBtn('az', t('qcg.sortAZ'))}
+        {sortBtn('popular', t('qcg.sortPopular'))}
+      </div>
       {!games.length && <Note>{t('qcg.noMatches')}</Note>}
       {games.map((g) => (
         <button key={g.key} type="button" className={rowCls} onClick={() => onPick(g)}>
           <GameArt game={g.game} art={g.art} className="w-24 flex-shrink-0 rounded-lg" />
           <span className="flex-1 min-w-0">
             <span className="block text-sm font-semibold text-zinc-100 truncate">{g.game}</span>
-            <span className="block text-xs text-zinc-500">{t('qcg.areas', { n: g.areas })}</span>
+            <span className="block text-xs text-zinc-500">
+              {t('qcg.areas', { n: g.areas })}
+              {g.checked && g.checked >= g.areas ? <span className="text-emerald-400/90"> · ✓ {t('qcg.checkedGuide')}</span> : null}
+            </span>
           </span>
           {g.key === current && <Play className="w-3.5 h-3.5 text-[var(--accent-color)]" />}
           <ChevronRight className="w-4 h-4 text-zinc-500" />
