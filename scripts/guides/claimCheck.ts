@@ -51,7 +51,7 @@ export function trusted(p: EvidencePack): EvidencePack {
 }
 
 /** Search grounding's supported segments: the parts of a reply a source backs, with the sites behind each. */
-function supportedSegments(res: any): { text: string; sites: string[] }[] {
+export function supportedSegments(res: any): { text: string; sites: string[] }[] {
   const gm = res?.candidates?.[0]?.groundingMetadata || {};
   const chunks: any[] = gm.groundingChunks || [];
   const site = (i: number) => String(chunks[i]?.web?.title || chunks[i]?.web?.domain || '').replace(/^www\./, '');

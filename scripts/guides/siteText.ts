@@ -91,3 +91,76 @@ export function redirectLines(moved: { key: string; from: string; to: string }[]
   }
   return [...out].map(([from, to]) => `${from} ${to} 301`);
 }
+
+/** An entity the guide text can link to (the compendium, scripts/guides/compendium.ts). */
+export type LinkEntity = { name: string; slug: string; aliases?: string[] };
+
+/**
+ * Guide text cut into plain runs and entity mentions (every mention, longest names first, never overlapping), for links
+ * to entity pages. Matching ignores case and apostrophes ("Thieves Landing" finds Thieves' Landing) and needs whole words.
+ */
+export function entitySegments(text: string, entities: LinkEntity[]): { text: string; slug?: string }[] {
+  const s = String(text || '');
+  if (!s || !entities.length) return [{ text: s }];
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = (name: string) => esc(name).replace(/['’]/g, "['’]?").replace(/\s+/g, '\\s+');
+  const names = entities.flatMap((e) => [e.name, ...(e.aliases || [])].filter((n) => n && n.length >= 3).map((n) => ({ n, slug: e.slug })))
+    .sort((a, b) => b.n.length - a.n.length);
+  const hits: { start: number; end: number; slug: string }[] = [];
+  for (const { n, slug } of names) {
+    const re = new RegExp(`(?<![\\p{L}\\p{N}])${pattern(n)}(?![\\p{L}\\p{N}])`, 'giu');
+    for (const m of s.matchAll(re)) {
+      const start = m.index!, end = start + m[0].length;
+      if (hits.some((h) => start < h.end && h.start < end)) continue;
+      hits.push({ start, end, slug });
+    }
+  }
+  hits.sort((a, b) => a.start - b.start);
+  const out: { text: string; slug?: string }[] = [];
+  let at = 0;
+  for (const h of hits) {
+    if (h.start > at) out.push({ text: s.slice(at, h.start) });
+    out.push({ text: s.slice(h.start, h.end), slug: h.slug });
+    at = h.end;
+  }
+  if (at < s.length) out.push({ text: s.slice(at) });
+  return out;
+}
+
+/**
+ * How well a guide search query matches a text (0 = not at all; higher is better). Forgiving the way players type:
+ * case, accents and apostrophes don't matter ("thieves landing", "keira metz house"), plurals match singulars, every
+ * query word must match a word of the text (as a prefix, or within one typo for words of 5+ letters). Written without
+ * outside helpers: the website's search runs this same function (fuzzyScore.toString()).
+ */
+export function fuzzyScore(query: string, text: string): number {
+  const norm = (x: string) => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['’`]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const stem = (w: string) => (w.length > 4 && /ies$/.test(w) ? w.slice(0, -3) + 'y' : w.length > 3 && /(s|es)$/.test(w) && !/ss$/.test(w) ? w.replace(/(es|s)$/, '') : w);
+  const near = (a: string, b: string) => {
+    if (Math.abs(a.length - b.length) > 1) return false;
+    let i = 0, j = 0, edits = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) { i++; j++; continue; }
+      if (++edits > 1) return false;
+      if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+    }
+    return edits + (a.length - i) + (b.length - j) <= 1;
+  };
+  const q = norm(query).split(' ').filter(Boolean).map(stem);
+  const words = norm(text).split(' ').filter(Boolean).map(stem);
+  if (!q.length || !words.length) return 0;
+  let score = 0;
+  for (const w of q) {
+    let best = 0;
+    for (const t of words) {
+      if (t === w) best = Math.max(best, 3);
+      else if (t.startsWith(w) && w.length >= 2) best = Math.max(best, 2);
+      else if (w.length >= 5 && near(w, t)) best = Math.max(best, 1);
+    }
+    if (!best) return 0;
+    score += best;
+  }
+  // A text that is (or starts with) the query ranks first.
+  const nq = q.join(' '), nt = words.join(' ');
+  return score + (nt === nq ? 4 : nt.startsWith(nq) ? 2 : 0);
+}

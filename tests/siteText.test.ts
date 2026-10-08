@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/siteText.test.ts)
 import assert from "node:assert/strict";
-import { shortGame, relatedQuests, achFlags, finalLinks, redirectLines } from "../scripts/guides/siteText";
+import { shortGame, relatedQuests, achFlags, finalLinks, redirectLines, entitySegments, fuzzyScore } from "../scripts/guides/siteText";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -72,6 +72,25 @@ test("redirects: moved pages 301 to their replacement, per language, never from 
     "/de/guides/ff6/crumbling-house/ /guides/ff6/tzen/ 301",
     "/de/guides/ff6/narshe/ /guides/ff6/tzen/ 301",
   ]);
+});
+
+test("entity links: every mention, apostrophes optional, longest names first, whole words only", () => {
+  const ents = [{ name: "Thieves' Landing", slug: "thieves-landing" }, { name: "Colter", slug: "colter" }, { name: "Saint Denis", slug: "saint-denis" }];
+  const segs = entitySegments("Ride from Colter to Thieves Landing, then on to Saint  Denis. Colterville isn't Colter.", ents);
+  assert.deepEqual(segs.filter((s) => s.slug).map((s) => `${s.text}>${s.slug}`), ["Colter>colter", "Thieves Landing>thieves-landing", "Saint  Denis>saint-denis", "Colter>colter"]);
+  assert.equal(segs.map((s) => s.text).join(""), "Ride from Colter to Thieves Landing, then on to Saint  Denis. Colterville isn't Colter.");
+  assert.deepEqual(entitySegments("No mentions here.", ents), [{ text: "No mentions here." }]);
+});
+
+test("guide search: forgiving matches (apostrophes, plurals, one typo), exact names first, no false hits", () => {
+  assert.ok(fuzzyScore("thieves landing", "Thieves' Landing") > 0);
+  assert.ok(fuzzyScore("rdr2 thieves landing".replace("rdr2 ", ""), "Thieves’ Landing") > 0);
+  assert.ok(fuzzyScore("keira metz house", "Keira Metz's House") > 0);
+  assert.ok(fuzzyScore("legendary bears", "Legendary Bharati Grizzly Bear") > 0);
+  assert.ok(fuzzyScore("wreckers cave", "Wrecker's Cave") > 0);
+  assert.ok(fuzzyScore("tumblweed", "Tumbleweed") > 0); // one typo
+  assert.equal(fuzzyScore("saint denis", "Chapter 1: Colter"), 0);
+  assert.ok(fuzzyScore("colter", "Colter") > fuzzyScore("colter", "Chapter 1: Colter"));
 });
 
 console.log(`\n${passed} tests passed`);
