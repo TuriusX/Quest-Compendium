@@ -897,7 +897,9 @@ async function program() {
     const left = pg.phase === 'done' ? 0 : pg.phase === 'outline' ? Number(g.pagesGuess || 30) : order.filter((o) => !pg.done.includes(o.slug) && !pg.failed.some((f) => f.slug === o.slug)).length;
     plan.push({ key: g.key, game: String(info.game || g.key), left, total: pg.phase === 'outline' ? Number(g.pagesGuess || 30) : order.length, outline: pg.phase === 'outline' });
   }
-  const estimate = st.spent + plan.reduce((n, x) => n + x.left * measured + (x.outline ? OUTLINE_GUESS : 0), 0);
+  // A guide built as a step of the re-verification order is judged on its own (later steps wait their turn and get the
+  // same check then), so a guide queued last can't stop the ones before it.
+  const estimate = st.spent + plan.filter((x) => !buildStep || x.key === buildStep).reduce((n, x) => n + x.left * measured + (x.outline ? OUTLINE_GUESS : 0), 0);
   st.estimate = Math.round(estimate * 100) / 100;
   console.log(`Flagship programme: $${st.spent.toFixed(2)} of $${budget.total} spent ($${st.spentToday.toFixed(2)} of $${budget.daily} today); estimate to finish $${estimate.toFixed(2)} at $${measured.toFixed(2)} a page.`);
   for (const x of plan) console.log(`  ${x.game}: ${x.outline ? `outline rebuild first, about ${x.left} pages` : `${x.left} of ${x.total} pages left`}`);

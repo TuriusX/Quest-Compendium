@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { questionType } from "../src/utils/questionType";
 import { normalizeRouting, ROUTING_DEFAULTS } from "../chatRouting";
-import { guideGroundingForPrompt, extractGuideRefs } from "../guidesApi";
+import { guideGroundingForPrompt, extractGuideRefs, pagePassed, standingOf } from "../guidesApi";
 import { tallyBy } from "../answerFeedback";
 
 let passed = 0;
@@ -68,6 +68,24 @@ test("feedback tallies: 👍 rate per group", () => {
   const t = tallyBy([{ vote: "up", qtype: "fight" }, { vote: "down", qtype: "fight" }, { vote: "up", qtype: "fight" }, { vote: "up", qtype: "location" }] as any, (r) => r.qtype);
   assert.deepEqual(t[0], { key: "fight", up: 2, down: 1, rate: 67 });
   assert.equal(t[1].rate, 100);
+});
+
+test("guide pages in answers: only checked pages, or pages of a guide whose review passed (not flagged, not awaiting re-verification)", () => {
+  const passing = standingOf({ review: { score: 85, pages: [{ name: "Sapphirl Tower (Chapter 7)", verdict: "wrong-kind" }] } });
+  const failing = standingOf({ review: { score: 40, pages: [] } });
+  const none = standingOf({});
+  const pub = (x: any) => ({ status: "published", name: "Bose", ...x });
+  assert.equal(pagePassed(pub({ verified: true }), passing, 75), true);           // checked against sources
+  assert.equal(pagePassed(pub({ verified: true }), none, 75), true);              // checked, guide never reviewed
+  assert.equal(pagePassed(pub({ verified: true }), failing, 75), false);          // a failing review overrides an old "checked"
+  assert.equal(pagePassed(pub({ verified: true, flagship: true }), failing, 75), true); // evidence-reviewed page by page
+  assert.equal(pagePassed(pub({ verified: false }), passing, 75), true);          // the guide's review passed
+  assert.equal(pagePassed(pub({ verified: false }), failing, 75), false);         // scored 40 (Trails 2nd Chapter)
+  assert.equal(pagePassed(pub({}), none, 75), false);                              // never reviewed
+  assert.equal(pagePassed(pub({ verified: false, reverify: { at: 1 } }), passing, 75), false); // failed its source check
+  assert.equal(pagePassed(pub({ name: "Sapphirl Tower (Chapter 7)" }), passing, 75), false);  // named as a problem page
+  assert.equal(pagePassed(pub({ verified: false }), passing, 90), false);         // the minimum is a setting
+  assert.equal(pagePassed({ status: "held", verified: true }, passing, 75), false);
 });
 
 console.log(`\n${passed} passed`);

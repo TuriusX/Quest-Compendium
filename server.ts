@@ -21,7 +21,7 @@ import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
 import { DONE_RULES, extractDone } from './src/utils/progressMemory';
-import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, type GuideRef } from './guidesApi';
+import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
@@ -37,7 +37,7 @@ import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifie
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
-import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, playerSearchesToday, recordPlayerSearches, getGuideAreaNames, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
+import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, playerSearchesToday, recordPlayerSearches, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
  * Firestore security rules don't restrict. That's what lets the rules lock Premium and quota fields so that players
@@ -1105,7 +1105,8 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         ? { text: String(req.body.place.story).trim().slice(0, 120), confirmed: req.body.place.storyConfirmed === true }
         : null;
       // A game with a guide has official area names: the AI uses them, so places line up with guide pages and facts.
-      const guideAreas = await getGuideAreaNames(effectiveGame?.name);
+      // Only pages that passed review (guidesApi.ts pagePassed): a failed guide's page names aren't offered either.
+      const guideAreas = await passedAreaNames(effectiveGame?.name);
       // A place is always one guide area ("Emerald Grove, Ravaged Beach" was two joined).
       if (place && guideAreas.length) place = { ...place, name: singleArea(place.name, guideAreas) };
       // On-screen place wins: with a screenshot, a place name read on screen (a minimap label, an area title) that names

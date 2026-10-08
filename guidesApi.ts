@@ -328,6 +328,71 @@ export async function guideAreasWithPages(game: string): Promise<{ areas: { slug
   });
 }
 
+// ---- Which guide pages answers may use ----
+/**
+ * Answers (their prompts, the "From the guide" badge, the new-release rule, the Known here list) only use pages that
+ * passed review: "Checked against sources" pages, or pages of a guide whose latest review score meets the minimum
+ * (Firestore config/guideGrounding { minScore }, default 75, the review's pass mark), unless the page is waiting for
+ * re-verification or the review named it as a problem page. Everything else is left out.
+ */
+export const GROUNDING_MIN_DEFAULT = 75;
+let minCache: { at: number; v: number } | null = null;
+export async function groundingMinScore(): Promise<number> {
+  if (minCache && Date.now() - minCache.at < 60_000) return minCache.v;
+  let v = GROUNDING_MIN_DEFAULT;
+  try {
+    const d: any = (await getFirestore().collection('config').doc('guideGrounding').get()).data() || {};
+    if (Number.isFinite(Number(d.minScore))) v = Math.max(0, Math.min(100, Number(d.minScore)));
+  } catch {
+    /* default */
+  }
+  minCache = { at: Date.now(), v };
+  return v;
+}
+
+/** A guide's latest review: its score and the pages it named as problems. */
+export type GuideStanding = { score: number | null; flagged: string[] };
+export function standingOf(info: any): GuideStanding {
+  const score = Number.isFinite(Number(info?.review?.score)) ? Number(info.review.score) : null;
+  const flagged = (Array.isArray(info?.review?.pages) ? info.review.pages : []).map((p: any) => norm(String(p?.name || ''))).filter(Boolean);
+  return { score, flagged };
+}
+/** Whether answers may use this page (see above). */
+export function pagePassed(page: any, standing: GuideStanding, minScore: number): boolean {
+  if (!page || page.status !== 'published') return false;
+  // A flagship page passed its own evidence review, page by page: it stands even when the guide's review failed.
+  if (page.flagship && page.verified === true) return true;
+  if (page.reverify) return false;
+  // A failing guide review overrides an older "checked" flag (careful builds marked whole guides checked, e.g. Trails in
+  // the Sky the 2nd Chapter, reviewed at 40).
+  if (standing.score !== null && standing.score < minScore) return false;
+  if (page.verified === true) return true;
+  if (standing.score === null) return false;
+  return !standing.flagged.includes(norm(String(page.name || '')));
+}
+async function guideStanding(key: string): Promise<GuideStanding> {
+  return cached(`standing:${key}`, async () => standingOf((await getFirestore().collection('guides').doc(key).get()).data() || {}));
+}
+
+/** The names of a game's guide pages that answers may use (for the AI's list of guide areas). */
+export async function passedAreaNames(game: string | undefined): Promise<string[]> {
+  if (!game) return [];
+  try {
+    const key = gameKey(game);
+    const [minScore, standing] = await Promise.all([groundingMinScore(), guideStanding(key)]);
+    return await cached(`passedNames:${key}:${minScore}`, async () => {
+      const ref = getFirestore().collection('guides').doc(key);
+      const info: any = (await ref.get()).data() || {};
+      const snap = await ref.collection('areas').where('status', '==', 'published').get();
+      const ok = new Map(snap.docs.filter((d) => pagePassed(d.data(), standing, minScore)).map((d) => [d.id, String(d.data().name || '')]));
+      const order: any[] = Array.isArray(info.areas) ? info.areas : [];
+      return order.filter((o) => ok.has(o.slug)).map((o) => ok.get(o.slug) || String(o.name || '')).filter(Boolean).slice(0, 300);
+    });
+  } catch {
+    return [];
+  }
+}
+
 export type GuidePageForPlace = {
   /** The guide and the area page (player corrections are filed under these). */
   key: string;
@@ -362,15 +427,18 @@ export async function guidePageFor(game: string | undefined, place: string | und
       g.areas.find((a: any) => p.startsWith(`${norm(a.name)},`) || norm(a.name).startsWith(`${p},`)) ||
       g.areas.find((a: any) => loose(a.name) === loose(place) || loose(place.split(',')[0]) === loose(a.name));
     if (!area) return null;
-    return await cached(`page:${key}:${area.slug}`, async () => {
+    const [minScore, standing] = await Promise.all([groundingMinScore(), guideStanding(key)]);
+    return await cached(`page:${key}:${area.slug}:${minScore}`, async () => {
       const doc = await getFirestore().collection('guides').doc(key).collection('areas').doc(area.slug).get();
       const a: any = doc.exists ? doc.data() : null;
-      if (!a || a.status !== 'published') return null;
+      // Only a page that passed review (see pagePassed): anything else never reaches an answer.
+      if (!a || !pagePassed(a, standing, minScore)) return null;
       return {
         key,
         slug: area.slug,
         name: String(a.name || area.name),
-        verified: a.verified !== false,
+        // "Checked against sources": its entries are grounding with the "From the guide" badge.
+        verified: a.verified === true,
         overview: String(a.overview || ''),
         items: a.items || [], secrets: a.secrets || [], enemies: a.enemies || [], shops: a.shops || [],
         tips: Array.isArray(a.tips) ? a.tips : [],
