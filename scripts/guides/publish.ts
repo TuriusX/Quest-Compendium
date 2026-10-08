@@ -594,7 +594,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       <h1 class="text-3xl font-bold text-white leading-tight">${esc(a.name)}</h1>
       <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
         <span>${esc(ui('guideOf', { game }))}${a.story ? ` · ${esc(a.story)}` : ''}</span>
-        ${a.verified !== false ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))}</span>` : ''}
+        ${a.verified === true ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))}</span>` : ''}
       </div>
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
       ${a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${esc(a.overview)}</p>` : ''}
@@ -829,7 +829,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
     );
     if (!draft && !untranslated) sitemap.push(`${SITE}/${LP}guides/${key}/${o.slug}/`);
   });
-  const checked = visible.filter((o) => byslug.get(o.slug)!.verified !== false).length;
+  const checked = visible.filter((o) => byslug.get(o.slug)!.verified === true).length;
   const totalChecks = links.reduce((n, l) => n + l.total, 0);
   const missables = visible.reduce((n, o) => n + byslug.get(o.slug)!.items.filter((e) => e.missable).length, 0);
   // "1 area" / "2 areas": the singular label when the number is 1.
@@ -1121,7 +1121,7 @@ async function main() {
     const live = visible.filter((o) => byslug.get(o.slug)!.status === 'published');
     if (live.length) {
       const art = String(info.art || '') || (info.appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${info.appId}/header.jpg` : '');
-      guideIndex.push({ key: g.id, game: String(info.game || g.id), areas: live.length, ...(art ? { art } : {}), checked: live.filter((o) => byslug.get(o.slug)!.verified !== false).length, players: playersBy.get(g.id) || 0, langs });
+      guideIndex.push({ key: g.id, game: String(info.game || g.id), areas: live.length, ...(art ? { art } : {}), checked: live.filter((o) => byslug.get(o.slug)!.verified === true).length, players: playersBy.get(g.id) || 0, langs });
     }
     for (const code of langs) {
       setLang(code);
