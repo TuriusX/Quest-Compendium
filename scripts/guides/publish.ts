@@ -289,7 +289,9 @@ function heldRedirects(key: string, docs: any[], visible: { slug: string; name: 
     if (d.status !== 'held' || live.has(d.slug) || entities.some((e) => e.slug === d.slug)) continue;
     const name = String(d.name || d.slug);
     const ent = entities.find((e) => norm(e.name) === norm(name));
-    const same = visible.find((o) => norm(byslug.get(o.slug)?.name || o.name) === norm(name));
+    const same = visible.find((o) => norm(byslug.get(o.slug)?.name || o.name) === norm(name))
+      // A page named after it ("Chapter 4: Saint Denis" for Saint Denis) before one that only mentions it.
+      || (name.length >= 4 ? visible.find((o) => entitySegments(byslug.get(o.slug)?.name || o.name, [{ name, slug: 'x' }]).some((sg) => sg.slug)) : undefined);
     const mention = name.length >= 4 ? visible.find((o) => entitySegments(text(byslug.get(o.slug)!), [{ name, slug: 'x' }]).some((sg) => sg.slug)) : undefined;
     out.push({ key, from: d.slug, to: ent?.slug || same?.slug || mention?.slug || '' });
   }
