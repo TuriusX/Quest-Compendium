@@ -8,6 +8,14 @@
  * Output includes thinking. Search grounding: 5,000 free searches a month across the Gemini 3 family, then $14 per
  * 1,000 searches (one question can run several). Unknown models log tokens without a price.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+/**
+ * The cost of one player request (chat): every logUsage call made while it's handled adds to it (tokens at the rates
+ * below, searches at SEARCH_DOLLARS), for the per-player cost report (playerCosts.ts).
+ */
+export const requestCost = new AsyncLocalStorage<{ dollars: number; searches: number }>();
+
 const RATES: Record<string, { input: number; output: number }> = {
   'gemini-3.8-flash': { input: 0.75, output: 3.75 },
   'gemini-3.1-pro-preview': { input: 2.0, output: 12.0 },
@@ -108,6 +116,11 @@ export function logUsage(feature: string, model: string, response: any): void {
     : 0;
   const rate = RATES[model];
   const cost = rate ? (input * rate.input + (answer + thinking) * rate.output) / 1_000_000 : null;
+  const scope = requestCost.getStore();
+  if (scope) {
+    scope.dollars += (cost ?? 0) + searches * SEARCH_DOLLARS;
+    scope.searches += searches;
+  }
   console.log(
     `[usage] ${feature} ${model} in=${input}${image ? ` (image ${image})` : ''} out=${answer} thinking=${thinking}` +
       (searches ? ` searches=${searches}` : '') +

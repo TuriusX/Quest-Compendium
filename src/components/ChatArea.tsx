@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { ModelToggle } from './ModelToggle';
+import { balancesOf, readAnswerModel, saveAnswerModel, startingModel, type AnswerModel } from '../utils/answerModel';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
@@ -56,6 +58,8 @@ const BUILD = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : { version: 
 const VOTE_REASONS = ['place', 'info', 'marker', 'unhelpful'] as const;
 
 interface ChatAreaProps {
+  /** The player's questions left (the user status): Pro and Fast counts for the switch next to the send button. */
+  quota?: any;
   /** On-screen markers (Settings, on by default): off, answers show no markers card, checklist or marker badges. */
   markersOn?: boolean;
   /** The screenshot shortcut from Settings, ready to show ("Ctrl + Shift + S"). */
@@ -181,6 +185,7 @@ const MessageMarkdown = React.memo(
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
   markersOn = true,
+  quota,
   activeTab,
   onSendMessage,
   isLoading,
@@ -318,7 +323,55 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [mode]);
-  const [preferredModel, setPreferredModel] = useState<'pro' | 'flash'>('pro');
+  // Pro / Fast next to the send button: the player's remembered choice when it has questions left, else the other one.
+  const bal = balancesOf(quota);
+  const [answerModel, setAnswerModel] = useState<AnswerModel>(() => startingModel(readAnswerModel(), bal));
+  const [modelNote, setModelNote] = useState('');
+  const preferredModel: 'pro' | 'flash' = answerModel === 'fast' ? 'flash' : 'pro';
+  const noteSwitch = (to: AnswerModel) => {
+    setModelNote(t(to === 'fast' ? 'model.switchedToFast' : 'model.switchedToPro'));
+    window.setTimeout(() => setModelNote(''), 5000);
+  };
+  const chooseModel = (m: AnswerModel) => {
+    setAnswerModel(m);
+    saveAnswerModel(m);
+    setModelNote('');
+  };
+  // The chosen model ran out (the counts came back from an answer or the status): switch to the other, and say so.
+  useEffect(() => {
+    if (!quota) return;
+    // The player's own choice has questions again (a new day): back to it.
+    const saved = readAnswerModel();
+    if (answerModel !== saved && (saved === 'pro' ? bal.pro : bal.fast) > 0) {
+      setAnswerModel(saved);
+      return;
+    }
+    const left = answerModel === 'pro' ? bal.pro : bal.fast;
+    const other: AnswerModel = answerModel === 'pro' ? 'fast' : 'pro';
+    if (left === 0 && (other === 'pro' ? bal.pro : bal.fast) > 0) {
+      setAnswerModel(other);
+      noteSwitch(other);
+    }
+  }, [bal.pro, bal.fast]);
+  // The server answered with the other model (the chosen one was used up), or a controller's R3 switched.
+  useEffect(() => {
+    const switched = (e: Event) => {
+      const to = (e as CustomEvent).detail?.to === 'fast' ? 'fast' : 'pro';
+      setAnswerModel(to);
+      noteSwitch(to);
+    };
+    const toggle = () => setAnswerModel((m) => {
+      const next: AnswerModel = m === 'pro' ? 'fast' : 'pro';
+      saveAnswerModel(next);
+      return next;
+    });
+    window.addEventListener('qc-answer-model-switched', switched);
+    window.addEventListener('qc-toggle-answer-model', toggle);
+    return () => {
+      window.removeEventListener('qc-answer-model-switched', switched);
+      window.removeEventListener('qc-toggle-answer-model', toggle);
+    };
+  }, []);
   const attachedImageRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1910,6 +1963,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </button>
             )}
 
+            {/* Pro / Fast, with the questions left of each */}
+            <ModelToggle value={answerModel} onChange={chooseModel} pro={bal.pro} fast={bal.fast} disabled={isLoading} />
+
             {/* Submit Send Button (follows whether the box has text without re-rendering the conversation) */}
             <HasTextGate ref={hasTextRef}>{(hasText) => (
             <button
@@ -1938,8 +1994,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             )}</HasTextGate>
           </div>
         </div>
-        <div className="mt-2 text-center text-[10px] font-mono uppercase text-zinc-500">
-          {isDesktopApp ? t('chat.hintDesktop') : t('chat.hintWeb')}
+        <div role="status" aria-live="polite" className={`mt-2 text-center text-[10px] font-mono uppercase ${modelNote ? 'text-[var(--accent-color)]' : 'text-zinc-500'}`}>
+          {modelNote || (isDesktopApp ? t('chat.hintDesktop') : t('chat.hintWeb'))}
         </div>
       </form>
 

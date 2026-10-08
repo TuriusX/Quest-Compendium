@@ -65,7 +65,7 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ userId, onClose }) =
           {t('pay.title')}
         </h2>
         <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
-          {t('pay.body')}
+          {t('pay.body2')}
         </p>
 
         {errorMsg && (
@@ -80,7 +80,7 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ userId, onClose }) =
             <span className="text-[var(--accent-color)] font-bold text-xl">$4.99<span className="text-sm text-zinc-500 font-normal">{t('pay.perMonth')}</span></span>
           </div>
           <ul className="space-y-2 text-sm text-zinc-300">
-            <li className="flex items-center gap-2"><GlainIcon size={15} /> {t('pay.f1')}</li>
+            <li className="flex items-center gap-2"><GlainIcon size={15} /> {t('pay.f1b')}</li>
             <li className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> {t('pay.f2')}</li>
             <li className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> {t('pay.f3')}</li>
           </ul>

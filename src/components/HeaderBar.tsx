@@ -8,7 +8,6 @@ import {
   ScrollText, 
   Maximize2, 
   Gamepad2, 
-  Sparkles,
   Search,
   ChevronDown,
   Activity,
@@ -18,14 +17,12 @@ import {
   Square,
   RefreshCw
 } from './icons';
-import { ManaBar } from './pixelArt';
 import { PWAInstallButton } from './PWAInstallButton';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
 import { useT } from '../i18n';
 import { QuestLogo } from './QuestLogo';
-import { GlainIcon } from './GlainIcon';
 
 interface HeaderBarProps {
   userData?: any;
@@ -115,28 +112,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const unlockedCount = achievements.filter(a => a.unlocked).length;
   const totalCount = achievements.length;
 
-  const [timeUntilReset, setTimeUntilReset] = useState<string>('');
-
-  useEffect(() => {
-    if (!userData) return;
-
-    const updateCountdown = () => {
-      const now = new Date();
-      const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
-      const diff = Math.max(0, tomorrow.getTime() - now.getTime());
-      
-      const h = Math.floor(diff / (1000 * 60 * 60));
-      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const s = Math.floor((diff % (1000 * 60)) / 1000);
-      
-      setTimeUntilReset(`${h.toString().padStart(2, '0')}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`);
-    };
-    
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, [userData]);
-
   return (
     <header className="qc-stars h-14 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between px-3 sm:px-4 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
       {/* Left side: Brand Logo + Game Library Toggle (shrinks, so the buttons on the right always stay visible) */}
@@ -212,67 +187,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </div>
       {/* Right Controls Toolbar */}
       <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 ml-2">
-        {/* Questions left today: one daily allowance, shown with the stone from the logo */}
-        {(() => {
-          const effectiveData = userData || { isPremium: false, flashQueriesAvailable: 10, isGuest: true };
-          const isPremiumUser = Boolean(effectiveData.isPremium && !effectiveData.isGuest);
-          const daily = Number(effectiveData.dailyQuestions) || (isPremiumUser ? 60 : 10);
-          const left = Math.max(0, Math.min(daily, Number(effectiveData.flashQueriesAvailable ?? effectiveData.questionsAvailable ?? daily)));
-
-          return (
-            <div className="relative group" style={{ WebkitAppRegion: "no-drag" } as any}>
-              <div
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap cursor-default mr-1 ${
-                  isPremiumUser
-                    ? 'bg-indigo-500/10 border border-indigo-500/25 text-indigo-300'
-                    : 'bg-amber-500/10 border border-amber-500/25 text-amber-300'
-                }`}
-                title={t('header.questionsTitle', { left, daily })}
-              >
-                <GlainIcon size={15} />
-                {left}
-                <span className="hidden md:inline font-mono uppercase text-[9px] opacity-70">{t('header.left')}</span>
-              </div>
-
-              <div className="absolute top-full right-2 pt-2 w-64 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                <div className="p-4 rounded-xl bg-zinc-900 border border-white/10 shadow-2xl flex flex-col gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-zinc-300 font-medium">{t('header.questionsToday')}</span>
-                      <span className="flex items-center gap-2 text-zinc-400 font-mono text-[10px]">
-                        <ManaBar value={left} max={daily} />
-                        {left} / {daily}
-                      </span>
-                    </div>
-                    <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden qc-seg">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${isPremiumUser ? 'bg-indigo-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`}
-                        style={{ width: `${Math.min(100, (left / daily) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-2 mt-1 border-t border-white/5 flex justify-between items-center text-[11px]">
-                    <span className="text-zinc-500 font-medium">{t('header.resetsIn')}</span>
-                    <span className="text-zinc-400 font-mono tracking-wider">{timeUntilReset}</span>
-                  </div>
-
-                  {!isPremiumUser && (
-                    <button
-                      onClick={() => {
-                        if (onOpenPaywall) onOpenPaywall();
-                      }}
-                      className="mt-1 pt-3 border-t border-white/5 text-xs text-amber-400 font-medium flex items-center justify-center gap-1.5 hover:text-amber-300 transition-colors w-full cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      {t('header.upgrade')}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+        {/* Questions left: shown on the Pro / Fast switch next to the send button (ChatArea, ModelToggle). */}
 
         {activeGame && (
           <button

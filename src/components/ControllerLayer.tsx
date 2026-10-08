@@ -8,11 +8,13 @@
  *   X  voice question (press again to send)          Y  quick questions (hold: ask out loud, immersive mode)
  *   Menu  on-screen keyboard                         View  screenshot & ask (desktop)
  *   LB / RB  Ask, Guide, then the previous / next game   LT / RT  page through long answers   Right stick  scroll
+ *   R3 (press the right stick)  switch Pro / Fast for the next question
  *
  * The rest of the app is reached through small window events, so no app logic lives here:
  *   'qc-ask' {text}         send a question        'qc-set-input' {text}   mirror typed text into the question box
  *   'qc-switch-tab' {delta} change compendium      'trigger-voice-record' / 'trigger-auto-screenshot-submit' (existing)
  *   'qc-talk' {state}       hold to talk           'qc-pad-mode' {dir}     bumpers: Ask / Guide / games
+ *   'qc-toggle-answer-model'  R3: Pro / Fast
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useT } from '../i18n';
@@ -366,6 +368,9 @@ export function ControllerLayer({ enabled, talkButton = 'y' }: { enabled: boolea
       } else if (b === 'lb' || b === 'rb') {
         // Ask -> Guide -> the next game (RB), and back (LB). Inside a dialog: nothing.
         if (scope === document.body) emit('qc-pad-mode', { dir: b === 'rb' ? 1 : -1 });
+      } else if (b === 'rs') {
+        // R3: Pro / Fast for the next question (ChatArea's switch next to the send button). Inside a dialog: nothing.
+        if (scope === document.body) emit('qc-toggle-answer-model');
       }
     },
     [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus],

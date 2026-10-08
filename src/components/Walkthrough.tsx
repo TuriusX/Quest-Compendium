@@ -30,7 +30,7 @@ export function Walkthrough({ isDesktop, screenshotKeys, hideKeys, onDone }: { i
     // Desktop: games that lock the cursor; the show/hide shortcut brings the overlay forward and frees the mouse.
     ...(isDesktop ? [{ title: t('tour.6t'), body: t('tour.6b', { keys: hideKeys || 'Ctrl+Space' }), icon: '🖱️' }] : []),
     // Controller players: opening the overlay, hold to talk, and getting around.
-    { title: t('tour.7t'), body: t('tour.7b'), icon: '🎮' },
+    { title: t('tour.7t'), body: t('tour.7c'), icon: '🎮' },
   ];
   const finish = () => {
     try {

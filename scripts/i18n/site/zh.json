@@ -164,5 +164,16 @@
   ". The": "。",
   "Microsoft Store version": "Microsoft Store 版本",
   "doesn't show this warning.": "则不会出现此提示。",
-  "Download from the Microsoft Store": "前往 Microsoft Store 下载"
+  "Download from the Microsoft Store": "前往 Microsoft Store 下载",
+  "Version 0.5.3 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "版本 0.5.3 beta，适用于 64 位 Windows。免费试用：每天 2 次 Pro 和 5 次 Fast 提问机会，无需信用卡。",
+  "Try it before you buy, no credit card needed. Questions reset at midnight.": "先试后买，无需信用卡。提问次数于每日午夜重置。",
+  "2 Pro + 5 Fast questions a day": "每天 2 次 Pro + 5 次 Fast 提问机会",
+  "8 Pro + 25 Fast questions a day": "每天 8 次 Pro + 25 次 Fast 提问机会",
+  "Unused questions carry over (up to 100 of each)": "未用完的提问次数可累计保留（各最多 100 次）",
+  "Pick": "在发送按钮旁选择",
+  "Pro": "Pro",
+  "(Gemini Pro, the best answers) or": "（Gemini Pro，提供最佳回答）或",
+  "Fast": "Fast",
+  "(Gemini Flash, quicker answers) next to the send button. When one runs out, the other answers.": "（Gemini Flash，响应更迅速）。一种用完时，会自动切换至另一种作答。",
+  "You can try it for free with 2 Pro and 5 Fast questions a day, no credit card needed. Premium is $4.99/month for 8 Pro and 25 Fast questions a day, with unused questions carrying over (up to 100 of each), plus premium features like on-screen markers and Gemini voices. During the beta, every player gets every feature. See": "你可以免费试用，每天享 2 次 Pro 和 5 次 Fast 提问机会，无需绑定信用卡。升级 Premium 仅需 $4.99/月，每天享 8 次 Pro 和 25 次 Fast 提问机会，未用完的次数可累计保留（各最多 100 次），并解锁屏幕标记和 Gemini 语音等高级功能。Beta 测试期间，所有玩家均可畅享全部功能。查看"
 }

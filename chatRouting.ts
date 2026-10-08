@@ -1,25 +1,22 @@
 /**
- * Which model answers a player's question (server-side, changeable without a deploy): Firestore config/chatRouting.
+ * How Pro answers run (server-side, changeable without a deploy): Firestore config/chatRouting. Which model a question
+ * gets is the player's choice, within their Pro and Fast questions (allowances.ts, config/allowances).
  *
- *   premiumPro        true: Premium players' answers come from Gemini 3.1 Pro.
- *   freeProTypes      question kinds (src/utils/questionType.ts) that free players get Pro for, e.g. ["location", "puzzle"].
  *   freeProMarkers    true: for free players' screenshot questions, a Pro step places the markers on the Flash answer.
  *   playerProDaily    the most Pro requests players may use in a day (default 40,000 of Google's 50,000: Pro is limited
  *                     by our dollar caps, not by requests).
  *   proTimeoutMs      how long a player waits for Pro before the answer comes from Flash instead.
  *
- * Every default keeps answers as they were (Flash for everyone during the beta): nothing here raises the cost of a
- * question until it's switched on. Pro is counted in system/proBudget, the same daily count as the guide reviewer's
+ * Pro is counted in system/proBudget, the same daily count as the guide reviewer's
  * (Google's limit and the reserve for careful rebuilds are in config/apiLimits, apiLimits.ts). Players never wait on the
  * count: the decision comes from a cached read and the count is updated in the background. A Pro answer that fails or
  * is too slow comes from Flash instead.
  */
 import { getFirestore } from 'firebase-admin/firestore';
-import type { QuestionType } from './src/utils/questionType';
 import { apiLimits, quotaDay } from './apiLimits';
 
-export type Routing = { premiumPro: boolean; freeProTypes: QuestionType[]; freeProMarkers: boolean; playerProDaily: number; proTimeoutMs: number; testAsFree?: boolean };
-export const ROUTING_DEFAULTS: Routing = { premiumPro: false, freeProTypes: [], freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000 };
+export type Routing = { freeProMarkers: boolean; playerProDaily: number; proTimeoutMs: number; testAsFree?: boolean };
+export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000 };
 export const PRO_CHAT_MODEL = process.env.PRO_CHAT_MODEL || 'gemini-3.1-pro-preview';
 
 let cache: { at: number; value: Routing } | null = null;
@@ -41,22 +38,11 @@ export async function routing(): Promise<Routing> {
 }
 
 export function normalizeRouting(d: any): Routing {
-  const types = ['location', 'puzzle', 'fight', 'choice', 'missable', 'general'];
   return {
-    premiumPro: d?.premiumPro === true,
-    freeProTypes: (Array.isArray(d?.freeProTypes) ? d.freeProTypes : []).filter((t: unknown) => types.includes(String(t))) as QuestionType[],
     freeProMarkers: d?.freeProMarkers === true,
     playerProDaily: Number.isFinite(Number(d?.playerProDaily)) ? Math.max(0, Math.floor(Number(d.playerProDaily))) : ROUTING_DEFAULTS.playerProDaily,
     proTimeoutMs: Number.isFinite(Number(d?.proTimeoutMs)) ? Math.max(5000, Math.min(60000, Number(d.proTimeoutMs))) : ROUTING_DEFAULTS.proTimeoutMs,
   };
-}
-
-/** What a question gets: Pro for the answer, Pro for the marker step, or neither. */
-export function route(r: Routing, q: { premium: boolean; type: QuestionType; image: boolean }): { answer: 'pro' | 'default'; markers: boolean } {
-  if (q.premium) return { answer: r.premiumPro ? 'pro' : 'default', markers: false };
-  const answer = r.freeProTypes.includes(q.type) ? 'pro' : 'default';
-  // A Pro answer places its own markers; a Flash answer to a screenshot question gets the Pro marker step.
-  return { answer, markers: answer === 'default' && q.image && r.freeProMarkers };
 }
 
 let proRead: { at: number; day: string; count: number; player: number } | null = null;

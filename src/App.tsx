@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { deviceTimeZone, untilReset } from './utils/answerModel';
 import { BookOpen, Plus, Sparkles, Gamepad2, Search, Camera, Mic, Moon, FileText, Globe } from './components/icons';
 import { 
   GameTab, 
@@ -1527,6 +1528,8 @@ export default function App() {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 75 seconds.")), 75000);
+    // Both models' questions used up today: the limit message, with when they come back (and Premium for free players).
+    let limitText = '';
     const backendUrl = getApiBaseUrl();
     const chatEndpoint = backendUrl ? `${backendUrl}/api/chat` : '/api/chat';
 
@@ -1546,7 +1549,10 @@ export default function App() {
           imageBase64,
           audioBase64,
           aiMode: settings.aiMode,
-          preferredModel,
+          // The model picked next to the send button (Pro or Fast); the server answers with the other one when it's used up.
+          answerModel: preferredModel === 'flash' ? 'fast' : 'pro',
+          // For the daily reset at the player's midnight.
+          timeZone: deviceTimeZone(),
           // A quick question's id (src/utils/quickQuestions.ts): the server adds what it asks for.
           ...(quick ? { quick } : {}),
           isGameRunningLocally: globalActiveGame !== null,
@@ -1604,7 +1610,16 @@ export default function App() {
           const errData = await res.json();
           errorText = errData.error || errData.text || errorText;
           if ((res.status === 403 || res.status === 429) && errData.modelUsed === 'Limit Reached') {
-            shouldOpenPaywall = true;
+            const lim = errData.limit || {};
+            if (errData.userData) window.dispatchEvent(new CustomEvent('quest_quota_updated', { detail: errData.userData }));
+            const { h, m } = untilReset(Number(lim.resetAt) || Date.now());
+            const when = tr('limit.in', { h, m });
+            limitText = lim.isPremium
+              ? tr('limit.premium', { when })
+              : lim.dailyPro != null
+                ? tr('limit.free', { pro: lim.dailyPro, fast: lim.dailyFlash, ppro: lim.premiumPro, pfast: lim.premiumFlash, when })
+                : errorText;
+            shouldOpenPaywall = !lim.isPremium;
           }
         } catch (e) {
           if (res.status === 404) {
@@ -1632,6 +1647,10 @@ export default function App() {
 
       if (data.userData && typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('quest_quota_updated', { detail: data.userData }));
+      }
+      // The picked model was used up, so the other one answered: the toggle follows and says so.
+      if (data.switched && data.answeredWith) {
+        window.dispatchEvent(new CustomEvent('qc-answer-model-switched', { detail: { to: data.answeredWith } }));
       }
 
       let finalAiText = data.text;
@@ -1784,14 +1803,14 @@ export default function App() {
       if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError') || errorMsg.includes('fetch failed')) {
         errorMsg = `Connection failed to cloud server at ${backendUrl || DEFAULT_CLOUD_URL}. Please check your internet connection or verify your server in Settings -> Cloud & Server.`;
       }
-      let isLimitReached = errorMsg.includes('Daily limit reached') || errorMsg.includes('Upgrade to Premium');
+      let isLimitReached = !!limitText || errorMsg.includes('Daily limit reached') || errorMsg.includes('Upgrade to Premium');
 
       const nowCatch = Date.now();
       const errorMessage: ChatMessage = {
         id: `msg-${nowCatch + 1}`,
         role: 'assistant',
         text: isLimitReached 
-          ? `⚠️ **Inquiry Limit Reached:**\n\n${errorMsg}`
+          ? limitText || `⚠️ **Inquiry Limit Reached:**\n\n${errorMsg}`
           : `⚠️ **Compendium Inquiry Error:** Unable to reach Google Gemini server.\n\n*Details: ${errorMsg}*`,
         timestamp: nowCatch,
         modelUsed: isLimitReached ? 'Limit Reached' : 'Offline Fallback'
@@ -2227,6 +2246,7 @@ export default function App() {
             ) : (
               <ChatArea
                 activeTab={activeTab}
+                quota={userData}
                 markersOn={settings.showPointersOnScreen !== false}
                 steamName={settings.steamName}
                 steamAvatar={settings.steamAvatar}

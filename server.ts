@@ -5,7 +5,7 @@ import express from 'express';
 
 const logDebug = (...args: any[]) => {};
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold, ThinkingLevel } from '@google/genai';
-import { logBanner, logUsage, withOutputCap, maybeBilledFailure, worstCaseDollars } from './usage';
+import { logBanner, logUsage, withOutputCap, maybeBilledFailure, worstCaseDollars, requestCost } from './usage';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
 import { initializeApp, getApp } from 'firebase-admin/app';
@@ -22,7 +22,10 @@ import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
 import { DONE_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, type GuideRef } from './guidesApi';
-import { routing, route, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
+import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
+import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode } from './searchPolicy';
+import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
+import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
 import { questionType } from './src/utils/questionType';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerAnswerReports } from './answerReports';
@@ -344,6 +347,8 @@ async function startServer() {
   registerAnswerReports(app, { requireAuth, optionalAuth, isAdmin });
   // Players' 👍 / 👎 on answers and the marker drop counts: the Quality tab of /admin/reviews.
   registerAnswerFeedback(app, { requireAuth, optionalAuth, isAdmin });
+  // What each player's questions cost per month: the Costs tab of /admin/reviews (playerCosts.ts).
+  registerPlayerCosts(app, { requireAuth, isAdmin });
   // The guide review queue: failed reviews and players' mistake reports, decided on /admin/reviews (ADMIN_EMAILS).
   registerReviewQueue(app, {
     requireAuth,
@@ -405,13 +410,11 @@ async function startServer() {
 
 
   // ---- Plans ---------------------------------------------------------------------------------------------------
-  // One daily question allowance (no more separate Pro / Flash counts). During the beta every player gets the full
-  // experience; after it, set BETA_ALL_ACCESS=false and free players get Flash-Lite answers and no Gemini voices or
-  // area checks, while Premium keeps everything. All of these can be changed with environment variables.
-  const envInt = (v: string | undefined, d: number) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : d);
+  // Two models a day, Pro (the best answers) and Fast (Flash), with Premium's unused questions carried over
+  // (allowances.ts, Firestore config/allowances). During the beta every player gets the full feature set; after it, set
+  // BETA_ALL_ACCESS=false and free players' Fast answers come from Flash-Lite and they get no Gemini voices or area
+  // checks, while Premium keeps everything.
   const BETA_ALL_ACCESS = (process.env.BETA_ALL_ACCESS ?? 'true') !== 'false';
-  const FREE_DAILY_QUESTIONS = envInt(process.env.FREE_DAILY_QUESTIONS, 10);
-  const PREMIUM_DAILY_QUESTIONS = envInt(process.env.PREMIUM_DAILY_QUESTIONS, 60);
   const MAIN_MODEL = process.env.MAIN_MODEL || 'gemini-3.8-flash';
   const FREE_MODEL = process.env.FREE_MODEL || 'gemini-3.1-flash-lite';
   const BACKSTOP_MODEL = 'gemini-3.1-flash-lite';
@@ -432,62 +435,56 @@ async function startServer() {
     return crypto.createHmac('sha256', secret).update(payload).digest('hex');
   }
 
-  function syncUserLimits(userData: any, today: string, isStripePremium: boolean) {
-    const isPremium = isStripePremium;
+  /** The player's time zone (the app sends it with each request; UTC when it doesn't). */
+  const tzOf = (req: any) => safeTimeZone(req.body?.timeZone || req.headers['x-qc-tz']);
 
+  /** A player's balances brought up to today in their time zone (Premium's carry-over applied at the new day). */
+  async function syncUserLimits(userData: any, tz: string, isPremium: boolean) {
+    const today = dayIn(tz);
     // Security Verification: If tampering is detected, reset to 0
     if (userData.lastResetDate === today && userData.securitySeal && !verifySeal(userData)) {
-       console.warn('SECURITY ALERT: Tampering detected for user. Resetting quotas.');
-       userData.proQueriesAvailable = 0;
-       userData.flashQueriesAvailable = 0;
-       userData.securitySeal = generateSeal(userData);
-       return userData;
+      console.warn('SECURITY ALERT: Tampering detected for user. Resetting quotas.');
+      userData.proQueriesAvailable = 0;
+      userData.flashQueriesAvailable = 0;
+      userData.securitySeal = generateSeal(userData);
+      return userData;
     }
-
-    const allowance = isPremium ? PREMIUM_DAILY_QUESTIONS : FREE_DAILY_QUESTIONS;
-    if (userData.lastResetDate !== today) {
-      userData.flashQueriesAvailable = allowance;
-      userData.lastResetDate = today;
-      userData.proQueriesToday = 0;
-      userData.flashQueriesToday = 0;
-      userData._upgradedToday = false;
-    } else {
-      if (userData.flashQueriesAvailable === undefined) {
-        userData.flashQueriesAvailable = Math.max(0, allowance - (userData.flashQueriesToday || 0) - (userData.proQueriesToday || 0));
-      }
-      // Upgraded to Premium today: top up to the Premium allowance once.
-      if (isPremium && !userData._upgradedToday && userData.flashQueriesAvailable < allowance) {
-        userData.flashQueriesAvailable = Math.max(0, allowance - (userData.flashQueriesToday || 0) - (userData.proQueriesToday || 0));
-        userData._upgradedToday = true;
-      }
-      // Saved under older, bigger allowances (Premium once had 1,000 Flash questions a day), or Premium ended today:
-      // never more than what's left of today's allowance.
-      const leftToday = Math.max(0, allowance - (userData.flashQueriesToday || 0) - (userData.proQueriesToday || 0));
-      if (userData.flashQueriesAvailable > leftToday) userData.flashQueriesAvailable = leftToday;
-    }
-    // One allowance. Older app versions (and the Steam Deck plugin) still read a "Pro" count: give them the same number.
-    userData.proQueriesAvailable = userData.flashQueriesAvailable;
+    Object.assign(userData, applyDay(userData, await allowances(), isPremium, today));
     return userData;
+  }
+
+  /** What the apps show: both balances, the day's allowance, the carry-over cap and when the day resets. */
+  async function quotaView(userData: any, isPremium: boolean, tz: string) {
+    const a = await allowances();
+    const plan = isPremium ? a.premium : a.free;
+    return {
+      proQueriesAvailable: userData.proQueriesAvailable,
+      flashQueriesAvailable: userData.flashQueriesAvailable,
+      dailyPro: plan.pro,
+      dailyFlash: plan.flash,
+      rollover: plan.rollover,
+      bankCap: plan.rollover ? plan.cap : 0,
+      resetAt: nextReset(tz),
+      // Older apps show one number: the Fast questions left.
+      questionsAvailable: userData.flashQueriesAvailable,
+      dailyQuestions: plan.flash,
+    };
   }
 
   interface GuestQuota {
     proQueriesAvailable: number;
     flashQueriesAvailable: number;
     lastResetDate: string;
+    allowancePlan?: 'premium' | 'free';
   }
   const guestQuotas = new Map<string, GuestQuota>();
 
-  function getOrCreateGuestQuota(guestId: string, today: string): GuestQuota {
-    let quota = guestQuotas.get(guestId);
-    if (!quota || quota.lastResetDate !== today) {
-      quota = {
-        proQueriesAvailable: FREE_DAILY_QUESTIONS,
-        flashQueriesAvailable: FREE_DAILY_QUESTIONS,
-        lastResetDate: today
-      };
-      guestQuotas.set(guestId, quota);
-    }
-    return quota;
+  /** A guest's balances (kept in memory per guest id): the free allowance, fresh each day. */
+  async function getOrCreateGuestQuota(guestId: string, tz: string): Promise<GuestQuota> {
+    const q = guestQuotas.get(guestId) || { proQueriesAvailable: 0, flashQueriesAvailable: 0, lastResetDate: '' };
+    Object.assign(q, applyDay(q, await allowances(), false, dayIn(tz)));
+    guestQuotas.set(guestId, q);
+    return q;
   }
 
   // --- API: User Status ---
@@ -497,16 +494,12 @@ async function startServer() {
       const userId = (req as any).user.uid;
       const isGuest = (req as any).user.isGuest || userId.startsWith('guest_');
 
+      const tz = tzOf(req);
       if (isGuest) {
-        const today = new Date().toISOString().split('T')[0];
-        const quota = getOrCreateGuestQuota(userId, today);
+        const quota = await getOrCreateGuestQuota(userId, tz);
         return res.json({
           isPremium: false,
-          freeQueriesUsed: FREE_DAILY_QUESTIONS - quota.flashQueriesAvailable,
-          proQueriesAvailable: quota.flashQueriesAvailable,
-          flashQueriesAvailable: quota.flashQueriesAvailable,
-          questionsAvailable: quota.flashQueriesAvailable,
-          dailyQuestions: FREE_DAILY_QUESTIONS,
+          ...(await quotaView(quota, false, tz)),
           fullAccess: hasFullAccess(false),
           beta: BETA_ALL_ACCESS,
           isGuest: true
@@ -541,8 +534,12 @@ async function startServer() {
       }
       
       const isEffectivePremium = Boolean(userData.isPremium === true || isStripePremium || userData.subscriptionStatus === 'active');
-      const today = new Date().toISOString().split('T')[0];
-      userData = syncUserLimits(userData, today, isEffectivePremium);
+      const before = `${userData.proQueriesAvailable}|${userData.flashQueriesAvailable}|${userData.lastResetDate}|${userData.allowancePlan}`;
+      userData = await syncUserLimits(userData, tz, isEffectivePremium);
+      // A new day (or a plan change) is saved now, so the carry-over is applied once.
+      if (before !== `${userData.proQueriesAvailable}|${userData.flashQueriesAvailable}|${userData.lastResetDate}|${userData.allowancePlan}`) {
+        updateFirestoreDocREST(idToken, userId, { proQueriesAvailable: userData.proQueriesAvailable, flashQueriesAvailable: userData.flashQueriesAvailable, lastResetDate: userData.lastResetDate, allowancePlan: userData.allowancePlan }).catch(() => {});
+      }
       userData.isPremium = isEffectivePremium;
       userData.subscriptionStatus = isEffectivePremium ? 'active' : (userData.subscriptionStatus || 'beta');
 
@@ -553,8 +550,7 @@ async function startServer() {
 
       res.json({
         ...userData,
-        questionsAvailable: userData.flashQueriesAvailable,
-        dailyQuestions: isEffectivePremium ? PREMIUM_DAILY_QUESTIONS : FREE_DAILY_QUESTIONS,
+        ...(await quotaView(userData, isEffectivePremium, tz)),
         fullAccess: hasFullAccess(isEffectivePremium),
         beta: BETA_ALL_ACCESS,
       });
@@ -872,10 +868,14 @@ async function startServer() {
       const userId = (req as any).user.uid;
       const isGuest = (req as any).user.isGuest || userId.startsWith('guest_');
       logDebug(`[API Chat] Processing for userId: ${userId}, isGuest: ${isGuest}`);
+      // Everything this answer costs (usage.ts), for the per-player cost report.
+      const costScope = { dollars: 0, searches: 0 };
+      requestCost.enterWith(costScope);
 
       let userData: any = { isPremium: false };
 
       let guestQuota: GuestQuota | null = null;
+      const tz = tzOf(req);
       if (!isGuest) {
         userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
         const rawEmail = (req as any).user?.email;
@@ -901,18 +901,17 @@ async function startServer() {
         }
         
         const isEffectivePremium = Boolean(userData.isPremium === true || isStripePremium);
-        const today = new Date().toISOString().split('T')[0];
-        userData = syncUserLimits(userData, today, isEffectivePremium);
+        userData = await syncUserLimits(userData, tz, isEffectivePremium);
         userData.isPremium = isEffectivePremium;
       } else {
-        // Guest mode trial: strictly match the unpaid tier (5 Pro & 5 Flash)
-        const today = new Date().toISOString().split('T')[0];
-        guestQuota = getOrCreateGuestQuota(userId, today);
+        // Guests: the free allowance, kept in memory per guest id.
+        guestQuota = await getOrCreateGuestQuota(userId, tz);
         userData = {
           isPremium: false,
           proQueriesAvailable: guestQuota.proQueriesAvailable,
           flashQueriesAvailable: guestQuota.flashQueriesAvailable,
-          lastResetDate: today,
+          lastResetDate: guestQuota.lastResetDate,
+          allowancePlan: guestQuota.allowancePlan,
           isGuest: true
         };
       }
@@ -923,7 +922,6 @@ async function startServer() {
         history = [],
         imageBase64,
         aiMode = 'standard',
-        preferredModel = 'pro',
         isGameRunningLocally = false,
         activeGame,
         achievements,
@@ -938,17 +936,24 @@ async function startServer() {
         ? String(languageRaw)
         : 'English';
 
-      // One seamless mode: Gemini 3.8 Flash with adaptive thinking (it thinks briefly on easy questions and longer on
-      // hard ones, up to a medium allowance). Free players get Flash-Lite after the beta. Backstop: Flash-Lite.
+      // Fast answers: Gemini 3.8 Flash with adaptive thinking (Flash-Lite for free players after the beta). Pro answers:
+      // Gemini Pro. The player picks one next to the send button; when it's used up today, the other one answers.
       let targetModel = hasFullAccess(isPremium) ? MAIN_MODEL : FREE_MODEL;
       const skipPrimary = true;
+      const wanted = wantedBucket(req.body);
+      const picked = pickBucket(wanted, { pro: Number(userData.proQueriesAvailable) || 0, flash: Number(userData.flashQueriesAvailable) || 0 });
 
-      if (userData.flashQueriesAvailable <= 0) {
+      if (!picked.bucket) {
+        const resetAt = nextReset(tz);
+        const allow = await allowances();
+        const p = isPremium ? allow.premium : allow.free;
         return res.status(429).json({
           text: isPremium
-            ? "You've reached today's question limit. It resets tomorrow."
-            : `You've used today's ${FREE_DAILY_QUESTIONS} free questions. Upgrade to Premium for ${PREMIUM_DAILY_QUESTIONS} questions a day, premium voices and more!`,
-          modelUsed: 'Limit Reached'
+            ? `You've used today's Pro and Fast questions. They're topped up at midnight, and what you don't use carries over.`
+            : `You've used today's ${allow.free.pro} Pro and ${allow.free.flash} Fast questions. They reset at midnight. Premium gives you ${allow.premium.pro} Pro and ${allow.premium.flash} Fast questions a day, and what you don't use carries over.`,
+          modelUsed: 'Limit Reached',
+          limit: { resetAt, isPremium, dailyPro: p.pro, dailyFlash: p.flash, premiumPro: allow.premium.pro, premiumFlash: allow.premium.flash },
+          userData: { isPremium, isGuest, ...(await quotaView(userData, isPremium, tz)) },
         });
       }
 
@@ -1206,7 +1211,6 @@ percentages:
       // Search budget: per-player daily allowance plus a whole-app monthly cap. Without search, the AI answers from
       // what it knows and marks exact data as unconfirmed. Facts looked up earlier for this game come along for free.
       const searchCtx = { uid: userId, isGuest, userData };
-      const searchOk = await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
       let searchesUsed = 0;
       let searchSourcesSeen: string[] = [];
       let groundedSeen: string[] = [];
@@ -1234,19 +1238,59 @@ percentages:
         if (corrected) systemInstruction += `\n\n${corrected}`;
         systemInstruction += `\n${CORRECTION_RULES}`;
       }
-      if (!searchOk) {
-        systemInstruction += `\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. Don't mention search limits to the player.`;
-      }
       // A quick question (a chip in the app): its short label is the question, and this is what it asks for
       // (src/utils/quickQuestions.ts). "Show me where" only makes sense with markers on.
       const quick = isQuickId(req.body.quick) && !(req.body.quick === 'where' && !wantMarkers) ? req.body.quick : null;
       if (quick) systemInstruction += `\n\n[QUICK QUESTION: the player tapped "${String(question || '').slice(0, 80)}"]\n${QUICK_PROMPTS[quick]}`;
-      // The kind of question, and the model it gets (chatRouting.ts, config/chatRouting): Pro only where it's switched
-      // on and players' share of today's Pro requests isn't used up; otherwise the usual model.
+      // The kind of question (for the Quality numbers), and the model: Pro when the player's Pro question is answered by
+      // Pro (players' share of today's Pro requests isn't used up, chatRouting.ts); otherwise Flash.
       let qtype = questionType(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null));
       const routingCfg = await routing();
-      const plan = route(routingCfg, { premium: isPremium && !routingCfg.testAsFree, type: qtype, image: Boolean(imageBase64) });
-      const usePro = plan.answer === 'pro' && (await takePlayerPro(routingCfg));
+      const usePro = picked.bucket === 'pro' && (await takePlayerPro(routingCfg));
+
+      // Search (searchPolicy.ts): always for a game released after the answering model's cutoff (past the player's own
+      // daily search allowance; the app-wide caps still apply); offered for unfamiliar games and for exact-data questions
+      // no checked guide page covers; otherwise only when the model asks for it (<qc-search/>).
+      const release = effectiveGame?.name ? await releaseOf(effectiveGame.name, Number(effectiveGame.appId) || undefined) : null;
+      const cut = await cutoffs();
+      const newRelease = !!release && isNewRelease(release, usePro ? cut.pro : cut.flash);
+      const searchMode: SearchMode = !effectiveGame?.name
+        ? 'ask'
+        : searchModeFor({ newRelease, dated: release?.source !== 'unknown', type: qtype, covered: Boolean(guidePage?.verified) });
+      const searchOk = searchMode === 'force'
+        ? (await playerSearchesToday()) && (await monthlyBudgetOk())
+        : await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
+      const searchTools = searchOk && searchMode !== 'ask';
+      systemInstruction += `\n\n${EXISTENCE_RULES}`;
+      if (searchMode === 'force') systemInstruction += `\n\n${FORCE_RULES(effectiveGame!.name, release!.text)}`;
+      if (!searchOk) {
+        systemInstruction += `\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. If something is unfamiliar, say there isn't enough information about it yet and ask for a screenshot or a detail. Don't mention search limits to the player.`;
+      }
+      // Ask mode: the first try has no search, and may ask for it.
+      const firstSystem = searchMode === 'ask' && searchOk ? `${systemInstruction}\n\n${ASK_RULES}` : systemInstruction;
+      let searchAsked = false;
+      // Which balance pays for the answer: the model that answered (a Pro question answered by Flash, because Pro was
+      // slow or unavailable, uses a Fast question when there's one left).
+      let chargedBucket: Bucket | null = null;
+      const charge = (answeredByPro: boolean) => {
+        const b: Bucket = answeredByPro ? 'pro' : Number(userData.flashQueriesAvailable) > 0 ? 'flash' : 'pro';
+        if (b === 'pro') userData.proQueriesAvailable = Math.max(0, Number(userData.proQueriesAvailable) - 1);
+        else userData.flashQueriesAvailable = Math.max(0, Number(userData.flashQueriesAvailable) - 1);
+        chargedBucket = b;
+      };
+      const saveBalances = async () => {
+        if (!isGuest) {
+          await updateFirestoreDocREST(idToken, userId, {
+            lastResetDate: userData.lastResetDate,
+            proQueriesAvailable: userData.proQueriesAvailable,
+            flashQueriesAvailable: userData.flashQueriesAvailable,
+            allowancePlan: userData.allowancePlan,
+          });
+        } else if (guestQuota) {
+          guestQuota.proQueriesAvailable = userData.proQueriesAvailable;
+          guestQuota.flashQueriesAvailable = userData.flashQueriesAvailable;
+        }
+      };
 
       // Build Multi-turn Contents
       const contentsPayload: any[] = [];
@@ -1409,8 +1453,7 @@ percentages:
           logDebug(`[API Chat] primaryCall succeeded, response length: ${responseText.length}`);
 
           if (responseText && responseText.trim().length > 0) {
-            userData.proQueriesAvailable = Math.max(0, userData.proQueriesAvailable - 1);
-            userData.proQueriesToday = (userData.proQueriesToday || 0) + 1; // legacy
+            charge(false);
           } else {
             console.log('Primary Pro query returned empty text (possibly blocked by safety). Not deducting credit.');
             responseText = 'No response received. Please try asking again.';
@@ -1418,12 +1461,12 @@ percentages:
         } else {
           const answerModel = usePro ? PRO_CHAT_MODEL : targetModel;
           if (usePro) modelUsed = 'Gemini 3.1 Pro';
-          const fallbackCall = ai.models.generateContent({
+          const answerCall = (sys: string, withSearch: boolean) => ai.models.generateContent({
             model: answerModel,
             contents: contentsPayload,
             config: {
-              systemInstruction,
-              ...(searchOk ? { tools: [{ googleSearch: {} }] } : {}),
+              systemInstruction: sys,
+              ...(withSearch ? { tools: [{ googleSearch: {} }] } : {}),
               safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -1435,35 +1478,41 @@ percentages:
             }
           });
           // Pro: no longer than the routing allows, then the Flash fallback below answers (players never wait on Pro).
-          const response = await withTimeout(fallbackCall, usePro ? routingCfg.proTimeoutMs : 25000, usePro ? 'Pro query' : 'Flash query') as any;
+          // Pro with search takes longer (about 30-40 s): up to 45 s then, still inside the app's 75 s with the fallback.
+          const proWait = searchTools ? Math.max(routingCfg.proTimeoutMs, 45000) : routingCfg.proTimeoutMs;
+          let response = await withTimeout(answerCall(firstSystem, searchTools), usePro ? proWait : 25000, usePro ? 'Pro query' : 'Flash query') as any;
           logUsage(usePro ? `chat-pro:${qtype}` : 'chat', answerModel, response);
+          // A new release must be answered from a search: if the model skipped it, once more, told to search first.
+          // (Flash only: Pro follows the instruction, and a second Pro call would run past the app's wait.)
+          if (searchMode === 'force' && searchTools && !usePro && countSearches(response) === 0) {
+            const first = response;
+            try {
+              response = await withTimeout(answerCall(`${systemInstruction}\n\n${FORCE_AGAIN}`, true), 25000, 'New release, searching') as any;
+              logUsage(usePro ? 'chat-pro-searched' : 'chat-searched', answerModel, response);
+              if (!String(response?.text || '').trim()) response = first;
+            } catch {
+              response = first;
+            }
+          }
+          if (searchMode === 'ask' && asksForSearch(response?.text || '')) {
+            // The model needs a search for this one: the same question again, with search when it's allowed.
+            searchAsked = true;
+            response = await withTimeout(answerCall(systemInstruction, searchOk), usePro ? (searchOk ? Math.max(routingCfg.proTimeoutMs, 45000) : routingCfg.proTimeoutMs) : 25000, 'Answer after asking to search') as any;
+            logUsage(usePro ? 'chat-pro-searched' : 'chat-searched', answerModel, response);
+          }
           searchesUsed += countSearches(response);
           searchSourcesSeen = searchSources(response);
           groundedSeen = groundedText(response);
           responseText = response.text || '';
 
           if (responseText && responseText.trim().length > 0) {
-            userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
-            userData.proQueriesAvailable = userData.flashQueriesAvailable;
-            userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1; // legacy
+            charge(usePro);
           } else {
-            console.log('Fallback Flash query returned empty text. Not deducting credit.');
+            console.log('Answer returned empty text. Not deducting a question.');
             responseText = 'No response received. Please try asking again.';
           }
         }
-        if (!isGuest) {
-          await updateFirestoreDocREST(idToken, userId, {
-            lastResetDate: userData.lastResetDate,
-            proQueriesAvailable: userData.proQueriesAvailable,
-            flashQueriesAvailable: userData.flashQueriesAvailable,
-            proQueriesToday: userData.proQueriesToday,
-            flashQueriesToday: userData.flashQueriesToday,
-            _upgradedToday: userData._upgradedToday ?? false
-          });
-        } else if (guestQuota) {
-          guestQuota.proQueriesAvailable = userData.proQueriesAvailable;
-          guestQuota.flashQueriesAvailable = userData.flashQueriesAvailable;
-        }
+        await saveBalances();
       } catch (primaryErr: any) {
         console.log('Primary query issue or timeout, attempting fallback. Reason:', primaryErr?.message);
         
@@ -1498,22 +1547,8 @@ percentages:
              responseText = 'No response received. Please try asking again.';
           }
           
-          userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
-          userData.proQueriesAvailable = userData.flashQueriesAvailable;
-          userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1;
-          if (!isGuest) {
-            await updateFirestoreDocREST(idToken, userId, {
-              lastResetDate: userData.lastResetDate,
-              proQueriesAvailable: userData.proQueriesAvailable,
-              flashQueriesAvailable: userData.flashQueriesAvailable,
-              proQueriesToday: userData.proQueriesToday,
-              flashQueriesToday: userData.flashQueriesToday,
-              _upgradedToday: userData._upgradedToday ?? false
-            });
-          } else if (guestQuota) {
-            guestQuota.proQueriesAvailable = userData.proQueriesAvailable;
-            guestQuota.flashQueriesAvailable = userData.flashQueriesAvailable;
-          }
+          charge(false);
+          await saveBalances();
         } catch (fallbackErr: any) {
           console.log('Gemini 3.8 Flash fallback failed, attempting emergency fallback to Flash Lite. Reason:', fallbackErr?.message);
           
@@ -1536,22 +1571,8 @@ percentages:
             responseText = emergencyResponse.text || 'No response received.';
             modelUsed = 'Gemini 3.1 Flash Lite (Emergency Fallback)';
             
-            userData.flashQueriesAvailable = Math.max(0, userData.flashQueriesAvailable - 1);
-            userData.proQueriesAvailable = userData.flashQueriesAvailable;
-            userData.flashQueriesToday = (userData.flashQueriesToday || 0) + 1;
-            if (!isGuest) {
-              await updateFirestoreDocREST(idToken, userId, {
-                lastResetDate: userData.lastResetDate,
-                proQueriesAvailable: userData.proQueriesAvailable,
-                flashQueriesAvailable: userData.flashQueriesAvailable,
-                proQueriesToday: userData.proQueriesToday,
-                flashQueriesToday: userData.flashQueriesToday,
-                _upgradedToday: userData._upgradedToday ?? false
-              });
-            } else if (guestQuota) {
-              guestQuota.proQueriesAvailable = userData.proQueriesAvailable;
-              guestQuota.flashQueriesAvailable = userData.flashQueriesAvailable;
-            }
+            charge(false);
+            await saveBalances();
           } catch (emergencyErr: any) {
             console.log('Emergency fallback to Flash Lite also failed:', emergencyErr?.message);
             
@@ -1574,7 +1595,7 @@ percentages:
       // Free players' screenshot questions (when switched on): a Pro step places the markers on the Flash answer.
       // Slow or failed, or no Pro requests left: the answer keeps its own markers.
       let markersBy = '';
-      if (plan.markers && wantMarkers && imageBase64 && !usePro && /<qc-points>/i.test(responseText) && (await takePlayerPro(routingCfg))) {
+      if (routingCfg.freeProMarkers && !isPremium && wantMarkers && imageBase64 && !usePro && /<qc-points>/i.test(responseText) && (await takePlayerPro(routingCfg))) {
         try {
           const shown = responseText.replace(/<qc-points>[\s\S]*?<\/qc-points>/gi, '').slice(0, 6000);
           const markerCall = ai.models.generateContent({
@@ -1646,6 +1667,9 @@ percentages:
         void saveMissingFight({ page: guidePage, combat: combatParsed, steps: stepsParsed.steps, uid: userId, isGuest, game: String(effectiveGame?.name || '') });
       }
       if (searchesUsed > 0) recordSearches(searchCtx, searchesUsed);
+      if (chargedBucket) recordPlayerCost({ uid: userId, premium: isPremium, guest: isGuest, dollars: costScope.dollars, searches: costScope.searches });
+      // One line per answer, for the search rate per question (searchPolicy.ts).
+      console.log(`[chat-search] mode=${searchMode} allowed=${searchOk} asked=${searchAsked} searches=${searchesUsed} model=${chargedBucket || '-'}${newRelease ? ' new-release' : ''}`);
       // Only file a fact under a place or story point that's actually known: confirmed by the player, or settled on
       // screen. A guessed place would put facts in the wrong spot for everyone.
       // A fact only counts if its subject shows up in a part of the answer a search result actually backs up;
@@ -1715,11 +1739,14 @@ percentages:
         qtype,
         ...(guideParsed.used.length ? { guideRefs: guideParsed.used } : {}),
         ...(markersBy && points.length ? { markersBy } : {}),
+        // Which model's question the answer used ("pro" or "fast"), and whether that wasn't the one the player picked
+        // (it was used up: the app switches its toggle and says so).
+        ...(chargedBucket ? { answeredWith: chargedBucket === 'pro' ? 'pro' : 'fast', ...(chargedBucket !== wanted ? { switched: true } : {}) } : {}),
+        searched: searchesUsed > 0,
         userData: {
           isPremium: userData.isPremium === true,
-          proQueriesAvailable: userData.proQueriesAvailable,
-          flashQueriesAvailable: userData.flashQueriesAvailable,
-          isGuest
+          isGuest,
+          ...(await quotaView(userData, userData.isPremium === true, tz)),
         }
       });
 

@@ -1,7 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/quality.test.ts)
 import assert from "node:assert/strict";
 import { questionType } from "../src/utils/questionType";
-import { normalizeRouting, route, ROUTING_DEFAULTS } from "../chatRouting";
+import { normalizeRouting, ROUTING_DEFAULTS } from "../chatRouting";
 import { guideGroundingForPrompt, extractGuideRefs } from "../guidesApi";
 import { tallyBy } from "../answerFeedback";
 
@@ -27,21 +27,13 @@ test("question types from quick questions and from the words", () => {
   assert.equal(questionType("Tell me about Karlach"), "general");
 });
 
-test("routing: the defaults change nothing", () => {
-  const r = normalizeRouting({});
-  assert.deepEqual(r, ROUTING_DEFAULTS);
-  assert.deepEqual(route(r, { premium: true, type: "location", image: true }), { answer: "default", markers: false });
-  assert.deepEqual(route(r, { premium: false, type: "location", image: true }), { answer: "default", markers: false });
-});
-
-test("routing: Premium on Pro; free players' chosen kinds on Pro, the rest with the Pro marker step", () => {
-  const r = normalizeRouting({ premiumPro: true, freeProTypes: ["location", "puzzle", "bogus"], freeProMarkers: true, playerProDaily: "30" });
-  assert.deepEqual(r.freeProTypes, ["location", "puzzle"]);
+test("routing: defaults, and the Pro settings read safely", () => {
+  assert.deepEqual(normalizeRouting({}), ROUTING_DEFAULTS);
+  const r = normalizeRouting({ premiumPro: true, freeProTypes: ["location"], freeProMarkers: true, playerProDaily: "30", proTimeoutMs: 999999 });
   assert.equal(r.playerProDaily, 30);
-  assert.deepEqual(route(r, { premium: true, type: "general", image: true }), { answer: "pro", markers: false });
-  assert.deepEqual(route(r, { premium: false, type: "puzzle", image: true }), { answer: "pro", markers: false });
-  assert.deepEqual(route(r, { premium: false, type: "fight", image: true }), { answer: "default", markers: true });
-  assert.deepEqual(route(r, { premium: false, type: "fight", image: false }), { answer: "default", markers: false });
+  assert.equal(r.freeProMarkers, true);
+  assert.equal(r.proTimeoutMs, 60000);
+  assert.equal((r as any).premiumPro, undefined); // replaced by the players' Pro / Fast choice (allowances.ts)
 });
 
 const page: any = {

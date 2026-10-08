@@ -164,5 +164,16 @@
   ". The": ". La",
   "Microsoft Store version": "version Microsoft Store",
   "doesn't show this warning.": "n'affiche pas cet avertissement.",
-  "Download from the Microsoft Store": "Télécharger sur le Microsoft Store"
+  "Download from the Microsoft Store": "Télécharger sur le Microsoft Store",
+  "Version 0.5.3 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "Version 0.5.3 bêta, Windows 64 bits. Essai gratuit : 2 questions Pro et 5 Fast par jour, sans carte bancaire.",
+  "Try it before you buy, no credit card needed. Questions reset at midnight.": "Testez avant d'acheter, sans carte bancaire. Les questions sont réinitialisées à minuit.",
+  "2 Pro + 5 Fast questions a day": "2 questions Pro + 5 Fast par jour",
+  "8 Pro + 25 Fast questions a day": "8 questions Pro + 25 Fast par jour",
+  "Unused questions carry over (up to 100 of each)": "Les questions non utilisées sont conservées (jusqu'à 100 de chaque)",
+  "Pick": "Choisissez",
+  "Pro": "Pro",
+  "(Gemini Pro, the best answers) or": "(Gemini Pro, les meilleures réponses) ou",
+  "Fast": "Fast",
+  "(Gemini Flash, quicker answers) next to the send button. When one runs out, the other answers.": "(Gemini Flash, des réponses plus rapides) à côté du bouton d'envoi. Quand l'un est épuisé, l'autre prend le relais.",
+  "You can try it for free with 2 Pro and 5 Fast questions a day, no credit card needed. Premium is $4.99/month for 8 Pro and 25 Fast questions a day, with unused questions carrying over (up to 100 of each), plus premium features like on-screen markers and Gemini voices. During the beta, every player gets every feature. See": "Vous pouvez l'essayer gratuitement avec 2 questions Pro et 5 Fast par jour, sans carte bancaire requise. Premium est à 4,99 $/mois pour 8 questions Pro et 25 Fast par jour, avec report des questions non utilisées (jusqu'à 100 de chaque), plus des fonctionnalités premium comme les marqueurs à l'écran et les voix Gemini. Pendant la bêta, chaque joueur a accès à toutes les fonctionnalités. Voir"
 }

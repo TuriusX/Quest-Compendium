@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { deviceTimeZone } from '../utils/answerModel';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut, getRedirectResult, browserPopupRedirectResolver } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, runTransaction } from 'firebase/firestore';
@@ -284,7 +285,7 @@ export function useCloudSync(
 
         currentUser.getIdToken().then(token => {
           return fetch(`${getApiBaseUrl()}/api/user/status`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}`, 'X-QC-TZ': deviceTimeZone() }
           });
         })
           .then(res => res.json())
@@ -337,7 +338,7 @@ export function useCloudSync(
 
         // Sync with server guest status, clamping to 5 maximum
         fetch(`${getApiBaseUrl()}/api/user/status`, {
-          headers: { Authorization: `Bearer ${savedGuest}` }
+          headers: { Authorization: `Bearer ${savedGuest}`, 'X-QC-TZ': deviceTimeZone() }
         })
           .then(res => res.json())
           .then(data => {
@@ -379,7 +380,7 @@ export function useCloudSync(
       setIsInitializing(false);
 
       fetch(`${getApiBaseUrl()}/api/user/status`, {
-        headers: { Authorization: `Bearer ${guestUser.uid}` }
+        headers: { Authorization: `Bearer ${guestUser.uid}`, 'X-QC-TZ': deviceTimeZone() }
       })
         .then(res => res.json())
         .then(data => {

@@ -23,6 +23,7 @@
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, parseJson, gameKey, guideRelease, releasedAfter, QUICK_MODEL_CUTOFF } from '../guides/common';
 import { estimateCost } from '../../usage';
+import { monthCosts, summarizeCosts, costMonth } from '../../playerCosts';
 
 const SITES = ['sc-domain:questcompendium.com', 'https://questcompendium.com/', 'https://www.questcompendium.com/'];
 const SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
@@ -317,6 +318,15 @@ async function weekly() {
     await db().collection('system').doc('pipeline').set({ searchWishes: wishes, searchConsoleAt: Date.now() }, { merge: true });
   }
 
+  // What players cost this month (playerCosts.ts): Premium's average and heaviest player, and free players' average.
+  let costLine = '';
+  try {
+    const c = summarizeCosts(await monthCosts());
+    costLine = `**Player costs, ${costMonth()} so far:** Premium ${c.premium.players} player(s), average $${c.premium.avg.toFixed(2)}, max $${c.premium.max.toFixed(2)} per player; free ${c.free.players + c.guests.players} player(s), average $${(c.free.players + c.guests.players ? (c.free.dollars + c.guests.dollars) / (c.free.players + c.guests.players) : 0).toFixed(3)}`;
+  } catch {
+    /* no cost data yet */
+  }
+
   // The weekly summary in Discord.
   const lines = [
     `**Search Console, last 28 days** (${iso(start)} to ${iso(end)}): ${sum.totals.impressions.toLocaleString()} impressions, ${sum.totals.clicks.toLocaleString()} clicks (CTR ${(sum.totals.ctr * 100).toFixed(1)}%)`,
@@ -330,6 +340,7 @@ async function weekly() {
       : checked.length ? 'Queued: nothing (every checked page answers its searches).' : '',
     gained.length ? `Gained clicks: ${gained.map((p) => `${p.key}/${p.slug} +${p.gain}`).join(', ')}` : '',
     wishes.length ? `Wish list from searches: ${wishes.slice(0, 6).map((w) => `${w.game} (${w.impressions})`).join(', ')}` : '',
+    costLine,
   ].filter(Boolean);
   console.log(lines.join('\n'));
   if (process.env.DISCORD_WEBHOOK_URL && !dry) {

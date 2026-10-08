@@ -198,7 +198,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
 <body>
 <header>
   <h1>Guide review queue</h1>
-  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button><button id="tabReports" class="tab">Reports</button><button id="tabQuality" class="tab">Quality</button></nav>
+  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button><button id="tabReports" class="tab">Reports</button><button id="tabQuality" class="tab">Quality</button><button id="tabCosts" class="tab">Costs</button></nav>
   <select id="filter" aria-label="Show"><option value="all">All open</option><option value="review">Failed reviews</option><option value="report">Player reports</option></select>
   <button id="signin" class="primary">Sign in with Google</button>
 </header>
@@ -210,6 +210,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   <div id="search" hidden></div>
   <div id="reports" hidden></div>
   <div id="quality" hidden></div>
+  <div id="costs" hidden></div>
   <details id="decidedBox" hidden><summary>Recently decided</summary><div id="decided"></div></details>
 </main>
 <script type="module">
@@ -308,6 +309,19 @@ function adminPage(firebaseConfig: Record<string, string>): string {
       + markers + '<h3>Recent 👎</h3>' + (downs || '<p class="dim">None.</p>');
     if (tab === 'quality') $('msg').textContent = 'Answer quality from players’ votes, and marker drops from the close-up check.';
   }
+  // Costs: what each player's questions cost this month (playerCosts.ts): Premium vs free vs guests, the 10 heaviest.
+  let costs = {};
+  function renderCosts() {
+    const usd = (x) => '$' + (x || 0).toFixed(x >= 10 ? 2 : 3);
+    const row = (name, g) => '<tr><td style="padding:4px;border-top:1px solid var(--line)">' + esc(name) + '</td>' + [String(g.players || 0), String(g.questions || 0), usd(g.dollars), usd(g.avg), usd(g.max), usd(g.perQuestion)].map((c) => '<td style="text-align:right;padding:4px;border-top:1px solid var(--line)">' + c + '</td>').join('') + '</tr>';
+    const head = '<tr>' + ['', 'Players', 'Questions', 'Total', 'Per player', 'Max player', 'Per question'].map((h, i) => '<th style="text-align:' + (i ? 'right' : 'left') + ';padding:4px">' + h + '</th>').join('') + '</tr>';
+    const top = (costs.heaviest || []).map((r, i) => '<tr><td style="padding:4px;border-top:1px solid var(--line)">' + (i + 1) + '. ' + esc(r.uid) + ' <span class="dim">' + (r.premium ? 'Premium' : r.guest ? 'guest' : 'free') + '</span></td>' + [String(r.questions), String(r.searches), usd(r.dollars)].map((c) => '<td style="text-align:right;padding:4px;border-top:1px solid var(--line)">' + c + '</td>').join('') + '</tr>').join('');
+    $('costs').innerHTML = !costs.month ? '<p class="dim">No costs counted yet.</p>'
+      : '<div class="card"><b>' + esc(costs.month) + ': cost per player</b><table style="width:100%;border-collapse:collapse;font-size:13px">' + head
+        + row('Premium', costs.premium || {}) + row('Free (signed in)', costs.free || {}) + row('Guests', costs.guests || {}) + row('Everyone', costs.all || {}) + '</table></div>'
+        + '<div class="card"><b>The 10 heaviest players this month</b>' + (top ? '<table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;padding:4px">Player</th><th style="text-align:right;padding:4px">Questions</th><th style="text-align:right;padding:4px">Searches</th><th style="text-align:right;padding:4px">Cost</th></tr>' + top + '</table>' : '<p class="dim">None yet.</p>') + '</div>';
+    if (tab === 'costs') $('msg').textContent = 'Every AI call made while answering a player, at Google’s rates (searches at $14 per 1,000).';
+  }
   // Search: the weekly Search Console summary (last 28 days), the pages planned for a repair, games from searches.
   let sc = {};
   function renderSearch() {
@@ -334,14 +348,16 @@ function adminPage(firebaseConfig: Record<string, string>): string {
     $('tabSearch').classList.toggle('on', t === 'search');
     $('tabReports').classList.toggle('on', t === 'reports');
     $('tabQuality').classList.toggle('on', t === 'quality');
+    $('tabCosts').classList.toggle('on', t === 'costs');
     $('reports').hidden = t !== 'reports';
     $('quality').hidden = t !== 'quality';
+    $('costs').hidden = t !== 'costs';
     $('list').hidden = t !== 'guides';
     $('decidedBox').hidden = t !== 'guides' || !data.decided.length;
     $('filter').hidden = t !== 'guides';
     $('corr').hidden = t !== 'corr';
     $('search').hidden = t !== 'search';
-    if (t === 'corr') renderCorr(); else if (t === 'search') renderSearch(); else if (t === 'reports') renderReports(); else if (t === 'quality') renderQuality(); else render();
+    if (t === 'corr') renderCorr(); else if (t === 'search') renderSearch(); else if (t === 'reports') renderReports(); else if (t === 'quality') renderQuality(); else if (t === 'costs') renderCosts(); else render();
   }
 
   async function api(path, body) {
@@ -378,7 +394,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   }
   async function load() {
     try {
-      [data, corr, sc, reps, qual] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections'), api('/api/admin/search-console').catch(() => ({})), api('/api/admin/answer-reports').catch(() => ({ open: [], decided: [] })), api('/api/admin/answer-quality').catch(() => ({}))]);
+      [data, corr, sc, reps, qual, costs] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections'), api('/api/admin/search-console').catch(() => ({})), api('/api/admin/answer-reports').catch(() => ({ open: [], decided: [] })), api('/api/admin/answer-quality').catch(() => ({})), api('/api/admin/player-costs').catch(() => ({}))]);
       render();
       renderCorr();
       renderReports();
@@ -425,6 +441,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   $('tabSearch').addEventListener('click', () => showTab('search'));
   $('tabReports').addEventListener('click', () => showTab('reports'));
   $('tabQuality').addEventListener('click', () => showTab('quality'));
+  $('tabCosts').addEventListener('click', () => showTab('costs'));
   $('signin').addEventListener('click', () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => { $('msg').textContent = 'Sign-in failed: ' + (e.code || e.message); }));
   onAuthStateChanged(auth, (u) => { $('signin').hidden = !!u; if (u) load(); });
 </script>

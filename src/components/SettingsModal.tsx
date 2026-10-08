@@ -928,7 +928,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="p-3 rounded-xl bg-black/30 border border-white/[0.08] space-y-1.5">
                         <div className="text-[10px] font-mono uppercase text-zinc-400">{tr('set.pad.controls')}</div>
                         <ul className="grid sm:grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-zinc-300">
-                          {['move', 'a', 'b', 'x', 'y', 'menu', 'view', 'lbrb', 'lt', 'rs'].map((k) => (
+                          {['move', 'a', 'b', 'x', 'y', 'menu', 'view', 'lbrb', 'lt', 'rs', 'r3'].map((k) => (
                             <li key={k}>{tr(`set.pad.c.${k}`)}</li>
                           ))}
                         </ul>

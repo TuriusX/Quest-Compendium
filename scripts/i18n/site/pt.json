@@ -164,5 +164,16 @@
   ". The": ". A",
   "Microsoft Store version": "versão da Microsoft Store",
   "doesn't show this warning.": "não exibe esse aviso.",
-  "Download from the Microsoft Store": "Baixar na Microsoft Store"
+  "Download from the Microsoft Store": "Baixar na Microsoft Store",
+  "Version 0.5.3 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "Versão 0.5.3 beta, Windows 64-bit. Teste grátis: 2 perguntas Pro e 5 Fast por dia, sem cartão de crédito.",
+  "Try it before you buy, no credit card needed. Questions reset at midnight.": "Teste antes de comprar, sem precisar de cartão. As perguntas renovam à meia-noite.",
+  "2 Pro + 5 Fast questions a day": "2 perguntas Pro + 5 Fast por dia",
+  "8 Pro + 25 Fast questions a day": "8 perguntas Pro + 25 Fast por dia",
+  "Unused questions carry over (up to 100 of each)": "Perguntas não usadas acumulam (até 100 de cada)",
+  "Pick": "Escolha",
+  "Pro": "Pro",
+  "(Gemini Pro, the best answers) or": "(Gemini Pro, as melhores respostas) ou",
+  "Fast": "Fast",
+  "(Gemini Flash, quicker answers) next to the send button. When one runs out, the other answers.": "(Gemini Flash, respostas mais rápidas) ao lado do botão de enviar. Se um acabar, o outro responde.",
+  "You can try it for free with 2 Pro and 5 Fast questions a day, no credit card needed. Premium is $4.99/month for 8 Pro and 25 Fast questions a day, with unused questions carrying over (up to 100 of each), plus premium features like on-screen markers and Gemini voices. During the beta, every player gets every feature. See": "Você pode testar de graça com 2 perguntas Pro e 5 Fast por dia, sem precisar de cartão. O Premium custa $4.99/mês para ter 8 perguntas Pro e 25 Fast por dia, com perguntas acumulando (até 100 de cada), além de recursos premium como marcadores na tela e vozes do Gemini. Durante o beta, todo mundo tem acesso a tudo. Confira"
 }
