@@ -50,6 +50,10 @@ interface HeaderBarProps {
   onToggleQuestLog?: () => void;
   /** The quest log is out (not away as the ribbon). */
   questLogVisible?: boolean;
+  /** Tuck the panel away (desktop): the same as the show/hide shortcut. */
+  onTuckAway?: () => void;
+  /** The dock's screen edge, for the tuck chevron's direction. */
+  tuckSide?: 'left' | 'right';
   /** There's something to put on the quest log (a known place, or an answer with steps). */
   questLogReady?: boolean;
   theme: ColorTheme;
@@ -79,6 +83,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onToggleDock,
   onToggleQuestLog,
   questLogVisible = false,
+  onTuckAway,
+  tuckSide = 'right',
   questLogReady = true,
   theme,
   onSync,
@@ -236,6 +242,21 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <>
             {/* Vertical Divider */}
             <div className="h-4 w-[1px] bg-white/10 mx-0.5 hidden sm:block" />
+
+            {/* Tuck away: the panel slides to the screen edge (Esc does the same) */}
+            {onTuckAway && (
+              <button
+                style={{ WebkitAppRegion: "no-drag" } as any}
+                onClick={onTuckAway}
+                title={t('header.tuckAway')}
+                aria-label={t('header.tuckAway')}
+                className="p-2 rounded-xl text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer"
+              >
+                <svg viewBox="0 0 12 12" width="16" height="16" shape-rendering="crispEdges" aria-hidden="true" style={tuckSide === 'left' ? { transform: 'scaleX(-1)' } : undefined}>
+                  <path fill="currentColor" d="M1 2h2v2h2v2h2v2H5v2H3v2H1v-2h2V8h2V6H3V4H1zM9 1h2v10H9z" />
+                </svg>
+              </button>
+            )}
 
             {onToggleQuestLog && (
               <button

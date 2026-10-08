@@ -612,7 +612,6 @@ app.whenReady().then(() => {
     mouseTips = { logSeen: Math.max(0, Number(t.logSeen) || 0), dismissed: t.dismissed === true };
     if (tipMode() === before) return;
     tracker.setMouseTip(tipMode());
-    spine.refresh();
   });
 
   // The objectives tracker drawn over the game (electron/tracker.cjs).
@@ -633,7 +632,19 @@ app.whenReady().then(() => {
   tracker.setMouseTip(tipMode());
   tracker.setVisibleInRecordings(markersInRecordings);
   tracker.setScale(currentUiScale);
-  // The hidden panel's book spine on the dock edge (electron/spine.cjs): a click opens the panel.
+  // The hidden panel's spine on the dock edge (electron/spine.cjs): a click opens the panel. Its look (the theme's accent
+  // and its label) comes from the app (set-look), so it follows the theme even when no quest log has been shown.
+  let appLook = null;
+  ipcMain.on('set-look', (event, look) => {
+    const l = look && typeof look === 'object' ? look : {};
+    const next = {
+      accent: /^#[0-9a-fA-F]{3,8}$/.test(String(l.accent || '')) ? String(l.accent) : undefined,
+      label: typeof l.label === 'string' && l.label.trim() ? l.label.trim().slice(0, 80) : undefined,
+    };
+    if (JSON.stringify(next) === JSON.stringify(appLook)) return;
+    appLook = next;
+    spine.refresh();
+  });
   spine.init({
     ipcMain, screen,
     onOpen: () => { if (!isAppVisible) slideIn(); },
@@ -644,15 +655,10 @@ app.whenReady().then(() => {
     },
     getTrackerBounds: () => tracker.getBounds(),
     raiseTracker: () => tracker.raise(),
-    getLook: () => tracker.getLook(),
-    // The mouse tip along the spine, like the quest log's: the shortcut that frees the mouse, or none.
-    getTip: () => {
-      const mode = tipMode();
-      if (mode === 'off' || !hideKeysNow) return null;
-      const l = tracker.getTipLabels();
-      return { mode, keys: formatAccelerator(hideKeysNow), text: l.mouseHint, close: l.mouseHintClose };
+    getLook: () => {
+      const t = tracker.getLook();
+      return { accent: (appLook && appLook.accent) || t.accent, label: (appLook && appLook.label) || t.label };
     },
-    onTipDismiss: () => tellApp({ type: 'mouse-tip', what: 'dismiss' }),
   });
 
   // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
@@ -702,11 +708,9 @@ app.whenReady().then(() => {
     const hideAppCmd = shortcuts.hideAppShortcut || 'CommandOrControl+Space';
     let hideKeys = registerHideShortcut(hideAppCmd) ? hideAppCmd : '';
     if (!hideKeys && hideAppCmd !== 'CommandOrControl+Space' && registerHideShortcut('CommandOrControl+Space')) hideKeys = 'CommandOrControl+Space';
-    // The tracker's hint (and the spine's) names the shortcut that opens the panel.
-    const keysChanged = hideKeys !== hideKeysNow;
+    // The tracker's hint names the shortcut that opens the panel.
     hideKeysNow = hideKeys;
     tracker.setKeys(hideKeys);
-    if (keysChanged) spine.refresh();
     console.log(`[panel] show/hide shortcut: ${hideKeys || `none (${hideAppCmd} and Ctrl+Space are taken)`}`);
     
     const voiceCmd = shortcuts.voiceInputShortcut || 'CommandOrControl+Shift+V';

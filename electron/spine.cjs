@@ -1,6 +1,6 @@
 /**
- * The hidden panel: a small book spine (electron/spine.html) peeking from the screen edge on the dock side, vertically
- * centred on where the docked panel sits. A click opens the panel. It replaces the strip of the panel window that used
+ * The hidden panel: a slim pixel spine (electron/spine.html, in the app's style and the current theme's accent) peeking
+ * from the screen edge on the dock side, vertically centred on where the docked panel sits. A click opens the panel. It replaces the strip of the panel window that used
  * to stay on screen: while the spine shows, the panel window itself is hidden.
  *
  * Like the objectives tracker it never takes focus (the game keeps it) and a fresh window opens each time it's shown.
@@ -8,19 +8,16 @@
  * the tracker stays on top.
  *
  *   const spine = require('./spine.cjs');
- *   spine.init({ ipcMain, screen, onOpen, getDock, getTrackerBounds, raiseTracker, getLook, getTip, onTipDismiss });
+ *   spine.init({ ipcMain, screen, onOpen, getDock, getTrackerBounds, raiseTracker, getLook });
  *   spine.show() when the docked panel has slid away, spine.hide() when it opens or is undocked; spine.refresh() when
- *   the mouse tip changes.
- *
- * The mouse tip (getTip: the show/hide shortcut that frees a locked cursor) runs down the spine like a book's title,
- * with a small × that dismisses it; the spine grows to fit it (the page reports its height).
+ *   its look changes (the app's theme or language).
  */
 const path = require('path');
 const { BrowserWindow } = require('electron');
 
-const W = 34; // the spine is 26 px; the other 8 are room for it to slide out on hover
-const H = 120;
-let h = H; // taller while the mouse tip runs down the spine
+const W = 26; // the spine is 20 px; the other 6 are room for it to slide out on hover
+const H = 112;
+const h = H;
 let deps = null;
 let win = null;
 let watch = null;
@@ -73,8 +70,6 @@ function show() {
   if (!deps) return;
   shown = true;
   drop();
-  const tip = (deps.getTip && deps.getTip()) || null;
-  h = H;
   const s = spot();
   const look = (deps.getLook && deps.getLook()) || {};
   win = new BrowserWindow({
@@ -86,10 +81,7 @@ function show() {
   win.setAlwaysOnTop(true, 'screen-saver');
   const w = win;
   win.loadFile(path.join(__dirname, 'spine.html'), {
-    query: {
-      edge: s.right ? 'right' : 'left', accent: look.accent || '', label: look.label || '',
-      ...(tip ? { tip: tip.mode, tipText: tip.text || '', tipKeys: tip.keys || '', tipClose: tip.close || '' } : {}),
-    },
+    query: { edge: s.right ? 'right' : 'left', accent: look.accent || '', label: look.label || '' },
   });
   win.webContents.once('did-finish-load', () => {
     if (win !== w || !shown || w.isDestroyed()) return;
@@ -101,7 +93,7 @@ function show() {
   watch = setInterval(place, 800);
 }
 
-/** The mouse tip changed (shown, subtle, dismissed, or another shortcut): a spine on screen is drawn again. */
+/** Its look changed (the app's theme or language): a spine on screen is drawn again. */
 function refresh() {
   if (shown) show();
 }
@@ -117,11 +109,6 @@ function init(d) {
   d.ipcMain.on('spine-msg', (e, msg) => {
     if (!alive() || e.sender !== win.webContents || !msg) return;
     if (msg.type === 'open') deps.onOpen();
-    else if (msg.type === 'tip-dismiss' && deps.onTipDismiss) deps.onTipDismiss();
-    else if (msg.type === 'size') {
-      h = Math.max(H, Math.min(480, Math.round(Number(msg.height) || H)));
-      place();
-    }
   });
 }
 

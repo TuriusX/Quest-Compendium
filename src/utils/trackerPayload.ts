@@ -88,7 +88,7 @@ export type TrackerGuideArea = {
 
 /** The tracker page's words (electron/tracker.html), from the "tracker.*" translations. */
 const LABEL_KEYS = [
-  'title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size',
+  'title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'awayEdge', 'size',
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
   'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',

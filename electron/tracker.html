@@ -90,6 +90,10 @@
   #tracker:hover .head .book { opacity: 1; }
   .head .book:hover { border-color: var(--accent); background: rgba(168,127,251,.2); color: #fff; }
   .head .book svg { width: 1.15em; height: .9em; image-rendering: pixelated; }
+  /* Send to the edge: always visible next to the book, the arrow pointing at the edge the log goes to. */
+  .head .hb { margin-left: auto; opacity: .85; }
+  .head .hb + .book { margin-left: 0; }
+  body.edge-left .head .hb svg { transform: scaleX(-1); }
 
   .place { display: flex; align-items: center; gap: .4em; margin: .15em 0 .35em 0; font-size: .9em; color: var(--dim); cursor: pointer; line-height: 1.3; }
   .place .pin { color: var(--accent); flex-shrink: 0; width: .95em; height: .95em; }
@@ -246,6 +250,7 @@
 <div id="tracker" class="in">
   <div class="head" id="head">
     <span class="tg" id="fold" title="Click: fold or open. Drag: move."><span class="title" id="title">Objectives</span><span class="count" id="count"></span><span class="chev" id="headChev">▾</span></span>
+    <span class="book hb" id="bAway" title="Send to the edge"><svg viewBox="0 0 16 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 5h8V3h1v1h1v1h1v1h1v1h-1v1h-1v1h-1v1H9V7H1zM14 0h2v12h-2z"/></svg></span>
     <span class="book" id="bBook" title="Open the Compendium"><svg viewBox="0 0 16 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 1h5v1h1v9H6v-1H1zM15 1h-5v1H9v9h1v-1h5z"/><path fill="#16101f" d="M2 3h3v1H2zM2 5h3v1H2zM2 7h3v1H2zM11 3h3v1h-3zM11 5h3v1h-3zM11 7h3v1h-3z"/></svg></span>
   </div>
   <div class="place" id="place">
@@ -269,7 +274,6 @@
   <div class="hint" id="hint"><kbd>Ctrl+G</kbd> or click the title: open the Compendium</div>
   <div class="ctl" id="ctl">
     <span class="btn" id="bConfirm" title="Confirm where you are"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span>
-    <span class="btn" id="bAway" title="Send to the screen edge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h12"/><path d="m13 6 6 6-6 6"/><path d="M21 4v16"/></svg></span>
     <span class="btn aa" id="bSize" title="Text size">Aa</span>
     <span class="sl" id="alphaWrap" title="Transparency"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg><input type="range" id="alpha" min="30" max="100" value="100"></span>
     <span class="sl" id="bdWrap" title="Backdrop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18" opacity=".5"/></svg><input type="range" id="bd" min="0" max="95" value="45"></span>
@@ -317,7 +321,7 @@
   // The page's words, in the app's language (payload.labels), with English as the fallback.
   const EN = {
     title: 'Objectives', confirm: 'Confirm', missable: 'Missable: {list}', placeHint: 'Click to confirm this is where you are',
-    confirmHint: 'Confirm where you are', away: 'Send to the screen edge',
+    confirmHint: 'Confirm where you are', away: 'Send to the screen edge', awayEdge: 'Send to the edge',
     size: 'Text size', alpha: 'Transparency', backdrop: 'Soft dark backdrop', tabHint: 'Bring the objectives back',
     itemTodo: 'Click: collected', itemDone: 'Click: not collected yet',
     empty: 'Nothing to track here yet', secAnswer: 'From your last answer', secMissable: 'Missable here',
@@ -349,7 +353,7 @@
     $('nextArea').title = L('nextArea');
     $('placeName').title = state.data && state.data.areas ? L('areaList') : '';
     $('bConfirm').title = L('confirmHint');
-    $('bAway').title = L('away');
+    $('bAway').title = L('awayEdge');
     $('bSize').title = L('size');
     $('alphaWrap').title = L('alpha');
     $('bdWrap').title = L('backdrop');
@@ -503,6 +507,7 @@
     tracker.classList.toggle('away', state.view === 'away');
     document.body.classList.toggle('away', state.view === 'away');
     tab.className = state.edge === 'left' ? 'left' : 'right';
+    document.body.classList.toggle('edge-left', state.edge === 'left');
     $('headChev').textContent = state.view === 'collapsed' ? '▸' : '▾';
     reportSize();
   }
@@ -572,12 +577,12 @@
     hintTimer = setTimeout(() => hint.classList.add('fade'), 4000);
   }
 
-  // Header: the book opens the panel here, a click anywhere else folds the whole log to the header line (and back), and
+  // Header: the book opens the panel here, the arrow sends the log to the edge, a click anywhere else folds the whole log to the header line (and back), and
   // a drag moves the whole tracker. (The press target is kept: under pointer capture the release reports the header.)
   let drag = null;
   $('head').addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    drag = { x: e.screenX, y: e.screenY, moved: false, book: !!e.target.closest('#bBook') };
+    drag = { x: e.screenX, y: e.screenY, moved: false, book: !!e.target.closest('#bBook'), away: !!e.target.closest('#bAway') };
     $('head').setPointerCapture(e.pointerId);
   });
   $('head').addEventListener('pointermove', (e) => {
@@ -596,6 +601,7 @@
     if (!was) return;
     if (was.moved) send('drag-end', {});
     else if (was.book) send('open-panel', {});
+    else if (was.away) setView('away');
     else setView(state.view === 'collapsed' ? 'full' : 'collapsed');
   });
   $('head').addEventListener('pointercancel', () => { drag = null; });
@@ -704,7 +710,6 @@
   };
   $('placeConfirm').addEventListener('click', confirmPlace);
   $('bConfirm').addEventListener('click', confirmPlace);
-  $('bAway').addEventListener('click', () => setView('away'));
   tab.addEventListener('click', () => setView('full'));
   $('bSize').addEventListener('click', () => {
     state.size = state.size === 'small' ? 'medium' : state.size === 'medium' ? 'large' : 'small';

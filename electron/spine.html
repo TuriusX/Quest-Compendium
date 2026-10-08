@@ -4,55 +4,41 @@
 <meta charset="utf-8">
 <title>Quest Compendium</title>
 <style>
-  /* The hidden panel: a book spine peeking from the screen edge on the dock side. Dark leather with gold pixel trim and
-     the pixel logo, 26 px wide; hovering slides it 8 px further out (the window is 34 px wide for that), a click opens
-     the panel. Pixel art: hard colour steps, no smoothing, steps() motion. ?edge=left|right&accent=#hex&label=… */
-  :root { --accent: #a87ffb; --w: 26px; --gold: #f4c535; --gold-dk: #a3791b; --ink: #120905; }
+  /* The hidden panel: a slim spine peeking from the screen edge on the dock side, in the app's own lo-fi pixel style.
+     Flat 2D: the panel's dark ground, a 2 px pixel border and stepped corners in the current theme's accent, small
+     accent rivets, and the pixel logo. 20 px wide; hovering slides it 6 px further out (steps), a click opens the panel.
+     ?edge=left|right&accent=#hex&label=… (the accent follows the app's theme). */
+  :root { --accent: #a87ffb; --bg: #0e0e14; --bg2: #16161f; --w: 20px; --step: 2px; }
   html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
   #spine { position: absolute; top: 0; bottom: 0; right: 0; width: var(--w); cursor: pointer; box-sizing: border-box;
-    image-rendering: pixelated;
-    /* Leather, lit from the inner edge: hard stops read as pixel shading on a rounded spine. */
-    background: linear-gradient(90deg, #1a0d07 0 2px, #6b3c22 2px 4px, #57311c 4px 9px, #4a2917 9px 17px, #3b2012 17px 22px, #2a160c 22px);
-    border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink);
-    transition: width .12s steps(2), filter .12s steps(2); }
+    image-rendering: pixelated; background: var(--accent);
+    /* Stepped (pixel) corners on the free side; flush with the screen edge on the other. */
+    clip-path: polygon(var(--step) 0, 100% 0, 100% 100%, var(--step) 100%, var(--step) calc(100% - var(--step)), 0 calc(100% - var(--step)), 0 var(--step), var(--step) var(--step));
+    transition: width .12s steps(3); }
   body.left #spine { right: auto; left: 0;
-    background: linear-gradient(270deg, #1a0d07 0 2px, #6b3c22 2px 4px, #57311c 4px 9px, #4a2917 9px 17px, #3b2012 17px 22px, #2a160c 22px); }
-  #spine:hover { width: calc(var(--w) + 8px); filter: brightness(1.12); }
-  /* Gold trim: two raised bands near each end (a 1 px shadow under each), and a stud between them. */
-  .band { position: absolute; left: 0; right: 0; height: 2px; background: var(--gold); box-shadow: 0 1px 0 var(--gold-dk); }
-  .b1 { top: 8px; } .b2 { top: 13px; } .b3 { bottom: 14px; } .b4 { bottom: 9px; }
-  .stud { position: absolute; left: 50%; width: 4px; height: 4px; margin-left: -2px; background: var(--gold);
-    box-shadow: 0 1px 0 var(--gold-dk), -2px 0 0 -1px var(--gold-dk); }
-  .s1 { top: 24px; } .s2 { bottom: 23px; }
+    clip-path: polygon(0 0, calc(100% - var(--step)) 0, calc(100% - var(--step)) var(--step), 100% var(--step), 100% calc(100% - var(--step)), calc(100% - var(--step)) calc(100% - var(--step)), calc(100% - var(--step)) 100%, 0 100%); }
+  /* The face: the panel's ground inside the accent border (no border on the screen-edge side). */
+  #face { position: absolute; top: 2px; bottom: 2px; left: 2px; right: 0; background: var(--bg);
+    box-shadow: inset 2px 0 0 var(--bg2); }
+  body.left #face { left: 0; right: 2px; box-shadow: inset -2px 0 0 var(--bg2); }
+  #spine:hover { width: calc(var(--w) + 6px); }
+  #spine:hover #face { background: var(--bg2); }
+  /* Accent rivets near each end, and a short accent rule beside each: the app's pixel UI trim. */
+  .rivet { position: absolute; left: 50%; width: 4px; height: 4px; margin-left: -2px; background: var(--accent); }
+  .r1 { top: 8px; } .r2 { bottom: 8px; }
+  .rule { position: absolute; left: 4px; right: 4px; height: 2px; background: var(--accent); opacity: .45; }
+  .u1 { top: 16px; } .u2 { bottom: 16px; }
   /* The pixel logo, at its own 16 px so every pixel stays square. */
   .logo { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; image-rendering: pixelated; }
-  /* A sliver of page edge on the inner side, like the paper block of a closed book. */
-  #spine::after { content: ''; position: absolute; top: 3px; bottom: 3px; width: 2px; left: -2px;
-    background: repeating-linear-gradient(180deg, #e9dfc0 0 2px, #cbbd93 2px 4px); }
-  body.left #spine::after { left: auto; right: -2px; }
-  /* The mouse tip, down the spine like a book's title: "Ctrl+\ to use your mouse here", and a × to dismiss it. The logo
-     moves to the top to make room. Strong: gold, the first times; subtle: smaller and dimmer. */
-  body.tip .logo { top: 32px; margin-top: 0; }
-  #tip { display: none; position: absolute; left: 0; right: 0; top: 54px; flex-direction: column; align-items: center; gap: 6px; }
-  body.tip #tip { display: flex; }
-  #tipText { writing-mode: vertical-rl; font: 700 10px/1 'Segoe UI', system-ui, sans-serif; color: var(--gold); letter-spacing: .04em;
-    text-shadow: 0 1px 0 var(--ink); white-space: nowrap; }
-  #tipText kbd { font: inherit; color: #fff; }
-  body.left #tipText { transform: rotate(180deg); }
-  body.subtle #tipText { font-size: 9px; font-weight: 600; color: #cbbd93; opacity: .75; }
-  #tipX { width: 14px; height: 14px; font: 800 11px/14px 'Segoe UI', system-ui, sans-serif; text-align: center; color: #cbbd93;
-    background: rgba(0,0,0,.35); cursor: pointer; }
-  #tipX:hover { color: #fff; }
 </style>
 </head>
 <body>
-<div id="spine" title="Open Quest Compendium">
-  <div class="band b1"></div><div class="band b2"></div>
-  <div class="stud s1"></div>
-  <svg class="logo" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><g> <rect x="1" y="1" width="12" height="1" fill="#0b0916" /> <rect x="1" y="2" width="1" height="1" fill="#0b0916" /> <rect x="2" y="2" width="1" height="1" fill="#1c1635" /> <rect x="3" y="2" width="7" height="1" fill="#16112c" /> <rect x="10" y="2" width="2" height="1" fill="#f4c535" /> <rect x="12" y="2" width="1" height="1" fill="#0b0916" /> <rect x="13" y="2" width="1" height="1" fill="#d6cda4" /> <rect x="0" y="3" width="2" height="1" fill="#f4c535" /> <rect x="2" y="3" width="1" height="1" fill="#1c1635" /> <rect x="3" y="3" width="8" height="1" fill="#16112c" /> <rect x="11" y="3" width="1" height="1" fill="#f4c535" /> <rect x="12" y="3" width="1" height="1" fill="#0b0916" /> <rect x="13" y="3" width="1" height="1" fill="#a49a71" /> <rect x="1" y="4" width="1" height="1" fill="#0b0916" /> <rect x="2" y="4" width="1" height="1" fill="#1c1635" /> <rect x="3" y="4" width="9" height="1" fill="#16112c" /> <rect x="12" y="4" width="1" height="1" fill="#0b0916" /> <rect x="13" y="4" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="5" width="1" height="1" fill="#0b0916" /> <rect x="2" y="5" width="1" height="1" fill="#1c1635" /> <rect x="3" y="5" width="9" height="1" fill="#16112c" /> <rect x="12" y="5" width="1" height="1" fill="#0b0916" /> <rect x="13" y="5" width="1" height="1" fill="#a49a71" /> <rect x="1" y="6" width="1" height="1" fill="#0b0916" /> <rect x="2" y="6" width="1" height="1" fill="#1c1635" /> <rect x="3" y="6" width="3" height="1" fill="#16112c" /> <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="9" y="6" width="3" height="1" fill="#16112c" /> <rect x="12" y="6" width="1" height="1" fill="#0b0916" /> <rect x="13" y="6" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="7" width="1" height="1" fill="#0b0916" /> <rect x="2" y="7" width="1" height="1" fill="#1c1635" /> <rect x="3" y="7" width="2" height="1" fill="#16112c" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill="#16112c" /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="10" y="7" width="2" height="1" fill="#16112c" /> <rect x="12" y="7" width="1" height="1" fill="#0b0916" /> <rect x="13" y="7" width="1" height="1" fill="#a49a71" /> <rect x="1" y="8" width="1" height="1" fill="#0b0916" /> <rect x="2" y="8" width="1" height="1" fill="#1c1635" /> <rect x="3" y="8" width="2" height="1" fill="#16112c" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="3" height="1" fill="#16112c" /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="10" y="8" width="2" height="1" fill="#16112c" /> <rect x="12" y="8" width="1" height="1" fill="#0b0916" /> <rect x="13" y="8" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="9" width="1" height="1" fill="#0b0916" /> <rect x="2" y="9" width="1" height="1" fill="#1c1635" /> <rect x="3" y="9" width="2" height="1" fill="#16112c" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill="#16112c" /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="10" y="9" width="2" height="1" fill="#16112c" /> <rect x="12" y="9" width="1" height="1" fill="#0b0916" /> <rect x="13" y="9" width="1" height="1" fill="#a49a71" /> <rect x="1" y="10" width="1" height="1" fill="#0b0916" /> <rect x="2" y="10" width="1" height="1" fill="#1c1635" /> <rect x="3" y="10" width="3" height="1" fill="#16112c" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> <rect x="9" y="10" width="3" height="1" fill="#16112c" /> <rect x="12" y="10" width="1" height="1" fill="#0b0916" /> <rect x="13" y="10" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="11" width="1" height="1" fill="#0b0916" /> <rect x="2" y="11" width="1" height="1" fill="#1c1635" /> <rect x="3" y="11" width="9" height="1" fill="#16112c" /> <rect x="12" y="11" width="1" height="1" fill="#0b0916" /> <rect x="13" y="11" width="1" height="1" fill="#a49a71" /> <rect x="0" y="12" width="2" height="1" fill="#f4c535" /> <rect x="2" y="12" width="1" height="1" fill="#1c1635" /> <rect x="3" y="12" width="9" height="1" fill="#16112c" /> <rect x="12" y="12" width="1" height="1" fill="#0b0916" /> <rect x="13" y="12" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="13" width="1" height="1" fill="#0b0916" /> <rect x="2" y="13" width="1" height="1" fill="#1c1635" /> <rect x="3" y="13" width="8" height="1" fill="#16112c" /> <rect x="11" y="13" width="1" height="1" fill="#f4c535" /> <rect x="12" y="13" width="1" height="1" fill="#0b0916" /> <rect x="13" y="13" width="1" height="1" fill="#a49a71" /> <rect x="1" y="14" width="1" height="1" fill="#0b0916" /> <rect x="2" y="14" width="1" height="1" fill="#1c1635" /> <rect x="3" y="14" width="7" height="1" fill="#16112c" /> <rect x="10" y="14" width="2" height="1" fill="#f4c535" /> <rect x="12" y="14" width="1" height="1" fill="#0b0916" /> <rect x="13" y="14" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="15" width="13" height="1" fill="#0b0916" /> </g> <g > <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill=var(--accent) /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="1" height="1" fill=var(--accent) /> <rect x="7" y="8" width="1" height="1" fill=#ffffff /> <rect x="8" y="8" width="1" height="1" fill=var(--accent) /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill=var(--accent) /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> </g></svg>
-  <div id="tip"><span id="tipText"></span><span id="tipX">×</span></div>
-  <div class="stud s2"></div>
-  <div class="band b3"></div><div class="band b4"></div>
+<div id="spine" title="Open Quest Compendium" role="button" aria-label="Open Quest Compendium">
+  <div id="face">
+    <div class="rivet r1"></div><div class="rule u1"></div>
+    <svg class="logo" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><g> <rect x="1" y="1" width="12" height="1" fill="#0b0916" /> <rect x="1" y="2" width="1" height="1" fill="#0b0916" /> <rect x="2" y="2" width="1" height="1" fill="#1c1635" /> <rect x="3" y="2" width="7" height="1" fill="#16112c" /> <rect x="10" y="2" width="2" height="1" fill="#f4c535" /> <rect x="12" y="2" width="1" height="1" fill="#0b0916" /> <rect x="13" y="2" width="1" height="1" fill="#d6cda4" /> <rect x="0" y="3" width="2" height="1" fill="#f4c535" /> <rect x="2" y="3" width="1" height="1" fill="#1c1635" /> <rect x="3" y="3" width="8" height="1" fill="#16112c" /> <rect x="11" y="3" width="1" height="1" fill="#f4c535" /> <rect x="12" y="3" width="1" height="1" fill="#0b0916" /> <rect x="13" y="3" width="1" height="1" fill="#a49a71" /> <rect x="1" y="4" width="1" height="1" fill="#0b0916" /> <rect x="2" y="4" width="1" height="1" fill="#1c1635" /> <rect x="3" y="4" width="9" height="1" fill="#16112c" /> <rect x="12" y="4" width="1" height="1" fill="#0b0916" /> <rect x="13" y="4" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="5" width="1" height="1" fill="#0b0916" /> <rect x="2" y="5" width="1" height="1" fill="#1c1635" /> <rect x="3" y="5" width="9" height="1" fill="#16112c" /> <rect x="12" y="5" width="1" height="1" fill="#0b0916" /> <rect x="13" y="5" width="1" height="1" fill="#a49a71" /> <rect x="1" y="6" width="1" height="1" fill="#0b0916" /> <rect x="2" y="6" width="1" height="1" fill="#1c1635" /> <rect x="3" y="6" width="3" height="1" fill="#16112c" /> <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="9" y="6" width="3" height="1" fill="#16112c" /> <rect x="12" y="6" width="1" height="1" fill="#0b0916" /> <rect x="13" y="6" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="7" width="1" height="1" fill="#0b0916" /> <rect x="2" y="7" width="1" height="1" fill="#1c1635" /> <rect x="3" y="7" width="2" height="1" fill="#16112c" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill="#16112c" /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="10" y="7" width="2" height="1" fill="#16112c" /> <rect x="12" y="7" width="1" height="1" fill="#0b0916" /> <rect x="13" y="7" width="1" height="1" fill="#a49a71" /> <rect x="1" y="8" width="1" height="1" fill="#0b0916" /> <rect x="2" y="8" width="1" height="1" fill="#1c1635" /> <rect x="3" y="8" width="2" height="1" fill="#16112c" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="3" height="1" fill="#16112c" /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="10" y="8" width="2" height="1" fill="#16112c" /> <rect x="12" y="8" width="1" height="1" fill="#0b0916" /> <rect x="13" y="8" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="9" width="1" height="1" fill="#0b0916" /> <rect x="2" y="9" width="1" height="1" fill="#1c1635" /> <rect x="3" y="9" width="2" height="1" fill="#16112c" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill="#16112c" /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="10" y="9" width="2" height="1" fill="#16112c" /> <rect x="12" y="9" width="1" height="1" fill="#0b0916" /> <rect x="13" y="9" width="1" height="1" fill="#a49a71" /> <rect x="1" y="10" width="1" height="1" fill="#0b0916" /> <rect x="2" y="10" width="1" height="1" fill="#1c1635" /> <rect x="3" y="10" width="3" height="1" fill="#16112c" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> <rect x="9" y="10" width="3" height="1" fill="#16112c" /> <rect x="12" y="10" width="1" height="1" fill="#0b0916" /> <rect x="13" y="10" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="11" width="1" height="1" fill="#0b0916" /> <rect x="2" y="11" width="1" height="1" fill="#1c1635" /> <rect x="3" y="11" width="9" height="1" fill="#16112c" /> <rect x="12" y="11" width="1" height="1" fill="#0b0916" /> <rect x="13" y="11" width="1" height="1" fill="#a49a71" /> <rect x="0" y="12" width="2" height="1" fill="#f4c535" /> <rect x="2" y="12" width="1" height="1" fill="#1c1635" /> <rect x="3" y="12" width="9" height="1" fill="#16112c" /> <rect x="12" y="12" width="1" height="1" fill="#0b0916" /> <rect x="13" y="12" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="13" width="1" height="1" fill="#0b0916" /> <rect x="2" y="13" width="1" height="1" fill="#1c1635" /> <rect x="3" y="13" width="8" height="1" fill="#16112c" /> <rect x="11" y="13" width="1" height="1" fill="#f4c535" /> <rect x="12" y="13" width="1" height="1" fill="#0b0916" /> <rect x="13" y="13" width="1" height="1" fill="#a49a71" /> <rect x="1" y="14" width="1" height="1" fill="#0b0916" /> <rect x="2" y="14" width="1" height="1" fill="#1c1635" /> <rect x="3" y="14" width="7" height="1" fill="#16112c" /> <rect x="10" y="14" width="2" height="1" fill="#f4c535" /> <rect x="12" y="14" width="1" height="1" fill="#0b0916" /> <rect x="13" y="14" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="15" width="13" height="1" fill="#0b0916" /> </g> <g > <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill=var(--accent) /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="1" height="1" fill=var(--accent) /> <rect x="7" y="8" width="1" height="1" fill=#ffffff /> <rect x="8" y="8" width="1" height="1" fill=var(--accent) /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill=var(--accent) /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> </g></svg>
+    <div class="rule u2"></div><div class="rivet r2"></div>
+  </div>
 </div>
 <script>
   'use strict';
@@ -61,22 +47,9 @@
   const accent = q.get('accent') || '';
   if (/^#[0-9a-f]{3,8}$/i.test(accent)) document.documentElement.style.setProperty('--accent', accent);
   const label = q.get('label');
-  if (label) document.getElementById('spine').title = label;
-  document.getElementById('spine').addEventListener('click', () => { if (window.qcSpine) window.qcSpine.open(); });
-  // The mouse tip: the show/hide shortcut frees a cursor the game has locked.
-  const tip = q.get('tip'), tipText = q.get('tipText') || '', tipKeys = q.get('tipKeys') || '';
-  if ((tip === 'strong' || tip === 'subtle') && tipKeys) {
-    document.body.classList.add('tip', tip);
-    const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const [b, a] = tipText.split('{keys}');
-    document.getElementById('tipText').innerHTML = a === undefined ? esc(b) : `${esc(b)}<kbd>${esc(tipKeys)}</kbd>${esc(a)}`;
-    const x = document.getElementById('tipX');
-    x.title = q.get('tipClose') || '';
-    x.addEventListener('click', (e) => { e.stopPropagation(); if (window.qcSpine && window.qcSpine.send) window.qcSpine.send({ type: 'tip-dismiss' }); });
-    // Tall enough for the words: the spine grows to fit them.
-    const box = document.getElementById('tip');
-    if (window.qcSpine && window.qcSpine.send) window.qcSpine.send({ type: 'size', height: box.offsetTop + box.offsetHeight + 34 });
-  }
+  const spine = document.getElementById('spine');
+  if (label) { spine.title = label; spine.setAttribute('aria-label', label); }
+  spine.addEventListener('click', () => { if (window.qcSpine) window.qcSpine.open(); });
 </script>
 </body>
 </html>

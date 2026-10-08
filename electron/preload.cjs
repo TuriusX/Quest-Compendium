@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleSlide: () => ipcRenderer.send('toggle-slide'),
   // Hold to talk: after sending, the panel slides away and the answer is read aloud.
   hidePanel: () => ipcRenderer.send('hide-panel'),
+  // The hidden panel's spine: the theme's accent and its label (electron/spine.cjs).
+  setLook: (look) => ipcRenderer.send('set-look', look),
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   // "Next turn" and "Locate me": a fresh screenshot of the game now (an open panel slides away for it), never the snapshot on open.
   captureFresh: () => ipcRenderer.invoke('capture-fresh'),
