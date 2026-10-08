@@ -471,12 +471,15 @@ type CompEntity = { name: string; slug: string; type: string; typeLabel: string;
 const COMPS = new Map<string, NonNullable<typeof COMP>>();
 let COMP: { taxonomy: any[]; entities: CompEntity[]; people: Record<string, { groups: { group: string; people: { name: string; role: string; where?: string }[] }[] }> } | null = null;
 const compLinkable = () => (COMP?.entities || []).map((e) => ({ name: e.name, slug: e.slug }));
+let COMP_KEY = '';
+/** An entity page's URL (root-relative: entity pages are English-only, so translated pages link there too). */
+const entHref = (slug: string) => `/guides/${COMP_KEY}/${slug}/`;
 /** Guide text with entity mentions linked to their pages (prefix: the path from this page to the guide's folder). */
-function rich(text: string | undefined, prefix = '../', self = ''): string {
+function rich(text: string | undefined, _prefix = '../', self = ''): string {
   const t = String(text || '');
   if (!COMP?.entities.length) return esc(t);
   return entitySegments(t, compLinkable().filter((e) => e.slug !== self))
-    .map((sg) => (sg.slug ? `<a class="qc-ent text-[#c4b0ff] underline decoration-[#a87ffb]/40 underline-offset-2 hover:text-white" data-ent="${esc(sg.slug)}" href="${prefix}${esc(sg.slug)}/index.html">${esc(sg.text)}</a>` : esc(sg.text)))
+    .map((sg) => (sg.slug ? `<a class="qc-ent text-[#c4b0ff] underline decoration-[#a87ffb]/40 underline-offset-2 hover:text-white" data-ent="${esc(sg.slug)}" href="${esc(entHref(sg.slug))}">${esc(sg.text)}</a>` : esc(sg.text)))
     .join('');
 }
 /** The hover preview: each linked entity's type, region and first line, and a small popover. */
@@ -936,7 +939,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           ${achHere ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${(achHere.list || []).length} · ${(achHere.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
           <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
           ${compSearch(key, visible, byslug)}
-          <input type="search" data-filter="#qc-area-rows" data-empty="#qc-area-empty" placeholder="${esc(ui('searchAreas'))}" class="mt-6 w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
+          ${COMP?.entities.length ? '' : `<input type="search" data-filter="#qc-area-rows" data-empty="#qc-area-empty" placeholder="${esc(ui('searchAreas'))}" class="mt-6 w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">`}
           <div id="qc-area-rows" class="mt-3">${rows}</div>
           <p id="qc-area-empty" hidden class="mt-3 text-sm text-zinc-500">${esc(ui('noMatches'))}</p>
           ${cta('../'.repeat(2 + extra), gameName)}
@@ -957,33 +960,38 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
  */
 function compSearch(key: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>): string {
   if (!COMP?.entities.length) return '';
-  const idx: { l: string; k: string; c: string; h: string }[] = [];
-  for (const e of COMP.entities) idx.push({ l: e.name, k: e.typeLabel, c: e.summary?.region || '', h: `${e.slug}/index.html` });
+  const idx: { l: string; k: string; c: string; h: string; p?: number }[] = [];
+  for (const e of COMP.entities) idx.push({ l: e.name, k: e.typeLabel, c: e.summary?.region || '', h: entHref(e.slug), p: 1 });
   for (const o of visible) {
     const a = byslug.get(o.slug)!;
-    idx.push({ l: a.name, k: 'Guide page', c: a.story || '', h: `${o.slug}/index.html` });
-    for (const st of a.walkthrough || []) idx.push({ l: st.title, k: 'Walkthrough step', c: a.name, h: `${o.slug}/index.html#${st.id}` });
-    for (const e of a.items || []) idx.push({ l: e.name || '', k: 'Item', c: a.name, h: `${o.slug}/index.html#e-${e.id}` });
-    for (const e of a.secrets || []) idx.push({ l: String(e.text || '').slice(0, 90), k: 'Secret', c: a.name, h: `${o.slug}/index.html#e-${e.id}` });
-    for (const e of a.shops || []) idx.push({ l: e.name || '', k: 'Shop or NPC', c: a.name, h: `${o.slug}/index.html#e-${e.id}` });
-    for (const f of a.fights || []) idx.push({ l: f.name, k: 'Key fight', c: a.name, h: `${o.slug}/index.html#${f.id}` });
+    const isChapter = /^(chapter|prologue|epilogue|act|part|episode|day)\b/i.test(a.name);
+    idx.push({ l: a.name, k: ui(isChapter ? 'kindChapter' : 'kindArea'), c: a.story || '', h: `${o.slug}/index.html`, p: 1 });
+    for (const st of a.walkthrough || []) idx.push({ l: st.title, k: ui('kindStep'), c: a.name, h: `${o.slug}/index.html#${st.id}` });
+    for (const e of a.items || []) idx.push({ l: e.name || '', k: ui('kindItem'), c: a.name, h: `${o.slug}/index.html#e-${e.id}` });
+    for (const e of a.secrets || []) idx.push({ l: String(e.text || '').slice(0, 90), k: ui('kindSecret'), c: a.name, h: `${o.slug}/index.html#e-${e.id}` });
+    for (const e of a.shops || []) idx.push({ l: e.name || '', k: ui('kindShop'), c: a.name, h: `${o.slug}/index.html#e-${e.id}` });
+    for (const e of a.enemies || []) idx.push({ l: e.name || '', k: ui('kindEnemy'), c: a.name, h: `${o.slug}/index.html#e-${e.id}` });
+    for (const f of a.fights || []) idx.push({ l: f.name, k: ui('kindFight'), c: a.name, h: `${o.slug}/index.html#${f.id}` });
   }
   const types = (COMP.taxonomy || []).map((t: any) => {
     const built = COMP!.entities.filter((e) => e.type === t.id);
     const more = (t.examples || []).filter((x: string) => !built.some((e) => e.name.toLowerCase() === x.toLowerCase())).slice(0, 6);
     return `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(t.label)}</div>
-      <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => `<a href="${esc(e.slug)}/index.html" class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(e.name)}</a>`).join('')}${more.map((x: string) => `<span class="rounded-md border border-white/10 px-2 py-0.5 text-sm text-zinc-500" title="Not built yet">${esc(x)}</span>`).join('')}</div></div>`;
+      <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => `<a href="${esc(entHref(e.slug))}" class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(e.name)}</a>`).join('')}${more.map((x: string) => `<span class="qc-soon rounded-md border border-dashed border-white/10 px-2 py-0.5 text-sm text-zinc-500 cursor-help select-none" tabindex="0" aria-disabled="true" title="${esc(ui('comingSoon'))}" data-soon="${esc(ui('comingSoon'))}">${esc(x)}</span>`).join('')}</div></div>`;
   }).join('');
   return `<div class="mt-6">
-    <input type="search" id="qc-gsearch" autocomplete="off" placeholder="Search everything in this guide: places, missions, items…" class="w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-[#a87ffb]/40 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]">
+    <input type="search" id="qc-gsearch" autocomplete="off" placeholder="${esc(ui('searchAll'))}" class="w-full px-4 py-2.5 rounded-xl bg-white/[0.04] border border-[#a87ffb]/40 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]">
     <ul id="qc-gresults" class="mt-2 space-y-1"></ul>
   </div>
   <script type="application/json" id="qc-gidx">${JSON.stringify(idx).replace(/</g, '\\u003c')}</script>
   <script>(function(){var __name=function(f){return f;};var fuzzyScore=${fuzzyScore.toString()};var idx=JSON.parse(document.getElementById('qc-gidx').textContent),q=document.getElementById('qc-gsearch'),out=document.getElementById('qc-gresults');
   function e(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-  q.addEventListener('input',function(){var v=q.value.trim();if(!v){out.innerHTML='';return;}var r=idx.map(function(x){var b=fuzzyScore(v,x.l);return{x:x,s:b&&b+(x.k==='Guide page'||x.k.indexOf('Location')>=0?0.5:0)};}).filter(function(y){return y.s>0;}).sort(function(a,b){return b.s-a.s;}).slice(0,12);
-  out.innerHTML=r.length?r.map(function(y){return '<li><a class="flex items-baseline gap-2 rounded-lg px-3 py-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10" href="'+e(y.x.h)+'"><span class="font-semibold text-white">'+e(y.x.l)+'</span><span class="text-xs text-[#c4b0ff]">'+e(y.x.k)+'</span><span class="ml-auto text-xs text-zinc-500 truncate">'+e(y.x.c)+'</span></a></li>';}).join(''):'<li class="text-sm text-zinc-500 px-1">Nothing matches that search.</li>';});})();</script>
-  <h2 class="mt-8 text-lg font-bold text-white">Compendium</h2>
+  q.addEventListener('input',function(){var v=q.value.trim();if(!v){out.innerHTML='';return;}var r=idx.map(function(x){var b=fuzzyScore(v,x.l);return{x:x,s:b&&b+(x.p?0.5:0)};}).filter(function(y){return y.s>0;}).sort(function(a,b){return b.s-a.s;}).slice(0,12);
+  out.innerHTML=r.length?r.map(function(y){return '<li><a class="flex items-baseline gap-2 rounded-lg px-3 py-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10" href="'+e(y.x.h)+'"><span class="font-semibold text-white">'+e(y.x.l)+'</span><span class="text-xs text-[#c4b0ff]">'+e(y.x.k)+'</span><span class="ml-auto text-xs text-zinc-500 truncate">'+e(y.x.c)+'</span></a></li>';}).join(''):'<li class="text-sm text-zinc-500 px-1">'+e(${JSON.stringify(ui('noMatches'))})+'</li>';});
+  /* A tap on a coming-soon entry shows its tooltip text for a moment (touch screens have no hover). */
+  document.querySelectorAll('.qc-soon').forEach(function(s){s.addEventListener('click',function(){var t=s.textContent;s.textContent=s.getAttribute('data-soon');setTimeout(function(){s.textContent=t;},1400);});});})();</script>
+  <h2 class="mt-8 text-lg font-bold text-white">${esc(ui('compendium'))}</h2>
+  ${types.includes('qc-soon') ? `<p class="mt-1 text-xs text-zinc-500">${esc(ui('comingSoonNote'))}</p>` : ''}
   <div class="mt-3 grid gap-3 sm:grid-cols-2">${types}</div>`;
 }
 
@@ -1258,6 +1266,7 @@ async function main() {
     for (const [from, to] of Object.entries((info.aliases || {}) as Record<string, string>)) moved.push({ key: g.id, from, to });
     if (!visible.length) continue;
     COMP = COMPS.get(g.id) || null;
+    COMP_KEY = g.id;
     // Never a broken indexed URL: a page a rebuild, repair or outline change took down (held) redirects to what replaced
     // it: an entity page with its name, a page with the same name, the first page that mentions it, else the guide's
     // front page. (An entity page with the same URL brings the URL back, so it needs none.)

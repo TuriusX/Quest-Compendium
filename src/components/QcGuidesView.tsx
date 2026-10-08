@@ -6,7 +6,7 @@ import { GUIDE_DONE_EVENT, readDone, writeDone } from '../utils/guideProgress';
 import { useLocale, useT } from '../i18n';
 import { tipMatches, useAchievementGuideByKey, type AchievementGuide } from '../utils/achievementGuide';
 import { samePlace } from '../utils/placeName';
-import { entitySegments } from '../../scripts/guides/siteText';
+import { entitySegments, fuzzyScore } from '../../scripts/guides/siteText';
 import type { Achievement } from '../types';
 
 /**
@@ -349,13 +349,17 @@ function AreaList({
   onAchievements?: () => void;
 }) {
   const t = useT();
-  const s = useApi<{ game: string; areas: Area[]; art?: string; entities?: Ent[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
+  const s = useApi<{ game: string; areas: Area[]; art?: string; entities?: Ent[]; compendium?: { type: string; built: { slug: string; name: string }[]; soon: string[] }[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
   const [q, setQ] = useState('');
+  // A tapped "coming soon" entry shows the words for a moment (no hover on a touch screen or with a controller).
+  const [soonTap, setSoonTap] = useState('');
   if (s.loading) return <Note>{t('qcg.loading')}</Note>;
   if (s.error || !s.data) return <Note>{t('qcg.none')}</Note>;
   const needle = fold(q.trim());
   // Search by area name, story note, or anything on the page (items, secrets, enemies).
-  const areas = s.data.areas.filter((a) => !needle || fold(`${a.name} ${a.story} ${a.search || ''}`).includes(needle));
+  const qq = q.trim();
+  const areas = s.data.areas.filter((a) => !needle || fold(`${a.name} ${a.story} ${a.search || ''}`).includes(needle) || fuzzyScore(qq, `${a.name} ${a.story}`) > 0);
+  const entHits = needle ? (s.data.entities || []).filter((e) => fuzzyScore(qq, e.name) > 0) : [];
   const lastSlug = ls.get(`qc-guide-last:${gameKey}`);
   const cont = areas.find((a) => a.slug === lastSlug && a.slug !== here);
   const hereA = areas.find((a) => a.slug === here);
@@ -379,7 +383,16 @@ function AreaList({
     <div className="space-y-2">
       {!needle && <GameArt game={s.data.game} art={s.data.art} className="rounded-xl border border-white/10 mb-1" />}
       <SearchBox value={q} onChange={setQ} placeholder={t('qcg.searchAreas')} />
-      {!areas.length && <Note>{t('qcg.noMatches')}</Note>}
+      {!areas.length && !entHits.length && <Note>{t('qcg.noMatches')}</Note>}
+      {entHits.length > 0 && onEntity && entHits.map((e) => (
+        <button key={e.slug} type="button" className={rowCls} onClick={() => onEntity(e.slug)}>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold text-zinc-100">{e.name}</span>
+            <span className="block text-xs text-[var(--accent-color)]">{e.type}{e.region ? ` · ${e.region}` : ''}</span>
+          </span>
+          <ChevronRight className="w-4 h-4 text-zinc-500" />
+        </button>
+      ))}
       {!needle && ach && onAchievements && (
         <button type="button" className={`${rowCls} !border-amber-500/30 !bg-amber-500/[0.07] hover:!bg-amber-500/[0.12]`} onClick={onAchievements}>
           <Sparkles className="w-4 h-4 text-amber-300 flex-shrink-0" />
@@ -402,15 +415,29 @@ function AreaList({
         </div>
       )}
       {/* The compendium: the guide's entity pages (places, characters, collectibles), by type. */}
-      {!needle && !!s.data.entities?.length && onEntity && (
+      {!needle && !!s.data.compendium?.length && onEntity && (
         <div className="pb-2">
-          <h3 className="pt-1 pb-1.5 text-xs font-bold uppercase tracking-wide text-zinc-400">{t('qcg.compendium')}</h3>
-          <div className="flex flex-wrap gap-1.5">
-            {s.data.entities.map((e) => (
-              <button key={e.slug} type="button" onClick={() => onEntity(e.slug)} title={`${e.type}${e.region ? ` · ${e.region}` : ''}`}
-                className="px-2.5 py-1 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-dim)] text-xs font-semibold text-zinc-100 hover:brightness-125 cursor-pointer">
-                {e.name}
-              </button>
+          <h3 className="pt-1 text-xs font-bold uppercase tracking-wide text-zinc-400">{t('qcg.compendium')}</h3>
+          {s.data.compendium.some((c) => c.soon.length) && <p className="text-[11px] text-zinc-500">{t('qcg.comingSoonNote')}</p>}
+          <div className="mt-2 space-y-2">
+            {s.data.compendium.map((c) => (
+              <div key={c.type}>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--accent-color)]">{c.type}</div>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {c.built.map((e) => (
+                    <button key={e.slug} type="button" onClick={() => onEntity(e.slug)}
+                      className="px-2.5 py-1 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-dim)] text-xs font-semibold text-zinc-100 hover:brightness-125 cursor-pointer">
+                      {e.name}
+                    </button>
+                  ))}
+                  {c.soon.map((name) => (
+                    <span key={name} role="note" aria-disabled="true" title={t('qcg.comingSoon')} onClick={() => { setSoonTap(name); window.setTimeout(() => setSoonTap(''), 1400); }}
+                      className="px-2.5 py-1 rounded-lg border border-dashed border-white/10 text-xs text-zinc-500 cursor-help select-none">
+                      {soonTap === name ? t('qcg.comingSoon') : name}
+                    </span>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>

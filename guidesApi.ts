@@ -236,8 +236,15 @@ export function registerGuidesApi(app: Express): void {
       const g = await gameAreas(gameKey(String(req.params.key)));
       if (!g) return res.status(404).json({ error: 'No guide for this game yet.' });
       // The guide's published entity pages (compendium.ts), for the apps' links and their compendium list.
-      const entities = (await compendiumOf(g.key)).map((e) => ({ slug: e.slug, name: e.name, type: e.typeLabel, region: e.summary?.region || '', line: String(e.overview || '').split(/(?<=[.!?])\s/)[0] || '' }));
-      send(res, { ...localizeAreas(g, await translation(g.key, langOf(req.query.lang))), ...(entities.length ? { entities } : {}) });
+      const entities = (await compendiumOf(g.key)).map((e) => ({ slug: e.slug, name: e.name, typeId: e.type, type: e.typeLabel, region: e.summary?.region || '', line: String(e.overview || '').split(/(?<=[.!?])\s/)[0] || '' }));
+      // The compendium by type: built entity pages, and the type's other known entities ("coming soon", not linked).
+      const tax: any[] = entities.length ? await taxonomyOf(g.key) : [];
+      const compendium = tax.map((t: any) => ({
+        type: t.label,
+        built: entities.filter((e) => (e as any).typeId === t.id).map(({ slug, name }) => ({ slug, name })),
+        soon: (t.examples || []).filter((x: string) => !entities.some((e) => e.name.toLowerCase() === String(x).toLowerCase())).slice(0, 6),
+      })).filter((t) => t.built.length || t.soon.length);
+      send(res, { ...localizeAreas(g, await translation(g.key, langOf(req.query.lang))), ...(entities.length ? { entities: entities.map(({ typeId, ...e }) => e), compendium } : {}) });
     } catch (e) {
       fail(res, e);
     }
@@ -341,6 +348,11 @@ export async function guideAreasWithPages(game: string): Promise<{ areas: { slug
     }
     return areas.length ? { areas, pages } : null;
   });
+}
+
+/** A guide's compendium taxonomy (its entity types, each with example entities), cached. */
+async function taxonomyOf(key: string): Promise<any[]> {
+  return cached(`taxonomy:${key}`, async () => ((await getFirestore().collection('guideCompendium').doc(key).get()).data()?.taxonomy || []) as any[]);
 }
 
 /** A guide's published entity pages (guideCompendium/{key}/entities, status published), cached. */
