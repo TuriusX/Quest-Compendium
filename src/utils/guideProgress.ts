@@ -34,3 +34,38 @@ export function setEntryDone(key: string, slug: string, id: string, done: boolea
   else next.delete(id);
   writeDone(key, slug, next);
 }
+
+const PREFIX = 'qc-guide-done:';
+
+/** Every guide page's ticks on this device ("key:slug" -> ids), for the account's synced copy (settings.guideDone). */
+export function exportAllDone(): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(PREFIX)) continue;
+      const ids = JSON.parse(localStorage.getItem(k) || '[]');
+      if (Array.isArray(ids) && ids.length) out[k.slice(PREFIX.length)] = ids.map(String);
+    }
+  } catch {
+    /* nothing readable */
+  }
+  return out;
+}
+
+/**
+ * The account's ticks onto this device (from settings.guideDone, synced across the player's devices), added to what
+ * this device has (never removing a tick, so two devices that both have ticks end up with all of them). Fires the
+ * usual event per changed page.
+ */
+export function importAllDone(all: Record<string, string[]>): void {
+  const local = exportAllDone();
+  for (const [k, ids] of Object.entries(all || {})) {
+    if (!Array.isArray(ids)) continue;
+    const cur = local[k] || [];
+    const next = [...new Set([...cur, ...ids.map(String)])];
+    if (next.length === cur.length) continue;
+    const at = k.indexOf(':');
+    if (at > 0) writeDone(k.slice(0, at), k.slice(at + 1), new Set(next));
+  }
+}

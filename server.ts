@@ -16,7 +16,8 @@ import nodeOs from 'os';
 import nodePath from 'path';
 import cors from 'cors';
 import { registerDeviceAuth } from './deviceAuth';
-import { registerGuestGuard } from './guestGuard';
+import { registerGuestGuard, clientIp } from './guestGuard';
+import { cleanTag, recordSignupSource, recordVisit } from './visitSources';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
@@ -454,10 +455,12 @@ async function startServer() {
   }
 
   /** What the apps show: both balances, the day's allowance, the carry-over cap and when the day resets. */
-  async function quotaView(userData: any, isPremium: boolean, tz: string) {
+  async function quotaView(userData: any, isPremium: boolean, tz: string, isGuest = false) {
     const a = await allowances();
-    const plan = isPremium ? a.premium : a.free;
+    const plan = isGuest ? a.guest : isPremium ? a.premium : a.free;
     return {
+      // A guest's day is smaller: what signing in gives (the free allowance), for the sign-in card.
+      ...(isGuest ? { signedInPro: a.free.pro, signedInFlash: a.free.flash } : {}),
       proQueriesAvailable: userData.proQueriesAvailable,
       flashQueriesAvailable: userData.flashQueriesAvailable,
       dailyPro: plan.pro,
@@ -482,7 +485,7 @@ async function startServer() {
   /** A guest's balances (kept in memory per guest id): the free allowance, fresh each day. */
   async function getOrCreateGuestQuota(guestId: string, tz: string): Promise<GuestQuota> {
     const q = guestQuotas.get(guestId) || { proQueriesAvailable: 0, flashQueriesAvailable: 0, lastResetDate: '' };
-    Object.assign(q, applyDay(q, await allowances(), false, dayIn(tz)));
+    Object.assign(q, applyDay(q, await allowances(), false, dayIn(tz), true));
     guestQuotas.set(guestId, q);
     return q;
   }
@@ -499,7 +502,7 @@ async function startServer() {
         const quota = await getOrCreateGuestQuota(userId, tz);
         return res.json({
           isPremium: false,
-          ...(await quotaView(quota, false, tz)),
+          ...(await quotaView(quota, false, tz, true)),
           fullAccess: hasFullAccess(false),
           beta: BETA_ALL_ACCESS,
           isGuest: true
@@ -546,6 +549,18 @@ async function startServer() {
       // If effective premium was identified, ensure Firestore is in sync
       if (isEffectivePremium && (userData.isPremium !== true || userData.subscriptionStatus !== 'active')) {
         updateFirestoreDocREST(idToken, userId, { isPremium: true, subscriptionStatus: 'active' }).catch(() => {});
+      }
+
+      // A new account's first source, once per account (the daily summary's sign-ups by source).
+      if (!userData.signupSource) {
+        const src = cleanTag(req.headers['x-qc-from']) || (String(req.headers['x-qc-app'] || '') === 'desktop' ? 'desktop' : 'untagged');
+        void (async () => {
+          try {
+            const created = Date.parse((await getAuth().getUser(userId)).metadata.creationTime);
+            await getFirestore().collection('users').doc(userId).set({ signupSource: src }, { merge: true });
+            if (Date.now() - created < 2 * 86_400_000) recordSignupSource(userId, src);
+          } catch { /* counted next time */ }
+        })();
       }
 
       res.json({
@@ -946,14 +961,20 @@ async function startServer() {
       if (!picked.bucket) {
         const resetAt = nextReset(tz);
         const allow = await allowances();
-        const p = isPremium ? allow.premium : allow.free;
+        const p = isGuest ? allow.guest : isPremium ? allow.premium : allow.free;
         return res.status(429).json({
-          text: isPremium
+          text: isGuest
+            // Guests are asked to sign in (more questions today, conversations saved), never sent to Premium.
+            ? `You've used today's guest questions. Sign in with Google to keep going: ${allow.free.pro} Pro and ${allow.free.flash} Fast questions a day, and your conversations saved on all your devices.`
+            : isPremium
             ? `You've used today's Pro and Fast questions. They're topped up at midnight, and what you don't use carries over.`
             : `You've used today's ${allow.free.pro} Pro and ${allow.free.flash} Fast questions. They reset at midnight. Premium gives you ${allow.premium.pro} Pro and ${allow.premium.flash} Fast questions a day, and what you don't use carries over.`,
           modelUsed: 'Limit Reached',
-          limit: { resetAt, isPremium, dailyPro: p.pro, dailyFlash: p.flash, premiumPro: allow.premium.pro, premiumFlash: allow.premium.flash },
-          userData: { isPremium, isGuest, ...(await quotaView(userData, isPremium, tz)) },
+          limit: {
+            resetAt, isPremium, dailyPro: p.pro, dailyFlash: p.flash, premiumPro: allow.premium.pro, premiumFlash: allow.premium.flash,
+            ...(isGuest ? { isGuest: true, signedInPro: allow.free.pro, signedInFlash: allow.free.flash } : {}),
+          },
+          userData: { isPremium, isGuest, ...(await quotaView(userData, isPremium, tz, isGuest)) },
         });
       }
 
@@ -1676,7 +1697,7 @@ percentages:
       // A fact only counts if its subject shows up in a part of the answer a search result actually backs up;
       // the AI can report facts from memory even when it searched for something else.
       recordGameDemand(effectiveGame?.name, userId, language); // which games and languages players use (for the guide pipeline)
-      recordDailyActivity(userId, isGuest, req.headers['user-agent'], String(req.headers['x-qc-app'] || '')); // daily questions, players vs guests, and which app
+      recordDailyActivity(userId, isGuest, req.headers['user-agent'], String(req.headers['x-qc-app'] || ''), cleanTag(req.headers['x-qc-from'])); // daily questions, players vs guests, which app, and where the player came from
       const factsSaved = saveGameFacts(effectiveGame?.name, factsBackedBySearch(factsParsed.facts, groundedSeen), {
         searched: searchesUsed > 0,
         // The confirmed place only counts while the player is still there: if this answer is about a different place,
@@ -1744,10 +1765,12 @@ percentages:
         // (it was used up: the app switches its toggle and says so).
         ...(chargedBucket ? { answeredWith: chargedBucket === 'pro' ? 'pro' : 'fast', ...(chargedBucket !== wanted ? { switched: true } : {}) } : {}),
         searched: searchesUsed > 0,
+        // A guest who just used their last question today: the apps show the sign-in card under this answer.
+        ...(isGuest && chargedBucket && !(Number(userData.proQueriesAvailable) > 0) && !(Number(userData.flashQueriesAvailable) > 0) ? { signInNudge: true } : {}),
         userData: {
           isPremium: userData.isPremium === true,
           isGuest,
-          ...(await quotaView(userData, userData.isPremium === true, tz)),
+          ...(await quotaView(userData, userData.isPremium === true, tz, isGuest)),
         }
       });
 
@@ -2344,6 +2367,12 @@ percentages:
   </div>
 </body>
 </html>`);
+  });
+
+  // Web app visits by source (?from= tag or referrer), for the daily summary (visitSources.ts).
+  app.get(['/', '/index.html'], (req, _res, next) => {
+    recordVisit(req, clientIp(req, Number(process.env.GUEST_PROXY_HOPS) || 1));
+    next();
   });
 
   // Serve public assets statically (icons, store art, downloads)

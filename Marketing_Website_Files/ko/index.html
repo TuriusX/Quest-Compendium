@@ -113,7 +113,7 @@
         <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-full sm:w-auto">
           <img src="https://get.microsoft.com/images/ko%20dark.svg" alt="Microsoft Store에서 다운로드" class="h-[52px] w-auto">
         </a>
-        <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+        <a href="https://quest-compendium-890629309063.us-east1.run.app/?from=home" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="external-link" class="w-5 h-5"></i>
           웹 앱 실행하기
         </a>
@@ -150,7 +150,7 @@
           <h3 class="text-xl font-bold text-white mb-2">웹 앱</h3>
           <p class="text-zinc-400 text-base mb-6">설치할 필요가 없습니다. 듀얼 모니터, 스마트폰 또는 게임 창 옆 브라우저 탭에서 바로 쓰세요. 게스트로 체험하거나 로그인해서 메모를 동기화할 수 있습니다.</p>
           <div class="mt-auto">
-            <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-2.5 rounded-full hover:bg-white/20 transition-colors w-full">
+            <a href="https://quest-compendium-890629309063.us-east1.run.app/?from=home" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-2.5 rounded-full hover:bg-white/20 transition-colors w-full">
               <i data-lucide="external-link" class="w-4 h-4"></i> 웹 앱 실행하기
             </a>
             <p class="text-sm text-zinc-500 mt-3">모든 최신 브라우저 지원.</p>
@@ -437,5 +437,6 @@
     }
     lucide.createIcons();
   </script>
+<script>(function(){try{var f=new URLSearchParams(location.search).get('from');if(f!=='guide')return;document.querySelectorAll('a[href^="https://quest-compendium-890629309063.us-east1.run.app/?from="]').forEach(function(a){a.href=a.href.replace(/from=[a-z]+/,'from=guide');});}catch(e){}})();</script>
 </body>
 </html>

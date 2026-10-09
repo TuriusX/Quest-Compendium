@@ -48,6 +48,8 @@ import { KnownHere } from './KnownHere';
 import { QcGuidesView } from './QcGuidesView';
 import { GlainIcon } from './GlainIcon';
 import { Walkthrough, walkthroughDone } from './Walkthrough';
+import { SignInCard } from './SignInCard';
+import { isPhone } from '../utils/source';
 import { samePlace, tipMatches, useAchievementGuide } from '../utils/achievementGuide';
 import { useLocale } from '../i18n';
 import { QUICK_MAIN, QUICK_MORE, QUICK_FOLLOW, type QuickId } from '../utils/quickQuestions';
@@ -60,6 +62,9 @@ const VOTE_REASONS = ['place', 'info', 'marker', 'unhelpful'] as const;
 interface ChatAreaProps {
   /** The player's questions left (the user status): Pro and Fast counts for the switch next to the send button. */
   quota?: any;
+  /** A guest: the sign-in card can show under their last answer of the day (onSignIn opens sign-in). */
+  isGuest?: boolean;
+  onSignIn?: () => void;
   /** On-screen markers (Settings, on by default): off, answers show no markers card, checklist or marker badges. */
   markersOn?: boolean;
   /** The screenshot shortcut from Settings, ready to show ("Ctrl + Shift + S"). */
@@ -186,6 +191,8 @@ const MessageMarkdown = React.memo(
 export const ChatArea: React.FC<ChatAreaProps> = ({
   markersOn = true,
   quota,
+  isGuest = false,
+  onSignIn,
   activeTab,
   onSendMessage,
   isLoading,
@@ -1303,6 +1310,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <Camera className="w-3 h-3 text-[var(--accent-color)]" />
                 {typeof window !== 'undefined' && (window as any).electronAPI ? (
                   <span>{t('chat.heroAuto')}</span>
+                ) : isPhone() ? (
+                  <span>{t('chat.heroPhone')}</span>
                 ) : (
                   <span>{t('chat.heroPastePre')} <kbd className="px-1.5 py-0.5 bg-white/10 rounded font-bold text-white">Ctrl + V</kbd> {t('chat.heroPastePost')}</span>
                 )}
@@ -1777,6 +1786,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             );
           })
         )}
+
+        {/* A guest's last question today: one card under it (what signing in gives), dismissible for the day. */}
+        {isGuest && onSignIn && !isLoading && activeTab?.messages?.length && activeTab.messages[activeTab.messages.length - 1].signInNudge ? (
+          <SignInCard onSignIn={onSignIn} pro={quota?.signedInPro} fast={quota?.signedInFlash} />
+        ) : null}
 
         {/* Animated 3D Levitating Tome Loader */}
         {isLoading && (

@@ -19,6 +19,7 @@
  *   POST /api/admin/corrections/:id       { action: 'apply' | 'dismiss' }
  */
 import crypto from 'crypto';
+import { isTestTraffic } from './testTraffic';
 import type { Express, Request, Response, NextFunction } from 'express';
 import { getFirestore } from 'firebase-admin/firestore';
 import { fightLine, type GuidePageForPlace } from './guidesApi';
@@ -226,7 +227,7 @@ export async function saveCorrectionCandidates(opts: {
   game: string;
 }): Promise<string[]> {
   const { page, corrections } = opts;
-  if (!page || !corrections.length || !opts.uid) return [];
+  if (!page || !corrections.length || !opts.uid || isTestTraffic(opts.uid)) return [];
   const pushback = isPushback(opts.question);
   const ids: string[] = [];
   for (const c of corrections) {

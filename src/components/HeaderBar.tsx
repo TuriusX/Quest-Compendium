@@ -15,7 +15,8 @@ import {
   LogOut,
   ArrowRightToLine,
   Square,
-  RefreshCw
+  RefreshCw,
+  LogIn
 } from './icons';
 import { PWAInstallButton } from './PWAInstallButton';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
@@ -42,6 +43,8 @@ interface HeaderBarProps {
   onOpenFeedback: () => void;
   onOpenPaywall?: () => void;
   onOpenSettings?: () => void;
+  /** Guests: a small Sign in button. */
+  onSignIn?: () => void;
   soundEnabled: boolean;
   isDocked: boolean;
   onToggleDock: () => void;
@@ -78,6 +81,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onOpenFeedback,
   onOpenPaywall,
   onOpenSettings,
+  onSignIn,
   soundEnabled,
   isDocked,
   onToggleDock,
@@ -194,6 +198,20 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       {/* Right Controls Toolbar */}
       <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 ml-2">
         {/* Questions left: shown on the Pro / Fast switch next to the send button (ChatArea, ModelToggle). */}
+        {onSignIn && (
+          <button
+            style={{ WebkitAppRegion: "no-drag" } as any}
+            onClick={() => {
+              playBlipSound(soundEnabled);
+              onSignIn();
+            }}
+            title={t('signin.headerTitle')}
+            className="px-2.5 py-1.5 rounded-xl border border-[var(--accent-border)] text-[var(--accent-color)] hover:text-white hover:bg-[var(--accent-dim)] transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+          >
+            <LogIn className="w-3.5 h-3.5" />
+            {t('signin.header')}
+          </button>
+        )}
 
         {activeGame && (
           <button

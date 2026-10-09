@@ -41,7 +41,8 @@ import { markersActiveFor, activeMarkersId, rememberAreaFind, setPointersActive 
 import { buildTrackerPayload, trackedMessage, trackerGameKey, trackerLabels, type TrackerData } from './utils/trackerPayload';
 import { useTrackerGuide } from './utils/trackerGuide';
 import { formatShortcut } from './utils/shortcut';
-import { setEntryDone } from './utils/guideProgress';
+import { setEntryDone, exportAllDone, importAllDone, GUIDE_DONE_EVENT } from './utils/guideProgress';
+import { appSource, isPhone } from './utils/source';
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -277,6 +278,12 @@ export default function App() {
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMessage, setAuthModalMessage] = useState<string | null>(null);
+  /** Sign-in from inside the app (a guest's header button, the sign-in card, Premium for a guest). */
+  const openSignIn = () => {
+    setIsPaywallOpen(false);
+    setAuthModalMessage(null);
+    setIsAuthModalOpen(true);
+  };
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [renameModalMode, setRenameModalMode] = useState<'create' | 'rename'>('create');
   const [renameModalTabId, setRenameModalTabId] = useState<string | null>(null);
@@ -1213,6 +1220,26 @@ export default function App() {
     } catch {}
   }, [settings]);
 
+  // Guide ticks follow the account: this device's ticks go into settings.guideDone (synced with the account), and
+  // ticks synced from the player's other devices are added here (utils/guideProgress.ts).
+  useEffect(() => {
+    const save = () =>
+      setSettings((s) => {
+        const all = exportAllDone();
+        const same = JSON.stringify(Object.entries(all).sort()) === JSON.stringify(Object.entries(s.guideDone || {}).sort());
+        return same || (!s.guideDone && !Object.keys(all).length) ? s : { ...s, guideDone: all };
+      });
+    window.addEventListener(GUIDE_DONE_EVENT, save);
+    return () => window.removeEventListener(GUIDE_DONE_EVENT, save);
+  }, []);
+  useEffect(() => {
+    if (settings.guideDone) importAllDone(settings.guideDone);
+    else {
+      const all = exportAllDone();
+      if (Object.keys(all).length) setSettings((s) => (s.guideDone ? s : { ...s, guideDone: all }));
+    }
+  }, [settings.guideDone]);
+
   useEffect(() => {
     // Avoid overwriting persisted storage with empty tabs while initializing
     if (isInitializing) return;
@@ -1536,6 +1563,7 @@ export default function App() {
     const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 75 seconds.")), 75000);
     // Both models' questions used up today: the limit message, with when they come back (and Premium for free players).
     let limitText = '';
+    let guestLimit = false; // a guest at their limit: the sign-in card, not the Premium screen
     const backendUrl = getApiBaseUrl();
     const chatEndpoint = backendUrl ? `${backendUrl}/api/chat` : '/api/chat';
 
@@ -1547,6 +1575,8 @@ export default function App() {
           'Content-Type': 'application/json',
           // Which app is asking (for the daily activity tally); the desktop app's browser identity looks like Chrome.
           'X-QC-App': (window as any).electronAPI ? 'desktop' : 'web',
+          // Where the player first came from (?from= on the link into the app), for the daily summary's sources.
+          ...(appSource() ? { 'X-QC-From': appSource() } : {}),
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
@@ -1620,12 +1650,15 @@ export default function App() {
             if (errData.userData) window.dispatchEvent(new CustomEvent('quest_quota_updated', { detail: errData.userData }));
             const { h, m } = untilReset(Number(lim.resetAt) || Date.now());
             const when = tr('limit.in', { h, m });
-            limitText = lim.isPremium
+            guestLimit = lim.isGuest === true;
+            limitText = guestLimit
+              ? tr('limit.guest', { pro: lim.signedInPro ?? 2, fast: lim.signedInFlash ?? 5 })
+              : lim.isPremium
               ? tr('limit.premium', { when })
               : lim.dailyPro != null
                 ? tr('limit.free', { pro: lim.dailyPro, fast: lim.dailyFlash, ppro: lim.premiumPro, pfast: lim.premiumFlash, when })
                 : errorText;
-            shouldOpenPaywall = !lim.isPremium;
+            shouldOpenPaywall = !lim.isPremium && !guestLimit;
           }
         } catch (e) {
           if (res.status === 404) {
@@ -1671,6 +1704,8 @@ export default function App() {
         text: finalAiText,
         modelUsed: data.modelUsed || 'Gemini 3.8 Flash',
         bannerImageUrl: data.bannerImageUrl,
+        // A guest's last question today: the sign-in card shows under this answer.
+        ...(data.signInNudge === true ? { signInNudge: true } : {}),
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
         ...(typeof data.title === 'string' && data.title.trim() ? { title: data.title.trim().slice(0, 60) } : {}),
         // A fight on screen: the steps are the battle plan.
@@ -1819,7 +1854,8 @@ export default function App() {
           ? limitText || `⚠️ **Inquiry Limit Reached:**\n\n${errorMsg}`
           : `⚠️ **Compendium Inquiry Error:** Unable to reach Google Gemini server.\n\n*Details: ${errorMsg}*`,
         timestamp: nowCatch,
-        modelUsed: isLimitReached ? 'Limit Reached' : 'Offline Fallback'
+        modelUsed: isLimitReached ? 'Limit Reached' : 'Offline Fallback',
+        ...(isLimitReached && guestLimit ? { signInNudge: true } : {}),
       };
 
       setTabs(prev => {
@@ -2049,6 +2085,7 @@ export default function App() {
           onOpenFeedback={() => setIsFeedbackOpen(true)}
           onOpenPaywall={() => setIsPaywallOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onSignIn={user?.isGuest ? openSignIn : undefined}
           soundEnabled={settings.soundEnabled}
           isDocked={settings.dockPosition !== 'undocked'}
           onToggleDock={() => {
@@ -2200,6 +2237,26 @@ export default function App() {
                      </p>
                    </div>
 
+                   {/* Phones: no game screen to capture here, so ask about any game, or browse the guides. */}
+                   {isPhone() && (
+                     <div className="w-full grid grid-cols-1 gap-2">
+                       <button
+                         onClick={() => setIsGameSearchOpen(true)}
+                         className="qc-px-bevel w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[var(--accent-color)] hover:brightness-110 text-[#16101f] font-bold text-sm transition cursor-pointer"
+                       >
+                         <Search className="w-4 h-4" />
+                         {tr('welcome.askAnyGame')}
+                       </button>
+                       <a
+                         href={`https://questcompendium.com/${(settings.language ?? 'en') === 'en' ? '' : `${settings.language}/`}guides/`}
+                         className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/15 hover:border-[var(--accent-border)] text-zinc-200 font-semibold text-sm transition"
+                       >
+                         <BookOpen className="w-4 h-4 text-[var(--accent-color)]" />
+                         {tr('welcome.browseGuides')}
+                       </a>
+                     </div>
+                   )}
+
                    {/* The game running on Steam right now, one click to start */}
                    {globalActiveGame && (
                      <div className="qc-px-frame w-full flex items-center gap-3 p-3 rounded-2xl bg-[#11121a] border border-[var(--accent-border)] text-left">
@@ -2260,7 +2317,7 @@ export default function App() {
                    </div>
 
                    {/* The three things worth knowing up front */}
-                   <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
+                   <div className={`w-full grid grid-cols-1 sm:grid-cols-3 gap-2 text-left ${isPhone() ? 'hidden' : ''}`}>
                      {[
                        isDesktop
                          ? { icon: Camera, title: tr('welcome.tipShot'), text: tr('welcome.tipShotText', { keys: prettyShortcut(settings.autoScreenshotShortcut) }) }
@@ -2288,6 +2345,8 @@ export default function App() {
               <ChatArea
                 activeTab={activeTab}
                 quota={userData}
+                isGuest={!!user?.isGuest}
+                onSignIn={openSignIn}
                 markersOn={settings.showPointersOnScreen !== false}
                 steamName={settings.steamName}
                 steamAvatar={settings.steamAvatar}
@@ -2414,6 +2473,8 @@ export default function App() {
         <PaywallModal 
           userId={user.uid} 
           onClose={() => setIsPaywallOpen(false)} 
+          isGuest={!!user.isGuest}
+          onSignIn={openSignIn}
         />
       )}
 

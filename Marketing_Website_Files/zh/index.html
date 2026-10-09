@@ -113,7 +113,7 @@
         <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-full sm:w-auto">
           <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" alt="前往 Microsoft Store 下载" class="h-[52px] w-auto">
         </a>
-        <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+        <a href="https://quest-compendium-890629309063.us-east1.run.app/?from=home" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="external-link" class="w-5 h-5"></i>
           启动网页端
         </a>
@@ -150,7 +150,7 @@
           <h3 class="text-xl font-bold text-white mb-2">网页版</h3>
           <p class="text-zinc-400 text-base mb-6">无需安装任何软件。可在副屏、手机或游戏旁的浏览器标签页中使用。支持以访客身份体验，登录即可同步笔记。</p>
           <div class="mt-auto">
-            <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-2.5 rounded-full hover:bg-white/20 transition-colors w-full">
+            <a href="https://quest-compendium-890629309063.us-east1.run.app/?from=home" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-2.5 rounded-full hover:bg-white/20 transition-colors w-full">
               <i data-lucide="external-link" class="w-4 h-4"></i> 启动网页端
             </a>
             <p class="text-sm text-zinc-500 mt-3">适配所有现代浏览器。</p>
@@ -437,5 +437,6 @@
     }
     lucide.createIcons();
   </script>
+<script>(function(){try{var f=new URLSearchParams(location.search).get('from');if(f!=='guide')return;document.querySelectorAll('a[href^="https://quest-compendium-890629309063.us-east1.run.app/?from="]').forEach(function(a){a.href=a.href.replace(/from=[a-z]+/,'from=guide');});}catch(e){}})();</script>
 </body>
 </html>

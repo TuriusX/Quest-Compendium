@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, Play, AlertCircle, ExternalLink, X } from './icons';
+import { Sparkles, Play, AlertCircle, ExternalLink, X, BookOpen } from './icons';
 import { MagicalBookIcon } from './MagicalBookIcon';
 import { signInWithGoogle, signInWithGoogleRedirect, auth } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { DEFAULT_PREVIEW_URL } from '../utils/api';
-import { useT } from '../i18n';
+import { useLocale, useT } from '../i18n';
+import { isPhone } from '../utils/source';
+import { saveGuestHandover } from '../utils/guestHandover';
 
 interface AuthModalProps {
   onSignInSuccess: () => void;
@@ -17,6 +19,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(initialMessage || null);
   const isEmbedded = typeof window !== 'undefined' && window.self !== window.top;
+  const lang = useLocale();
+  const phone = isPhone();
+  // Already a guest (opened from the header button, the sign-in card or Premium): only signing in is offered.
+  const alreadyGuest = typeof window !== 'undefined' && !!localStorage.getItem('quest_guest_session');
+  const guidesUrl = `https://questcompendium.com/${lang === 'en' ? '' : `${lang}/`}guides/`;
 
   useEffect(() => {
     if (initialMessage) {
@@ -38,6 +45,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
             credential = GoogleAuthProvider.credential(null, accessToken);
           }
           if (credential) {
+            saveGuestHandover(); // a guest keeps their conversations and progress (merged into the account)
             await signInWithCredential(auth, credential);
           }
           if (typeof window !== 'undefined') {
@@ -57,10 +65,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
     try {
       setLoading(true);
       setErrorMessage(null);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('quest_guest_session');
-        window.dispatchEvent(new Event('quest_auth_change'));
-      }
+      // A guest stays a guest until the account is in (hooks/useCloudSync.ts then keeps their conversations and
+      // progress and ends the guest session); a closed popup leaves them where they were.
+      saveGuestHandover();
       if ((window as any).electronAPI?.startDesktopLogin) {
         // We are in Electron, open system browser for OAuth
         (window as any).electronAPI.startDesktopLogin();
@@ -124,7 +131,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
           QUEST COMPENDIUM
         </h2>
         <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
-          {t('auth.tagline')}
+          {alreadyGuest ? t('signin.why') : phone ? t('auth.taglinePhone') : t('auth.tagline')}
         </p>
 
         {errorMessage && (
@@ -174,15 +181,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
           </svg>
           {loading ? t('auth.authenticating') : t('auth.google')}
         </button>
+        {!isEmbedded && !alreadyGuest && <p className="mt-2 text-[11px] text-zinc-500 leading-snug">{t('auth.googleWhy')}</p>}
 
         {errorMessage && !isEmbedded && !(window as any).electronAPI?.startDesktopLogin && (
           <button
             onClick={async () => {
               try {
                 setLoading(true);
-                if (typeof window !== 'undefined') {
-                  localStorage.removeItem('quest_guest_session');
-                }
                 await signInWithGoogleRedirect();
               } catch (e: any) {
                 setErrorMessage(e?.message || t('auth.redirectFailed'));
@@ -196,14 +201,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
           </button>
         )}
 
-        {!isEmbedded && (
-          <button
-            onClick={handleContinueAsGuest}
-            className="w-full mt-3 py-2.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center justify-center gap-1.5"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            {t('auth.guest')}
-          </button>
+        {/* One tap to start without an account (on phones: ask about any game, or browse the guides). */}
+        {!isEmbedded && !alreadyGuest && (
+          <div className="w-full mt-4 flex flex-col gap-2">
+            <button
+              onClick={handleContinueAsGuest}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/15 text-sm font-semibold text-zinc-100 transition-colors cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-purple-400" />
+              {phone ? t('auth.askAnyGame') : t('auth.startNow')}
+            </button>
+            {phone && (
+              <a
+                href={guidesUrl}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/15 text-sm font-semibold text-zinc-100 transition-colors"
+              >
+                <BookOpen className="w-4 h-4 text-purple-400" />
+                {t('auth.browseGuides')}
+              </a>
+            )}
+          </div>
         )}
         
         {isEmbedded && (
@@ -212,9 +229,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
               {t('auth.itch')}
             </p>
             <a
-              href={DEFAULT_PREVIEW_URL}
+              href={`${DEFAULT_PREVIEW_URL}/?from=store`}
               target="_blank"
-              rel="noopener noreferrer"
+              rel="noopener"
               className="text-xs font-medium text-purple-300 hover:text-white transition-colors bg-purple-950/40 hover:bg-purple-900/60 px-4 py-2 rounded-lg border border-purple-500/30 flex items-center gap-1.5"
             >
               {t('auth.openWeb')}

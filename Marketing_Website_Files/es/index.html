@@ -113,7 +113,7 @@
         <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-full sm:w-auto">
           <img src="https://get.microsoft.com/images/es%20dark.svg" alt="Descárgalo en la Microsoft Store" class="h-[52px] w-auto">
         </a>
-        <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+        <a href="https://quest-compendium-890629309063.us-east1.run.app/?from=home" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="external-link" class="w-5 h-5"></i>
           Abrir app web
         </a>
@@ -150,7 +150,7 @@
           <h3 class="text-xl font-bold text-white mb-2">App web</h3>
           <p class="text-zinc-400 text-base mb-6">No necesitas instalar nada. Úsala en una segunda pantalla, en tu teléfono o en una pestaña del navegador junto a tu juego. Pruébala como invitado o inicia sesión para sincronizar tus notas.</p>
           <div class="mt-auto">
-            <a href="https://quest-compendium-890629309063.us-east1.run.app" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-2.5 rounded-full hover:bg-white/20 transition-colors w-full">
+            <a href="https://quest-compendium-890629309063.us-east1.run.app/?from=home" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-6 py-2.5 rounded-full hover:bg-white/20 transition-colors w-full">
               <i data-lucide="external-link" class="w-4 h-4"></i> Abrir app web
             </a>
             <p class="text-sm text-zinc-500 mt-3">Funciona en cualquier navegador moderno.</p>
@@ -437,5 +437,6 @@
     }
     lucide.createIcons();
   </script>
+<script>(function(){try{var f=new URLSearchParams(location.search).get('from');if(f!=='guide')return;document.querySelectorAll('a[href^="https://quest-compendium-890629309063.us-east1.run.app/?from="]').forEach(function(a){a.href=a.href.replace(/from=[a-z]+/,'from=guide');});}catch(e){}})();</script>
 </body>
 </html>

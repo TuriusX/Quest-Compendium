@@ -74,6 +74,8 @@ export interface NearbyItem {
 
 export interface ChatMessage {
   id: string;
+  /** A guest's answer that used their last question today (or their limit message): the sign-in card shows under it. */
+  signInNudge?: boolean;
   role: 'user' | 'assistant' | 'system';
   text: string;
   timestamp: number;
@@ -230,6 +232,8 @@ export interface AppSettings {
   gameProgress?: Record<string, { name: string; confirmed: boolean; story?: string; storyConfirmed?: boolean }>;
   /** Per game (same key as gameProgress): what the player has already done, most recent first (utils/progressMemory). */
   gameDone?: Record<string, DoneItem[]>;
+  /** Guide ticks ("gameKey:slug" -> entry ids), synced with the account so they follow the player across devices. */
+  guideDone?: Record<string, string[]>;
 }
 
 export interface SyncEventLog {

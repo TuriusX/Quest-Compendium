@@ -3,7 +3,8 @@
  *
  *   premium  { pro: 8, flash: 25, rollover: true, cap: 100 }   a day; unused questions carry over, each model's banked
  *                                                               balance capped at `cap`
- *   free     { pro: 2, flash: 5, rollover: false }             a day (guests too); no carry-over
+ *   free     { pro: 2, flash: 5, rollover: false }             a day for signed-in players; no carry-over
+ *   guest    { pro: 1, flash: 3, rollover: false }             a day without signing in (signing in unlocks free's)
  *
  * "Pro" answers come from Gemini Pro (the best answers), "Fast" ones from Flash. The player picks one next to the send
  * button; when the picked one is used up the other answers instead (the app says so), and when both are used up the
@@ -16,10 +17,11 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 export type Bucket = 'pro' | 'flash';
 export type PlanAllowance = { pro: number; flash: number; rollover: boolean; cap: number };
-export type Allowances = { premium: PlanAllowance; free: PlanAllowance };
+export type Allowances = { premium: PlanAllowance; free: PlanAllowance; guest: PlanAllowance };
 export const ALLOWANCE_DEFAULTS: Allowances = {
   premium: { pro: 8, flash: 25, rollover: true, cap: 100 },
   free: { pro: 2, flash: 5, rollover: false, cap: 0 },
+  guest: { pro: 1, flash: 3, rollover: false, cap: 0 },
 };
 
 const int = (v: unknown, d: number, max = 10_000) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.min(max, Math.floor(Number(v))) : d);
@@ -30,7 +32,7 @@ export function normalizeAllowances(d: any): Allowances {
     rollover: typeof x?.rollover === 'boolean' ? x.rollover : def.rollover,
     cap: int(x?.cap, def.cap),
   });
-  return { premium: plan(d?.premium, ALLOWANCE_DEFAULTS.premium), free: plan(d?.free, ALLOWANCE_DEFAULTS.free) };
+  return { premium: plan(d?.premium, ALLOWANCE_DEFAULTS.premium), free: plan(d?.free, ALLOWANCE_DEFAULTS.free), guest: plan(d?.guest, ALLOWANCE_DEFAULTS.guest) };
 }
 
 let cache: { at: number; value: Allowances } | null = null;
@@ -81,16 +83,17 @@ export function nextReset(tz: string, t = Date.now()): number {
 }
 
 /** The balances a player has (the fields on their user document; guests keep the same shape in memory). */
-export type Balances = { proQueriesAvailable?: number; flashQueriesAvailable?: number; lastResetDate?: string; allowancePlan?: 'premium' | 'free' };
+export type Balances = { proQueriesAvailable?: number; flashQueriesAvailable?: number; lastResetDate?: string; allowancePlan?: 'premium' | 'free' | 'guest' };
 
 /**
  * Balances brought up to today: at a new day, Premium adds each day's allowance to what's left (one per day passed),
  * each model capped at `cap`; free players start the day fresh. On the same day, a player who became Premium is topped
- * up to Premium's daily allowance once, and one whose Premium ended keeps no more than the free allowance.
+ * up to Premium's daily allowance once, and one whose Premium ended keeps no more than the free allowance. Guests
+ * (guest = true) get the guest allowance.
  */
-export function applyDay(b: Balances, a: Allowances, premium: boolean, today: string): Required<Balances> {
-  const plan = premium ? a.premium : a.free;
-  const planName = premium ? 'premium' : 'free';
+export function applyDay(b: Balances, a: Allowances, premium: boolean, today: string, guest = false): Required<Balances> {
+  const plan = guest ? a.guest : premium ? a.premium : a.free;
+  const planName = guest ? 'guest' : premium ? 'premium' : 'free';
   let pro = Number.isFinite(Number(b.proQueriesAvailable)) ? Math.max(0, Number(b.proQueriesAvailable)) : plan.pro;
   let flash = Number.isFinite(Number(b.flashQueriesAvailable)) ? Math.max(0, Number(b.flashQueriesAvailable)) : plan.flash;
   const last = String(b.lastResetDate || '');

@@ -1,6 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/allowances.test.ts)
 import assert from "node:assert/strict";
 import { summarizeCosts } from "../playerCosts";
+import { isTestId, isTestTraffic } from "../testTraffic";
 import { ALLOWANCE_DEFAULTS as A, applyDay, daysBetween, dayIn, nextReset, normalizeAllowances, pickBucket, safeTimeZone, wantedBucket } from "../allowances";
 
 let passed = 0;
@@ -90,6 +91,26 @@ test("player costs: Premium vs free vs guests, average and max per player, the h
   assert.equal(c.guests.players, 1);
   assert.deepEqual(c.heaviest.map((r) => r.uid), ["a", "b"]);
   assert.equal(c.all.perQuestion.toFixed(4), (1.67 / 62).toFixed(4));
+});
+
+test("guests: 1 Pro + 3 Fast a day, fresh each day; signing in starts the free 2 + 5", () => {
+  assert.deepEqual(A.guest, { pro: 1, flash: 3, rollover: false, cap: 0 });
+  const g = applyDay({}, A, false, "2026-10-09", true);
+  assert.deepEqual(bal(g), [1, 3]);
+  assert.equal(g.allowancePlan, "guest");
+  assert.deepEqual(bal(applyDay({ proQueriesAvailable: 0, flashQueriesAvailable: 0, lastResetDate: "2026-10-08", allowancePlan: "guest" }, A, false, "2026-10-09", true)), [1, 3]);
+  // A new account: the free day, whatever the guest used.
+  assert.deepEqual(bal(applyDay({}, A, false, "2026-10-09")), [2, 5]);
+  assert.deepEqual(normalizeAllowances({ guest: { pro: 0, flash: 2 } }).guest, { pro: 0, flash: 2, rollover: false, cap: 0 });
+});
+
+test("test traffic: test guest ids and local servers aren't counted; real players are", () => {
+  const cloud = { K_SERVICE: "quest-compendium" };
+  for (const id of ["guest_e2e_abc123", "guest_test_1", "guest_sim_x", "guest_dev_9", "guest_local_q", "guest_ci_7", "guest_e2e"]) assert.ok(isTestTraffic(id, cloud), id);
+  for (const id of ["guest_k3j9x0abcd", "guest_deck_0a1b2c3d4e5f6a7b8c9d0e1f", "guest_e2etoo", "Xq9AbCdEfGh123"]) assert.ok(!isTestTraffic(id, cloud), id);
+  assert.ok(isTestTraffic("guest_k3j9x0abcd", {}), "a local dev server");
+  assert.ok(!isTestTraffic("guest_k3j9x0abcd", { QC_COUNT_LOCAL: "1" }));
+  assert.ok(isTestId("guest_e2e_x") && !isTestId("guest_x"));
 });
 
 console.log(`\n${passed} tests passed`);

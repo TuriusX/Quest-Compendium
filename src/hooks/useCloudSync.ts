@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { deviceTimeZone } from '../utils/answerModel';
+import { appSource } from '../utils/source';
+import { clearGuestHandover, mergeHandoverSettings, mergeHandoverTabs, readGuestHandover, saveGuestHandover } from '../utils/guestHandover';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut, getRedirectResult, browserPopupRedirectResolver } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, runTransaction } from 'firebase/firestore';
@@ -249,6 +251,7 @@ export function useCloudSync(
       .then((result) => {
         if (result?.user) {
           if (typeof window !== 'undefined') {
+            saveGuestHandover(); // a guest signing in keeps what they did (merged into the account below)
             localStorage.removeItem('quest_guest_session');
             window.dispatchEvent(new Event('quest_auth_change'));
           }
@@ -263,6 +266,7 @@ export function useCloudSync(
       // 1. If an authenticated user is logged in, they take absolute priority!
       if (currentUser) {
         if (typeof window !== 'undefined') {
+          saveGuestHandover(); // a guest signing in keeps what they did (merged into the account below)
           localStorage.removeItem('quest_guest_session');
         }
         setGuestUser(null);
@@ -285,7 +289,7 @@ export function useCloudSync(
 
         currentUser.getIdToken().then(token => {
           return fetch(`${getApiBaseUrl()}/api/user/status`, {
-            headers: { Authorization: `Bearer ${token}`, 'X-QC-TZ': deviceTimeZone() }
+            headers: { Authorization: `Bearer ${token}`, 'X-QC-TZ': deviceTimeZone(), 'X-QC-App': (window as any).electronAPI ? 'desktop' : 'web', ...(appSource() ? { 'X-QC-From': appSource() } : {}) }
           });
         })
           .then(res => res.json())
@@ -413,6 +417,17 @@ export function useCloudSync(
       try {
         const docSnap = await getDoc(userRef);
         if (!docSnap.exists()) {
+          // A new account made from a guest session: the guest's conversations, progress and ticks start it off.
+          const handover = readGuestHandover();
+          if (handover) {
+            const tabs = mergeHandoverTabs(localDataRef.current.tabs, handover);
+            const settings = mergeHandoverSettings(localDataRef.current.settings, handover);
+            localDataRef.current = { settings, tabs };
+            setLocalGameTabs(tabs);
+            setLocalSettings(settings);
+            clearGuestHandover();
+            addEvent('GUEST_HANDOVER', `Brought ${handover.tabs.length} guest tab(s) and progress into the new account`);
+          }
           const initialTabs = sanitizeTabsForCloud(localDataRef.current.tabs);
           const initialSettingsCanonical = canonicalStringify(localDataRef.current.settings);
           const initialTabsCanonical = canonicalStringify(initialTabs);
@@ -505,8 +520,18 @@ export function useCloudSync(
               `exists=true, fromCache=${meta.fromCache}, pendingWrites=false, cloudTabsCount=${cloudCount}`
             );
 
+            // A guest who signed in to an existing account: their conversations, progress and ticks are merged in (and
+            // uploaded: the merged copy differs from the cloud's).
+            const handover = !hasDoneInitialCloudLoad ? readGuestHandover() : null;
+            if (handover) {
+              const merged = mergeHandoverSettings(cloudSettings || localDataRef.current.settings, handover);
+              setLocalSettings(merged);
+              localDataRef.current = { settings: merged, tabs: mergeHandoverTabs(localDataRef.current.tabs, handover) };
+              clearGuestHandover();
+              addEvent('GUEST_HANDOVER', `Merged ${handover.tabs.length} guest tab(s) and progress into the account`);
+            }
             // Sync Settings if remote settings genuinely differ
-            if (cloudSettings) {
+            if (cloudSettings && !handover) {
               const currentLocalSettingsCanonical = canonicalStringify(localDataRef.current.settings);
               // After the first load: settings changed here and not uploaded yet (an answer saves the game's progress,
               // say, while the tabs' own upload echoes back) win, and the upload sends them. Only an untouched local

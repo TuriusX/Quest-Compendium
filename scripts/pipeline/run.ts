@@ -658,8 +658,16 @@ async function main() {
       newAccounts += page.users.filter((u) => Date.now() - Date.parse(u.metadata.creationTime) < 86_400_000).length;
       pageToken = page.pageToken;
     } while (pageToken);
+    // Where players came from (server visitSources.ts): web app visits by source, and the questions and sign-ups of
+    // players by their first source.
+    const visits: Record<string, number> = st.sources || {}, srcQ: Record<string, number> = st.sourceQuestions || {}, srcS: Record<string, number> = st.sourceSignups || {};
+    const srcKeys = [...new Set([...Object.keys(visits), ...Object.keys(srcQ), ...Object.keys(srcS)])].sort((a, b) => (visits[b] || 0) - (visits[a] || 0) || a.localeCompare(b));
+    const sourcesLine = srcKeys.length
+      ? `🔗 Sources: ${srcKeys.map((k) => `${k} ${visits[k] || 0} visit(s)${srcQ[k] ? `, ${srcQ[k]} question(s)` : ''}${srcS[k] ? `, ${srcS[k]} sign-up(s)` : ''}`).join(' · ')}`
+      : '🔗 Sources: no web app visits yesterday';
     report.unshift(
       `📊 Yesterday: ${st.questions || 0} question(s) from ${players + guests} player(s) (${players} signed in, ${guests} guest${guests === 1 ? '' : 's'})${apps ? ` · ${apps}` : ''} · ${newAccounts} new sign-up(s), ${accounts} accounts in total`,
+      sourcesLine,
     );
   } catch (e: any) {
     console.warn(`Activity summary skipped: ${e?.message}`);

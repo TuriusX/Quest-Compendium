@@ -369,7 +369,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
       <a href="${up}${LP}index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="${up}icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
       <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="${up}${LP}guides/index.html" class="hover:text-white">${esc(ui('navGuides'))}</a>
-        <a href="${up}${LP}index.html#download" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('navGetApp'))}</a>
+        <a href="${up}${LP}index.html?from=guide#download" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('navGetApp'))}</a>
         ${menu}
       </div>
     </div>
@@ -406,7 +406,7 @@ const cta = (up: string, game: string) => `
   <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">${esc(ui('ctaTitle', { game }))}</h2>
     <p class="text-zinc-300 text-sm mb-4">${esc(ui('ctaBody'))}</p>
-    <a href="${up}${LP}index.html#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">${esc(ui('ctaButton'))}</a>
+    <a href="${up}${LP}index.html?from=guide#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">${esc(ui('ctaButton'))}</a>
   </div>`;
 
 const ICON = {

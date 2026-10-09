@@ -7,12 +7,13 @@
  */
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { Express, RequestHandler } from 'express';
+import { isTestId, isTestTraffic } from './testTraffic';
 
 export const costMonth = (t = Date.now()) => new Date(t).toISOString().slice(0, 7);
 
 /** Add one answer's cost to the player's month (in the background: the answer never waits on it). */
 export function recordPlayerCost(p: { uid: string; premium: boolean; guest: boolean; dollars: number; searches: number }): void {
-  if (!p.uid) return;
+  if (!p.uid || isTestTraffic(p.uid)) return; // test scripts and local servers aren't players
   void getFirestore()
     .collection('playerCosts').doc(costMonth()).collection('players').doc(p.uid)
     .set({
@@ -52,7 +53,7 @@ export function summarizeCosts(rows: PlayerCost[], top = 10) {
 
 export async function monthCosts(month = costMonth()): Promise<PlayerCost[]> {
   const snap = await getFirestore().collection('playerCosts').doc(month).collection('players').get();
-  return snap.docs.map((d) => {
+  return snap.docs.filter((d) => !isTestId(d.id)).map((d) => {
     const x: any = d.data();
     return { uid: d.id, dollars: Number(x.dollars) || 0, questions: Number(x.questions) || 0, searches: Number(x.searches) || 0, premium: x.premium === true, guest: x.guest === true };
   });

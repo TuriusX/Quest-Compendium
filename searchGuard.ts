@@ -406,8 +406,9 @@ export function extractFacts(text: string): { text: string; facts: FactReport[] 
 // pipeline (scripts/pipeline/run.ts) uses it to decide which games get guides, upgrades and translations.
 // Players are counted by a short one-way hash (no ids stored), capped at 200 per game.
 import crypto from 'crypto';
+import { isTestTraffic } from './testTraffic';
 export function recordGameDemand(game: string | undefined, userId: string, language: string): void {
-  if (!game) return;
+  if (!game || isTestTraffic(userId)) return;
   const key = gameKey(game);
   if (!key) return;
   const d = db();
@@ -435,9 +436,9 @@ export function recordGameDemand(game: string | undefined, userId: string, langu
 // stats/{YYYY-MM-DD} (Central time): questions from signed-in players vs guests, how many different ones (counted by a
 // short one-way hash, nothing personal stored), and desktop / web / Deck. The guide pipeline's Discord summary shows it.
 export const statsDay = (t = Date.now()) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
-export function recordDailyActivity(userId: string, isGuest: boolean, userAgent: string | undefined, appHeader = ''): void {
+export function recordDailyActivity(userId: string, isGuest: boolean, userAgent: string | undefined, appHeader = '', from = ''): void {
   const d = db();
-  if (!d || !userId) return;
+  if (!d || !userId || isTestTraffic(userId)) return; // test scripts and local servers aren't players
   const who = crypto.createHash('sha256').update(`qc:${userId}`).digest('hex').slice(0, 12);
   const ua = String(userAgent || '');
   const app = /QuestCompendiumDeck/i.test(ua) ? 'deck' : appHeader === 'desktop' || /Electron/i.test(ua) ? 'desktop' : 'web';
@@ -453,6 +454,8 @@ export function recordDailyActivity(userId: string, isGuest: boolean, userAgent:
       [isGuest ? 'guestQuestions' : 'playerQuestions']: (cur[isGuest ? 'guestQuestions' : 'playerQuestions'] || 0) + 1,
       [field]: seen.includes(who) || seen.length >= 1000 ? seen : [...seen, who],
       apps,
+      // Questions by where the player came from (the ?from= tag on the link into the app; visitSources.ts).
+      ...(from ? { sourceQuestions: { ...(cur.sourceQuestions || {}), [from]: ((cur.sourceQuestions || {})[from] || 0) + 1 } } : {}),
       updatedAt: Date.now(),
     }, { merge: true });
   }).catch(() => {});

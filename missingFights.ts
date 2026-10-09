@@ -6,6 +6,7 @@
  * Key fights entry into a staged copy and runs the review gate. More reports of the same fight raise its priority.
  */
 import { getFirestore } from 'firebase-admin/firestore';
+import { isTestTraffic } from './testTraffic';
 import type { GuidePageForPlace } from './guidesApi';
 import { saveCandidate, playerHash, REPORTER_WEIGHT, type EntryRef } from './corrections';
 
@@ -60,7 +61,7 @@ export async function saveMissingFight(opts: {
   page: GuidePageForPlace | null; combat: CombatFight; steps: { text: string }[]; uid: string; isGuest: boolean; game: string;
 }): Promise<string | null> {
   const { page, combat } = opts;
-  if (!page || !opts.uid || fightKnown(page, combat)) return null;
+  if (!page || !opts.uid || isTestTraffic(opts.uid) || fightKnown(page, combat)) return null;
   const fight = String(combat.fight || '').trim() || (combat.enemies || []).slice(0, 2).join(' and ');
   const enemies = (combat.enemies || []).map((e) => String(e).trim()).filter(Boolean).slice(0, 8);
   const plan = planSummary(opts.steps);

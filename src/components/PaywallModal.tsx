@@ -9,9 +9,12 @@ import { GlainIcon } from './GlainIcon';
 interface PaywallModalProps {
   userId: string;
   onClose?: () => void;
+  /** A guest: Premium belongs to an account, so Subscribe asks them to sign in first (this opens sign-in). */
+  isGuest?: boolean;
+  onSignIn?: () => void;
 }
 
-export const PaywallModal: React.FC<PaywallModalProps> = ({ userId, onClose }) => {
+export const PaywallModal: React.FC<PaywallModalProps> = ({ userId, onClose, isGuest = false, onSignIn }) => {
   const t = useT();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -21,7 +24,12 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ userId, onClose }) =
       setLoading(true);
       setErrorMsg('');
       const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
+      if (!token) {
+        // Not signed in (a guest): Premium is tied to an account, so sign in first.
+        setErrorMsg(t('pay.signInFirst'));
+        onSignIn?.();
+        return;
+      }
 
       const res = await fetch(`${getApiBaseUrl()}/api/checkout`, {
         method: 'POST',
@@ -95,12 +103,24 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ userId, onClose }) =
           {loading ? t('pay.connecting') : t('pay.subscribe')}
         </button>
         
-        <button
-          onClick={logOut}
-          className="mt-6 text-xs text-zinc-500 hover:text-white transition-colors underline"
-        >
-          {t('common.signOut')}
-        </button>
+        {isGuest ? (
+          <>
+            <p className="mt-4 text-xs text-zinc-400">{t('pay.signInFirst')}</p>
+            <button
+              onClick={() => onSignIn?.()}
+              className="mt-2 text-xs text-[var(--accent-color)] hover:text-white transition-colors underline"
+            >
+              {t('auth.google')}
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={logOut}
+            className="mt-6 text-xs text-zinc-500 hover:text-white transition-colors underline"
+          >
+            {t('common.signOut')}
+          </button>
+        )}
       </div>
     </div>
   );
