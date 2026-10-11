@@ -67,15 +67,22 @@ export async function assess(key: string, note = '') {
     console.log(`${game}: ${pages.length} live pages, ${ents.length} entity pages, ${queries.length} Search Console query rows, ${facts.length} searched facts, ${corrections.length} correction groups.`);
 
     // ---- 2. assessment: two searched calls ----
+    // A searched call: asked again, firmly, if the reply ran no searches; refused if it still didn't (no memory answers).
     const searched = async (prompt: string) => {
-      if (scope.dollars > MAX_DOLLARS - 0.4) throw new Error(`cost guard: $${scope.dollars.toFixed(2)} spent, next call could pass $${MAX_DOLLARS}`);
-      const res: any = await gemini().models.generateContent({
-        model: MODEL,
-        contents: [{ role: 'user', parts: [{ text: `${prompt}\nSearch the web first (the best walkthrough sites and wikis for this game; never fandom.com). Reply with JSON only.` }] }],
-        config: { tools: [{ googleSearch: {} }], temperature: 0.2, maxOutputTokens: 12000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
-      });
-      const sources = sourcesIn(res).filter((s) => !/fandom\.com/i.test(s));
-      return { j: objOf(String(res?.text || '')), searches: searchesIn(res), sources };
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (scope.dollars > MAX_DOLLARS - 0.4) throw new Error(`cost guard: $${scope.dollars.toFixed(2)} spent, next call could pass $${MAX_DOLLARS}`);
+        const res: any = await gemini().models.generateContent({
+          model: MODEL,
+          contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}${prompt}\nRun several Google searches first (the best walkthrough sites and wikis for this game; never fandom.com), then reply with JSON only.` }] }],
+          config: { tools: [{ googleSearch: {} }], temperature: 0.2, maxOutputTokens: 12000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+        });
+        const n = searchesIn(res);
+        console.log(`  research call: ${n} searches`);
+        if (!n) continue;
+        const sources = sourcesIn(res).filter((s) => !/fandom\.com/i.test(s));
+        return { j: objOf(String(res?.text || '')), searches: n, sources };
+      }
+      throw new Error('the research call ran no searches twice; not using a memory answer');
     };
     const a1 = await searched([
       `Assess the video game "${game}" for a player's guide.`,
@@ -126,7 +133,8 @@ export async function assess(key: string, note = '') {
       assessmentCost: { dollars: Math.round(scope.dollars * 1000) / 1000, searches: scope.searches },
     };
     console.log(`\n=== BLUEPRINT ${game} ===`);
-    console.log(JSON.stringify(out));
+    // Prefixed so Cloud Logging keeps it as text (a bare JSON line becomes structured data).
+    console.log(`BLUEPRINT_JSON ${JSON.stringify(out)}`);
     console.log(`\n${game}: assessment cost $${scope.dollars.toFixed(3)} (${scope.searches} searches); blueprint build estimate $${out.buildCost.toFixed(2)}.`);
     return out;
   });
