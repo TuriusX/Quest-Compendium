@@ -347,12 +347,7 @@ export function useCloudSync(
           .then(res => res.json())
           .then(data => {
             if (data && typeof data.proQueriesAvailable === 'number') {
-              setUserData({
-                isPremium: false,
-                proQueriesAvailable: Math.min(5, data.proQueriesAvailable),
-                flashQueriesAvailable: Math.min(5, data.flashQueriesAvailable ?? 5),
-                isGuest: true
-              });
+              setUserData({ ...data, isPremium: false, isGuest: true });
             }
           })
           .catch(() => {});
@@ -389,12 +384,7 @@ export function useCloudSync(
         .then(res => res.json())
         .then(data => {
           if (data && typeof data.proQueriesAvailable === 'number') {
-            setUserData({
-              isPremium: false,
-              proQueriesAvailable: Math.min(5, data.proQueriesAvailable),
-              flashQueriesAvailable: Math.min(5, data.flashQueriesAvailable ?? 5),
-              isGuest: true
-            });
+            setUserData({ ...data, isPremium: false, isGuest: true });
           }
         })
         .catch(() => {});

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { deviceTimeZone, untilReset } from './utils/answerModel';
+import { balancesOf, deviceTimeZone, topUpLine, untilReset } from './utils/answerModel';
 import { BookOpen, Plus, Sparkles, Gamepad2, Search, Camera, Mic, Moon, FileText, Globe } from './components/icons';
 import { 
   GameTab, 
@@ -1659,6 +1659,9 @@ export default function App() {
                 ? tr('limit.free', { pro: lim.dailyPro, fast: lim.dailyFlash, ppro: lim.premiumPro, pfast: lim.premiumFlash, when })
                 : errorText;
             shouldOpenPaywall = !lim.isPremium && !guestLimit;
+            // When the next questions arrive: "+2 Pro · +5 Fast in 3h 20m".
+            const next = topUpLine(balancesOf(errData.userData), tr);
+            if (next && limitText) limitText = `${limitText}\n\n${next}`;
           }
         } catch (e) {
           if (res.status === 404) {

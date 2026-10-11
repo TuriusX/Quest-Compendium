@@ -30,7 +30,8 @@ export function deviceTimeZone(): string {
 }
 
 /** Questions left of each model, from the user status / chat response (older servers: one shared count). */
-export function balancesOf(d: any): { pro: number; fast: number; dailyPro: number; dailyFast: number; resetAt?: number } {
+export type Balances = { pro: number; fast: number; dailyPro: number; dailyFast: number; resetAt?: number; rollover?: boolean; bankCap?: number };
+export function balancesOf(d: any): Balances {
   const n = (v: any, def = 0) => (Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : def);
   return {
     pro: n(d?.proQueriesAvailable),
@@ -38,7 +39,40 @@ export function balancesOf(d: any): { pro: number; fast: number; dailyPro: numbe
     dailyPro: n(d?.dailyPro, 0),
     dailyFast: n(d?.dailyFlash, 0),
     ...(Number(d?.resetAt) > 0 ? { resetAt: Number(d.resetAt) } : {}),
+    // Premium's carry-over: unused questions are kept, each model capped at bankCap.
+    ...(d?.rollover === true ? { rollover: true, bankCap: n(d?.bankCap, 0) } : {}),
   };
+}
+
+/**
+ * The next daily top-up: what each model gets at midnight (the player's time zone) and how long until then. Premium
+ * (carry-over) gets the day's amount up to the cap: atMax when a model is already at it. Free and guest players get
+ * their day's amounts. null while the reset time or the amounts aren't known.
+ */
+export function topUp(b: Balances, now = Date.now()): { pro: number; fast: number; proMax: boolean; fastMax: boolean; cap: number; h: number; m: number } | null {
+  if (!b.resetAt || (!b.dailyPro && !b.dailyFast)) return null;
+  const cap = b.rollover && b.bankCap ? b.bankCap : 0;
+  const add = (left: number, daily: number) => (cap ? Math.min(daily, Math.max(0, cap - left)) : daily);
+  const { h, m } = untilReset(b.resetAt, now);
+  return {
+    pro: add(b.pro, b.dailyPro),
+    fast: add(b.fast, b.dailyFast),
+    proMax: !!cap && b.pro >= cap,
+    fastMax: !!cap && b.fast >= cap,
+    cap,
+    h,
+    m,
+  };
+}
+
+/** The top-up as one line: "+8 Pro · +25 Fast in 13h 20m" ("Pro at max 100 · +25 Fast in 45m"). */
+export function topUpLine(b: Balances, t: (k: string, v?: Record<string, string | number>) => string, now = Date.now()): string {
+  const u = topUp(b, now);
+  if (!u) return '';
+  const part = (model: string, n: number, max: boolean) => (max ? t('topup.max', { model, n: u.cap }) : n > 0 ? t('topup.add', { model, n }) : '');
+  const parts = [part(t('model.pro'), u.pro, u.proMax), part(t('model.fast'), u.fast, u.fastMax)].filter(Boolean).join(' · ');
+  const when = u.h > 0 ? t('topup.hm', { h: u.h, m: u.m }) : t('topup.m', { m: u.m });
+  return t('topup.line', { parts, when });
 }
 
 /**

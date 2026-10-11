@@ -1978,7 +1978,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             )}
 
             {/* Pro / Fast, with the questions left of each */}
-            <ModelToggle value={answerModel} onChange={chooseModel} pro={bal.pro} fast={bal.fast} disabled={isLoading} />
+            <ModelToggle value={answerModel} onChange={chooseModel} pro={bal.pro} fast={bal.fast} disabled={isLoading} balances={bal} />
 
             {/* Submit Send Button (follows whether the box has text without re-rendering the conversation) */}
             <HasTextGate ref={hasTextRef}>{(hasText) => (

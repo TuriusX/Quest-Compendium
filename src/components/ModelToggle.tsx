@@ -1,16 +1,36 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useT } from '../i18n';
-import type { AnswerModel } from '../utils/answerModel';
+import { topUpLine, type AnswerModel, type Balances } from '../utils/answerModel';
+
+/** Re-renders every minute (the top-up countdown), on the minute. */
+function useMinute(): number {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    let iv: ReturnType<typeof setInterval> | undefined;
+    const first = setTimeout(() => {
+      setNow(Date.now());
+      iv = setInterval(() => setNow(Date.now()), 60_000);
+    }, 60_000 - (Date.now() % 60_000));
+    return () => {
+      clearTimeout(first);
+      if (iv) clearInterval(iv);
+    };
+  }, []);
+  return now;
+}
 
 /**
  * Pro / Fast next to the send button, each with the questions left today ("Pro 7 · Fast 24"). A radio group: click
  * either side, or Left / Right (and Up / Down) when it has focus; a controller's R3 switches too (ControllerLayer).
+ * Under it, a small line counts down to the next daily top-up ("+8 Pro · +25 Fast in 13h 20m"), also in the tooltips.
  */
-export function ModelToggle({ value, onChange, pro, fast, disabled }: { value: AnswerModel; onChange: (m: AnswerModel) => void; pro: number; fast: number; disabled?: boolean }) {
+export function ModelToggle({ value, onChange, pro, fast, disabled, balances }: { value: AnswerModel; onChange: (m: AnswerModel) => void; pro: number; fast: number; disabled?: boolean; balances?: Balances }) {
   const t = useT();
+  const now = useMinute();
+  const next = balances ? topUpLine(balances, t, now) : '';
   const opts: { id: AnswerModel; label: string; left: number; hint: string }[] = [
-    { id: 'pro', label: t('model.pro'), left: pro, hint: t('model.proHint', { n: pro }) },
-    { id: 'fast', label: t('model.fast'), left: fast, hint: t('model.fastHint', { n: fast }) },
+    { id: 'pro', label: t('model.pro'), left: pro, hint: [t('model.proHint', { n: pro }), next].filter(Boolean).join('\n') },
+    { id: 'fast', label: t('model.fast'), left: fast, hint: [t('model.fastHint', { n: fast }), next].filter(Boolean).join('\n') },
   ];
   const onKey = (e: React.KeyboardEvent) => {
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
@@ -19,6 +39,7 @@ export function ModelToggle({ value, onChange, pro, fast, disabled }: { value: A
     }
   };
   return (
+    <div className="flex flex-col items-end gap-0.5">
     <div
       role="radiogroup"
       aria-label={t('model.label')}
@@ -46,6 +67,8 @@ export function ModelToggle({ value, onChange, pro, fast, disabled }: { value: A
           </button>
         );
       })}
+    </div>
+    {next && <span className="text-[10px] leading-none text-zinc-500 tabular-nums whitespace-nowrap">{next}</span>}
     </div>
   );
 }
