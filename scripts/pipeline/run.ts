@@ -735,7 +735,7 @@ async function main() {
       report.push(`📚 Core guides${coreSt.approved ? '' : ' (waiting for the list to be approved)'}${coreSt.paused ? ' (paused)' : ''}: $${b.spentMonth.toFixed(2)} of $${b.monthly} this month. Left to complete them all: ≈ $${e.total.toFixed(0)}, about ${e.months.toFixed(1)} month(s) at $${e.monthly} a month.`);
       for (const r of e.rows) {
         const done = !!coreSt.perGuide?.[r.key]?.done;
-        report.push(`${done ? '✅' : '•'} ${shortName(r.game)}: flagship pages ${r.corePages}/${r.pages} · compendium pages ${r.entitiesPublished}/${r.entitiesTotal}${r.taxonomy ? '' : ' (count planned once its taxonomy is built)'} · $${r.cost.toFixed(2)} so far, ≈ $${r.left.toFixed(2)} left`);
+        report.push(`${done ? '✅' : '•'} ${shortName(r.game)}: flagship pages ${r.corePages}/${r.pages}${r.keptPages ? ' (kept)' : ''} · compendium pages ${r.entitiesPublished}/${r.entitiesTotal} (cap ${r.cap}) · $${r.cost.toFixed(2)} so far, ≈ $${r.left.toFixed(2)} left`);
       }
       const fails = (coreSt.guides as string[]).flatMap((k) => [...(coreSt.perGuide?.[k]?.failedPages || []).map((f: any) => `${f.name} (page)`), ...(coreSt.perGuide?.[k]?.failedEntities || []).map((f: any) => `${f.name} (entity)`)]);
       if (fails.length) report.push(`⚠️ Core pieces that failed review (not retried; add them to system/core.retry to try again): ${fails.slice(0, 15).join(', ')}${fails.length > 15 ? `, and ${fails.length - 15} more` : ''}.`);

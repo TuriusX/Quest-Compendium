@@ -13,9 +13,12 @@
  *     the guide's own order);
  *   - the guide has a core compendium taxonomy (compendium.ts coreTaxonomy: entity types fitting the game, each with a
  *     tier, and the game's important entities by exact name);
- *   - entity pages are built for those entities, important ones first: characters, NPCs and merchants, then bosses,
- *     then key locations, then collectibles, then the rest (auto-linked in the guide and covered by the guide search
- *     at publish).
+ *   - entity pages for the important entities, at most system/core.entityCap (40) per guide: characters, NPCs and
+ *     merchants, then bosses, then key locations (auto-linked in the guide and covered by the guide search at publish).
+ *     Collectibles and the rest come only by Search Console demand (the weekly step, compendium.ts demandEntities).
+ * Guides in system/core.keepPages (Baldur's Gate 3) keep their existing flagship pages (earlier flagship method,
+ * reviewed): those count as complete and are rebuilt only when flagged (the page's `reverify` field, set by a failed
+ * review or a re-verification request); only their compendium is built.
  * Pages and entities that fail review aren't retried automatically (listed in the Discord summary; add their ids to
  * system/core.retry to try again). A guide moves on once everything has been tried.
  *
@@ -38,9 +41,12 @@ export const PAGE_COST = 0.224;
 export const ENTITY_COST = 0.17;
 export const TAXONOMY_COST = 0.05;
 /** Entities a game's core taxonomy lists, until its taxonomy is built (then its own count). */
-export const ENTITIES_GUESS = 120;
+export const ENTITIES_GUESS = 120; // (before the cap; kept for reference)
 /** Build order of the entity tiers. */
 export const TIERS = ['people', 'bosses', 'locations', 'collectibles', 'other'] as const;
+/** The tiers the programme builds (the rest only by Search Console demand), and the default cap per guide. */
+export const CORE_TIERS = ['people', 'bosses', 'locations'];
+export const ENTITY_CAP_DEFAULT = 40;
 
 const MINUTES = Number(process.env.FLAGSHIP_MINUTES || 150);
 const RUN_STARTED = Date.now();
@@ -50,8 +56,28 @@ const month = () => new Date().toISOString().slice(0, 7);
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const cref = () => db().collection('system').doc('core');
 
-/** A page that meets the core standard: a flagship page by the evidence method that passed (claim check, Pro review). */
-export const isCorePage = (a: any) => a?.status === 'published' && a?.flagship?.mode === 'evidence' && a?.verified === true;
+/**
+ * A page that meets the core standard: a flagship page by the evidence method that passed (claim check, Pro review).
+ * keep: the guide keeps its existing flagship pages (system/core.keepPages): any flagship page counts unless flagged.
+ */
+export const isCorePage = (a: any, keep = false) =>
+  a?.status === 'published' && (keep ? !!a?.flagship && !a?.reverify : a?.flagship?.mode === 'evidence' && a?.verified === true);
+
+/** The programme's settings (system/core): the guides whose pages are kept, and the entity cap. */
+async function coreConfig() {
+  const st: any = (await cref().get()).data() || {};
+  return { keep: new Set<string>((st.keepPages || []).map(String)), cap: Number.isFinite(Number(st.entityCap)) ? Number(st.entityCap) : ENTITY_CAP_DEFAULT };
+}
+
+/** The guide's planned core entities: the core tiers only, in build order, the first `cap`. */
+function plannedCore(comp: any, cap: number): any[] {
+  const tierIdx = (tier: string) => CORE_TIERS.indexOf(tier);
+  const tierOf = new Map<string, number>((comp?.taxonomy || []).map((t: any) => [t.id, tierIdx(t.tier)]));
+  return (comp?.entities || [])
+    .filter((e: any) => e?.slug && (tierOf.get(e.type) ?? -1) >= 0)
+    .sort((a: any, b: any) => (tierOf.get(a.type)! - tierOf.get(b.type)!) || (Number(a.rank) || 999) - (Number(b.rank) || 999))
+    .slice(0, cap);
+}
 
 /** The shared budget: this month's and today's spending against the caps. */
 export async function coreBudget() {
@@ -79,14 +105,15 @@ export async function chargeCore(dollars: number, key?: string): Promise<void> {
 }
 
 /** One guide's completeness: flagship pages, compendium entities, and what it has cost so far (pages and entities). */
-export async function coreStatus(key: string) {
+export async function coreStatus(key: string, cfg?: { keep: Set<string>; cap: number }) {
+  const { keep, cap } = cfg || (await coreConfig());
   const gref = db().collection('guides').doc(key);
   const info: any = (await gref.get()).data() || {};
   const pages = (await gref.collection('areas').get()).docs.map((d) => ({ slug: d.id, ...(d.data() as any) })).filter((a) => a.status === 'published');
-  const corePages = pages.filter(isCorePage);
+  const corePages = pages.filter((a) => isCorePage(a, keep.has(key)));
   const comp: any = (await db().collection('guideCompendium').doc(key).get()).data() || null;
   const ents = comp ? (await db().collection('guideCompendium').doc(key).collection('entities').get()).docs.map((d) => ({ slug: d.id, ...(d.data() as any) })) : [];
-  const planned: any[] = comp?.core ? (comp.entities || []) : [];
+  const planned: any[] = comp?.core ? plannedCore(comp, cap) : [];
   const plannedSlugs = new Set(planned.map((e) => e.slug));
   const published = ents.filter((e) => e.status === 'published');
   const tried = ents.filter((e) => plannedSlugs.has(e.slug));
@@ -95,13 +122,14 @@ export async function coreStatus(key: string) {
     ents.reduce((n, e) => n + (Number(e.cost?.dollars) || 0), 0) +
     (Number(comp?.cost?.dollars) || 0) + (Number(comp?.core?.cost?.dollars) || 0);
   const pagesLeft = pages.length - corePages.length;
-  const entitiesTotal = comp?.core ? planned.length : ENTITIES_GUESS;
-  const entitiesLeft = comp?.core ? planned.filter((e) => !ents.some((x) => x.slug === e.slug)).length : Math.max(0, ENTITIES_GUESS - published.length);
+  // Until the taxonomy is built, the cap is the plan (pages already published count toward it).
+  const entitiesTotal = comp?.core ? planned.length : cap;
+  const entitiesPublished = comp?.core ? published.filter((e) => plannedSlugs.has(e.slug)).length : Math.min(cap, published.length);
+  const entitiesLeft = comp?.core ? planned.filter((e) => !ents.some((x) => x.slug === e.slug)).length : Math.max(0, cap - published.length);
   const left = pagesLeft * PAGE_COST + entitiesLeft * ENTITY_COST + (comp?.core ? 0 : TAXONOMY_COST);
   return {
-    key, game: String(info.game || key), pages: pages.length, corePages: corePages.length, pagesLeft,
-    taxonomy: !!comp?.core, entitiesTotal, entitiesPublished: published.filter((e) => !comp?.core || plannedSlugs.has(e.slug)).length,
-    entitiesTried: tried.length, entitiesLeft, cost, left,
+    key, game: String(info.game || key), pages: pages.length, corePages: corePages.length, pagesLeft, keptPages: keep.has(key),
+    taxonomy: !!comp?.core, entitiesTotal, entitiesPublished, entitiesTried: tried.length, entitiesLeft, cap, cost, left,
   };
 }
 
@@ -109,15 +137,16 @@ export async function coreStatus(key: string) {
 export async function coreEstimate(keys?: string[]) {
   const st: any = (await cref().get()).data() || {};
   const list = keys?.length ? keys : (st.guides || []);
+  const cfg = await coreConfig();
   const rows = [];
-  for (const k of list) rows.push(await coreStatus(k));
+  for (const k of list) rows.push(await coreStatus(k, cfg));
   const total = rows.reduce((n, r) => n + r.left, 0);
   const monthly = Number(st.monthly) || CORE_MONTHLY_DEFAULT;
   return { rows, total, monthly, months: total / monthly };
 }
 
 /** The guide's pages still to build, the most-visited first (Search Console impressions, then the guide's order). */
-async function pagesToBuild(key: string, failed: Set<string>, retry: Set<string>) {
+async function pagesToBuild(key: string, failed: Set<string>, retry: Set<string>, keep = false) {
   const gref = db().collection('guides').doc(key);
   const info: any = (await gref.get()).data() || {};
   const order: { slug: string; name: string }[] = info.areas || [];
@@ -127,19 +156,15 @@ async function pagesToBuild(key: string, failed: Set<string>, retry: Set<string>
   const pos = (s: string) => { const i = order.findIndex((o) => o.slug === s); return i < 0 ? 9999 : i; };
   return (await gref.collection('areas').get()).docs
     .map((d) => ({ slug: d.id, ...(d.data() as any) }))
-    .filter((a) => a.status === 'published' && !isCorePage(a) && (!failed.has(a.slug) || retry.has(`${key}/${a.slug}`)))
+    .filter((a) => a.status === 'published' && !isCorePage(a, keep) && (!failed.has(a.slug) || retry.has(`${key}/${a.slug}`)))
     .sort((a, b) => (impr.get(b.slug) || 0) - (impr.get(a.slug) || 0) || pos(a.slug) - pos(b.slug))
     .map((a) => ({ slug: a.slug as string, name: String(a.name || a.slug) }));
 }
 
-/** The guide's planned entities still to build, in tier order (people, bosses, locations, collectibles, the rest). */
-async function entitiesToBuild(key: string, comp: any, failed: Set<string>, retry: Set<string>) {
+/** The guide's planned core entities still to build (the core tiers, in order, within the cap). */
+async function entitiesToBuild(key: string, comp: any, failed: Set<string>, retry: Set<string>, cap: number) {
   const built = new Set((await db().collection('guideCompendium').doc(key).collection('entities').get()).docs.filter((d) => d.data().status === 'published' || !retry.has(`${key}:${d.id}`)).map((d) => d.id));
-  const tierIdx = (tier: string) => { const i = TIERS.indexOf(tier as any); return i < 0 ? TIERS.length : i; };
-  const tierOf = new Map<string, number>((comp.taxonomy || []).map((t: any) => [t.id, tierIdx(t.tier)]));
-  return (comp.entities || [])
-    .filter((e: any) => e.slug && !built.has(e.slug) && (!failed.has(e.slug) || retry.has(`${key}:${e.slug}`)))
-    .sort((a: any, b: any) => (tierOf.get(a.type) ?? TIERS.length) - (tierOf.get(b.type) ?? TIERS.length) || (Number(a.rank) || 999) - (Number(b.rank) || 999));
+  return plannedCore(comp, cap).filter((e: any) => !built.has(e.slug) && (!failed.has(e.slug) || retry.has(`${key}:${e.slug}`)));
 }
 
 /** One run: the first incomplete guide in the list, then the next, while the budget, time and limits allow. */
@@ -150,6 +175,7 @@ export async function runCore(): Promise<void> {
   const { buildPageEvidenceForCore, writePageForCore, publishSiteForCore } = await import('./flagship');
   const { coreTaxonomy, buildEntity } = await import('./compendium');
   const retry = new Set<string>((st.retry || []).map(String));
+  const cfg = await coreConfig();
   let wentLive = false;
   const timeUp = () => Date.now() - RUN_STARTED > MINUTES * 60_000;
   let transientRow = 0;
@@ -169,7 +195,7 @@ export async function runCore(): Promise<void> {
     try {
       // 1. Pages: every live page a flagship walkthrough by the evidence method, the most-visited first.
       const failedP = new Set<string>(pg.failedPages.map((f: any) => f.slug));
-      const pages = await pagesToBuild(key, failedP, retry);
+      const pages = await pagesToBuild(key, failedP, retry, cfg.keep.has(key));
       for (const p of pages) {
         const b = await coreBudget();
         if (b.room < PAGE_COST * 1.5) { stopped = stop(b.monthRoom < PAGE_COST * 1.5 ? `This month's $${b.monthly} is used up` : `Today's $${b.daily} is used up`); break; }
@@ -220,7 +246,7 @@ export async function runCore(): Promise<void> {
 
       // 3. Entity pages, important ones first.
       const failedE = new Set<string>(pg.failedEntities.map((f: any) => f.slug));
-      const ents = await entitiesToBuild(key, comp, failedE, retry);
+      const ents = await entitiesToBuild(key, comp, failedE, retry, cfg.cap);
       for (const e of ents) {
         const b = await coreBudget();
         if (b.room < ENTITY_COST * 1.5) { stopped = stop(b.monthRoom < ENTITY_COST * 1.5 ? `This month's $${b.monthly} is used up` : `Today's $${b.daily} is used up`); break; }
@@ -256,7 +282,7 @@ async function main() {
   if (arg('estimate') === 'true') {
     const keys = arg('keys') && arg('keys') !== 'true' ? String(arg('keys')).split(',').map((s) => s.trim()).filter(Boolean) : undefined;
     const e = await coreEstimate(keys);
-    for (const r of e.rows) console.log(`${r.game}: flagship pages ${r.corePages}/${r.pages}, compendium ${r.entitiesPublished}/${r.entitiesTotal}${r.taxonomy ? '' : ' (planned count is a guess until its taxonomy is built)'}, cost so far $${r.cost.toFixed(2)}, left ≈ $${r.left.toFixed(2)}`);
+    for (const r of e.rows) console.log(`${r.game}: flagship pages ${r.corePages}/${r.pages}${r.keptPages ? ' (existing pages kept)' : ''}, compendium ${r.entitiesPublished}/${r.entitiesTotal} (cap ${r.cap}), cost so far $${r.cost.toFixed(2)}, left ≈ $${r.left.toFixed(2)}`);
     console.log(`\nIn all ≈ $${e.total.toFixed(2)} left, about ${e.months.toFixed(1)} month(s) at $${e.monthly} a month.`);
   } else if (arg('run') === 'true') await runCore();
   setTimeout(() => process.exit(0), 500);
