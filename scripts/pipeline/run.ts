@@ -732,7 +732,9 @@ async function main() {
       const { coreEstimate, coreBudget } = await import('../guides/core');
       const e = await coreEstimate();
       const b = await coreBudget();
-      report.push(`📚 Core guides${coreSt.approved ? '' : ' (waiting for the list to be approved)'}${coreSt.paused ? ' (paused)' : ''}: $${b.spentMonth.toFixed(2)} of $${b.monthly} this month. Left to complete them all: ≈ $${e.total.toFixed(0)}, about ${e.months.toFixed(1)} month(s) at $${e.monthly} a month.`);
+      report.push(`📚 Core guides${coreSt.approved ? '' : ' (waiting for the list to be approved)'}${coreSt.paused ? ` (paused: ${coreSt.paused.why || 'until the owner says go'})` : ''}: $${b.spentMonth.toFixed(2)} of $${b.monthly} this month. Left to complete them all: ≈ $${e.total.toFixed(0)}, about ${e.months.toFixed(1)} month(s) at $${e.monthly} a month.`);
+      const cp = coreSt.checkpoint?.result;
+      if (cp) report.push(`🧮 Core checkpoint (first ${cp.pages} pages): $${Number(cp.avg).toFixed(3)} a page, ${Math.round(Number(cp.pass) * 100)}% passed${cp.paused ? ' — over the limits, so the programme paused itself' : ' — within the limits'}.`);
       for (const r of e.rows) {
         const done = !!coreSt.perGuide?.[r.key]?.done;
         report.push(`${done ? '✅' : '•'} ${shortName(r.game)}: flagship pages ${r.corePages}/${r.pages}${r.keptPages ? ' (kept)' : ''} · compendium pages ${r.entitiesPublished}/${r.entitiesTotal} (cap ${r.cap}) · $${r.cost.toFixed(2)} so far, ≈ $${r.left.toFixed(2)} left`);

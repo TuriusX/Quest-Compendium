@@ -167,6 +167,29 @@ async function entitiesToBuild(key: string, comp: any, failed: Set<string>, retr
   return plannedCore(comp, cap).filter((e: any) => !built.has(e.slug) && (!failed.has(e.slug) || retry.has(`${key}:${e.slug}`)));
 }
 
+/**
+ * The owner's checkpoint (system/core.checkpoint { since, pages: 10, maxAvg: 0.40, minPass: 0.70 }): once that many
+ * pages have been built since `since` (system/core.pageLog), their average cost and pass rate are saved on the
+ * checkpoint, and the programme pauses itself if the average is over maxAvg or the pass rate under minPass. Returns
+ * the reason when it paused.
+ */
+async function checkpoint(): Promise<string | null> {
+  const st: any = (await cref().get()).data() || {};
+  const cp = st.checkpoint;
+  if (!cp || cp.result) return null;
+  const log = ((st.pageLog || []) as any[]).filter((x) => Number(x.at) >= Number(cp.since || 0));
+  const n = Number(cp.pages || 10);
+  if (log.length < n) return null;
+  const first = log.sort((a, b) => a.at - b.at).slice(0, n);
+  const avg = first.reduce((s, x) => s + Number(x.dollars || 0), 0) / first.length;
+  const pass = first.filter((x) => x.status === 'passed').length / first.length;
+  const bad = avg > Number(cp.maxAvg ?? 0.4) || pass < Number(cp.minPass ?? 0.7);
+  const why = `checkpoint after ${n} pages: average $${avg.toFixed(3)} a page, ${Math.round(pass * 100)}% passed (limits: $${Number(cp.maxAvg ?? 0.4).toFixed(2)}, ${Math.round(Number(cp.minPass ?? 0.7) * 100)}%)`;
+  await cref().set({ checkpoint: { ...cp, result: { at: Date.now(), avg, pass, pages: n, paused: bad } }, ...(bad ? { paused: { at: Date.now(), why } } : {}) }, { merge: true });
+  console.log(`\nCore guides ${why}${bad ? ': paused until the owner decides.' : ': within the limits, carrying on.'}`);
+  return bad ? `Paused: ${why}` : null;
+}
+
 /** One run: the first incomplete guide in the list, then the next, while the budget, time and limits allow. */
 export async function runCore(): Promise<void> {
   const st: any = (await cref().get()).data() || {};
@@ -226,6 +249,9 @@ export async function runCore(): Promise<void> {
         }
         console.log(`  [core] ${game} / ${p.name}: ${r?.review?.status || 'not built'}${r?.review?.score != null ? ` ${r.review.score}` : ''}, $${scope.dollars.toFixed(3)}`);
         await savePg();
+        await cref().set({ pageLog: FieldValue.arrayUnion({ key, slug: p.slug, status: r?.review?.status || 'not built', dollars: Math.round(scope.dollars * 1000) / 1000, at: Date.now() }) }, { merge: true });
+        const cp = await checkpoint();
+        if (cp) { stopped = stop(cp); break; }
       }
       if (stopped) break guides;
 
