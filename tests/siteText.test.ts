@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/siteText.test.ts)
 import assert from "node:assert/strict";
-import { shortGame, relatedQuests, achFlags, finalLinks, redirectLines, entitySegments, fuzzyScore } from "../scripts/guides/siteText";
+import { shortGame, relatedQuests, achFlags, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterKey, chapterPage, coveringPage } from "../scripts/guides/siteText";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -99,6 +99,28 @@ test("guide search: forgiving matches (apostrophes, plurals, one typo), exact na
   assert.ok(fuzzyScore("rolling blok rifles", "Rolling Block Rifle") > 0); // a typo in a short word, and a plural
   assert.equal(fuzzyScore("saint denis", "Chapter 1: Colter"), 0);
   assert.ok(fuzzyScore("colter", "Colter") > fuzzyScore("colter", "Chapter 1: Colter"));
+});
+
+test("redirect targets: a held page's chapter note finds the live chapter page", () => {
+  const pages = [
+    { slug: "chapter-1-colter", name: "Chapter 1: Colter" }, { slug: "chapter-3-clemens-point", name: "Chapter 3: Clemens Point" },
+    { slug: "epilogue-part-2-beechers-hope", name: "Epilogue Part 2: Beecher's Hope" },
+  ];
+  assert.equal(chapterPage("Chapter 3, the region surrounding Rhodes", pages), "chapter-3-clemens-point");
+  assert.equal(chapterPage("Epilogue Chapter 2, hunting and missions", pages), "epilogue-part-2-beechers-hope");
+  assert.equal(chapterPage("Epilogue Chapter 1, John's employment", pages), "epilogue-part-2-beechers-hope"); // the guide's epilogue page
+  assert.equal(chapterPage("Chapter 5, the island", pages), undefined);
+  assert.equal(chapterPage("the gang's first camp", pages), undefined);
+  assert.equal(chapterKey("Act II: The Underdark"), "act 2");
+  // Covering page: the most named entries, never another chapter number, the same character first.
+  const live = [{ slug: "chapter-2", name: "Chapter 2: Intensive Care", text: "Plasma Cutter, Stasis Module, Kinesis Module, Medical Deck" }, { slug: "chapter-10", name: "Chapter 10: End of Days", text: "Plasma Cutter and the Marker" }];
+  assert.equal(coveringPage(["Plasma Cutter", "Stasis Module", "Kinesis Module"], live, 3, "Crew Deck Chapter 10"), undefined);
+  assert.equal(coveringPage(["Plasma Cutter", "Stasis Module", "Kinesis Module"], live, 3, "Medical Deck"), "chapter-2");
+  // A chapter per character: only that character's page.
+  const octo = [{ slug: "olberic-chapter-3", name: "Olberic: Chapter 3" }, { slug: "haanit-chapter-3", name: "H'aanit Chapter 3" }];
+  assert.equal(chapterPage("H'aanit Chapter 3", octo), "haanit-chapter-3");
+  assert.equal(chapterPage("Tressa Chapter 3", octo), undefined);
+  assert.equal(chapterPage("Partitio's Chapter 2", [{ slug: "partitio-chapter-2", name: "Partitio Chapter 2" }]), "partitio-chapter-2");
 });
 
 console.log(`\n${passed} tests passed`);

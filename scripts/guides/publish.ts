@@ -16,7 +16,7 @@ import path from 'path';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
-import { shortGame, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, type AchFlag } from './siteText';
+import { shortGame, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterPage, coveringPage, type AchFlag } from './siteText';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 import { GENERATED as GUIDE_UI_GEN } from './guide-ui.generated';
@@ -273,8 +273,9 @@ function writeGuideIndex(games: { key: string; game: string; areas: number; art?
 
 /**
  * Redirects for a guide's held pages (taken down by a rebuild, repair or outline change), each to its replacement: an
- * entity page or a live page with its name, else the first live page (in guide order) whose text mentions it, else the
- * guide's front page (to ''). Pages held because the whole guide was unpublished get none while the guide is down
+ * entity page or a live page with its name, else the first live page (in guide order) whose text mentions it; failing
+ * those, rather than the guide's front page: an entity page whose name matches loosely, else the chapter page its own
+ * chapter note names ("Epilogue Chapter 2, ..." -> "Epilogue Part 2: ..."); the front page (to '') only when nothing fits. Pages held because the whole guide was unpublished get none while the guide is down
  * (publish skips guides with no live pages).
  */
 export let heldRedirectCount = 0;
@@ -282,6 +283,8 @@ function heldRedirects(key: string, docs: any[], visible: { slug: string; name: 
   const live = new Set(visible.map((o) => o.slug));
   const norm = (x: string) => String(x || '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
   const text = (a: GuideArea) => [a.name, a.overview, ...(a.walkthrough || []).flatMap((s) => [s.title, s.text]), ...(a.items || []).map((e) => `${e.name} ${e.where || ''}`)].filter(Boolean).join(' ');
+  const fullText = (a: GuideArea) => [text(a), ...(a.secrets || []).map((e: any) => e.text), ...(a.shops || []).map((e: any) => e.name), ...(a.enemies || []).map((e: any) => e.name), ...(a.fights || []).map((f: any) => f.name)].filter(Boolean).join(' ');
+  const entryNames = (d: any) => [...(d.items || []), ...(d.shops || []), ...(d.enemies || []), ...(d.fights || [])].map((e: any) => String(e?.name || ''));
   const out: { key: string; from: string; to: string }[] = [];
   for (const d of docs) {
     if (d.status !== 'held' || live.has(d.slug) || entities.some((e) => e.slug === d.slug)) continue;
@@ -291,7 +294,14 @@ function heldRedirects(key: string, docs: any[], visible: { slug: string; name: 
       // A page named after it ("Chapter 4: Saint Denis" for Saint Denis) before one that only mentions it.
       || (name.length >= 4 ? visible.find((o) => entitySegments(byslug.get(o.slug)?.name || o.name, [{ name, slug: 'x' }]).some((sg) => sg.slug)) : undefined);
     const mention = name.length >= 4 ? visible.find((o) => entitySegments(text(byslug.get(o.slug)!), [{ name, slug: 'x' }]).some((sg) => sg.slug)) : undefined;
-    out.push({ key, from: d.slug, to: ent?.slug || same?.slug || mention?.slug || '' });
+    let to = ent?.slug || same?.slug || mention?.slug || '';
+    // Never the front page when something fits better: a loosely matching entity page, else the page's own chapter.
+    if (!to) to = entities.find((e) => fuzzyScore(name, e.name) > 0 && fuzzyScore(e.name, name) > 0)?.slug
+      || chapterPage(String(d.story || ''), visible.map((o) => ({ slug: o.slug, name: byslug.get(o.slug)?.name || o.name })))
+      // else the live page that covers most of its named entries (items, secrets, shops, enemies, fights)
+      || coveringPage(entryNames(d), visible.map((o) => ({ slug: o.slug, name: byslug.get(o.slug)?.name || o.name, text: fullText(byslug.get(o.slug)!) })), 3, `${name} ${d.story || ''}`)
+      || '';
+    out.push({ key, from: d.slug, to });
   }
   heldRedirectCount += out.length;
   return out;
@@ -329,7 +339,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
   <meta name="description" content="${esc(opts.description)}">
   <link rel="canonical" href="${esc(opts.canonical)}">
   ${hreflang}
-  ${opts.draft ? '<meta name="robots" content="noindex">' : ''}
+  ${opts.draft ? '<meta name="robots" content="noindex, follow">' : ''}
   <meta property="og:title" content="${esc(opts.title)}">
   <meta property="og:description" content="${esc(opts.description)}">
   <meta property="og:image" content="${SITE}/icon.png">
@@ -1269,6 +1279,7 @@ async function main() {
   // Pages that moved (merged into another page, or replaced by a rebuild): their old URLs get 301s in _redirects.
   // The apps' guide list (guides/index.json): one small line per game, read from the website instead of the server.
   const guideIndex: { key: string; game: string; areas: number; art?: string; checked: number; players: number; langs: string[] }[] = [];
+  const restoredGuides: string[] = [];
   const moved: { key: string; from: string; to: string }[] = Object.entries(SITE_REDIRECTS).flatMap(([key, m]) => Object.entries(m).map(([from, to]) => ({ key, from, to })));
   // Translated guides are rebuilt from scratch too.
   for (const code of Object.keys(LANG_TAG)) if (code !== 'en') fs.rmSync(path.join(OUT, code, 'guides'), { recursive: true, force: true });
@@ -1282,16 +1293,23 @@ async function main() {
       const a = d.data() as GuideArea;
       return [d.id, pr ? { ...a, walkthrough: pr.walkthrough, choices: pr.choices, advice: pr.advice, items: pr.items, secrets: pr.secrets, fights: pr.fights, ...(pr.info ? { info: pr.info } : {}), sources: pr.sources || a.sources } : a];
     }));
-    const visible = order.filter((o) => byslug.has(o.slug) && show(byslug.get(o.slug)!.status));
+    // An unpublished guide (taken down after a failing review: info.unpublished) keeps its addresses: its held pages are
+    // published as noindex, follow pages (drafts), out of the sitemap, the guide list, the homepage and the apps' index,
+    // so its URLs don't return 404 while it waits for a rebuild.
+    const restored = !!info.unpublished && !order.some((o) => byslug.get(o.slug)?.status === 'published');
+    const visible = restored
+      ? order.filter((o) => byslug.get(o.slug)?.status === 'held')
+      : order.filter((o) => byslug.has(o.slug) && show(byslug.get(o.slug)!.status));
     // A merged or renamed page (an alias saved on the guide): its old URL redirects to the page that has it now.
     for (const [from, to] of Object.entries((info.aliases || {}) as Record<string, string>)) moved.push({ key: g.id, from, to });
     if (!visible.length) continue;
+    if (restored) restoredGuides.push(g.id);
     COMP = COMPS.get(g.id) || null;
     COMP_KEY = g.id;
     // Never a broken indexed URL: a page a rebuild, repair or outline change took down (held) redirects to what replaced
     // it: an entity page with its name, a page with the same name, the first page that mentions it, else the guide's
     // front page. (An entity page with the same URL brings the URL back, so it needs none.)
-    if (!PREVIEW) moved.push(...heldRedirects(g.id, snap.docs.map((d) => ({ slug: d.id, ...(d.data() as any) })), visible, byslug, COMP?.entities || []));
+    if (!PREVIEW && !restored) moved.push(...heldRedirects(g.id, snap.docs.map((d) => ({ slug: d.id, ...(d.data() as any) })), visible, byslug, COMP?.entities || []));
     // Languages this game's guide is translated into (translate-guide.ts), published pages only.
     const trs: Record<string, any> = {};
     for (const code of Array.isArray(info.languages) ? info.languages : []) {
@@ -1300,8 +1318,8 @@ async function main() {
       if (t?.areas && Object.keys(t.areas).length) trs[code] = t;
     }
     const langs = ['en', ...Object.keys(trs)];
-    const ach = info.hasAchievements ? (await g.ref.collection('achievements').doc('main').get()).data() || null : null;
-    games.push({
+    const ach = info.hasAchievements && !restored ? (await g.ref.collection('achievements').doc('main').get()).data() || null : null;
+    if (!restored) games.push({
       key: g.id, game: String(info.game || g.id), count: visible.length,
       published: visible.filter((o) => byslug.get(o.slug)!.status === 'published').length, langs,
       players: playersBy.get(g.id) || 0, created: Number(info.createdAt || info.updatedAt || 0),
@@ -1316,14 +1334,15 @@ async function main() {
     for (const code of langs) {
       setLang(code);
       const t = trs[code];
-      // Drafts are English-only previews.
-      const pages = code === 'en' ? visible : visible.filter((o) => byslug.get(o.slug)!.status === 'published');
+      // Drafts are English-only previews; an unpublished guide's pages keep their translated addresses too (noindex).
+      const pages = code === 'en' || restored ? visible : visible.filter((o) => byslug.get(o.slug)!.status === 'published');
       renderGame(g.id, String(info.game || g.id), pages, byslug, t, langs, sitemap, trs, ach, Number(info.appId) || undefined);
     }
     setLang('en');
     COMP = null;
   }
 
+  if (restoredGuides.length) console.log(`Unpublished guides kept at their addresses as noindex pages: ${restoredGuides.join(', ')}.`);
   for (const code of Object.keys(LANG_TAG)) {
     const list = games.filter((g) => g.langs.includes(code));
     if (!list.length) continue;

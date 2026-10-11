@@ -165,3 +165,63 @@ export function fuzzyScore(query: string, text: string): number {
   const nq = q.join(' '), nt = words.join(' ');
   return score + (nt === nq ? 4 : nt.startsWith(nq) ? 2 : 0);
 }
+
+/**
+ * The chapter a text names, as a comparable key: "Chapter 3, the region near Rhodes" -> "chapter 3", "Epilogue Chapter
+ * 2" / "Epilogue Part 2" -> "epilogue 2", "Act II" -> "act 2", "Prologue" -> "prologue". null when it names none.
+ */
+export function chapterKey(text: string): string | null {
+  const roman: Record<string, number> = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10 };
+  const t = String(text || '').toLowerCase();
+  const n = (v: string | undefined) => (v ? (/^\d+$/.test(v) ? String(Number(v)) : roman[v] ? String(roman[v]) : '') : '');
+  const ep = t.match(/\b(epilogue|prologue)\b(?:\s*[:,-]?\s*(?:chapter|part|act)?\s*(\d+|[ivx]+)\b)?/);
+  if (ep) return `${ep[1]}${n(ep[2]) ? ` ${n(ep[2])}` : ''}`;
+  const m = t.match(/\b(chapter|act|part|day|episode|book)\s*(\d+|[ivx]+)\b/);
+  return m && n(m[2]) ? `${m[1]} ${n(m[2])}` : null;
+}
+
+/**
+ * The live page for a held page's chapter (its story note): the page named after the same chapter ("Chapter 3:
+ * Clemens Point" for "Chapter 3, ..."), else, for an epilogue or prologue, the guide's page of that kind. When the note
+ * says whose chapter it is ("H'aanit Chapter 3"), the page's name must name them too (games with a chapter per
+ * character).
+ */
+export function chapterPage(story: string, pages: { slug: string; name: string }[]): string | undefined {
+  const want = chapterKey(story);
+  if (!want) return undefined;
+  const norm = (x: string) => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['’]s\b/g, '').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const at = String(story).toLowerCase().search(/\b(chapter|act|part|day|episode|book|epilogue|prologue)\b/);
+  const owner = at > 0 ? norm(String(story).slice(0, at)) : '';
+  const keyed = pages.filter((p) => !owner || norm(p.name).includes(owner)).map((p) => ({ slug: p.slug, k: chapterKey(p.name) }));
+  const exact = keyed.find((p) => p.k === want);
+  if (exact) return exact.slug;
+  const kind = want.split(' ')[0];
+  return kind === 'epilogue' || kind === 'prologue' ? keyed.find((p) => p.k?.split(' ')[0] === kind)?.slug : undefined;
+}
+
+/**
+ * The live page that covers most of a held page's named entries (its items, secrets, shops, enemies and fights): the
+ * page whose text mentions the most of those names, needing at least `min` of them. For a redirect when nothing else
+ * names the place. hint (the held page's name and chapter note) keeps it honest: a page for another chapter number
+ * ("Chapter 2" for a Chapter 10 page) is never picked, and when the note says whose chapter it is ("Castti's Chapter
+ * 1"), only that character's pages are considered if the guide has any.
+ */
+export function coveringPage(names: string[], pages: { slug: string; name?: string; text: string }[], min = 3, hint = ''): string | undefined {
+  const wanted = [...new Set(names.map((n) => String(n || '').trim()).filter((n) => n.length >= 4))].slice(0, 40);
+  if (wanted.length < min) return undefined;
+  const norm = (x: string) => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['’]s\b/g, '').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const want = chapterKey(hint);
+  const at = String(hint).toLowerCase().search(/\b(chapter|act|part|day|episode|book)\b/);
+  const owner = at > 0 ? norm(String(hint).slice(0, at)).split(' ').slice(-1)[0] : '';
+  let pool = pages.filter((p) => { const k = p.name ? chapterKey(p.name) : null; return !want || !k || k.split(' ')[0] !== want.split(' ')[0] || k === want; });
+  if (owner && owner.length >= 3) {
+    const own = pool.filter((p) => norm(p.name || '').includes(owner));
+    if (own.length) pool = own;
+  }
+  let best: { slug: string; n: number } | undefined;
+  for (const p of pool) {
+    const n = wanted.filter((name) => entitySegments(p.text, [{ name, slug: 'x' }]).some((s) => s.slug)).length;
+    if (n >= min && (!best || n > best.n)) best = { slug: p.slug, n };
+  }
+  return best?.slug;
+}
