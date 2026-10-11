@@ -73,27 +73,24 @@ export async function assess(key: string, note = '') {
         if (scope.dollars > MAX_DOLLARS - 0.4) throw new Error(`cost guard: $${scope.dollars.toFixed(2)} spent, next call could pass $${MAX_DOLLARS}`);
         const res: any = await gemini().models.generateContent({
           model: MODEL,
-          contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}${prompt}\nRun several Google searches first (the best walkthrough sites and wikis for this game; never fandom.com), then reply with JSON only.` }] }],
+          contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}${prompt}\nRun a few Google searches (the best walkthrough sites and wikis for this game; never fandom.com). Answer in short factual lines, one fact per line, only what the sources say.` }] }],
           config: { tools: [{ googleSearch: {} }], temperature: 0.2, maxOutputTokens: 12000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
         });
         const n = searchesIn(res);
         console.log(`  research call: ${n} searches`);
         if (!n) continue;
         const sources = sourcesIn(res).filter((s) => !/fandom\.com/i.test(s));
-        return { j: objOf(String(res?.text || '')), searches: n, sources };
+        return { text: cut(res?.text, 9000), searches: n, sources };
       }
       throw new Error('the research call ran no searches twice; not using a memory answer');
     };
     const a1 = await searched([
-      `Assess the video game "${game}" for a player's guide.`,
-      'Return {"structure": {"type": "linear|open world|hub-based|branching", "chapters": "how the story is divided", "choices": "how much player choices matter and where", "builds": "how much character builds matter", "collectibles": "the main collectible kinds", "missables": "how many missables, and of what kind"},',
-      '"players_look_for": ["the kinds of things players search for and ask about most, most common first"],',
-      '"top_guides": [{"site": "name", "sections": ["sections and compendium types it has"]}] (3 to 5 of the best-known guides, not Fandom)}',
+      `For a player's guide to the video game "${game}": how is the game structured (linear, open world, hub-based or branching; how the story is divided; how much player choices matter and where; how much character builds matter; the main collectible kinds; how many missables and of what kind)?`,
+      'What do players search for and ask about most for this game?',
+      'Which sections and compendium types do the 3 to 5 best-known guides for this game have (name each site; not Fandom)?',
     ].join('\n'));
     const a2 = await searched([
-      `For the video game "${game}", count the things a complete guide covers. Use the game's own terms.`,
-      'Return {"counts": [{"kind": "e.g. story missions, side quests, stranger missions, companions, bosses, merchants, legendary animals, collectible kinds", "count": number, "note": "what is counted and the source"}]}',
-      'Count every kind that matters for this game (10 to 16 kinds), exactly as the sources number them.',
+      `For the video game "${game}", how many of each kind of thing does a complete guide cover? For example story missions, side quests, Stranger missions, companions, bosses, merchants, legendary animals, and each collectible kind. Use the game's own terms and give 10 to 16 kinds, each with its number as the sources give it.`,
     ].join('\n'));
 
     // ---- 3 + 4. gaps and blueprint (no search) ----
@@ -104,8 +101,8 @@ export async function assess(key: string, note = '') {
     const topQ = queries.slice(0, 60).map((q) => `"${q.query}" ${q.impressions} (pos ${q.position.toFixed(0)}, ${q.page.replace(/^https:\/\/questcompendium\.com/, '')})`);
     const prompt = [
       `Write the guide blueprint for "${game}": what OUR guide should contain, decided for this game. The shared standards (evidence check, review, stable URLs, cost caps) are fixed; you decide the content.`,
-      `ASSESSMENT: ${JSON.stringify(a1.j)}`,
-      `COUNTS: ${JSON.stringify(a2.j)}`,
+      `ASSESSMENT (searched research): ${a1.text}`,
+      `COUNTS (searched research): ${a2.text}`,
       `OUR GUIDE: walkthrough pages in order: ${inventory.join('; ')}.`,
       `Compendium types: ${(comp.taxonomy || []).map((t: any) => `${t.label}${t.tier ? ` (${t.tier})` : ''}`).join(', ') || 'none'}; entity pages: ${ents.length} (${ents.filter((e) => e.status === 'published').length} published).`,
       `GAPS WE KNOW: failed review: ${failed.join(', ') || 'none'}; thin pages (<6 entries): ${thin.join(', ') || 'none'}; entity pages with generic or wrong content: ${generic.length} (${generic.slice(0, 12).join(', ')}).`,
@@ -113,7 +110,9 @@ export async function assess(key: string, note = '') {
       `THINGS THE APP HAD TO SEARCH FOR (the guide lacked them): ${facts.slice(0, 50).join(' | ') || 'none'}.`,
       `CORRECTIONS: ${corrections.join(' | ') || 'none'}.`,
       ...(note ? [`OWNER'S REQUIREMENTS FOR THIS GAME: ${note}`] : []),
-      'Return JSON: {"summary": "2-3 sentences", "gaps": {"missing_sections": ["..."], "thin_or_weak": ["..."], "wrong_or_generic": ["..."]},',
+      'Return JSON: {"assessment": {"structure": "type, how the story is divided", "choices": "...", "builds": "...", "collectibles": "...", "missables": "...", "players_look_for": ["most common first"], "top_guides": [{"site": "...", "sections": ["..."]}]},',
+      ' "counts": [{"kind": "...", "count": number, "note": "as the research gives it"}] (from the research only),',
+      ' "summary": "2-3 sentences", "gaps": {"missing_sections": ["..."], "thin_or_weak": ["..."], "wrong_or_generic": ["..."]},',
       ' "sections": [{"id": "kebab-case", "title": "...", "kind": "walkthrough|compendium|reference", "what": "one line", "why": "evidence from the inputs",',
       '   "units": number of pages or entity pages, "unit": "page|entity|quest-short|quest-full", "cap": per-game cap for this type (entity kinds only), "priority": 1 is first}],',
       ' "keep": ["what of ours already fits and stays as is"], "drop_or_merge": ["sections not worth building for this game"]}',
@@ -126,7 +125,7 @@ export async function assess(key: string, note = '') {
     const out = {
       key, game, at: Date.now(), status: 'proposed',
       inputs: { pages: pages.length, entities: ents.length, scQueries: queries.length, facts: facts.length, corrections: corrections.length },
-      assessment: a1.j, counts: a2.j.counts || [], sources: [...new Set([...a1.sources, ...a2.sources])].slice(0, 30),
+      assessment: bp.assessment || a1.text, counts: bp.counts || [], research: { structure: a1.text, counts: a2.text }, sources: [...new Set([...a1.sources, ...a2.sources])].slice(0, 30),
       gaps: { ...(bp.gaps || {}), failedPages: failed, thinPages: thin, genericEntities: generic.length },
       summary: bp.summary, sections, keep: bp.keep || [], dropOrMerge: bp.drop_or_merge || [],
       buildCost: Math.round(sections.reduce((n: number, s: any) => n + s.cost, 0) * 100) / 100,
