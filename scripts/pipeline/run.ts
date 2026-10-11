@@ -57,6 +57,10 @@
  * Off switch: set `enabled: false` on system/pipeline in Firestore (or PIPELINE_ENABLED=false).
  * Pause switch for the repair queue and careful builds: set `queuePaused` on system/pipeline (anything truthy, e.g.
  * { at, why }); delete it to resume. Everything else (translations, quick guides, corrections) still runs, under the caps.
+ * New guides are paused (depth over breadth, since Oct 2026): no guides for new games from the wish list, Steam
+ * candidates, Search Console suggestions or games players ask about, and queued builds of games without a live guide
+ * wait. Existing guides keep improving (repairs, corrections, translations, revisits). system/pipeline.newGuides = true
+ * (or PIPELINE_NEW_GUIDES=on) turns new guides back on. The core guides (scripts/guides/core.ts) get the depth.
  */
 import { spawnSync } from 'child_process';
 import fs from 'fs';
@@ -256,8 +260,12 @@ async function main() {
     planned.add(id);
     plan.push(a);
   };
+  // New guides paused (depth over breadth): only existing guides are improved unless system/pipeline.newGuides is on.
+  const NEW_GUIDES = process.env.PIPELINE_NEW_GUIDES === 'on' || state.newGuides === true;
+  let newSkipped = 0;
   for (const s of demand) {
     const g = await guideInfo(s.game);
+    if (!g.published && !NEW_GUIDES) { newSkipped++; continue; }
     if (!g.published) {
       // A game the AI barely knew in quick mode (few pages came out) gets the careful mode next.
       if (g.pipeline.quickTried) add({ kind: 'build-checked', game: s.game, key: g.key, searches: 400, why: `${s.playerCount} players use it; the quick guide came out thin` });
@@ -266,6 +274,7 @@ async function main() {
   }
   for (const t of trending) {
     const g = await guideInfo(t.name);
+    if (!g.published && !NEW_GUIDES) { newSkipped++; continue; }
     if (!g.published && t.isNew) add({ kind: 'build-checked', game: t.name, key: g.key, searches: 400, why: 'a popular new release on Steam' });
     else if (!g.published) add({ kind: 'build', game: t.name, key: g.key, searches: 0, why: 'a popular game on Steam with no guide' });
     else if (g.pipeline.newRelease && !g.pipeline.revisited && Date.now() - (g.pipeline.builtAt || 0) > 21 * DAY)
@@ -292,11 +301,13 @@ async function main() {
   // first; at least 20 impressions in 28 days).
   const searchWishes: string[] = (Array.isArray(state.searchWishes) ? state.searchWishes : []).filter((w: any) => w && w.game && w.impressions >= 20).map((w: any) => String(w.game));
   for (const name of [...wishlist(), ...searchWishes]) {
+    if (!NEW_GUIDES) { if (!have.has(gameKey(name))) newSkipped++; continue; }
     if (wished >= WISH_SLOTS) break;
     if (have.has(gameKey(name))) continue;
     add({ kind: 'build', game: name, key: gameKey(name), searches: 0, why: 'from the wish list', wish: true });
     wished++;
   }
+  if (newSkipped) report.push(`⏸️ New guides paused (depth over breadth): ${newSkipped} new-game suggestion(s) skipped (wish list, Steam, Search Console, players). system/pipeline.newGuides turns them back on.`);
   for (const s of demand) {
     const g = await guideInfo(s.game);
     if (g.quick > 0) add({ kind: 'upgrade', game: s.game, key: g.key, searches: Math.min(400, g.quick * 6), why: `${s.playerCount} players use it; ${g.quick} quick pages to check` });
@@ -432,6 +443,23 @@ async function main() {
   // Guides in the flagship programme (system/flagship) get their pages rebuilt there: their page passes leave the queue.
   const flagship: any = (await db().collection('system').doc('flagship').get()).data() || {};
   const flagKeys = new Set<string>((flagship.guides || []).filter((g: any) => flagship.progress?.[g.key]?.phase !== 'done').map((g: any) => g.key));
+  // The core guides (core.ts) rebuild every page with the evidence method: their page repairs are covered too.
+  const core: any = (await db().collection('system').doc('core').get()).data() || {};
+  if (core.approved) for (const k of (core.guides || []) as string[]) if (!core.perGuide?.[k]?.done) flagKeys.add(k);
+  // New guides paused: careful builds of games that have no live guide wait in the queue.
+  if (!NEW_GUIDES) {
+    const live = new Set<string>();
+    for (const q of queue) {
+      const k = gameKey(q.game);
+      if ((await db().collection('guides').doc(k).collection('areas').where('status', '==', 'published').limit(1).get()).size) live.add(k);
+    }
+    const newOnes = queue.filter((q) => !live.has(gameKey(q.game)));
+    if (newOnes.length) {
+      queue.splice(0, queue.length, ...queue.filter((q) => live.has(gameKey(q.game))));
+      waiting.push(...newOnes);
+      report.push(`⏸️ ${newOnes.length} queued build(s) of new games wait while new guides are paused (${[...new Set(newOnes.map((q) => q.game))].slice(0, 5).join(', ')}).`);
+    }
+  }
   const covered = queue.filter((q) => flagKeys.has(gameKey(q.game)) && ['fights', 'missables', 'info', 'queries'].includes(q.mode));
   if (covered.length) {
     queue.splice(0, queue.length, ...queue.filter((q) => !covered.includes(q)));
@@ -696,6 +724,24 @@ async function main() {
       for (const f of fl) failedPages.push(`${name} / ${f.name}${f.score != null ? ` (${f.score})` : ''}: ${String(f.reason || 'failed review').slice(0, 80)}`);
     }
     if (failedPages.length) report.push(`⚠️ Re-verification failed (old content kept, no badge; ${failedPages.length} page(s), say which to retry): ${failedPages.slice(0, 25).join('; ')}${failedPages.length > 25 ? `; and ${failedPages.length - 25} more` : ''}.`);
+  }
+  // Core guides (scripts/guides/core.ts): completeness per guide, this month's shared budget, and what's left.
+  try {
+    const coreSt: any = (await db().collection('system').doc('core').get()).data() || {};
+    if (Array.isArray(coreSt.guides) && coreSt.guides.length) {
+      const { coreEstimate, coreBudget } = await import('../guides/core');
+      const e = await coreEstimate();
+      const b = await coreBudget();
+      report.push(`📚 Core guides${coreSt.approved ? '' : ' (waiting for the list to be approved)'}${coreSt.paused ? ' (paused)' : ''}: $${b.spentMonth.toFixed(2)} of $${b.monthly} this month. Left to complete them all: ≈ $${e.total.toFixed(0)}, about ${e.months.toFixed(1)} month(s) at $${e.monthly} a month.`);
+      for (const r of e.rows) {
+        const done = !!coreSt.perGuide?.[r.key]?.done;
+        report.push(`${done ? '✅' : '•'} ${shortName(r.game)}: flagship pages ${r.corePages}/${r.pages} · compendium pages ${r.entitiesPublished}/${r.entitiesTotal}${r.taxonomy ? '' : ' (count planned once its taxonomy is built)'} · $${r.cost.toFixed(2)} so far, ≈ $${r.left.toFixed(2)} left`);
+      }
+      const fails = (coreSt.guides as string[]).flatMap((k) => [...(coreSt.perGuide?.[k]?.failedPages || []).map((f: any) => `${f.name} (page)`), ...(coreSt.perGuide?.[k]?.failedEntities || []).map((f: any) => `${f.name} (entity)`)]);
+      if (fails.length) report.push(`⚠️ Core pieces that failed review (not retried; add them to system/core.retry to try again): ${fails.slice(0, 15).join(', ')}${fails.length > 15 ? `, and ${fails.length - 15} more` : ''}.`);
+    }
+  } catch (e: any) {
+    console.warn(`Core guides summary skipped: ${e?.message}`);
   }
   const guidesDone = (flagship.guides || []).every((g: any) => flagship.progress?.[g.key]?.phase === 'done');
   if (flagship.rollout?.enabled && (guidesDone || flagship.rollout.lastRun)) {

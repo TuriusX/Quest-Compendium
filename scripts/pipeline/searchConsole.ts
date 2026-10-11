@@ -321,7 +321,7 @@ async function weekly() {
 
   // What players cost this month (playerCosts.ts): Premium's average and heaviest player, and free players' average.
   // Entity pages by demand (compendium.ts): queries that land on a missing or weak page get an entity page, most
-  // searched first, within config/compendium.monthly ($10 a month by default).
+  // searched first, paid from the core guides' monthly budget (core.ts, $30 a month by default).
   let entityLine = '', entityBuilt = 0, entityDollars = 0;
   try {
     const demand = rows.map((r) => ({ query: r.query, impressions: r.impressions, ...(pageRefOf(r.page) || { key: '' }) })).filter((r: any) => r.key);
@@ -329,7 +329,7 @@ async function weekly() {
     entityBuilt = d.built.filter((b) => b.status === 'published').length;
     entityDollars = d.built.reduce((n, b) => n + b.dollars, 0);
     entityLine = d.built.length || d.skipped.length
-      ? `**Entity pages by demand:** ${d.built.length ? d.built.map((b) => `${b.name} (${b.key}, ${b.status}, $${b.dollars.toFixed(2)})`).join(', ') : 'none built'}; $${entityDollars.toFixed(2)} this week, $${d.spent.toFixed(2)} of $${d.monthly} this month${d.skipped.length ? `; skipped ${d.skipped.length}: ${d.skipped.slice(0, 5).join('; ')}` : ''}`
+      ? `**Entity pages by demand:** ${d.built.length ? d.built.map((b) => `${b.name} (${b.key}, ${b.status}, $${b.dollars.toFixed(2)})`).join(', ') : 'none built'}; $${entityDollars.toFixed(2)} this week, $${d.spent.toFixed(2)} of the core guides' $${d.monthly} this month${d.skipped.length ? `; skipped ${d.skipped.length}: ${d.skipped.slice(0, 5).join('; ')}` : ''}`
       : '**Entity pages by demand:** no queries landed on a missing or weak page.';
   } catch (e: any) {
     entityLine = `**Entity pages by demand:** failed (${String(e?.message || e).slice(0, 120)})`;

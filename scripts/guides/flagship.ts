@@ -863,7 +863,19 @@ async function reverifyPhase(st: any, budget: any, save: () => Promise<any>, cha
   return rv.done as boolean | { build: string };
 }
 
+/** For the core guides programme (core.ts): the evidence-method page, writing a page that passed, and the site publish. */
+export const buildPageEvidenceForCore = (...a: Parameters<typeof buildPageEvidence>) => buildPageEvidence(...a);
+export const writePageForCore = (...a: Parameters<typeof writePage>) => writePage(...a);
+export const publishSiteForCore = () => publishSite();
+
 async function program() {
+  // The core guides programme (core.ts), once its list is approved, replaces the flagship programme and its rollout:
+  // one $30 a month budget for the core guides, one guide at a time.
+  const core: any = (await db().collection('system').doc('core').get()).data() || {};
+  if (core.approved && Array.isArray(core.guides) && core.guides.length && arg('estimate') !== 'true' && !arg('only')) {
+    const { runCore } = await import('./core');
+    return runCore();
+  }
   const ref = db().collection('system').doc('flagship');
   const st: any = (await ref.get()).data();
   if (!st?.guides?.length) { console.log('No flagship programme (system/flagship.guides).'); return; }

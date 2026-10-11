@@ -16,8 +16,12 @@
  *       "Services and people" as structured data (Merchants, Quest NPCs, Invaders and enemies, Services: name, role,
  *       short location), from the page's evidence pack, each person claim-checked, broken fragments dropped
  *       -> the area page's "people" field (the site shows grouped cards); --people all: every evidence-built page
+ *   npx tsx scripts/guides/compendium.ts --key elden-ring --core-taxonomy
+ *       the core guides' taxonomy (core.ts): entity types fitting the game, each with a tier (people, bosses,
+ *       locations, collectibles, other), and the game's important entities by exact name, searched -> guideCompendium/{key}
+ *       { taxonomy, entities, core: { builtAt, cost } }
  *   demandEntities(): the weekly rollout by demand (searchConsole.ts): entity pages for the most-searched queries that
- *       land on a missing or weak page, within config/compendium.monthly (default $10 a month)
+ *       land on a missing or weak page, paid from the core guides' monthly budget (core.ts, $30 a month by default)
  *
  * publish.ts renders published entity pages, links entity mentions in the guide text (with a hover preview), the
  * forgiving guide search over every entity, page, step and entry, and the structured "Services and people".
@@ -80,6 +84,60 @@ async function taxonomy(demand: string[] = []) {
   console.log(`${game}: ${types.length} types: ${types.map((t: any) => `${t.label} (${t.examples.slice(0, 4).join(', ')})`).join(' | ')}`);
   console.log(`  entities: ${entities.map((e: any) => `${e.name} [${e.type}]`).join(', ')}`);
   console.log(`  cost $${scope.dollars.toFixed(4)}`);
+}
+
+/**
+ * The core guides' taxonomy (core.ts): the compendium planned for this game's structure. One searched call: 6 to 12
+ * entity types that fit the game (its own terms), each with a tier that sets the build order (people: main characters,
+ * companions, NPCs, merchants; bosses; locations: regions, towns, dungeons; collectibles: each kind its own type;
+ * other), and the important entities of each by exact in-game name, most important first. Merged with what the
+ * compendium had (existing entities and their types are kept).
+ */
+export async function coreTaxonomy(k: string) {
+  key = k;
+  const info: any = (await db().collection('guides').doc(key).get()).data() || {};
+  const game = String(info.game || key);
+  const old: any = (await ref().get()).data() || {};
+  const sc: any = (await db().collection('system').doc('searchConsole').get()).data() || {};
+  const words = game.toLowerCase().split(/[^a-z0-9]+/).filter((w: string) => w.length > 3);
+  const queries = (sc.topQueries || []).filter((q: any) => words.some((w: string) => q.query.toLowerCase().includes(w))).map((q: any) => `"${q.query}"`).slice(0, 40);
+  const prompt = [
+    `Plan the complete compendium for the video game "${game}": every kind of thing a player looks up one at a time, and the important ones of each kind. Search wikis and guides for this game first; use exact in-game names with correct apostrophes.`,
+    `The guide's walkthrough is organised as: ${(info.areas || []).map((a: any) => a.name).join('; ')}.`,
+    queries.length ? `Queries people found our guide with: ${queries.join('; ')}.` : '',
+    'Pick 6 to 12 entity types that fit THIS game, in its own terms. Give each a tier:',
+    '  "people": main characters, companions, NPCs, merchants, trainers (merchants may be their own type);',
+    '  "bosses": bosses and major enemies;',
+    '  "locations": key locations: regions, towns, dungeons, landmarks;',
+    '  "collectibles": each collectible kind its own type (never one "Collectibles" type);',
+    '  "other": weapons, spells, quests, anything else players look up.',
+    'For each type list its important entities, most important first: up to 40 for people, bosses and locations, up to 25 for collectibles and other. Only real entities of this game.',
+    'Reply with JSON only: {"taxonomy": [{"id": "kebab-case", "label": "plural label", "description": "one line", "tier": "people|bosses|locations|collectibles|other"}], "entities": [{"name": "exact name", "type": "type id", "rank": 1, "aliases": ["other spellings"]}]}',
+  ].filter(Boolean).join('\n');
+  const scope = { dollars: 0, searches: 0 };
+  const res: any = await usageScope.run(scope, () => gemini().models.generateContent({
+    model: MODEL,
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: { tools: [{ googleSearch: {} }], temperature: 0.2, maxOutputTokens: 24000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+  }));
+  const j: any = parseObj(String(res?.text || ''));
+  const tiers = ['people', 'bosses', 'locations', 'collectibles', 'other'];
+  const types = (Array.isArray(j.taxonomy) ? j.taxonomy : []).filter((t: any) => t?.id && t?.label).map((t: any) => ({
+    id: entitySlug(t.id), label: cut(t.label, 60), description: cut(t.description, 200), tier: tiers.includes(String(t.tier)) ? String(t.tier) : 'other', examples: [] as string[],
+  }));
+  if (types.length < 3) { console.log(`${game}: the core taxonomy came back empty (${types.length} types); not saved.`); return null; }
+  const ids = new Set(types.map((t: any) => t.id));
+  const fresh = (Array.isArray(j.entities) ? j.entities : []).filter((e: any) => e?.name && ids.has(entitySlug(e.type))).map((e: any, i: number) => ({
+    name: cut(e.name, 80), slug: entitySlug(e.name), type: entitySlug(e.type), rank: Number(e.rank) || i + 1, aliases: (e.aliases || []).map((x: any) => cut(x, 80)).filter(Boolean).slice(0, 6),
+  }));
+  for (const t of types) t.examples = fresh.filter((e: any) => e.type === t.id).slice(0, 12).map((e: any) => e.name);
+  // Existing entities stay (with their types when still known); new ones are added once each.
+  const oldTypes = (old.taxonomy || []).filter((t: any) => !ids.has(t.id)).map((t: any) => ({ ...t, tier: t.tier || 'other' }));
+  const seen = new Set<string>();
+  const entities = [...(old.entities || []), ...fresh].filter((e: any) => e?.slug && !seen.has(e.slug) && seen.add(e.slug));
+  await ref().set({ key, game, taxonomy: [...types, ...oldTypes], entities, core: { builtAt: Date.now(), cost: scope } }, { merge: true });
+  console.log(`${game}: core taxonomy, ${types.length} types (${types.map((t: any) => `${t.label} [${t.tier}] ${fresh.filter((e: any) => e.type === t.id).length}`).join(', ')}), ${entities.length} entities, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);
+  return { types: types.length, entities: entities.length, dollars: scope.dollars };
 }
 
 // ---------------- 2. entity pages ----------------
@@ -356,11 +414,13 @@ const ENTITY_ESTIMATE = 0.2; // dollars a page (measured $0.15-0.19 on RDR2)
  */
 export async function demandEntities(rows: { query: string; key: string; slug?: string; impressions: number }[], opts: { dry?: boolean; minImpressions?: number } = {}) {
   const month = new Date().toISOString().slice(0, 7);
-  const cfg: any = (await db().collection('config').doc('compendium').get()).data() || {};
-  const monthly = Number.isFinite(Number(cfg.monthly)) ? Number(cfg.monthly) : COMPENDIUM_MONTHLY_DEFAULT;
+  // Paid from the core guides' monthly budget (core.ts): the same $30 a month as the core guides' pages and entities.
+  const { coreBudget, chargeCore } = await import('./core');
+  const budget = await coreBudget();
+  const monthly = budget.monthly;
   const sref = db().collection('system').doc('compendium');
-  const st: any = (await sref.get()).data() || {};
-  let spent = st.month === month ? Number(st.spent || 0) : 0;
+  let spent = budget.spentMonth;
+  const startSpent = spent;
   const built: { key: string; name: string; status: string; dollars: number }[] = [];
   const skipped: string[] = [];
   const byKey = new Map<string, Map<string, number>>();
@@ -395,6 +455,7 @@ export async function demandEntities(rows: { query: string; key: string; slug?: 
       const sc0 = { dollars: 0, searches: 0 };
       await usageScope.run(sc0, () => buildTaxonomy(k, [...wanted.keys()]));
       spent += sc0.dollars;
+      await chargeCore(sc0.dollars, k);
       comp = (await cref.get()).data();
     }
     for (const [thing, imp] of wanted) {
@@ -411,12 +472,13 @@ export async function demandEntities(rows: { query: string; key: string; slug?: 
     try {
       const r = await buildEntity(c.key, c.name, { type: c.type });
       spent += r.dollars;
+      await chargeCore(r.dollars, c.key);
       built.push({ key: c.key, name: c.name, status: r.status, dollars: r.dollars });
     } catch (e: any) {
       skipped.push(`${c.game}: ${c.name} (${cut(e?.message || e, 80)})`);
     }
   }
-  if (!opts.dry) await sref.set({ month, spent: Math.round(spent * 10000) / 10000, lastRun: Date.now(), lastBuilt: built, monthly }, { merge: true });
+  if (!opts.dry) await sref.set({ month, spent: Math.round((spent - startSpent) * 10000) / 10000, lastRun: Date.now(), lastBuilt: built, monthly }, { merge: true });
   return { built, skipped, spent, monthly, candidates: cands.length };
 }
 
@@ -424,6 +486,7 @@ async function main() {
   if (arg('people') === 'all') return void (await peopleAll(arg('dry') === 'true'), process.exit(0));
   if (!key) throw new Error('--key is required');
   if (arg('taxonomy') === 'true') await taxonomy();
+  if (arg('core-taxonomy') === 'true') await coreTaxonomy(key);
   if (arg('entity')) await entity(String(arg('entity')));
   if (arg('people')) await people(String(arg('people')));
   process.exit(0);
