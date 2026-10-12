@@ -309,6 +309,16 @@ function writeGuideIndex(games: { key: string; game: string; areas: number; art?
  * (publish skips guides with no live pages).
  */
 export let heldRedirectCount = 0;
+/** The live page closest to a held one in the guide's play order: the one just before it, else the one after. */
+function nearestInOrder(d: any, docs: any[], live: Set<string>): string {
+  const at = Number(d.order);
+  if (!Number.isFinite(at)) return '';
+  const ordered = docs.filter((x) => live.has(x.slug) && Number.isFinite(Number(x.order)));
+  const before = ordered.filter((x) => Number(x.order) < at).sort((a, b) => Number(b.order) - Number(a.order))[0];
+  const after = ordered.filter((x) => Number(x.order) > at).sort((a, b) => Number(a.order) - Number(b.order))[0];
+  return (before || after)?.slug || '';
+}
+
 function heldRedirects(key: string, docs: any[], visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, entities: { slug: string; name: string }[]) {
   const live = new Set(visible.map((o) => o.slug));
   const norm = (x: string) => String(x || '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -330,6 +340,8 @@ function heldRedirects(key: string, docs: any[], visible: { slug: string; name: 
       || chapterPage(String(d.story || ''), visible.map((o) => ({ slug: o.slug, name: byslug.get(o.slug)?.name || o.name })))
       // else the live page that covers most of its named entries (items, secrets, shops, enemies, fights)
       || coveringPage(entryNames(d), visible.map((o) => ({ slug: o.slug, name: byslug.get(o.slug)?.name || o.name, text: fullText(byslug.get(o.slug)!) })), 3, `${name} ${d.story || ''}`)
+      // else the nearest live page in play order (the one just before it, or after it), never the front page
+      || nearestInOrder(d, docs, live)
       || '';
     out.push({ key, from: d.slug, to });
   }
