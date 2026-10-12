@@ -110,6 +110,9 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ we
   const info: any = (await db().collection('guides').doc(key).get()).data() || {};
   const game = String(info.game || key);
   const progress: Record<string, Progress> = b.progress || {};
+  // Entity sections held for a guide (system/core.entityHold.{key}: why), e.g. until the new compendium method's pilot
+  // is reviewed, so pages aren't built the old way and then rebuilt. The guide's other sections carry on.
+  const hold = String(((await db().collection('system').doc('core').get()).data()?.entityHold || {})[key] || '');
   const save = (id: string) => ref.set({ progress: { [id]: progress[id] }, updatedAt: Date.now() }, { merge: true });
   let wentLive = false;
   const { buildPageEvidenceForCore, writePageForCore } = await import('./flagship');
@@ -120,6 +123,7 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ we
   for (const s of (b.sections || []).slice().sort((x: Section, y: Section) => (x.priority || 99) - (y.priority || 99)) as Section[]) {
     const p: Progress = (progress[s.id] ||= { built: [] });
     if (p.done) continue;
+    if (hold && s.unit === 'entity') { console.log(`  ${s.title}: held (${hold}).`); continue; }
     const want = Math.max(0, Math.min(Number(s.units) || 0, s.cap != null ? Number(s.cap) : Infinity));
     // Entity pages that only needed a rebuild (done by the re-research of existing pages): nothing new to build.
     if (isRebuildExisting(s) || want === 0) { p.done = Date.now(); await save(s.id); continue; }

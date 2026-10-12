@@ -236,7 +236,7 @@ const WRITER = (game: string, name: string, typeLabel: string, ev: EvidencePack,
 ].join('\n');
 
 /** The page as claims for the check: the overview and route as sentences, each listed thing as its own claim. */
-function claimPageOf(p: EntityPage): ClaimPage {
+export function claimPageOf(p: EntityPage): ClaimPage {
   return {
     steps: [
       { title: 'Overview', text: p.overview },
@@ -264,7 +264,7 @@ function claimPageOf(p: EntityPage): ClaimPage {
 }
 
 /** Removes what the check couldn't support (by label), keeping the rest. */
-function applyVerdicts(p: EntityPage, verdicts: ClaimVerdict[]): string[] {
+export function applyVerdicts(p: EntityPage, verdicts: ClaimVerdict[]): string[] {
   const bad = verdicts.filter((v) => v.verdict === 'unsupported' || v.verdict === 'contradicted');
   const removed: string[] = [];
   const nShops = p.summary.shops.length, nServ = p.summary.services.length, nQuests = p.summary.quests.length, nColl = p.summary.collectibles.length, nChap = p.summary.chapters.length;
@@ -596,3 +596,9 @@ async function main() {
   process.exit(0);
 }
 if (process.argv[1] && /compendium\.ts$/.test(process.argv[1])) main().catch((e) => { console.error(e?.message || e); process.exit(1); });
+
+/** The entity's stored research (searched once; reused), for other builders (entityV2.ts). */
+export async function entityEvidenceFor(k: string, game: string, name: string, type: string, rebuild = false): Promise<EvidencePack> {
+  key = k;
+  return entityEvidence(game, name, type, rebuild);
+}
