@@ -753,6 +753,13 @@ async function main() {
   } catch (e: any) {
     console.warn(`Core guides summary skipped: ${e?.message}`);
   }
+  // Three weeks after Fextralife was blocked as evidence: pass rates of the guides that leaned on it, separately.
+  try {
+    const { fextralifeWatchLines } = await import('./fextralifeWatch');
+    report.push(...(await fextralifeWatchLines(Number(state.fextralifeWatchUntil) || undefined)));
+  } catch (e: any) {
+    console.warn(`Fextralife watch skipped: ${e?.message}`);
+  }
   const guidesDone = (flagship.guides || []).every((g: any) => flagship.progress?.[g.key]?.phase === 'done');
   if (flagship.rollout?.enabled && (guidesDone || flagship.rollout.lastRun)) {
     // The traffic-driven rollout: pages live this month against its budget, the last run's pages and failures.

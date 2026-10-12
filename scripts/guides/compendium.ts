@@ -157,8 +157,13 @@ async function entityEvidence(game: string, name: string, type: string, rebuild:
     const kind = entityKind(type);
     const asks = kind === 'person'
       ? [
-          { topic: 'what', text: `In the video game "${game}", the character "${name}" (${type}): who they are and their role, where a player finds them in each chapter or act (where they are, and when that changes), and what they sell or what services they offer, if any.` },
+          { topic: 'what', text: `In the video game "${game}", the character "${name}" (${type}): who they are and their role, where a player finds them in each chapter or act (where they are, and when that changes; for a companion or gang member who travels with the player or stays in the player's camp, say so for each chapter, e.g. \"in camp\" or \"travels with you\"), and what they sell or what services they offer, if any.` },
           { topic: 'quests', text: `In the video game "${game}", the character "${name}": every mission, quest or strand they give or appear in (each part separately, e.g. "Mission – I", "Mission – II"), with the chapter or act of each.` },
+        ]
+      : kind === 'thing'
+      ? [
+          { topic: 'what', text: `In the video game "${game}", "${name}" (${type}): what it is and what it does, exactly where or how a player gets or unlocks it (location, quest, vendor, requirement), and anything missable about it.` },
+          { topic: 'quests', text: `In the video game "${game}", "${name}": the quests, characters or places tied to getting it.` },
         ]
       : kind === 'boss'
       ? [
@@ -198,10 +203,11 @@ export type EntityPage = {
 };
 
 /** What kind of thing an entity is, from its type: a person (characters, NPCs, merchants, companions), a boss, or a place/thing. */
-export function entityKind(type: string): 'person' | 'boss' | 'place' {
+export function entityKind(type: string): 'person' | 'boss' | 'thing' | 'place' {
   const t = String(type || '').toLowerCase();
   if (/charact|npc|compan|merchant|people|person|vendor|trader|ally|allies|villain|origin|follower|romance|hireling|quest giver|gang member/.test(t)) return 'person';
   if (/boss|enem|monster|creature|foe|dragon|demigod/.test(t)) return 'boss';
+  if (/power|spell|abilit|item|weapon|armou?r|class|feat|skill|perk|talent|trinket|talisman|relic|specimen|parasite|rune|ash of war|gear|equipment|lure|recipe/.test(t)) return 'thing';
   return 'place';
 }
 
@@ -214,7 +220,7 @@ const WRITER = (game: string, name: string, typeLabel: string, ev: EvidencePack,
   ...(entityKind(typeLabel) === 'person'
     ? [
         '{"overview": "2-3 sentences: who they are and why players look for them",',
-        ' "whereToFind": [{"when": "Chapter 2 (or the act or period; empty if it never changes)", "where": "where they are then, by landmarks"}] (only what the evidence says; [] if it does not say),',
+        ' "whereToFind": [{"when": "Chapter 2 (or the act or period; empty if it never changes)", "where": "where they are then, by landmarks; for a companion or gang member, \\"in camp\\" or \\"travels with you\\" is a valid answer"}] (only what the evidence says; [] if it does not say),',
       ]
     : [
         '{"overview": "2-3 sentences: what it is and why players go there",',
@@ -535,6 +541,24 @@ export async function demandEntities(rows: { query: string; key: string; slug?: 
  * review, and the rejection check. A rewrite that doesn't pass keeps the live page (cleaned). Addresses never change.
  *   npx tsx scripts/guides/compendium.ts --rewrite-all [--only <key>] [--dry]
  */
+/**
+ * Re-research named entity pages (new searches; blocked and low-trust sites never count) and rewrite them; a rewrite
+ * that doesn't pass keeps the live page. npx tsx scripts/guides/compendium.ts --reresearch "key:Name|key:Name"
+ */
+async function reresearch(list: string) {
+  let total = 0;
+  for (const item of list.split('|').map((x) => x.trim()).filter(Boolean)) {
+    const at = item.indexOf(':');
+    const k = item.slice(0, at), name = item.slice(at + 1);
+    const e: any = (await db().collection('guideCompendium').doc(k).collection('entities').doc(entitySlug(name)).get()).data();
+    if (!e) { console.log(`${k} / ${name}: no such page`); continue; }
+    const r = await buildEntity(k, e.name, { type: e.type, rebuild: true, keepOnFail: true });
+    total += r.dollars;
+    console.log(`  => ${k} / ${e.name}: ${r.status}, where to find: ${r.whereToFind || 0} line(s), $${r.dollars.toFixed(3)}`);
+  }
+  console.log(`\nRe-research: $${total.toFixed(2)} in all.`);
+}
+
 async function rewriteAll(only: string, dry: boolean) {
   const rows: { key: string; name: string; status: string; dollars: number; person: boolean; whereToFind: number }[] = [];
   for (const c of (await db().collection('guideCompendium').get()).docs) {
@@ -561,6 +585,7 @@ async function rewriteAll(only: string, dry: boolean) {
 }
 
 async function main() {
+  if (arg('reresearch') && arg('reresearch') !== 'true') return void (await reresearch(String(arg('reresearch'))), setTimeout(() => process.exit(0), 300));
   if (arg('rewrite-all') === 'true') return void (await rewriteAll(arg('only') && arg('only') !== 'true' ? String(arg('only')) : '', arg('dry') === 'true'), setTimeout(() => process.exit(0), 300));
   if (arg('people') === 'all') return void (await peopleAll(arg('dry') === 'true'), process.exit(0));
   if (!key) throw new Error('--key is required');

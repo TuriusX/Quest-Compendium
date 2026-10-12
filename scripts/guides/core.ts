@@ -22,6 +22,9 @@
  * Pages and entities that fail review aren't retried automatically (listed in the Discord summary; add their ids to
  * system/core.retry to try again). A guide moves on once everything has been tried.
  *
+ * Guides with an approved blueprint (guideBlueprints/{key}, scripts/guides/blueprintBuild.ts) follow it instead of the
+ * fixed template above, first (system/core.blueprintOrder sets their order), section by section in priority order.
+ *
  * system/core: { approved: true, guides: [keys in order], monthly: 30, daily: 6, month, spentMonth, day, spentToday,
  *   perGuide: { [key]: { spent, failedPages: [{slug,name,reason,score}], failedEntities: [...], done: <ms> } },
  *   retry: ["key/slug" | "key:entity-slug"], paused: { why } }
@@ -168,16 +171,17 @@ async function entitiesToBuild(key: string, comp: any, failed: Set<string>, retr
 }
 
 /**
- * The owner's checkpoint (system/core.checkpoint { since, pages: 10, maxAvg: 0.40, minPass: 0.70 }): once that many
- * pages have been built since `since` (system/core.pageLog), their average cost and pass rate are saved on the
- * checkpoint, and the programme pauses itself if the average is over maxAvg or the pass rate under minPass. Returns
- * the reason when it paused.
+ * The owner's checkpoint (system/core.checkpoint { since, pages: 10, maxAvg: 0.40, minPass: 0.70 }), rolling: every
+ * time that many units (pages, quest pages, entity, list and reference pages) have been built since the last check
+ * (system/core.pageLog), their average cost and pass rate are saved on the checkpoint, and the programme pauses itself
+ * if the average is over maxAvg or the pass rate under minPass. Returns the reason when it paused.
  */
 async function checkpoint(): Promise<string | null> {
   const st: any = (await cref().get()).data() || {};
   const cp = st.checkpoint;
-  if (!cp || cp.result) return null;
-  const log = ((st.pageLog || []) as any[]).filter((x) => Number(x.at) >= Number(cp.since || 0));
+  if (!cp) return null;
+  const from = Math.max(Number(cp.since || 0), Number(cp.result?.at || 0));
+  const log = ((st.pageLog || []) as any[]).filter((x) => Number(x.at) > from);
   const n = Number(cp.pages || 10);
   if (log.length < n) return null;
   const first = log.sort((a, b) => a.at - b.at).slice(0, n);
@@ -185,9 +189,15 @@ async function checkpoint(): Promise<string | null> {
   const pass = first.filter((x) => x.status === 'passed').length / first.length;
   const bad = avg > Number(cp.maxAvg ?? 0.4) || pass < Number(cp.minPass ?? 0.7);
   const why = `checkpoint after ${n} pages: average $${avg.toFixed(3)} a page, ${Math.round(pass * 100)}% passed (limits: $${Number(cp.maxAvg ?? 0.4).toFixed(2)}, ${Math.round(Number(cp.minPass ?? 0.7) * 100)}%)`;
-  await cref().set({ checkpoint: { ...cp, result: { at: Date.now(), avg, pass, pages: n, paused: bad } }, ...(bad ? { paused: { at: Date.now(), why } } : {}) }, { merge: true });
+  await cref().set({ checkpoint: { ...cp, result: { at: Date.now(), avg, pass, pages: n, paused: bad }, history: FieldValue.arrayUnion({ at: Date.now(), avg: Math.round(avg * 1000) / 1000, pass: Math.round(pass * 100) / 100 }) }, ...(bad ? { paused: { at: Date.now(), why } } : {}) }, { merge: true });
   console.log(`\nCore guides ${why}${bad ? ': paused until the owner decides.' : ': within the limits, carrying on.'}`);
   return bad ? `Paused: ${why}` : null;
+}
+
+/** A built unit for the checkpoint (pages, quest, entity, list and reference pages); the reason when it paused. */
+export async function logUnit(u: { key: string; slug: string; status: string; dollars: number }): Promise<string | null> {
+  await cref().set({ pageLog: FieldValue.arrayUnion({ key: u.key, slug: u.slug, status: u.status, dollars: Math.round(u.dollars * 1000) / 1000, at: Date.now() }) }, { merge: true });
+  return checkpoint();
 }
 
 /** One run: the first incomplete guide in the list, then the next, while the budget, time and limits allow. */
@@ -201,12 +211,33 @@ export async function runCore(): Promise<void> {
   const cfg = await coreConfig();
   let wentLive = false;
   const timeUp = () => Date.now() - RUN_STARTED > MINUTES * 60_000;
+  // Guides with an approved blueprint follow it (blueprintBuild.ts), first, in system/core.blueprintOrder.
+  const approved = (await db().collection('guideBlueprints').where('status', '==', 'approved').get()).docs.map((d) => d.id);
+  const bpOrder = [...((st.blueprintOrder || []) as string[]).filter((k) => approved.includes(k)), ...approved.filter((k) => !(st.blueprintOrder || []).includes(k))];
+  const { runBlueprint } = await import('./blueprintBuild');
+  for (const key of bpOrder) {
+    const lk = await acquireGuideLock(key, 'core blueprint');
+    if (isRefusal(lk)) { console.log(lockedLine(lk, key)); continue; }
+    try {
+      const r = await runBlueprint(key, {
+        room: async () => (await coreBudget()).room,
+        charge: (d) => chargeCore(d, key),
+        logUnit,
+        timeUp,
+      });
+      if (r.wentLive) wentLive = true;
+      if (r.stopped) { console.log(`\n${r.stopped}; the next run carries on.`); await lk.release(); if (wentLive) await publishSiteForCore(); return; }
+      if (r.done) console.log(`\n${key}: blueprint complete.`);
+    } finally {
+      await lk.release().catch(() => {});
+    }
+  }
   let transientRow = 0;
   const stop = (why: string) => { console.log(`\n${why}; the next run carries on.`); return true; };
 
   guides: for (const key of st.guides as string[]) {
     const pg = { failedPages: [], failedEntities: [], ...((st.perGuide || {})[key] || {}) } as any;
-    if (pg.done) continue;
+    if (pg.done || approved.includes(key)) continue; // a guide with an approved blueprint follows it (above)
     const gref = db().collection('guides').doc(key);
     const info: any = (await gref.get()).data();
     if (!info) { console.log(`${key}: no such guide; skipped.`); continue; }

@@ -472,7 +472,7 @@ function areaList(gameKey: string, areas: AreaLink[], current: string | null, ba
 // Entity pages next to the guide (published ones; a preview shows all), links from every mention in the guide's text
 // (with a hover preview), a forgiving search over every entity, page, step and entry, and "Services and people" as
 // grouped cards. COMP is the guide being rendered (set per guide in main).
-type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any; kind?: string; quest?: any };
+type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any; kind?: string; quest?: any; ref?: any };
 const COMPS = new Map<string, NonNullable<typeof COMP>>();
 let COMP: { taxonomy: any[]; entities: CompEntity[]; people: Record<string, { groups: { group: string; people: { name: string; role: string; where?: string }[] }[] }> } | null = null;
 const compLinkable = () => (COMP?.entities || []).map((e) => ({ name: e.name, slug: e.slug }));
@@ -1055,6 +1055,15 @@ function questRows(q: any, row: (label: string, html: string) => string, list: (
   ].join('');
 }
 
+/** A list or reference page's body (refpages.ts): its sections, then its items as a table (name, where, notes). */
+function refBlocks(r: any, self: string): string {
+  const secs = (r.sections || []).map((x: any) => `<h2 class="mt-6 text-lg font-bold text-white">${esc(x.heading)}</h2><p class="mt-2 text-zinc-300 leading-relaxed">${rich(x.text, '../', self)}</p>`).join('');
+  const items = (r.items || []).length
+    ? `<div class="mt-6 overflow-x-auto"><table class="w-full text-sm border-collapse"><thead><tr class="text-left text-zinc-500"><th class="py-1.5 pr-3">Name</th><th class="py-1.5 pr-3">Where</th><th class="py-1.5">Notes</th></tr></thead><tbody>${r.items.map((it: any, i: number) => `<tr id="item-${i + 1}" class="border-t border-white/10 align-top"><td class="py-1.5 pr-3 font-semibold text-white">${esc(it.name)}</td><td class="py-1.5 pr-3 text-zinc-300">${rich(it.where || '', '../', self)}</td><td class="py-1.5 text-zinc-400">${esc(it.notes || '')}</td></tr>`).join('')}</tbody></table></div>`
+    : '';
+  return secs + items;
+}
+
 function renderEntities(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, sitemap: string[]) {
   const pageText = (a: GuideArea) => [a.overview, ...(a.walkthrough || []).flatMap((s) => [s.title, s.text, s.tip, s.warn]), ...(a.items || []).map((e) => `${e.name} ${e.where || ''}`), ...(a.tips || [])].filter(Boolean).join(' ');
   // Mission links: a mission whose name is a walkthrough step's title links to that step (exact title matches only;
@@ -1091,6 +1100,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
         ${row('Missions', list((sm.quests || []).map((x: any) => { const st = missionLink(x.name); return `${st ? `<a class="font-semibold text-[#a87ffb] hover:text-white" href="../${esc(st.slug)}/#${esc(st.id)}">${esc(x.name)}</a>` : `<strong class="text-white">${esc(x.name)}</strong>`}<span class="text-zinc-400">${x.kind ? ` · ${esc(x.kind)}` : ''}${x.chapter ? ` · ${esc(x.chapter)}` : ''}</span>`; })))}
         ${row('In the guide', list(mentions.map((o) => `<a class="text-[#a87ffb] hover:text-white" href="../${esc(o.slug)}/index.html">${esc(o.name)}</a>`)))}
       </dl>
+      ${e.ref ? refBlocks(e.ref, e.slug) : ''}
       ${(sm.notes || []).length ? `<ul class="mt-4 space-y-1.5 text-sm text-zinc-300">${sm.notes.map((x: string) => `<li class="flex gap-2"><span class="text-[#c4b0ff]">&bull;</span><span>${rich(x, '../', e.slug)}</span></li>`).join('')}</ul>` : ''}
       ${(e.sources || []).length ? `<p class="mt-6 text-xs text-zinc-500">Sources: ${e.sources.map(esc).join(', ')}</p>` : ''}
     </article>`;

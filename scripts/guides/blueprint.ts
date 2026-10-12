@@ -156,6 +156,17 @@ export async function assess(key: string, note = '') {
 
 const ADMIN_URL = `${process.env.QC_SERVER_URL || 'https://quest-compendium-890629309063.us-east1.run.app'}/admin/reviews`;
 
+/** Whole sentences up to max characters (at least the first sentence): never cut mid-word. */
+export function sentences(text: string, max: number): string {
+  const all = String(text || '').replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s+/);
+  let out = '';
+  for (const s of all) {
+    if (out && (out + ' ' + s).length > max) break;
+    out = out ? `${out} ${s}` : s;
+  }
+  return out;
+}
+
 /** A blueprint's short summary in Discord: the sections in order with their cost, and where to approve it. */
 export async function postBlueprint(key: string): Promise<boolean> {
   const b: any = (await db().collection('guideBlueprints').doc(key).get()).data();
@@ -163,9 +174,9 @@ export async function postBlueprint(key: string): Promise<boolean> {
   const secs = (b.sections || []).slice().sort((x: any, y: any) => (x.priority || 99) - (y.priority || 99));
   const text = [
     `📐 **Guide blueprint ${b.status || 'proposed'}: ${b.game}** (v${b.version || 1}): build ≈ $${Number(b.buildCost || 0).toFixed(2)}${b.assessmentCost ? `, assessment $${Number(b.assessmentCost.dollars || 0).toFixed(2)}` : ''}.`,
-    b.summary ? cut(b.summary, 400) : '',
+    b.summary ? sentences(b.summary, 400) : '',
     ...secs.slice(0, 14).map((x: any) => `${x.priority}. ${x.title || x.id}: ${x.units} ${x.unit}${x.cap != null ? ` (cap ${x.cap})` : ''}, $${Number(x.cost || 0).toFixed(2)}`),
-    b.notes ? `Notes: ${cut(b.notes, 300)}` : '',
+    b.notes ? `Notes: ${sentences(b.notes, 400)}` : '',
     `Approve or edit: ${ADMIN_URL} (Blueprints tab). Nothing is built until it's approved.`,
   ].filter(Boolean).join('\n');
   if (!process.env.DISCORD_WEBHOOK_URL) { console.log(`(No DISCORD_WEBHOOK_URL: not posted)\n${text}`); return false; }
