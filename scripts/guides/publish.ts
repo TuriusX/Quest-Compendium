@@ -92,9 +92,9 @@ function artBox(game: string, appId: number | undefined, extra = '', key?: strin
  *   A  portrait: IGDB's cover (box art, up to 528 px wide), else Steam's portrait library art (600×900, 1200×1800 for
  *      sharp screens)
  *   B  landscape: Steam's large capsule with the logo (616×353), else IGDB's cover on a blurred copy of itself
- * Unset: the key art (artBox).
+ * Unset: the key art (artBox). The site's choice is config/igdb.cards ("A" chosen on 2026-10-12); QC_CARDS overrides it.
  */
-const CARD_MODE = (process.env.QC_CARDS || '').toUpperCase();
+let CARD_MODE = (process.env.QC_CARDS || '').toUpperCase();
 /** Each guide's Steam store art paths (guides/{key}.steamArt, scripts/pipeline/steamArt.ts): capsule, library art, header. */
 const STEAM_ART = new Map<string, Record<string, string>>();
 /** A Steam store image for an app, from the same folder as its saved art (newer apps keep theirs under a hashed path). */
@@ -1446,7 +1446,9 @@ async function buildSiteCss() {
 }
 
 async function main() {
-  if (!IGDB_ON) IGDB_ON = (await db().collection('config').doc('igdb').get()).data()?.site === true;
+  const igdbCfg: any = (await db().collection('config').doc('igdb').get()).data() || {};
+  if (!IGDB_ON) IGDB_ON = igdbCfg.site === true;
+  if (!CARD_MODE) CARD_MODE = String(igdbCfg.cards || '').toUpperCase();
   // One publish at a time (the pipeline, the flagship job and manual runs all write the site); re-entrant when the
   // caller already holds the site lock. A preview writes elsewhere and needs none.
   if (!PREVIEW) {
