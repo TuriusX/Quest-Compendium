@@ -102,7 +102,7 @@ async function main() {
     if (!keep) continue;
     const x = { id, name: r.name, slug: r.slug, first: Number(r.first_release_date) || 0, platforms: ids(r.platforms), genres: ids(r.genres), cover: Number(r.cover) || 0, artworks: ids(r.artworks), screenshots: ids(r.screenshots), type: Number(r.game_type ?? r.category ?? 0), rated: Number(r.total_rating_count) || 0, n };
     games.set(id, x);
-    for (const k of wantName.get(n) || wantName.get(short || '') || []) cands.set(k, [...(cands.get(k) || []), { ...x, n: wantName.has(n) ? n : short }]);
+    for (const k of wantName.get(n) || wantName.get(short || '') || []) cands.set(k, [...(cands.get(k) || []), { ...x, n: wantName.has(n) ? n : short, viaShort: !wantName.has(n) }]);
   }
   for (const g of guides) {
     const exact = norm(g.game), bare = exact.replace(EDITION, '');
@@ -111,12 +111,12 @@ async function main() {
     // gives way to the game with the guide's exact name.
     if (how.get(g.key) === 'steam') {
       const s = games.get(game.get(g.key)!);
-      const named = (cands.get(g.key) || []).find((c) => c.n === exact && c.id !== s?.id);
+      const named = (cands.get(g.key) || []).filter((c) => c.n === exact && c.id !== s?.id).sort((a, b) => Number(!!a.viaShort) - Number(!!b.viaShort) || b.rated - a.rated)[0];
       if (s && s.n !== exact && s.n !== bare && named) { game.set(g.key, named.id); how.set(g.key, 'name'); }
       continue;
     }
     if (game.has(g.key)) continue;
-    const xs = (cands.get(g.key) || []).sort((a, b) => Number(b.n === exact) - Number(a.n === exact) || Number(b.type === 0) - Number(a.type === 0) || b.rated - a.rated);
+    const xs = (cands.get(g.key) || []).sort((a, b) => Number(b.n === exact) - Number(a.n === exact) || Number(!!a.viaShort) - Number(!!b.viaShort) || Number(b.type === 0) - Number(a.type === 0) || b.rated - a.rated);
     if (xs[0] && (xs[0].n === exact || xs[0].n === bare)) { game.set(g.key, xs[0].id); how.set(g.key, 'name'); }
   }
   const need = new Set(game.values());
