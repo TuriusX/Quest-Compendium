@@ -183,7 +183,12 @@ async function main() {
       const n = Number(arg('sample')) || 10;
       const by = new Map<string, typeof pages>();
       for (const p of pages) by.set(p.key, [...(by.get(p.key) || []), p]);
-      pages = [...by.values()].flatMap((xs) => xs.sort((a, b) => Number(b.e.demand?.score || 0) - Number(a.e.demand?.score || 0)).slice(0, n));
+      // Ties (most pages have no measured demand yet) go by the type's tier: people, bosses, places, then the rest.
+      const { CORE_TIERS } = await import('./core');
+      const tierOf = new Map<string, number>();
+      for (const k of by.keys()) for (const t of ((await db().collection('guideCompendium').doc(k).get()).data()?.taxonomy || []) as any[]) tierOf.set(`${k}/${t.id}`, CORE_TIERS.includes(t.tier) ? CORE_TIERS.indexOf(t.tier) : 9);
+      const tier = (p: (typeof pages)[number]) => tierOf.get(`${p.key}/${p.e.type}`) ?? 9;
+      pages = [...by.values()].flatMap((xs) => xs.sort((a, b) => Number(b.e.demand?.score || 0) - Number(a.e.demand?.score || 0) || tier(a) - tier(b)).slice(0, n));
       console.log(`Sample: ${pages.length} page(s): ${pages.map((p) => `${p.key.split('-')[0]}/${p.e.name} ${p.e.demand?.score ?? '?'}`).join(', ')}`);
     }
     for (const p of pages) {
