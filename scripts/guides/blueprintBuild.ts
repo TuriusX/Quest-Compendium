@@ -19,6 +19,11 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { db, gemini, MODEL, usageScope, searchesIn } from './common';
 import { entitySlug } from './compendium';
 import { chapterKey } from './siteText';
+import { apiLimits, searchesToday, pipelineRoom } from '../../apiLimits';
+import { isTransient } from './claimCheck';
+
+/** A stop that isn't the unit's fault (the day's search or Pro limit, the API down): the run stops, nothing is recorded. */
+const isStop = (e: any) => /search day limit|ProQuotaWait|Pro reviewer|no Pro reviewer/i.test(String(e?.message || e) + String(e?.name || '')) || isTransient(e);
 
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 type Section = { id: string; title: string; kind: string; what?: string; unit: string; units: number; cap?: number; priority: number; cost?: number };
@@ -41,12 +46,18 @@ const isRebuildExisting = (s: Section) => s.unit === 'entity' && /rebuild/i.test
 /** The names a section covers: one searched call, saved in the blueprint's progress. */
 async function planSection(game: string, s: Section, n: number): Promise<string[]> {
   const noun = s.unit === 'quest-short' ? 'story missions, in the order they are played' : s.unit === 'quest-full' ? 'Stranger mission strands and side quests (one name per strand)' : s.unit === 'entity' ? 'entries' : 'page titles (one topic each)';
-  const res: any = await gemini().models.generateContent({
-    model: MODEL,
-    contents: [{ role: 'user', parts: [{ text: `For a player's guide to the video game "${game}", the section "${s.title}" (${s.what || ''}): list the ${n} ${noun} it covers, exact in-game names, most important first. Run a few searches (the game's wikis and guides; never fandom.com or fextralife.com). Reply with the names only, one per line, no numbering or commentary.` }] }],
-    config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 6000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
-  });
-  console.log(`  [plan] ${s.title}: ${searchesIn(res)} searches`);
+  // Searched, never from memory: asked again firmly when the reply ran no searches, refused if it still didn't.
+  let res: any = null;
+  for (let attempt = 0; attempt < 2 && !res; attempt++) {
+    const r: any = await gemini().models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}For a player's guide to the video game "${game}", the section "${s.title}" (${s.what || ''}): list the ${n} ${noun} it covers, exact in-game names, most important first. Run a few searches (the game's wikis and guides; never fandom.com or fextralife.com). Reply with the names only, one per line, no numbering or commentary.` }] }],
+      config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 6000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    });
+    console.log(`  [plan] ${s.title}: ${searchesIn(r)} searches`);
+    if (searchesIn(r)) res = r;
+  }
+  if (!res) throw new Error(`the plan for "${s.title}" ran no searches twice; not using a memory answer`);
   const lines = String(res?.text || '').split('\n').map((l) => l.replace(/^[\s*\-\d.)]+/, '').replace(/\*\*/g, '').trim()).filter((l) => l.length >= 2 && l.length <= 100 && !/^(here|sure|note)/i.test(l));
   return [...new Set(lines)].slice(0, n);
 }
@@ -103,6 +114,7 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ we
     const before = async () => {
       if (ctx.timeUp()) return 'Time limit for this run';
       if ((await ctx.room()) < est * 1.5) return 'Budget for today or this month is used up';
+      if (pipelineRoom(await apiLimits(), await searchesToday(true)) < 15) return "Today's pipeline searches are used up";
       return null;
     };
     const record = async (name: string, slug: string, status: string, dollars: number) => {
@@ -120,7 +132,8 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ we
       if (!target) { console.log(`  ${s.title}: no page to deepen found; skipped.`); p.done = Date.now(); await save(s.id); continue; }
       const order = (await db().collection('guides').doc(key).get()).data()?.areas || [];
       const scope = { dollars: 0, searches: 0 };
-      const r: any = await usageScope.run(scope, () => buildPageEvidenceForCore(key, game, target.slug, order, key)).catch((e: any) => ({ error: String(e?.message || e) }));
+      const r: any = await usageScope.run(scope, () => buildPageEvidenceForCore(key, game, target.slug, order, key, { rebuild: isDeepen(s) })).catch((e: any) => ({ error: String(e?.message || e), stop: isStop(e) }));
+      if (r?.stop) { await ctx.charge(scope.dollars); return { wentLive, stopped: `Stopped: ${cut(r.error, 120)}`, done: false }; }
       const passed = r?.review?.status === 'passed';
       if (passed) {
         await writePageForCore(key, target.slug, r.proto);
@@ -138,7 +151,12 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ we
       const why = await before();
       if (why) return { wentLive, stopped: why, done: false };
       const scope = { dollars: 0, searches: 0 };
-      p.plan = await usageScope.run(scope, () => planSection(game, s, want));
+      try {
+        p.plan = await usageScope.run(scope, () => planSection(game, s, want));
+      } catch (e: any) {
+        await ctx.charge(scope.dollars);
+        return { wentLive, stopped: `Stopped: ${cut(e?.message || e, 120)}`, done: false };
+      }
       await ctx.charge(scope.dollars);
       await save(s.id);
       console.log(`  [plan] ${s.title}: ${p.plan.length} of ${want} named, $${scope.dollars.toFixed(3)}`);
@@ -161,6 +179,7 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ we
         else if (s.unit === 'entity') res = await buildEntity(key, name, { type: s.id });
         else res = await buildReference(key, name, s.unit === 'list-page' ? 'list' : 'reference', s);
       } catch (e: any) {
+        if (isStop(e)) return { wentLive, stopped: `Stopped: ${cut(e?.message || e, 120)}`, done: false };
         console.log(`  ${name}: not built (${cut(e?.message || e, 100)})`);
         res = { status: 'error', dollars: 0 };
       }

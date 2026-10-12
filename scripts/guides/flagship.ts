@@ -605,7 +605,7 @@ export function pageClaimPage(a: any): ClaimPage {
  * pack, the walkthrough and choices written from it, every claim checked (unsupported ones removed), the rules, then
  * the claim-by-claim review. Nothing goes live. Returns the page, what was removed and the cost.
  */
-async function buildPageEvidence(key: string, game: string, slug: string, order: { slug: string; name: string }[], from = key) {
+async function buildPageEvidence(key: string, game: string, slug: string, order: { slug: string; name: string }[], from = key, opts: { rebuild?: boolean } = {}) {
   const scope = usageScope.getStore();
   const before = scope ? { ...scope } : { searches: ledger.searches, dollars: ledgerDollars() };
   const p: any = (await db().collection('guides').doc(from).collection('areas').doc(slug).get()).data();
@@ -619,7 +619,7 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   // researched once and shared by those pages; the page itself only researches its order of play and its own entries.
   const g0 = Math.floor(Math.max(0, i) / 6) * 6;
   const gameEv = await buildGameEvidence(key, game, order.slice(g0, g0 + 6).map((o) => o.name));
-  const ev = await buildEvidencePack(key, slug, game, p.name, neighbours, { rebuild: arg('rebuild') === 'true', gameEvidence: gameEv, entries: [...(p.items || []).map((e: any) => e.name), ...(p.secrets || []).map((e: any) => cut(e.text, 60))] });
+  const ev = await buildEvidencePack(key, slug, game, p.name, neighbours, { rebuild: !!opts.rebuild || arg('rebuild') === 'true', gameEvidence: gameEv, entries: [...(p.items || []).map((e: any) => e.name), ...(p.secrets || []).map((e: any) => cut(e.text, 60))] });
   console.log(`  evidence: ${ev.evidence.length} sourced sentences from ${ev.sites.length} sites`);
   if (ev.evidence.length < 8) throw new Error(`too little evidence (${ev.evidence.length} sourced sentences)`);
   const evText = evidenceText(ev);

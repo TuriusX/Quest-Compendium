@@ -204,6 +204,13 @@ function adminPage(firebaseConfig: Record<string, string>): string {
 </header>
 <main>
   <p id="limits" class="dim" hidden></p>
+  <div id="gate" class="card">
+    <div class="game">Admin sign-in</div>
+    <p>This page is for Quest Compendium admins. Sign in with the Google account listed as an admin on the server (ADMIN_EMAILS).</p>
+    <div class="actions"><button id="gateSignin" class="primary">Sign in with Google</button><button id="gateRedirect">Sign in (if the popup is blocked)</button></div>
+    <p id="gateMsg" class="dim">Not signed in.</p>
+    <noscript><p style="color:var(--bad)">This page needs JavaScript to sign in. Turn JavaScript on for this site and reload.</p></noscript>
+  </div>
   <p id="msg">Sign in to see the queue. Decisions are carried out by the next guide pipeline run (daily, 9:00 Chicago time); a dismissal is immediate.</p>
   <div id="list"></div>
   <div id="corr" hidden></div>
@@ -215,9 +222,22 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   <details id="decidedBox" hidden><summary>Recently decided</summary><div id="decided"></div></details>
 </main>
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+  // Sign-in is loaded with a fallback message: a blocked script (an ad or privacy blocker, an in-app browser) says so
+  // on the page instead of leaving it empty.
+  const gateMsg = (t, bad) => { const m = document.getElementById('gateMsg'); if (m) { m.textContent = t; m.style.color = bad ? 'var(--bad)' : ''; } };
+  let fb;
+  try {
+    fb = {
+      ...(await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js")),
+      ...(await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js")),
+    };
+  } catch (e) {
+    gateMsg('Sign-in could not load (' + (e && e.message ? e.message : e) + '). A blocker or this browser may be stopping www.gstatic.com: allow it for this page, or open the page in Chrome, Edge or Firefox.', true);
+    throw e;
+  }
+  const { initializeApp, getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } = fb;
   const auth = getAuth(initializeApp(${cfg}));
+  getRedirectResult(auth).catch((e) => gateMsg('Sign-in failed: ' + (e.code || e.message), true));
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const SITE = 'https://questcompendium.com/guides/';
@@ -434,7 +454,14 @@ function adminPage(firebaseConfig: Record<string, string>): string {
         $('limits').hidden = false;
       }).catch(() => {});
     }
-    catch (e) { $('msg').textContent = e.message === 'Not an admin.' ? 'This account is not an admin (ADMIN_EMAILS on the server).' : 'Could not load the queue: ' + e.message; }
+    catch (e) {
+      if (e.message === 'Not an admin.') {
+        $('gate').hidden = false;
+        gateMsg('Signed in as ' + (auth.currentUser?.email || 'this account') + ', which is not an admin (ADMIN_EMAILS on the server). Sign out and sign in with the admin account.', true);
+        $('gateSignin').textContent = 'Sign out and use another account';
+        $('msg').textContent = '';
+      } else $('msg').textContent = 'Could not load the queue: ' + e.message;
+    }
   }
   document.addEventListener('click', async (e) => {
     const bb = e.target.closest('button[data-bact]');
@@ -486,8 +513,27 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   $('tabQuality').addEventListener('click', () => showTab('quality'));
   $('tabCosts').addEventListener('click', () => showTab('costs'));
   $('tabBlue').addEventListener('click', () => showTab('blue'));
-  $('signin').addEventListener('click', () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => { $('msg').textContent = 'Sign-in failed: ' + (e.code || e.message); }));
-  onAuthStateChanged(auth, (u) => { $('signin').hidden = !!u; if (u) load(); });
+  const provider = () => { const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' }); return p; };
+  const popup = async () => {
+    try {
+      if (auth.currentUser) await signOut(auth);
+      await signInWithPopup(auth, provider());
+    } catch (e) {
+      const code = e.code || e.message;
+      gateMsg(code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user' ? 'The sign-in popup was blocked or closed. Use "Sign in (if the popup is blocked)".' : 'Sign-in failed: ' + code, true);
+      $('msg').textContent = 'Sign-in failed: ' + code;
+    }
+  };
+  $('signin').addEventListener('click', popup);
+  $('gateSignin').addEventListener('click', popup);
+  $('gateRedirect').addEventListener('click', () => signInWithRedirect(auth, provider()));
+  onAuthStateChanged(auth, (u) => {
+    $('signin').hidden = !!u;
+    $('gate').hidden = !!u;
+    if (!u) { gateMsg('Not signed in.'); $('gateSignin').textContent = 'Sign in with Google'; $('msg').textContent = 'Sign in to see the queue.'; return; }
+    gateMsg('Signed in as ' + (u.email || '') + '. Loading…');
+    load();
+  });
 </script>
 </body>
 </html>`;

@@ -161,7 +161,8 @@ const totalOf = (a: GuideArea) =>
   a.items.length + a.secrets.length + (a.sections || []).filter((x) => x.check).reduce((n, x) => n + x.entries.length, 0);
 
 /** Where "Report it here" sends mistake reports: the app server's review queue (reviewQueue.ts). */
-const REPORT_API = `${process.env.QC_SERVER_URL || 'https://quest-compendium-890629309063.us-east1.run.app'}/api/guides/report`;
+const SERVER_URL = process.env.QC_SERVER_URL || 'https://quest-compendium-890629309063.us-east1.run.app';
+const REPORT_API = `${SERVER_URL}/api/guides/report`;
 
 /**
  * Small script for guide pages: remembers ticked items and the last page per game in the visitor's browser, keeps the
@@ -310,7 +311,9 @@ function heldRedirects(key: string, docs: any[], visible: { slug: string; name: 
 /** Netlify's _redirects: the moved pages' old URLs, 301 to the pages that replaced them. */
 function writeRedirects(moved: { key: string; from: string; to: string }[], live: Set<string>) {
   const lines = redirectLines(moved, live, Object.keys(LANG_TAG), SITE);
-  fs.writeFileSync(path.join(OUT, '_redirects'), `# Made by scripts/guides/publish.ts: pages that moved (scripts/guides/site-redirects.json, guide aliases).\n${lines.join('\n')}\n`);
+  // The admin pages live on the app server: the website's /admin addresses lead there.
+  const admin = [`/admin ${SERVER_URL}/admin/reviews 302`, `/admin/* ${SERVER_URL}/admin/:splat 302`];
+  fs.writeFileSync(path.join(OUT, '_redirects'), `# Made by scripts/guides/publish.ts: pages that moved (scripts/guides/site-redirects.json, guide aliases).\n${[...admin, ...lines].join('\n')}\n`);
   console.log(`Redirects: ${lines.length} old URL(s) to the pages that replaced them.`);
 }
 
