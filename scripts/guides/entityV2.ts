@@ -84,14 +84,15 @@ async function intents(key: string, game: string, name: string, slug: string, be
   return { questions: qs.length ? qs : benchQuestions.slice(0, 6), from };
 }
 
-const WRITER = (game: string, name: string, typeLabel: string, kind: string, questions: string[], ev: EvidencePack, chapters: string[]) => [
+const WRITER = (game: string, name: string, typeLabel: string, kind: string, questions: string[], ev: EvidencePack, chapters: string[], must: string[], current: string) => [
   `Write the compendium page for "${name}" (${typeLabel}) in the video game "${game}", from the EVIDENCE only, in the order players want it.`,
   'Every fact must come from an evidence line; leave a question unanswered rather than guess. Use the game\'s exact names.',
+  ...(must.length ? [`KEY FACTS: a player expects any good page to say each of these (the evidence backs them); state every one, in the overview or the answer it belongs to: ${must.map((m, i) => `(${i + 1}) ${m}`).join(' ')}`] : []),
   'Never write what it is not or what it does not do (e.g. "X is not a location", "X does not sell items"). No generic advice.',
   `Answer these questions, in this order (skip one only if the evidence says nothing): ${questions.map((q, i) => `${i + 1}. ${q}`).join(' ')}`,
   `"chapters": which of the guide's chapters it features in, only from: ${chapters.join('; ')}.`,
   'Reply with JSON only:',
-  '{"overview": "the quick answer: 2-4 sentences with what players most want to know",',
+  '{"overview": "the quick answer: 2-4 short sentences with what players most want to know",',
   ' "qa": [{"q": "the question", "a": "1-4 sentences"}],',
   kind === 'person'
     ? ' "whereToFind": [{"when": "chapter or act, empty if it never changes", "where": "where; for a companion, \\"in camp\\" or \\"travels with you\\" is valid"}], "shops": [{"name": "...", "what": "..."}],'
@@ -99,6 +100,8 @@ const WRITER = (game: string, name: string, typeLabel: string, kind: string, que
     ? ' "region": "...", "where": "...", "gettingThere": "route from a nearby town", "shops": [{"name": "...", "what": "..."}], "services": ["..."], "places": [{"name": "...", "what": "..."}], "collectibles": [{"name": "...", "where": "..."}],'
     : ' "where": "where it is found or fought",',
   ' "quests": [{"name": "every mission tied to it, each numbered part separately", "kind": "story|side|stranger|event", "chapter": "..."}], "chapters": ["..."], "notes": ["0-2 extra facts players search for"]}',
+  'Each answer adds detail beyond the overview; never repeat an overview sentence. Each field says one thing: "where" is one location description, not two.',
+  ...(current ? ['', 'THE CURRENT PAGE (its facts were checked against this evidence before): keep every fact of it the evidence backs, in the section it belongs to (a merchant’s stock under "shops", items and rewards under "notes" or the answer they belong to). Leave out its lines about what the entity is not or does not do.', current] : []),
   '',
   'EVIDENCE:',
   evidenceText(ev),
@@ -108,7 +111,7 @@ const WRITER = (game: string, name: string, typeLabel: string, kind: string, que
 async function contradictions(game: string, name: string, text: string): Promise<string[]> {
   const res: any = await gemini().models.generateContent({
     model: MODEL,
-    contents: [{ role: 'user', parts: [{ text: `Our page about "${name}" in "${game}":\n${text}\n\nList any statements on this page that contradict each other (different chapters, places, outcomes or numbers for the same thing). Only real contradictions within the page, not things you think are wrong. Reply with JSON only: {"contradictions": ["A says ..., but B says ..."]}` }] }],
+    contents: [{ role: 'user', parts: [{ text: `Our page about "${name}" in "${game}":\n${text}\n\nList any statements on this page that contradict each other (different chapters, places, directions, regions, outcomes or numbers for the same thing; two descriptions of where it is that can't both be true). Only real contradictions within the page, not things you think are wrong. Reply with JSON only: {"contradictions": ["A says ..., but B says ..."]}` }] }],
     config: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 800, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
   });
   return (objOf(String(res?.text || '')).contradictions || []).map((x: any) => cut(x, 240)).filter(Boolean).slice(0, 5);
@@ -157,15 +160,31 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     const stored = await entityEvidenceFor(key, game, name, typeLabel);
     const asked = await searchedEvidence(`In the video game "${game}", about "${name}" (${typeLabel}), answer: ${intent.questions.join(' ')}`, 'q', 'intent');
     let ev: EvidencePack = trusted({ ...stored, evidence: [...stored.evidence, ...(bench.evidence || []), ...asked.evidence], sites: [...new Set([...stored.sites, ...(bench.sites || []), ...asked.evidence.flatMap((e) => e.sources)])] });
-    // 3. Write in the order of the questions.
-    const res: any = await gemini().models.generateContent({ model: MODEL, contents: [{ role: 'user', parts: [{ text: WRITER(game, name, typeLabel, kind, intent.questions, ev, chapters) }] }], config: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 7000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } });
+    // The benchmark's core points are a model's answer: each is checked against the evidence (a targeted search for the
+    // ones it doesn't back). Only verified points are required of the page; the rest are reported, not required.
+    const pointSlots = (ps: BenchPoint[]) => ps.map((p, i) => ({ id: `K${i + 1}`, label: `B${i + 1}`, kind: 'sentence' as const, sentence: 0, text: p.point }));
+    let pv = await claimCheck(game, name, pointSlots(core), ev);
+    const okPoint = (i: number) => pv.find((v) => v.id === `K${i + 1}`)?.verdict === 'supported';
+    const unbacked = core.filter((_, i) => !okPoint(i));
+    if (unbacked.length) {
+      const more = await searchedEvidence(`In the video game "${game}", about "${name}": check each statement against the game's wikis and guides and state what the sources say: ${unbacked.map((p) => `"${p.point}"`).join('; ')}`, 'v', 'benchmark check');
+      if (more.evidence.length) {
+        ev = trusted({ ...ev, evidence: [...ev.evidence, ...more.evidence], sites: [...new Set([...ev.sites, ...more.evidence.flatMap((e) => e.sources)])] });
+        pv = await claimCheck(game, name, pointSlots(core), ev);
+      }
+    }
+    const verified = core.map((_, i) => okPoint(i));
+    // 3. Write in the order of the questions, stating every verified key fact.
+    const res: any = await gemini().models.generateContent({ model: MODEL, contents: [{ role: 'user', parts: [{ text: WRITER(game, name, typeLabel, kind, intent.questions, ev, chapters, core.filter((_, i) => verified[i]).map((p) => p.point), pageText(live)) }] }], config: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 7000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } });
     const j = objOf(String(res?.text || ''));
     const clean = (v: unknown, n = 300) => cut(v, n);
+    // Whole sentences up to n characters (never cut mid-sentence).
+    const whole = (v: unknown, n: number) => cut(v, 4000).split(/(?<=[.!?])\s+/).reduce((a, x) => (a.length + x.length + 1 <= n || !a ? `${a} ${x}`.trim() : a), '');
     const named = (xs: any, f: string) => (Array.isArray(xs) ? xs : []).map((x: any) => ({ name: cut(x?.name, 80), [f]: clean(x?.[f], 220) })).filter((x: any) => x.name);
     const page: EntityPage & { qa: QA[] } = {
       name: live.name, slug, type: live.type, typeLabel, title: live.title, description: live.description,
-      overview: clean(j.overview, 800),
-      qa: (Array.isArray(j.qa) ? j.qa : []).map((x: any) => ({ q: cut(x?.q, 160), a: clean(x?.a, 700) })).filter((x: QA) => x.q && x.a).slice(0, 8),
+      overview: whole(j.overview, 700),
+      qa: (Array.isArray(j.qa) ? j.qa : []).map((x: any) => ({ q: cut(x?.q, 160), a: whole(x?.a, 900) })).filter((x: QA) => x.q && x.a).slice(0, 8),
       summary: {
         ...(kind === 'place' ? { region: clean(j.region, 80), where: clean(j.where, 240), gettingThere: clean(j.gettingThere, 400) } : kind === 'person' ? {} : { where: clean(j.where, 240) }),
         ...(kind === 'person' ? { whereToFind: (Array.isArray(j.whereToFind) ? j.whereToFind : []).map((w: any) => ({ when: clean(w?.when, 60), where: clean(w?.where, 240) })).filter((w: any) => w.where).slice(0, 8) } : {}),
@@ -187,7 +206,7 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
       if (more.evidence.length) {
         ev = trusted({ ...ev, evidence: [...ev.evidence, ...more.evidence], sites: [...new Set([...ev.sites, ...more.evidence.flatMap((e) => e.sources)])] });
         verdicts = await claimCheck(game, name, claimSlots(c1.page), ev);
-        filled = failed.length - verdicts.filter((v) => v.verdict === 'unsupported').length;
+        filled = failed.filter((f) => verdicts.find((v) => v.id === f.id)?.verdict === 'supported').length;
       }
     }
     const dropped = applyAll(page, c1.base, verdicts);
@@ -202,22 +221,22 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     // 6. Usefulness: every core point of the benchmark covered.
     const text = pageText(page);
     const cov = await coverage(game, name, text, core);
-    const missing = core.filter((_, i) => !cov[i]);
+    const missing = core.filter((_, i) => verified[i] && !cov[i]);
     // 7. Consistency.
     const contra = await contradictions(game, name, text);
     const reasons = [
       review.status !== 'passed' ? `review ${review.score}: ${review.reason || 'failed'}` : '',
       lint.left.length ? 'still explains what kind of entity it is' : '',
-      missing.length ? `misses ${missing.length} core point(s): ${missing.map((p) => p.point).join('; ')}` : '',
+      missing.length ? `misses ${missing.length} verified core point(s): ${missing.map((p) => p.point).join('; ')}` : '',
       contra.length ? `contradicts itself: ${contra.join('; ')}` : '',
     ].filter(Boolean);
-    return { page, bench, core, cov, beforeCov, intent, review, dropped, filled, contra, reasons };
+    return { page, bench, core, cov, beforeCov, verified, intent, review, dropped, filled, contra, reasons };
   });
   const passed = !out.reasons.length;
   const doc = {
     ...out.page, method: 'intent', status: passed ? 'published' : 'held',
     intent: { questions: out.intent.questions, from: out.intent.from.slice(0, 20) },
-    benchmark: { ...out.bench, points: out.core.map((p, i) => ({ ...p, covered: out.cov[i], coveredBefore: out.beforeCov[i] })) },
+    benchmark: { ...out.bench, points: out.core.map((p, i) => ({ ...p, verified: out.verified[i], covered: out.cov[i], coveredBefore: out.beforeCov[i] })) },
     review: { score: out.review.score, status: out.review.status, supported: out.review.supported, total: out.review.total, ...(out.review.reason ? { reason: out.review.reason } : {}) },
     dropped: out.dropped.map((x) => cut(x, 200)), gapsFilled: out.filled, ...(out.contra.length ? { contradictions: out.contra } : {}),
     ...(out.reasons.length ? { heldBecause: out.reasons } : {}),
@@ -226,7 +245,7 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
   if (opts.draft) await db().collection('compendiumDrafts').doc(`${key}__${slug}`).set(JSON.parse(JSON.stringify({ before: live, after: doc, at: Date.now() })));
   else if (passed) await ref.set(JSON.parse(JSON.stringify(doc)));
   else await ref.set({ v2Held: JSON.parse(JSON.stringify({ at: Date.now(), reasons: out.reasons, cost: doc.cost })) }, { merge: true });
-  console.log(`${key} / ${name}: ${passed ? 'passes' : `held (${out.reasons.join(' | ').slice(0, 300)})`}; core points ${out.beforeCov.filter(Boolean).length} -> ${out.cov.filter(Boolean).length} of ${out.core.length}, ${out.page.qa.length} question(s) answered, ${out.filled} claim(s) saved by the gap search, ${out.dropped.length} dropped, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);
+  console.log(`${key} / ${name}: ${passed ? 'passes' : `held (${out.reasons.join(' | ').slice(0, 300)})`}; verified core points ${out.beforeCov.filter((c, i) => c && out.verified[i]).length} -> ${out.cov.filter((c, i) => c && out.verified[i]).length} of ${out.verified.filter(Boolean).length} (${out.core.length - out.verified.filter(Boolean).length} unverified), ${out.page.qa.length} question(s) answered, ${out.filled} claim(s) saved by the gap search, ${out.dropped.length} dropped, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);
   return { status: doc.status, dollars: scope.dollars, coreCovered: out.cov.filter(Boolean).length, core: out.core.length };
 }
 
