@@ -429,6 +429,10 @@ async function main() {
     // Compendium demand (no AI cost): each entity page's impressions and in-app questions, and the planned pages', for
     // the rollout's order.
     const cd = runScript(['scripts/pipeline/scCompendium.ts']);
+    // IGDB (no AI cost): each guide's game data and images from IGDB's data dumps (scripts/pipeline/igdb.ts).
+    const ig = runScript(['scripts/pipeline/igdb.ts']);
+    report.push(ig.ok ? `🖼️ ${(ig.out.match(/igdb: [^\n]+/) || ['IGDB data refreshed'])[0]}` :'⚠️ IGDB refresh failed (see the job log); guides keep last week’s images.');
+    if (ig.ok) changed = true;
     if (!cd.ok) report.push('⚠️ Compendium demand refresh failed (see the job log); the rollout keeps the previous order.');
     report.push(`${sc.ok ? '🔎' : '⚠️'} ${sc.summary || 'Search Console pull failed (see the job log)'}`);
     // New entity pages by demand go live with this run's publish.

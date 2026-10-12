@@ -13,6 +13,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { landscapeOf, wideSet, coverSet, ogImageOf, type IgdbInfo } from './igdbArt';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
@@ -57,14 +58,46 @@ const initials = (game: string) =>
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join('') || '?';
-/** The art for a game, at a fixed shape (Steam's header art is 460×215), with the placeholder underneath. */
-function artBox(game: string, appId: number | undefined, extra = '') {
+/** Each guide's IGDB data (guides/{key}.igdb, scripts/pipeline/igdb.ts): key art, cover, release, platforms, genres. */
+const IGDB = new Map<string, IgdbInfo>();
+/** IGDB art and credit on the site: on when config/igdb.site is true, or for a local look (QC_IGDB=1). */
+let IGDB_ON = process.env.QC_IGDB === '1';
+/** The social share image for a guide's pages: IGDB key art, else Steam's header, else the site icon. */
+const ogImageFor = (key?: string, appId?: number) => (key && ogImageOf(IGDB.get(key))) || (appId ? steamArt(appId) : '') || `${SITE}/icon.png`;
+const GUIDE_APP = new Map<string, number>();
+
+/**
+ * The art for a game, at a fixed shape (460×215, the guide cards' shape), with the placeholder underneath: IGDB's key
+ * art (or widest screenshot) at the size the spot needs, else Steam's header art; if an image fails, the next one.
+ * hero: the guide front page's header (wider, loaded first).
+ */
+function artBox(game: string, appId: number | undefined, extra = '', key?: string, hero = false) {
   const placeholder = `<div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">${esc(initials(game))}</span></div>`;
-  const img = appId
-    ? `<img src="${steamArt(appId)}" alt="${esc(game)}" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()">`
-    : '';
+  const ig = key ? landscapeOf(IGDB.get(key)) : null;
+  const steam = appId ? steamArt(appId) : '';
+  const load = hero ? 'fetchpriority="high"' : 'loading="lazy"';
+  const fallback = `onerror="if(this.dataset.fb){this.removeAttribute('srcset');this.src=this.dataset.fb;this.removeAttribute('data-fb')}else this.remove()"`;
+  let img = '';
+  if (ig) {
+    const set = wideSet(ig, hero ? 1920 : 1280);
+    img = `<img src="${set.src}" srcset="${set.srcset}" sizes="${hero ? '(min-width: 800px) 768px, 100vw' : '(min-width: 1024px) 280px, (min-width: 640px) 45vw, 92vw'}" alt="${esc(ui('artAlt', { game }))}" ${load} decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover"${steam ? ` data-fb="${steam}"` : ''} ${fallback}>`;
+  } else if (steam) {
+    img = `<img src="${steam}" alt="${esc(ui('artAlt', { game }))}" ${load} decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()">`;
+  }
   return `<div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] ${extra}">${placeholder}${img}</div>`;
 }
+
+/** A guide front page's IGDB line: the cover, release year, platforms and genres, and the credit. */
+function igdbFacts(key: string, game: string): string {
+  const g = IGDB.get(key);
+  if (!g || g.missing) return '';
+  const year = g.released ? g.released.slice(0, 4) : '';
+  const facts = [year, (g.platforms || []).slice(0, 6).join(', '), (g.genres || []).slice(0, 3).join(', ')].filter(Boolean);
+  const cover = g.cover ? (() => { const c = coverSet(g.cover!); return `<img src="${c.src}" srcset="${c.srcset}" sizes="88px" alt="${esc(ui('coverAlt', { game }))}" loading="lazy" decoding="async" width="88" height="125" class="w-[88px] h-[125px] shrink-0 rounded-lg border border-white/10 object-cover">`; })() : '';
+  if (!facts.length && !cover) return '';
+  return `<div class="mt-4 flex items-start gap-4">${cover}<div class="min-w-0 text-sm text-zinc-400 space-y-1">${facts.map((f) => `<div>${esc(f)}</div>`).join('')}<div class="text-xs text-zinc-500">${igdbCredit()}</div></div></div>`;
+}
+const igdbCredit = () => !IGDB_ON ? '' : esc(ui('igdbCredit')).replace('{igdb}', '<a href="https://www.igdb.com" class="text-[#a87ffb] hover:underline" rel="noopener">IGDB</a>');
 
 /** The achievement guide with a translation merged in: Steam's official names, translated tips and roadmap. */
 function localizeAch(ach: any, t: any) {
@@ -386,7 +419,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
   ${opts.draft ? '<meta name="robots" content="noindex, follow">' : ''}
   <meta property="og:title" content="${esc(opts.title)}">
   <meta property="og:description" content="${esc(opts.description)}">
-  <meta property="og:image" content="${SITE}/icon.png">
+  <meta property="og:image" content="${esc(ogImageFor(opts.guide, opts.guide ? GUIDE_APP.get(opts.guide) : undefined))}">
   <link rel="icon" type="image/png" sizes="192x192" href="${up}favicon-192.png">
   <link rel="icon" type="image/png" sizes="96x96" href="${up}favicon-96.png">
   <link rel="icon" href="${up}favicon.ico" sizes="16x16 32x32 48x48">
@@ -433,7 +466,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
   <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     ${esc(ui('footerReport'))
       .replace('{report}', `<button type="button" data-report class="text-[#a87ffb] hover:underline">${esc(ui('reportLink'))}</button>`)
-      .replace('{discord}', '<a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>')} ${esc(ui('imagesNote'))}
+      .replace('{discord}', '<a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>')} ${esc(ui('imagesNote'))} ${igdbCredit()}
   </footer>
   <dialog id="qc-report" class="rounded-2xl bg-[#121218] text-zinc-200 border border-white/10 p-0 w-[min(92vw,28rem)] backdrop:bg-black/60" data-api="${REPORT_API}" data-lang="${LANG}" data-thanks="${esc(ui('reportThanks'))}" data-error="${esc(ui('reportError'))}">
     <form method="dialog" class="p-5 space-y-3">
@@ -893,7 +926,7 @@ function updateHomepage(games: { key: string; game: string; published: number; l
       .map(
         (g) =>
           `        <a href="${g.langs?.includes(pg.code) && pg.code !== 'en' ? '' : pg.up}guides/${esc(g.key)}/index.html" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors">` +
-          artBox(g.game, g.appId) +
+          artBox(g.game, g.appId, '', g.key) +
           `<div class="p-4"><div class="text-white font-bold leading-snug">${esc(g.game)}</div>` +
           `<div class="text-sm text-zinc-400 mt-1">${esc(L.areas(g.published))}</div></div></a>`,
       )
@@ -1025,8 +1058,9 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
       path: `guides/${key}/`,
       body: `<div class="max-w-3xl">
           <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">${esc(ui('navGuides'))}</a></p>
-          ${artBox(gameName, appId, 'rounded-2xl border border-white/10 mb-5')}
+          ${artBox(gameName, appId, 'rounded-2xl border border-white/10 mb-5', key, true)}
           <h1 class="text-3xl font-bold text-white">${esc(ui('gameH1', { game: gameName }))}</h1>
+          ${igdbFacts(key, gameName)}
           <p class="text-zinc-400 mt-2">${esc(ui('gameIntro'))}</p>
           <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, one(links.length, 'statAreas'))}${stat(totalChecks, one(totalChecks, 'statThings'))}${stat(missables, one(missables, 'statMissables'))}${checked ? stat(checked === links.length ? ui('statAll') : checked, one(checked, 'statChecked')) : ''}</div>
           ${achHere ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${(achHere.list || []).length} · ${(achHere.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
@@ -1306,7 +1340,7 @@ function indexBody(list: { key: string; game: string; count: number; players?: n
   const sortName = (n: string) => n.replace(/^(the|a|an)\s+/i, '').toLowerCase();
   const card = (g: (typeof list)[number], tags = true) => {
     const letter = (sortName(g.game).match(/[a-z0-9]/)?.[0] || '#').toUpperCase().replace(/[0-9]/, '#');
-    return `<a href="${esc(g.key)}/index.html"${tags ? ` data-search="${esc(g.game)}" data-name="${esc(sortName(g.game))}" data-popular="${g.players || 0}" data-new="${g.created || 0}" data-l="${letter}"` : ''} class="block rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50 hover:bg-white/[0.06] transition-colors">${artBox(g.game, g.appId)}<div class="p-4"><div class="font-bold text-white leading-snug">${esc(g.game)}</div><div class="mt-1 text-sm text-zinc-400">${esc(g.count === 1 ? ui('areasCountOne') : ui('areasCount', { n: g.count }))}</div></div></a>`;
+    return `<a href="${esc(g.key)}/index.html"${tags ? ` data-search="${esc(g.game)}" data-name="${esc(sortName(g.game))}" data-popular="${g.players || 0}" data-new="${g.created || 0}" data-l="${letter}"` : ''} class="block rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50 hover:bg-white/[0.06] transition-colors">${artBox(g.game, g.appId, '', g.key)}<div class="p-4"><div class="font-bold text-white leading-snug">${esc(g.game)}</div><div class="mt-1 text-sm text-zinc-400">${esc(g.count === 1 ? ui('areasCountOne') : ui('areasCount', { n: g.count }))}</div></div></a>`;
   };
   const az = list.slice().sort((x, y) => sortName(x.game).localeCompare(sortName(y.game)));
   // Mark the first game of each letter, for the A–Z bar.
@@ -1376,6 +1410,7 @@ async function buildSiteCss() {
 }
 
 async function main() {
+  if (!IGDB_ON) IGDB_ON = (await db().collection('config').doc('igdb').get()).data()?.site === true;
   // One publish at a time (the pipeline, the flagship job and manual runs all write the site); re-entrant when the
   // caller already holds the site lock. A preview writes elsewhere and needs none.
   if (!PREVIEW) {
@@ -1471,9 +1506,12 @@ async function main() {
       appId: Number(info.appId) || undefined,
     });
     if (info.appId && String(info.art || '').includes(`/apps/${info.appId}/`)) ART.set(Number(info.appId), String(info.art));
+    if (info.igdb && IGDB_ON) IGDB.set(g.id, info.igdb);
+    if (info.appId) GUIDE_APP.set(g.id, Number(info.appId));
     const live = visible.filter((o) => byslug.get(o.slug)!.status === 'published');
     if (live.length) {
-      const art = String(info.art || '') || (info.appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${info.appId}/header.jpg` : '');
+      const igArt = IGDB_ON ? landscapeOf(info.igdb) : null;
+      const art = (igArt ? wideSet(igArt, 889).src : '') || String(info.art || '') || (info.appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${info.appId}/header.jpg` : '');
       guideIndex.push({ key: g.id, game: String(info.game || g.id), areas: live.length, ...(art ? { art } : {}), checked: live.filter((o) => byslug.get(o.slug)!.verified === true).length, players: playersBy.get(g.id) || 0, langs });
     }
     for (const code of langs) {

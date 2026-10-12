@@ -22,6 +22,16 @@ import { GameTab, SteamGameData } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import pixelSceneUrl from '../pixel-scene.png';
 import { useT } from '../i18n';
+import { useGameArt } from '../utils/gameArt';
+
+/** A library tile's picture: the game's IGDB cover (square-cropped) when it has one, else its saved Steam image. */
+function GameThumb({ appId, name, fallback, alt }: { appId?: number; name: string; fallback?: string; alt: string }) {
+  const ig = useGameArt(appId, name);
+  const [failed, setFailed] = useState(false);
+  const src = !failed && (ig.cover || ig.art) ? (ig.cover || ig.art)! : fallback;
+  if (!src) return null;
+  return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className="w-8 h-8 rounded-lg object-cover object-top border border-white/15 flex-shrink-0" />;
+}
 
 /** Short initials for a game tile, e.g. "Baldur's Gate 3" -> "BG3". */
 function initials(name: string): string {
@@ -235,12 +245,8 @@ export const GamesSidebar: React.FC<GamesSidebarProps> = ({
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0">
                       {/* Game Banner Thumbnail */}
-                      {game?.headerImage ? (
-                        <img 
-                          src={game.headerImage} 
-                          alt={tab.name} 
-                          className="w-8 h-8 rounded-lg object-cover border border-white/15 flex-shrink-0" 
-                        />
+                      {game?.headerImage || game?.appId ? (
+                        <GameThumb appId={game?.appId} name={game?.name || tab.name} fallback={game?.headerImage} alt={tab.name} />
                       ) : (
                         <div
                           className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-[10px] font-mono font-bold uppercase text-white shadow-[inset_-2px_-2px_0_rgba(0,0,0,0.3),inset_2px_2px_0_rgba(255,255,255,0.18)]"

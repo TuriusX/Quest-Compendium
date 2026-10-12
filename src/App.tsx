@@ -43,6 +43,23 @@ import { useTrackerGuide } from './utils/trackerGuide';
 import { formatShortcut } from './utils/shortcut';
 import { setEntryDone, exportAllDone, importAllDone, GUIDE_DONE_EVENT } from './utils/guideProgress';
 import { appSource, isPhone } from './utils/source';
+import { useGameArt } from './utils/gameArt';
+
+/** The running game's picture: IGDB's key art when its guide has it, else Steam's header; hidden if neither loads. */
+function RunningGameArt({ appId, name }: { appId: number; name?: string }) {
+  const ig = useGameArt(appId, name);
+  const steam = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`;
+  const [src, setSrc] = React.useState<string>('');
+  const shown = src || ig.art || steam;
+  return (
+    <img
+      src={shown}
+      alt=""
+      className="w-16 h-10 object-cover rounded-lg border border-white/10 flex-shrink-0"
+      onError={(e) => { if (shown !== steam) setSrc(steam); else (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+    />
+  );
+}
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiMode: 'standard',
@@ -2263,12 +2280,7 @@ export default function App() {
                    {/* The game running on Steam right now, one click to start */}
                    {globalActiveGame && (
                      <div className="qc-px-frame w-full flex items-center gap-3 p-3 rounded-2xl bg-[#11121a] border border-[var(--accent-border)] text-left">
-                       <img
-                         src={`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${globalActiveGame.appId}/header.jpg`}
-                         alt=""
-                         className="w-16 h-10 object-cover rounded-lg border border-white/10 flex-shrink-0"
-                         onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                       />
+                       <RunningGameArt appId={globalActiveGame.appId} name={globalActiveGame.name} />
                        <div className="flex-1 min-w-0">
                          <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase text-emerald-400">
                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />

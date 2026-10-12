@@ -13,6 +13,7 @@ import type { Express } from 'express';
 import { singularLabel } from './scripts/guides/siteText';
 import { getFirestore } from 'firebase-admin/firestore';
 import { placeKey } from './src/utils/placeName';
+import { landscapeOf, wideSet, coverSet } from './scripts/guides/igdbArt';
 
 const TTL = 10 * 60_000;
 const cache = new Map<string, { at: number; data: any }>();
@@ -41,6 +42,7 @@ export async function guideKeyFor(game: string | undefined): Promise<string | nu
 
 async function gameAreas(key: string) {
   return cached(`game:${key}`, async () => {
+    await igdbOn();
     const ref = getFirestore().collection('guides').doc(key);
     const doc = await ref.get();
     if (!doc.exists) return null;
@@ -68,7 +70,9 @@ async function gameAreas(key: string) {
         })(),
       }));
     // The game's art: the saved store art (scripts/guides/steam-ids.ts), or Steam's standard header for its app id.
-    const art = String(info.art || '') || (info.appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${info.appId}/header.jpg` : '');
+    // The game's art: IGDB's key art (scripts/pipeline/igdb.ts), else the saved store art, else Steam's header.
+    const land = IGDB_ON ? landscapeOf(info.igdb) : null;
+    const art = (land ? wideSet(land, 889).src : '') || String(info.art || '') || (info.appId ? `https://cdn.cloudflare.steamstatic.com/steam/apps/${info.appId}/header.jpg` : '');
     return areas.length ? { key, game: String(info.game || key), layout: String(info.layout || 'area'), art, areas } : null;
   });
 }
@@ -159,6 +163,29 @@ export async function guideAreaEntries(key: string, slug: string): Promise<{ id:
   });
 }
 
+/** IGDB art for the app, on with the site's (config/igdb.site), checked every 10 minutes. */
+let IGDB_ON = false;
+const igdbOn = () => cached('igdb:on', async () => (IGDB_ON = (await getFirestore().collection('config').doc('igdb').get()).data()?.site === true));
+
+/**
+ * A game's IGDB art for the app (the library's tiles, the running game's tile): by Steam app id or name, from the
+ * guides' IGDB data (scripts/pipeline/igdb.ts). Empty for a game without a guide or IGDB art (the app keeps Steam's).
+ */
+async function gameArt(appId: number, name: string): Promise<{ art?: string; cover?: string; source?: string }> {
+  if (!(await igdbOn())) return {};
+  const all = await cached('igdb:art', async () => {
+    const snap = await getFirestore().collection('guides').get();
+    return snap.docs.filter((d) => !d.id.includes('--') && (d.data() as any).igdb && !(d.data() as any).igdb.missing).map((d) => {
+      const x: any = d.data();
+      const land = landscapeOf(x.igdb);
+      return { key: d.id, appId: Number(x.appId) || 0, art: land ? wideSet(land, 889).src : '', cover: x.igdb.cover ? coverSet(x.igdb.cover).src : '' };
+    });
+  });
+  const key = name ? gameKey(name) : '';
+  const hit = (appId && all.find((g) => g.appId === appId)) || (key && all.find((g) => g.key === key)) || null;
+  return hit ? { ...(hit.art ? { art: hit.art } : {}), ...(hit.cover ? { cover: hit.cover } : {}), source: 'IGDB' } : {};
+}
+
 export function registerGuidesApi(app: Express): void {
   const send = (res: any, data: any) => {
     res.set('Cache-Control', 'public, max-age=300');
@@ -172,6 +199,15 @@ export function registerGuidesApi(app: Express): void {
   app.get('/api/guides', async (_req, res) => {
     try {
       send(res, { games: await guideList() });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
+  app.get('/api/game-art', async (req, res) => {
+    try {
+      res.set('Cache-Control', 'public, max-age=3600');
+      res.json(await gameArt(Number(req.query.appId) || 0, String(req.query.name || '').slice(0, 160)));
     } catch (e) {
       fail(res, e);
     }
