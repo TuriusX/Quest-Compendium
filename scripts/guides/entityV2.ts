@@ -122,6 +122,17 @@ const backed = (game: string, name: string, texts: string[], ev: EvidencePack) =
   return texts.map((_, i) => v.find((x) => x.id === `K${i + 1}`)?.verdict === 'supported');
 });
 
+/** Whether the sources disagree with each other about each statement (settled; no search). */
+const disputedIn = (game: string, name: string, texts: string[], ev: EvidencePack) => settled(async () => {
+  const r: any = await gemini().models.generateContent({
+    model: MODEL,
+    contents: [{ role: 'user', parts: [{ text: [`Evidence about "${name}" in the video game "${game}" (sentences from sources):`, evidenceText(ev), '', 'For each statement below: do the evidence lines disagree with each other about it (some say one thing, others something different, e.g. two different colours, places or numbers for the same thing)? "agree" if they all say the same or only one says anything.', ...texts.map((t, i) => `S${i + 1}: ${t}`), 'Reply with JSON only: {"verdicts": ["disputed" | "agree", ...]} (one per statement, in order).'].join('\n') }] }],
+    config: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 400, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+  });
+  const v = objOf(String(r?.text || '')).verdicts;
+  return texts.map((_, i) => Array.isArray(v) && String(v[i]).toLowerCase() === 'disputed');
+});
+
 /**
  * 7. Statements on the page that can't both be true (no search): candidates first, then each confirmed (settled): two
  * statements that can both be true (one after the other in the story, different parts of one place, one more specific
@@ -205,6 +216,7 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
       }
     }
     const verified = core.map((_, i) => ok[i]);
+    const disputed = new Set<number>();
     // 3-7, with one automatic retry: a held draft is written again with the reasons it was held, before the page is
     // held for good.
     const build = async (retryFor: string[]) => {
@@ -264,6 +276,13 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
       missing.forEach((p, i) => { if (!still[i]) verified[core.indexOf(p)] = false; });
       missing = missing.filter((_, i) => still[i]);
     }
+    if (missing.length) {
+      // A point the sources disagree about (one says brown, another yellow) is disputed: reported, not required, and
+      // the page leaves the disputed detail out.
+      const split = await disputedIn(game, name, missing.map((p) => p.point), ev);
+      missing.forEach((p, i) => { if (split[i]) { verified[core.indexOf(p)] = false; disputed.add(core.indexOf(p)); } });
+      missing = missing.filter((_, i) => !split[i]);
+    }
     // 7. Consistency.
     const contra = await contradictions(game, name, text);
     const reasons = [
@@ -281,13 +300,13 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
       const second = await build(built.reasons);
       built = { ...second, dropped: [...built.dropped.map((x) => `(first draft) ${x}`), ...second.dropped], filled: built.filled + second.filled };
     }
-    return { ...built, bench, core, beforeCov, verified, intent, attempts };
+    return { ...built, bench, core, beforeCov, verified, disputed, intent, attempts };
   });
   const passed = !out.reasons.length;
   const doc = {
     ...out.page, method: 'intent', status: passed ? 'published' : 'held',
     intent: { questions: out.intent.questions, from: out.intent.from.slice(0, 20) },
-    benchmark: { ...out.bench, points: out.core.map((p, i) => ({ ...p, verified: out.verified[i], covered: out.cov[i], coveredBefore: out.beforeCov[i] })) },
+    benchmark: { ...out.bench, points: out.core.map((p, i) => ({ ...p, verified: out.verified[i], ...(out.disputed.has(i) ? { disputed: true } : {}), covered: out.cov[i], coveredBefore: out.beforeCov[i] })) },
     review: { score: out.review.score, status: out.review.status, supported: out.review.supported, total: out.review.total, ...(out.review.reason ? { reason: out.review.reason } : {}) },
     dropped: out.dropped.map((x) => cut(x, 200)), gapsFilled: out.filled, attempts: out.attempts, ...(out.contra.length ? { contradictions: out.contra } : {}),
     ...(out.reasons.length ? { heldBecause: out.reasons } : {}),
@@ -296,7 +315,7 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
   if (opts.draft) await db().collection('compendiumDrafts').doc(`${key}__${slug}`).set(JSON.parse(JSON.stringify({ before: live, after: doc, at: Date.now() })));
   else if (passed) await ref.set(JSON.parse(JSON.stringify(doc)));
   else await ref.set({ v2Held: JSON.parse(JSON.stringify({ at: Date.now(), reasons: out.reasons, cost: doc.cost })) }, { merge: true });
-  console.log(`${key} / ${name}: ${passed ? 'passes' : `held (${out.reasons.join(' | ').slice(0, 300)})`}; verified core points ${out.beforeCov.filter((c, i) => c && out.verified[i]).length} -> ${out.cov.filter((c, i) => c && out.verified[i]).length} of ${out.verified.filter(Boolean).length} (${out.core.length - out.verified.filter(Boolean).length} unverified), ${out.page.qa.length} question(s) answered, ${out.attempts} attempt(s), ${out.filled} claim(s) saved by the gap search, ${out.dropped.length} dropped, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);
+  console.log(`${key} / ${name}: ${passed ? 'passes' : `held (${out.reasons.join(' | ').slice(0, 300)})`}; verified core points ${out.beforeCov.filter((c, i) => c && out.verified[i]).length} -> ${out.cov.filter((c, i) => c && out.verified[i]).length} of ${out.verified.filter(Boolean).length} (${out.core.length - out.verified.filter(Boolean).length} unverified${out.disputed.size ? `, ${out.disputed.size} disputed by the sources` : ''}), ${out.page.qa.length} question(s) answered, ${out.attempts} attempt(s), ${out.filled} claim(s) saved by the gap search, ${out.dropped.length} dropped, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);
   return { status: doc.status, dollars: scope.dollars, coreCovered: out.cov.filter(Boolean).length, core: out.core.length };
 }
 
