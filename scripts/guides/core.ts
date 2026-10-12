@@ -213,6 +213,23 @@ export async function runCore(): Promise<void> {
   const timeUp = () => Date.now() - RUN_STARTED > MINUTES * 60_000;
   // The compendium rollout to the new method first (rollout.ts): rebuilds across guides by demand, then (from
   // system/core.newPages.from) the blueprints' new entity pages.
+  // Blueprint sections the rollout waits for (system/core.rollout.after: [{key, section}], e.g. RDR2's Stranger
+  // missions) are built first.
+  for (const g of ((st.rollout?.after || []) as { key: string; section: string }[])) {
+    const bp: any = (await db().collection('guideBlueprints').doc(g.key).get()).data();
+    if (bp?.status !== 'approved' || bp.progress?.[g.section]?.done) continue;
+    const lk = await acquireGuideLock(g.key, 'core blueprint');
+    if (isRefusal(lk)) { console.log(lockedLine(lk, g.key)); return; }
+    try {
+      const { runBlueprint: runFirst } = await import('./blueprintBuild');
+      const r = await runFirst(g.key, { room: async () => (await coreBudget()).room, charge: (d) => chargeCore(d, g.key), logUnit, timeUp }, { only: [g.section] });
+      if (r.wentLive) wentLive = true;
+      if (r.stopped) { console.log(`
+${r.stopped}; the next run carries on.`); await lk.release(); if (wentLive) await publishSiteForCore(); return; }
+    } finally {
+      await lk.release().catch(() => {});
+    }
+  }
   {
     const { runRollout } = await import('./rollout');
     const r = await runRollout({ room: async () => (await coreBudget()).room, charge: (d, k) => chargeCore(d, k), logUnit, timeUp });

@@ -140,7 +140,7 @@ export async function recordEntityUnit(key: string, sectionId: string, u: { name
 }
 
 /** Build an approved blueprint's next units. Returns whether anything went live and whether it stopped (budget, time, checkpoint). */
-export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ wentLive: boolean; stopped: string | null; done: boolean }> {
+export async function runBlueprint(key: string, ctx: BlueprintCtx, opts: { only?: string[] } = {}): Promise<{ wentLive: boolean; stopped: string | null; done: boolean }> {
   const ref = db().collection('guideBlueprints').doc(key);
   const b: any = (await ref.get()).data();
   if (b?.status !== 'approved') return { wentLive: false, stopped: null, done: true };
@@ -162,6 +162,7 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ we
   const { buildReference } = await import('./refpages');
 
   for (const s of (b.sections || []).slice().sort((x: Section, y: Section) => (x.priority || 99) - (y.priority || 99)) as Section[]) {
+    if (opts.only && !opts.only.includes(s.id)) continue;
     const p: Progress = (progress[s.id] ||= { built: [] });
     if (p.done) continue;
     if (s.unit === 'entity' && !isRebuildExisting(s) && (hold || elsewhere)) { if (hold) console.log(`  ${s.title}: held (${hold}).`); continue; }
