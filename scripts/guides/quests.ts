@@ -17,7 +17,7 @@ import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, usageScope, searchesIn } from './common';
 import { supportedSegments, trusted, evidenceText, claimCheck, claimReview, claimSlots, type Evidence, type EvidencePack, type ClaimPage, type ClaimVerdict } from './claimCheck';
 import { entitySlug } from './compendium';
-import { entitySegments, lintEntity } from './siteText';
+import { entitySegments, lintEntity, chapterPage } from './siteText';
 
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const objOf = (text: string): any => {
@@ -71,7 +71,7 @@ async function questEvidence(key: string, game: string, name: string, kind: Ques
 const WRITER = (game: string, name: string, kind: QuestKind, ev: EvidencePack, chapters: string[]) => [
   `Write a compendium page for the ${kind === 'story' ? 'story mission' : 'Stranger mission strand'} "${name}" in the video game "${game}", from the EVIDENCE only.`,
   'Every fact must come from an evidence line; leave a field empty rather than guess. Use the game\'s exact names. Never write generic advice.',
-  `"chapter": one of: ${chapters.join('; ')} when the evidence says which.`,
+  '"chapter": as the evidence words it (e.g. "Chapter 2", "Epilogue Part 1"), only when it says.',
   'Reply with JSON only:',
   '{"overview": "1-2 sentences: what the mission is about (no spoilers beyond its setup)", "giver": "who gives it", "chapter": "...", "where": "where it starts",',
   ' "rewards": ["each reward"], "missables": ["anything missable, only if the evidence says so"], "choices": [{"choice": "...", "outcome": "..."}],',
@@ -97,8 +97,11 @@ function claimsOf(name: string, overview: string, q: Quest): { page: ClaimPage; 
   q.goldMedal.forEach((r, i) => { services.push(`A gold medal requirement for "${name}": ${r}`); map.push(keep(q.goldMedal, i)); });
   q.choices.forEach((c, i) => { services.push(`In "${name}", choosing "${c.choice}" leads to: ${c.outcome}`); map.push(keep(q.choices, i)); });
   q.parts.forEach((p, i) => {
-    services.push(`"${p.name}" is a part of "${name}"${p.chapter ? ` (${p.chapter})` : ''}${p.where ? `, starting ${p.where}` : ''}`);
+    // The part, its chapter and where it starts as separate claims: an unsupported chapter drops the chapter, not the part.
+    services.push(`"${p.name}" is a part of "${name}"`);
     map.push(keep(q.parts, i));
+    if (p.chapter) { services.push(`"${p.name}" takes place in ${p.chapter}`); map.push((ok) => { if (!ok && q.parts[i]) q.parts[i].chapter = ''; }); }
+    if (p.where) { services.push(`"${p.name}" starts ${p.where}`); map.push((ok) => { if (!ok && q.parts[i]) q.parts[i].where = ''; }); }
   });
   const steps = [{ title: 'Overview', text: overview }, ...q.parts.flatMap((p) => p.steps.map((s) => ({ title: p.name, text: s.text })))];
   return { page: { steps, entries: [], choices: [], advice: [], services, fights: [] }, map };
@@ -108,14 +111,13 @@ function applyQuestVerdicts(overview: string, q: Quest, map: ((ok: boolean) => v
   const bad = verdicts.filter((v) => v.verdict === 'unsupported' || v.verdict === 'contradicted');
   const removed = bad.map((v) => `${v.label} ${v.verdict}: ${cut(v.text, 120)}`);
   const dropSent = new Map<number, Set<number>>();
-  for (const v of bad) {
-    if (v.kind === 'merchant') map[Number(v.label.slice(1)) - 1]?.(false);
-    else if (v.kind === 'sentence') { const s = Number(v.label.slice(1)) - 1; (dropSent.get(s) || dropSent.set(s, new Set()).get(s)!).add(Number(v.sentence)); }
-  }
+  for (const v of bad) if (v.kind === 'sentence') { const s = Number(v.label.slice(1)) - 1; (dropSent.get(s) || dropSent.set(s, new Set()).get(s)!).add(Number(v.sentence)); }
   const sentences = (t: string) => t.split(/(?<=[.!?])\s+/);
   if (dropSent.has(0)) overview = sentences(overview).filter((_, j) => !dropSent.get(0)!.has(j)).join(' ');
+  // Step sentences first (numbered over every part, as the claims were), then the facts and parts that failed.
   let k = 1;
   for (const p of q.parts) for (const st of p.steps) { const d = dropSent.get(k++); if (d) st.text = sentences(st.text).filter((_, j) => !d.has(j)).join(' '); }
+  for (const v of bad) if (v.kind === 'merchant') map[Number(v.label.slice(1)) - 1]?.(false);
   q.rewards = q.rewards.filter(Boolean); q.missables = q.missables.filter(Boolean); q.goldMedal = q.goldMedal.filter(Boolean);
   q.choices = q.choices.filter(Boolean);
   q.parts = q.parts.filter(Boolean).map((p) => ({ ...p, steps: p.steps.filter((s) => s.text) }));
@@ -127,7 +129,8 @@ async function walkthroughFor(key: string, name: string, chapter: string) {
   const info: any = (await db().collection('guides').doc(key).get()).data() || {};
   const pages = (await db().collection('guides').doc(key).collection('areas').where('status', '==', 'published').get()).docs.map((d) => ({ slug: d.id, ...(d.data() as any) }));
   for (const p of pages) for (const st of p.walkthrough || []) if (st.id && entitySegments(String(st.title || ''), [{ name, slug: 'x' }]).some((s) => s.slug)) return { slug: p.slug, name: p.name, anchor: String(st.id) };
-  const ch = (info.areas || []).find((a: any) => chapter && entitySegments(a.name, [{ name: chapter.replace(/:.*$/, ''), slug: 'x' }]).some((s) => s.slug));
+  const slug = chapter ? chapterPage(chapter, (info.areas || []).filter((a: any) => pages.some((p) => p.slug === a.slug))) : undefined;
+  const ch = slug ? (info.areas || []).find((a: any) => a.slug === slug) : null;
   return ch ? { slug: ch.slug, name: ch.name } : undefined;
 }
 

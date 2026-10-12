@@ -472,7 +472,7 @@ function areaList(gameKey: string, areas: AreaLink[], current: string | null, ba
 // Entity pages next to the guide (published ones; a preview shows all), links from every mention in the guide's text
 // (with a hover preview), a forgiving search over every entity, page, step and entry, and "Services and people" as
 // grouped cards. COMP is the guide being rendered (set per guide in main).
-type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any };
+type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any; kind?: string; quest?: any };
 const COMPS = new Map<string, NonNullable<typeof COMP>>();
 let COMP: { taxonomy: any[]; entities: CompEntity[]; people: Record<string, { groups: { group: string; people: { name: string; role: string; where?: string }[] }[] }> } | null = null;
 const compLinkable = () => (COMP?.entities || []).map((e) => ({ name: e.name, slug: e.slug }));
@@ -1019,7 +1019,14 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
     const more = (t.examples || []).filter((x: string) => !built.some((e) => e.name.toLowerCase() === x.toLowerCase())).slice(0, 6);
     return `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(t.label)}</div>
       <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => `<a href="${esc(entHref(e.slug))}" class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(e.name)}</a>`).join('')}${more.map((x: string) => `<span class="qc-soon rounded-md border border-dashed border-white/10 px-2 py-0.5 text-sm text-zinc-500 cursor-help select-none" tabindex="0" aria-disabled="true" title="${esc(ui('comingSoon'))}" data-soon="${esc(ui('comingSoon'))}">${esc(x)}</span>`).join('')}</div></div>`;
-  }).join('');
+  }).join('')
+    // Built pages of types outside the taxonomy (quest pages: story missions, Stranger strands): built ones only, never
+    // "coming soon".
+    + [...new Set(COMP.entities.map((e) => e.type))].filter((ty) => !(COMP!.taxonomy || []).some((t: any) => t.id === ty)).map((ty) => {
+      const built = COMP!.entities.filter((e) => e.type === ty);
+      return `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(built[0].typeLabel)}</div>
+      <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => `<a href="${esc(entHref(e.slug))}" class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(e.name)}</a>`).join('')}</div></div>`;
+    }).join('');
   return `<h2 class="mt-8 text-lg font-bold text-white">${esc(ui('compendium'))}</h2>
   ${types.includes('qc-soon') ? `<p class="mt-1 text-xs text-zinc-500">${esc(ui('comingSoonNote'))}</p>` : ''}
   <div class="mt-3 grid gap-3 sm:grid-cols-2">${types}</div>
@@ -1027,6 +1034,27 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
 }
 
 /** The compendium's entity pages (previews only): a summary box made for search, linked back to the guide. */
+/**
+ * A quest page's facts (scripts/guides/quests.ts): giver, chapter, where it starts, rewards, missables, choices, gold
+ * medal goals; a Stranger strand's parts with their steps; and, for a story mission, the walkthrough for the
+ * step-by-step (the page isn't repeated here).
+ */
+function questRows(q: any, row: (label: string, html: string) => string, list: (xs: string[]) => string): string {
+  const parts = (q.parts || []).map((p: any) => `<div id="${esc(p.id)}" class="mt-1"><strong class="text-white">${esc(p.name)}</strong>${p.chapter ? `<span class="text-zinc-400"> · ${esc(p.chapter)}</span>` : ''}${p.where ? `<div class="text-zinc-400">${esc(p.where)}</div>` : ''}${(p.steps || []).length ? `<ol class="mt-1 list-decimal pl-5 space-y-0.5">${p.steps.map((st: any) => `<li id="${esc(st.id)}">${esc(st.text)}</li>`).join('')}</ol>` : ''}</div>`).join('');
+  const walk = q.walkthrough ? `<a class="text-[#a87ffb] hover:text-white font-semibold" href="../${esc(q.walkthrough.slug)}/${q.walkthrough.anchor ? `#${esc(q.walkthrough.anchor)}` : ''}">${esc(q.walkthrough.name)}</a>` : '';
+  return [
+    row('Given by', esc(q.giver || '')),
+    row('Chapter', esc(q.chapter || '')),
+    row('Starts', esc(q.where || '')),
+    row('Rewards', list((q.rewards || []).map(esc))),
+    row('Missable', list((q.missables || []).map((m: string) => `<span class="text-amber-200">${esc(m)}</span>`))),
+    row('Choices', list((q.choices || []).map((c: any) => `<strong class="text-white">${esc(c.choice)}</strong><span class="text-zinc-400"> → ${esc(c.outcome)}</span>`))),
+    row('Gold medal', list((q.goldMedal || []).map(esc))),
+    row('Parts', parts),
+    row('Walkthrough', walk),
+  ].join('');
+}
+
 function renderEntities(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, sitemap: string[]) {
   const pageText = (a: GuideArea) => [a.overview, ...(a.walkthrough || []).flatMap((s) => [s.title, s.text, s.tip, s.warn]), ...(a.items || []).map((e) => `${e.name} ${e.where || ''}`), ...(a.tips || [])].filter(Boolean).join(' ');
   // Mission links: a mission whose name is a walkthrough step's title links to that step (exact title matches only;
@@ -1051,6 +1079,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
       ${e.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${rich(e.overview, '../', e.slug)}</p>` : ''}
       <dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm">
         ${row('Type', esc(label))}
+        ${e.quest ? questRows(e.quest, row, list) : ''}
         ${row('Region', esc(sm.region || ''))}
         ${row('Where', esc(sm.where || ''))}
         ${row('Where to find them', list((sm.whereToFind || []).map((w: any) => `${w.when ? `<strong class="text-white">${esc(w.when)}</strong>: ` : ''}${rich(w.where, '../', e.slug)}`)))}
