@@ -65,6 +65,8 @@ async function* rows(clientId: string, tok: string, endpoint: string): AsyncGene
 
 type Img = { id: string; w: number; h: number };
 const best = (xs: Img[], landscape: boolean) => xs.filter((x) => !landscape || x.w >= x.h).sort((a, b) => b.w * b.h - a.w * a.h);
+/** Key art for a wide banner: art shaped 1.4:1 to 3.6:1 (largest first), else the widest screenshot, else any landscape art. */
+const bannerArt = (arts: Img[], shots: Img[]) => best(arts, true).find((x) => x.w / Math.max(1, x.h) >= 1.4 && x.w / Math.max(1, x.h) <= 3.6) || best(shots, true)[0] || best(arts, true).find((x) => x.w / Math.max(1, x.h) >= 1.2) || null;
 
 async function main() {
   const cfg: any = (await db().collection('config').doc('igdb').get()).data() || {};
@@ -86,22 +88,34 @@ async function main() {
   for (const [id, ks] of pinned) for (const k of ks) { game.set(k, id); how.set(k, 'pinned'); }
   // 2. Games: the matched ones' fields, and name candidates for the rest.
   const wantName = new Map<string, string[]>();
-  for (const g of guides) if (!game.has(g.key)) for (const n of [norm(g.game), norm(g.game).replace(EDITION, '')]) wantName.set(n, [...new Set([...(wantName.get(n) || []), g.key])]);
+  for (const g of guides) if (norm(g.game)) for (const n of [norm(g.game), norm(g.game).replace(EDITION, '')]) if (n) wantName.set(n, [...new Set([...(wantName.get(n) || []), g.key])]);
   const games = new Map<number, any>();
   const cands = new Map<string, any[]>();
   const matched = new Set(game.values());
   for await (const r of rows(clientId, tok, 'games')) {
     const id = Number(r.id);
     const n = norm(r.name);
-    const keep = matched.has(id) || wantName.has(n);
+    // The name, or the name without its subtitle or "Version" ("Dragon Quest VIII: Journey of the Cursed King",
+    // "Pokémon Emerald Version") for a guide named the short way.
+    const short = [norm(String(r.name).split(':')[0]), n.replace(/ version$/, '')].find((x) => x !== n && wantName.has(x));
+    const keep = matched.has(id) || wantName.has(n) || !!short;
     if (!keep) continue;
     const x = { id, name: r.name, slug: r.slug, first: Number(r.first_release_date) || 0, platforms: ids(r.platforms), genres: ids(r.genres), cover: Number(r.cover) || 0, artworks: ids(r.artworks), screenshots: ids(r.screenshots), type: Number(r.game_type ?? r.category ?? 0), rated: Number(r.total_rating_count) || 0, n };
     games.set(id, x);
-    for (const k of wantName.get(n) || []) cands.set(k, [...(cands.get(k) || []), x]);
+    for (const k of wantName.get(n) || wantName.get(short || '') || []) cands.set(k, [...(cands.get(k) || []), { ...x, n: wantName.has(n) ? n : short }]);
   }
   for (const g of guides) {
-    if (game.has(g.key)) continue;
     const exact = norm(g.game), bare = exact.replace(EDITION, '');
+    if (!exact) continue;
+    // A Steam match that's a bundle or collection ("Kingdom Hearts HD 1.5 + 2.5 Remix" for Kingdom Hearts Final Mix)
+    // gives way to the game with the guide's exact name.
+    if (how.get(g.key) === 'steam') {
+      const s = games.get(game.get(g.key)!);
+      const named = (cands.get(g.key) || []).find((c) => c.n === exact && c.id !== s?.id);
+      if (s && s.n !== exact && s.n !== bare && named) { game.set(g.key, named.id); how.set(g.key, 'name'); }
+      continue;
+    }
+    if (game.has(g.key)) continue;
     const xs = (cands.get(g.key) || []).sort((a, b) => Number(b.n === exact) - Number(a.n === exact) || Number(b.type === 0) - Number(a.type === 0) || b.rated - a.rated);
     if (xs[0] && (xs[0].n === exact || xs[0].n === bare)) { game.set(g.key, xs[0].id); how.set(g.key, 'name'); }
   }
@@ -127,18 +141,19 @@ async function main() {
   for (const g of guides) {
     const id = game.get(g.key);
     const x = id ? games.get(id) : null;
-    if (!x) { none.push(g.game); await db().collection('guides').doc(g.key).set({ igdb: { id: id || null, at: Date.now(), missing: true } }, { merge: true }); continue; }
-    const art = best(arts.get(x.id) || [], true)[0] || null;
+    // update() replaces the whole igdb field, so nothing from an older match lingers.
+    if (!x) { none.push(g.game || g.key); await db().collection('guides').doc(g.key).update({ igdb: { id: null, at: Date.now(), missing: true } }); continue; }
+    const art = bannerArt(arts.get(x.id) || [], shots.get(x.id) || []);
     const ss = best(shots.get(x.id) || [], true).slice(0, 4);
     const cover = best(covers.get(x.id) || [], false)[0] || null;
     if (art || ss.length || cover) withArt++;
-    await db().collection('guides').doc(g.key).set({ igdb: {
+    await db().collection('guides').doc(g.key).update({ igdb: {
       id: x.id, name: x.name, slug: x.slug, url: `https://www.igdb.com/games/${x.slug}`,
       released: x.first ? new Date(x.first * 1000).toISOString().slice(0, 10) : null,
       platforms: x.platforms.map((p: number) => platforms.get(p)).filter(Boolean),
       genres: x.genres.map((p: number) => genres.get(p)).filter(Boolean),
       cover, art, screenshots: ss, matchedBy: how.get(g.key) || 'name', at: Date.now(),
-    } }, { merge: true });
+    } });
   }
   console.log(`igdb: ${guides.length} guide(s): ${guides.length - none.length} matched, ${withArt} with images; no IGDB match: ${none.join(', ') || 'none'}.`);
 }
