@@ -97,10 +97,12 @@ async function main() {
   // 1. Steam app ids.
   const game = new Map<string, number>(); // guide key -> IGDB game id
   const how = new Map<string, string>(); // guide key -> steam | pinned | name
+  const steamCands = new Map<string, number[]>(); // guide key -> IGDB games sharing its Steam app id
   for await (const r of rows(clientId, tok, 'external_games')) {
     const src = Number(r.external_game_source || r.category);
     if (src !== STEAM) continue;
-    for (const k of byApp.get(String(r.uid)) || []) if (!game.has(k)) { game.set(k, Number(r.game)); how.set(k, 'steam'); }
+    // One Steam app can be several IGDB games (the game, its deluxe edition, a bundle): all kept, the main game chosen below.
+    for (const k of byApp.get(String(r.uid)) || []) steamCands.set(k, [...(steamCands.get(k) || []), Number(r.game)]);
   }
   for (const [id, ks] of pinned) for (const k of ks) { game.set(k, id); how.set(k, 'pinned'); }
   // 2. Games: the matched ones' fields, and name candidates for the rest.
@@ -108,7 +110,7 @@ async function main() {
   for (const g of guides) if (norm(g.game)) for (const n of [norm(g.game), norm(g.game).replace(EDITION, '')]) if (n) wantName.set(n, [...new Set([...(wantName.get(n) || []), g.key])]);
   const games = new Map<number, any>();
   const cands = new Map<string, any[]>();
-  const matched = new Set(game.values());
+  const matched = new Set([...game.values(), ...[...steamCands.values()].flat()]);
   for await (const r of rows(clientId, tok, 'games')) {
     const id = Number(r.id);
     const n = norm(r.name);
@@ -120,6 +122,15 @@ async function main() {
     const x = { id, name: r.name, slug: r.slug, first: when(r.first_release_date), platforms: ids(r.platforms), genres: ids(r.genres), cover: Number(r.cover) || 0, artworks: ids(r.artworks), screenshots: ids(r.screenshots), type: Number(r.game_type ?? r.category ?? 0), rated: Number(r.total_rating_count) || 0, n };
     games.set(id, x);
     for (const k of wantName.get(n) || wantName.get(short || '') || []) cands.set(k, [...(cands.get(k) || []), { ...x, n: wantName.has(n) ? n : short, viaShort: !wantName.has(n) }]);
+  }
+  // The Steam match: the main game among the IGDB games sharing the app id, then the closest name, then the most rated.
+  for (const [k, xs] of steamCands) {
+    if (game.has(k)) continue; // pinned
+    const g = guides.find((x) => x.key === k)!;
+    const exact = norm(g.game || ''), bare = exact.replace(EDITION, '');
+    const opts = [...new Set(xs)].map((id) => games.get(id)).filter(Boolean) as any[];
+    const pick = opts.sort((a, b) => Number(b.type === 0) - Number(a.type === 0) || Number(b.n === exact || b.n === bare) - Number(a.n === exact || a.n === bare) || b.rated - a.rated)[0];
+    if (pick) { game.set(k, pick.id); how.set(k, 'steam'); }
   }
   for (const g of guides) {
     const exact = norm(g.game), bare = exact.replace(EDITION, '');
