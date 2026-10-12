@@ -95,6 +95,8 @@ function artBox(game: string, appId: number | undefined, extra = '', key?: strin
  * Unset: the key art (artBox).
  */
 const CARD_MODE = (process.env.QC_CARDS || '').toUpperCase();
+/** Each guide's Steam store art paths (guides/{key}.steamArt, scripts/pipeline/steamArt.ts): capsule, library art, header. */
+const STEAM_ART = new Map<string, Record<string, string>>();
 /** A Steam store image for an app, from the same folder as its saved art (newer apps keep theirs under a hashed path). */
 const steamAsset = (appId: number, file: string) => (ART.get(appId) || `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`).replace(/header\.jpg(\?.*)?$/, file);
 function cardArt(game: string, appId: number | undefined, key: string): string {
@@ -105,8 +107,9 @@ function cardArt(game: string, appId: number | undefined, key: string): string {
   const alt = esc(ui('coverAlt', { game }));
   const next = `onerror="if(this.dataset.fb){this.removeAttribute('srcset');this.src=this.dataset.fb;this.removeAttribute('data-fb')}else this.remove()"`;
   if (CARD_MODE === 'A') {
-    const steam = appId ? steamAsset(appId, 'library_600x900.jpg') : '';
-    const steam2x = appId ? steamAsset(appId, 'library_600x900_2x.jpg') : '';
+    const sa = STEAM_ART.get(key) || {};
+    const steam = sa.library || (appId ? steamAsset(appId, 'library_600x900.jpg') : '');
+    const steam2x = sa.library2x || (appId ? steamAsset(appId, 'library_600x900_2x.jpg') : '') || steam;
     const img = cover
       ? `<img src="${cover.src}" srcset="${cover.srcset}" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 32vw" alt="${alt}" loading="lazy" decoding="async" width="264" height="374" class="absolute inset-0 w-full h-full object-cover"${steam ? ` data-fb="${steam}"` : ''} ${next}>`
       : steam ? `<img src="${steam}" srcset="${steam} 600w, ${steam2x} 1200w" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 32vw" alt="${alt}" loading="lazy" decoding="async" width="600" height="900" class="absolute inset-0 w-full h-full object-cover" onerror="if(this.srcset){this.removeAttribute('srcset')}else this.remove()">` : '';
@@ -114,7 +117,9 @@ function cardArt(game: string, appId: number | undefined, key: string): string {
   }
   // B: the cover on a blurred copy of itself (non-Steam games, and under the capsule in case it fails).
   const coverLayer = cover ? `<div class="absolute inset-0"><img src="${cover.src}" alt="" aria-hidden="true" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-60"><img src="${cover.src}" srcset="${cover.srcset}" sizes="140px" alt="${alt}" loading="lazy" decoding="async" class="relative mx-auto h-full w-auto py-2 object-contain drop-shadow-lg"></div>` : '';
-  const capsule = appId ? `<img src="${steamAsset(appId, 'capsule_616x353.jpg')}" alt="${alt}" loading="lazy" decoding="async" width="616" height="353" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()">` : '';
+  const sa = STEAM_ART.get(key) || {};
+  const cap = sa.capsule || (appId ? steamAsset(appId, 'capsule_616x353.jpg') : '');
+  const capsule = cap ? `<img src="${cap}"${sa.capsule2x ? ` srcset="${cap} 616w, ${sa.capsule2x} 1232w" sizes="(min-width: 1024px) 280px, (min-width: 640px) 45vw, 50vw"` : ''} alt="${alt}" loading="lazy" decoding="async" width="616" height="353" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()">` : '';
   return `<div class="relative aspect-[616/353] overflow-hidden bg-[#0c0d14]">${placeholder}${coverLayer}${capsule}</div>`;
 }
 
@@ -1538,6 +1543,7 @@ async function main() {
     });
     if (info.appId && String(info.art || '').includes(`/apps/${info.appId}/`)) ART.set(Number(info.appId), String(info.art));
     if (info.igdb && IGDB_ON) IGDB.set(g.id, info.igdb);
+    if (info.steamArt) STEAM_ART.set(g.id, info.steamArt);
     if (info.appId) GUIDE_APP.set(g.id, Number(info.appId));
     const live = visible.filter((o) => byslug.get(o.slug)!.status === 'published');
     if (live.length) {

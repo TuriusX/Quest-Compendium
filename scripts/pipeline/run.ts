@@ -433,6 +433,9 @@ async function main() {
     const ig = runScript(['scripts/pipeline/igdb.ts']);
     report.push(ig.ok ? `🖼️ ${(ig.out.match(/igdb: [^\n]+/) || ['IGDB data refreshed'])[0]}` :'⚠️ IGDB refresh failed (see the job log); guides keep last week’s images.');
     if (ig.ok) changed = true;
+    // Steam store art paths (capsule, library art; scripts/pipeline/steamArt.ts), no AI cost.
+    const sa = runScript(['scripts/pipeline/steamArt.ts']);
+    if (!sa.ok) report.push('⚠️ Steam art refresh failed (see the job log); guides keep their saved paths.');
     if (!cd.ok) report.push('⚠️ Compendium demand refresh failed (see the job log); the rollout keeps the previous order.');
     report.push(`${sc.ok ? '🔎' : '⚠️'} ${sc.summary || 'Search Console pull failed (see the job log)'}`);
     // New entity pages by demand go live with this run's publish.
