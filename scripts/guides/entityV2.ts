@@ -108,13 +108,46 @@ const WRITER = (game: string, name: string, typeLabel: string, kind: string, que
 ].join('\n');
 
 /** 7. Do any of the page's statements contradict each other? (no search) */
+/** A yes/no judgement per item, settled: judged twice, and a third judgement decides where the two disagree. */
+async function settled(judge: () => Promise<boolean[]>): Promise<boolean[]> {
+  const [a, b] = await Promise.all([judge(), judge()]);
+  if (a.every((v, i) => v === b[i])) return a;
+  const c = await judge();
+  return a.map((v, i) => (v === b[i] ? v : c[i]));
+}
+
+/** Which statements the evidence backs, settled (for the benchmark's key points). */
+const backed = (game: string, name: string, texts: string[], ev: EvidencePack) => settled(async () => {
+  const v = await claimCheck(game, name, texts.map((t, i) => ({ id: `K${i + 1}`, label: `B${i + 1}`, kind: 'sentence' as const, sentence: 0, text: t })), ev);
+  return texts.map((_, i) => v.find((x) => x.id === `K${i + 1}`)?.verdict === 'supported');
+});
+
+/**
+ * 7. Statements on the page that can't both be true (no search): candidates first, then each confirmed (settled): two
+ * statements that can both be true (one after the other in the story, different parts of one place, one more specific
+ * than the other, a different colour name for the same thing in another context) are not a contradiction.
+ */
 async function contradictions(game: string, name: string, text: string): Promise<string[]> {
   const res: any = await gemini().models.generateContent({
     model: MODEL,
-    contents: [{ role: 'user', parts: [{ text: `Our page about "${name}" in "${game}":\n${text}\n\nList any statements on this page that contradict each other (different chapters, places, directions, regions, outcomes or numbers for the same thing; two descriptions of where it is that can't both be true). Only real contradictions within the page, not things you think are wrong. Reply with JSON only: {"contradictions": ["A says ..., but B says ..."]}` }] }],
-    config: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 800, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    contents: [{ role: 'user', parts: [{ text: `Our page about "${name}" in "${game}":
+${text}
+
+List pairs of statements on this page that cannot both be true (different chapters, places, directions, regions, outcomes or numbers for the same thing). Only contradictions within the page, not things you think are wrong. Reply with JSON only: {"contradictions": ["A says ..., but B says ..."]}` }] }],
+    config: { responseMimeType: 'application/json', temperature: 0, seed: 7, maxOutputTokens: 800, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
   });
-  return (objOf(String(res?.text || '')).contradictions || []).map((x: any) => cut(x, 240)).filter(Boolean).slice(0, 5);
+  const cands: string[] = (objOf(String(res?.text || '')).contradictions || []).map((x: any) => cut(x, 240)).filter(Boolean).slice(0, 5);
+  if (!cands.length) return [];
+  const real = await settled(async () => {
+    const r: any = await gemini().models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: [{ text: [`Our page about "${name}" in "${game}":`, text, '', 'For each possible contradiction below: can both statements be true at once? They can when one happens after the other in the story, they describe different parts of one place, one is just more specific than the other, or they are worded differently. Answer "contradiction" only when both cannot be true.', ...cands.map((c, i) => `C${i + 1}: ${c}`), 'Reply with JSON only: {"verdicts": ["contradiction" | "compatible", ...]} (one per item, in order).'].join('\n') }] }],
+      config: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 400, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    });
+    const v = objOf(String(r?.text || '')).verdicts;
+    return cands.map((_, i) => Array.isArray(v) && String(v[i]).toLowerCase() === 'contradiction');
+  });
+  return cands.filter((_, i) => real[i]);
 }
 
 /** The page's questions as claim steps after the base page's (their sentences are checked like the overview's). */
@@ -162,18 +195,16 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     let ev: EvidencePack = trusted({ ...stored, evidence: [...stored.evidence, ...(bench.evidence || []), ...asked.evidence], sites: [...new Set([...stored.sites, ...(bench.sites || []), ...asked.evidence.flatMap((e) => e.sources)])] });
     // The benchmark's core points are a model's answer: each is checked against the evidence (a targeted search for the
     // ones it doesn't back). Only verified points are required of the page; the rest are reported, not required.
-    const pointSlots = (ps: BenchPoint[]) => ps.map((p, i) => ({ id: `K${i + 1}`, label: `B${i + 1}`, kind: 'sentence' as const, sentence: 0, text: p.point }));
-    let pv = await claimCheck(game, name, pointSlots(core), ev);
-    const okPoint = (i: number) => pv.find((v) => v.id === `K${i + 1}`)?.verdict === 'supported';
-    const unbacked = core.filter((_, i) => !okPoint(i));
+    let ok = await backed(game, name, core.map((p) => p.point), ev);
+    const unbacked = core.filter((_, i) => !ok[i]);
     if (unbacked.length) {
       const more = await searchedEvidence(`In the video game "${game}", about "${name}": check each statement against the game's wikis and guides and state what the sources say: ${unbacked.map((p) => `"${p.point}"`).join('; ')}`, 'v', 'benchmark check');
       if (more.evidence.length) {
         ev = trusted({ ...ev, evidence: [...ev.evidence, ...more.evidence], sites: [...new Set([...ev.sites, ...more.evidence.flatMap((e) => e.sources)])] });
-        pv = await claimCheck(game, name, pointSlots(core), ev);
+        ok = await backed(game, name, core.map((p) => p.point), ev);
       }
     }
-    const verified = core.map((_, i) => okPoint(i));
+    const verified = core.map((_, i) => ok[i]);
     // 3-7, with one automatic retry: a held draft is written again with the reasons it was held, before the page is
     // held for good.
     const build = async (retryFor: string[]) => {
@@ -225,7 +256,14 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     // 6. Usefulness: every core point of the benchmark covered.
     const text = pageText(page);
     const cov = await coverage(game, name, text, core);
-    const missing = core.filter((_, i) => verified[i] && !cov[i]);
+    let missing = core.filter((_, i) => verified[i] && !cov[i]);
+    if (missing.length) {
+      // The page's own checks may have dropped the sentence that stated it: the point is checked once more (settled);
+      // one the evidence doesn't back after all is unverified, not required.
+      const still = await backed(game, name, missing.map((p) => p.point), ev);
+      missing.forEach((p, i) => { if (!still[i]) verified[core.indexOf(p)] = false; });
+      missing = missing.filter((_, i) => still[i]);
+    }
     // 7. Consistency.
     const contra = await contradictions(game, name, text);
     const reasons = [
