@@ -526,8 +526,8 @@ function questGroups(typeId: string, pages: { slug: string; name: string }[]): {
   const built = (COMP?.entities || []).filter((e) => e.type === typeId);
   const builtBy = new Map(built.map((e) => [e.name.toLowerCase(), e]));
   const items = [
-    ...plan.map((name, i) => { const e = builtBy.get(name.toLowerCase()); return { name, i, e, chapter: String(e?.quest?.chapter || planCh[name] || '') }; }),
-    ...built.filter((e) => !plan.some((n) => n.toLowerCase() === e.name.toLowerCase())).map((e, j) => ({ name: e.name, i: 10_000 + j, e, chapter: String(e.quest?.chapter || '') })),
+    ...plan.map((name, i) => { const e = builtBy.get(name.toLowerCase()); return { name, i, e, chapter: String(e?.quest?.chapter || e?.quest?.parts?.[0]?.chapter || planCh[name] || '') }; }),
+    ...built.filter((e) => !plan.some((n) => n.toLowerCase() === e.name.toLowerCase())).map((e, j) => ({ name: e.name, i: 10_000 + j, e, chapter: String(e.quest?.chapter || e.quest?.parts?.[0]?.chapter || '') })),
   ].filter((x) => x.e || !tried.has(x.name.toLowerCase()));
   const groups = new Map<string, { slug: string; name: string; at: number; items: { name: string; slug?: string; i: number }[] }>();
   for (const x of items) {
