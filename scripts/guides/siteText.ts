@@ -225,3 +225,58 @@ export function coveringPage(names: string[], pages: { slug: string; name?: stri
   }
   return best?.slug;
 }
+
+/** A sentence explaining what kind of thing an entity is or isn't ("X is an NPC rather than a location"). */
+export const KIND_EXPLAIN = /\b(?:is|are|was|serves as)\b[^.!?]*?\b(?:rather than|not|instead of|as opposed to)\s+(?:a|an|the)?\s*(?:physical |geographical |actual |playable )?(?:location|place|region|town|settlement|area|mission hub|landmark|character|npc|person)s?\b/i;
+/** Generic travel filler (on a character's page it's never the answer to "where is X"). */
+export const TRAVEL_FILLER = /\b(?:fast[- ]travel|use (?:the|your) map|follow the (?:main )?road|ride (?:north|south|east|west)|make your way)\b/i;
+
+/**
+ * The rejection check for entity pages, before publishing: sentences explaining what kind of entity it is are removed
+ * everywhere, and a person's page loses its "Getting there" (a character is found, not travelled to; their
+ * whereToFind says where) and any travel-filler sentence. Returns the cleaned summary fields and what was removed;
+ * `left` lists anything that still fails (the page is then held).
+ */
+export function lintEntity(p: { overview?: string; summary: Record<string, any> }, person: boolean) {
+  const removed: string[] = [];
+  const sentences = (t: string) => String(t || '').split(/(?<=[.!?])\s+/).filter(Boolean);
+  const clean = (t: string, travel: boolean) => sentences(t).filter((s) => {
+    const bad = KIND_EXPLAIN.test(s) || (travel && TRAVEL_FILLER.test(s));
+    if (bad) removed.push(s);
+    return !bad;
+  }).join(' ');
+  const overview = clean(p.overview || '', person);
+  const summary = { ...p.summary };
+  for (const f of ['where', 'region']) if (summary[f]) summary[f] = clean(summary[f], person);
+  if (Array.isArray(summary.notes)) summary.notes = summary.notes.map((n: string) => clean(n, person)).filter(Boolean);
+  if (person && summary.gettingThere) { removed.push(`Getting there: ${summary.gettingThere}`); delete summary.gettingThere; }
+  else if (summary.gettingThere) summary.gettingThere = clean(summary.gettingThere, false);
+  const all = [overview, summary.where, summary.region, summary.gettingThere, ...(summary.notes || []), ...(summary.whereToFind || []).map((w: any) => w.where)].filter(Boolean).join(' ');
+  const left = sentences(all).filter((s) => KIND_EXPLAIN.test(s));
+  return { overview, summary, removed, left };
+}
+
+/**
+ * A compendium type's label for one entity: "Characters" -> "Character", "Companions & Allies" -> "Companion & Ally",
+ * "Bosses" -> "Boss", "Locations & Settlements" -> "Location & Settlement", "NPCs" -> "NPC", "People" -> "Person".
+ * The last word of each part is made singular; words that are already singular stay.
+ */
+export function singularLabel(label: string): string {
+  const irregular: Record<string, string> = { people: 'person', wolves: 'wolf', knives: 'knife', thieves: 'thief', lives: 'life', fish: 'fish', sheep: 'sheep', series: 'series', species: 'species' };
+  const one = (w: string) => {
+    const lower = w.toLowerCase();
+    let out = w;
+    if (irregular[lower]) out = irregular[lower];
+    else if (/[^aeiou]ies$/i.test(w)) out = w.slice(0, -3) + 'y';
+    else if (/(ss|sh|ch|x|z)es$/i.test(w)) out = w.slice(0, -2);
+    else if (/[A-Z]s$/.test(w)) out = w.slice(0, -1); // NPCs
+    else if (/[^s]s$/i.test(w) && w.length > 3) out = w.slice(0, -1);
+    return w[0] === w[0].toUpperCase() ? out[0].toUpperCase() + out.slice(1) : out;
+  };
+  return String(label || '').split(/(\s*&\s*|\s+and\s+|,\s*|\s*\/\s*)/).map((part, i) => {
+    if (i % 2) return part;
+    const words = part.split(' ');
+    words[words.length - 1] = one(words[words.length - 1]);
+    return words.join(' ');
+  }).join('');
+}

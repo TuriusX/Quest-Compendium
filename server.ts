@@ -18,11 +18,12 @@ import cors from 'cors';
 import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard, clientIp } from './guestGuard';
 import { cleanTag, recordSignupSource, recordVisit } from './visitSources';
+import { recordGroundingMiss, registerBlueprints } from './blueprints';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
 import { DONE_RULES, extractDone } from './src/utils/progressMemory';
-import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef } from './guidesApi';
+import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
@@ -350,6 +351,7 @@ async function startServer() {
   registerAnswerFeedback(app, { requireAuth, optionalAuth, isAdmin });
   // What each player's questions cost per month: the Costs tab of /admin/reviews (playerCosts.ts).
   registerPlayerCosts(app, { requireAuth, isAdmin });
+  registerBlueprints(app, { requireAuth, isAdmin });
   // The guide review queue: failed reviews and players' mistake reports, decided on /admin/reviews (ADMIN_EMAILS).
   registerReviewQueue(app, {
     requireAuth,
@@ -1697,6 +1699,13 @@ percentages:
       // A fact only counts if its subject shows up in a part of the answer a search result actually backs up;
       // the AI can report facts from memory even when it searched for something else.
       recordGameDemand(effectiveGame?.name, userId, language); // which games and languages players use (for the guide pipeline)
+      // The guide didn't ground this answer (anonymous: game, page, question type, why), for the monthly blueprint report.
+      void (async () => {
+        const gk = await guideKeyFor(effectiveGame?.name).catch(() => null);
+        if (!gk) return;
+        const reason = !guidePage ? 'no-page' : !guidePage.verified ? 'unchecked' : !guideParsed.used.length ? 'not-used' : null;
+        if (reason) recordGroundingMiss({ uid: userId, key: gk, page: guidePage?.slug, qtype, reason });
+      })();
       recordDailyActivity(userId, isGuest, req.headers['user-agent'], String(req.headers['x-qc-app'] || ''), cleanTag(req.headers['x-qc-from'])); // daily questions, players vs guests, which app, and where the player came from
       const factsSaved = saveGameFacts(effectiveGame?.name, factsBackedBySearch(factsParsed.facts, groundedSeen), {
         searched: searchesUsed > 0,

@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/siteText.test.ts)
 import assert from "node:assert/strict";
-import { shortGame, relatedQuests, achFlags, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterKey, chapterPage, coveringPage } from "../scripts/guides/siteText";
+import { shortGame, relatedQuests, achFlags, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterKey, chapterPage, coveringPage, lintEntity, singularLabel } from "../scripts/guides/siteText";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -112,6 +112,24 @@ test("redirect targets: a held page's chapter note finds the live chapter page",
   assert.equal(chapterPage("Chapter 5, the island", pages), undefined);
   assert.equal(chapterPage("the gang's first camp", pages), undefined);
   assert.equal(chapterKey("Act II: The Underdark"), "act 2");
+  // Type labels on one entity's page.
+  assert.equal(singularLabel("Characters"), "Character");
+  assert.equal(singularLabel("Companions & Allies"), "Companion & Ally");
+  assert.equal(singularLabel("Bosses"), "Boss");
+  assert.equal(singularLabel("Locations & Settlements"), "Location & Settlement");
+  assert.equal(singularLabel("NPCs and Merchants"), "NPC and Merchant");
+  assert.equal(singularLabel("Legendary Fish"), "Legendary Fish");
+  assert.equal(singularLabel("Key Characters"), "Key Character");
+  assert.equal(singularLabel("Stranger Missions"), "Stranger Mission");
+  // Entity rejection check.
+  const r = lintEntity({ overview: "Popper is an NPC merchant rather than a location, and he sells nothing rare. He runs a stall.", summary: { gettingThere: "Fast-travel to the Grove.", notes: ["Shadowheart is a companion, not a location."] } }, true);
+  assert.equal(r.overview, "He runs a stall.");
+  assert.equal(r.summary.gettingThere, undefined);
+  assert.deepEqual(r.summary.notes, []);
+  assert.equal(r.left.length, 0);
+  const place = lintEntity({ overview: "Colter is an abandoned mining town.", summary: { gettingThere: "Ride north from Valentine." } }, false);
+  assert.equal(place.summary.gettingThere, "Ride north from Valentine.");
+  assert.equal(place.removed.length, 0);
   // Covering page: the most named entries, never another chapter number, the same character first.
   const live = [{ slug: "chapter-2", name: "Chapter 2: Intensive Care", text: "Plasma Cutter, Stasis Module, Kinesis Module, Medical Deck" }, { slug: "chapter-10", name: "Chapter 10: End of Days", text: "Plasma Cutter and the Marker" }];
   assert.equal(coveringPage(["Plasma Cutter", "Stasis Module", "Kinesis Module"], live, 3, "Crew Deck Chapter 10"), undefined);

@@ -541,6 +541,7 @@ function EntityPage({ gameKey, slug, onEntity }: { gameKey: string; slug: string
       <dl className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2 text-sm">
         {row(t('qcg.infoRegion'), sm.region)}
         {row(t('qcg.entWhere'), sm.where)}
+        {row(t('qcg.entFind'), sm.whereToFind?.length ? <ul className="space-y-1">{sm.whereToFind.map((w: any, i: number) => <li key={i}>{w.when ? <strong className="text-white">{w.when}: </strong> : null}<Linked text={w.where} ents={ents} onEntity={onEntity} self={slug} /></li>)}</ul> : null)}
         {row(t('qcg.infoWay'), sm.gettingThere ? <Linked text={sm.gettingThere} ents={ents} onEntity={onEntity} self={slug} /> : null)}
         {row(t('qcg.shops'), named(sm.shops, 'what'))}
         {row(t('qcg.infoServices'), sm.services?.length ? sm.services.join(' · ') : null)}

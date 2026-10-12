@@ -13,11 +13,20 @@
  *    for it have, and how many of each kind of thing there is.
  * 3. Gap analysis: missing sections, thin pages, failed or flagged pages, generic or wrong content.
  * 4. Blueprint: the sections and compendium types this game needs, in priority order, each with a count, a per-game cap
- *    and a cost from our measured rates. Printed (prototype); nothing is built.
+ *    and a cost from our measured rates -> guideBlueprints/{key} { status: 'proposed', version, ... } and a short summary
+ *    in Discord (#guides-pipeline). The owner approves or edits it on /admin/reviews (Blueprints tab); an unapproved
+ *    blueprint builds nothing.
  * Stops before a call that could take it past MAX_DOLLARS ($1.80).
+ *
+ *   --post <key>   post a stored blueprint's summary to Discord again
+ *   --monthly      the monthly report per guide with a blueprint: Search Console impressions and position by section,
+ *                  grounding misses (blueprints.ts), corrections, and proposed updates (one cheap call, no search),
+ *                  saved on the blueprint (reports.{YYYY-MM}) and posted to Discord. The pipeline runs it once a month.
  */
+import { postDiscord } from '../pipeline/summary';
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, usageScope, searchesIn, sourcesIn } from './common';
+import { BLOCKED } from './claimCheck';
 
 const MAX_DOLLARS = 1.8;
 /** Measured rates: an evidence-method page, an entity page (first build), a short quest page (links to the walkthrough). */
@@ -73,13 +82,13 @@ export async function assess(key: string, note = '') {
         if (scope.dollars > MAX_DOLLARS - 0.4) throw new Error(`cost guard: $${scope.dollars.toFixed(2)} spent, next call could pass $${MAX_DOLLARS}`);
         const res: any = await gemini().models.generateContent({
           model: MODEL,
-          contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}${prompt}\nRun a few Google searches (the best walkthrough sites and wikis for this game; never fandom.com). Answer in short factual lines, one fact per line, only what the sources say.` }] }],
+          contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}${prompt}\nRun a few Google searches (the best walkthrough sites and wikis for this game; never fandom.com or fextralife.com; forums and videos only for what players ask). Answer in short factual lines, one fact per line, only what the sources say.` }] }],
           config: { tools: [{ googleSearch: {} }], temperature: 0.2, maxOutputTokens: 12000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
         });
         const n = searchesIn(res);
         console.log(`  research call: ${n} searches`);
         if (!n) continue;
-        const sources = sourcesIn(res).filter((s) => !/fandom\.com/i.test(s));
+        const sources = sourcesIn(res).filter((s) => !BLOCKED.test(s));
         return { text: cut(res?.text, 9000), searches: n, sources };
       }
       throw new Error('the research call ran no searches twice; not using a memory answer');
@@ -87,7 +96,7 @@ export async function assess(key: string, note = '') {
     const a1 = await searched([
       `For a player's guide to the video game "${game}": how is the game structured (linear, open world, hub-based or branching; how the story is divided; how much player choices matter and where; how much character builds matter; the main collectible kinds; how many missables and of what kind)?`,
       'What do players search for and ask about most for this game?',
-      'Which sections and compendium types do the 3 to 5 best-known guides for this game have (name each site; not Fandom)?',
+      'Which sections and compendium types do the 3 to 5 best-known guides for this game have (name each site; not Fandom or Fextralife)?',
     ].join('\n'));
     const a2 = await searched([
       `For the video game "${game}", how many of each kind of thing does a complete guide cover? For example story missions, side quests, Stranger missions, companions, bosses, merchants, legendary animals, and each collectible kind. Use the game's own terms and give 10 to 16 kinds, each with its number as the sources give it.`,
@@ -135,8 +144,111 @@ export async function assess(key: string, note = '') {
     // Prefixed so Cloud Logging keeps it as text (a bare JSON line becomes structured data).
     console.log(`BLUEPRINT_JSON ${JSON.stringify(out)}`);
     console.log(`\n${game}: assessment cost $${scope.dollars.toFixed(3)} (${scope.searches} searches); blueprint build estimate $${out.buildCost.toFixed(2)}.`);
+    if (arg('save') === 'true') {
+      const ref = db().collection('guideBlueprints').doc(key);
+      const prev: any = (await ref.get()).data();
+      await ref.set(JSON.parse(JSON.stringify({ ...out, version: (Number(prev?.version) || 0) + 1, updatedAt: Date.now() })));
+      await postBlueprint(key);
+    }
     return out;
   });
+}
+
+const ADMIN_URL = `${process.env.QC_SERVER_URL || 'https://quest-compendium-890629309063.us-east1.run.app'}/admin/reviews`;
+
+/** A blueprint's short summary in Discord: the sections in order with their cost, and where to approve it. */
+export async function postBlueprint(key: string): Promise<boolean> {
+  const b: any = (await db().collection('guideBlueprints').doc(key).get()).data();
+  if (!b) { console.log(`No blueprint for ${key}.`); return false; }
+  const secs = (b.sections || []).slice().sort((x: any, y: any) => (x.priority || 99) - (y.priority || 99));
+  const text = [
+    `📐 **Guide blueprint ${b.status || 'proposed'}: ${b.game}** (v${b.version || 1}): build ≈ $${Number(b.buildCost || 0).toFixed(2)}${b.assessmentCost ? `, assessment $${Number(b.assessmentCost.dollars || 0).toFixed(2)}` : ''}.`,
+    b.summary ? cut(b.summary, 400) : '',
+    ...secs.slice(0, 14).map((x: any) => `${x.priority}. ${x.title || x.id}: ${x.units} ${x.unit}${x.cap != null ? ` (cap ${x.cap})` : ''}, $${Number(x.cost || 0).toFixed(2)}`),
+    b.notes ? `Notes: ${cut(b.notes, 300)}` : '',
+    `Approve or edit: ${ADMIN_URL} (Blueprints tab). Nothing is built until it's approved.`,
+  ].filter(Boolean).join('\n');
+  if (!process.env.DISCORD_WEBHOOK_URL) { console.log(`(No DISCORD_WEBHOOK_URL: not posted)\n${text}`); return false; }
+  const ok = await postDiscord(process.env.DISCORD_WEBHOOK_URL, text);
+  console.log(ok ? `Posted ${b.game}'s blueprint to Discord.` : 'Posting to Discord failed.');
+  return ok;
+}
+
+/** Which blueprint section a guide URL belongs to: walkthrough pages, or the compendium type of an entity page. */
+function sectionOf(b: any, slug: string, entityType: string | null, walkthroughSlugs: Set<string>): string {
+  if (walkthroughSlugs.has(slug)) return 'walkthrough pages';
+  if (entityType) {
+    const hit = (b.sections || []).find((x: any) => x.kind === 'compendium' && String(x.id).includes(String(entityType).split('-')[0]));
+    return hit ? String(hit.title || hit.id) : `compendium: ${entityType}`;
+  }
+  return slug === 'achievements' ? 'achievements' : 'other pages';
+}
+
+/**
+ * The monthly report per guide with a blueprint: last month's Search Console impressions and position by section,
+ * grounding misses, corrections, and proposed blueprint updates (Flash, no search, about a cent a guide).
+ */
+export async function monthly() {
+  const month = arg('month') && arg('month') !== 'true' ? String(arg('month')) : (() => { const n = new Date(); return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 0)).toISOString().slice(0, 7); })(); // the month that ended (or --month)
+  const bps = (await db().collection('guideBlueprints').get()).docs;
+  const misses: any = (await db().collection('groundingMisses').doc(month).get()).data() || {};
+  const lines: string[] = [`📈 **Monthly guide report, ${month}**`];
+  for (const d of bps) {
+    const b: any = d.data();
+    const key = d.id;
+    const rows = await scPages(key, month);
+    const pages = (await db().collection('guides').doc(key).collection('areas').get()).docs;
+    const walk = new Set(pages.map((x) => x.id));
+    const ents = new Map((await db().collection('guideCompendium').doc(key).collection('entities').get()).docs.map((x) => [x.id, String((x.data() as any).type || '')]));
+    const bySec = new Map<string, { impressions: number; clicks: number; posSum: number }>();
+    for (const r of rows) {
+      const m = r.page.match(/\/guides\/[^/]+\/([^/]+)\//);
+      const slug = m ? m[1] : '';
+      const sec = sectionOf(b, slug, ents.get(slug) || null, walk);
+      const a = bySec.get(sec) || { impressions: 0, clicks: 0, posSum: 0 };
+      a.impressions += r.impressions; a.clicks += r.clicks; a.posSum += r.position * r.impressions;
+      bySec.set(sec, a);
+    }
+    const sections = [...bySec].sort((x, y) => y[1].impressions - x[1].impressions).map(([sec, a]) => ({ section: sec, impressions: a.impressions, clicks: a.clicks, position: a.impressions ? Math.round((a.posSum / a.impressions) * 10) / 10 : null }));
+    const miss = misses[key] || {};
+    const missRows = Object.entries(miss).flatMap(([page, v]: any) => Object.entries(v || {}).map(([k, n]) => ({ page, kind: k, n: Number(n) || 0 }))).sort((x, y) => y.n - x.n);
+    const corrections = (await db().collection('correctionGroups').where('gameKey', '==', key).get()).docs.filter((x) => Number((x.data() as any).updatedAt || 0) > Date.now() - 35 * 86_400_000).length;
+    // Proposed updates from the data (no search).
+    const scope = { dollars: 0, searches: 0 };
+    const res: any = await usageScope.run(scope, () => gemini().models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: [{ text: [
+        `The guide blueprint for "${b.game}" (status ${b.status}): ${JSON.stringify((b.sections || []).map((x: any) => ({ id: x.id, title: x.title, units: x.units, priority: x.priority })))}.`,
+        `Last month on Google, by section: ${JSON.stringify(sections)}.`,
+        `Questions our guide could not ground (page | question type:reason | count): ${missRows.slice(0, 30).map((x) => `${x.page} | ${x.kind} | ${x.n}`).join('; ') || 'none'}.`,
+        `Corrections reported: ${corrections}.`,
+        'Propose 0 to 4 blueprint updates the data supports (raise or lower a section\'s priority, add a section, deepen a page), each one line with the evidence. Reply with JSON only: {"updates": ["..."]}',
+      ].join('\n') }] }],
+      config: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 1500, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    }));
+    const updates: string[] = (objOf(String(res?.text || '')).updates || []).map((x: any) => cut(x, 240)).filter(Boolean).slice(0, 4);
+    await d.ref.set({ reports: { [month]: { at: Date.now(), sections, misses: missRows.slice(0, 50), corrections, updates, cost: scope.dollars } } }, { merge: true });
+    lines.push(`**${b.game}** (${b.status}): ${sections.slice(0, 5).map((x) => `${x.section} ${x.impressions} impr${x.position != null ? ` @${x.position}` : ''}`).join(' · ') || 'no Search Console data'}; ungrounded questions ${missRows.reduce((n, x) => n + x.n, 0)}${missRows[0] ? ` (most: ${missRows[0].page} ${missRows[0].kind})` : ''}; corrections ${corrections}.${updates.length ? ` Proposed: ${updates.join(' | ')}` : ''}`);
+  }
+  console.log(lines.join('\n'));
+  if (process.env.DISCORD_WEBHOOK_URL && bps.length) await postDiscord(process.env.DISCORD_WEBHOOK_URL, lines.join('\n'));
+}
+
+async function scPages(key: string, month: string): Promise<{ page: string; impressions: number; clicks: number; position: number }[]> {
+  try {
+    const r0 = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token?scopes=' + encodeURIComponent('https://www.googleapis.com/auth/webmasters.readonly'), { headers: { 'Metadata-Flavor': 'Google' }, signal: AbortSignal.timeout(3000) });
+    if (!r0.ok) return [];
+    const tok = String((await r0.json()).access_token || '');
+    const start = `${month}-01`;
+    const end = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+    const r = await fetch(`https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent('sc-domain:questcompendium.com')}/searchAnalytics/query`, {
+      method: 'POST', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ startDate: start, endDate: end, dimensions: ['page'], rowLimit: 25_000, dataState: 'all', dimensionFilterGroups: [{ filters: [{ dimension: 'page', operator: 'contains', expression: `/guides/${key}/` }] }] }),
+    });
+    return (((await r.json()).rows || []) as any[]).map((x) => ({ page: x.keys[0], impressions: x.impressions, clicks: x.clicks, position: x.position }));
+  } catch {
+    return [];
+  }
 }
 
 /** The owner's requirements per game, part of its blueprint. */
@@ -147,6 +259,8 @@ const NOTES: Record<string, string> = {
 async function main() {
   const key = String(arg('key') || '');
   if (arg('assess') === 'true' && key) await assess(key, arg('note') && arg('note') !== 'true' ? String(arg('note')) : NOTES[key] || '');
+  else if (arg('post') && arg('post') !== 'true') await postBlueprint(String(arg('post')));
+  else if (arg('monthly') === 'true') await monthly();
   setTimeout(() => process.exit(0), 300);
 }
 if (/blueprint\.ts$/.test(process.argv[1] || '')) main().catch((e) => { console.error('blueprint failed:', e?.message || e); process.exit(1); });

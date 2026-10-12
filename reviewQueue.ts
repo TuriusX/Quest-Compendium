@@ -198,7 +198,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
 <body>
 <header>
   <h1>Guide review queue</h1>
-  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button><button id="tabReports" class="tab">Reports</button><button id="tabQuality" class="tab">Quality</button><button id="tabCosts" class="tab">Costs</button></nav>
+  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button><button id="tabReports" class="tab">Reports</button><button id="tabQuality" class="tab">Quality</button><button id="tabCosts" class="tab">Costs</button><button id="tabBlue" class="tab">Blueprints</button></nav>
   <select id="filter" aria-label="Show"><option value="all">All open</option><option value="review">Failed reviews</option><option value="report">Player reports</option></select>
   <button id="signin" class="primary">Sign in with Google</button>
 </header>
@@ -211,6 +211,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   <div id="reports" hidden></div>
   <div id="quality" hidden></div>
   <div id="costs" hidden></div>
+  <div id="blue" hidden></div>
   <details id="decidedBox" hidden><summary>Recently decided</summary><div id="decided"></div></details>
 </main>
 <script type="module">
@@ -309,6 +310,31 @@ function adminPage(firebaseConfig: Record<string, string>): string {
       + markers + '<h3>Recent 👎</h3>' + (downs || '<p class="dim">None.</p>');
     if (tab === 'quality') $('msg').textContent = 'Answer quality from players’ votes, and marker drops from the close-up check.';
   }
+  // Blueprints (scripts/guides/blueprint.ts): each guide's plan; Approve lets builds follow it, Edit changes its sections.
+  let blue = { blueprints: [] };
+  const editing = new Set();
+  function renderBlue() {
+    const usd = (x) => '$' + Number(x || 0).toFixed(2);
+    const cards = (blue.blueprints || []).map((b) => {
+      const st = '<span class="chip ' + (b.status === 'approved' ? 'approved' : 'pending') + '">' + esc(b.status || 'proposed') + (b.version > 1 ? ' v' + esc(b.version) : '') + '</span>';
+      const head = '<div class="row"><span class="game">' + esc(b.game || b.key) + '</span>' + st + '<span class="dim">build ' + usd(b.buildCost) + (b.assessmentCost ? ' · assessment ' + usd(b.assessmentCost.dollars) : '') + '</span>'
+        + (b.approvedAt ? '<span class="dim">approved ' + new Date(b.approvedAt).toLocaleDateString() + (b.approvedBy ? ' by ' + esc(b.approvedBy) : '') + '</span>' : '') + '</div>';
+      const gaps = b.gaps || {};
+      const gapList = [].concat(gaps.missing_sections || [], gaps.thin_or_weak || [], gaps.wrong_or_generic || []);
+      const rows = (b.sections || []).slice().sort((x, y) => (x.priority || 99) - (y.priority || 99)).map((x) => '<tr><td style="padding:4px;border-top:1px solid var(--line)">' + esc(x.priority) + '</td><td style="padding:4px;border-top:1px solid var(--line)"><b>' + esc(x.title || x.id) + '</b><div class="dim">' + esc(x.what || '') + '</div></td><td style="padding:4px;border-top:1px solid var(--line);text-align:right">' + esc(x.units) + ' ' + esc(x.unit || '') + (x.cap != null ? '<div class="dim">cap ' + esc(x.cap) + '</div>' : '') + '</td><td style="padding:4px;border-top:1px solid var(--line);text-align:right">' + usd(x.cost) + '</td></tr>').join('');
+      const table = '<table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;padding:4px">#</th><th style="text-align:left;padding:4px">Section</th><th style="text-align:right;padding:4px">Units</th><th style="text-align:right;padding:4px">Cost</th></tr>' + rows + '</table>';
+      const edit = editing.has(b.key)
+        ? '<div><div class="dim">Sections (JSON: id, title, kind, what, unit, units, cap, priority, cost)</div><textarea data-bjson="' + esc(b.key) + '" style="width:100%;min-height:260px;font:12px monospace;color:var(--text);background:#1b1b24;border:1px solid var(--line);border-radius:8px;padding:8px">' + esc(JSON.stringify(b.sections || [], null, 2)) + '</textarea>'
+          + '<div class="dim">Notes</div><textarea data-bnotes="' + esc(b.key) + '" style="width:100%;min-height:60px;color:var(--text);background:#1b1b24;border:1px solid var(--line);border-radius:8px;padding:8px">' + esc(b.notes || '') + '</textarea>'
+          + '<div class="actions"><button class="primary" data-bact="save" data-bkey="' + esc(b.key) + '">Save (back to proposed)</button><button data-bact="cancel" data-bkey="' + esc(b.key) + '">Cancel</button></div></div>'
+        : '<div class="actions">' + (b.status !== 'approved' ? '<button class="primary" data-bact="approve" data-bkey="' + esc(b.key) + '">Approve</button>' : '') + '<button data-bact="edit" data-bkey="' + esc(b.key) + '">Edit</button></div>';
+      return '<div class="card">' + head + (b.summary ? '<div>' + esc(b.summary) + '</div>' : '') + (b.notes ? '<div class="said">' + esc(b.notes) + '</div>' : '')
+        + (gapList.length ? '<details><summary>Gaps (' + gapList.length + ')</summary><ul>' + gapList.map((g) => '<li>' + esc(g) + '</li>').join('') + '</ul></details>' : '')
+        + table + ((b.dropOrMerge || []).length ? '<details><summary>Not built / merged</summary><ul>' + b.dropOrMerge.map((g) => '<li>' + esc(g) + '</li>').join('') + '</ul></details>' : '') + edit + '</div>';
+    }).join('');
+    $('blue').innerHTML = cards || '<p class="dim">No blueprints yet.</p>';
+    if (tab === 'blue') $('msg').textContent = 'Each guide is built to its approved blueprint; an unapproved blueprint builds nothing.';
+  }
   // Costs: what each player's questions cost this month (playerCosts.ts): Premium vs free vs guests, the 10 heaviest.
   let costs = {};
   function renderCosts() {
@@ -349,6 +375,8 @@ function adminPage(firebaseConfig: Record<string, string>): string {
     $('tabReports').classList.toggle('on', t === 'reports');
     $('tabQuality').classList.toggle('on', t === 'quality');
     $('tabCosts').classList.toggle('on', t === 'costs');
+    $('tabBlue').classList.toggle('on', t === 'blue');
+    $('blue').hidden = t !== 'blue';
     $('reports').hidden = t !== 'reports';
     $('quality').hidden = t !== 'quality';
     $('costs').hidden = t !== 'costs';
@@ -357,7 +385,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
     $('filter').hidden = t !== 'guides';
     $('corr').hidden = t !== 'corr';
     $('search').hidden = t !== 'search';
-    if (t === 'corr') renderCorr(); else if (t === 'search') renderSearch(); else if (t === 'reports') renderReports(); else if (t === 'quality') renderQuality(); else if (t === 'costs') renderCosts(); else render();
+    if (t === 'corr') renderCorr(); else if (t === 'search') renderSearch(); else if (t === 'reports') renderReports(); else if (t === 'quality') renderQuality(); else if (t === 'costs') renderCosts(); else if (t === 'blue') renderBlue(); else render();
   }
 
   async function api(path, body) {
@@ -394,7 +422,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   }
   async function load() {
     try {
-      [data, corr, sc, reps, qual, costs] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections'), api('/api/admin/search-console').catch(() => ({})), api('/api/admin/answer-reports').catch(() => ({ open: [], decided: [] })), api('/api/admin/answer-quality').catch(() => ({})), api('/api/admin/player-costs').catch(() => ({}))]);
+      [data, corr, sc, reps, qual, costs, blue] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections'), api('/api/admin/search-console').catch(() => ({})), api('/api/admin/answer-reports').catch(() => ({ open: [], decided: [] })), api('/api/admin/answer-quality').catch(() => ({})), api('/api/admin/player-costs').catch(() => ({})), api('/api/admin/blueprints').catch(() => ({ blueprints: [] }))]);
       render();
       renderCorr();
       renderReports();
@@ -409,6 +437,21 @@ function adminPage(firebaseConfig: Record<string, string>): string {
     catch (e) { $('msg').textContent = e.message === 'Not an admin.' ? 'This account is not an admin (ADMIN_EMAILS on the server).' : 'Could not load the queue: ' + e.message; }
   }
   document.addEventListener('click', async (e) => {
+    const bb = e.target.closest('button[data-bact]');
+    if (bb) {
+      const key = bb.dataset.bkey, act = bb.dataset.bact;
+      if (act === 'edit' || act === 'cancel') { if (act === 'edit') editing.add(key); else editing.delete(key); renderBlue(); return; }
+      let body = { action: act };
+      if (act === 'save') {
+        try { body.sections = JSON.parse(document.querySelector('textarea[data-bjson="' + CSS.escape(key) + '"]').value); }
+        catch (err) { alert('The sections are not valid JSON: ' + err.message); return; }
+        body.notes = document.querySelector('textarea[data-bnotes="' + CSS.escape(key) + '"]').value;
+      }
+      bb.disabled = true;
+      try { await api('/api/admin/blueprints/' + encodeURIComponent(key), body); editing.delete(key); await load(); }
+      catch (err) { alert(err.message); bb.disabled = false; }
+      return;
+    }
     const rb = e.target.closest('button[data-ract]');
     if (rb) {
       const id = rb.dataset.rid;
@@ -442,6 +485,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   $('tabReports').addEventListener('click', () => showTab('reports'));
   $('tabQuality').addEventListener('click', () => showTab('quality'));
   $('tabCosts').addEventListener('click', () => showTab('costs'));
+  $('tabBlue').addEventListener('click', () => showTab('blue'));
   $('signin').addEventListener('click', () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => { $('msg').textContent = 'Sign-in failed: ' + (e.code || e.message); }));
   onAuthStateChanged(auth, (u) => { $('signin').hidden = !!u; if (u) load(); });
 </script>

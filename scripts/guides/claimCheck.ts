@@ -43,7 +43,13 @@ const TOPICS: { topic: string; ask: (game: string, area: string, neighbours: str
  * only these back is dropped; a guide or wiki site has to say it.
  */
 export const LOW_TRUST = /(^|\.)(reddit\.com|youtube\.com|youtu\.be|steamcommunity\.com|facebook\.com|x\.com|twitter\.com|tiktok\.com|quora\.com|scribd\.com|pinterest\.com|royalcdkeys\.com|mmoexp\.com|plarium\.com|g2a\.com|eneba\.com|kinguin\.net|instant-gaming\.com)$/i;
-export const trustedSites = (sites: string[]) => sites.filter((s) => !LOW_TRUST.test(s));
+/**
+ * Sites never used as evidence at all: their robots.txt disallows AI crawlers and their terms forbid AI use (Fandom;
+ * Fextralife/Valnet: "development or operation of artificial intelligence ... including retrieval-augmented
+ * generation"; checked Oct 2026). Lines only they back are dropped, and they're taken off every other line.
+ */
+export const BLOCKED = /(^|\.)(fandom\.com|fextralife\.com)$/i;
+export const trustedSites = (sites: string[]) => sites.filter((s) => !LOW_TRUST.test(s) && !BLOCKED.test(s));
 /** The pack with low-trust-only evidence left out (and low-trust sites off each line). */
 export function trusted(p: EvidencePack): EvidencePack {
   const evidence = p.evidence.map((e) => ({ ...e, sources: trustedSites(e.sources) })).filter((e) => e.sources.length);

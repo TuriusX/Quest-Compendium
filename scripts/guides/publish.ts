@@ -16,7 +16,7 @@ import path from 'path';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
-import { shortGame, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterPage, coveringPage, type AchFlag } from './siteText';
+import { shortGame, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterPage, coveringPage, singularLabel, type AchFlag } from './siteText';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 import { GENERATED as GUIDE_UI_GEN } from './guide-ui.generated';
@@ -490,7 +490,7 @@ function rich(text: string | undefined, _prefix = '../', self = ''): string {
 /** The hover preview: each linked entity's type, region and first line, and a small popover. */
 function entPreview(): string {
   if (!COMP?.entities.length) return '';
-  const data = Object.fromEntries(COMP.entities.map((e) => [e.slug, { name: e.name, type: e.typeLabel, region: e.summary?.region || '', line: String(e.overview || '').split(/(?<=[.!?])\s/)[0] || '' }]));
+  const data = Object.fromEntries(COMP.entities.map((e) => [e.slug, { name: e.name, type: singularLabel(e.typeLabel), region: e.summary?.region || '', line: String(e.overview || '').split(/(?<=[.!?])\s/)[0] || '' }]));
   return `<script type="application/json" id="qc-ents">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>
 <div id="qc-ent-pop" hidden class="fixed z-50 max-w-xs rounded-xl border border-[#a87ffb]/40 bg-[#0c0d14] p-3 text-sm shadow-xl pointer-events-none"></div>
 <script>(function(){var d=JSON.parse(document.getElementById('qc-ents').textContent),p=document.getElementById('qc-ent-pop');
@@ -975,7 +975,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
 function guideSearchIndex(key: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>) {
   const idx: { l: string; k: string; c: string; h: string; p?: number; e?: number }[] = [];
   const base = `/${LP}guides/${key}/`;
-  for (const e of COMP?.entities || []) idx.push({ l: e.name, k: e.typeLabel, c: e.summary?.region || '', h: entHref(e.slug), p: 1, e: 1 });
+  for (const e of COMP?.entities || []) idx.push({ l: e.name, k: singularLabel(e.typeLabel), c: e.summary?.region || '', h: entHref(e.slug), p: 1, e: 1 });
   for (const o of visible) {
     const a = byslug.get(o.slug)!;
     const isChapter = /^(chapter|prologue|epilogue|act|part|episode|day)\b/i.test(a.name);
@@ -1029,7 +1029,12 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
 /** The compendium's entity pages (previews only): a summary box made for search, linked back to the guide. */
 function renderEntities(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, sitemap: string[]) {
   const pageText = (a: GuideArea) => [a.overview, ...(a.walkthrough || []).flatMap((s) => [s.title, s.text, s.tip, s.warn]), ...(a.items || []).map((e) => `${e.name} ${e.where || ''}`), ...(a.tips || [])].filter(Boolean).join(' ');
+  // Mission links: a mission whose name is a walkthrough step's title links to that step (exact title matches only;
+  // missions only mentioned in a step's text wait for quest pages).
+  const stepTitles = visible.flatMap((o) => (byslug.get(o.slug)!.walkthrough || []).filter((st: any) => st.id && st.title).map((st: any) => ({ slug: o.slug, id: String(st.id), title: String(st.title) })));
+  const missionLink = (name: string) => stepTitles.find((st) => entitySegments(st.title, [{ name, slug: 'x' }]).some((sg) => sg.slug));
   for (const e of COMP!.entities) {
+    const label = singularLabel(e.typeLabel);
     // Backlinks: the guide pages that mention it (found by the same linker), plus the chapters the page names.
     const mentions = visible.filter((o) => entitySegments(pageText(byslug.get(o.slug)!), [{ name: e.name, slug: e.slug }]).some((sg) => sg.slug));
     const sm = e.summary || {};
@@ -1038,22 +1043,23 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     const dir = path.join(OUT, 'guides', key, e.slug);
     fs.mkdirSync(dir, { recursive: true });
     const body = `<article class="max-w-3xl">
-      <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a> / <span>${esc(e.typeLabel)}</span></p>
+      <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a> / <span>${esc(label)}</span></p>
       <h1 class="text-3xl font-bold text-white leading-tight">${esc(e.name)}</h1>
-      <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400"><span class="rounded-md bg-[#a87ffb]/15 px-2 py-0.5 text-[#c4b0ff]">${esc(e.typeLabel)}</span><span>${esc(gameName)}</span>
+      <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400"><span class="rounded-md bg-[#a87ffb]/15 px-2 py-0.5 text-[#c4b0ff]">${esc(label)}</span><span>${esc(gameName)}</span>
         ${e.review ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))} · ${e.review.supported}/${e.review.total}</span>` : ''}
         ${PREVIEW ? '<span class="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-semibold text-amber-200">Preview</span>' : ''}</div>
       ${e.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${rich(e.overview, '../', e.slug)}</p>` : ''}
       <dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm">
-        ${row('Type', esc(e.typeLabel))}
+        ${row('Type', esc(label))}
         ${row('Region', esc(sm.region || ''))}
         ${row('Where', esc(sm.where || ''))}
+        ${row('Where to find them', list((sm.whereToFind || []).map((w: any) => `${w.when ? `<strong class="text-white">${esc(w.when)}</strong>: ` : ''}${rich(w.where, '../', e.slug)}`)))}
         ${row('Getting there', rich(sm.gettingThere || '', '../', e.slug))}
         ${row('Shops', list((sm.shops || []).map((x: any) => `<strong class="text-white">${esc(x.name)}</strong>${x.what ? `<span class="text-zinc-400">: ${esc(x.what)}</span>` : ''}`)))}
         ${row('Services', esc((sm.services || []).join(' · ')))}
         ${row("What's there", list((sm.places || []).map((x: any) => `<strong class="text-white">${esc(x.name)}</strong>${x.what ? `<span class="text-zinc-400">: ${esc(x.what)}</span>` : ''}`)))}
         ${row('Collectibles', list((sm.collectibles || []).map((x: any) => `<strong class="text-white">${esc(x.name)}</strong>${x.where ? `<span class="text-zinc-400">: ${esc(x.where)}</span>` : ''}`)))}
-        ${row('Missions', list((sm.quests || []).map((x: any) => `<strong class="text-white">${esc(x.name)}</strong><span class="text-zinc-400">${x.kind ? ` · ${esc(x.kind)}` : ''}${x.chapter ? ` · ${esc(x.chapter)}` : ''}</span>`)))}
+        ${row('Missions', list((sm.quests || []).map((x: any) => { const st = missionLink(x.name); return `${st ? `<a class="font-semibold text-[#a87ffb] hover:text-white" href="../${esc(st.slug)}/#${esc(st.id)}">${esc(x.name)}</a>` : `<strong class="text-white">${esc(x.name)}</strong>`}<span class="text-zinc-400">${x.kind ? ` · ${esc(x.kind)}` : ''}${x.chapter ? ` · ${esc(x.chapter)}` : ''}</span>`; })))}
         ${row('In the guide', list(mentions.map((o) => `<a class="text-[#a87ffb] hover:text-white" href="../${esc(o.slug)}/index.html">${esc(o.name)}</a>`)))}
       </dl>
       ${(sm.notes || []).length ? `<ul class="mt-4 space-y-1.5 text-sm text-zinc-300">${sm.notes.map((x: string) => `<li class="flex gap-2"><span class="text-[#c4b0ff]">&bull;</span><span>${rich(x, '../', e.slug)}</span></li>`).join('')}</ul>` : ''}

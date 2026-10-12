@@ -412,6 +412,14 @@ async function main() {
   // after PIPELINE_QUEUE_MINUTES so the rest of the run still fits in the job's time limit.
   // ---- 3b'. player corrections (scripts/guides/corrections.ts): reports from conversations, checked against sources
   // (up to 8 searches an entry, within the player reserve) and written into the guides through the review gate ----
+  // ---- 3a''. The monthly guide report (scripts/guides/blueprint.ts --monthly): per guide with a blueprint, Search
+  // Console by section, grounding misses and corrections, with proposed blueprint updates; once a month, from the 2nd.
+  const reportMonth = (() => { const n = new Date(); return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 0)).toISOString().slice(0, 7); })(); // the month that ended
+  if (!DRY && new Date().getUTCDate() >= 2 && state.blueprintReport !== reportMonth && room() >= 0.25) {
+    const bp = runScript(['scripts/guides/blueprint.ts', '--monthly']);
+    await charge(bp, 'Monthly guide report');
+    if (bp.ok) state.blueprintReport = reportMonth;
+  }
   // ---- 3a'. Search Console, weekly (scripts/pipeline/searchConsole.ts): the pull, the summary, page checks and the
   // plan (repairs queued only when SEARCH_CONSOLE_REPAIRS=on), the wish list from searches and the Discord summary ----
   if (!DRY && Date.now() - Number(state.searchConsoleAt || 0) > 6.5 * DAY && room() >= 0.25) {

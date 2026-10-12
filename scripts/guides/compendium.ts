@@ -28,7 +28,7 @@
  */
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, parseJson, searchesIn, usageScope } from './common';
-import { fuzzyScore } from './siteText';
+import { fuzzyScore, lintEntity } from './siteText';
 import {
   supportedSegments, trusted, gameLinesFor, evidenceText, claimCheck, claimReview, cleanEntryText,
   type Evidence, type EvidencePack, type GameEvidence, type ClaimPage, type ClaimVerdict,
@@ -153,10 +153,22 @@ async function entityEvidence(game: string, name: string, type: string, rebuild:
     const evidence: Evidence[] = [];
     const sites = new Set<string>();
     let searches = 0;
-    const asks = [
-      { topic: 'what', text: `In the video game "${game}", "${name}" (${type}): what and where it is (region, state or area), how a player gets there (nearest towns, roads, rivers, fast travel), and what is there: shops, merchants and services (with what they sell or do), collectibles, treasures and points of interest.` },
-      { topic: 'quests', text: `In the video game "${game}", "${name}": the story missions (with their chapter), side missions, Stranger or side quests, gang hideouts, robberies and events that take place at or start from ${name}, and any characters met there.` },
-    ];
+    // What to research depends on the kind of entity: a character is found somewhere (by chapter), a place is travelled to.
+    const kind = entityKind(type);
+    const asks = kind === 'person'
+      ? [
+          { topic: 'what', text: `In the video game "${game}", the character "${name}" (${type}): who they are and their role, where a player finds them in each chapter or act (where they are, and when that changes), and what they sell or what services they offer, if any.` },
+          { topic: 'quests', text: `In the video game "${game}", the character "${name}": every mission, quest or strand they give or appear in (each part separately, e.g. "Mission – I", "Mission – II"), with the chapter or act of each.` },
+        ]
+      : kind === 'boss'
+      ? [
+          { topic: 'what', text: `In the video game "${game}", the boss or enemy "${name}" (${type}): where it is fought (area and how to reach the arena), whether it is optional, its attacks, phases and weaknesses, and what it drops.` },
+          { topic: 'quests', text: `In the video game "${game}", "${name}": the missions or quests it is part of, and what defeating it unlocks or locks out.` },
+        ]
+      : [
+          { topic: 'what', text: `In the video game "${game}", "${name}" (${type}): what and where it is (region, state or area), how a player gets there (nearest towns, roads, rivers, fast travel), and what is there: shops, merchants and services (with what they sell or do), collectibles, treasures and points of interest.` },
+          { topic: 'quests', text: `In the video game "${game}", "${name}": the story missions (with their chapter), side missions, Stranger or side quests, gang hideouts, robberies and events that take place at or start from ${name}, and any characters met there.` },
+        ];
     for (const a of asks) {
       const res: any = await gemini().models.generateContent({
         model: MODEL,
@@ -181,20 +193,36 @@ async function entityEvidence(game: string, name: string, type: string, rebuild:
 
 export type EntityPage = {
   name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string;
-  summary: { region?: string; where?: string; gettingThere?: string; shops: { name: string; what?: string }[]; services: string[]; collectibles: { name: string; where?: string }[]; places: { name: string; what?: string }[]; quests: { name: string; kind?: string; chapter?: string }[]; chapters: string[]; notes: string[] };
+  summary: { region?: string; where?: string; gettingThere?: string; whereToFind?: { when?: string; where: string }[]; shops: { name: string; what?: string }[]; services: string[]; collectibles: { name: string; where?: string }[]; places: { name: string; what?: string }[]; quests: { name: string; kind?: string; chapter?: string }[]; chapters: string[]; notes: string[] };
   sources: string[];
 };
+
+/** What kind of thing an entity is, from its type: a person (characters, NPCs, merchants, companions), a boss, or a place/thing. */
+export function entityKind(type: string): 'person' | 'boss' | 'place' {
+  const t = String(type || '').toLowerCase();
+  if (/charact|npc|compan|merchant|people|person|vendor|trader|ally|allies|villain|origin|follower|romance|hireling|quest giver|gang member/.test(t)) return 'person';
+  if (/boss|enem|monster|creature|foe|dragon|demigod/.test(t)) return 'boss';
+  return 'place';
+}
 
 const WRITER = (game: string, name: string, typeLabel: string, ev: EvidencePack, chapters: string[]) => [
   `Write a short, focused compendium page for "${name}" (${typeLabel}) in the video game "${game}", from the EVIDENCE only.`,
   'Every fact must come from an evidence line; leave a field empty rather than guess. Use the game\'s exact names.',
+  'Never write a sentence about what kind of thing it is or is not (e.g. "X is an NPC rather than a location"). Never write generic travel advice (fast travel, follow the road, use your map).',
   `"chapters": which of the guide's chapters it features in, only from: ${chapters.join('; ')} (only when the evidence connects it).`,
   'Reply with JSON only:',
-  '{"overview": "2-3 sentences: what it is and why players go there",',
-  ' "region": "region / state", "where": "where in the region, by landmarks", "gettingThere": "1-2 sentences: route from a nearby town or landmark",',
+  ...(entityKind(typeLabel) === 'person'
+    ? [
+        '{"overview": "2-3 sentences: who they are and why players look for them",',
+        ' "whereToFind": [{"when": "Chapter 2 (or the act or period; empty if it never changes)", "where": "where they are then, by landmarks"}] (only what the evidence says; [] if it does not say),',
+      ]
+    : [
+        '{"overview": "2-3 sentences: what it is and why players go there",',
+        ' "region": "region / state", "where": "where in the region, by landmarks", "gettingThere": "1-2 sentences: route from a nearby town or landmark",',
+      ]),
   ' "shops": [{"name": "shop or merchant", "what": "what they sell or do"}], "services": ["fast travel, hotel, bank, fence, post office... one each"],',
   ' "collectibles": [{"name": "...", "where": "where at this place"}], "places": [{"name": "point of interest (a gang hideout, a dock, a landmark)", "what": "what it is or what happens there"}],',
-  ' "quests": [{"name": "mission name", "kind": "story|side|stranger|robbery|event", "chapter": "Chapter N"}], "chapters": ["Chapter 4: Saint Denis"],',
+  ' "quests": [{"name": "mission name", "kind": "story|side|stranger|robbery|event", "chapter": "Chapter N"}] (EVERY mission the evidence ties to it, each numbered part separately), "chapters": ["Chapter 4: Saint Denis"],',
   ' "notes": ["1-3 short sentences players search for, e.g. that no story missions start here, or what differs in the online mode (say so)"]}',
   '',
   'EVIDENCE:',
@@ -219,8 +247,11 @@ function claimPageOf(p: EntityPage): ClaimPage {
     services: [
       ...p.summary.shops.map((s) => `${s.name} is at ${p.name}${s.what ? `: ${s.what}` : ''}`),
       ...p.summary.services.map((s) => `${p.name} has: ${s}`),
-      ...p.summary.quests.map((q) => `The ${q.kind || ''} mission "${q.name}"${q.chapter ? ` (${q.chapter})` : ''} takes place at or starts from ${p.name}`),
+      ...p.summary.quests.map((q) => entityKind(p.typeLabel) === 'person'
+        ? `${p.name} gives or appears in the ${q.kind || ''} mission "${q.name}"${q.chapter ? ` (${q.chapter})` : ''}`
+        : `The ${q.kind || ''} mission "${q.name}"${q.chapter ? ` (${q.chapter})` : ''} takes place at or starts from ${p.name}`),
       ...p.summary.chapters.map((c) => `${p.name} features in the story chapter "${c}"`),
+      ...(p.summary.whereToFind || []).map((w) => `${p.name} can be found ${w.where}${w.when ? ` (${w.when})` : ''}`),
     ],
     fights: [],
   };
@@ -230,7 +261,7 @@ function claimPageOf(p: EntityPage): ClaimPage {
 function applyVerdicts(p: EntityPage, verdicts: ClaimVerdict[]): string[] {
   const bad = verdicts.filter((v) => v.verdict === 'unsupported' || v.verdict === 'contradicted');
   const removed: string[] = [];
-  const nShops = p.summary.shops.length, nServ = p.summary.services.length, nQuests = p.summary.quests.length, nColl = p.summary.collectibles.length;
+  const nShops = p.summary.shops.length, nServ = p.summary.services.length, nQuests = p.summary.quests.length, nColl = p.summary.collectibles.length, nChap = p.summary.chapters.length;
   const dropP = new Set<number>(), dropE = new Set<number>();
   const dropSentences: Record<string, Set<number>> = {};
   for (const v of bad) {
@@ -243,6 +274,7 @@ function applyVerdicts(p: EntityPage, verdicts: ClaimVerdict[]): string[] {
   p.summary.services = p.summary.services.filter((_, i) => !dropP.has(nShops + i));
   p.summary.quests = p.summary.quests.filter((_, i) => !dropP.has(nShops + nServ + i));
   p.summary.chapters = p.summary.chapters.filter((_, i) => !dropP.has(nShops + nServ + nQuests + i));
+  if (p.summary.whereToFind) p.summary.whereToFind = p.summary.whereToFind.filter((_, i) => !dropP.has(nShops + nServ + nQuests + nChap + i));
   p.summary.collectibles = p.summary.collectibles.filter((_, i) => !dropE.has(i));
   p.summary.places = p.summary.places.filter((_, i) => !dropE.has(nColl + i));
   // Steps: S1 overview, then Where, Getting there and Notes (in that order when present).
@@ -258,11 +290,11 @@ function applyVerdicts(p: EntityPage, verdicts: ClaimVerdict[]): string[] {
   return removed;
 }
 
-export async function buildEntity(k: string, name: string, opts: { type?: string; rebuild?: boolean } = {}) {
+export async function buildEntity(k: string, name: string, opts: { type?: string; rebuild?: boolean; keepOnFail?: boolean } = {}) {
   key = k;
   return entity(name, opts);
 }
-async function entity(name: string, opts: { type?: string; rebuild?: boolean } = {}) {
+async function entity(name: string, opts: { type?: string; rebuild?: boolean; keepOnFail?: boolean } = {}) {
   const comp: any = (await ref().get()).data() || {};
   const info: any = (await db().collection('guides').doc(key).get()).data() || {};
   const game = String(info.game || key);
@@ -282,6 +314,8 @@ async function entity(name: string, opts: { type?: string; rebuild?: boolean } =
       overview: clean(j.overview, 700),
       summary: {
         region: clean(j.region, 80), where: clean(j.where, 240), gettingThere: clean(j.gettingThere, 400),
+        // A person: where to find them, by chapter when it changes (no "Getting there").
+        ...(entityKind(typeLabel) === 'person' ? { whereToFind: (Array.isArray(j.whereToFind) ? j.whereToFind : []).map((w: any) => ({ when: clean(w?.when, 60), where: clean(w?.where, 240) })).filter((w: any) => w.where).slice(0, 8) } : {}),
         shops: (j.shops || []).map((s: any) => ({ name: cut(s?.name, 80), what: clean(s?.what, 160) })).filter((s: any) => s.name),
         services: (j.services || []).map((s: any) => cut(s, 120)).filter((s: string) => s.length > 2),
         collectibles: (j.collectibles || []).map((c: any) => ({ name: cut(c?.name, 80), where: clean(c?.where, 200) })).filter((c: any) => c.name),
@@ -304,13 +338,27 @@ async function entity(name: string, opts: { type?: string; rebuild?: boolean } =
     page.description = cut(`${name} in ${game}: ${[page.summary.region && `in ${page.summary.region}`, page.summary.shops.length && `${page.summary.shops.length} shop(s) and services`, page.summary.quests.length && `${page.summary.quests.length} mission(s)`, page.summary.collectibles.length && 'collectibles'].filter(Boolean).join(', ')}. ${page.overview.split(/(?<=[.!?])\s/)[0] || ''}`, 158);
     return { page, ev, removed: [...removed, ...removed2], review };
   });
+  // The rejection check: "what kind of entity this is" sentences and a person's travel filler come out; anything left holds it.
+  const lint = lintEntity(out.page, entityKind(typeLabel) === 'person');
+  out.page.overview = lint.overview;
+  out.page.summary = lint.summary as any;
+  const lintHold = lint.left.length ? `still explains what kind of entity it is: ${cut(lint.left[0], 100)}` : '';
+  const passed = out.review.status === 'passed' && !lintHold;
+  // A rewrite of a live page that doesn't pass keeps the live page, cleaned by the same check (its address stays live).
+  const prev: any = opts.keepOnFail ? (await ref().collection('entities').doc(out.page.slug).get()).data() : null;
+  if (!passed && prev?.status === 'published') {
+    const old = lintEntity(prev, entityKind(prev.typeLabel || typeLabel) === 'person');
+    await ref().collection('entities').doc(out.page.slug).set(JSON.parse(JSON.stringify({ ...prev, overview: old.overview, summary: old.summary, lintedAt: Date.now(), rewriteFailed: { at: Date.now(), reason: lintHold || out.review.reason || `review ${out.review.score}`, dollars: Math.round(scope.dollars * 10000) / 10000 } })));
+    console.log(`${name} [${typeLabel}]: rewrite didn't pass (${lintHold || `review ${out.review.score}`}); the live page stays, cleaned (${old.removed.length} line(s) removed), $${scope.dollars.toFixed(3)}`);
+    return { name, slug: out.page.slug, status: 'kept', score: out.review.score, dollars: scope.dollars, searches: scope.searches, whereToFind: (prev.summary?.whereToFind || []).length };
+  }
   // Passed: published (the next site publish puts it live). Failed: held, never shown.
-  const doc = { ...out.page, status: out.review.status === 'passed' ? 'published' : 'held', review: { score: out.review.score, status: out.review.status, supported: out.review.supported, total: out.review.total, ...(out.review.reason ? { reason: out.review.reason } : {}) }, removed: out.removed, evidence: { lines: out.ev.evidence.length, sites: out.ev.sites.length, searches: out.ev.searches }, cost: { dollars: Math.round(scope.dollars * 10000) / 10000, searches: scope.searches }, builtAt: Date.now() };
+  const doc = { ...out.page, status: passed ? 'published' : 'held', ...(lint.removed.length ? { linted: lint.removed.map((x) => cut(x, 160)) } : {}), review: { score: out.review.score, status: out.review.status, supported: out.review.supported, total: out.review.total, ...(out.review.reason ? { reason: out.review.reason } : {}) }, removed: out.removed, evidence: { lines: out.ev.evidence.length, sites: out.ev.sites.length, searches: out.ev.searches }, cost: { dollars: Math.round(scope.dollars * 10000) / 10000, searches: scope.searches }, builtAt: Date.now() };
   await ref().collection('entities').doc(out.page.slug).set(JSON.parse(JSON.stringify(doc)));
   console.log(`${name} [${typeLabel}]: review ${out.review.status} ${out.review.score} (${out.review.supported}/${out.review.total}), ${out.removed.length} claim(s) removed, evidence ${out.ev.evidence.length} lines from ${out.ev.sites.length} sites, cost $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);
   console.log(`  ${out.page.title}`);
   console.log(`  shops ${out.page.summary.shops.length}, services ${out.page.summary.services.length}, collectibles ${out.page.summary.collectibles.length}, places ${out.page.summary.places.length}, quests ${out.page.summary.quests.length}, notes ${out.page.summary.notes.length}, chapters ${out.page.summary.chapters.join('; ') || '-'}`);
-  return { name, slug: out.page.slug, status: doc.status, score: out.review.score, dollars: scope.dollars, searches: scope.searches };
+  return { name, slug: out.page.slug, status: doc.status, score: out.review.score, dollars: scope.dollars, searches: scope.searches, whereToFind: (out.page.summary.whereToFind || []).length };
 }
 
 // ---------------- 4. Services and people, structured ----------------
@@ -482,7 +530,38 @@ export async function demandEntities(rows: { query: string; key: string; slug?: 
   return { built, skipped, spent, monthly, candidates: cands.length };
 }
 
+/**
+ * Rewrite every entity page from its stored research (no new searches): the type-aware writer, the claim check and
+ * review, and the rejection check. A rewrite that doesn't pass keeps the live page (cleaned). Addresses never change.
+ *   npx tsx scripts/guides/compendium.ts --rewrite-all [--only <key>] [--dry]
+ */
+async function rewriteAll(only: string, dry: boolean) {
+  const rows: { key: string; name: string; status: string; dollars: number; person: boolean; whereToFind: number }[] = [];
+  for (const c of (await db().collection('guideCompendium').get()).docs) {
+    if (only && c.id !== only) continue;
+    for (const d of (await c.ref.collection('entities').get()).docs) {
+      const e: any = d.data();
+      if ((e.status !== 'published' && e.status !== 'held') || e.kind === 'quest') continue; // quest pages have their own builder (quests.ts)
+      const person = entityKind(e.typeLabel || e.type) === 'person';
+      if (dry) { rows.push({ key: c.id, name: e.name, status: 'planned', dollars: 0.03, person, whereToFind: 0 }); continue; }
+      try {
+        const r = await buildEntity(c.id, e.name, { type: e.type, keepOnFail: true });
+        rows.push({ key: c.id, name: e.name, status: r.status, dollars: r.dollars, person, whereToFind: r.whereToFind || 0 });
+      } catch (err: any) {
+        console.log(`${c.id} / ${e.name}: not rewritten (${cut(err?.message || err, 100)})`);
+        rows.push({ key: c.id, name: e.name, status: 'error', dollars: 0, person, whereToFind: 0 });
+      }
+    }
+  }
+  const by = (f: (r: typeof rows[number]) => boolean) => rows.filter(f).length;
+  const dollars = rows.reduce((n, r) => n + r.dollars, 0);
+  console.log(`\nRewrite: ${rows.length} page(s): ${by((r) => r.status === 'published')} rewritten and published, ${by((r) => r.status === 'kept')} kept (rewrite didn't pass; live page cleaned), ${by((r) => r.status === 'held')} held, ${by((r) => r.status === 'error')} errors; $${dollars.toFixed(2)} ($${rows.length ? (dollars / rows.length).toFixed(3) : '0'} a page).`);
+  const people = rows.filter((r) => r.person && r.status === 'published');
+  console.log(`Character pages rewritten: ${people.length}; with no "Where to find them": ${people.filter((r) => !r.whereToFind).length} (${people.filter((r) => !r.whereToFind).map((r) => `${r.key}: ${r.name}`).join('; ')}).`);
+}
+
 async function main() {
+  if (arg('rewrite-all') === 'true') return void (await rewriteAll(arg('only') && arg('only') !== 'true' ? String(arg('only')) : '', arg('dry') === 'true'), setTimeout(() => process.exit(0), 300));
   if (arg('people') === 'all') return void (await peopleAll(arg('dry') === 'true'), process.exit(0));
   if (!key) throw new Error('--key is required');
   if (arg('taxonomy') === 'true') await taxonomy();
