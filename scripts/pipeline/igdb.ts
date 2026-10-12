@@ -74,6 +74,14 @@ async function main() {
   const cfg: any = (await db().collection('config').doc('igdb').get()).data() || {};
   const clientId = process.env.IGDB_CLIENT_ID || String(cfg.clientId || '');
   const tok = await token(clientId);
+  // Read-only look at one guide's artworks with every field the dump has (--inspect <guide key>).
+  const inspect = process.argv.includes('--inspect') ? process.argv[process.argv.indexOf('--inspect') + 1] : '';
+  if (inspect) {
+    const gid = Number(((await db().collection('guides').doc(inspect).get()).data() as any)?.igdb?.id);
+    for await (const r of rows(clientId, tok, 'artworks')) if (Number(r.game) === gid) console.log(`igdb-inspect artwork: ${JSON.stringify(r)}`);
+    try { for await (const r of rows(clientId, tok, 'artwork_types')) console.log(`igdb-inspect type: ${JSON.stringify(r)}`); } catch (e: any) { console.log(`igdb-inspect: no artwork_types dump (${e?.message})`); }
+    return;
+  }
   const guides = (await db().collection('guides').get()).docs.filter((d) => !d.id.includes('--')).map((d) => ({ key: d.id, ...(d.data() as any) }));
   const byApp = new Map<string, string[]>(); // Steam app id -> guide keys
   for (const g of guides) if (g.appId) byApp.set(String(g.appId), [...(byApp.get(String(g.appId)) || []), g.key]);
