@@ -140,7 +140,7 @@ async function main() {
     if (how.get(g.key) === 'steam') {
       const s = games.get(game.get(g.key)!);
       const named = (cands.get(g.key) || []).filter((c) => c.n === exact && c.id !== s?.id).sort((a, b) => Number(!!a.viaShort) - Number(!!b.viaShort) || b.rated - a.rated)[0];
-      if (s && s.n !== exact && s.n !== bare && named) { game.set(g.key, named.id); how.set(g.key, 'name'); }
+      if (s && s.type !== 0 && s.n !== exact && s.n !== bare && named && !named.viaShort) { game.set(g.key, named.id); how.set(g.key, 'name'); }
       continue;
     }
     if (game.has(g.key)) continue;
