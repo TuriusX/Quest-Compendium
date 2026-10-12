@@ -65,10 +65,17 @@ async function* rows(clientId: string, tok: string, endpoint: string): AsyncGene
   }
 }
 
-type Img = { id: string; w: number; h: number };
+type Img = { id: string; w: number; h: number; type?: number };
+/** IGDB artwork types, best first for a banner: key art with logo, key art without logo, artwork, concept art. Logos,
+ * icons, infographics and alternative or historical covers (5-15) are never used as a banner. */
+const ART_RANK: Record<number, number> = { 3: 0, 2: 1, 1: 2, 0: 2, 4: 3 };
 const best = (xs: Img[], landscape: boolean) => xs.filter((x) => !landscape || x.w >= x.h).sort((a, b) => b.w * b.h - a.w * a.h);
 /** Key art for a wide banner: art shaped 1.4:1 to 3.6:1 (largest first), else the widest screenshot, else any landscape art. */
-const bannerArt = (arts: Img[], shots: Img[]) => best(arts, true).find((x) => x.w / Math.max(1, x.h) >= 1.4 && x.w / Math.max(1, x.h) <= 3.6) || best(shots, true)[0] || best(arts, true).find((x) => x.w / Math.max(1, x.h) >= 1.2) || null;
+const bannerArt = (arts: Img[], shots: Img[]) => {
+  const ratio = (x: Img) => x.w / Math.max(1, x.h);
+  const ranked = (xs: Img[]) => best(xs, true).sort((a, b) => (ART_RANK[a.type ?? 1] ?? 9) - (ART_RANK[b.type ?? 1] ?? 9));
+  return ranked(arts).find((x) => ratio(x) >= 1.4 && ratio(x) <= 3.6 && x.w >= 1200) || best(shots, true)[0] || ranked(arts).find((x) => ratio(x) >= 1.2) || null;
+};
 
 async function main() {
   const cfg: any = (await db().collection('config').doc('igdb').get()).data() || {};
@@ -135,8 +142,10 @@ async function main() {
     const out = new Map<number, Img[]>();
     for await (const r of rows(clientId, tok, endpoint)) {
       const gid = Number(r.game);
-      if (!need.has(gid) || !r.image_id) continue;
-      out.set(gid, [...(out.get(gid) || []), { id: r.image_id, w: Number(r.width) || 0, h: Number(r.height) || 0 }]);
+      if (!need.has(gid) || !r.image_id || r.animated === 't' || r.alpha_channel === 't') continue;
+      const type = Number(r.artwork_type) || 0;
+      if (endpoint === 'artworks' && !(type in ART_RANK)) continue;
+      out.set(gid, [...(out.get(gid) || []), { id: r.image_id, w: Number(r.width) || 0, h: Number(r.height) || 0, ...(endpoint === 'artworks' ? { type } : {}) }]);
     }
     return out;
   };
