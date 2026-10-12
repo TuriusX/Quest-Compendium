@@ -58,9 +58,22 @@ export async function newPagesQueue(first?: { key: string; section: string }): P
     const b: any = d.data();
     for (const s of b.sections || []) {
       if (s.unit !== 'entity' || /rebuild/i.test(`${s.id} ${s.title}`) || b.progress?.[s.id]?.done) continue;
-      const plan = await planEntitySection(d.id, s.id);
+      // A plan that can't be researched this run (no searches) waits for the next run; the other sections go on.
+      const plan = await planEntitySection(d.id, s.id).catch((e: any) => { console.log(`  [rollout] ${d.id} / ${s.title}: not planned yet (${cut(e?.message || e, 100)})`); return null; });
       if (!plan) continue;
       const built = new Set((b.progress?.[s.id]?.built || []).map((x: any) => x.name));
+      // Names that already have a page built with the new method (the rebuilds did them) count as built.
+      const { entitySlug } = await import('./compendium');
+      const ents = db().collection('guideCompendium').doc(d.id).collection('entities');
+      for (const name of plan.names) {
+        if (built.has(name)) continue;
+        const e: any = (await ents.doc(entitySlug(name)).get()).data();
+        if (e?.status === 'published' && e.method === 'intent') {
+          const { recordEntityUnit } = await import('./blueprintBuild');
+          await recordEntityUnit(d.id, s.id, { name, slug: entitySlug(name), status: 'published', dollars: 0 });
+          built.add(name);
+        }
+      }
       const isFirst = first?.key === d.id && first?.section === s.id;
       plan.names.forEach((name, i) => {
         if (built.has(name)) return;
