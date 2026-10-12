@@ -27,7 +27,7 @@ const isStop = (e: any) => /search day limit|ProQuotaWait|Pro reviewer|no Pro re
 
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 type Section = { id: string; title: string; kind: string; what?: string; unit: string; units: number; cap?: number; priority: number; cost?: number };
-type Progress = { plan?: string[]; built: { name: string; slug?: string; status: string; dollars: number }[]; done?: number };
+type Progress = { plan?: string[]; planChapters?: Record<string, string>; built: { name: string; slug?: string; status: string; dollars: number }[]; done?: number };
 /** What a unit usually costs (measured), for the budget check before starting one. */
 const UNIT_COST: Record<string, number> = { page: 0.4, 'quest-short': 0.08, 'quest-full': 0.15, entity: 0.15, 'list-page': 0.35 };
 
@@ -44,22 +44,34 @@ const isDeepen = (s: Section) => /deepen|expan|flesh|thin|enhance/i.test(`${s.id
 const isRebuildExisting = (s: Section) => s.unit === 'entity' && /rebuild/i.test(`${s.id} ${s.title}`);
 
 /** The names a section covers: one searched call, saved in the blueprint's progress. */
-async function planSection(game: string, s: Section, n: number): Promise<string[]> {
-  const noun = s.unit === 'quest-short' ? 'story missions, in the order they are played' : s.unit === 'quest-full' ? 'Stranger mission strands and side quests (one name per strand)' : s.unit === 'entity' ? 'entries' : 'page titles (one topic each)';
+async function planSection(game: string, s: Section, n: number): Promise<{ names: string[]; chapters: Record<string, string> }> {
+  const noun = s.unit === 'quest-short' ? 'story missions, in the order they are played' : s.unit === 'quest-full' ? 'Stranger mission strands and side quests (one name per strand), in the order they first become available' : s.unit === 'entity' ? 'entries' : 'page titles (one topic each)';
+  // Quests come with their chapter (the one they're in, or first become available in), for the compendium's grouping.
+  const quest = s.unit === 'quest-short' || s.unit === 'quest-full';
+  const shape = quest ? 'Reply one per line as: chapter | name (e.g. "Chapter 2 | Who Is Not Without Sin", "Epilogue Part 1 | Pouring Forth Oil"), no numbering or commentary.' : 'Reply with the names only, one per line, no numbering or commentary.';
   // Searched, never from memory: asked again firmly when the reply ran no searches, refused if it still didn't.
   let res: any = null;
   for (let attempt = 0; attempt < 2 && !res; attempt++) {
     const r: any = await gemini().models.generateContent({
       model: MODEL,
-      contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}For a player's guide to the video game "${game}", the section "${s.title}" (${s.what || ''}): list the ${n} ${noun} it covers, exact in-game names, most important first. Run a few searches (the game's wikis and guides; never fandom.com or fextralife.com). Reply with the names only, one per line, no numbering or commentary.` }] }],
+      contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}For a player's guide to the video game "${game}", the section "${s.title}" (${s.what || ''}): list the ${n} ${noun} it covers, exact in-game names${quest ? '' : ', most important first'}. Run a few searches (the game's wikis and guides; never fandom.com or fextralife.com). ${shape}` }] }],
       config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 6000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     console.log(`  [plan] ${s.title}: ${searchesIn(r)} searches`);
     if (searchesIn(r)) res = r;
   }
   if (!res) throw new Error(`the plan for "${s.title}" ran no searches twice; not using a memory answer`);
-  const lines = String(res?.text || '').split('\n').map((l) => l.replace(/^[\s*\-\d.)]+/, '').replace(/\*\*/g, '').trim()).filter((l) => l.length >= 2 && l.length <= 100 && !/^(here|sure|note)/i.test(l));
-  return [...new Set(lines)].slice(0, n);
+  const lines = String(res?.text || '').split('\n').map((l) => l.replace(/^[\s*\-\d.)]+/, '').replace(/\*\*/g, '').trim()).filter((l) => l.length >= 2 && l.length <= 160 && !/^(here|sure|note)/i.test(l));
+  const names: string[] = [];
+  const chapters: Record<string, string> = {};
+  for (const l of lines) {
+    const bar = quest ? l.indexOf('|') : -1;
+    const name = (bar >= 0 ? l.slice(bar + 1) : l).trim();
+    if (!name || name.length > 100 || names.includes(name)) continue;
+    names.push(name);
+    if (bar >= 0) chapters[name] = l.slice(0, bar).trim().slice(0, 60);
+  }
+  return { names: names.slice(0, n), chapters };
 }
 
 /** A new walkthrough page (Epilogue Part 1): its name and where it goes in the guide's order. */
@@ -76,7 +88,8 @@ async function newPage(key: string, s: Section) {
     const next = [...areas];
     next.splice(at < 0 ? areas.length : at, 0, { slug, name });
     await gref.set({ areas: next }, { merge: true });
-    await gref.collection('areas').doc(slug).set({ name, story: cut(s.what || '', 160), status: 'draft', items: [], secrets: [], walkthrough: [], createdBy: 'blueprint', createdAt: Date.now() }, { merge: true });
+    // Every field a guide page has (the site build expects them), empty until the build fills them.
+    await gref.collection('areas').doc(slug).set({ name, slug, order: at < 0 ? areas.length : at, story: cut(s.what || '', 160), overview: '', status: 'draft', items: [], secrets: [], enemies: [], shops: [], tips: [], sections: [], fights: [], walkthrough: [], createdBy: 'blueprint', createdAt: Date.now() }, { merge: true });
   }
   return { slug, name, order: (await gref.get()).data()?.areas || areas };
 }
@@ -152,7 +165,9 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ we
       if (why) return { wentLive, stopped: why, done: false };
       const scope = { dollars: 0, searches: 0 };
       try {
-        p.plan = await usageScope.run(scope, () => planSection(game, s, want));
+        const plan = await usageScope.run(scope, () => planSection(game, s, want));
+        p.plan = plan.names;
+        if (Object.keys(plan.chapters).length) p.planChapters = plan.chapters;
       } catch (e: any) {
         await ctx.charge(scope.dollars);
         return { wentLive, stopped: `Stopped: ${cut(e?.message || e, 120)}`, done: false };

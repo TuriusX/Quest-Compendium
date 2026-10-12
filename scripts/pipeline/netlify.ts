@@ -6,8 +6,40 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
+/**
+ * The shrinkage guard: a build whose sitemap has far fewer pages than the live site's (a publish that stopped halfway)
+ * is never deployed, since a deploy removes every live page the build lacks. More than 2% of the live pages, or any
+ * guide that's live but missing from the build, refuses the deploy (QC_DEPLOY_ALLOW_SHRINK=1 overrides, for a
+ * deliberate removal).
+ */
+export async function checkShrink(root: string, site = 'https://questcompendium.com'): Promise<string | null> {
+  if (process.env.QC_DEPLOY_ALLOW_SHRINK === '1') return null;
+  const locs = (xml: string) => (xml.match(/<loc>[^<]+/g) || []).map((x) => x.slice(5));
+  let live: string[] = [];
+  try {
+    const r = await fetch(`${site}/sitemap.xml`, { signal: AbortSignal.timeout(20_000) });
+    if (r.ok) live = locs(await r.text());
+  } catch {
+    return null; // the live sitemap can't be read: nothing to compare against
+  }
+  const local = fs.existsSync(path.join(root, 'sitemap.xml')) ? locs(fs.readFileSync(path.join(root, 'sitemap.xml'), 'utf8')) : [];
+  if (!live.length) return null;
+  const have = new Set(local);
+  const gone = live.filter((u) => !have.has(u));
+  const guideOf = (u: string) => (u.match(/\/guides\/([^/]+)\//) || [])[1];
+  const liveGuides = new Set(live.map(guideOf).filter(Boolean));
+  const localGuides = new Set(local.map(guideOf).filter(Boolean));
+  const lostGuides = [...liveGuides].filter((g) => !localGuides.has(g));
+  if (lostGuides.length || gone.length > live.length * 0.02) {
+    return `the build would remove ${gone.length} of ${live.length} live page(s)${lostGuides.length ? ` and ${lostGuides.length} whole guide(s) (${lostGuides.slice(0, 5).join(', ')})` : ''}; not deployed (QC_DEPLOY_ALLOW_SHRINK=1 if that's intended)`;
+  }
+  return null;
+}
+
 export async function deployToNetlify(dir: string, siteId: string, token: string): Promise<{ id: string; uploaded: number }> {
   const root = path.resolve(dir);
+  const shrink = await checkShrink(root);
+  if (shrink) throw new Error(shrink);
   const files: Record<string, string> = {};
   const byHash = new Map<string, string>();
   const walk = (d: string) => {

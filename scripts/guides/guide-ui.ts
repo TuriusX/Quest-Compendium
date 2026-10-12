@@ -119,6 +119,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   newGuides: 'New guides',
   allGames: 'All games',
   noMatches: 'Nothing matches that search.',
+  missionsHere: 'Missions in this chapter',
   searchAll: 'Search everything in this guide: places, chapters, items…',
   compendium: 'Compendium',
   comingSoon: 'Coming soon',

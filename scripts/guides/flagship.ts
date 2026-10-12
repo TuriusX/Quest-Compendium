@@ -1109,11 +1109,18 @@ async function publishSite() {
 
 async function publishAndDeploy() {
   const cli = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
-  spawnSync(process.execPath, [cli, 'scripts/guides/publish.ts'], { encoding: 'utf8', timeout: 30 * 60_000, maxBuffer: 64 * 1024 * 1024, stdio: 'inherit' });
+  const r = spawnSync(process.execPath, [cli, 'scripts/guides/publish.ts'], { encoding: 'utf8', timeout: 30 * 60_000, maxBuffer: 64 * 1024 * 1024, stdio: 'inherit' });
+  // A publish that failed leaves a partial site: never deploy it (it would take the missing pages off the live site).
+  if (r.status !== 0) { console.log(`Publishing failed (exit ${r.status ?? r.signal}); nothing deployed, the live site is unchanged.`); return; }
   if (process.env.NETLIFY_AUTH_TOKEN && process.env.NETLIFY_SITE_ID) {
     try {
       const n = await deployToNetlify('Marketing_Website_Files', process.env.NETLIFY_SITE_ID, process.env.NETLIFY_AUTH_TOKEN);
       console.log(`Deployed to Netlify (${n.uploaded} changed file(s)).`);
+      // Every compendium link on the live site, for the pipeline summary.
+      const { checkCompendiumLinks } = await import('../pipeline/linkCheck');
+      const lc = await checkCompendiumLinks();
+      await db().collection('system').doc('pipeline').set({ linkCheck: { at: Date.now(), checked: lc.checked, broken: lc.broken.slice(0, 50), by: 'flagship job' } }, { merge: true });
+      console.log(`Compendium links: ${lc.checked} checked, ${lc.broken.length} broken.`);
     } catch (e: any) {
       console.log(`Netlify deploy failed: ${e?.message}`);
     }

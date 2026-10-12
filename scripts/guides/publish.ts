@@ -265,6 +265,33 @@ const SCRIPT = `
  * guides/index.json: the apps' guide list (the Deck plugin and the desktop app), a few KB, served by Netlify so the first
  * load never waits on the server. _headers lets the apps fetch it from anywhere and caches it for 5 minutes.
  */
+/**
+ * The site's own "Page not found" (Netlify serves /404.html for any missing address, at that address, so every link
+ * is from the site root): a search over the guides (guides/index.json), and links to the guides and the home page.
+ */
+function write404() {
+  setLang('en');
+  const body = `<div class="max-w-2xl">
+    <h1 class="text-3xl font-bold text-white">Page not found</h1>
+    <p class="mt-3 text-zinc-300">This page doesn't exist, or it moved. Search for your game, or open the guides.</p>
+    <input type="search" id="qc-404-q" autocomplete="off" placeholder="Search for a game…" class="mt-5 w-full px-3.5 py-2 rounded-xl bg-white/[0.04] border border-[#a87ffb]/40 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]">
+    <ul id="qc-404-r" class="mt-2 space-y-1"></ul>
+    <p class="mt-6 flex flex-wrap gap-4"><a href="/guides/" class="text-[#a87ffb] hover:text-white font-semibold">All guides &rarr;</a><a href="/" class="text-[#a87ffb] hover:text-white font-semibold">Home &rarr;</a></p>
+  </div>
+  <script>(function(){var __name=function(f){return f;};var fuzzyScore=${fuzzyScore.toString()};var q=document.getElementById('qc-404-q'),out=document.getElementById('qc-404-r'),games=null;
+  function e(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function load(){return games?Promise.resolve(games):fetch('/guides/index.json').then(function(r){return r.json();}).then(function(j){games=j.games||[];return games;}).catch(function(){games=[];return games;});}
+  // The words of the address that failed ("/guides/red-dead-redemption-2/x/" -> "red dead redemption 2") start the search.
+  var guess=(location.pathname.match(/\\/guides\\/([^/]+)/)||[])[1];if(guess){q.value=guess.replace(/-/g,' ');}
+  function run(){var v=q.value.trim();if(!v){out.innerHTML='';return;}load().then(function(gs){var r=gs.map(function(g){return{g:g,s:fuzzyScore(v,g.game)};}).filter(function(x){return x.s>0;}).sort(function(a,b){return b.s-a.s;}).slice(0,8);
+    out.innerHTML=r.length?r.map(function(x){return '<li><a class="block rounded-lg px-3 py-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 text-white font-semibold" href="/guides/'+e(x.g.key)+'/">'+e(x.g.game)+'</a></li>';}).join(''):'<li class="text-sm text-zinc-500 px-1">No guide matches. <a class="text-[#a87ffb]" href="/guides/">See every guide</a>.</li>';});}
+  q.addEventListener('input',run);if(q.value)run();})();</script>`;
+  // Served at the missing address itself: the base makes the page's own links and stylesheet work from any depth.
+  const html = page({ title: 'Page not found – Quest Compendium', description: 'This page does not exist.', depth: 0, canonical: `${SITE}/404.html`, body, draft: true })
+    .replace('<head>', '<head>\n  <base href="/">');
+  fs.writeFileSync(path.join(OUT, '404.html'), html);
+}
+
 function writeGuideIndex(games: { key: string; game: string; areas: number; art?: string; checked: number; players: number; langs: string[] }[]) {
   const list = games.slice().sort((a, b) => a.game.localeCompare(b.game));
   fs.writeFileSync(path.join(OUT, 'guides', 'index.json'), JSON.stringify({ v: 1, updated: Date.now(), games: list }));
@@ -477,6 +504,49 @@ function areaList(gameKey: string, areas: AreaLink[], current: string | null, ba
 // grouped cards. COMP is the guide being rendered (set per guide in main).
 type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any; kind?: string; quest?: any; ref?: any };
 const COMPS = new Map<string, NonNullable<typeof COMP>>();
+/** Approved guide blueprints (guideBlueprints/{key}): their quest plans give the quests' play order and chapters. */
+const BLUEPRINTS = new Map<string, any>();
+const QUEST_TYPES: Record<string, { unit: string; label: string }> = { 'story-missions': { unit: 'quest-short', label: 'Story Missions' }, 'stranger-missions': { unit: 'quest-full', label: 'Stranger Missions' } };
+
+/**
+ * A quest type's missions grouped by chapter, in play order: the blueprint's plan (play order, each mission's chapter)
+ * with the built quest pages. A planned mission not tried yet is "coming soon"; one that was tried and isn't published
+ * (failed its review) is left out. Built pages not in the plan go after, by their own chapter. Groups follow the
+ * guide's chapter order; a mission whose chapter matches no page goes under "Other".
+ */
+function questGroups(typeId: string, pages: { slug: string; name: string }[]): { slug: string; name: string; items: { name: string; slug?: string }[] }[] {
+  const qt = QUEST_TYPES[typeId];
+  if (!qt) return [];
+  const bp = BLUEPRINTS.get(COMP_KEY);
+  const sec = bp?.status === 'approved' ? (bp.sections || []).find((x: any) => x.unit === qt.unit) : null;
+  const prog = sec ? bp.progress?.[sec.id] || {} : {};
+  const plan: string[] = prog.plan || [];
+  const planCh: Record<string, string> = prog.planChapters || {};
+  const tried = new Set<string>((prog.built || []).map((b: any) => String(b.name).toLowerCase()));
+  const built = (COMP?.entities || []).filter((e) => e.type === typeId);
+  const builtBy = new Map(built.map((e) => [e.name.toLowerCase(), e]));
+  const items = [
+    ...plan.map((name, i) => { const e = builtBy.get(name.toLowerCase()); return { name, i, e, chapter: String(e?.quest?.chapter || planCh[name] || '') }; }),
+    ...built.filter((e) => !plan.some((n) => n.toLowerCase() === e.name.toLowerCase())).map((e, j) => ({ name: e.name, i: 10_000 + j, e, chapter: String(e.quest?.chapter || '') })),
+  ].filter((x) => x.e || !tried.has(x.name.toLowerCase()));
+  const groups = new Map<string, { slug: string; name: string; at: number; items: { name: string; slug?: string; i: number }[] }>();
+  for (const x of items) {
+    const slug = (x.chapter && chapterPage(x.chapter, pages)) || '';
+    const at = slug ? pages.findIndex((p) => p.slug === slug) : 9_999;
+    const g = groups.get(slug) || { slug, name: slug ? pages[at].name : 'Other', at, items: [] };
+    g.items.push({ name: x.name, slug: x.e?.slug, i: x.i });
+    groups.set(slug, g);
+  }
+  return [...groups.values()].sort((a, b) => a.at - b.at).map((g) => ({ slug: g.slug, name: g.name, items: g.items.sort((a, b) => a.i - b.i).map(({ name, slug }) => ({ name, slug })) }));
+}
+
+/** An area page's "Missions in this chapter": the built quest pages whose chapter is this page, in play order. */
+function missionsHere(slug: string, pages: { slug: string; name: string }[]): string {
+  const rows = Object.keys(QUEST_TYPES).flatMap((t) => questGroups(t, pages).filter((g) => g.slug === slug).flatMap((g) => g.items.filter((x) => x.slug).map((x) => ({ ...x, type: QUEST_TYPES[t].label }))));
+  if (!rows.length) return '';
+  return `<section class="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('missionsHere'))}</h2>
+    <ul class="mt-2 space-y-1 text-sm">${rows.map((x) => `<li><a class="text-[#a87ffb] hover:text-white font-semibold" href="${esc(entHref(x.slug!))}">${esc(x.name)}</a> <span class="text-zinc-500 text-xs">· ${esc(x.type)}</span></li>`).join('')}</ul></section>`;
+}
 let COMP: { taxonomy: any[]; entities: CompEntity[]; people: Record<string, { groups: { group: string; people: { name: string; role: string; where?: string }[] }[] }> } | null = null;
 const compLinkable = () => (COMP?.entities || []).map((e) => ({ name: e.name, slug: e.slug }));
 let COMP_KEY = '';
@@ -674,6 +744,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       </div>
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
       ${a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${rich(a.overview)}</p>` : ''}
+      ${missionsHere(a.slug, areas)}
       ${infoBox}
       ${peopleCards(a.slug, (a as any).people)}
       ${shortVersion}
@@ -1023,9 +1094,17 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
     return `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(t.label)}</div>
       <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => `<a href="${esc(entHref(e.slug))}" class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(e.name)}</a>`).join('')}${more.map((x: string) => `<span class="qc-soon rounded-md border border-dashed border-white/10 px-2 py-0.5 text-sm text-zinc-500 cursor-help select-none" tabindex="0" aria-disabled="true" title="${esc(ui('comingSoon'))}" data-soon="${esc(ui('comingSoon'))}">${esc(x)}</span>`).join('')}</div></div>`;
   }).join('')
-    // Built pages of types outside the taxonomy (quest pages: story missions, Stranger strands): built ones only, never
-    // "coming soon".
-    + [...new Set(COMP.entities.map((e) => e.type))].filter((ty) => !(COMP!.taxonomy || []).some((t: any) => t.id === ty)).map((ty) => {
+    // Quest pages (story missions, Stranger strands): grouped by chapter in play order, planned missions not built yet
+    // as "coming soon" (failed ones are left out).
+    + Object.keys(QUEST_TYPES).map((ty) => {
+      const groups = questGroups(ty, visible.map((o) => ({ slug: o.slug, name: byslug.get(o.slug)?.name || o.name })));
+      if (!groups.length) return '';
+      return `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:col-span-2"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(QUEST_TYPES[ty].label)}</div>
+      ${groups.map((g) => `<div class="mt-2.5">${g.slug ? `<a href="${esc(`/guides/${COMP_KEY}/${g.slug}/`)}" class="text-[11px] font-semibold text-zinc-400 hover:text-white">${esc(g.name)}</a>` : `<span class="text-[11px] font-semibold text-zinc-400">${esc(g.name)}</span>`}
+      <div class="mt-1 flex flex-wrap gap-1.5">${g.items.map((x) => x.slug ? `<a href="${esc(entHref(x.slug))}" class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(x.name)}</a>` : `<span class="qc-soon rounded-md border border-dashed border-white/10 px-2 py-0.5 text-sm text-zinc-500 cursor-help select-none" tabindex="0" aria-disabled="true" title="${esc(ui('comingSoon'))}" data-soon="${esc(ui('comingSoon'))}">${esc(x.name)}</span>`).join('')}</div></div>`).join('')}</div>`;
+    }).join('')
+    // Built pages of other types outside the taxonomy: built ones only, never "coming soon".
+    + [...new Set(COMP.entities.map((e) => e.type))].filter((ty) => !QUEST_TYPES[ty] && !(COMP!.taxonomy || []).some((t: any) => t.id === ty)).map((ty) => {
       const built = COMP!.entities.filter((e) => e.type === ty);
       return `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(built[0].typeLabel)}</div>
       <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => `<a href="${esc(entHref(e.slug))}" class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(e.name)}</a>`).join('')}</div></div>`;
@@ -1290,6 +1369,8 @@ async function main() {
       process.exit(0);
     }
   }
+  // Approved guide blueprints: the quest plans (play order, chapters) for the compendium's mission lists.
+  for (const d of (await db().collection('guideBlueprints').get()).docs) if ((d.data() as any).status === 'approved') BLUEPRINTS.set(d.id, d.data());
   // Staged rebuilds (guides/{key}--next) are never part of the site; review.ts --gate promotes them.
   const guides = { docs: (await db().collection('guides').get()).docs.filter((d) => !d.id.endsWith('--next') && (!ONLY || d.id === ONLY)) };
   // A preview carries the game's flagship prototypes (guidePrototypes/{key}__{slug}) on their pages.
@@ -1430,6 +1511,7 @@ async function main() {
   updateVersion();
   writeRedirects(moved, new Set(sitemap));
   writeGuideIndex(guideIndex);
+  write404();
   // Links use the final URLs (/guides/x/, not /guides/x/index.html), so nothing a visitor or crawler follows redirects
   // or shows the same page under a second URL.
   let relinked = 0;

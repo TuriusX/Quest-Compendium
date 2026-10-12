@@ -670,6 +670,10 @@ async function main() {
       try {
         const n = await deployToNetlify('Marketing_Website_Files', process.env.NETLIFY_SITE_ID, process.env.NETLIFY_AUTH_TOKEN);
         report.push(`🚀 Deployed to Netlify (${n.uploaded} changed file(s) uploaded).`);
+        // Every compendium link on the live site (a compendium link should never lead to a missing page).
+        const { checkCompendiumLinks } = await import('./linkCheck');
+        const lc = await checkCompendiumLinks();
+        state.linkCheck = { at: Date.now(), checked: lc.checked, broken: lc.broken.slice(0, 50), by: 'pipeline' };
       } catch (e: any) {
         report.push(`⚠️ Netlify deploy failed: ${e?.message}`);
       }
@@ -753,6 +757,9 @@ async function main() {
   } catch (e: any) {
     console.warn(`Core guides summary skipped: ${e?.message}`);
   }
+  // The last compendium link check (after the latest deploy, by this run or the flagship job).
+  const lcs: any = state.linkCheck || (await stateRef.get()).data()?.linkCheck;
+  if (lcs?.at && Date.now() - lcs.at < 2 * DAY) report.push(lcs.broken?.length ? `🔗❌ Compendium links: ${lcs.broken.length} of ${lcs.checked} don't work on the live site: ${lcs.broken.slice(0, 10).map((b: any) => `${b.url.replace('https://questcompendium.com', '')} (${b.status || 'no answer'})`).join(', ')}.` : `🔗 Compendium links: all ${lcs.checked} work on the live site.`);
   // Three weeks after Fextralife was blocked as evidence: pass rates of the guides that leaned on it, separately.
   try {
     const { fextralifeWatchLines } = await import('./fextralifeWatch');
