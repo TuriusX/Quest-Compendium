@@ -102,23 +102,41 @@ export async function benchmarkAnswer(game: string, name: string, typeLabel: str
   return { answer: cut(part('ANSWER', 'POINTS'), 1500), points, questions, evidence, sites: [...sites] };
 }
 
-/** Which key points a page covers (no search). */
+/**
+ * Which key points a page covers (no search). One fixed rule: the page covers a point when it states the point's main
+ * fact (the who, what, where or outcome; the same names and numbers where the point gives them), quoted from the page;
+ * extra detail in the point (examples, parentheses, a second clause) isn't required. A quote that isn't on the page
+ * doesn't count. Judged twice; where the two disagree, a third judgement decides (so a rerun gives the same result).
+ */
 export async function coverage(game: string, name: string, page: string, points: BenchPoint[]): Promise<boolean[]> {
   if (!points.length) return [];
-  const res: any = await gemini().models.generateContent({
-    model: MODEL,
-    contents: [{ role: 'user', parts: [{ text: [
-      `Our compendium page about "${name}" in the video game "${game}":`,
-      page || '(empty)',
-      '',
-      'For each key point below, does the page state that fact (same meaning; wording may differ)? A page that only hints at it, or states something different, does not cover it.',
-      ...points.map((p, i) => `P${i + 1}: ${p.point}`),
-      'Reply with JSON only: {"covered": [true, false, ...]} (one per point, in order).',
-    ].join('\n') }] }],
-    config: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 800, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
-  });
-  const c = objOf(String(res?.text || '')).covered;
-  return points.map((_, i) => (Array.isArray(c) ? c[i] === true : false));
+  const flat = (t: string) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const pageFlat = flat(page);
+  const judge = async (): Promise<boolean[]> => {
+    const res: any = await gemini().models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: [{ text: [
+        `Our compendium page about "${name}" in the video game "${game}":`,
+        page || '(empty)',
+        '',
+        'For each key point below: does the page state its main fact (the who, what, where or outcome, with the same names and numbers where the point gives them)? Extra detail in the point (examples, parentheses, a second clause) is not required. A page that only hints at it, or says something different, does not cover it.',
+        'For a point the page covers, copy the page’s words that state it exactly (one sentence or a few words, verbatim); otherwise an empty quote.',
+        ...points.map((p, i) => `P${i + 1}: ${p.point}`),
+        'Reply with JSON only: {"points": [{"p": "P1", "quote": "..."}, ...]} (one per point, in order).',
+      ].join('\n') }] }],
+      config: { responseMimeType: 'application/json', temperature: 0, seed: 7, maxOutputTokens: 2500, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    });
+    const xs = objOf(String(res?.text || '')).points;
+    return points.map((_, i) => {
+      const x = Array.isArray(xs) ? xs.find((y: any) => String(y?.p) === `P${i + 1}`) || xs[i] : null;
+      const q = flat(x?.quote);
+      return q.length >= 3 && pageFlat.includes(q);
+    });
+  };
+  const [a, b] = await Promise.all([judge(), judge()]);
+  if (a.every((v, i) => v === b[i])) return a;
+  const c = await judge();
+  return a.map((v, i) => (v === b[i] ? v : c[i]));
 }
 
 /** Benchmark one live page and save the result on it. */

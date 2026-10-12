@@ -120,6 +120,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   allGames: 'All games',
   noMatches: 'Nothing matches that search.',
   missionsHere: 'Missions in this chapter',
+  entQuestions: 'What players ask',
   searchAll: 'Search everything in this guide: places, chapters, items…',
   compendium: 'Compendium',
   comingSoon: 'Coming soon',

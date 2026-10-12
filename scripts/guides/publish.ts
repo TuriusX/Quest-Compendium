@@ -504,7 +504,7 @@ function areaList(gameKey: string, areas: AreaLink[], current: string | null, ba
 // Entity pages next to the guide (published ones; a preview shows all), links from every mention in the guide's text
 // (with a hover preview), a forgiving search over every entity, page, step and entry, and "Services and people" as
 // grouped cards. COMP is the guide being rendered (set per guide in main).
-type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any; kind?: string; quest?: any; ref?: any };
+type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any; kind?: string; quest?: any; ref?: any; qa?: { q: string; a: string }[] };
 const COMPS = new Map<string, NonNullable<typeof COMP>>();
 /** Approved guide blueprints (guideBlueprints/{key}): their quest plans give the quests' play order and chapters. */
 const BLUEPRINTS = new Map<string, any>();
@@ -1157,7 +1157,8 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
   for (const e of COMP!.entities) {
     const label = singularLabel(e.typeLabel);
     // Backlinks: the guide pages that mention it (found by the same linker), plus the chapters the page names.
-    const mentions = visible.filter((o) => entitySegments(pageText(byslug.get(o.slug)!), [{ name: e.name, slug: e.slug }]).some((sg) => sg.slug));
+    const named = new Set(((e.summary || {}).chapters || []).map((c: string) => c.toLowerCase()));
+    const mentions = visible.filter((o) => named.has(String(byslug.get(o.slug)?.name || o.name).toLowerCase()) || entitySegments(pageText(byslug.get(o.slug)!), [{ name: e.name, slug: e.slug }]).some((sg) => sg.slug));
     const sm = e.summary || {};
     const row = (label: string, html: string) => (html ? `<div class="flex gap-2 py-1.5 border-t border-white/5 first:border-0"><dt class="w-36 shrink-0 text-zinc-500">${esc(label)}</dt><dd class="min-w-0 text-zinc-200">${html}</dd></div>` : '');
     const list = (xs: string[]) => (xs.length ? `<ul class="space-y-1">${xs.map((x) => `<li>${x}</li>`).join('')}</ul>` : '');
@@ -1170,6 +1171,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
         ${e.review ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))} · ${e.review.supported}/${e.review.total}</span>` : ''}
         ${PREVIEW ? '<span class="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-semibold text-amber-200">Preview</span>' : ''}</div>
       ${e.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${rich(e.overview, '../', e.slug)}</p>` : ''}
+      ${(e.qa || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entQuestions'))}</h2>${e.qa.map((x: any, i: number) => `<h3 id="q-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.q)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.a, '../', e.slug)}</p>`).join('')}</section>` : ''}
       <dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm">
         ${row('Type', esc(label))}
         ${e.quest ? questRows(e.quest, row, list) : ''}

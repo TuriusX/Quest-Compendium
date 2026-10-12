@@ -35,7 +35,7 @@ const objOf = (text: string): any => {
 type QA = { q: string; a: string };
 
 /** A searched call whose source-backed sentences (allowed sources only) become evidence lines. */
-async function searchedEvidence(prompt: string, prefix: string, topic: string): Promise<{ evidence: Evidence[]; searches: number }> {
+export async function searchedEvidence(prompt: string, prefix: string, topic: string): Promise<{ evidence: Evidence[]; searches: number }> {
   let res: any = null;
   for (let attempt = 0; attempt < 2 && !res; attempt++) {
     const r: any = await gemini().models.generateContent({
@@ -154,7 +154,7 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     const bench = live.benchmark?.points?.length ? live.benchmark : { ...(await benchmarkAnswer(game, name, typeLabel)), at: Date.now() };
     const core: BenchPoint[] = (bench.points || []).filter((p: BenchPoint) => p.core);
     // The live page against the same points (for the before/after).
-    const beforeCov = core.every((p) => typeof p.covered === 'boolean') ? core.map((p) => !!p.covered) : await coverage(game, name, pageText(live), core);
+    const beforeCov = await coverage(game, name, pageText(live), core);
     // 1-2. Intent, then research those questions on top of what's stored.
     const intent = await intents(key, game, name, slug, bench.questions || []);
     const stored = await entityEvidenceFor(key, game, name, typeLabel);
@@ -174,8 +174,12 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
       }
     }
     const verified = core.map((_, i) => okPoint(i));
+    // 3-7, with one automatic retry: a held draft is written again with the reasons it was held, before the page is
+    // held for good.
+    const build = async (retryFor: string[]) => {
     // 3. Write in the order of the questions, stating every verified key fact.
-    const res: any = await gemini().models.generateContent({ model: MODEL, contents: [{ role: 'user', parts: [{ text: WRITER(game, name, typeLabel, kind, intent.questions, ev, chapters, core.filter((_, i) => verified[i]).map((p) => p.point), pageText(live)) }] }], config: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 7000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } });
+    const fix = retryFor.length ? `\n\nA FIRST DRAFT OF THIS PAGE WAS HELD BECAUSE: ${retryFor.join(' | ')}\nFix that: state every missing key fact plainly, in the overview or the answer it belongs to; where the draft contradicted itself, keep only what the evidence says and describe each thing once.` : '';
+    const res: any = await gemini().models.generateContent({ model: MODEL, contents: [{ role: 'user', parts: [{ text: WRITER(game, name, typeLabel, kind, intent.questions, ev, chapters, core.filter((_, i) => verified[i]).map((p) => p.point), pageText(live)) + fix }] }], config: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 7000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } });
     const j = objOf(String(res?.text || ''));
     const clean = (v: unknown, n = 300) => cut(v, n);
     // Whole sentences up to n characters (never cut mid-sentence).
@@ -230,7 +234,16 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
       missing.length ? `misses ${missing.length} verified core point(s): ${missing.map((p) => p.point).join('; ')}` : '',
       contra.length ? `contradicts itself: ${contra.join('; ')}` : '',
     ].filter(Boolean);
-    return { page, bench, core, cov, beforeCov, verified, intent, review, dropped, filled, contra, reasons };
+    return { page, cov, review, dropped, filled, contra, reasons };
+    };
+    let built = await build([]);
+    const attempts = built.reasons.length ? 2 : 1;
+    if (built.reasons.length) {
+      console.log(`  ${name}: first draft held (${cut(built.reasons.join(' | '), 200)}); retrying once.`);
+      const second = await build(built.reasons);
+      built = { ...second, dropped: [...built.dropped.map((x) => `(first draft) ${x}`), ...second.dropped], filled: built.filled + second.filled };
+    }
+    return { ...built, bench, core, beforeCov, verified, intent, attempts };
   });
   const passed = !out.reasons.length;
   const doc = {
@@ -238,14 +251,14 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     intent: { questions: out.intent.questions, from: out.intent.from.slice(0, 20) },
     benchmark: { ...out.bench, points: out.core.map((p, i) => ({ ...p, verified: out.verified[i], covered: out.cov[i], coveredBefore: out.beforeCov[i] })) },
     review: { score: out.review.score, status: out.review.status, supported: out.review.supported, total: out.review.total, ...(out.review.reason ? { reason: out.review.reason } : {}) },
-    dropped: out.dropped.map((x) => cut(x, 200)), gapsFilled: out.filled, ...(out.contra.length ? { contradictions: out.contra } : {}),
+    dropped: out.dropped.map((x) => cut(x, 200)), gapsFilled: out.filled, attempts: out.attempts, ...(out.contra.length ? { contradictions: out.contra } : {}),
     ...(out.reasons.length ? { heldBecause: out.reasons } : {}),
     cost: { dollars: Math.round(scope.dollars * 10000) / 10000, searches: scope.searches }, builtAt: Date.now(),
   };
   if (opts.draft) await db().collection('compendiumDrafts').doc(`${key}__${slug}`).set(JSON.parse(JSON.stringify({ before: live, after: doc, at: Date.now() })));
   else if (passed) await ref.set(JSON.parse(JSON.stringify(doc)));
   else await ref.set({ v2Held: JSON.parse(JSON.stringify({ at: Date.now(), reasons: out.reasons, cost: doc.cost })) }, { merge: true });
-  console.log(`${key} / ${name}: ${passed ? 'passes' : `held (${out.reasons.join(' | ').slice(0, 300)})`}; verified core points ${out.beforeCov.filter((c, i) => c && out.verified[i]).length} -> ${out.cov.filter((c, i) => c && out.verified[i]).length} of ${out.verified.filter(Boolean).length} (${out.core.length - out.verified.filter(Boolean).length} unverified), ${out.page.qa.length} question(s) answered, ${out.filled} claim(s) saved by the gap search, ${out.dropped.length} dropped, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);
+  console.log(`${key} / ${name}: ${passed ? 'passes' : `held (${out.reasons.join(' | ').slice(0, 300)})`}; verified core points ${out.beforeCov.filter((c, i) => c && out.verified[i]).length} -> ${out.cov.filter((c, i) => c && out.verified[i]).length} of ${out.verified.filter(Boolean).length} (${out.core.length - out.verified.filter(Boolean).length} unverified), ${out.page.qa.length} question(s) answered, ${out.attempts} attempt(s), ${out.filled} claim(s) saved by the gap search, ${out.dropped.length} dropped, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);
   return { status: doc.status, dollars: scope.dollars, coreCovered: out.cov.filter(Boolean).length, core: out.core.length };
 }
 

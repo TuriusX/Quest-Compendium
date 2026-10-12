@@ -251,12 +251,16 @@ export function claimPageOf(p: EntityPage): ClaimPage {
     choices: [],
     advice: [],
     services: [
-      ...p.summary.shops.map((s) => `${s.name} is at ${p.name}${s.what ? `: ${s.what}` : ''}`),
+      // A shop is checked as a shop (what it sells or offers), not as a location; a person can be their own shop.
+      ...p.summary.shops.map((s) => (entityKind(p.typeLabel) === 'person' || s.name === p.name
+        ? `Shop: ${p.name} sells or offers ${s.what || s.name}${s.name && s.name !== p.name && s.what ? ` (${s.name})` : ''}`
+        : `Shop: ${s.name}, at ${p.name}, sells or offers ${s.what || 'goods or services'}`)),
       ...p.summary.services.map((s) => `${p.name} has: ${s}`),
       ...p.summary.quests.map((q) => entityKind(p.typeLabel) === 'person'
         ? `${p.name} gives or appears in the ${q.kind || ''} mission "${q.name}"${q.chapter ? ` (${q.chapter})` : ''}`
         : `The ${q.kind || ''} mission "${q.name}"${q.chapter ? ` (${q.chapter})` : ''} takes place at or starts from ${p.name}`),
-      ...p.summary.chapters.map((c) => `${p.name} features in the story chapter "${c}"`),
+      // The guide's parts are chapters in some guides and places in others: "appears in" either way.
+      ...p.summary.chapters.map((c) => `${p.name} appears in "${c}" (a part of the game the guide covers: a chapter, act or area)`),
       ...(p.summary.whereToFind || []).map((w) => `${p.name} can be found ${w.where}${w.when ? ` (${w.when})` : ''}`),
     ],
     fights: [],
