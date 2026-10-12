@@ -300,7 +300,16 @@ export function applyVerdicts(p: EntityPage, verdicts: ClaimVerdict[]): string[]
   return removed;
 }
 
-export async function buildEntity(k: string, name: string, opts: { type?: string; rebuild?: boolean; keepOnFail?: boolean } = {}) {
+/**
+ * Builds or rebuilds an entity page. The standard is the intent-first method (entityV2.ts): players' questions, the
+ * usefulness benchmark, gap searches before a claim is dropped, the consistency check; an existing page that's held
+ * keeps its live version ("kept"). opts.legacy builds it the old way (fixed per-type fields).
+ */
+export async function buildEntity(k: string, name: string, opts: { type?: string; rebuild?: boolean; keepOnFail?: boolean; legacy?: boolean } = {}): Promise<{ name: string; slug: string; status: string; dollars: number; score?: number; whereToFind?: number; reasons?: string[] }> {
+  if (!opts.legacy) {
+    const { buildEntityV2 } = await import('./entityV2');
+    return buildEntityV2(k, name, { type: opts.type });
+  }
   key = k;
   return entity(name, opts);
 }

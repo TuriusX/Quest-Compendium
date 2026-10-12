@@ -211,6 +211,15 @@ export async function runCore(): Promise<void> {
   const cfg = await coreConfig();
   let wentLive = false;
   const timeUp = () => Date.now() - RUN_STARTED > MINUTES * 60_000;
+  // The compendium rollout to the new method first (rollout.ts): rebuilds across guides by demand, then (from
+  // system/core.newPages.from) the blueprints' new entity pages.
+  {
+    const { runRollout } = await import('./rollout');
+    const r = await runRollout({ room: async () => (await coreBudget()).room, charge: (d, k) => chargeCore(d, k), logUnit, timeUp });
+    if (r.wentLive) wentLive = true;
+    if (r.stopped) { console.log(`
+${r.stopped}; the next run carries on.`); if (wentLive) await publishSiteForCore(); return; }
+  }
   // Guides with an approved blueprint follow it (blueprintBuild.ts), first, in system/core.blueprintOrder.
   const approved = (await db().collection('guideBlueprints').where('status', '==', 'approved').get()).docs.map((d) => d.id);
   const bpOrder = [...((st.blueprintOrder || []) as string[]).filter((k) => approved.includes(k)), ...approved.filter((k) => !(st.blueprintOrder || []).includes(k))];

@@ -76,5 +76,29 @@ async function main() {
     rows.sort((x, y) => score(y) - score(x));
     console.log(`scCompendium: ${c.id} (${rows.length} live): ${rows.slice(0, 14).map((x) => `${x.name} ${score(x)} (page ${x.impressions}, named ${x.named}, asked ${x.asked})`).join('; ')}`);
   }
+  // The blueprints' planned entity pages (not built yet): searches naming them on the guide's pages, and in-app
+  // questions, for the new-pages order (rollout.ts). Saved as guideBlueprints/{key}.planDemand.{section}.{name}.
+  for (const d of (await db().collection('guideBlueprints').where('status', '==', 'approved').get()).docs) {
+    const b: any = d.data();
+    const game = norm(String((await db().collection('guides').doc(d.id).get()).data()?.game || d.id));
+    const facts = (await db().collection('gameFacts').doc(d.id).collection('facts').limit(5000).get()).docs.map((x) => ` ${norm(String((x.data() as any).subject || ''))} `);
+    const out: Record<string, Record<string, number>> = {};
+    for (const s of b.sections || []) {
+      const plan: string[] = b.progress?.[s.id]?.plan || [];
+      if (s.unit !== 'entity' || !plan.length) continue;
+      out[s.id] = {};
+      for (const name of plan) {
+        const forms = [...new Set([norm(name), norm(name.split(',')[0])])].filter((f) => f.length >= 4).map((f) => ` ${f} `);
+        const hit = (t: string) => forms.some((f) => t.includes(f));
+        const named = (queries.get(d.id) || []).filter((x) => hit(x.q)).reduce((a, x) => a + x.n, 0);
+        const a = asked.filter((x) => hit(x.q) && (!x.game || x.game.includes(game.split(' ').slice(0, 2).join(' ')))).length + facts.filter(hit).length;
+        out[s.id][name] = named + ASKED_WEIGHT * a;
+      }
+    }
+    if (!Object.keys(out).length) continue;
+    await d.ref.update({ planDemand: out, planDemandAt: Date.now() });
+    const top = Object.entries(out).flatMap(([sec, xs]) => Object.entries(xs).map(([n, v]) => `${n} ${v} (${sec})`)).sort((x, y) => Number(y.split(' (')[0].split(' ').pop()) - Number(x.split(' (')[0].split(' ').pop())).slice(0, 10);
+    console.log(`scCompendium: ${d.id} planned pages by demand: ${top.join('; ')}`);
+  }
 }
 main().then(() => process.exit(0), (e) => { console.error('scCompendium failed:', e?.message || e); process.exit(1); });

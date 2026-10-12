@@ -26,6 +26,7 @@ import { supportedSegments, trusted, trustedSites, evidenceText, claimCheck, cla
 import { entitySlug, entityKind, entityEvidenceFor, claimPageOf, applyVerdicts, type EntityPage } from './compendium';
 import { benchmarkAnswer, coverage, pageText, type BenchPoint } from './benchmark';
 import { lintEntity, fuzzyScore } from './siteText';
+import { ProQuotaWait } from './reviewerQuota';
 
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const objOf = (text: string): any => {
@@ -182,11 +183,18 @@ function applyAll(p: EntityPage & { qa: QA[] }, base: number, verdicts: any[]): 
   return removed;
 }
 
-export async function buildEntityV2(key: string, name: string, opts: { draft?: boolean } = {}) {
+export async function buildEntityV2(key: string, name: string, opts: { draft?: boolean; type?: string } = {}) {
   const slug = entitySlug(name);
   const ref = db().collection('guideCompendium').doc(key).collection('entities').doc(slug);
-  const live: any = (await ref.get()).data();
-  if (!live) throw new Error(`no page ${key}/${slug}`);
+  const found: any = (await ref.get()).data();
+  // A page that doesn't exist yet (or was never published) starts empty, typed from the guide's taxonomy.
+  const isNew = !found || found.status !== 'published';
+  let live: any = found;
+  if (!found || (isNew && !found.overview)) {
+    const tax = (((await db().collection('guideCompendium').doc(key).get()).data() || {}).taxonomy || []) as any[];
+    const type = opts.type || found?.type || tax[0]?.id || 'people';
+    live = { name, slug, type, typeLabel: tax.find((t) => t.id === type)?.label || found?.typeLabel || type, title: '', description: '', overview: '', summary: {}, ...(found || {}) };
+  }
   const info: any = (await db().collection('guides').doc(key).get()).data() || {};
   const game = String(info.game || key);
   const typeLabel = String(live.typeLabel || live.type);
@@ -263,6 +271,7 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     page.qa = page.qa.map((x) => ({ ...x, a: lintEntity({ overview: x.a, summary: {} }, kind === 'person').overview })).filter((x) => x.a);
     const c2 = claimsWithQA(page);
     const review = await claimReview(game, name, c2.page, ev);
+    if ((review as any).status === 'waiting') throw new ProQuotaWait();
     dropped.push(...applyAll(page, c2.base, review.claims));
     page.sources = ev.sites.slice(0, 12);
     // 6. Usefulness: every core point of the benchmark covered.
@@ -303,8 +312,15 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     return { ...built, bench, core, beforeCov, verified, disputed, intent, attempts };
   });
   const passed = !out.reasons.length;
+  // Titles for search: kept for a page that has one (stable for the address), made for a new page.
+  if (!live.title) {
+    const sm: any = out.page.summary;
+    const parts = [kind === 'person' && (sm.whereToFind || []).length ? 'where to find' : sm.where || sm.region ? 'location' : '', sm.quests.length ? 'missions' : '', sm.shops.length ? 'shops' : '', out.page.qa.length ? 'questions' : ''].filter(Boolean).slice(0, 3);
+    out.page.title = `${name} – ${game}${parts.length ? `: ${parts.join(', ')}` : ''}`;
+    out.page.description = cut(`${name} in ${game}. ${out.page.overview.split(/(?<=[.!?])\s/)[0] || ''}`, 158);
+  }
   const doc = {
-    ...out.page, method: 'intent', status: passed ? 'published' : 'held',
+    ...out.page, method: 'intent', status: passed ? 'published' : 'held', ...(live.demand ? { demand: live.demand } : {}),
     intent: { questions: out.intent.questions, from: out.intent.from.slice(0, 20) },
     benchmark: { ...out.bench, points: out.core.map((p, i) => ({ ...p, verified: out.verified[i], ...(out.disputed.has(i) ? { disputed: true } : {}), covered: out.cov[i], coveredBefore: out.beforeCov[i] })) },
     review: { score: out.review.score, status: out.review.status, supported: out.review.supported, total: out.review.total, ...(out.review.reason ? { reason: out.review.reason } : {}) },
@@ -313,10 +329,11 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     cost: { dollars: Math.round(scope.dollars * 10000) / 10000, searches: scope.searches }, builtAt: Date.now(),
   };
   if (opts.draft) await db().collection('compendiumDrafts').doc(`${key}__${slug}`).set(JSON.parse(JSON.stringify({ before: live, after: doc, at: Date.now() })));
-  else if (passed) await ref.set(JSON.parse(JSON.stringify(doc)));
-  else await ref.set({ v2Held: JSON.parse(JSON.stringify({ at: Date.now(), reasons: out.reasons, cost: doc.cost })) }, { merge: true });
+  else if (passed || isNew) await ref.set(JSON.parse(JSON.stringify(doc))); // a new page that's held is kept, not shown
+  else await ref.set({ v2Held: JSON.parse(JSON.stringify({ at: Date.now(), reasons: out.reasons, cost: doc.cost })) }, { merge: true }); // the live page stays
   console.log(`${key} / ${name}: ${passed ? 'passes' : `held (${out.reasons.join(' | ').slice(0, 300)})`}; verified core points ${out.beforeCov.filter((c, i) => c && out.verified[i]).length} -> ${out.cov.filter((c, i) => c && out.verified[i]).length} of ${out.verified.filter(Boolean).length} (${out.core.length - out.verified.filter(Boolean).length} unverified${out.disputed.size ? `, ${out.disputed.size} disputed by the sources` : ''}), ${out.page.qa.length} question(s) answered, ${out.attempts} attempt(s), ${out.filled} claim(s) saved by the gap search, ${out.dropped.length} dropped, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);
-  return { status: doc.status, dollars: scope.dollars, coreCovered: out.cov.filter(Boolean).length, core: out.core.length };
+  // "kept": an existing page that was held keeps its live version.
+  return { name, slug, status: passed ? 'published' : isNew ? 'held' : 'kept', reasons: out.reasons, dollars: scope.dollars, searches: scope.searches, score: out.review.score, coreCovered: out.cov.filter(Boolean).length, core: out.core.length, whereToFind: ((out.page.summary as any).whereToFind || []).length };
 }
 
 async function main() {

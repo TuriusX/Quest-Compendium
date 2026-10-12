@@ -426,6 +426,10 @@ async function main() {
     const sc = runScript(['scripts/pipeline/searchConsole.ts', '--weekly']);
     await charge(sc, 'Search Console weekly');
     if (sc.ok) state.searchConsoleAt = Date.now();
+    // Compendium demand (no AI cost): each entity page's impressions and in-app questions, and the planned pages', for
+    // the rollout's order.
+    const cd = runScript(['scripts/pipeline/scCompendium.ts']);
+    if (!cd.ok) report.push('⚠️ Compendium demand refresh failed (see the job log); the rollout keeps the previous order.');
     report.push(`${sc.ok ? '🔎' : '⚠️'} ${sc.summary || 'Search Console pull failed (see the job log)'}`);
     // New entity pages by demand go live with this run's publish.
     if (/[1-9]\d* entity page\(s\) published/.test(sc.summary || '')) changed = true;
@@ -756,6 +760,14 @@ async function main() {
     }
   } catch (e: any) {
     console.warn(`Core guides summary skipped: ${e?.message}`);
+  }
+  // The compendium rollout to the new method (rollout.ts): the last day's pages, held ones with reasons, budget left.
+  try {
+    const { rolloutLine } = await import('../guides/rollout');
+    const line = await rolloutLine();
+    if (line) report.push(line);
+  } catch (e: any) {
+    console.warn(`Compendium rollout line skipped: ${e?.message}`);
   }
   // The last compendium link check (after the latest deploy, by this run or the flagship job).
   const lcs: any = state.linkCheck || (await stateRef.get()).data()?.linkCheck;

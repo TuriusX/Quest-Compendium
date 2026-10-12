@@ -102,6 +102,43 @@ async function deepenTarget(key: string, s: Section) {
   return pages.find((p) => k && chapterKey(p.name) === k) || pages.find((p) => t.includes(p.name.toLowerCase().split(':')[0].trim()) && p.name.length > 3) || null;
 }
 
+/**
+ * An entity section's plan (the names it covers), researched once and saved like any section's, with the section's
+ * own compendium type in the taxonomy. For the new-pages phase (rollout.ts), which builds entity sections across
+ * guides in order of demand.
+ */
+export async function planEntitySection(key: string, sectionId: string): Promise<{ names: string[]; section: Section } | null> {
+  const ref = db().collection('guideBlueprints').doc(key);
+  const b: any = (await ref.get()).data();
+  const s: Section | undefined = (b?.sections || []).find((x: Section) => x.id === sectionId);
+  if (!s || s.unit !== 'entity') return null;
+  const want = Math.max(0, Math.min(Number(s.units) || 0, s.cap != null ? Number(s.cap) : Infinity));
+  const p: Progress = b.progress?.[s.id] || { built: [] };
+  if (!p.plan) {
+    const game = String((await db().collection('guides').doc(key).get()).data()?.game || key);
+    p.plan = (await planSection(game, s, want)).names;
+    await ref.set({ progress: { [s.id]: p }, updatedAt: Date.now() }, { merge: true });
+  }
+  const { coreTaxonomy } = await import('./compendium');
+  const cref = db().collection('guideCompendium').doc(key);
+  if (!((await cref.get()).data() || {}).taxonomy) await coreTaxonomy(key).catch(() => null);
+  const tax = ((await cref.get()).data()?.taxonomy || []) as any[];
+  if (!tax.some((t) => t.id === s.id)) await cref.set({ taxonomy: FieldValue.arrayUnion({ id: s.id, label: s.title, description: cut(s.what, 200), tier: 'other', examples: p.plan.slice(0, 12) }) }, { merge: true });
+  return { names: p.plan.slice(0, want), section: s };
+}
+
+/** Record a unit built outside the runner (the new-pages phase) in the blueprint's progress; the section is done when all its names are. */
+export async function recordEntityUnit(key: string, sectionId: string, u: { name: string; slug?: string; status: string; dollars: number }) {
+  const ref = db().collection('guideBlueprints').doc(key);
+  const b: any = (await ref.get()).data() || {};
+  const s: Section | undefined = (b.sections || []).find((x: Section) => x.id === sectionId);
+  const p: Progress = b.progress?.[sectionId] || { built: [] };
+  p.built = [...(p.built || []).filter((x) => x.name !== u.name), { ...u, dollars: Math.round(u.dollars * 1000) / 1000 }];
+  const want = s ? Math.max(0, Math.min(Number(s.units) || 0, s.cap != null ? Number(s.cap) : Infinity)) : 0;
+  if (p.plan && p.plan.slice(0, want).every((n) => p.built.some((x) => x.name === n))) p.done = Date.now();
+  await ref.set({ progress: { [sectionId]: p }, updatedAt: Date.now() }, { merge: true });
+}
+
 /** Build an approved blueprint's next units. Returns whether anything went live and whether it stopped (budget, time, checkpoint). */
 export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ wentLive: boolean; stopped: string | null; done: boolean }> {
   const ref = db().collection('guideBlueprints').doc(key);
@@ -112,7 +149,11 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ we
   const progress: Record<string, Progress> = b.progress || {};
   // Entity sections held for a guide (system/core.entityHold.{key}: why), e.g. until the new compendium method's pilot
   // is reviewed, so pages aren't built the old way and then rebuilt. The guide's other sections carry on.
-  const hold = String(((await db().collection('system').doc('core').get()).data()?.entityHold || {})[key] || '');
+  const coreDoc: any = (await db().collection('system').doc('core').get()).data() || {};
+  const hold = String((coreDoc.entityHold || {})[key] || '');
+  // With the new-pages phase set up (system/core.newPages), entity sections are built there (rollout.ts), across
+  // guides in order of demand, not here.
+  const elsewhere = !!coreDoc.newPages;
   const save = (id: string) => ref.set({ progress: { [id]: progress[id] }, updatedAt: Date.now() }, { merge: true });
   let wentLive = false;
   const { buildPageEvidenceForCore, writePageForCore } = await import('./flagship');
@@ -123,7 +164,7 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx): Promise<{ we
   for (const s of (b.sections || []).slice().sort((x: Section, y: Section) => (x.priority || 99) - (y.priority || 99)) as Section[]) {
     const p: Progress = (progress[s.id] ||= { built: [] });
     if (p.done) continue;
-    if (hold && s.unit === 'entity') { console.log(`  ${s.title}: held (${hold}).`); continue; }
+    if (s.unit === 'entity' && !isRebuildExisting(s) && (hold || elsewhere)) { if (hold) console.log(`  ${s.title}: held (${hold}).`); continue; }
     const want = Math.max(0, Math.min(Number(s.units) || 0, s.cap != null ? Number(s.cap) : Infinity));
     // Entity pages that only needed a rebuild (done by the re-research of existing pages): nothing new to build.
     if (isRebuildExisting(s) || want === 0) { p.done = Date.now(); await save(s.id); continue; }
