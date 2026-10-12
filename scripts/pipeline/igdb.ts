@@ -20,6 +20,8 @@ const API = 'https://api.igdb.com/v4';
 const STEAM = 1; // external game source: Steam
 const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[™®©]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').replace(/^the /, '').trim();
 const EDITION = /\s+(complete|game of the year|goty|definitive|enhanced|special|deluxe|ultimate|legendary|anniversary|director s cut|remastered|hd)( edition)?$/;
+/** A dump date: Unix seconds, or a date string (the CSV dumps write timestamps either way). Unix seconds out, 0 if none. */
+const when = (v: string) => { const n = Number(v); if (n > 0) return n; const t = Date.parse(String(v || '')); return Number.isFinite(t) && t > 0 ? Math.round(t / 1000) : 0; };
 const ids = (v: string) => String(v || '').replace(/[{}"]/g, '').split(',').map((x) => Number(x)).filter((x) => x > 0);
 
 async function token(clientId: string): Promise<string> {
@@ -100,7 +102,7 @@ async function main() {
     const short = [norm(String(r.name).split(':')[0]), n.replace(/ version$/, '')].find((x) => x !== n && wantName.has(x));
     const keep = matched.has(id) || wantName.has(n) || !!short;
     if (!keep) continue;
-    const x = { id, name: r.name, slug: r.slug, first: Number(r.first_release_date) || 0, platforms: ids(r.platforms), genres: ids(r.genres), cover: Number(r.cover) || 0, artworks: ids(r.artworks), screenshots: ids(r.screenshots), type: Number(r.game_type ?? r.category ?? 0), rated: Number(r.total_rating_count) || 0, n };
+    const x = { id, name: r.name, slug: r.slug, first: when(r.first_release_date), platforms: ids(r.platforms), genres: ids(r.genres), cover: Number(r.cover) || 0, artworks: ids(r.artworks), screenshots: ids(r.screenshots), type: Number(r.game_type ?? r.category ?? 0), rated: Number(r.total_rating_count) || 0, n };
     games.set(id, x);
     for (const k of wantName.get(n) || wantName.get(short || '') || []) cands.set(k, [...(cands.get(k) || []), { ...x, n: wantName.has(n) ? n : short, viaShort: !wantName.has(n) }]);
   }
