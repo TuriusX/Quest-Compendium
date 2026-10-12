@@ -288,7 +288,9 @@ function write404() {
   q.addEventListener('input',run);if(q.value)run();})();</script>`;
   // Served at the missing address itself: the base makes the page's own links and stylesheet work from any depth.
   const html = page({ title: 'Page not found – Quest Compendium', description: 'This page does not exist.', depth: 0, canonical: `${SITE}/404.html`, body, draft: true })
-    .replace('<head>', '<head>\n  <base href="/">');
+    .replace('<head>', '<head>\n  <base href="/">')
+    // noindex (from draft) without the draft banner.
+    .replace('<div class="bg-amber-500/15 border-b border-amber-500/30 text-amber-300 text-sm text-center py-2">DRAFT preview: not public yet</div>', '');
   fs.writeFileSync(path.join(OUT, '404.html'), html);
 }
 
