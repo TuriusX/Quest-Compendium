@@ -4,7 +4,7 @@
  */
 import dotenv from 'dotenv';
 import { initializeApp, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { apiLimits, searchesToday, recordSearchDay, pipelineRoom, SearchDayWait } from '../../apiLimits';
 import { GoogleGenAI } from '@google/genai';
 import { AsyncLocalStorage } from 'async_hooks';
@@ -23,6 +23,16 @@ export const db = () => getFirestore();
  */
 export const ledger = { calls: 0, input: 0, output: 0, thinking: 0, searches: 0, tokenDollars: 0, searchDollars: 0, unpriced: 0, failedCalls: 0 };
 export const ledgerDollars = () => ledger.tokenDollars + ledger.searchDollars;
+/**
+ * Work run from a developer's machine (not the Cloud Run jobs, which have their own budgets): each call's cost is added
+ * to system/localSpend.months.{YYYY-MM}, so the pipeline summary's month total includes it. Tracked from 2026-10-13.
+ */
+const IS_LOCAL = !process.env.CLOUD_RUN_JOB && !process.env.K_SERVICE;
+async function recordLocal(dollars: number, searches: number) {
+  if (!IS_LOCAL || !(dollars > 0)) return;
+  const m = new Date().toISOString().slice(0, 7);
+  await getFirestore().collection('system').doc('localSpend').set({ months: { [m]: { dollars: FieldValue.increment(dollars), calls: FieldValue.increment(1), searches: FieldValue.increment(searches) } }, updatedAt: Date.now() }, { merge: true }).catch(() => {});
+}
 /**
  * Per-task usage when several run at once (flagship pages in parallel): calls made inside usageScope.run(scope, ...)
  * are added to that scope as well as to the process ledger.
@@ -73,6 +83,7 @@ export function gemini(): GoogleGenAI {
         const scope = usageScope.getStore();
         if (scope) scope.dollars += worst;
         printLedgerOnExit();
+        await recordLocal(worst, 0);
       }
       throw e;
     }
@@ -84,6 +95,7 @@ export function gemini(): GoogleGenAI {
     const scope = usageScope.getStore();
     if (scope) { scope.dollars += u.tokenDollars + u.searchDollars; scope.searches += u.searches; }
     printLedgerOnExit();
+    await recordLocal(u.tokenDollars + u.searchDollars, u.searches);
     return res;
   };
   return client;

@@ -79,12 +79,13 @@ import { apiLimits, searchesToday, pipelineRoom, searchDayLine } from '../../api
  * The run in progress, for its closing message however it ends: finished, stopped by a cap, crashed, or stopped from
  * outside (the job's time limit, a cancel).
  */
-const RUN: { report: string[]; spent: () => number; stoppedBy?: string; posted?: boolean } = { report: [], spent: () => 0 };
+/** head: the lines that open the summary's first Discord message (the month's spending, the core programme). */
+const RUN: { report: string[]; head: string[]; spent: () => number; stoppedBy?: string; posted?: boolean } = { report: [], head: [], spent: () => 0 };
 async function postEnd(closing: string) {
   if (RUN.posted || DRY || !process.env.DISCORD_WEBHOOK_URL) return;
   RUN.posted = true;
-  await postDiscord(process.env.DISCORD_WEBHOOK_URL, summaryText(RUN.report, closing));
-  await db().collection('system').doc('pipeline').set({ lastReport: RUN.report, lastEnd: closing, lastRun: Date.now() }, { merge: true }).catch(() => {});
+  await postDiscord(process.env.DISCORD_WEBHOOK_URL, summaryText([...RUN.head, ...RUN.report], closing));
+  await db().collection('system').doc('pipeline').set({ lastReport: [...RUN.head, ...RUN.report], lastEnd: closing, lastRun: Date.now() }, { merge: true }).catch(() => {});
 }
 process.on('SIGTERM', () => {
   postEnd(`⛔ Run stopped from outside (the job's 3-hour limit, or cancelled) after $${RUN.spent().toFixed(2)}. The summary above is what it did until then.`).finally(() => process.exit(1));
@@ -500,7 +501,7 @@ async function main() {
   const held = hold ? queue.filter((q) => !q.approved) : [];
   if (held.length) {
     queue.splice(0, queue.length, ...queue.filter((q) => q.approved));
-    report.push(`⏸️ ${held.length} queue item(s) on hold until ${state.queueHold.until}; ${queue.length} approved item(s) run.`);
+    report.push(`⏸️ Repairs on hold until ${state.queueHold.until}${state.queueHold.why ? ` (${state.queueHold.why})` : ''}: ${held.length} waiting, ${queue.length} approved one(s) run.`);
   }
   while (queue.length && !DRY && !paused) {
     const item = queue.shift()!;
@@ -647,7 +648,8 @@ async function main() {
     report.push(`${r.ok ? '✅' : '⚠️'} ${a.kind} **${a.game}**${a.lang ? ` → ${a.lang}` : ''}: ${a.why}. ${r.summary || (r.ok ? '' : 'failed (see the job log)')}`.trim());
     guideCache.delete(g.key);
   }
-  if (!done) report.push('Nothing to do within the budget this run.');
+  // Why the pipeline's own queue did nothing: its budget, or nothing it may run (repairs on hold, new guides paused).
+  if (!done) report.push(aiRoom > 0.25 && dayRoom() > 0.25 ? `Nothing for the pipeline's own queue to run${hold ? ' (repairs on hold' : ''}${hold && !NEW_GUIDES ? ', new guides paused)' : hold ? ')' : !NEW_GUIDES ? ' (new guides paused)' : ''}.` : `The pipeline's own queue stopped: ${capReached()}.`);
 
   // ---- 3d. translations kept in sync: a guide whose pages changed (repairs, missables, Key fights, corrections,
   // rebuilds: promote.ts marks translationsDue) gets just the changed pages retranslated, in the languages it's already
@@ -750,7 +752,8 @@ async function main() {
       per.push(`${name} ${(p.done || []).length} passed${(p.failed || []).length ? `, ${(p.failed || []).length} failed` : ''}${p.complete ? ' ✓' : ''}`);
     }
     const rate = st.pages ? Math.round((st.passed / st.pages) * 100) : 0;
-    report.push(`🔎 Flagship re-verification (evidence method)${rv.done ? ' done' : ''}: ${per.join(' · ')}. Pass rate ${rate}% (${st.passed} of ${st.pages}), $${st.pages ? (st.dollars / st.pages).toFixed(2) : '0.00'} a page, $${Number(st.dollars || 0).toFixed(2)} in all.`);
+    const fb: any = flagship.budget || {};
+    report.push(`🔎 Flagship re-verification (part of the flagship programme's one-off $${Number(fb.total || 0)}${flagship.spent != null ? `, $${Number(flagship.spent).toFixed(2)} spent` : ''}${Number(flagship.spent || 0) >= Number(fb.total || 0) - 1 ? '; stopped at its total' : ''})${rv.done ? ' done' : ''}: ${per.join(' · ')}. Pass rate ${rate}% (${st.passed} of ${st.pages}), $${st.pages ? (st.dollars / st.pages).toFixed(2) : '0.00'} a page; re-verification $${Number(st.dollars || 0).toFixed(2)} in all since it started.`);
     // Pages that failed keep their old content without the badge: listed so the owner can decide on retries.
     const failedPages: string[] = [];
     for (const k of rv.order as string[]) {
@@ -768,9 +771,13 @@ async function main() {
       const { coreEstimate, coreBudget } = await import('../guides/core');
       const e = await coreEstimate();
       const b = await coreBudget();
+      // The core programme's last day (every unit it built: quest pages, rebuilds, pages), first in the summary.
+      const dayLog = ((coreSt.pageLog || []) as any[]).filter((x) => Number(x.at) >= Date.now() - 24 * 3600_000);
+      const dayCost = dayLog.reduce((a, x) => a + Number(x.dollars || 0), 0);
+      RUN.head.push(`📚 Core programme, last day: ${dayLog.length} page(s) built, ${dayLog.filter((x) => /passed|published/.test(String(x.status))).length} passed, $${dayCost.toFixed(2)}. October: $${b.spentMonth.toFixed(2)} of $${b.monthly} spent, $${Math.max(0, b.monthly - b.spentMonth).toFixed(2)} left ($${b.daily} a day).`);
       report.push(`📚 Core guides${coreSt.approved ? '' : ' (waiting for the list to be approved)'}${coreSt.paused ? ` (paused: ${coreSt.paused.why || 'until the owner says go'})` : ''}: $${b.spentMonth.toFixed(2)} of $${b.monthly} this month. Left to complete them all: ≈ $${e.total.toFixed(0)}, about ${e.months.toFixed(1)} month(s) at $${e.monthly} a month.`);
       const cp = coreSt.checkpoint?.result;
-      if (cp) report.push(`🧮 Core checkpoint (first ${cp.pages} pages): $${Number(cp.avg).toFixed(3)} a page, ${Math.round(Number(cp.pass) * 100)}% passed${cp.paused ? ' — over the limits, so the programme paused itself' : ' — within the limits'}.`);
+      if (cp) RUN.head.push(`🧮 Core checkpoint (first ${cp.pages} pages): $${Number(cp.avg).toFixed(3)} a page, ${Math.round(Number(cp.pass) * 100)}% passed${cp.paused ? ' — over the limits, so the programme paused itself' : ' — within the limits'}.`);
       for (const r of e.rows) {
         const done = !!coreSt.perGuide?.[r.key]?.done;
         report.push(`${done ? '✅' : '•'} ${shortName(r.game)}: flagship pages ${r.corePages}/${r.pages}${r.keptPages ? ' (kept)' : ''} · compendium pages ${r.entitiesPublished}/${r.entitiesTotal} (cap ${r.cap}) · $${r.cost.toFixed(2)} so far, ≈ $${r.left.toFixed(2)} left`);
@@ -785,7 +792,7 @@ async function main() {
   try {
     const { rolloutLine } = await import('../guides/rollout');
     const line = await rolloutLine();
-    if (line) report.push(line);
+    if (line) RUN.head.push(line);
   } catch (e: any) {
     console.warn(`Compendium rollout line skipped: ${e?.message}`);
   }
@@ -848,6 +855,21 @@ async function main() {
   // The closing line: how the run ended (finished, or stopped by which cap) and what it spent.
   // The limits that apply: the daily and monthly dollar caps, and the app's monthly searches minus the player reserve.
   const appSearches = await appSearchesThisMonth(month).catch(() => appUsedNow);
+  // The month's AI spending across every budget, as the summary's first line: the core programme, the flagship
+  // programme (a one-off total; counted in the month it was spent), the pipeline's own work, and work run locally.
+  try {
+    const m = new Date().toISOString().slice(0, 7);
+    const { coreBudget } = await import('../guides/core');
+    const cb = await coreBudget();
+    const fl: any = (await db().collection('system').doc('flagship').get()).data() || {};
+    const flMonth = new Date(Number(fl.createdAt || 0)).toISOString().slice(0, 7) === m ? Number(fl.spent || 0) : Number(fl.spentMonth?.[m] || 0);
+    const local = Number(((await db().collection('system').doc('localSpend').get()).data() || {}).months?.[m]?.dollars || 0);
+    const pipe = state.month === m ? Number(state.dollars || 0) : 0;
+    const name = new Date().toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
+    RUN.head.unshift(`💰 ${name} AI spending: $${(cb.spentMonth + flMonth + pipe + local).toFixed(2)} in all · core $${cb.spentMonth.toFixed(2)} of $${cb.monthly} · flagship $${Number(fl.spent || 0).toFixed(2)} of $${Number(fl.budget?.total || 0)} (one-off) · pipeline $${pipe.toFixed(2)} of $${AI_CAP} · local runs $${local.toFixed(2)} (tracked since Oct 13)`);
+  } catch (e: any) {
+    console.warn(`Spending line skipped: ${e?.message}`);
+  }
   const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches, ${state.searches || 0} pipeline searches); app searches ${appSearches} of ${APP_CAP} (the pipeline stops at ${APP_CAP - RESERVE}, the rest kept for players).`;
   const closing = RUN.stoppedBy ? `🛑 Run stopped early: ${RUN.stoppedBy}. ${totals}` : `🏁 Run finished. ${totals}`;
   state.lastRun = Date.now();
