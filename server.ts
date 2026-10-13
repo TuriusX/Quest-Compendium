@@ -30,6 +30,7 @@ import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
 import { questionType } from './src/utils/questionType';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
+import { registerContributions } from './contributions';
 import { registerAnswerReports } from './answerReports';
 import { registerAnswerFeedback, recordMarkerCheck } from './answerFeedback';
 import { registerDiscord } from './discord';
@@ -352,6 +353,17 @@ async function startServer() {
   // What each player's questions cost per month: the Costs tab of /admin/reviews (playerCosts.ts).
   registerPlayerCosts(app, { requireAuth, isAdmin });
   registerBlueprints(app, { requireAuth, isAdmin });
+  // "Suggest an edit" (contributions.ts): players' corrections and details, checked nightly, approved on /admin/reviews.
+  registerContributions(app, {
+    requireAuth,
+    isAdmin,
+    firebaseWebConfig: {
+      apiKey: process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY',
+      authDomain: 'quest-compendium-1bccf.firebaseapp.com',
+      projectId: 'quest-compendium-1bccf',
+      appId: '1:890629309063:web:87293cf13f922fd3edee22',
+    },
+  });
   // The guide review queue: failed reviews and players' mistake reports, decided on /admin/reviews (ADMIN_EMAILS).
   registerReviewQueue(app, {
     requireAuth,

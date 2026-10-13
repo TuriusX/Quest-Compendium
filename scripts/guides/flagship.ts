@@ -620,6 +620,10 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   const g0 = Math.floor(Math.max(0, i) / 6) * 6;
   const gameEv = await buildGameEvidence(key, game, order.slice(g0, g0 + 6).map((o) => o.name));
   const ev = await buildEvidencePack(key, slug, game, p.name, neighbours, { rebuild: !!opts.rebuild || arg('rebuild') === 'true', gameEvidence: gameEv, entries: [...(p.items || []).map((e: any) => e.name), ...(p.secrets || []).map((e: any) => cut(e.text, 60))] });
+  // Approved player suggestions for this page (contributions.ts): owner-approved evidence, so a rebuild keeps them.
+  const { contributionEvidence } = await import('./contribEvidence');
+  const pc = await contributionEvidence(key, slug);
+  if (pc.length) { ev.evidence.push(...pc); console.log(`  ${pc.length} approved player suggestion(s) added to the evidence`); }
   console.log(`  evidence: ${ev.evidence.length} sourced sentences from ${ev.sites.length} sites`);
   if (ev.evidence.length < 8) throw new Error(`too little evidence (${ev.evidence.length} sourced sentences)`);
   const evText = evidenceText(ev);

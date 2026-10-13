@@ -232,11 +232,14 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     // 1-2. Intent, then research those questions on top of what's stored.
     const intent = await intents(key, game, name, slug, bench.questions || []);
     const stored = await entityEvidenceFor(key, game, name, typeLabel);
+    // Approved player suggestions (contributions.ts): owner-approved evidence the page must state.
+    const { contributionEvidence } = await import('./contribEvidence');
+    const pc = await contributionEvidence(key, slug);
     const asked = await searchedEvidence(`In the video game "${game}", about "${name}" (${typeLabel}), answer: ${intent.questions.join(' ')}`, 'q', 'intent');
     // The story and background (who they are, history with the main character, role in the story, fates), in full.
     const story = kind === 'thing' ? { evidence: [] as Evidence[], searches: 0 } : await searchedEvidence(STORY_ASK[kind](game, name), 's', 'story');
     asked.evidence.push(...story.evidence);
-    let ev: EvidencePack = trusted({ ...stored, evidence: [...stored.evidence, ...(bench.evidence || []), ...asked.evidence], sites: [...new Set([...stored.sites, ...(bench.sites || []), ...asked.evidence.flatMap((e) => e.sources)])] });
+    let ev: EvidencePack = trusted({ ...stored, evidence: [...stored.evidence, ...(bench.evidence || []), ...asked.evidence, ...pc], sites: [...new Set([...stored.sites, ...(bench.sites || []), ...asked.evidence.flatMap((e) => e.sources)])] });
     // The benchmark's core points are a model's answer: each is checked against the evidence (a targeted search for the
     // ones it doesn't back). Only verified points are required of the page; the rest are reported, not required.
     let ok = await backed(game, name, core.map((p) => p.point), ev);
@@ -255,7 +258,7 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     const build = async (retryFor: string[]) => {
     // 3. Write in the order of the questions, stating every verified key fact.
     const fix = retryFor.length ? `\n\nA FIRST DRAFT OF THIS PAGE WAS HELD BECAUSE: ${retryFor.join(' | ')}\nFix that: state every missing key fact plainly, in the overview or the answer it belongs to; where the draft contradicted itself, keep only what the evidence says and describe each thing once.` : '';
-    const res: any = await gemini().models.generateContent({ model: MODEL, contents: [{ role: 'user', parts: [{ text: WRITER(game, name, typeLabel, kind, intent.questions, ev, chapters, core.filter((_, i) => verified[i]).map((p) => p.point), pageText(live)) + fix }] }], config: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 7000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } });
+    const res: any = await gemini().models.generateContent({ model: MODEL, contents: [{ role: 'user', parts: [{ text: WRITER(game, name, typeLabel, kind, intent.questions, ev, chapters, [...core.filter((_, i) => verified[i]).map((p) => p.point), ...pc.map((x) => x.text)], pageText(live)) + fix }] }], config: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 7000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } });
     const j = objOf(String(res?.text || ''));
     const clean = (v: unknown, n = 300) => cut(v, n);
     // Whole sentences up to n characters (never cut mid-sentence).

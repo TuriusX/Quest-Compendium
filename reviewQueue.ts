@@ -198,7 +198,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
 <body>
 <header>
   <h1>Guide review queue</h1>
-  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button><button id="tabReports" class="tab">Reports</button><button id="tabQuality" class="tab">Quality</button><button id="tabCosts" class="tab">Costs</button><button id="tabBlue" class="tab">Blueprints</button></nav>
+  <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button><button id="tabReports" class="tab">Reports</button><button id="tabQuality" class="tab">Quality</button><button id="tabCosts" class="tab">Costs</button><button id="tabBlue" class="tab">Blueprints</button><button id="tabContrib" class="tab">Suggestions</button></nav>
   <select id="filter" aria-label="Show"><option value="all">All open</option><option value="review">Failed reviews</option><option value="report">Player reports</option></select>
   <button id="signin" class="primary">Sign in with Google</button>
 </header>
@@ -219,6 +219,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   <div id="quality" hidden></div>
   <div id="costs" hidden></div>
   <div id="blue" hidden></div>
+  <div id="contrib" hidden></div>
   <details id="decidedBox" hidden><summary>Recently decided</summary><div id="decided"></div></details>
 </main>
 <script type="module">
@@ -330,6 +331,32 @@ function adminPage(firebaseConfig: Record<string, string>): string {
       + markers + '<h3>Recent 👎</h3>' + (downs || '<p class="dim">None.</p>');
     if (tab === 'quality') $('msg').textContent = 'Answer quality from players’ votes, and marker drops from the close-up check.';
   }
+  // Suggestions (contributions.ts): players' corrections and details, checked against sources each night; Approve puts
+  // the wording below on the page with the player's credit, Reject drops it, Remove takes a published one down.
+  let contrib = { open: [], decided: [], enabled: false };
+  function renderContrib() {
+    const VERD = { supported: 'approved', contradicted: 'bad', unverifiable: 'pending' };
+    const page = (c) => 'https://questcompendium.com/guides/' + encodeURIComponent(c.key) + '/' + encodeURIComponent(c.slug) + '/' + (c.anchor ? '#' + encodeURIComponent(c.anchor) : '');
+    const card = (c, open) => {
+      const ck = c.check || {};
+      const head = '<div class="row"><span class="game">' + esc(c.key) + '</span><a href="' + page(c) + '" target="_blank" rel="noopener">' + esc(c.label || c.slug) + '</a>'
+        + '<span class="chip ' + (c.kind === 'correction' ? 'bad' : 'pending') + '">' + (c.kind === 'correction' ? 'correction' : 'extra detail') + '</span>'
+        + (ck.verdict ? '<span class="chip ' + (VERD[ck.verdict] || 'pending') + '">sources: ' + esc(ck.verdict) + '</span>' : '<span class="chip pending">not checked yet</span>')
+        + '<span class="dim">' + new Date(c.at).toLocaleDateString() + (c.credit ? ' · credit: ' + esc(c.displayName) : ' · anonymous') + '</span></div>';
+      const said = '<div class="said">' + esc(c.text) + '</div>';
+      const ev = (ck.evidence || []).length ? '<details><summary>Evidence (' + ck.evidence.length + ')</summary><ul>' + ck.evidence.map((x) => '<li>' + esc(x.text) + ' <span class="dim">' + esc((x.sources || []).join(', ')) + '</span></li>').join('') + '</ul></details>' : '';
+      const why = ck.reason ? '<div class="dim">' + esc(ck.reason) + '</div>' : '';
+      if (!open) return '<div class="card">' + head + '<div class="dim">' + esc(c.status) + (c.decided && c.decided.by ? ' by ' + esc(c.decided.by) : '') + (c.absorbed ? ' · now part of the page itself' : '') + '</div>' + said
+        + (c.status === 'approved' ? '<div class="actions"><button data-cact="remove" data-cid="' + esc(c.id) + '">Remove from the page</button></div>' : '') + '</div>';
+      return '<div class="card">' + head + said + why + ev
+        + '<div class="dim">Wording on the page (edit if needed):</div><textarea data-ctext="' + esc(c.id) + '" style="width:100%;min-height:80px;color:var(--text);background:#1b1b24;border:1px solid var(--line);border-radius:8px;padding:8px">' + esc(ck.proposal || c.text) + '</textarea>'
+        + '<div class="actions"><button class="primary" data-cact="approve" data-cid="' + esc(c.id) + '">Approve</button><button data-cact="reject" data-cid="' + esc(c.id) + '">Reject</button></div></div>';
+    };
+    $('contrib').innerHTML = (contrib.enabled ? '' : '<p class="dim">Suggestions are off for players (config/contrib.enabled); admins can still send test ones.</p>')
+      + ((contrib.open || []).map((c) => card(c, true)).join('') || '<p class="dim">No open suggestions.</p>')
+      + ((contrib.decided || []).length ? '<h3>Decided</h3>' + contrib.decided.map((c) => card(c, false)).join('') : '');
+    if (tab === 'contrib') $('msg').textContent = (contrib.open || []).length + ' open suggestion(s). Approved ones go on the page with the next publish.';
+  }
   // Blueprints (scripts/guides/blueprint.ts): each guide's plan; Approve lets builds follow it, Edit changes its sections.
   let blue = { blueprints: [] };
   const editing = new Set();
@@ -397,6 +424,8 @@ function adminPage(firebaseConfig: Record<string, string>): string {
     $('tabCosts').classList.toggle('on', t === 'costs');
     $('tabBlue').classList.toggle('on', t === 'blue');
     $('blue').hidden = t !== 'blue';
+    $('tabContrib').classList.toggle('on', t === 'contrib');
+    $('contrib').hidden = t !== 'contrib';
     $('reports').hidden = t !== 'reports';
     $('quality').hidden = t !== 'quality';
     $('costs').hidden = t !== 'costs';
@@ -405,7 +434,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
     $('filter').hidden = t !== 'guides';
     $('corr').hidden = t !== 'corr';
     $('search').hidden = t !== 'search';
-    if (t === 'corr') renderCorr(); else if (t === 'search') renderSearch(); else if (t === 'reports') renderReports(); else if (t === 'quality') renderQuality(); else if (t === 'costs') renderCosts(); else if (t === 'blue') renderBlue(); else render();
+    if (t === 'corr') renderCorr(); else if (t === 'search') renderSearch(); else if (t === 'reports') renderReports(); else if (t === 'quality') renderQuality(); else if (t === 'costs') renderCosts(); else if (t === 'blue') renderBlue(); else if (t === 'contrib') renderContrib(); else render();
   }
 
   async function api(path, body) {
@@ -442,7 +471,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   }
   async function load() {
     try {
-      [data, corr, sc, reps, qual, costs, blue] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections'), api('/api/admin/search-console').catch(() => ({})), api('/api/admin/answer-reports').catch(() => ({ open: [], decided: [] })), api('/api/admin/answer-quality').catch(() => ({})), api('/api/admin/player-costs').catch(() => ({})), api('/api/admin/blueprints').catch(() => ({ blueprints: [] }))]);
+      [data, corr, sc, reps, qual, costs, blue, contrib] = await Promise.all([api('/api/admin/review-queue'), api('/api/admin/corrections'), api('/api/admin/search-console').catch(() => ({})), api('/api/admin/answer-reports').catch(() => ({ open: [], decided: [] })), api('/api/admin/answer-quality').catch(() => ({})), api('/api/admin/player-costs').catch(() => ({})), api('/api/admin/blueprints').catch(() => ({ blueprints: [] })), api('/api/admin/contributions').catch(() => ({ open: [], decided: [], enabled: false }))]);
       render();
       renderCorr();
       renderReports();
@@ -464,6 +493,15 @@ function adminPage(firebaseConfig: Record<string, string>): string {
     }
   }
   document.addEventListener('click', async (e) => {
+    const cb = e.target.closest('button[data-cact]');
+    if (cb) {
+      const id = cb.dataset.cid, act = cb.dataset.cact;
+      const ta = document.querySelector('textarea[data-ctext="' + CSS.escape(id) + '"]');
+      cb.disabled = true;
+      try { await api('/api/admin/contributions/' + encodeURIComponent(id), { action: act, ...(ta ? { text: ta.value } : {}) }); await load(); }
+      catch (err) { alert(err.message); cb.disabled = false; }
+      return;
+    }
     const bb = e.target.closest('button[data-bact]');
     if (bb) {
       const key = bb.dataset.bkey, act = bb.dataset.bact;
@@ -513,6 +551,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   $('tabQuality').addEventListener('click', () => showTab('quality'));
   $('tabCosts').addEventListener('click', () => showTab('costs'));
   $('tabBlue').addEventListener('click', () => showTab('blue'));
+  $('tabContrib').addEventListener('click', () => showTab('contrib'));
   const provider = () => { const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' }); return p; };
   const popup = async () => {
     try {

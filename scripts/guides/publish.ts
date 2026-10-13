@@ -418,16 +418,73 @@ function heldRedirects(key: string, docs: any[], visible: { slug: string; name: 
   return out;
 }
 
+/** Players' suggestions on the site (contributions.ts): on when config/contrib.enabled is true, or for a local look (QC_CONTRIB=1). */
+let CONTRIB_ON = process.env.QC_CONTRIB === '1';
+/** Approved, not yet absorbed suggestions, by "key/slug". */
+const CONTRIBS = new Map<string, { anchor: string; text: string; credit: boolean; displayName?: string; lang: string }[]>();
+
+/** The note an approved suggestion shows at its spot, with the contributor's credit. */
+const contribNote = (c: { text: string; credit: boolean; displayName?: string }) => `<div class="qc-contrib mt-2 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2 text-sm text-zinc-200"><span class="mr-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">${esc(ui('contribLabel'))}</span>${esc(c.text)} <span class="text-xs text-zinc-500">· ${esc(c.credit && c.displayName ? ui('contribBy', { name: c.displayName }) : ui('contribByPlayer'))}</span></div>`;
+
+/**
+ * A page's approved suggestions placed in its HTML: after the element with the suggestion's anchor id (after a
+ * heading's paragraph), or in a "From players" box at the end when the anchor isn't on the page.
+ */
+function withContributions(html: string, key: string, slug: string): string {
+  const mine = (CONTRIBS.get(`${key}/${slug}`) || []).filter((c) => c.lang === LANG || LANG === 'en');
+  if (!mine.length) return html;
+  const loose: string[] = [];
+  for (const c of mine) {
+    const at = c.anchor ? html.indexOf(` id="${c.anchor}"`) : -1;
+    if (at < 0) { loose.push(contribNote(c)); continue; }
+    const open = html.lastIndexOf('<', at);
+    const tag = (html.slice(open + 1).match(/^[a-z0-9]+/i) || [''])[0].toLowerCase();
+    let end = -1;
+    if (/^h[1-6]$/.test(tag)) { const p = html.indexOf('</p>', at); end = p < 0 ? -1 : p + 4; }
+    else {
+      const re = new RegExp(`<(/?)${tag}\\b[^>]*>`, 'gi');
+      re.lastIndex = open;
+      let depth = 0, m: RegExpExecArray | null;
+      while ((m = re.exec(html))) { depth += m[1] ? -1 : 1; if (depth === 0) { end = m.index + m[0].length; break; } }
+    }
+    if (end < 0) { loose.push(contribNote(c)); continue; }
+    html = html.slice(0, end) + contribNote(c) + html.slice(end);
+  }
+  return loose.length ? html + `<section class="mt-8"><h2 class="text-sm font-bold uppercase tracking-wide text-emerald-300">${esc(ui('contribFromPlayers'))}</h2>${loose.join('')}</section>` : html;
+}
+
+/**
+ * The "Suggest an edit" links: one on each walkthrough step, checklist entry, choice, compendium section and question,
+ * opening the form on the app server (/suggest) for that spot. Added in the browser from the page's anchors.
+ */
+function suggestScript(key: string, slug: string, page: 'area' | 'entity'): string {
+  const base = `${SERVER_URL}/suggest?key=${encodeURIComponent(key)}&slug=${encodeURIComponent(slug)}&page=${page}&lang=${LANG}`;
+  return `<script>(function(){var base=${JSON.stringify(base)},label=${JSON.stringify(ui('suggestEdit'))},skip=/^(qc-|walkthrough$|compendium$|roadmap$|people$|choices$)/;
+  var link=function(el,text,after){var a=document.createElement('a');a.href=base+'&anchor='+encodeURIComponent(el.id)+'&label='+encodeURIComponent((text||'').trim().slice(0,120));a.target='_blank';a.rel='noopener';a.className='qc-suggest ml-2 text-[11px] text-zinc-500 hover:text-[#a87ffb] whitespace-nowrap';a.textContent='\u270e '+label;(after||el).appendChild(a);};
+  document.querySelectorAll('main [id]').forEach(function(el){if(skip.test(el.id)||el.closest('nav,dialog,header,footer'))return;var t=el.tagName;
+    if(/^H[23]$/.test(t)){link(el,el.textContent);return;}
+    if(t==='LI'||t==='DIV'||t==='SECTION'){var h=el.querySelector('h2,h3,strong,.font-semibold');if(!h)return;link(el,h.textContent,h.parentElement===el?el:h.parentElement);}
+  });
+  var top=document.querySelector('main h1');if(top){var a=document.createElement('a');a.href=base+'&label='+encodeURIComponent(top.textContent.trim().slice(0,120));a.target='_blank';a.rel='noopener';a.className='qc-suggest block mt-1 text-xs text-zinc-500 hover:text-[#a87ffb]';a.textContent='\u270e '+label;top.insertAdjacentElement('afterend',a);}
+})();</script>`;
+}
+
 /** Netlify's _redirects: the moved pages' old URLs, 301 to the pages that replaced them. */
 function writeRedirects(moved: { key: string; from: string; to: string }[], live: Set<string>) {
   const lines = redirectLines(moved, live, Object.keys(LANG_TAG), SITE);
   // The admin pages live on the app server: the website's /admin addresses lead there.
-  const admin = [`/admin ${SERVER_URL}/admin/reviews 302`, `/admin/* ${SERVER_URL}/admin/:splat 302`];
+  const admin = [`/admin ${SERVER_URL}/admin/reviews 302`, `/admin/* ${SERVER_URL}/admin/:splat 302`, `/suggest ${SERVER_URL}/suggest 302`];
   fs.writeFileSync(path.join(OUT, '_redirects'), `# Made by scripts/guides/publish.ts: pages that moved (scripts/guides/site-redirects.json, guide aliases).\n${[...admin, ...lines].join('\n')}\n`);
   console.log(`Redirects: ${lines.length} old URL(s) to the pages that replaced them.`);
 }
 
 function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string; entries?: { id: string; label: string }[]; ld?: object[] }) {
+  // A guide or compendium page (/guides/{key}/{slug}/): its approved player suggestions, and the "Suggest an edit" links.
+  const at = opts.guide ? (opts.canonical.match(/\/guides\/([a-z0-9-]+)\/([a-z0-9-]+)\/$/) || []) : [];
+  if (at[1] && at[2] && at[2] !== 'achievements') {
+    const isEntity = !!COMP?.entities.some((e) => e.slug === at[2]);
+    opts = { ...opts, body: withContributions(opts.body, at[1], at[2]) + (CONTRIB_ON ? suggestScript(at[1], at[2], isEntity ? 'entity' : 'area') : '') };
+  }
   // "Spot a mistake?": on an area page, the form can say which entry is wrong (its id goes to the server).
   const entryPicker = opts.entries && opts.entries.length
     ? `<label class="block text-sm text-zinc-400" for="qc-report-entry">${esc(ui('reportEntry'))}</label>
@@ -1468,6 +1525,11 @@ async function main() {
   const igdbCfg: any = (await db().collection('config').doc('igdb').get()).data() || {};
   if (!IGDB_ON) IGDB_ON = igdbCfg.site === true;
   if (!CARD_MODE) CARD_MODE = String(igdbCfg.cards || '').toUpperCase();
+  if (!CONTRIB_ON) CONTRIB_ON = (await db().collection('config').doc('contrib').get()).data()?.enabled === true;
+  {
+    const { approvedContributions } = await import('./contribEvidence');
+    for (const c of await approvedContributions()) if (!c.absorbed) CONTRIBS.set(`${c.key}/${c.slug}`, [...(CONTRIBS.get(`${c.key}/${c.slug}`) || []), c]);
+  }
   // One publish at a time (the pipeline, the flagship job and manual runs all write the site); re-entrant when the
   // caller already holds the site lock. A preview writes elsewhere and needs none.
   if (!PREVIEW) {

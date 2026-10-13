@@ -455,6 +455,13 @@ async function main() {
       if (!/^corrections: 0 verified, 0 applied, 0 dismissed, 0 waiting/.test(c.summary)) report.push(`${c.ok ? '🧭' : '⚠️'} ${c.summary || 'corrections check failed (see the job log)'}`);
     }
   }
+  // ---- 3b''. players' suggestions ("Suggest an edit", contributions.ts): checked against sources for the owner's
+  // approval on /admin/reviews; approved ones that a rebuilt page now states are marked absorbed ----
+  if (!DRY && room() >= 0.2) {
+    const sg = runScript(['scripts/guides/contributions.ts', '--max', '30']);
+    await charge(sg, 'suggestions');
+    if (sg.summary && !/^suggestions: 0 checked, 0 waiting for approval, 0 now/.test(sg.summary)) report.push(`${sg.ok ? '✍️' : '⚠️'} ${sg.summary || 'suggestions check failed (see the job log)'}`);
+  }
   let queueRoom = Math.min(QUEUE_DAILY, APP_CAP - RESERVE - appUsed) - correctionSearches;
   const waiting: QueueItem[] = [];
   const queueStart = Date.now();
