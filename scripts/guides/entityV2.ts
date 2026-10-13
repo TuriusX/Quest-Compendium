@@ -360,6 +360,14 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
   }
   const doc = {
     ...out.page, method: 'intent', status: passed ? 'published' : 'held', ...(live.demand ? { demand: live.demand } : {}),
+    // The character's common name (Ciri, Dijkstra): kept from the page, or found for a new one (commonNames.ts).
+    ...(kind === 'person' && !live.noDisplayName ? await (async () => {
+      if (live.displayName) return { displayName: live.displayName };
+      const { commonNames } = await import('./commonNames');
+      const c = (await usageScope.run(scope, () => commonNames(game, [name])))[name];
+      return c ? { displayName: c } : {};
+    })() : {}),
+    ...(live.noDisplayName ? { noDisplayName: true } : {}),
     intent: { questions: out.intent.questions, from: out.intent.from.slice(0, 20) },
     benchmark: { ...out.bench, points: out.core.map((p, i) => ({ ...p, verified: out.verified[i], ...(out.disputed.has(i) ? { disputed: true } : {}), covered: out.cov[i], coveredBefore: out.beforeCov[i] })) },
     review: { score: out.review.score, status: out.review.status, supported: out.review.supported, total: out.review.total, ...(out.review.reason ? { reason: out.review.reason } : {}) },

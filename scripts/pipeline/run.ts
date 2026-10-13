@@ -455,6 +455,12 @@ async function main() {
       if (!/^corrections: 0 verified, 0 applied, 0 dismissed, 0 waiting/.test(c.summary)) report.push(`${c.ok ? '🧭' : '⚠️'} ${c.summary || 'corrections check failed (see the job log)'}`);
     }
   }
+  // ---- the website's "Recent updates": new app releases (GitHub) join the list, then show with the next publish ----
+  if (!DRY) {
+    const cl = runScript(['scripts/pipeline/changelog.ts']);
+    if (/[1-9]\d* new/.test(cl.summary || cl.out || '')) changed = true;
+    if (!cl.ok) report.push('⚠️ Updating the website\'s release list failed (see the job log).');
+  }
   // ---- 3b''. players' suggestions ("Suggest an edit", contributions.ts): checked against sources for the owner's
   // approval on /admin/reviews; approved ones that a rebuilt page now states are marked absorbed ----
   if (!DRY && room() >= 0.2) {
