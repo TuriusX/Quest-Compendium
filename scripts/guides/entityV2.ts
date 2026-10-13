@@ -343,9 +343,9 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
   });
   const passed = !out.reasons.length;
   // Titles for search: kept for a page that has one (stable for the address), made for a new page.
-  if (!live.title) {
+  if (!live.title || (kind === 'person' && /collectible|what's there|location/i.test(String(live.title)))) {
     const sm: any = out.page.summary;
-    const parts = [kind === 'person' && (sm.whereToFind || []).length ? 'where to find' : sm.where || sm.region ? 'location' : '', sm.quests.length ? 'missions' : '', sm.shops.length ? 'shops' : '', out.page.qa.length ? 'questions' : ''].filter(Boolean).slice(0, 3);
+    const parts = [(out.page as any).story?.length && kind !== 'thing' ? 'story' : '', kind === 'person' && (sm.whereToFind || []).length ? 'where to find' : sm.where || sm.region ? 'location' : '', sm.quests.length ? 'missions' : '', sm.shops.length ? 'shops' : '', out.page.qa.length ? 'questions' : ''].filter(Boolean).slice(0, 3);
     out.page.title = `${name} – ${game}${parts.length ? `: ${parts.join(', ')}` : ''}`;
     out.page.description = cut(`${name} in ${game}. ${out.page.overview.split(/(?<=[.!?])\s/)[0] || ''}`, 158);
   }

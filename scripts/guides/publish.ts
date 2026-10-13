@@ -1347,7 +1347,11 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     </article>`;
     const url = `${SITE}/guides/${key}/${e.slug}/`;
     const ld = [breadcrumb([{ name: ui('navGuides'), url: `${SITE}/guides/` }, { name: shortGame(gameName), url: `${SITE}/guides/${key}/` }, { name: e.name, url }])];
-    fs.writeFileSync(path.join(dir, 'index.html'), page({ title: e.title || `${e.name} – ${gameName}`, description: e.description || '', depth: 3, canonical: url, ld, body: body + entPreview(), draft: !!PREVIEW, guide: key }));
+    // A character's title never names location fields (collectibles, what's there): it says what the page has.
+    const title = person && (!e.title || /collectible|what's there|location/i.test(e.title))
+      ? `${e.name} – ${gameName}${(() => { const parts = [(e.story || []).length ? 'story' : '', (sm.whereToFind || []).length ? 'where to find' : '', (sm.quests || []).length ? 'missions' : ''].filter(Boolean); return parts.length ? `: ${parts.join(', ')}` : ''; })()}`
+      : e.title || `${e.name} – ${gameName}`;
+    fs.writeFileSync(path.join(dir, 'index.html'), page({ title, description: e.description || '', depth: 3, canonical: url, ld, body: body + entPreview(), draft: !!PREVIEW, guide: key }));
     if (!PREVIEW) sitemap.push(url);
   }
   console.log(`Compendium: ${COMP!.entities.length} entity page(s) for ${gameName}.`);
