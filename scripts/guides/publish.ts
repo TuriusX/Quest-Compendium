@@ -111,8 +111,8 @@ function cardArt(game: string, appId: number | undefined, key: string): string {
     const steam = sa.library || (appId ? steamAsset(appId, 'library_600x900.jpg') : '');
     const steam2x = sa.library2x || (appId ? steamAsset(appId, 'library_600x900_2x.jpg') : '') || steam;
     const img = cover
-      ? `<img src="${cover.src}" srcset="${cover.srcset}" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 32vw" alt="${alt}" loading="lazy" decoding="async" width="264" height="374" class="absolute inset-0 w-full h-full object-cover"${steam ? ` data-fb="${steam}"` : ''} ${next}>`
-      : steam ? `<img src="${steam}" srcset="${steam} 600w, ${steam2x} 1200w" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 32vw" alt="${alt}" loading="lazy" decoding="async" width="600" height="900" class="absolute inset-0 w-full h-full object-cover" onerror="if(this.srcset){this.removeAttribute('srcset')}else this.remove()">` : '';
+      ? `<img src="${cover.src}" srcset="${cover.srcset}" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 48vw" alt="${alt}" loading="lazy" decoding="async" width="264" height="374" class="absolute inset-0 w-full h-full object-cover"${steam ? ` data-fb="${steam}"` : ''} ${next}>`
+      : steam ? `<img src="${steam}" srcset="${steam} 600w, ${steam2x} 1200w" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 48vw" alt="${alt}" loading="lazy" decoding="async" width="600" height="900" class="absolute inset-0 w-full h-full object-cover" onerror="if(this.srcset){this.removeAttribute('srcset')}else this.remove()">` : '';
     return `<div class="relative aspect-[2/3] overflow-hidden bg-[#0c0d14]">${placeholder}${img}</div>`;
   }
   // B: the cover on a blurred copy of itself (non-Steam games, and under the capsule in case it fails).
@@ -962,8 +962,8 @@ function updateHomepage(games: { key: string; game: string; published: number; l
       .map(
         (g) =>
           `        <a href="${g.langs?.includes(pg.code) && pg.code !== 'en' ? '' : pg.up}guides/${esc(g.key)}/index.html" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors">` +
-          artBox(g.game, g.appId, '', g.key) +
-          `<div class="p-4"><div class="text-white font-bold leading-snug">${esc(g.game)}</div>` +
+          cardArt(g.game, g.appId, g.key) +
+          `<div class="${CARD_MODE === 'A' ? 'p-3' : 'p-4'}"><div class="text-white font-bold leading-snug${CARD_MODE === 'A' ? ' text-sm break-words' : ''}">${esc(g.game)}</div>` +
           `<div class="text-sm text-zinc-400 mt-1">${esc(L.areas(g.published))}</div></div></a>`,
       )
       .join(nl);
@@ -977,7 +977,7 @@ function updateHomepage(games: { key: string; game: string; published: number; l
           '        </div>',
           `        <a href="${games.some((g) => g.langs?.includes(pg.code)) && pg.code !== 'en' ? '' : pg.up}guides/index.html" class="text-[#a87ffb] hover:text-white font-semibold whitespace-nowrap">${esc(L.all)} &rarr;</a>`,
           '      </div>',
-          '      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">',
+          `      <div class="grid ${CARD_MODE === 'A' ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4'}">`,
           tiles,
           '      </div>',
           end,
@@ -1376,7 +1376,7 @@ function indexBody(list: { key: string; game: string; count: number; players?: n
   const sortName = (n: string) => n.replace(/^(the|a|an)\s+/i, '').toLowerCase();
   const card = (g: (typeof list)[number], tags = true) => {
     const letter = (sortName(g.game).match(/[a-z0-9]/)?.[0] || '#').toUpperCase().replace(/[0-9]/, '#');
-    return `<a href="${esc(g.key)}/index.html"${tags ? ` data-search="${esc(g.game)}" data-name="${esc(sortName(g.game))}" data-popular="${g.players || 0}" data-new="${g.created || 0}" data-l="${letter}"` : ''} class="block rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50 hover:bg-white/[0.06] transition-colors">${cardArt(g.game, g.appId, g.key)}<div class="${CARD_MODE === 'A' ? 'p-3' : 'p-4'}"><div class="font-bold text-white leading-snug">${esc(g.game)}</div><div class="mt-1 text-sm text-zinc-400">${esc(g.count === 1 ? ui('areasCountOne') : ui('areasCount', { n: g.count }))}</div></div></a>`;
+    return `<a href="${esc(g.key)}/index.html"${tags ? ` data-search="${esc(g.game)}" data-name="${esc(sortName(g.game))}" data-popular="${g.players || 0}" data-new="${g.created || 0}" data-l="${letter}"` : ''} class="block rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50 hover:bg-white/[0.06] transition-colors">${cardArt(g.game, g.appId, g.key)}<div class="${CARD_MODE === 'A' ? 'p-3' : 'p-4'}"><div class="font-bold text-white leading-snug${CARD_MODE === 'A' ? ' text-sm break-words' : ''}">${esc(g.game)}</div><div class="mt-1 text-sm text-zinc-400">${esc(g.count === 1 ? ui('areasCountOne') : ui('areasCount', { n: g.count }))}</div></div></a>`;
   };
   const az = list.slice().sort((x, y) => sortName(x.game).localeCompare(sortName(y.game)));
   // Mark the first game of each letter, for the A–Z bar.
@@ -1393,7 +1393,7 @@ function indexBody(list: { key: string; game: string; count: number; players?: n
   const popular = list.filter((g) => (g.players || 0) > 0).sort((a, b) => (b.players || 0) - (a.players || 0)).slice(0, 4);
   const fresh = list.slice().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 4);
   const row = (title: string, items: typeof list) =>
-    items.length ? `<section data-hide-when-searching class="mb-8"><h2 class="text-lg font-bold text-white mb-3">${esc(title)}</h2><div class="grid ${CARD_MODE === 'A' ? 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-6' : 'sm:grid-cols-2 lg:grid-cols-4'} gap-3">${items.map((g) => card(g, false)).join('')}</div></section>` : '';
+    items.length ? `<section data-hide-when-searching class="mb-8"><h2 class="text-lg font-bold text-white mb-3">${esc(title)}</h2><div class="grid ${CARD_MODE === 'A' ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-6' : 'sm:grid-cols-2 lg:grid-cols-4'} gap-3">${items.map((g) => card(g, false)).join('')}</div></section>` : '';
   const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].filter((l) => seen.has(l));
   return `<h1 class="text-3xl font-bold text-white">${esc(ui('indexH1'))}</h1><p class="text-zinc-400 mt-2 mb-6 max-w-2xl">${esc(ui('indexIntro', { n: list.length }))}</p>
     ${list.length > 8 ? row(ui('popular'), popular) + row(ui('newGuides'), fresh) : ''}
@@ -1405,7 +1405,7 @@ function indexBody(list: { key: string; game: string; count: number; players?: n
       </label>
     </div>
     ${letters.length > 5 ? `<div data-hide-when-searching class="flex flex-wrap gap-1 mb-4">${letters.map((l) => `<button type="button" data-letter="${l}" class="w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-[#a87ffb]/20 text-sm text-zinc-300 hover:text-white">${l}</button>`).join('')}</div>` : ''}
-    <div data-games class="grid ${CARD_MODE === 'A' ? 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-6' : 'grid-cols-2 lg:grid-cols-4'} gap-3">${cards}</div>
+    <div data-games class="grid ${CARD_MODE === 'A' ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-6' : 'grid-cols-2 lg:grid-cols-4'} gap-3">${cards}</div>
     <p id="qc-games-empty" hidden class="mt-3 text-sm text-zinc-500">${esc(ui('noMatches'))}</p>`;
 }
 
