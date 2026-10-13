@@ -1405,7 +1405,9 @@ function indexBody(list: { key: string; game: string; count: number; players?: n
     })
     .join('');
   const perRow = CARD_MODE === 'A' ? 6 : 4;
-  const popular = list.filter((g) => (g.players || 0) > 0).sort((a, b) => (b.players || 0) - (a.players || 0)).slice(0, perRow);
+  // Most played first; a row with room left is filled with the most complete guides.
+  const played = list.filter((g) => (g.players || 0) > 0).sort((a, b) => (b.players || 0) - (a.players || 0));
+  const popular = [...played, ...list.filter((g) => !played.includes(g)).sort((a, b) => b.count - a.count)].slice(0, played.length ? perRow : 0);
   const fresh = list.slice().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, perRow);
   const row = (title: string, items: typeof list) =>
     items.length ? `<section data-hide-when-searching class="mb-8"><h2 class="text-lg font-bold text-white mb-3">${esc(title)}</h2><div class="grid ${CARD_MODE === 'A' ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-6' : 'sm:grid-cols-2 lg:grid-cols-4'} gap-3">${items.map((g) => card(g, false)).join('')}</div></section>` : '';
