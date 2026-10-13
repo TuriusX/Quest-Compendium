@@ -209,8 +209,17 @@ async function main() {
   if (state.spend?.day !== today || !Number.isFinite(state.spend?.dollars)) state.spend = { day: today, dollars: 0 };
   const paused = !!state.queuePaused;
   // On hold until a month (system/pipeline.queueHold = { until: '2026-11' }): only approved queue items run, and no
-  // new careful builds, upgrades or searched achievement guides start; everything else waits for that month.
-  const hold = !!state.queueHold?.until && month < String(state.queueHold.until);
+  // new careful builds, upgrades or searched achievement guides start; everything else waits for that month. With
+  // untilDecision, the hold also outlasts that month until the owner has decided which held repairs run (decidedAt).
+  const holdPendingDecision = !!state.queueHold?.untilDecision && !state.queueHold?.decidedAt;
+  const hold = (!!state.queueHold?.until && month < String(state.queueHold.until)) || holdPendingDecision;
+  // The last week of a month: reminders for what next month needs from the owner.
+  const chicago = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+  const daysLeft = new Date(chicago.getFullYear(), chicago.getMonth() + 1, 0).getDate() - chicago.getDate();
+  const nextMonth = new Date(Date.UTC(chicago.getFullYear(), chicago.getMonth() + 1, 1));
+  const nextKey = nextMonth.toISOString().slice(0, 7);
+  const nextName = nextMonth.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
+  const nextCapSet = (process.env.PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH || '').split(',').some((x) => x.trim().startsWith(`${nextKey}:`));
   const enabled = state.enabled !== false && process.env.PIPELINE_ENABLED !== 'false';
   const report: string[] = [];
   RUN.report = report;
@@ -499,6 +508,8 @@ async function main() {
     report.push(`🏰 ${covered.length} repair(s) dropped from the queue: the flagship build covers ${[...new Set(covered.map((q) => q.game))].join(', ')}.`);
   }
   const held = hold ? queue.filter((q) => !q.approved) : [];
+  if (daysLeft < 7 && !nextCapSet) RUN.head.push(`📅 Before ${nextName} 1: set ${nextName}'s pipeline cap. Without one it falls back to the default $${env('PIPELINE_MONTHLY_AI_DOLLARS', 10)} a month (this month: $${AI_CAP}).`);
+  if (holdPendingDecision && (daysLeft < 7 || (state.queueHold?.until && month >= String(state.queueHold.until)))) RUN.head.push(`📅 Decide which held repairs to approve (${held.length} waiting). The repair queue stays on hold until you do; it won't resume on ${state.queueHold?.until && month < String(state.queueHold.until) ? `${nextName} 1` : 'its own'}.`);
   if (held.length) {
     queue.splice(0, queue.length, ...queue.filter((q) => q.approved));
     report.push(`⏸️ Repairs on hold until ${state.queueHold.until}: ${held.length} waiting, ${queue.length} approved run.${state.queueHold.why ? ` Why: ${state.queueHold.why}.` : ''}`);
