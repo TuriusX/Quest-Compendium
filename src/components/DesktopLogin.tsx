@@ -39,14 +39,14 @@ export const DesktopLogin: React.FC = () => {
           setStatus('You can safely close this window.');
         }, 1500);
       } else {
-        setError('Failed to extract Google credentials.');
+        setError('Sign-in didn’t finish. Please try again.');
       }
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/popup-closed-by-user') {
          setError('Login was cancelled. Please try again.');
       } else {
-         setError(err.message || 'An error occurred. Please try again.');
+         setError('Sign-in didn’t work. Please try again.');
       }
       setStatus('Ready to login');
     }

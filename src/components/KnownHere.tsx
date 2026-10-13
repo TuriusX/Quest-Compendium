@@ -64,7 +64,8 @@ export function KnownHere({ game, place, story, refreshKey, onOpenGuide }: { gam
     };
   }, [game, place, refreshKey]);
 
-  if (!place) return null;
+  // Nothing known here yet: no bar at all.
+  if (!place || (!facts.length && !guide.length && !guideName)) return null;
   const sameStory = (s: string) => !s || !story || s.toLowerCase() === story.toLowerCase();
 
   return (

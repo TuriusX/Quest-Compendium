@@ -23,6 +23,7 @@ import {
   RefreshCw,
   ExternalLink,
   Globe,
+  Type,
   AlertCircle,
   CheckCircle2,
   Image as ImageIcon,
@@ -343,6 +344,55 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     })}
                   </div>
                   <p className="text-[11px] text-zinc-500">{tr('set.languageHint')}</p>
+                </div>
+
+                {/* Answer text: its typeface and size (was the "Aa" button by the question box) */}
+                <div className="space-y-2.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+                    <Type className="w-4 h-4 text-[var(--accent-color)]" />
+                    <span>{tr('set.chatText')}</span>
+                  </label>
+                  <div role="group" aria-label={tr('set.chatFont')} className="grid grid-cols-2 gap-2">
+                    {([
+                      ['segoe', 'font-sans'],
+                      ['pixel', 'font-pixel text-base'],
+                      ['lore', 'font-lore'],
+                      ['code', 'font-code'],
+                    ] as const).map(([id, cls]) => {
+                      const isSelected = settings.chatFont === id;
+                      return (
+                        <button
+                          key={id}
+                          aria-pressed={isSelected}
+                          onClick={() => {
+                            playBlipSound(soundEnabled);
+                            onUpdateSettings({ chatFont: id });
+                          }}
+                          className={`p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer flex items-center justify-between gap-2 ${cls} ${
+                            isSelected
+                              ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white'
+                              : 'bg-black/30 border-white/[0.08] text-zinc-300 hover:border-white/20'
+                          }`}
+                        >
+                          <span className="truncate">{tr(`set.font.${id}`)}</span>
+                          {isSelected && <Check className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-color)]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label htmlFor="qc-chat-size" className="text-[11px] text-zinc-400 flex-shrink-0">{tr('set.chatSize')}</label>
+                    <input
+                      id="qc-chat-size"
+                      type="range"
+                      min="12"
+                      max="24"
+                      value={settings.chatFontSize}
+                      onChange={(e) => onUpdateSettings({ chatFontSize: Number(e.target.value) })}
+                      className="flex-1 accent-[var(--accent-color)] cursor-pointer h-1.5 bg-white/20 rounded"
+                    />
+                    <span className="font-mono text-zinc-300 w-9 text-right font-bold text-xs">{settings.chatFontSize}px</span>
+                  </div>
                 </div>
 
                 {/* Interface style: Lo-fi pixel (default) or Classic */}

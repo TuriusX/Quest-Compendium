@@ -305,7 +305,17 @@ export default function App() {
   const [renameModalMode, setRenameModalMode] = useState<'create' | 'rename'>('create');
   const [renameModalTabId, setRenameModalTabId] = useState<string | null>(null);
   const [renameModalInitialValue, setRenameModalInitialValue] = useState('');
-  const [fontMenuOpen, setFontMenuOpen] = useState(false);
+  // The compact view (desktop). The player's choice is remembered per game (qc_view_by_game); a game with no choice
+  // yet opens compact while it is running. viewNow is this session's view (an answer opening the full view, or a
+  // choice made with no game running), cleared when the running game changes.
+  const [viewByGame, setViewByGame] = useState<Record<string, 'compact' | 'full'>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('qc_view_by_game') || '{}') || {};
+    } catch {
+      return {};
+    }
+  });
+  const [viewNow, setViewNow] = useState<'compact' | 'full' | null>(null);
   const [examinedImageUrl, setExaminedImageUrl] = useState<string | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [globalActiveGame, setGlobalActiveGame] = useState<SteamGameData | null>(null);
@@ -1682,9 +1692,9 @@ export default function App() {
           }
         } catch (e) {
           if (res.status === 404) {
-             errorText = `Backend 404 at ${backendUrl}: The server endpoint was not found.`;
+             errorText = `HTTP 404 (${backendUrl})`;
           } else if (res.status === 403) {
-             errorText = `HTTP 403 Forbidden at ${backendUrl}. The server rejected the request. Please check your backend connection in Settings -> Cloud & Server.`;
+             errorText = `HTTP 403 (${backendUrl})`;
           } else {
              errorText = `HTTP ${res.status} (Non-JSON response)`;
           }
@@ -1861,9 +1871,8 @@ export default function App() {
         return;
       }
 
-      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError') || errorMsg.includes('fetch failed')) {
-        errorMsg = `Connection failed to cloud server at ${backendUrl || DEFAULT_CLOUD_URL}. Please check your internet connection or verify your server in Settings -> Cloud & Server.`;
-      }
+      const offline = errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError') || errorMsg.includes('fetch failed');
+      if (offline) errorMsg = `${errorMsg} (${backendUrl || DEFAULT_CLOUD_URL})`;
       let isLimitReached = !!limitText || errorMsg.includes('Daily limit reached') || errorMsg.includes('Upgrade to Premium');
 
       const nowCatch = Date.now();
@@ -1871,8 +1880,8 @@ export default function App() {
         id: `msg-${nowCatch + 1}`,
         role: 'assistant',
         text: isLimitReached 
-          ? limitText || `⚠️ **Inquiry Limit Reached:**\n\n${errorMsg}`
-          : `⚠️ **Compendium Inquiry Error:** Unable to reach Google Gemini server.\n\n*Details: ${errorMsg}*`,
+          ? limitText || `**${tr('err.limitTitle')}**\n\n${errorMsg}`
+          : `${tr(offline ? 'err.offline' : 'err.noAnswer')}\n\n*${tr('err.details', { d: errorMsg })}*`,
         timestamp: nowCatch,
         modelUsed: isLimitReached ? 'Limit Reached' : 'Offline Fallback',
         ...(isLimitReached && guestLimit ? { signInNudge: true } : {}),
@@ -2016,6 +2025,47 @@ export default function App() {
   const tuckAway = () => (window as any).electronAPI?.hidePanel?.();
   const tuckSide: 'left' | 'right' = String(settings.dockPosition).endsWith('left') ? 'left' : 'right';
 
+  // The compact view: a small resting state (where you are, the current objective, the question box) over the game.
+  const runningKey = globalActiveGame ? String(globalActiveGame.appId || globalActiveGame.name || '') : '';
+  useEffect(() => setViewNow(null), [runningKey]);
+  const view = viewNow ?? (runningKey ? viewByGame[runningKey] ?? 'compact' : 'full');
+  const compact = isDesktop && !!activeTab && !isBrowserMode && view === 'compact';
+  // The player chose a view (Ctrl+Shift+F, the ⋯ menu, the compact card): remembered for the running game.
+  const chooseView = (v: 'compact' | 'full') => {
+    setViewNow(v);
+    if (!runningKey) return;
+    setViewByGame((prev) => {
+      const next = { ...prev, [runningKey]: v };
+      try {
+        localStorage.setItem('qc_view_by_game', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+  useEffect(() => {
+    (window as any).electronAPI?.setCompact?.(compact);
+    // The side panels close, so the window is back to its base width.
+    if (compact) {
+      setIsSidebarOpen(false);
+      setIsAchDrawerOpen(false);
+    }
+  }, [compact]);
+  // A question asked from anywhere (the screenshot shortcut too) opens the full view, where its answer appears.
+  useEffect(() => {
+    if (isLoadingAi && compact) setViewNow('full');
+  }, [isLoadingAi, compact]);
+  // Ctrl+Shift+F: compact view / full view.
+  useEffect(() => {
+    if (!isDesktop) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey || e.code !== 'KeyF' || e.repeat) return;
+      e.preventDefault();
+      chooseView(compact ? 'full' : 'compact');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isDesktop, compact, runningKey]);
+
   // Docking Layout Container classes
   useEffect(() => {
     if (!isDesktop) return;
@@ -2046,7 +2096,7 @@ export default function App() {
 
   return (
     <Suspense fallback={<div className="w-screen h-screen bg-[#0c0d14]" />}>
-    <div className={`w-screen h-screen flex overflow-hidden ${isDesktop ? 'bg-transparent' : 'bg-[#0c0d14]'}`}>
+    <div className={`w-screen h-screen flex overflow-clip ${isDesktop ? 'bg-transparent' : 'bg-[#0c0d14]'}`}>
       {/* Background CRT scan line ambient glow */}
       <div className="absolute inset-0 bg-radial from-purple-900/10 via-transparent to-transparent pointer-events-none" />
 
@@ -2054,7 +2104,7 @@ export default function App() {
 
       {/* Main App Window Frame */}
       <div 
-        className={`flex flex-col overflow-hidden backdrop-blur-2xl relative transition-all ${getDockClasses(settings.dockPosition)}`}
+        className={`flex flex-col overflow-clip backdrop-blur-2xl relative transition-all ${getDockClasses(settings.dockPosition)}`}
         style={{
           backgroundColor: `rgba(14, 14, 18, ${settings.windowOpacity / 100})`,
           boxShadow: '0 0 35px var(--accent-glow)'
@@ -2086,8 +2136,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Header Bar */}
-        <HeaderBar
+        {/* Header Bar (not in the compact view) */}
+        {!compact && <HeaderBar
           userData={userData}
           activeTab={activeTab}
           tabsCount={tabs.length}
@@ -2122,65 +2172,15 @@ export default function App() {
           questLogReady={!!trackerPayload}
           theme={settings.theme}
           onSync={syncDiagnostics?.triggerSyncNow}
-        />
-
-        {/* Font Quick Switcher Menu Popup */}
-        {fontMenuOpen && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setFontMenuOpen(false)} />
-            <div className="absolute top-14 right-12 z-50 bg-[#161620] border border-white/15 rounded-xl shadow-2xl p-3 w-56 space-y-3 animate-in fade-in zoom-in-95">
-              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block border-b border-white/10 pb-1">
-              Typography Style
-            </span>
-            <div className="space-y-1 text-xs">
-              <button
-                onClick={() => setSettings(s => ({ ...s, chatFont: 'segoe' }))}
-                className={`w-full text-left p-1.5 rounded hover:bg-white/10 transition-colors ${settings.chatFont === 'segoe' ? 'text-[var(--accent-color)] font-bold' : 'text-zinc-300'}`}
-              >
-                Standard (Segoe UI)
-              </button>
-              <button
-                onClick={() => setSettings(s => ({ ...s, chatFont: 'pixel' }))}
-                className={`w-full text-left p-1.5 rounded hover:bg-white/10 transition-colors font-pixel text-base ${settings.chatFont === 'pixel' ? 'text-[var(--accent-color)] font-bold' : 'text-zinc-300'}`}
-              >
-                Retro Pixel (VT323)
-              </button>
-              <button
-                onClick={() => setSettings(s => ({ ...s, chatFont: 'lore' }))}
-                className={`w-full text-left p-1.5 rounded hover:bg-white/10 transition-colors font-lore ${settings.chatFont === 'lore' ? 'text-[var(--accent-color)] font-bold' : 'text-zinc-300'}`}
-              >
-                Tome Lore (Literata)
-              </button>
-              <button
-                onClick={() => setSettings(s => ({ ...s, chatFont: 'code' }))}
-                className={`w-full text-left p-1.5 rounded hover:bg-white/10 transition-colors font-code ${settings.chatFont === 'code' ? 'text-[var(--accent-color)] font-bold' : 'text-zinc-300'}`}
-              >
-                Cyber Code (JetBrains)
-              </button>
-            </div>
-            
-            <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block border-b border-white/10 pb-1 mt-2 pt-2">
-              Chat Size
-            </span>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="12"
-                max="24"
-                value={settings.chatFontSize}
-                onChange={(e) => setSettings(s => ({ ...s, chatFontSize: Number(e.target.value) }))}
-                className="flex-1 accent-[var(--accent-color)] cursor-pointer h-1.5 bg-white/20 rounded"
-              />
-              <span className="font-mono text-zinc-300 w-6 text-right font-bold text-xs">{settings.chatFontSize}px</span>
-            </div>
-          </div>
-          </>
-        )}
+          onCompact={isDesktop && activeTab ? () => chooseView('compact') : undefined}
+        />}
 
         {/* Main Body: Left Sidebar + Central Chat/Browser + Right Achievements Drawer */}
-        <div className="flex-1 flex overflow-hidden relative">
+        {/* overflow-clip, not overflow-hidden: a clipped box isn't scrollable, so focusing a field can't shift the
+            layout (the closed side panels are wider and taller than the window). */}
+        <div className="flex-1 flex overflow-clip relative">
           {/* Games Sidebar */}
-          <GamesSidebar
+          {!compact && <GamesSidebar
             width={sidebarWidth}
             isDragging={isDraggingSidebar}
             isOpen={isSidebarOpen}
@@ -2201,10 +2201,10 @@ export default function App() {
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenFeedback={() => setIsFeedbackOpen(true)}
             onSync={syncDiagnostics?.triggerSyncNow}
-          />
+          />}
 
           {/* Sidebar Drag Handle */}
-          {isSidebarOpen && (
+          {isSidebarOpen && !compact && (
             <div 
               className="w-1.5 cursor-col-resize hover:bg-[var(--accent-color)]/50 active:bg-[var(--accent-color)] transition-colors z-30 flex-shrink-0"
               onMouseDown={(e) => {
@@ -2215,7 +2215,7 @@ export default function App() {
           )}
 
           {/* Central Workspace: Chat OR Browser */}
-          <main className="qc-scanlines flex-1 flex flex-col overflow-hidden relative">
+          <main className="qc-scanlines flex-1 flex flex-col overflow-clip relative">
             {isBrowserMode ? (
               <GameGuidesBrowser
                 activeGame={activeGame}
@@ -2400,8 +2400,8 @@ export default function App() {
                 ttsVoice={settings.ttsVoice}
                 customApiKey={settings.customApiKey}
                 openAiApiKey={settings.openAiApiKey}
-                fontMenuOpen={fontMenuOpen}
-                onToggleFontMenu={() => setFontMenuOpen(!fontMenuOpen)}
+                compact={compact}
+                onExpand={() => chooseView('full')}
               />
             )}
 
@@ -2435,15 +2435,15 @@ export default function App() {
             />
           )}
 
-          {/* Right Achievements Drawer */}
-          <AchievementsDrawer
+          {/* Right Achievements Drawer (not in the compact view) */}
+          {!compact && <AchievementsDrawer
             width={achDrawerWidth}
             isDragging={isDraggingAch}
             isOpen={isAchDrawerOpen}
             onClose={() => setIsAchDrawerOpen(false)}
             gameData={activeGame}
             soundEnabled={settings.soundEnabled}
-          />
+          />}
         </div>
       </div>
 

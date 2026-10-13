@@ -41,7 +41,7 @@ export const BetaFeedbackModal: React.FC<BetaFeedbackModalProps> = ({ isOpen, on
       }, 2000);
     } catch (error: any) {
       console.error('Failed to submit feedback:', error);
-      alert(`Failed to submit feedback: ${error.message || 'Please try again.'}`);
+      alert('Couldn’t send your feedback. Check your internet connection and try again.');
     } finally {
       setIsSubmitting(false);
     }

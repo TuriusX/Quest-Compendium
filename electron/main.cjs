@@ -111,6 +111,10 @@ let localAuthPort = null;
 let currentUiScale = 1.0;
 let baseLogicalWidth = 550;
 let baseLogicalHeight = 800;
+// The compact view (the app's small resting state over the game): the window is this tall (before the UI scale)
+// and stays on its dock edge; the full height comes back when the full view opens.
+const COMPACT_LOGICAL_HEIGHT = 176;
+let compactMode = false;
 
 // Auth Server
 const authServer = http.createServer((req, res) => {
@@ -501,7 +505,7 @@ function createWindow() {
   });
 
   mainWindow.on('resize', () => {
-    if (mainWindow) {
+    if (mainWindow && !compactMode) {
       const bounds = mainWindow.getBounds();
       baseLogicalHeight = bounds.height / currentUiScale;
     }
@@ -1037,7 +1041,7 @@ ipcMain.on('set-ui-scale', (event, scale) => {
     const sHeight = primaryDisplay.workAreaSize.height;
 
     const newWidth = Math.round(baseLogicalWidth * scale);
-    const newHeight = Math.round(baseLogicalHeight * scale);
+    const newHeight = Math.round((compactMode ? COMPACT_LOGICAL_HEIGHT : baseLogicalHeight) * scale);
 
     let newX = bounds.x;
     let newY = bounds.y;
@@ -1061,6 +1065,21 @@ ipcMain.on('set-ui-scale', (event, scale) => {
       height: newHeight
     });
   }
+});
+
+// Compact view on / off: only the height changes; a window docked at the bottom keeps its bottom edge there.
+ipcMain.on('set-compact', (event, on) => {
+  on = !!on;
+  if (!mainWindow || on === compactMode) return;
+  compactMode = on;
+  const bounds = mainWindow.getBounds();
+  const sHeight = screen.getPrimaryDisplay().workAreaSize.height;
+  const height = Math.round((on ? COMPACT_LOGICAL_HEIGHT : baseLogicalHeight) * currentUiScale);
+  let y = bounds.y;
+  if (currentDockPosition === 'top-right' || currentDockPosition === 'top-left') y = 0;
+  else if (currentDockPosition === 'bottom-right' || currentDockPosition === 'bottom-left') y = sHeight - height;
+  else if (!on) y = Math.max(0, Math.min(bounds.y, sHeight - height)); // floating: stay on screen when growing
+  mainWindow.setBounds({ x: bounds.x, y, width: bounds.width, height });
 });
 
 ipcMain.on('resize-window', (event, width) => {

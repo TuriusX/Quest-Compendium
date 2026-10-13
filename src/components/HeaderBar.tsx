@@ -24,6 +24,7 @@ import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
 import { useT } from '../i18n';
 import { QuestLogo } from './QuestLogo';
+import { displayGameName } from '../utils/gameName';
 
 interface HeaderBarProps {
   userData?: any;
@@ -61,6 +62,8 @@ interface HeaderBarProps {
   questLogReady?: boolean;
   theme: ColorTheme;
   onSync?: () => Promise<boolean>;
+  /** Switch to the compact view (the small resting state over the game). */
+  onCompact?: () => void;
 }
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
@@ -92,9 +95,27 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   questLogReady = true,
   theme,
   onSync,
+  onCompact,
 }) => {
   const t = useT();
   const [isClosing, setIsClosing] = useState(false);
+  // The "More" menu: the header's less-used controls (achievements, settings, compact view, dock).
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  const menuBtnRef = React.useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    // Opened: focus the first item (keyboard and controller land in the menu).
+    setTimeout(() => menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true }), 0);
+  }, [menuOpen]);
+  const onMenuKey = (e: React.KeyboardEvent) => {
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') || []);
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenuOpen(false); menuBtnRef.current?.focus(); }
+  };
+  const pick = (fn: () => void) => () => { setMenuOpen(false); fn(); };
 
   const handleCloseApp = async () => {
     if (isClosing) return;
@@ -191,7 +212,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           >
             <span className={`w-1.5 h-1.5 flex-shrink-0 rounded-full ${isGameRunningLocally ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
             {/* The game's name matters most, so a narrow window shows just the name. */}
-            <span className="truncate">{isGameRunningLocally ? (activeGame?.name ?? '') : t('header.noGame')}</span>
+            <span className="truncate">{isGameRunningLocally ? displayGameName(activeGame?.name) : t('header.noGame')}</span>
           </span>
         </div>
       </div>
@@ -213,54 +234,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </button>
         )}
 
-        {activeGame && (
-          <button
-            style={{ WebkitAppRegion: "no-drag" } as any}
-            onClick={() => {
-              playPageTurnSound(soundEnabled);
-              onToggleAchDrawer();
-            }}
-            title={t('common.achievements')}
-            aria-label={t('common.achievements')}
-            className={`px-2 sm:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
-              isAchDrawerOpen 
-                ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
-                : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] border border-transparent'
-            }`}
-          >
-            <Trophy className="w-4 h-4 text-amber-400" />
-            {totalCount > 0 && (
-              <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.08] text-zinc-300 font-mono font-bold">
-                {unlockedCount}/{totalCount}
-              </span>
-            )}
-          </button>
-        )}
-        {onOpenSettings && (
-          <button
-            style={{ WebkitAppRegion: "no-drag" } as any}
-            onClick={() => {
-              playBlipSound(soundEnabled);
-              onOpenSettings();
-            }}
-            title={t('common.settings')}
-            aria-label={t('common.settings')}
-            className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-all cursor-pointer"
-          >
-            <SettingsIcon className="w-4 h-4" />
-          </button>
-        )}
-
-        <div className="flex items-center" style={{ WebkitAppRegion: "no-drag" } as any}>
-          <PWAInstallButton />
-        </div>
-
-        {/* Desktop Window Controls (Close & Dock) - only rendered in Electron desktop mode */}
+        {/* The desktop app's two most used controls: tuck the panel away, and the quest log. */}
         {typeof window !== 'undefined' && !!(window as any).electronAPI && (
           <>
-            {/* Vertical Divider */}
-            <div className="h-4 w-[1px] bg-white/10 mx-0.5 hidden sm:block" />
-
             {/* Tuck away: the panel slides to the screen edge (Esc does the same) */}
             {onTuckAway && (
               <button
@@ -290,6 +266,71 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               </button>
             )}
 
+          </>
+        )}
+
+        {/* "More": achievements, settings, compact view, dock / undock */}
+        <div className="relative" style={{ WebkitAppRegion: "no-drag" } as any}>
+          <button
+            ref={menuBtnRef}
+            type="button"
+            onClick={() => {
+              playBlipSound(soundEnabled);
+              setMenuOpen((v) => !v);
+            }}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            title={t('header.menu')}
+            aria-label={t('header.menu')}
+            className={`p-2 rounded-xl transition-all cursor-pointer ${menuOpen ? 'text-white bg-white/[0.08]' : 'text-zinc-400 hover:text-white hover:bg-white/[0.08]'}`}
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="3" cy="8" r="1.6" fill="currentColor" /><circle cx="8" cy="8" r="1.6" fill="currentColor" /><circle cx="13" cy="8" r="1.6" fill="currentColor" /></svg>
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+              <div ref={menuRef} role="menu" aria-label={t('header.menu')} onKeyDown={onMenuKey} className="absolute right-0 top-11 z-50 w-56 py-1.5 rounded-xl bg-[#161620] border border-white/15 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                {activeGame && (
+                  <button type="button" role="menuitem" onClick={pick(() => { playPageTurnSound(soundEnabled); onToggleAchDrawer(); })} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
+                    <Trophy className="w-4 h-4 text-amber-400" />
+                    <span className="flex-1">{t('common.achievements')}</span>
+                    {totalCount > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.08] text-zinc-300 font-mono font-bold">{unlockedCount}/{totalCount}</span>}
+                  </button>
+                )}
+                {onCompact && (
+                  <button type="button" role="menuitem" onClick={pick(onCompact)} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" className="text-zinc-400"><path fill="none" stroke="currentColor" strokeWidth="1.5" d="M2 10h12v4H2zM4 6h8M6 3h4" /></svg>
+                    <span className="flex-1">{t('compact.collapse')}</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">Ctrl+Shift+F</span>
+                  </button>
+                )}
+                {onOpenSettings && (
+                  <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); onOpenSettings(); })} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
+                    <SettingsIcon className="w-4 h-4 text-zinc-400" />
+                    <span className="flex-1">{t('common.settings')}</span>
+                  </button>
+                )}
+                {typeof window !== 'undefined' && !!(window as any).electronAPI && (
+                  <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); onToggleDock(); })} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
+                    {isDocked ? <Square className="w-4 h-4 text-zinc-400" /> : <ArrowRightToLine className="w-4 h-4 text-zinc-400" />}
+                    <span className="flex-1">{isDocked ? t('header.undock') : t('header.dock')}</span>
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center" style={{ WebkitAppRegion: "no-drag" } as any}>
+          <PWAInstallButton />
+        </div>
+
+        {/* Desktop Window Controls (Close & Dock) - only rendered in Electron desktop mode */}
+        {typeof window !== 'undefined' && !!(window as any).electronAPI && (
+          <>
+            {/* Vertical Divider */}
+            <div className="h-4 w-[1px] bg-white/10 mx-0.5 hidden sm:block" />
+
             {/* Close Button */}
             <button
               style={{ WebkitAppRegion: "no-drag" } as any}
@@ -309,19 +350,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               )}
             </button>
 
-            {/* Dock / Free-floating Window Mode */}
-            <button
-              style={{ WebkitAppRegion: "no-drag" } as any}
-              onClick={() => {
-                playBlipSound(soundEnabled);
-                onToggleDock();
-              }}
-              title={isDocked ? t('header.undock') : t('header.dock')}
-              aria-label={isDocked ? t('header.undock') : t('header.dock')}
-              className="p-2 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-all cursor-pointer"
-            >
-              {isDocked ? <Square className="w-4 h-4" /> : <ArrowRightToLine className="w-4 h-4" />}
-            </button>
           </>
         )}
       </div>

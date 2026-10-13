@@ -51,6 +51,18 @@ export function withMarkerBadges(text: string, points: ScreenPoint[]): string {
  * Which markers got an inline checkbox in the answer text (the rest are listed separately). Read from the badges
  * withMarkerBadges actually added, so a marker never ends up with no checkbox at all.
  */
+/**
+ * Markers that aren't on screen right now, in words: "Aard Place of Power, look for the ? at the northern edge".
+ * Each entry is "label (where)" or just "label" (App's close-up check stores them so).
+ */
+export function unmarkedLine(t: (key: string, vars?: Record<string, string | number>) => string, removed: string[]): string {
+  const items = removed.map((r) => {
+    const m = r.match(/^(.*\S)\s+\(([^()]+)\)$/);
+    return m ? t('chat.unmarkedItem', { label: m[1], where: m[2] }) : r;
+  });
+  return t('chat.unmarked', { list: items.join('; ') });
+}
+
 export function markerMentions(text: string, points: ScreenPoint[]): Set<number> {
   const found = new Set<number>();
   for (const m of withMarkerBadges(text, points).matchAll(/\]\(#qc-marker-(\d+)\)/g)) found.add(Number(m[1]) - 1);
@@ -272,7 +284,7 @@ export function AnnotatedShot({
       </ul>}
 
       {removed && removed.length > 0 && (
-        <p className="mt-2 text-[11px] leading-snug text-zinc-500">{t('chat.unmarked', { list: removed.join(', ') })}</p>
+        <p className="mt-2 text-[11px] leading-snug text-zinc-500">{unmarkedLine(t, removed)}</p>
       )}
       {watching.length > 0 && (
         <p className="text-[11px] text-zinc-400 leading-relaxed">

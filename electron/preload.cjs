@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startSteamLogin: () => ipcRenderer.send('start-steam-login'),
   setUiScale: (scale) => ipcRenderer.send('set-ui-scale', scale),
   resizeWindow: (width) => ipcRenderer.send('resize-window', width),
+  /** The compact view: the window shrinks to its small resting height (true) or back to full height (false). */
+  setCompact: (on) => ipcRenderer.send('set-compact', !!on),
   setDockPosition: (pos) => ipcRenderer.send('set-dock-position', pos),
   toggleSlide: () => ipcRenderer.send('toggle-slide'),
   // Hold to talk: after sending, the panel slides away and the answer is read aloud.

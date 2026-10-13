@@ -34,7 +34,7 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from './icons';
-import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions } from './ScreenPointers';
+import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions, unmarkedLine } from './ScreenPointers';
 import { areaFindsFor, markersActiveFor } from './pointerStore';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
 import { getApiBaseUrl, DEFAULT_PREVIEW_URL } from '../utils/api';
@@ -53,6 +53,8 @@ import { isPhone } from '../utils/source';
 import { samePlace, tipMatches, useAchievementGuide } from '../utils/achievementGuide';
 import { useLocale } from '../i18n';
 import { QUICK_MAIN, QUICK_MORE, QUICK_FOLLOW, type QuickId } from '../utils/quickQuestions';
+import { displayGameName } from '../utils/gameName';
+import { showFirstRunHints } from '../utils/sessions';
 declare const __APP_BUILD__: { version: string } | undefined;
 const BUILD = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : { version: 'dev' };
 
@@ -103,8 +105,10 @@ interface ChatAreaProps {
   openAiApiKey?: string;
   steamName?: string;
   steamAvatar?: string;
-  fontMenuOpen?: boolean;
-  onToggleFontMenu?: () => void;
+  /** Compact view: a small resting state (where you are, the current objective, the question box). */
+  compact?: boolean;
+  /** Open the full view (from the compact one). */
+  onExpand?: () => void;
 }
 
 /**
@@ -211,8 +215,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   openAiApiKey,
   steamName,
   steamAvatar,
-  fontMenuOpen,
-  onToggleFontMenu,
+  compact = false,
+  onExpand,
   onUpdateMessage,
   markerLifetime,
   onChangeMarkerLifetime,
@@ -229,7 +233,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const submitRef = useRef<() => void>(() => {});
   // The answer whose 👎 is asking "What was wrong?".
   const [voteAsk, setVoteAsk] = useState<string | null>(null);
+  // "More" under the suggestions: the other quick questions, in a small menu.
   const [showMoreQuick, setShowMoreQuick] = useState(false);
+  const moreQuickRef = useRef<HTMLDivElement>(null);
+  const moreQuickBtnRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (showMoreQuick) setTimeout(() => moreQuickRef.current?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true }), 0);
+  }, [showMoreQuick]);
+  // The screenshot shortcut hint under the question box: first five sessions only.
+  const [firstRunHint] = useState(showFirstRunHints);
   const pendingText = useRef('');
   const hasTextRef = useRef<HasTextHandle>(null);
   const setHasText = useCallback((h: boolean) => hasTextRef.current?.set(h), []);
@@ -931,7 +943,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const fallbackToBrowserTTS = (reason: string) => {
       console.warn('[TTS] Falling back to browser native TTS:', reason);
       if (!('speechSynthesis' in window)) {
-        setTtsStatusError({ msgId, error: reason });
+        setTtsStatusError({ msgId, error: t('err.voice') });
         setPlayingAudioId(null);
         setAudioLoadingId(null);
         return;
@@ -1170,11 +1182,272 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     return null;
   })();
   const isDesktopApp = typeof window !== 'undefined' && !!(window as any).electronAPI;
-  const gameLabel = activeGame?.name || activeTab?.activeSteamGame?.name || '';
+  const gameLabel = displayGameName(activeGame?.name || activeTab?.activeSteamGame?.name);
 
   submitRef.current = () => {
     void handleSubmit();
   };
+
+  const askForm = (
+      <form
+        onSubmit={handleSubmit}
+        className={compact ? 'p-2.5' : 'p-3 sm:p-4 bg-[#0a0b10]/90 border-t border-white/[0.08] backdrop-blur-2xl'}
+      >
+        {/* Suggestions, one set at a time on one line: the starter questions in an empty conversation, the follow-ups
+            after an answer ("Show me where on screen" only with markers on and an answer about a screenshot: the web
+            app sends that screenshot again, the desktop app takes a fresh one). The rest are under "More". */}
+        {!compact && (() => {
+          const msgs = activeTab?.messages ?? [];
+          const asked = msgs.some((m) => m.role === 'user');
+          let shot: string | undefined;
+          if (asked) {
+            const last = msgs.map((m) => m.id).lastIndexOf(lastAssistantId ?? '');
+            for (let i = last - 1; i >= 0; i--) if (msgs[i].role === 'user') { shot = msgs[i].imageUrl; break; }
+          }
+          const follow = QUICK_FOLLOW.filter((id) => id !== 'where' || (markersOn && !!shot));
+          const shown: QuickId[] = asked && lastAssistantId ? follow : QUICK_MAIN;
+          const extra: QuickId[] = asked && lastAssistantId ? [...QUICK_MAIN, ...QUICK_MORE] : QUICK_MORE;
+          const ask = (id: QuickId) => {
+            setShowMoreQuick(false);
+            askQuick(id, id === 'where' && !isDesktopApp ? shot : undefined);
+          };
+          return (
+            <div className="relative mb-2 flex items-center gap-1.5">
+              <div role="group" aria-label={t('quick.label')} className="flex-1 min-w-0 flex flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {shown.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => ask(id)}
+                    className="qc-px-frame shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11.5px] font-medium text-zinc-300 hover:text-white hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default"
+                  >
+                    {t(`quick.${id}`)}
+                  </button>
+                ))}
+              </div>
+              <button
+                ref={moreQuickBtnRef}
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={showMoreQuick}
+                disabled={isLoading}
+                onClick={() => {
+                  playBlipSound(soundEnabled);
+                  setShowMoreQuick((v) => !v);
+                }}
+                className="qc-px-frame shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full border border-[var(--accent-border)] text-[11.5px] font-semibold text-[var(--accent-color)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-default"
+              >
+                {t('quick.more')}
+                <ChevronDown className={`w-3 h-3 transition-transform ${showMoreQuick ? '' : 'rotate-180'}`} />
+              </button>
+              {showMoreQuick && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowMoreQuick(false)} aria-hidden="true" />
+                  <div
+                    ref={moreQuickRef}
+                    role="menu"
+                    aria-label={t('quick.label')}
+                    onKeyDown={(e) => {
+                      const items = Array.from(moreQuickRef.current?.querySelectorAll<HTMLElement>('button') || []);
+                      const i = items.indexOf(document.activeElement as HTMLElement);
+                      if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
+                      else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
+                      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setShowMoreQuick(false); moreQuickBtnRef.current?.focus(); }
+                    }}
+                    className="absolute right-0 bottom-full mb-1.5 z-50 w-max max-w-[min(20rem,calc(100vw-2rem))] py-1.5 rounded-xl bg-[#161620] border border-white/15 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+                  >
+                    {extra.map((id) => (
+                      <button
+                        key={id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => ask(id)}
+                        className="w-full px-3 py-1.5 text-left text-[12.5px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer"
+                      >
+                        {t(`quick.${id}`)}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
+        <div className="relative flex items-center rounded-2xl bg-[#13141d] border border-white/15 focus-within:border-[var(--accent-color)] focus-within:shadow-[0_0_20px_var(--accent-glow)] transition-all shadow-lg">
+          <AskTextarea
+            ref={askRef}
+            takeInitial={takeInitialText}
+            onHasTextChange={setHasText}
+            onEnter={() => submitRef.current()}
+            onPaste={handleTextareaPaste}
+            placeholder={
+              isRecording 
+                ? t('chat.listening') 
+                : attachedImage 
+                  ? t('chat.askShot') 
+                  : gameLabel
+                    ? t('chat.askGame', { game: gameLabel })
+                    : t('chat.ask')
+            }
+            rows={1}
+            className={`flex-1 max-h-48 bg-transparent text-white outline-none resize-none ${compact ? 'min-h-[44px] py-3 pl-3.5 pr-40' : 'min-h-[72px] py-4 pl-4 pr-4 sm:pr-4 pb-14'}`}
+          />
+
+          {/* Action Buttons inside Input Bar */}
+          <div className={`absolute flex items-center gap-1.5 ${compact ? 'right-1.5 bottom-1.5' : 'right-2.5 bottom-2.5'}`}>
+
+            {/* Hidden file input for manual upload */}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+            />
+
+            {/* Hidden file input for mobile camera capture */}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              ref={cameraInputRef}
+              onChange={handleFileUpload}
+            />
+
+            {/* Attach Screenshot / Game Screen */}
+            <button
+              type="button"
+              onClick={() => {
+                playBlipSound(soundEnabled);
+                captureGameScreen();
+              }}
+              disabled={isLoading || isCapturingScreen}
+              aria-label={t('chat.attachShot')}
+              title={
+                typeof window !== 'undefined' && (window as any).electronAPI
+                  ? t('chat.snapTitle')
+                  : t('chat.attachTitle')
+              }
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                isCapturingScreen
+                  ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] animate-pulse shadow-[0_0_12px_var(--accent-glow)]'
+                  : attachedImage
+                    ? 'text-[var(--accent-color)] bg-[var(--accent-dim)]'
+                    : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
+              }`}
+            >
+              {isCapturingScreen ? (
+                <div className="w-4 h-4 border-2 border-[var(--accent-color)] border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Camera className="w-4 h-4" />
+              )}
+            </button>
+
+            {/* Push to Talk / Voice Dictation */}
+            <button
+              type="button"
+              onClick={toggleVoiceRecording}
+              title={isRecording ? t('chat.stopVoice') : t('chat.voice')}
+              aria-label={isRecording ? t('chat.stopVoice') : t('chat.voice')}
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                isRecording
+                  ? 'bg-red-500/25 text-red-300 border border-red-500/40 animate-pulse shadow-[0_0_14px_rgba(239,68,68,0.5)]'
+                  : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
+              }`}
+            >
+              {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+
+            {/* Pro / Fast, with the questions left of each */}
+            <ModelToggle value={answerModel} onChange={chooseModel} pro={bal.pro} fast={bal.fast} disabled={isLoading} balances={bal} />
+
+            {/* Submit Send Button (follows whether the box has text without re-rendering the conversation) */}
+            <HasTextGate ref={hasTextRef}>{(hasText) => (
+            <button
+              type="submit"
+              aria-label={t('chat.send')}
+              disabled={
+                (!hasText && !attachedImage && !(typeof window !== 'undefined' && (window as any).electronAPI)) ||
+                isLoading ||
+                isCapturingScreen
+              }
+              title={
+                isCapturingScreen
+                  ? t('chat.snapping')
+                  : !hasText && !attachedImage && typeof window !== 'undefined' && (window as any).electronAPI
+                    ? t('chat.snapSend')
+                    : t('chat.send')
+              }
+              className="qc-px-bevel p-2.5 rounded-xl bg-[var(--accent-color)] text-black font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-[0_0_12px_var(--accent-glow)] flex items-center justify-center"
+            >
+              {isCapturingScreen ? (
+                <Camera className="w-4 h-4 animate-pulse text-black" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+            </button>
+            )}</HasTextGate>
+          </div>
+        </div>
+        {(() => {
+          const note = modelNote || (firstRunHint && !compact ? (isDesktopApp ? t('chat.hintDesktop') : t('chat.hintWeb')) : '');
+          return (
+            <div role="status" aria-live="polite" className={`${note ? 'mt-2' : ''} text-center text-[10px] font-mono uppercase ${modelNote ? 'text-[var(--accent-color)]' : 'text-zinc-500'}`}>
+              {note}
+            </div>
+          );
+        })()}
+      </form>
+  );
+
+  // The compact view: where you are, the current objective and the question box; a click (or Ctrl+Shift+F) opens
+  // the full view.
+  if (compact && activeTab) {
+    const msgs = activeTab.messages ?? [];
+    let objective: { title?: string; step?: string } | null = null;
+    for (let i = msgs.length - 1; i >= 0 && !objective; i--) {
+      const m = msgs[i];
+      if (m.role !== 'assistant' || !(m.title || m.steps?.length)) continue;
+      const done = m.doneSteps ?? [];
+      const next = (m.steps ?? []).find((st, j) => st.kind !== 'warning' && !done.includes(j));
+      objective = { title: m.title, step: next?.text };
+    }
+    return (
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-[#0d0e14] to-[#07070b] relative">
+        <button
+          type="button"
+          onClick={() => {
+            playBlipSound(soundEnabled);
+            onExpand?.();
+          }}
+          title={`${t('compact.expand')} (Ctrl+Shift+F)`}
+          className="group flex-1 min-h-0 text-left px-3.5 pt-3 pb-1 flex flex-col gap-1 min-w-0 cursor-pointer hover:bg-white/[0.03] focus-visible:bg-white/[0.05] outline-none"
+          style={{ WebkitAppRegion: 'no-drag' } as any}
+        >
+          <span className="flex items-center gap-2 min-w-0 text-[11px] text-zinc-400">
+            <MapPin className="w-3.5 h-3.5 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />
+            <span className={`truncate ${placeNow ? 'text-zinc-200 font-semibold' : ''}`}>{placeNow || t('strip.noPlace')}</span>
+            {gameLabel && <span className="truncate text-zinc-500">· {gameLabel}</span>}
+            <span className="ml-auto flex-shrink-0 flex items-center gap-1 text-[10.5px] text-zinc-500 group-hover:text-[var(--accent-color)] group-focus-visible:text-[var(--accent-color)]">
+              <Maximize2 className="w-3 h-3" aria-hidden="true" />
+              {t('compact.expand')}
+            </span>
+          </span>
+          {objective ? (
+            <span className="min-w-0">
+              {objective.title && <span className="block font-fantasy font-bold text-[14px] text-white truncate">{objective.title}</span>}
+              {objective.step && <span className="block text-[12.5px] text-zinc-300 line-clamp-2">{objective.step}</span>}
+            </span>
+          ) : (
+            <span className="text-[12.5px] text-zinc-400">{t('compact.noObjective')}</span>
+          )}
+        </button>
+        {askForm}
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-[#0d0e14] via-[#090a0f] to-[#07070b] relative crt-grid">
@@ -1184,7 +1457,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <div className="flex items-baseline gap-2.5 min-w-0">
             <span className="font-fantasy font-bold text-sm text-white truncate">{activeTab.name}</span>
             <span className="hidden sm:inline text-[11px] text-zinc-500 truncate">
-              {[activeGame?.name || activeTab.activeSteamGame?.name, t('chat.personaLabel', { name: t(`chat.persona.${aiMode}`) })].filter(Boolean).join(' · ')}
+              {[gameLabel, t('chat.personaLabel', { name: t(`chat.persona.${aiMode}`) })].filter(Boolean).join(' · ')}
             </span>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
@@ -1385,7 +1658,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             return (
               <div
                 key={msg.id}
-                className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-full`}
+                className={`group/msg flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-full`}
               >
                 {/* User or AI Message Header Tag */}
                 <div className={`flex items-center gap-2 mb-1 text-[11px] font-mono ${isUser ? 'text-zinc-400 justify-end' : 'text-zinc-400'}`}>
@@ -1407,9 +1680,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         <QuestLogo size={16} compact />
                       </div>
                       <span className="font-fantasy font-bold text-zinc-200">{t('chat.compendium')}</span>
-                      <span className="px-1.5 py-0.2 rounded bg-white/10 text-[9.5px] text-zinc-400">
-                        {msg.modelUsed || 'GEMINI'}
-                      </span>
+                      {!['Offline Fallback', 'Limit Reached', 'Session Expired'].includes(msg.modelUsed || '') && (
+                        <span className="px-1.5 py-0.2 rounded bg-white/10 text-[9.5px] text-zinc-400">
+                          {msg.modelUsed || 'GEMINI'}
+                        </span>
+                      )}
                       <span className="text-zinc-500">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </>
                   )}
@@ -1557,13 +1832,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     </div>
                   ) : null}
 
-                  {/* Message Bottom Toolbar (for AI responses) */}
+                  {/* Answer actions: a small bar on the answer's bottom edge, shown on hover or keyboard / controller
+                      focus (always on touch screens), and kept while reading aloud, just copied or saved, or asking
+                      what was wrong after a 👎. It takes no room in the answer. */}
                   {!isUser && (
-                    <div className="mt-3.5 pt-2.5 border-t border-white/[0.08] flex items-center justify-between text-xs text-zinc-400">
-                      <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-500">
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
+                    <div className={`absolute -bottom-4 right-3 z-10 text-xs text-zinc-400 transition-opacity duration-150 focus-within:opacity-100 ${
+                      isAudioPlaying || isNoteSaved || copiedMessageId === msg.id || voteAsk === msg.id ? '' : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/msg:opacity-100'
+                    }`}>
+                      <div className="flex items-center gap-0.5 p-0.5 rounded-xl bg-[#171822] border border-white/[0.12] shadow-[0_4px_14px_rgba(0,0,0,0.55)]">
                         {/* Audio TTS button with animated wave indicator / stop control */}
                         <button
                           onClick={() => handlePlayTTS(msg.id, msg.text)}
@@ -1720,7 +1996,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                   {/* Every marker was dropped by the close-up check: what they were and where, in words */}
                   {!isUser && msg.removedMarkers && msg.removedMarkers.length > 0 && !(msg.points && msg.points.length) && (
-                    <p className="mt-2 text-[11px] leading-snug text-zinc-400">{t('chat.unmarked', { list: msg.removedMarkers.join('; ') })}</p>
+                    <p className="mt-2 text-[11px] leading-snug text-zinc-400">{unmarkedLine(t, msg.removedMarkers)}</p>
                   )}
 
                   {/* TTS Error / Connection diagnostic notification if speech failed */}
@@ -1756,32 +2032,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   </button>
                 )}
 
-                {/* Suggested follow-ups under the latest answer. "Show me where on screen" only with markers on and
-                    an answer about a screenshot (the web app sends that screenshot again; the desktop app takes a
-                    fresh one, of what's on screen now). */}
-                {!isUser && msg.id === lastAssistantId && !isLoading && (() => {
-                  let shot: string | undefined;
-                  for (let i = msgIndex - 1; i >= 0; i--) {
-                    const m = activeTab.messages[i];
-                    if (m.role === 'user') { shot = m.imageUrl; break; }
-                  }
-                  const follow = QUICK_FOLLOW.filter((id) => id !== 'where' || (markersOn && !!shot));
-                  return (
-                  <div className="mt-2.5 flex flex-wrap gap-2 max-w-[94%] sm:max-w-[88%]">
-                    {follow.map((id) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => askQuick(id, id === 'where' && !isDesktopApp ? shot : undefined)}
-                        className="qc-px-frame px-3 py-1.5 rounded-full bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[12px] font-medium text-zinc-200 hover:text-white hover:bg-[var(--accent-border)] transition-colors cursor-pointer flex items-center gap-1.5"
-                      >
-                        <GlainIcon size={10} />
-                        {t(`quick.${id}`)}
-                      </button>
-                    ))}
-                  </div>
-                  );
-                })()}
               </div>
             );
           })
@@ -1843,175 +2093,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
       )}
 
-      {/* Floating HUD Input Form Bar */}
-      <form onSubmit={handleSubmit} className="p-3 sm:p-4 bg-[#0a0b10]/90 border-t border-white/[0.08] backdrop-blur-2xl">
-        {/* Quick questions: always there, more behind "More" */}
-        <div role="group" aria-label={t('quick.label')} className="mb-2 flex flex-wrap gap-1.5">
-          {[...QUICK_MAIN, ...(showMoreQuick ? QUICK_MORE : [])].map((id) => (
-            <button
-              key={id}
-              type="button"
-              disabled={isLoading}
-              onClick={() => askQuick(id)}
-              className="qc-px-frame px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11.5px] font-medium text-zinc-300 hover:text-white hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default"
-            >
-              {t(`quick.${id}`)}
-            </button>
-          ))}
-          <button
-            type="button"
-            aria-expanded={showMoreQuick}
-            onClick={() => {
-              playBlipSound(soundEnabled);
-              setShowMoreQuick((v) => !v);
-            }}
-            className="qc-px-frame px-2.5 py-1 rounded-full border border-[var(--accent-border)] text-[11.5px] font-semibold text-[var(--accent-color)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer flex items-center gap-1"
-          >
-            {t(showMoreQuick ? 'quick.less' : 'quick.more')}
-            <ChevronDown className={`w-3 h-3 transition-transform ${showMoreQuick ? 'rotate-180' : ''}`} />
-          </button>
-        </div>
-        <div className="relative flex items-center rounded-2xl bg-[#13141d] border border-white/15 focus-within:border-[var(--accent-color)] focus-within:shadow-[0_0_20px_var(--accent-glow)] transition-all shadow-lg">
-          <AskTextarea
-            ref={askRef}
-            takeInitial={takeInitialText}
-            onHasTextChange={setHasText}
-            onEnter={() => submitRef.current()}
-            onPaste={handleTextareaPaste}
-            placeholder={
-              isRecording 
-                ? t('chat.listening') 
-                : attachedImage 
-                  ? t('chat.askShot') 
-                  : gameLabel
-                    ? t('chat.askGame', { game: gameLabel })
-                    : t('chat.ask')
-            }
-            rows={1}
-            className="flex-1 max-h-48 min-h-[72px] py-4 pl-4 pr-4 sm:pr-4 pb-14 bg-transparent text-white outline-none resize-none"
-          />
-
-          {/* Action Buttons inside Input Bar */}
-          <div className="absolute right-2.5 bottom-2.5 flex items-center gap-1.5">
-
-            {/* Hidden file input for manual upload */}
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-            />
-
-            {/* Hidden file input for mobile camera capture */}
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              ref={cameraInputRef}
-              onChange={handleFileUpload}
-            />
-
-            {/* Attach Screenshot / Game Screen */}
-            <button
-              type="button"
-              onClick={() => {
-                playBlipSound(soundEnabled);
-                captureGameScreen();
-              }}
-              disabled={isLoading || isCapturingScreen}
-              aria-label={t('chat.attachShot')}
-              title={
-                typeof window !== 'undefined' && (window as any).electronAPI
-                  ? t('chat.snapTitle')
-                  : t('chat.attachTitle')
-              }
-              className={`p-2 rounded-xl transition-all cursor-pointer ${
-                isCapturingScreen
-                  ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] animate-pulse shadow-[0_0_12px_var(--accent-glow)]'
-                  : attachedImage
-                    ? 'text-[var(--accent-color)] bg-[var(--accent-dim)]'
-                    : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
-              }`}
-            >
-              {isCapturingScreen ? (
-                <div className="w-4 h-4 border-2 border-[var(--accent-color)] border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Camera className="w-4 h-4" />
-              )}
-            </button>
-
-            {/* Push to Talk / Voice Dictation */}
-            <button
-              type="button"
-              onClick={toggleVoiceRecording}
-              title={isRecording ? t('chat.stopVoice') : t('chat.voice')}
-              aria-label={isRecording ? t('chat.stopVoice') : t('chat.voice')}
-              className={`p-2 rounded-xl transition-all cursor-pointer ${
-                isRecording
-                  ? 'bg-red-500/25 text-red-300 border border-red-500/40 animate-pulse shadow-[0_0_14px_rgba(239,68,68,0.5)]'
-                  : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
-              }`}
-            >
-              {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            </button>
-
-            {/* Font Quick Switcher */}
-            {onToggleFontMenu && (
-              <button
-                type="button"
-                onClick={() => {
-                  playBlipSound(soundEnabled);
-                  onToggleFontMenu();
-                }}
-                title={t('chat.fontSettings')}
-                aria-label={t('chat.fontSettings')}
-                className={`p-2 rounded-xl transition-all cursor-pointer ${
-                  fontMenuOpen 
-                    ? 'bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)] shadow-[0_0_12px_var(--accent-glow)]' 
-                    : 'text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10'
-                }`}
-              >
-                <span className="font-bold font-serif text-[15px] leading-none px-0.5">Aa</span>
-              </button>
-            )}
-
-            {/* Pro / Fast, with the questions left of each */}
-            <ModelToggle value={answerModel} onChange={chooseModel} pro={bal.pro} fast={bal.fast} disabled={isLoading} balances={bal} />
-
-            {/* Submit Send Button (follows whether the box has text without re-rendering the conversation) */}
-            <HasTextGate ref={hasTextRef}>{(hasText) => (
-            <button
-              type="submit"
-              aria-label={t('chat.send')}
-              disabled={
-                (!hasText && !attachedImage && !(typeof window !== 'undefined' && (window as any).electronAPI)) ||
-                isLoading ||
-                isCapturingScreen
-              }
-              title={
-                isCapturingScreen
-                  ? t('chat.snapping')
-                  : !hasText && !attachedImage && typeof window !== 'undefined' && (window as any).electronAPI
-                    ? t('chat.snapSend')
-                    : t('chat.send')
-              }
-              className="qc-px-bevel p-2.5 rounded-xl bg-[var(--accent-color)] text-black font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-[0_0_12px_var(--accent-glow)] flex items-center justify-center"
-            >
-              {isCapturingScreen ? (
-                <Camera className="w-4 h-4 animate-pulse text-black" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-            </button>
-            )}</HasTextGate>
-          </div>
-        </div>
-        <div role="status" aria-live="polite" className={`mt-2 text-center text-[10px] font-mono uppercase ${modelNote ? 'text-[var(--accent-color)]' : 'text-zinc-500'}`}>
-          {modelNote || (isDesktopApp ? t('chat.hintDesktop') : t('chat.hintWeb'))}
-        </div>
-      </form>
+      {askForm}
 
       {/* Embedded Browser Screen Capture Guidance Modal */}
       <ReportAnswerModal
