@@ -153,7 +153,9 @@ async function main() {
     const out = new Map<number, Img[]>();
     for await (const r of rows(clientId, tok, endpoint)) {
       const gid = Number(r.game);
-      if (!need.has(gid) || !r.image_id || r.animated === 't' || r.alpha_channel === 't') continue;
+      if (!need.has(gid) || !r.image_id) continue;
+      // Transparent or animated artworks are logos and badges, not banner art; covers may be either and are kept.
+      if (endpoint === 'artworks' && (r.animated === 't' || r.alpha_channel === 't')) continue;
       const type = Number(r.artwork_type) || 0;
       if (endpoint === 'artworks' && !(type in ART_RANK)) continue;
       out.set(gid, [...(out.get(gid) || []), { id: r.image_id, w: Number(r.width) || 0, h: Number(r.height) || 0, ...(endpoint === 'artworks' ? { type } : {}) }]);
