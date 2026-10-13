@@ -7,7 +7,7 @@
  *   --seed: the list from scripts/pipeline/changelog-seed.json (entries marked fromHomepage keep the homepage's own
  *   wording and translations), translated where needed.
  *
- *   npx tsx scripts/pipeline/changelog.ts [--seed]
+ *   npx tsx scripts/pipeline/changelog.ts [--seed] [--add <version> --text "<the line>"]
  */
 import fs from 'fs';
 import path from 'path';
@@ -58,6 +58,14 @@ async function main() {
     const need = entries.filter((e) => Object.keys(e.tr).length < LANGS.length);
     const tr = await translate(need.map((e) => e.text));
     need.forEach((e, i) => { e.tr = { ...tr[i], ...e.tr }; });
+  }
+  // A release's line written by hand (--add 0.5.5 --text "..."): used as is, translated, in place of the AI's line.
+  const addV = arg('add');
+  const addText = arg('text');
+  if (addV && addV !== 'true' && addText && addText !== 'true' && !entries.some((e) => e.v === addV)) {
+    const [tr] = await translate([addText]);
+    entries.unshift({ v: addV, date: new Date().toISOString().slice(0, 10), text: addText, tr });
+    console.log(`changelog: ${addV} added by hand: ${addText}`);
   }
   // New releases since the last entry.
   const r = await fetch('https://api.github.com/repos/TuriusX/Quest-Compendium/releases?per_page=30', { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'quest-compendium-pipeline' } });
