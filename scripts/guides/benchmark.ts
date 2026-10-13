@@ -22,9 +22,19 @@ import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, usageScope, searchesIn } from './common';
 import { supportedSegments, trustedSites, type Evidence } from './claimCheck';
 import { apiLimits, searchesToday, pipelineRoom } from '../../apiLimits';
+import { entityKind } from './siteText';
 
 export const BENCH_COST = 0.065; // dollars a page: the searched answer (about 4 searches) and the check
-export const KINDS = ['location', 'how to get or unlock', 'quests and outcomes', 'choices and consequences', 'recruitment and romance', 'combat and strategy', 'rewards and drops', 'timing and missables', 'identity and lore', 'stats and abilities', 'other'] as const;
+export const KINDS = ['location', 'how to get or unlock', 'quests and outcomes', 'choices and consequences', 'recruitment and romance', 'combat and strategy', 'rewards and drops', 'timing and missables', 'identity and lore', 'relationships', 'story role and fates', 'stats and abilities', 'other'] as const;
+/** The benchmark's version: a stored benchmark older than this is made again (2: story, lore and relationships for characters). */
+export const BENCH_V = 2;
+/** What the benchmark's core points must include, by kind of entity. */
+const CORE_MUST: Record<string, string> = {
+  person: 'For a character, the core points MUST include: who they are (identity and lore); their history and relationship with the main character, by name (relationships); their role in the main story; and every possible fate or outcome, depending on the player\'s choices (story role and fates). State deaths, betrayals and endings plainly.',
+  boss: 'For a boss or enemy, the core points MUST include who or what it is and its lore (identity and lore), and its role in the story and what defeating it leads to (story role and fates), stated plainly.',
+  place: 'For a place, include its history and the story events that happen there (identity and lore) when the sources give them.',
+  thing: '',
+};
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const objOf = (text: string): any => {
   const t = String(text || '').replace(/```json|```/g, '');
@@ -32,7 +42,7 @@ const objOf = (text: string): any => {
 };
 
 export type BenchPoint = { point: string; kind: string; core: boolean; covered?: boolean };
-export type Benchmark = { at: number; answer: string; points: BenchPoint[]; questions: string[]; evidence: Evidence[]; sites: string[]; cost: { dollars: number; searches: number } };
+export type Benchmark = { at: number; v?: number; answer: string; points: BenchPoint[]; questions: string[]; evidence: Evidence[]; sites: string[]; cost: { dollars: number; searches: number } };
 
 /** Everything a page says, as plain text (for the coverage check). */
 export function pageText(e: any): string {
@@ -41,6 +51,7 @@ export function pageText(e: any): string {
   const r = e.ref || {};
   return [
     e.overview,
+    ...(e.story || []).map((x: any) => `${x.heading}: ${x.text}`),
     ...(e.qa || []).map((x: any) => `${x.q}: ${x.a}`),
     s.region, s.where, s.gettingThere,
     ...(s.whereToFind || []).map((w: any) => `${w.when || ''} ${w.where}`),
@@ -64,8 +75,9 @@ export async function benchmarkAnswer(game: string, name: string, typeLabel: str
     `- core | <kind> | <one specific fact>   (core = a player would expect any good page to say it; extra = nice to have; kind is one of: ${KINDS.join(', ')})`,
     'QUESTIONS:',
     '- <a question players ask about it>',
-    'Give 5 to 10 points and 3 to 8 questions, most important first. Only facts the sources state.',
-  ].join('\n');
+    'Give 5 to 10 points and 3 to 8 questions, most important first. Only facts the sources state. State everything plainly, story events and endings included; no spoiler warnings.',
+    CORE_MUST[entityKind(typeLabel)] || '',
+  ].filter(Boolean).join('\n');
   let res: any = null;
   for (let attempt = 0; attempt < 2 && !res; attempt++) {
     const r: any = await gemini().models.generateContent({
@@ -151,7 +163,7 @@ export async function benchmarkPage(key: string, slug: string) {
     const cov = await coverage(game, e.name, pageText(e), a.points);
     return { ...a, points: a.points.map((p, i) => ({ ...p, covered: cov[i] })) };
   });
-  const out: Benchmark = { at: Date.now(), ...b, cost: { dollars: Math.round(scope.dollars * 10000) / 10000, searches: scope.searches } };
+  const out: Benchmark = { at: Date.now(), v: BENCH_V, ...b, cost: { dollars: Math.round(scope.dollars * 10000) / 10000, searches: scope.searches } };
   await ref.set({ benchmark: JSON.parse(JSON.stringify(out)) }, { merge: true });
   const missing = out.points.filter((p) => p.core && !p.covered);
   console.log(`${key} / ${e.name}: ${out.points.filter((p) => p.covered).length}/${out.points.length} points covered, ${missing.length} core missing${missing.length ? ` (${missing.map((p) => p.kind).join(', ')})` : ''}, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);

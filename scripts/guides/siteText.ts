@@ -280,3 +280,12 @@ export function singularLabel(label: string): string {
     return words.join(' ');
   }).join('');
 }
+
+/** What kind of entity a compendium type is (its label): a person, a boss or enemy, a thing (item, power, class), or a place. */
+export function entityKind(type: string): 'person' | 'boss' | 'thing' | 'place' {
+  const t = String(type || '').toLowerCase();
+  if (/charact|npc|compan|merchant|people|person|vendor|trader|ally|allies|villain|origin|follower|romance|hireling|quest giver|gang member/.test(t)) return 'person';
+  if (/boss|enem|monster|creature|foe|dragon|demigod/.test(t)) return 'boss';
+  if (/power|spell|abilit|item|weapon|armou?r|class|feat|skill|perk|talent|trinket|talisman|relic|specimen|parasite|rune|ash of war|gear|equipment|lure|recipe/.test(t)) return 'thing';
+  return 'place';
+}

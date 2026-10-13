@@ -402,7 +402,7 @@ export function missableGaps(e: { where?: string; how?: string; lockout?: string
  * entries (ids) and key fights (ids) found along the way, a tip and a warning.
  */
 export type GuideStep = { id: string; title: string; text: string; entries?: string[]; fights?: string[]; tip?: string; warn?: string };
-/** An important choice on a flagship page: when it comes up, its options and what each leads to (spoilers). */
+/** An important choice on a flagship page: when it comes up, its options and what each leads to. */
 export type GuideChoice = { id: string; title: string; when?: string; options: { label: string; outcome: string }[]; recommended?: string; note?: string };
 /** A flagship page's short version, from an experienced player: what matters, what to skip, common mistakes. */
 export type GuideAdvice = { matters: string[]; skip: string[]; mistakes: string[] };

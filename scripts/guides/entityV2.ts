@@ -24,7 +24,7 @@ import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, usageScope, searchesIn } from './common';
 import { supportedSegments, trusted, trustedSites, evidenceText, claimCheck, claimReview, claimSlots, type Evidence, type EvidencePack, type ClaimPage } from './claimCheck';
 import { entitySlug, entityKind, entityEvidenceFor, claimPageOf, applyVerdicts, type EntityPage } from './compendium';
-import { benchmarkAnswer, coverage, pageText, type BenchPoint } from './benchmark';
+import { benchmarkAnswer, coverage, pageText, BENCH_V, type BenchPoint } from './benchmark';
 import { lintEntity, fuzzyScore } from './siteText';
 import { ProQuotaWait } from './reviewerQuota';
 
@@ -34,6 +34,21 @@ const objOf = (text: string): any => {
   try { return JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch { return {}; }
 };
 type QA = { q: string; a: string };
+type Story = { heading: string; text: string };
+/** The "Story and background" section's parts, by kind of entity (only what the evidence covers is written). */
+const STORY_PARTS: Record<string, string> = {
+  person: '"Who they are"; "History with <the main character, by name>" (their past together and how their relationship develops); "Role in the story" (what they do in the main story, chapter by chapter); "Possible fates" (every outcome, with the choices that lead to each)',
+  boss: '"Who or what it is" (its lore and origin); "Role in the story" (why it is fought and what defeating it leads to)',
+  place: '"History" (its past and lore); "Story events here" (what happens there in the story, by chapter)',
+  thing: '"Lore" (its in-game history or description), only if the evidence has any',
+};
+/** The research ask for the story section. */
+const STORY_ASK: Record<string, (game: string, name: string) => string> = {
+  person: (g, n) => `In the video game "${g}", the character "${n}": who they are and their background; their history and relationship with the game's main character (by name), including events before the game; their role in the main story chapter by chapter; and every possible fate or ending for them and the player choices that decide each. Full detail, plainly, including deaths and endings.`,
+  boss: (g, n) => `In the video game "${g}", "${n}": its lore and origin, why the player fights it in the story, and what defeating it leads to. Full detail, plainly.`,
+  place: (g, n) => `In the video game "${g}", "${n}": its history and lore, and the story events that happen there (by chapter). Full detail, plainly.`,
+  thing: (g, n) => `In the video game "${g}", "${n}": its in-game lore and history, if any.`,
+};
 
 /** A searched call whose source-backed sentences (allowed sources only) become evidence lines. */
 export async function searchedEvidence(prompt: string, prefix: string, topic: string): Promise<{ evidence: Evidence[]; searches: number }> {
@@ -90,13 +105,16 @@ const WRITER = (game: string, name: string, typeLabel: string, kind: string, que
   'Every fact must come from an evidence line; leave a question unanswered rather than guess. Use the game\'s exact names.',
   ...(must.length ? [`KEY FACTS: a player expects any good page to say each of these (the evidence backs them); state every one, in the overview or the answer it belongs to: ${must.map((m, i) => `(${i + 1}) ${m}`).join(' ')}`] : []),
   'Never write what it is not or what it does not do (e.g. "X is not a location", "X does not sell items"). No generic advice.',
+  'State everything plainly: story events, deaths, betrayals, twists and endings included. No spoiler warnings, no hints in place of facts, no softened wording.',
+  `"story" is the page's "Story and background" section, after the quick answer: ${STORY_PARTS[kind]}. Give full detail (3-8 sentences a part), in the order of the story; leave out a part the evidence says nothing about.`,
   `Answer these questions, in this order (skip one only if the evidence says nothing): ${questions.map((q, i) => `${i + 1}. ${q}`).join(' ')}`,
   `"chapters": which of the guide's chapters it features in, only from: ${chapters.join('; ')}.`,
   'Reply with JSON only:',
   '{"overview": "the quick answer: 2-4 short sentences with what players most want to know",',
+  ' "story": [{"heading": "...", "text": "3-8 sentences"}],',
   ' "qa": [{"q": "the question", "a": "1-4 sentences"}],',
   kind === 'person'
-    ? ' "whereToFind": [{"when": "chapter or act, empty if it never changes", "where": "where; for a companion, \\"in camp\\" or \\"travels with you\\" is valid"}], "shops": [{"name": "...", "what": "..."}],'
+    ? ' "whereToFind": [{"when": "chapter or act, empty if it never changes", "where": "where; for a companion, \\"in camp\\" or \\"travels with you\\" is valid"}], "shops": [{"name": "...", "what": "..."}],' + ' (a character has no region, places or collectibles fields)'
     : kind === 'place'
     ? ' "region": "...", "where": "...", "gettingThere": "route from a nearby town", "shops": [{"name": "...", "what": "..."}], "services": ["..."], "places": [{"name": "...", "what": "..."}], "collectibles": [{"name": "...", "where": "..."}],'
     : ' "where": "where it is found or fought",',
@@ -163,23 +181,27 @@ List pairs of statements on this page that cannot both be true (different chapte
 }
 
 /** The page's questions as claim steps after the base page's (their sentences are checked like the overview's). */
-function claimsWithQA(p: EntityPage & { qa: QA[] }): { page: ClaimPage; base: number } {
+/** The page's questions and story parts as claim steps after the base page's (their sentences are checked like the overview's). */
+function claimsWithQA(p: EntityPage & { qa: QA[]; story: Story[] }): { page: ClaimPage; base: number } {
   const page = claimPageOf(p);
   const base = page.steps.length;
-  page.steps.push(...p.qa.map((x) => ({ title: x.q, text: x.a })));
+  page.steps.push(...p.qa.map((x) => ({ title: x.q, text: x.a })), ...p.story.map((x) => ({ title: x.heading, text: x.text })));
   return { page, base };
 }
-function applyAll(p: EntityPage & { qa: QA[] }, base: number, verdicts: any[]): string[] {
+function applyAll(p: EntityPage & { qa: QA[]; story: Story[] }, base: number, verdicts: any[]): string[] {
   const removed = applyVerdicts(p, verdicts.filter((v) => !(v.kind === 'sentence' && Number(String(v.label).slice(1)) > base)));
   const sentences = (t: string) => t.split(/(?<=[.!?])\s+/);
   for (const v of verdicts) {
     if (v.kind !== 'sentence' || !(v.verdict === 'unsupported' || v.verdict === 'contradicted')) continue;
     const i = Number(String(v.label).slice(1)) - 1 - base;
-    if (i < 0 || !p.qa[i]) continue;
-    p.qa[i].a = sentences(p.qa[i].a).filter((_, j) => j !== Number(v.sentence)).join(' ');
+    if (i < 0) continue;
+    if (p.qa[i]) p.qa[i].a = sentences(p.qa[i].a).filter((_, j) => j !== Number(v.sentence)).join(' ');
+    else if (p.story[i - p.qa.length]) { const st = p.story[i - p.qa.length]; st.text = sentences(st.text).filter((_, j) => j !== Number(v.sentence)).join(' '); }
+    else continue;
     removed.push(`${v.label} ${v.verdict}: ${cut(v.text, 120)}`);
   }
   p.qa = p.qa.filter((x) => x.a.trim());
+  p.story = p.story.filter((x) => x.text.trim());
   return removed;
 }
 
@@ -203,7 +225,7 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
   const scope = { dollars: 0, searches: 0 };
   const out = await usageScope.run(scope, async () => {
     // The benchmark (reused when the measurement already ran it).
-    const bench = live.benchmark?.points?.length ? live.benchmark : { ...(await benchmarkAnswer(game, name, typeLabel)), at: Date.now() };
+    const bench = live.benchmark?.points?.length && Number(live.benchmark.v || 1) >= BENCH_V ? live.benchmark : { ...(await benchmarkAnswer(game, name, typeLabel)), at: Date.now(), v: BENCH_V };
     const core: BenchPoint[] = (bench.points || []).filter((p: BenchPoint) => p.core);
     // The live page against the same points (for the before/after).
     const beforeCov = await coverage(game, name, pageText(live), core);
@@ -211,6 +233,9 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     const intent = await intents(key, game, name, slug, bench.questions || []);
     const stored = await entityEvidenceFor(key, game, name, typeLabel);
     const asked = await searchedEvidence(`In the video game "${game}", about "${name}" (${typeLabel}), answer: ${intent.questions.join(' ')}`, 'q', 'intent');
+    // The story and background (who they are, history with the main character, role in the story, fates), in full.
+    const story = kind === 'thing' ? { evidence: [] as Evidence[], searches: 0 } : await searchedEvidence(STORY_ASK[kind](game, name), 's', 'story');
+    asked.evidence.push(...story.evidence);
     let ev: EvidencePack = trusted({ ...stored, evidence: [...stored.evidence, ...(bench.evidence || []), ...asked.evidence], sites: [...new Set([...stored.sites, ...(bench.sites || []), ...asked.evidence.flatMap((e) => e.sources)])] });
     // The benchmark's core points are a model's answer: each is checked against the evidence (a targeted search for the
     // ones it doesn't back). Only verified points are required of the page; the rest are reported, not required.
@@ -236,15 +261,17 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     // Whole sentences up to n characters (never cut mid-sentence).
     const whole = (v: unknown, n: number) => cut(v, 4000).split(/(?<=[.!?])\s+/).reduce((a, x) => (a.length + x.length + 1 <= n || !a ? `${a} ${x}`.trim() : a), '');
     const named = (xs: any, f: string) => (Array.isArray(xs) ? xs : []).map((x: any) => ({ name: cut(x?.name, 80), [f]: clean(x?.[f], 220) })).filter((x: any) => x.name);
-    const page: EntityPage & { qa: QA[] } = {
+    const page: EntityPage & { qa: QA[]; story: Story[] } = {
       name: live.name, slug, type: live.type, typeLabel, title: live.title, description: live.description,
       overview: whole(j.overview, 700),
       qa: (Array.isArray(j.qa) ? j.qa : []).map((x: any) => ({ q: cut(x?.q, 160), a: whole(x?.a, 900) })).filter((x: QA) => x.q && x.a).slice(0, 8),
+      story: (Array.isArray(j.story) ? j.story : []).map((x: any) => ({ heading: cut(x?.heading, 80), text: whole(x?.text, 1800) })).filter((x: Story) => x.heading && x.text).slice(0, 6),
       summary: {
         ...(kind === 'place' ? { region: clean(j.region, 80), where: clean(j.where, 240), gettingThere: clean(j.gettingThere, 400) } : kind === 'person' ? {} : { where: clean(j.where, 240) }),
         ...(kind === 'person' ? { whereToFind: (Array.isArray(j.whereToFind) ? j.whereToFind : []).map((w: any) => ({ when: clean(w?.when, 60), where: clean(w?.where, 240) })).filter((w: any) => w.where).slice(0, 8) } : {}),
-        shops: named(j.shops, 'what') as any, services: (Array.isArray(j.services) ? j.services : []).map((x: any) => cut(x, 120)).filter(Boolean),
-        collectibles: named(j.collectibles, 'where') as any, places: named(j.places, 'what') as any,
+        shops: named(j.shops, 'what') as any, services: kind === 'person' ? [] : (Array.isArray(j.services) ? j.services : []).map((x: any) => cut(x, 120)).filter(Boolean),
+        // A character's page has no location fields (what's there, collectibles): those belong to places.
+        collectibles: kind === 'person' ? [] : named(j.collectibles, 'where') as any, places: kind === 'person' ? [] : named(j.places, 'what') as any,
         quests: (Array.isArray(j.quests) ? j.quests : []).map((q: any) => ({ name: cut(q?.name, 80), kind: cut(q?.kind, 20), chapter: cut(q?.chapter, 40) })).filter((q: any) => q.name),
         chapters: (Array.isArray(j.chapters) ? j.chapters : []).map((c: any) => cut(c, 80)).filter((c: string) => chapters.includes(c)),
         notes: (Array.isArray(j.notes) ? j.notes : []).map((x: any) => clean(x, 240)).filter(Boolean).slice(0, 2),

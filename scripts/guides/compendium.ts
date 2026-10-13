@@ -203,13 +203,8 @@ export type EntityPage = {
 };
 
 /** What kind of thing an entity is, from its type: a person (characters, NPCs, merchants, companions), a boss, or a place/thing. */
-export function entityKind(type: string): 'person' | 'boss' | 'thing' | 'place' {
-  const t = String(type || '').toLowerCase();
-  if (/charact|npc|compan|merchant|people|person|vendor|trader|ally|allies|villain|origin|follower|romance|hireling|quest giver|gang member/.test(t)) return 'person';
-  if (/boss|enem|monster|creature|foe|dragon|demigod/.test(t)) return 'boss';
-  if (/power|spell|abilit|item|weapon|armou?r|class|feat|skill|perk|talent|trinket|talisman|relic|specimen|parasite|rune|ash of war|gear|equipment|lure|recipe/.test(t)) return 'thing';
-  return 'place';
-}
+export { entityKind } from './siteText';
+import { entityKind } from './siteText';
 
 const WRITER = (game: string, name: string, typeLabel: string, ev: EvidencePack, chapters: string[]) => [
   `Write a short, focused compendium page for "${name}" (${typeLabel}) in the video game "${game}", from the EVIDENCE only.`,

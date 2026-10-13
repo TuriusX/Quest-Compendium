@@ -73,7 +73,7 @@ const WRITER = (game: string, name: string, kind: QuestKind, ev: EvidencePack, c
   'Every fact must come from an evidence line; leave a field empty rather than guess. Use the game\'s exact names. Never write generic advice.',
   '"chapter": as the evidence words it (e.g. "Chapter 2", "Epilogue Part 1"), only when it says.',
   'Reply with JSON only:',
-  '{"overview": "1-2 sentences: what the mission is about (no spoilers beyond its setup)", "giver": "who gives it", "chapter": "...", "where": "where it starts",',
+  '{"overview": "1-2 sentences: what the mission is about and how it ends", "giver": "who gives it", "chapter": "...", "where": "where it starts",',
   ' "rewards": ["each reward"], "missables": ["anything missable, only if the evidence says so"], "choices": [{"choice": "...", "outcome": "..."}],',
   kind === 'story'
     ? ' "goldMedal": ["each gold medal requirement"]}'

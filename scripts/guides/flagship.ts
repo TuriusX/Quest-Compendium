@@ -10,7 +10,7 @@
  *   - a walkthrough: the area in the order a player experiences it, as connected steps, with the page's items, secrets,
  *     missables and fights placed where you meet them (by id, so they stay tickable), plus entries the page lacks
  *   - the short version: what matters, what to skip, common mistakes
- *   - the important choices: options and what each leads to (shown as spoilers)
+ *   - the important choices: options and what each leads to
  *   - a fact-check of all of that against sources, which corrects or drops what it can't back up
  * Prints each page's searches and real cost (the API's usage data: tokens with thinking, and searches).
  *

@@ -121,6 +121,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   noMatches: 'Nothing matches that search.',
   missionsHere: 'Missions in this chapter',
   entQuestions: 'What players ask',
+  entStory: 'Story and background',
   igdbCredit: 'Game data and images from {igdb}.',
   artAlt: '{game} key art',
   coverAlt: '{game} cover art',

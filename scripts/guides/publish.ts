@@ -17,7 +17,7 @@ import { landscapeOf, wideSet, coverSet, ogImageOf, platformList, type IgdbInfo 
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
-import { shortGame, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterPage, coveringPage, singularLabel, type AchFlag } from './siteText';
+import { entityKind, shortGame, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterPage, coveringPage, singularLabel, type AchFlag } from './siteText';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 import { GENERATED as GUIDE_UI_GEN } from './guide-ui.generated';
@@ -585,7 +585,7 @@ function areaList(gameKey: string, areas: AreaLink[], current: string | null, ba
 // Entity pages next to the guide (published ones; a preview shows all), links from every mention in the guide's text
 // (with a hover preview), a forgiving search over every entity, page, step and entry, and "Services and people" as
 // grouped cards. COMP is the guide being rendered (set per guide in main).
-type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any; kind?: string; quest?: any; ref?: any; qa?: { q: string; a: string }[] };
+type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any; kind?: string; quest?: any; ref?: any; qa?: { q: string; a: string }[]; story?: { heading: string; text: string }[] };
 const COMPS = new Map<string, NonNullable<typeof COMP>>();
 /** Approved guide blueprints (guideBlueprints/{key}): their quest plans give the quests' play order and chapters. */
 const BLUEPRINTS = new Map<string, any>();
@@ -1255,7 +1255,8 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     // Backlinks: the guide pages that mention it (found by the same linker), plus the chapters the page names.
     const named = new Set(((e.summary || {}).chapters || []).map((c: string) => c.toLowerCase()));
     const mentions = visible.filter((o) => named.has(String(byslug.get(o.slug)?.name || o.name).toLowerCase()) || entitySegments(pageText(byslug.get(o.slug)!), [{ name: e.name, slug: e.slug }]).some((sg) => sg.slug));
-    const sm = e.summary || {};
+    const person = entityKind(e.typeLabel || e.type) === 'person';
+    const sm = person ? { ...(e.summary || {}), region: '', where: '', gettingThere: '', places: [], collectibles: [] } : e.summary || {};
     const row = (label: string, html: string) => (html ? `<div class="flex gap-2 py-1.5 border-t border-white/5 first:border-0"><dt class="w-36 shrink-0 text-zinc-500">${esc(label)}</dt><dd class="min-w-0 text-zinc-200">${html}</dd></div>` : '');
     const list = (xs: string[]) => (xs.length ? `<ul class="space-y-1">${xs.map((x) => `<li>${x}</li>`).join('')}</ul>` : '');
     const dir = path.join(OUT, 'guides', key, e.slug);
@@ -1267,6 +1268,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
         ${e.review ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))} · ${e.review.supported}/${e.review.total}</span>` : ''}
         ${PREVIEW ? '<span class="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-semibold text-amber-200">Preview</span>' : ''}</div>
       ${e.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${rich(e.overview, '../', e.slug)}</p>` : ''}
+      ${(e.story || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entStory'))}</h2>${e.story!.map((x: any, i: number) => `<h3 id="story-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.heading)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : ''}
       ${(e.qa || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entQuestions'))}</h2>${e.qa.map((x: any, i: number) => `<h3 id="q-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.q)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.a, '../', e.slug)}</p>`).join('')}</section>` : ''}
       <dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm">
         ${row('Type', esc(label))}
@@ -1327,7 +1329,7 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
         return `<li id="step-${i + 1}" class="scroll-mt-20 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
           <div class="flex items-baseline gap-2"><span class="shrink-0 rounded-md bg-[#a87ffb]/20 px-1.5 text-xs font-bold text-[#a87ffb]">${esc(ui('rmStep', { n: i + 1 }))}</span>${head ? `<span class="font-semibold text-white">${esc(head)}</span>` : ''}</div>
           <p class="mt-1 text-sm text-zinc-300">${esc(text)}</p>
-          ${miss.length ? `<div class="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-sm"><div class="flex items-center gap-1.5 font-semibold text-amber-200">${ICON.warn} ${esc(ui('rmMissHere'))}</div><ul class="mt-1 space-y-1 text-zinc-200">${miss.map((x) => `<li>${link(x)}${x.how && !x.hidden ? `<span class="text-zinc-400">: ${esc(String(x.how).split(/(?<=[.!?])\s/)[0])}</span>` : ''}</li>`).join('')}</ul></div>` : ''}
+          ${miss.length ? `<div class="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-sm"><div class="flex items-center gap-1.5 font-semibold text-amber-200">${ICON.warn} ${esc(ui('rmMissHere'))}</div><ul class="mt-1 space-y-1 text-zinc-200">${miss.map((x) => `<li>${link(x)}${x.how ? `<span class="text-zinc-400">: ${esc(String(x.how).split(/(?<=[.!?])\s/)[0])}</span>` : ''}</li>`).join('')}</ul></div>` : ''}
           ${mine.length > miss.length ? `<p class="mt-2 text-xs text-zinc-500">${esc(ui('rmAlsoHere'))}: ${mine.filter((x) => !x.missable).map(link).join(', ')}</p>` : ''}
         </li>`;
       }).join('')}</ol></section>`
@@ -1346,7 +1348,7 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
       ${x.hidden ? `<span class="block text-[11px] uppercase tracking-wide text-zinc-500 mt-0.5">${esc(ui('achHiddenTag'))}</span>` : ''}${x.desc ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.desc)}</span>` : ''}
       ${x.how ? `<span class="block text-zinc-300 text-sm mt-1">${esc(x.how)}</span>` : ''}
       ${where || step ? `<span class="block text-xs mt-1">${[where, step].filter(Boolean).join(' · ')}</span>` : ''}`;
-    return `<div id="${achId(x.name)}" class="scroll-mt-20" data-flags="${esc(flags.join(' '))}" data-ach="${esc(`ach:${x.name}`)}" data-search="${esc(`${x.name} ${x.hidden ? '' : x.desc || ''} ${areaName(x.area) || ''}`)}">${checkRow(`ach:${x.name}`, body)}</div>`;
+    return `<div id="${achId(x.name)}" class="scroll-mt-20" data-flags="${esc(flags.join(' '))}" data-ach="${esc(`ach:${x.name}`)}" data-search="${esc(`${x.name} ${x.desc || ''} ${areaName(x.area) || ''}`)}">${checkRow(`ach:${x.name}`, body)}</div>`;
   };
   fs.writeFileSync(
     path.join(dir, 'index.html'),

@@ -10,7 +10,7 @@
  *   add ?lang=pt (es, pt, de, fr, ru, ja, ko, zh) to get a translated guide where one exists (English otherwise)
  */
 import type { Express } from 'express';
-import { singularLabel } from './scripts/guides/siteText';
+import { singularLabel, entityKind } from './scripts/guides/siteText';
 import { getFirestore } from 'firebase-admin/firestore';
 import { placeKey } from './src/utils/placeName';
 import { landscapeOf, wideSet, coverSet } from './scripts/guides/igdbArt';
@@ -280,7 +280,7 @@ export function registerGuidesApi(app: Express): void {
       const g = await gameAreas(gameKey(String(req.params.key)));
       if (!g) return res.status(404).json({ error: 'No guide for this game yet.' });
       // The guide's published entity pages (compendium.ts), for the apps' links and their compendium list.
-      const entities = (await compendiumOf(g.key)).map((e) => ({ slug: e.slug, name: e.name, typeId: e.type, type: singularLabel(e.typeLabel), region: e.summary?.region || '', line: String(e.overview || '').split(/(?<=[.!?])\s/)[0] || '' }));
+      const entities = (await compendiumOf(g.key)).map((e) => ({ slug: e.slug, name: e.name, typeId: e.type, type: singularLabel(e.typeLabel), region: entityKind(e.typeLabel || e.type) === 'person' ? '' : e.summary?.region || '', line: String(e.overview || '').split(/(?<=[.!?])\s/)[0] || '' }));
       // The compendium by type: built entity pages, and the type's other known entities ("coming soon", not linked).
       const tax: any[] = entities.length ? await taxonomyOf(g.key) : [];
       const compendium = tax.map((t: any) => ({
@@ -301,7 +301,10 @@ export function registerGuidesApi(app: Express): void {
       const slug = String(req.params.slug).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 120);
       const e = (await compendiumOf(key)).find((x) => x.slug === slug);
       if (!e) return res.status(404).json({ error: 'No such page.' });
-      send(res, { key, slug: e.slug, name: e.name, type: singularLabel(e.typeLabel), title: e.title, overview: e.overview, summary: e.summary });
+      // A character's entry has no location fields (region, where, what's there, collectibles); those belong to places.
+      const person = entityKind(e.typeLabel || e.type) === 'person';
+      const summary = person ? { ...(e.summary || {}), region: '', where: '', gettingThere: '', places: [], collectibles: [] } : e.summary;
+      send(res, { key, slug: e.slug, name: e.name, type: singularLabel(e.typeLabel), title: e.title, overview: e.overview, summary, ...(e.story?.length ? { story: e.story } : {}), ...(e.qa?.length ? { qa: e.qa } : {}) });
     } catch (e) {
       fail(res, e);
     }
