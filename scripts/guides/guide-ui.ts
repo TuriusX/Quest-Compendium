@@ -122,6 +122,8 @@ export const GUIDE_UI_EN: Record<string, string> = {
   missionsHere: 'Missions in this chapter',
   entQuestions: 'What players ask',
   entStory: 'Story and background',
+  entGameplay: 'Gameplay',
+  entAlsoAsked: 'Also asked',
   suggestEdit: 'Suggest an edit',
   contribLabel: 'From a player',
   contribBy: 'added by {name}',

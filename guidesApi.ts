@@ -304,7 +304,7 @@ export function registerGuidesApi(app: Express): void {
       // A character's entry has no location fields (region, where, what's there, collectibles); those belong to places.
       const person = entityKind(e.typeLabel || e.type) === 'person';
       const summary = person ? { ...(e.summary || {}), region: '', where: '', gettingThere: '', places: [], collectibles: [] } : e.summary;
-      send(res, { key, slug: e.slug, name: e.name, type: singularLabel(e.typeLabel), title: e.title, overview: e.overview, summary, ...(e.story?.length ? { story: e.story } : {}), ...(e.qa?.length ? { qa: e.qa } : {}) });
+      send(res, { key, slug: e.slug, name: e.name, type: singularLabel(e.typeLabel), title: e.title, overview: e.overview, summary, ...(e.story?.length ? { story: e.story } : {}), ...(e.gameplay?.length ? { gameplay: e.gameplay } : {}), ...((e.qaArrangedAt ? e.alsoAsked : e.qa)?.length ? { alsoAsked: e.qaArrangedAt ? e.alsoAsked : e.qa } : {}) });
     } catch (e) {
       fail(res, e);
     }

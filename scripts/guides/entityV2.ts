@@ -342,6 +342,15 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
     return { ...built, bench, core, beforeCov, verified, disputed, intent, attempts };
   });
   const passed = !out.reasons.length;
+  // The answers to players' questions worked into the page's sections (no search, word for word); only what fits no
+  // section stays, under "Also asked" (qaArrange.ts).
+  {
+    const { arrangeQA, restOfPage } = await import('./qaArrange');
+    const r = await usageScope.run(scope, () => arrangeQA(game, name, out.page as any, restOfPage(out.page), kind));
+    (out.page as any).story = r.story; (out.page as any).gameplay = r.gameplay; (out.page as any).alsoAsked = r.alsoAsked;
+    out.page.summary.notes = r.notes;
+    (out.page as any).qaArrangedAt = Date.now();
+  }
   // Titles for search: kept for a page that has one (stable for the address), made for a new page.
   if (!live.title || (kind === 'person' && /collectible|what's there|location/i.test(String(live.title)))) {
     const sm: any = out.page.summary;

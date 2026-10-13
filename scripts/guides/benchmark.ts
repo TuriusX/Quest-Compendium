@@ -52,6 +52,8 @@ export function pageText(e: any): string {
   return [
     e.overview,
     ...(e.story || []).map((x: any) => `${x.heading}: ${x.text}`),
+    ...(e.gameplay || []).map((x: any) => `${x.heading}: ${x.text}`),
+    ...(e.alsoAsked || []).map((x: any) => `${x.q}: ${x.a}`),
     ...(e.qa || []).map((x: any) => `${x.q}: ${x.a}`),
     s.region, s.where, s.gettingThere,
     ...(s.whereToFind || []).map((w: any) => `${w.when || ''} ${w.where}`),

@@ -642,7 +642,7 @@ function areaList(gameKey: string, areas: AreaLink[], current: string | null, ba
 // Entity pages next to the guide (published ones; a preview shows all), links from every mention in the guide's text
 // (with a hover preview), a forgiving search over every entity, page, step and entry, and "Services and people" as
 // grouped cards. COMP is the guide being rendered (set per guide in main).
-type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any; kind?: string; quest?: any; ref?: any; qa?: { q: string; a: string }[]; story?: { heading: string; text: string }[] };
+type CompEntity = { name: string; slug: string; type: string; typeLabel: string; title: string; description: string; overview: string; summary: any; sources: string[]; review?: any; cost?: any; kind?: string; quest?: any; ref?: any; qa?: { q: string; a: string }[]; story?: { heading: string; text: string }[]; gameplay?: { heading: string; text: string }[]; alsoAsked?: { q: string; a: string }[]; qaArrangedAt?: number };
 const COMPS = new Map<string, NonNullable<typeof COMP>>();
 /** Approved guide blueprints (guideBlueprints/{key}): their quest plans give the quests' play order and chapters. */
 const BLUEPRINTS = new Map<string, any>();
@@ -1326,7 +1326,13 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
         ${PREVIEW ? '<span class="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-semibold text-amber-200">Preview</span>' : ''}</div>
       ${e.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${rich(e.overview, '../', e.slug)}</p>` : ''}
       ${(e.story || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entStory'))}</h2>${e.story!.map((x: any, i: number) => `<h3 id="story-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.heading)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : ''}
-      ${(e.qa || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entQuestions'))}</h2>${e.qa.map((x: any, i: number) => `<h3 id="q-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.q)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.a, '../', e.slug)}</p>`).join('')}</section>` : ''}
+      ${(e.gameplay || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entGameplay'))}</h2>${e.gameplay!.map((x: any, i: number) => `<h3 id="play-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.heading)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : ''}
+      ${(() => {
+        // Answers to players' questions are worked into the sections above (qaArrange.ts); only those that fit none
+        // show here. A page from before that step still shows its questions.
+        const asked = e.qaArrangedAt ? e.alsoAsked || [] : e.qa || [];
+        return asked.length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui(e.qaArrangedAt ? 'entAlsoAsked' : 'entQuestions'))}</h2>${asked.map((x: any, i: number) => `<h3 id="q-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.q)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.a, '../', e.slug)}</p>`).join('')}</section>` : '';
+      })()}
       <dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm">
         ${row('Type', esc(label))}
         ${e.quest ? questRows(e.quest, row, list) : ''}
