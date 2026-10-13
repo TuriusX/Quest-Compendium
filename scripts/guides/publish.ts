@@ -420,6 +420,9 @@ function heldRedirects(key: string, docs: any[], visible: { slug: string; name: 
 
 /** Players' suggestions on the site (contributions.ts): on when config/contrib.enabled is true, or for a local look (QC_CONTRIB=1). */
 let CONTRIB_ON = process.env.QC_CONTRIB === '1';
+/** The suggest form served on questcompendium.com (proxied, sign-in on the site): config/contrib.siteAuth, set once
+ * Firebase allows questcompendium.com and Google's sign-in accepts its /__/auth/handler. */
+let CONTRIB_SITE_AUTH = false;
 /** Approved, not yet absorbed suggestions, by "key/slug". */
 const CONTRIBS = new Map<string, { anchor: string; text: string; credit: boolean; displayName?: string; lang: string }[]>();
 
@@ -458,7 +461,7 @@ function withContributions(html: string, key: string, slug: string): string {
  * opening the form on the app server (/suggest) for that spot. Added in the browser from the page's anchors.
  */
 function suggestScript(key: string, slug: string, page: 'area' | 'entity'): string {
-  const base = `${SERVER_URL}/suggest?key=${encodeURIComponent(key)}&slug=${encodeURIComponent(slug)}&page=${page}&lang=${LANG}`;
+  const base = `/suggest?key=${encodeURIComponent(key)}&slug=${encodeURIComponent(slug)}&page=${page}&lang=${LANG}`;
   return `<script>(function(){var base=${JSON.stringify(base)},label=${JSON.stringify(ui('suggestEdit'))},skip=/^(qc-|walkthrough$|compendium$|roadmap$|people$|choices$)/;
   var link=function(el,text,after){var a=document.createElement('a');a.href=base+'&anchor='+encodeURIComponent(el.id)+'&label='+encodeURIComponent((text||'').trim().slice(0,120));a.target='_blank';a.rel='noopener';a.className='qc-suggest ml-2 text-[11px] text-zinc-500 hover:text-[#a87ffb] whitespace-nowrap';a.textContent='\u270e '+label;(after||el).appendChild(a);};
   document.querySelectorAll('main [id]').forEach(function(el){if(skip.test(el.id)||el.closest('nav,dialog,header,footer'))return;var t=el.tagName;
@@ -473,7 +476,10 @@ function suggestScript(key: string, slug: string, page: 'area' | 'entity'): stri
 function writeRedirects(moved: { key: string; from: string; to: string }[], live: Set<string>) {
   const lines = redirectLines(moved, live, Object.keys(LANG_TAG), SITE);
   // The admin pages live on the app server: the website's /admin addresses lead there.
-  const admin = [`/admin ${SERVER_URL}/admin/reviews 302`, `/admin/* ${SERVER_URL}/admin/:splat 302`, `/suggest ${SERVER_URL}/suggest 302`];
+  const suggest = CONTRIB_SITE_AUTH
+    ? [`/suggest ${SERVER_URL}/suggest 200!`, `/api/contributions ${SERVER_URL}/api/contributions 200!`, `/__/auth/* https://quest-compendium-1bccf.firebaseapp.com/__/auth/:splat 200!`, `/__/firebase/* https://quest-compendium-1bccf.firebaseapp.com/__/firebase/:splat 200!`]
+    : [`/suggest ${SERVER_URL}/suggest 302`];
+  const admin = [`/admin ${SERVER_URL}/admin/reviews 302`, `/admin/* ${SERVER_URL}/admin/:splat 302`, ...suggest];
   fs.writeFileSync(path.join(OUT, '_redirects'), `# Made by scripts/guides/publish.ts: pages that moved (scripts/guides/site-redirects.json, guide aliases).\n${[...admin, ...lines].join('\n')}\n`);
   console.log(`Redirects: ${lines.length} old URL(s) to the pages that replaced them.`);
 }
@@ -1535,7 +1541,9 @@ async function main() {
   const igdbCfg: any = (await db().collection('config').doc('igdb').get()).data() || {};
   if (!IGDB_ON) IGDB_ON = igdbCfg.site === true;
   if (!CARD_MODE) CARD_MODE = String(igdbCfg.cards || '').toUpperCase();
-  if (!CONTRIB_ON) CONTRIB_ON = (await db().collection('config').doc('contrib').get()).data()?.enabled === true;
+  const contribCfg: any = (await db().collection('config').doc('contrib').get()).data() || {};
+  if (!CONTRIB_ON) CONTRIB_ON = contribCfg.enabled === true;
+  CONTRIB_SITE_AUTH = contribCfg.siteAuth === true;
   {
     const { approvedContributions } = await import('./contribEvidence');
     for (const c of await approvedContributions()) if (!c.absorbed) CONTRIBS.set(`${c.key}/${c.slug}`, [...(CONTRIBS.get(`${c.key}/${c.slug}`) || []), c]);

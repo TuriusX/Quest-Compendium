@@ -36,10 +36,21 @@ const enabled = async () => (await db().collection('config').doc('contrib').get(
 export function registerContributions(app: Express, deps: { requireAuth: Mw; isAdmin: (user: any) => boolean; firebaseWebConfig: Record<string, string> }) {
   const requireAdmin: Mw = (req, res, next) => (deps.isAdmin((req as any).user) ? next() : res.status(403).json({ error: 'Not an admin.' }));
 
-  app.get('/suggest', (_req: Request, res: Response) => {
+  app.get('/suggest', async (req: Request, res: Response) => {
     res.set('Cache-Control', 'no-store');
     res.set('X-Robots-Tag', 'noindex');
-    res.type('html').send(suggestPage(deps.firebaseWebConfig));
+    // What the suggestion is for, in words: the game's proper name (IGDB's, else the guide's) and the page's name.
+    const key = cut(req.query.key, 120).toLowerCase().replace(/[^a-z0-9-]/g, '');
+    const slug = cut(req.query.slug, 160).toLowerCase().replace(/[^a-z0-9-]/g, '');
+    let game = '', pageName = '';
+    try {
+      if (key) { const g: any = (await db().collection('guides').doc(key).get()).data() || {}; game = String((g.igdb && !g.igdb.missing && g.igdb.name) || g.game || ''); }
+      if (key && slug) {
+        const e: any = req.query.page === 'entity' ? (await db().collection('guideCompendium').doc(key).collection('entities').doc(slug).get()).data() : (await db().collection('guides').doc(key).collection('areas').doc(slug).get()).data();
+        pageName = String(e?.name || '');
+      }
+    } catch { /* the form still works without the names */ }
+    res.type('html').send(suggestPage(deps.firebaseWebConfig, { game, pageName }));
   });
 
   app.post('/api/contributions', deps.requireAuth, async (req: Request, res: Response) => {
@@ -102,8 +113,9 @@ export function registerContributions(app: Express, deps: { requireAuth: Mw; isA
   });
 }
 
-function suggestPage(firebaseConfig: Record<string, string>): string {
+function suggestPage(firebaseConfig: Record<string, string>, names: { game: string; pageName: string } = { game: '', pageName: '' }): string {
   const cfg = JSON.stringify(firebaseConfig).replace(/</g, '\\u003c');
+  const namesJson = JSON.stringify(names).replace(/</g, '\\u003c');
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -147,13 +159,17 @@ function suggestPage(firebaseConfig: Record<string, string>): string {
   const q = new URLSearchParams(location.search);
   const ctx = { key: q.get('key') || '', slug: q.get('slug') || '', page: q.get('page') || 'area', anchor: q.get('anchor') || '', label: q.get('label') || '', lang: q.get('lang') || 'en' };
   const $ = (id) => document.getElementById(id);
-  $('where').textContent = [ctx.label, ctx.slug && ctx.key ? ctx.key.replace(/-/g, ' ') : ''].filter(Boolean).join(' · ') || 'Quest Compendium guides';
+  const names = ${namesJson};
+  $('where').textContent = [names.game, names.pageName, ctx.label && ctx.label !== names.pageName ? ctx.label : ''].filter(Boolean).join(' · ') || 'Quest Compendium guides';
+  if (names.game) document.title = 'Suggest an edit: ' + names.game + ' | Quest Compendium';
   let fb;
   try {
     fb = { ...(await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js')), ...(await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js')) };
   } catch (e) { $('gateMsg').textContent = 'Sign-in could not load. A blocker may be stopping www.gstatic.com: allow it, or open this page in Chrome, Edge or Firefox.'; throw e; }
   const { initializeApp, getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged } = fb;
-  const auth = getAuth(initializeApp(${cfg}));
+  const fbCfg = ${cfg};
+  if (location.hostname === 'questcompendium.com' || location.hostname === 'www.questcompendium.com') fbCfg.authDomain = location.hostname;
+  const auth = getAuth(initializeApp(fbCfg));
   getRedirectResult(auth).catch((e) => { $('gateMsg').textContent = 'Sign-in failed: ' + (e.code || e.message); });
   $('signin').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => { $('gateMsg').textContent = 'Sign-in failed: ' + (e.code || e.message); });
   $('redirect').onclick = () => signInWithRedirect(auth, new GoogleAuthProvider());
