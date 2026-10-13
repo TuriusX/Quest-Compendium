@@ -13,7 +13,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { landscapeOf, wideSet, coverSet, ogImageOf, type IgdbInfo } from './igdbArt';
+import { landscapeOf, wideSet, coverSet, ogImageOf, platformList, type IgdbInfo } from './igdbArt';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
@@ -128,7 +128,7 @@ function igdbFacts(key: string, game: string): string {
   const g = IGDB.get(key);
   if (!g || g.missing) return '';
   const year = g.released ? g.released.slice(0, 4) : '';
-  const facts = [year, (g.platforms || []).slice(0, 6).join(', '), (g.genres || []).slice(0, 3).join(', ')].filter(Boolean);
+  const facts = [year, platformList(g.platforms).slice(0, 7).join(', '), (g.genres || []).slice(0, 3).join(', ')].filter(Boolean);
   const cover = g.cover ? (() => { const c = coverSet(g.cover!); return `<img src="${c.src}" srcset="${c.srcset}" sizes="88px" alt="${esc(ui('coverAlt', { game }))}" loading="lazy" decoding="async" width="88" height="125" class="w-[88px] h-[125px] shrink-0 rounded-lg border border-white/10 object-cover">`; })() : '';
   if (!facts.length && !cover) return '';
   return `<div class="mt-4 flex items-start gap-4">${cover}<div class="min-w-0 text-sm text-zinc-400 space-y-1">${facts.map((f) => `<div>${esc(f)}</div>`).join('')}<div class="text-xs text-zinc-500">${igdbCredit()}</div></div></div>`;
@@ -1069,7 +1069,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   let lastGroup = '';
   const rows = links
     .map((l) => {
-      const head = l.group && l.group !== lastGroup ? `<h2 data-head="${esc(l.group)}" class="pt-6 pb-2 text-sm font-bold uppercase tracking-wide text-zinc-400">${esc(l.group)}</h2>` : '';
+      const head = l.group && l.group !== lastGroup ? `<h3 data-head="${esc(l.group)}" class="flex items-center gap-3 pt-6 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500"><span>${esc(l.group)}</span><span class="h-px flex-1 bg-white/10"></span></h3>` : '';
       lastGroup = l.group || lastGroup;
       return `${head}<a data-search="${esc(`${l.name} ${l.story || ''} ${l.search || ''}`)}"${l.group ? ` data-group="${esc(l.group)}"` : ''} href="${esc(l.slug)}/index.html" data-area-link="${esc(l.slug)}" data-name="${esc(l.name)}" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
           <span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(l.name)}</span>${l.story ? `<span class="block text-sm text-zinc-500 truncate">${esc(l.story)}</span>` : ''}</span>
@@ -1102,9 +1102,11 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           ${achHere ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${(achHere.list || []).length} · ${(achHere.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
           <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
           ${guideSearchBox(key, '#qc-area-list')}
+          ${jumpBar(links.length, !!achHere)}
           <div id="qc-area-list">
+          <section id="walkthrough" class="mt-10 scroll-mt-20">${sectionHead(ui('walkthrough'), ui('walkthroughSub'), `${links.length} ${one(links.length, 'statAreas')}`)}
+          <div id="qc-area-rows" class="mt-2">${rows}</div></section>
           ${compSearch(key, visible, byslug)}
-          <div id="qc-area-rows" class="mt-3">${rows}</div>
           </div>
           ${cta('../'.repeat(2 + extra), gameName)}
         </div>`,
@@ -1193,11 +1195,23 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
       return `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(built[0].typeLabel)}</div>
       <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => `<a href="${esc(entHref(e.slug))}" class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(e.name)}</a>`).join('')}</div></div>`;
     }).join('');
-  return `<h2 class="mt-8 text-lg font-bold text-white">${esc(ui('compendium'))}</h2>
-  ${types.includes('qc-soon') ? `<p class="mt-1 text-xs text-zinc-500">${esc(ui('comingSoonNote'))}</p>` : ''}
-  <div class="mt-3 grid gap-3 sm:grid-cols-2">${types}</div>
+  return `<section id="compendium" class="mt-14 scroll-mt-20">${sectionHead(ui('compendium'), ui('compendiumSub'), ui('pagesCount', { n: COMP.entities.length }))}
+  ${types.includes('qc-soon') ? `<p class="mt-3 text-xs text-zinc-500">${esc(ui('comingSoonNote'))}</p>` : ''}
+  <div class="mt-4 grid gap-3 sm:grid-cols-2">${types}</div></section>
   <script>document.querySelectorAll('.qc-soon').forEach(function(s){s.addEventListener('click',function(){var t=s.textContent;s.textContent=s.getAttribute('data-soon');setTimeout(function(){s.textContent=t;},1400);});});</script>`;
 }
+
+/** A guide front page's jump bar: its walkthrough, its compendium and its achievements (shown with two or more). */
+function jumpBar(areas: number, ach: boolean): string {
+  const jump = (href: string, label: string, n?: number) => `<a href="${href}" class="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-zinc-300 hover:border-[#a87ffb]/50 hover:text-white">${esc(label)}${n != null ? ` <span class="text-zinc-500">${n}</span>` : ''}</a>`;
+  const parts = [jump('#walkthrough', ui('walkthrough'), areas), ...(COMP?.entities.length ? [jump('#compendium', ui('compendium'), COMP.entities.length)] : []), ...(ach ? [jump('achievements/index.html', ui('achLink'))] : [])];
+  return parts.length > 1 ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex flex-wrap items-center gap-2 text-sm">${parts.join('')}</nav>` : '';
+}
+
+/** A guide front page's section header: accent bar, title, a line on what's in it, and its count. */
+const sectionHead = (title: string, sub: string, count?: string) => `<div class="flex items-end justify-between gap-3 border-b border-white/10 pb-3">
+    <div class="min-w-0"><h2 class="flex items-center gap-2.5 text-xl font-bold text-white"><span class="h-5 w-1 shrink-0 rounded-full bg-[#a87ffb]"></span>${esc(title)}</h2><p class="mt-1 text-sm text-zinc-500">${esc(sub)}</p></div>
+    ${count ? `<span class="shrink-0 text-sm text-zinc-500 tabular-nums">${esc(count)}</span>` : ''}</div>`;
 
 /** The compendium's entity pages (previews only): a summary box made for search, linked back to the guide. */
 /**
@@ -1390,8 +1404,9 @@ function indexBody(list: { key: string; game: string; count: number; players?: n
       return html.replace(' data-l=', ` data-first="${l}" data-l=`);
     })
     .join('');
-  const popular = list.filter((g) => (g.players || 0) > 0).sort((a, b) => (b.players || 0) - (a.players || 0)).slice(0, 4);
-  const fresh = list.slice().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 4);
+  const perRow = CARD_MODE === 'A' ? 6 : 4;
+  const popular = list.filter((g) => (g.players || 0) > 0).sort((a, b) => (b.players || 0) - (a.players || 0)).slice(0, perRow);
+  const fresh = list.slice().sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, perRow);
   const row = (title: string, items: typeof list) =>
     items.length ? `<section data-hide-when-searching class="mb-8"><h2 class="text-lg font-bold text-white mb-3">${esc(title)}</h2><div class="grid ${CARD_MODE === 'A' ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-6' : 'sm:grid-cols-2 lg:grid-cols-4'} gap-3">${items.map((g) => card(g, false)).join('')}</div></section>` : '';
   const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].filter((l) => seen.has(l));
