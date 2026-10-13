@@ -1343,9 +1343,10 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
 
 /** A guide front page's jump bar: its walkthrough, its compendium and its achievements (shown with two or more). */
 function jumpBar(areas: number, ach: boolean): string {
-  const jump = (href: string, label: string, n?: number) => `<a href="${href}" class="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-zinc-300 hover:border-[#a87ffb]/50 hover:text-white">${esc(label)}${n != null ? ` <span class="text-zinc-500">${n}</span>` : ''}</a>`;
+  // Small enough to sit on one line on a phone; the counts show from tablet width up.
+  const jump = (href: string, label: string, n?: number) => `<a href="${href}" class="whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-zinc-300 hover:border-[#a87ffb]/50 hover:text-white">${esc(label)}${n != null ? ` <span class="hidden sm:inline text-zinc-500">${n}</span>` : ''}</a>`;
   const parts = [jump('#walkthrough', ui('walkthrough'), areas), ...(COMP?.entities.length ? [jump('#compendium', ui('compendium'), COMP.entities.length)] : []), ...(ach ? [jump('achievements/index.html', ui('achShort'))] : [])];
-  return parts.length > 1 ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex flex-wrap items-center gap-2 text-sm">${parts.join('')}</nav>` : '';
+  return parts.length > 1 ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex flex-wrap items-center gap-1.5 text-[13px] sm:text-sm">${parts.join('')}</nav>` : '';
 }
 
 /** A guide front page's section header: accent bar, title, a line on what's in it, and its count. */
