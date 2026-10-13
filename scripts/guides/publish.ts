@@ -489,8 +489,8 @@ function page(opts: { title: string; description: string; depth: number; canonic
 <body class="min-h-screen"${opts.guide ? ` data-guide="${esc(opts.guide)}"` : ''}${opts.area ? ` data-area="${esc(opts.area)}"` : ''}>
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
     <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
-      <a href="${up}${LP}index.html" class="flex items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="${up}icon.svg" alt="" class="w-7 h-7 qc-pixel"> Quest Compendium</a>
-      <div class="flex items-center gap-4 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
+      <a href="${up}${LP}index.html" class="flex shrink-0 items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="${up}icon.svg" alt="" class="w-7 h-7 qc-pixel"><span class="max-[419px]:sr-only">Quest Compendium</span></a>
+      <div class="flex items-center gap-3 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
         <a href="${up}${LP}guides/index.html" class="hover:text-white">${esc(ui('navGuides'))}</a>
         <a href="${up}${LP}index.html?from=guide#download" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('navGetApp'))}</a>
         ${menu}
