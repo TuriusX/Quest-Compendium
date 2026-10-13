@@ -501,7 +501,7 @@ async function main() {
   const held = hold ? queue.filter((q) => !q.approved) : [];
   if (held.length) {
     queue.splice(0, queue.length, ...queue.filter((q) => q.approved));
-    report.push(`⏸️ Repairs on hold until ${state.queueHold.until}${state.queueHold.why ? ` (${state.queueHold.why})` : ''}: ${held.length} waiting, ${queue.length} approved one(s) run.`);
+    report.push(`⏸️ Repairs on hold until ${state.queueHold.until}: ${held.length} waiting, ${queue.length} approved run.${state.queueHold.why ? ` Why: ${state.queueHold.why}.` : ''}`);
   }
   while (queue.length && !DRY && !paused) {
     const item = queue.shift()!;
