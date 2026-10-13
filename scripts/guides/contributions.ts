@@ -92,6 +92,12 @@ async function main() {
     const [has] = await coverage(game, page.name, page.text, [{ point: String(c.decided?.text || c.text), kind: 'other', core: true }]);
     if (has) { await d.ref.set({ absorbed: { at: Date.now() } }, { merge: true }); absorbed++; }
   }
+  // Declined suggestions are deleted after 90 days (the privacy policy says so).
+  let deleted = 0;
+  for (const d of (await db().collection('contributions').where('status', '==', 'rejected').get()).docs) {
+    if (Number(d.data().decided?.at || d.data().at || 0) < Date.now() - 90 * 86_400_000) { await d.ref.delete(); deleted++; }
+  }
+  if (deleted) console.log(`  ${deleted} declined suggestion(s) older than 90 days deleted`);
   const waiting = (await db().collection('contributions').where('status', '==', 'checked').count().get()).data().count;
   console.log(`suggestions: ${checked} checked, ${waiting} waiting for approval, ${absorbed} now part of their page; $${dollars.toFixed(2)}`);
   setTimeout(() => process.exit(0), 300);
