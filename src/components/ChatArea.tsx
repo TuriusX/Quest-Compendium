@@ -289,13 +289,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   };
   // "In the guide" from the achievements drawer, or "Open in guide" on a tracker entry: switch to the Guide at that
   // area (and that entry, shown and highlighted).
-  const [guideOpenReq, setGuideOpenReq] = useState<{ slug: string; entry?: string; n: number } | null>(null);
+  const [guideOpenReq, setGuideOpenReq] = useState<{ slug: string; entry?: string; entity?: boolean; n: number } | null>(null);
   useEffect(() => {
     const onOpen = (e: Event) => {
       const d = (e as CustomEvent).detail;
       if (!d?.slug) return;
       setMode('guide');
-      setGuideOpenReq({ slug: d.slug, entry: typeof d.entry === 'string' ? d.entry : undefined, n: Date.now() });
+      setGuideOpenReq({ slug: d.slug, entry: typeof d.entry === 'string' ? d.entry : undefined, entity: !!d.entity, n: Date.now() });
     };
     window.addEventListener('qc-open-guide', onOpen);
     return () => window.removeEventListener('qc-open-guide', onOpen);

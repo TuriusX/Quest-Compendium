@@ -48,7 +48,7 @@ const detail = (d: TrackerDetail): TrackerDetail | undefined => {
   }
   return Object.keys(out).length ? out : undefined;
 };
-export type TrackerSectionId = 'answer' | 'missable' | 'noreturn' | 'collect' | 'ach';
+export type TrackerSectionId = 'guide' | 'answer' | 'missable' | 'noreturn' | 'collect' | 'ach';
 export type TrackerSection = { id: TrackerSectionId; title: string; tone?: 'amber'; icon?: 'warn'; items: TrackerItem[]; nextTurn?: boolean };
 export type TrackerData = {
   id: string;
@@ -66,6 +66,10 @@ export type TrackerData = {
   locating?: boolean;
   /** A short message on the tracker (why "Locate me" couldn't set the place). */
   notice?: string;
+  /** The guide covers the player's current quest: "Load the guide's steps: <name> (n)" (utils/guideSteps). */
+  offer?: { name: string; n: number };
+  /** A missable line at the bottom (a loaded quest's missables). */
+  warning?: string;
   labels?: Record<string, string>;
 };
 export type TrackerPayload = { data: TrackerData; gameKey: string };
@@ -93,19 +97,21 @@ const LABEL_KEYS = [
   'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'secBattle', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
+  'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
   Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));
 
 /** Section titles when a translation is missing (the page has the same English fallbacks for its other words). */
 const SECTION_EN: Record<TrackerSectionId, string> = {
+  guide: 'From the guide',
   answer: 'From your last answer',
   missable: 'Missable here',
   noreturn: 'Point of no return',
   collect: 'To collect',
   ach: 'Achievements here',
 };
-const SECTION_KEY: Record<TrackerSectionId, string> = { answer: 'secAnswer', missable: 'secMissable', noreturn: 'secNoReturn', collect: 'secCollect', ach: 'secAch' };
+const SECTION_KEY: Record<TrackerSectionId, string> = { guide: 'secGuide', answer: 'secAnswer', missable: 'secMissable', noreturn: 'secNoReturn', collect: 'secCollect', ach: 'secAch' };
 
 /** Lines that open with an apology or a correction ("You're right…", "Sorry…") make a poor quest title. */
 const APOLOGY = /^(you are|you're|you’re|sorry|my mistake|apologies)\b/i;
@@ -229,7 +235,13 @@ export function buildTrackerPayload(
   guideArea: TrackerGuideArea | null | undefined,
   achievementGuide: AchievementGuide | null | undefined,
   labels: Record<string, string> | undefined,
-  opts: { accent: string; gameKey: string; pinned?: boolean; achievements?: Achievement[]; locating?: boolean; notice?: string },
+  opts: {
+    accent: string; gameKey: string; pinned?: boolean; achievements?: Achievement[]; locating?: boolean; notice?: string;
+    /** The guide's steps the player loaded (utils/guideSteps): they're the objectives in place of the answer's. */
+    guideSteps?: { title: string; items: TrackerItem[]; warning?: string } | null;
+    /** The guide covers the current quest: offer to load its steps. */
+    offer?: { name: string; count: number } | null;
+  },
 ): TrackerPayload | null {
   const msg = latestAnswer || null;
   const L = labels || {};
@@ -240,8 +252,10 @@ export function buildTrackerPayload(
   const answerPlace = msg ? msg.placeChosen || msg.place?.name || '' : '';
   // The answer counts for the current place when it's about it (or nothing better is known, or it was picked).
   const answerHere = !!msg && (!!opts.pinned || !tabPlace || (!!answerPlace && samePlace(answerPlace, tabPlace.name)));
-  const steps = answerHere && msg?.steps?.length ? msg.steps : [];
-  if (!tabPlace && !steps.length) return null;
+  const loadedSteps = opts.guideSteps && opts.guideSteps.items.length ? opts.guideSteps : null;
+  // Loaded guide steps stand in for the answer's objectives.
+  const steps = !loadedSteps && answerHere && msg?.steps?.length ? msg.steps : [];
+  if (!tabPlace && !steps.length && !loadedSteps) return null;
 
   const place = tabPlace
     ? { name: tabPlace.name, story: storyPhrase(tabPlace.story) || undefined, sure: !!tabPlace.confirmed }
@@ -258,6 +272,7 @@ export function buildTrackerPayload(
   if (place && placeStory) place.story = undefined;
 
   const sections: TrackerSection[] = [];
+  if (loadedSteps) sections.push({ id: 'guide', title: loadedSteps.title, items: loadedSteps.items });
   if (steps.length && msg) {
     const done = new Set(msg.doneSteps ?? []);
     sections.push({
@@ -364,6 +379,8 @@ export function buildTrackerPayload(
       ...(guideArea?.areas?.length && Number.isInteger(guideArea.index) ? { areas: { names: guideArea.areas.map((a) => a.name), index: guideArea.index! } } : {}),
       ...(opts.locating ? { locating: true } : {}),
       ...(opts.notice ? { notice: opts.notice } : {}),
+      ...(opts.offer && !loadedSteps ? { offer: { name: opts.offer.name, n: opts.offer.count } } : {}),
+      ...(loadedSteps?.warning ? { warning: loadedSteps.warning } : {}),
       // The place isn't one of the guide's areas by name: say which area this is and that it's the closest match.
       ...(guideArea && guideArea.via && guideArea.via !== 'name'
         ? { source: (L.closest || 'From the guide: {area} (closest match)').replace('{area}', guideArea.name) }

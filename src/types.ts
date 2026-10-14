@@ -159,6 +159,11 @@ export interface GameTab {
   personalQuests?: PersonalQuest[];
   /** Where the player is in this game. confirmed = the player picked or said it, not just the AI's guess. */
   place?: { name: string; confirmed: boolean; story?: string; storyConfirmed?: boolean };
+  /**
+   * Guide steps loaded on the quest log (utils/guideSteps): a quest page's steps or a walkthrough's, in place of the
+   * answer's objectives, until a newer answer (answerId: the answer they were loaded with) or the player unloads them.
+   */
+  guideSteps?: { kind: 'quest' | 'walk'; key: string; slug: string; name: string; from?: string; answerId?: string };
   createdAt: number;
   lastActive: number;
 }

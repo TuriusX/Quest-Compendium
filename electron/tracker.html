@@ -109,6 +109,20 @@
   .source:empty { display: none; }
   #tracker.collapsed .source { display: none; }
   .quest { font-weight: 700; font-size: 1.02em; line-height: 1.3; margin: .1em 0 .2em 0; color: #fff; }
+  /* The guide covers this quest: one quiet line offering its steps (no AI question), with a × for "not now". */
+  .offer { display: flex; align-items: center; gap: .4em; margin: 0 0 .3em 0; font-size: .82em; color: var(--dim); }
+  .offer .go { cursor: pointer; color: var(--accent); font-weight: 700; border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    border-radius: 3px; padding: .05em .45em; background: rgba(16,12,28,.6); text-shadow: none; }
+  .offer .go:hover { background: var(--accent); color: #16101f; }
+  .offer .nm { color: var(--ink); font-weight: 600; }
+  .offer .dx { cursor: pointer; font-weight: 800; padding: 0 .2em; opacity: .7; }
+  .offer .dx:hover { opacity: 1; color: #fff; }
+  .offer.off, #tracker.collapsed .offer { display: none; }
+  /* Loaded guide steps: their heading says where they're from, with a small control to go back to the answer's. */
+  .sechead .unl { opacity: 0; font-weight: 800; padding: 0 .25em; letter-spacing: 0; }
+  .sechead:hover .unl { opacity: .85; }
+  .sechead .unl:hover { opacity: 1; color: #fff; }
+  .sec.guide .sechead { color: var(--accent); }
   /* The sections scroll here once the tracker is at its height limit; the scrollbar only shows while hovered. */
   .body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: .2em;
     scrollbar-width: thin; scrollbar-color: transparent transparent; }
@@ -279,6 +293,7 @@
   <div class="arealist off" id="areaList"></div>
   <div class="source" id="source"></div>
   <div class="quest" id="quest"></div>
+  <div class="offer off" id="offer"></div>
   <div class="body" id="body">
     <div id="secs"></div>
     <div class="none" id="none"></div>
@@ -351,6 +366,8 @@
     headFold: 'Click: fold the log to this line or open it. Drag: move.', openBook: 'Open the Compendium',
     foldHint: 'Click to fold or open', detWhere: 'Where', detHow: 'How', detMissable: 'Missable', detNotes: 'Notes',
     openInGuide: 'Open in guide', askAbout: 'Ask about this', expandHint: 'Click for details', missableTip: 'Can be missed for good',
+    loadSteps: "Load the guide's steps", loadStepsHint: "The guide covers this quest: its steps become your objectives (no question used)",
+    unloadSteps: "Back to your answer's objectives", dismissOffer: 'Not now', part: 'Part {n} of {total}',
   };
   const L = (k, vars) => {
     const own = state.data && state.data.labels && state.data.labels[k];
@@ -456,6 +473,10 @@
     $('source').textContent = d.source || '';
     $('quest').textContent = d.quest || '';
     $('quest').style.display = d.quest ? '' : 'none';
+    // "Load the guide's steps: <name> (12)", while the guide covers the current quest and nothing is loaded.
+    const of = d.offer && d.offer.name ? d.offer : null;
+    $('offer').classList.toggle('off', !of);
+    if (of) $('offer').innerHTML = `<span class="go" title="${esc(L('loadStepsHint'))}">＋ ${esc(L('loadSteps'))}</span><span class="nm">${esc(of.name)}</span>${of.n ? `<span>(${of.n})</span>` : ''}<span class="dx" title="${esc(L('dismissOffer'))}">×</span>`;
     const p = d.place || null;
     $('place').style.display = p && p.name ? '' : 'none';
     // While locating, the place line says only "Locating…" (the rest of the log stays as it was until the result).
@@ -491,8 +512,10 @@
       // The count lives in the header only; the section's "show 3 / 6 / all" is a small control shown on hover.
       const lim = `<span class="lim" title="${esc(L('limitHint'))}">≡</span>`;
       // The answer's objectives are the log itself: no heading (a fight keeps "Battle plan" and its Next turn).
-      const head = x.id === 'answer' && !x.nextTurn ? '' : `<div class="sechead" title="${esc(L('foldHint'))}">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${lim}<span class="chev">${folded ? '▸' : '▾'}</span></div>`;
-      return `<div class="sec${x.tone === 'amber' ? ' amber' : ''}${folded && head ? ' folded' : ''}" data-sec="${esc(x.id)}">
+      // Loaded guide steps: the quest's name, and a small × back to the answer's objectives.
+      const unl = x.id === 'guide' ? `<span class="unl" title="${esc(L('unloadSteps'))}">×</span>` : '';
+      const head = x.id === 'answer' && !x.nextTurn ? '' : `<div class="sechead" title="${esc(L('foldHint'))}">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${lim}${unl}<span class="chev">${folded ? '▸' : '▾'}</span></div>`;
+      return `<div class="sec${x.tone === 'amber' ? ' amber' : ''}${x.id === 'guide' ? ' guide' : ''}${folded && head ? ' folded' : ''}" data-sec="${esc(x.id)}">
         ${head}
         <ol>${shown.map((o) => itemHtml(o, x.id, o.id === curId)).join('')}</ol>
         ${x.nextTurn ? `<div class="nturn${state.turnBusy ? ' busy' : ''}" title="${esc(L('nextTurnHint'))}">⟳ ${esc(L('nextTurn'))}</div>` : ''}
@@ -647,6 +670,7 @@
     const sec = e.target.closest('.sec'); if (!sec || !state.data) return;
     const id = sec.dataset.sec;
     const x = (state.data.sections || []).find((s2) => s2.id === id);
+    if (e.target.closest('.unl')) { send('unload-steps', {}); return; }
     if (e.target.closest('.lim')) {
       // The count: show 3, then 6, then all (remembered per game by the app).
       const cur = state.limits && state.limits[id];
@@ -732,6 +756,10 @@
   // "Locate me" (the crosshair after the place name): the app takes a screenshot and finds the area; meanwhile the
   // crosshair spins and the place line says "Locating…".
   $('bLocate').addEventListener('click', () => { if (state.data && !state.data.locating) send('locate', {}); });
+  $('offer').addEventListener('click', (e) => {
+    if (e.target.closest('.dx')) { state.data.offer = null; render(); send('dismiss-offer', {}); return; }
+    if (e.target.closest('.go, .nm')) send('load-steps', {});
+  });
   const confirmPlace = () => {
     const p = state.data && state.data.place; if (!p || !p.name) return;
     p.sure = true; render();

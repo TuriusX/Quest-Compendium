@@ -116,6 +116,7 @@ function localizePage(p: any, t: any) {
     enemies: merge(p.enemies, x.enemies),
     shops: merge(p.shops, x.shops),
     fights: merge(p.fights || [], x.fights),
+    ...(p.walkthrough ? { walkthrough: merge(p.walkthrough, x.walkthrough) } : {}),
     // The summary box and the way here: the translation's words, the original's levels and coordinates.
     ...(p.info && x.info ? { info: { ...p.info, ...x.info, levels: p.info.levels, coords: p.info.coords } } : {}),
     tips: Array.isArray(x.tips) && x.tips.length === p.tips.length ? x.tips : p.tips,
@@ -280,7 +281,7 @@ export function registerGuidesApi(app: Express): void {
       const g = await gameAreas(gameKey(String(req.params.key)));
       if (!g) return res.status(404).json({ error: 'No guide for this game yet.' });
       // The guide's published entity pages (compendium.ts), for the apps' links and their compendium list.
-      const entities = (await compendiumOf(g.key)).map((e) => ({ slug: e.slug, name: e.name, typeId: e.type, type: singularLabel(e.typeLabel), region: entityKind(e.typeLabel || e.type) === 'person' ? '' : e.summary?.region || '', line: String(e.overview || '').split(/(?<=[.!?])\s/)[0] || '' }));
+      const entities = (await compendiumOf(g.key)).map((e) => ({ slug: e.slug, name: e.name, typeId: e.type, type: singularLabel(e.typeLabel), region: entityKind(e.typeLabel || e.type) === 'person' ? '' : e.summary?.region || '', line: String(e.overview || '').split(/(?<=[.!?])\s/)[0] || '', ...(e.kind === 'quest' ? { quest: true } : {}) }));
       // The compendium by type: built entity pages, and the type's other known entities ("coming soon", not linked).
       const tax: any[] = entities.length ? await taxonomyOf(g.key) : [];
       const compendium = tax.map((t: any) => ({
@@ -294,6 +295,22 @@ export function registerGuidesApi(app: Express): void {
     }
   });
 
+  // A quest page's structured data (scripts/guides/quests.ts), for the quest log: its parts and steps (ids stable),
+  // missables, and the walkthrough it belongs to.
+  const questOf = (e: any) => {
+    const q = (e as any).quest;
+    if (!q || typeof q !== 'object') return null;
+    const parts = (Array.isArray(q.parts) ? q.parts : [])
+      .map((p: any) => ({ id: String(p?.id || ''), name: String(p?.name || ''), where: String(p?.where || ''), steps: (Array.isArray(p?.steps) ? p.steps : []).filter((st: any) => st?.id && st?.text).map((st: any) => ({ id: String(st.id), text: String(st.text) })) }))
+      .filter((p: any) => p.id && p.steps.length);
+    return {
+      giver: String(q.giver || ''), chapter: String(q.chapter || ''), where: String(q.where || ''),
+      missables: (Array.isArray(q.missables) ? q.missables : []).map(String).filter(Boolean),
+      parts,
+      ...(q.walkthrough?.slug ? { walkthrough: { slug: String(q.walkthrough.slug), name: String(q.walkthrough.name || ''), ...(q.walkthrough.anchor ? { anchor: String(q.walkthrough.anchor) } : {}) } } : {}),
+    };
+  };
+
   // One entity page (published), for the apps' guide view.
   app.get('/api/guides/:key/entity/:slug', async (req, res) => {
     try {
@@ -304,7 +321,7 @@ export function registerGuidesApi(app: Express): void {
       // A character's entry has no location fields (region, where, what's there, collectibles); those belong to places.
       const person = entityKind(e.typeLabel || e.type) === 'person';
       const summary = person ? { ...(e.summary || {}), region: '', where: '', gettingThere: '', places: [], collectibles: [] } : e.summary;
-      send(res, { key, slug: e.slug, name: e.name, type: singularLabel(e.typeLabel), title: e.title, overview: e.overview, summary, ...(e.story?.length ? { story: e.story } : {}), ...(e.gameplay?.length ? { gameplay: e.gameplay } : {}), ...((e.qaArrangedAt ? e.alsoAsked : e.qa)?.length ? { alsoAsked: e.qaArrangedAt ? e.alsoAsked : e.qa } : {}) });
+      send(res, { key, slug: e.slug, name: e.name, type: singularLabel(e.typeLabel), title: e.title, overview: e.overview, summary, ...(e.story?.length ? { story: e.story } : {}), ...(e.gameplay?.length ? { gameplay: e.gameplay } : {}), ...((e.qaArrangedAt ? e.alsoAsked : e.qa)?.length ? { alsoAsked: e.qaArrangedAt ? e.alsoAsked : e.qa } : {}), ...(questOf(e) ? { quest: questOf(e) } : {}) });
     } catch (e) {
       fail(res, e);
     }
@@ -338,6 +355,10 @@ export function registerGuidesApi(app: Express): void {
           fights: (Array.isArray(a.fights) ? a.fights : []).map(({ sources, updatedFrom, ...x }: any) => x).filter((x: any) => x && x.name),
           // The summary box and the way here (region, levels, quests, services, enemy types, directions, coordinates).
           ...(a.info && typeof a.info === 'object' ? { info: (({ sources, ...x }: any) => x)(a.info) } : {}),
+          // A flagship page's walkthrough in play order (the quest log can load its steps as objectives).
+          ...(Array.isArray(a.walkthrough) && a.walkthrough.length
+            ? { walkthrough: a.walkthrough.filter((w: any) => w && w.id && w.title).map((w: any) => ({ id: String(w.id), title: String(w.title), text: String(w.text || ''), ...(w.warn ? { warn: String(w.warn) } : {}), ...(w.tip ? { tip: String(w.tip) } : {}) })) }
+            : {}),
           // Structure-specific sections (a calendar page's deadlines, missable events, social links, activities).
           sections: Array.isArray(a.sections)
             ? a.sections.map((x: any) => ({ title: String(x.title || ''), check: !!x.check, entries: (x.entries || []).map((e: any) => ({ id: String(e.id), text: String(e.text || '') })) }))

@@ -88,7 +88,7 @@ export function QcGuidesView({
   place?: string;
   onAsk?: (question: string) => void;
   /** Open this area (the achievements drawer's "In the guide"), and show one entry in it (a tracker entry's "Open in guide"). */
-  openRequest?: { slug: string; entry?: string; n: number } | null;
+  openRequest?: { slug: string; entry?: string; entity?: boolean; n: number } | null;
   /** The player's Steam achievements (unlocked or not), for "Achievements here". */
   achievements?: Achievement[];
 }) {
@@ -134,6 +134,8 @@ export function QcGuidesView({
   };
   useEffect(() => {
     if (!openRequest?.slug || !guide) return;
+    // An entity page (a quest the quest log loaded steps from), or an area.
+    if (openRequest.entity) { go({ view: 'entity', key: guide.key, slug: openRequest.slug, game: guide.game }); return; }
     openArea(guide.key, openRequest.slug, guide.game);
     setFocus(openRequest.entry ? { slug: openRequest.slug, id: openRequest.entry, n: openRequest.n } : null);
   }, [openRequest?.n, guide?.key]);

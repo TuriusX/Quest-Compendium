@@ -40,6 +40,7 @@ import { ControllerLayer } from './components/ControllerLayer';
 import { markersActiveFor, activeMarkersId, rememberAreaFind, setPointersActive } from './components/pointerStore';
 import { buildTrackerPayload, trackedMessage, trackerGameKey, trackerLabels, type TrackerData } from './utils/trackerPayload';
 import { useTrackerGuide } from './utils/trackerGuide';
+import { useGuideSteps } from './utils/guideSteps';
 import { showFirstRunHints } from './utils/sessions';
 import { formatShortcut } from './utils/shortcut';
 import { setEntryDone, exportAllDone, importAllDone, GUIDE_DONE_EVENT } from './utils/guideProgress';
@@ -711,6 +712,24 @@ export default function App() {
     }
   };
   const trackerMsg = trackedMessage(activeTab, trackerPickId);
+  // Guide-backed objectives: the guide's steps for the player's current quest, offered on the quest log and loaded in
+  // place of the answer's objectives (utils/guideSteps). A newer answer takes the log back.
+  const loadedSteps = activeTab?.guideSteps && (!activeTab.guideSteps.answerId || !trackerMsg || trackerMsg.id === activeTab.guideSteps.answerId) ? activeTab.guideSteps : null;
+  const [offerDismissed, setOfferDismissed] = useState<string>('');
+  // Steps loaded with an older answer: a newer answer took the log back, so they're put away.
+  const staleSteps = !!activeTab?.guideSteps && !loadedSteps;
+  useEffect(() => {
+    if (!staleSteps || !activeTab) return;
+    const id = activeTab.id;
+    setTabs((prev) => prev.map((x) => (x.id === id ? { ...x, guideSteps: undefined } : x)));
+  }, [staleSteps, activeTab?.id]);
+  const guideSteps = useGuideSteps({
+    guideKey: trackerGame.guideKey, lang: useLocale(), tab: activeTab, msg: trackerMsg,
+    areaSlug: trackerGame.guideArea?.slug, areaPage: (trackerGame.guideArea?.page as any) || null, loaded: loadedSteps, labels: trackerWords,
+  });
+  const stepsOffer = guideSteps.offer && `${guideSteps.offer.kind}:${guideSteps.offer.slug}` !== offerDismissed ? guideSteps.offer : null;
+  const stepsOfferRef = useRef(stepsOffer);
+  stepsOfferRef.current = stepsOffer;
   const builtTrackerPayload = activeTab
     ? buildTrackerPayload({ ...activeTab, place: trackerPlace }, trackerMsg, trackerGame.guideArea, trackerGame.achievementGuide, trackerWords, {
         accent: trackerAccent,
@@ -719,6 +738,8 @@ export default function App() {
         achievements: activeGame?.achievements,
         locating,
         notice: locateNote,
+        guideSteps: guideSteps.section,
+        offer: stepsOffer ? { name: stepsOffer.name, count: stepsOffer.count } : null,
       })
     : null;
   // While "Locate me" runs, the tracker keeps showing what it showed (its place line says "Locating…"). With a result,
@@ -832,6 +853,17 @@ export default function App() {
         updateMessageById(msgId, (m) => ({ ...m, donePoints: next }));
         if (next.length >= msg.points.length) api?.hideScreenPointers?.();
         else if (markersActiveFor(msgId)) api?.setPointersHidden?.(msgId, next);
+      } else if (id.startsWith('q:') || id.startsWith('w:')) {
+        // Loaded guide steps: q:<quest slug>:<step id> (the quest page's ticks), w:<area slug>:<step id> (the
+        // walkthrough's, on its area). Kept with the guide's other ticks, so they sync with the account.
+        const rest = id.slice(2);
+        const cut = rest.indexOf(':');
+        const key = activeTab?.guideSteps?.key || trackerGuideKeyRef.current;
+        if (cut > 0 && key) {
+          const slug = rest.slice(0, cut), stepId = rest.slice(cut + 1);
+          if (id.startsWith('q:')) setEntryDone(key, `quest:${slug}`, stepId, !!e.done);
+          else setEntryDone(key, slug, `walk:${stepId}`, !!e.done);
+        }
       } else if (id.startsWith('g:')) {
         // A guide entry: g:<area slug>:<entry id>, the same ticks as the guide page.
         const rest = id.slice(2);
@@ -846,6 +878,24 @@ export default function App() {
     } else if (e.type === 'goto-area' && typeof e.name === 'string' && e.name.trim()) {
       // The ‹ › arrows or the area list on the tracker: that area becomes where the player is.
       moveToArea(e.name.trim());
+    } else if (e.type === 'load-steps') {
+      // "Load the guide's steps" on the quest log: they become the objectives of this tab (no AI question).
+      const o = stepsOfferRef.current;
+      const t = activeTab;
+      if (o && t) {
+        const answerId = trackedMessage(t)?.id;
+        const steps = { kind: o.kind, key: o.key, slug: o.slug, name: o.name, ...(o.kind === 'walk' && o.from ? { from: o.from } : {}), ...(answerId ? { answerId } : {}) };
+        setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, guideSteps: steps, lastActive: Date.now() } : x)));
+      }
+    } else if (e.type === 'unload-steps') {
+      const t = activeTab;
+      if (t) {
+        if (t.guideSteps) setOfferDismissed(`${t.guideSteps.kind}:${t.guideSteps.slug}`);
+        setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, guideSteps: undefined, lastActive: Date.now() } : x)));
+      }
+    } else if (e.type === 'dismiss-offer') {
+      const o = stepsOfferRef.current;
+      if (o) setOfferDismissed(`${o.kind}:${o.slug}`);
     } else if (e.type === 'locate') {
       runLocate();
     } else if (e.type === 'next-turn') {
@@ -858,7 +908,8 @@ export default function App() {
       const slug = kind === 'a' ? trackerGameRef.current.guideArea?.slug : rest[0];
       const tail = rest.slice(1).join(':');
       const entry = kind === 'g' ? tail.split('+')[0] : kind === 'h' ? `ach:${tail}` : undefined;
-      if (slug) window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug, entry } }));
+      // A loaded quest step opens its quest page; a walkthrough step its area.
+      if (slug) window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug, entry, ...(kind === 'q' ? { entity: true } : {}) } }));
     } else if (e.type === 'ask-about' && typeof e.label === 'string' && e.label.trim()) {
       // "Ask about this": the panel opens with a question about the entry in the box, not sent.
       const area = trackerPlaceRef.current?.name?.trim() || '';

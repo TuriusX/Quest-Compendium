@@ -253,7 +253,7 @@ function reveal() {
 }
 
 /** What the page gets: only known fields, trimmed to length. */
-const SECTION_IDS = ['answer', 'missable', 'noreturn', 'collect', 'ach'];
+const SECTION_IDS = ['guide', 'answer', 'missable', 'noreturn', 'collect', 'ach'];
 /**
  * Text for the page, cut without breaking a word: at the last space before the limit, with "…" (the page wraps text,
  * so the limits are generous and only stop runaway text). Ids are cut plainly (str).
@@ -299,6 +299,8 @@ function cleanData(data) {
       : null,
     locating: !!(data && data.locating),
     notice: clip(data && data.notice, 240),
+    // The guide covers the current quest: "Load the guide's steps: <name> (n)".
+    offer: data && data.offer && data.offer.name ? { name: clip(data.offer.name, 90), n: Math.max(0, Math.min(999, Math.round(Number(data.offer.n) || 0))) } : null,
     source: clip(data && data.source, 160), // "From the guide: <area> (closest match)" when the place isn't an area by name
     labels: cleanLabels(data && data.labels),
   };
@@ -315,7 +317,8 @@ function cleanDetail(d) {
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
 const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
-  'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip'];
+  'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
+  'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -626,6 +629,12 @@ function onMessage(event, msg) {
       if (typeof msg.name === 'string' && current && current.data.areas && current.data.areas.names.includes(msg.name)) {
         tell({ type: 'goto-area', name: msg.name });
       }
+      break;
+    case 'load-steps':
+    case 'unload-steps':
+    case 'dismiss-offer':
+      // The guide's steps for the current quest: load them as the objectives, put them away, or not now.
+      tell({ type: msg.type });
       break;
     case 'next-turn':
       // "Next turn" under the Battle plan: the app takes a fresh screenshot and asks for whoever is acting now.
