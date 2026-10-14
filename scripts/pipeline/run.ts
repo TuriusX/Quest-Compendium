@@ -843,6 +843,15 @@ async function main() {
       const next = e.rows.find((r) => !coreSt.perGuide?.[r.key]?.done && r.left > 0);
       const failCount = (coreSt.guides as string[]).reduce((n, k) => n + (coreSt.perGuide?.[k]?.failedPages || []).length + (coreSt.perGuide?.[k]?.failedEntities || []).length, 0);
       report.push(`📚 Core guides${coreSt.approved ? '' : ' (waiting for the list to be approved)'}${coreSt.paused ? ` (paused: ${coreSt.paused.why || 'until the owner says go'})` : ''}: ${doneGuides.length} of ${e.rows.length} complete${next ? `, now ${shortName(next.game)}` : ''}; $${b.spentMonth.toFixed(2)} of $${b.monthly} this month. Left: ≈ $${e.total.toFixed(0)} at the current method's real cost ($${e.rates.page.toFixed(2)} a walkthrough page, $${e.rates.entity.toFixed(2)} an entity page, failures included), about ${e.months.toFixed(1)} month(s) at $${e.monthly} a month.${failCount ? ` ${failCount} piece(s) failed review${MONDAY ? '' : ' (listed on Mondays)'}.` : ''}`);
+      // Retries of failed pages (system/core.retry, run first by the nightly core run): every result since yesterday.
+      const retried = ((coreSt.retryLog || []) as any[]).filter((x) => Number(x.at) >= Date.now() - 24 * 3600_000);
+      const waitingRetry = ((coreSt.retry || []) as string[]).length;
+      if (retried.length || waitingRetry) {
+        const label = (x: any) => String(x.item).split(/[/:]/).pop()!.replace(/-/g, ' ');
+        const ok = (x: any) => x.status === 'passed' || x.status === 'published';
+        const passed = retried.filter(ok), failed = retried.filter((x) => !ok(x));
+        RUN.head.push(`🔁 Core retries (gap-filling): ${passed.length} passed${passed.length ? ` (${passed.map(label).join(', ')})` : ''}, ${failed.length} failed${failed.length ? ` (${failed.map((x) => `${label(x)}: ${String(x.detail || x.status).slice(0, 80)}`).join('; ')})` : ''}, $${retried.reduce((a, x) => a + Number(x.dollars || 0), 0).toFixed(2)}${waitingRetry ? `; ${waitingRetry} still waiting` : ''}.`);
+      }
       const cp = coreSt.checkpoint?.result;
       if (cp) RUN.head.push(`🧮 Core checkpoint (first ${cp.pages} pages): $${Number(cp.avg).toFixed(3)} a page, ${Math.round(Number(cp.pass) * 100)}% passed${cp.paused ? ' — over the limits, so the programme paused itself' : ' — within the limits'}.`);
       if (MONDAY) {
