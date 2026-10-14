@@ -278,6 +278,18 @@ export async function runCore(): Promise<void> {
   const cfg = await coreConfig();
   let wentLive = false;
   const timeUp = () => Date.now() - RUN_STARTED > MINUTES * 60_000;
+  // Pages the owner asked to retry (system/core.retry "key/slug"), first, in their order and whatever the guide's state
+  // (a complete guide is otherwise skipped): the evidence method with gap-filling. One the budget or a daily limit
+  // stopped stays on the list for the next run; the rest come off it (a failure goes back on the guide's failed list).
+  const pageRetries = [...retry].filter((x) => /^[^/:]+\/.+$/.test(x));
+  if (pageRetries.length) {
+    const res = await retryOnly(pageRetries, { publish: false });
+    if (res.some((r) => r.status === 'passed')) wentLive = true;
+    const ran = new Set(res.filter((r) => !['stopped', 'error', 'skipped'].includes(r.status) || /no such guide|not key/.test(r.detail)).map((r) => r.item));
+    for (const x of ran) retry.delete(x);
+    await cref().set({ retry: [...retry] }, { merge: true });
+    if (res.some((r) => r.status === 'stopped')) { console.log('\nPage retries stopped by the budget; the next run carries on.'); if (wentLive) await publishSiteForCore(); return; }
+  }
   // The compendium rollout to the new method first (rollout.ts): rebuilds across guides by demand, then (from
   // system/core.newPages.from) the blueprints' new entity pages.
   // Blueprint sections the rollout waits for (system/core.rollout.after: [{key, section}], e.g. RDR2's Stranger
@@ -426,7 +438,8 @@ ${r.stopped}; the next run carries on.`); if (wentLive) await publishSiteForCore
       await lk.release();
     }
   }
-  if (retry.size) await cref().set({ retry: [] }, { merge: true });
+  // Entity retries are taken up in their guide's turn above; page retries were handled first.
+  if (retry.size) await cref().set({ retry: [...retry].filter((x) => /^[^/:]+\/.+$/.test(x)) }, { merge: true });
   if (wentLive) await publishSiteForCore();
 }
 
@@ -435,7 +448,7 @@ ${r.stopped}; the next run carries on.`); if (wentLive) await publishSiteForCore
  * compendium's current method), each charged to the core budget, logged, and taken off (or put on) the guide's failed
  * list like in a run. The site is published once at the end when anything went live. Prints each one's cost and result.
  */
-export async function retryOnly(items: string[]): Promise<{ item: string; status: string; dollars: number; detail: string }[]> {
+export async function retryOnly(items: string[], opts: { publish?: boolean } = {}): Promise<{ item: string; status: string; dollars: number; detail: string }[]> {
   process.env.CORE_CHARGED = '1'; // charged to the core budget, so not to the local-runs ledger too
   const { buildPageEvidenceForCore, writePageForCore, publishSiteForCore } = await import('./flagship');
   const { buildEntity } = await import('./compendium');
@@ -501,9 +514,14 @@ export async function retryOnly(items: string[]): Promise<{ item: string; status
     const last = out[out.length - 1];
     console.log(`  [retry] ${item}: ${last.status}, $${last.dollars.toFixed(3)}${last.detail ? ` (${last.detail})` : ''}`);
   }
-  if (wentLive) await publishSiteForCore();
-  console.log(`
-Retries: ${out.map((o) => `${o.item} ${o.status} $${o.dollars.toFixed(3)}`).join('; ')}; $${out.reduce((a, o) => a + o.dollars, 0).toFixed(3)} in all.`);
+  if (wentLive && opts.publish !== false) await publishSiteForCore();
+  console.log(`\nRetries: ${out.map((o) => `${o.item} ${o.status} $${o.dollars.toFixed(3)}`).join('; ')}; $${out.reduce((a, o) => a + o.dollars, 0).toFixed(3)} in all.`);
+  // For the Discord summary (run.ts): every retry's result, kept for a week.
+  if (out.length) {
+    const st: any = (await cref().get()).data() || {};
+    const keep = ((st.retryLog || []) as any[]).filter((x) => Number(x.at) > Date.now() - 7 * 86_400_000);
+    await cref().set({ retryLog: [...keep, ...out.map((o) => ({ ...o, dollars: Math.round(o.dollars * 1000) / 1000, detail: cut(o.detail, 200), at: Date.now() }))] }, { merge: true });
+  }
   return out;
 }
 
