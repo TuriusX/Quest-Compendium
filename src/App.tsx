@@ -2164,7 +2164,7 @@ export default function App() {
 
       {/* Main App Window Frame */}
       <div 
-        className={`flex flex-col overflow-clip backdrop-blur-2xl relative transition-all ${getDockClasses(settings.dockPosition)}`}
+        className={`flex flex-col min-h-0 min-w-0 overflow-clip backdrop-blur-2xl relative transition-all ${getDockClasses(settings.dockPosition)}`}
         style={{
           backgroundColor: `rgba(14, 14, 18, ${settings.windowOpacity / 100})`,
           boxShadow: '0 0 35px var(--accent-glow)'
@@ -2237,8 +2237,10 @@ export default function App() {
 
         {/* Main Body: Left Sidebar + Central Chat/Browser + Right Achievements Drawer */}
         {/* overflow-clip, not overflow-hidden: a clipped box isn't scrollable, so focusing a field can't shift the
-            layout (the closed side panels are wider and taller than the window). */}
-        <div className="flex-1 flex overflow-clip relative">
+            layout (the closed side panels are wider and taller than the window). Unlike overflow-hidden it doesn't
+            stop a flex item growing to its content, hence min-h-0 / min-w-0 here and on the panel and main (without
+            them a long conversation pushed the question box below the window). */}
+        <div className="flex-1 min-h-0 min-w-0 flex overflow-clip relative">
           {/* Games Sidebar */}
           {!compact && <GamesSidebar
             width={sidebarWidth}
@@ -2275,7 +2277,7 @@ export default function App() {
           )}
 
           {/* Central Workspace: Chat OR Browser */}
-          <main className="qc-scanlines flex-1 flex flex-col overflow-clip relative">
+          <main className="qc-scanlines flex-1 min-h-0 min-w-0 flex flex-col overflow-clip relative">
             {isBrowserMode ? (
               <GameGuidesBrowser
                 activeGame={activeGame}
