@@ -52,14 +52,15 @@ server's image only holds the built app.
 - **Steam picks:** only RPG/adventure games with at least `PIPELINE_MIN_STEAM_REVIEWS` Steam reviews (default 2,000)
   count, so small new games don't use up the month's searches.
 - **Budget:** money: `PIPELINE_DAILY_DOLLARS` (default $8) and `PIPELINE_MONTHLY_AI_DOLLARS` (default $10, or
-  `PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH` for one month), counting tokens and searches ($14 per 1,000). Searches have no
-  separate pipeline limit (`PIPELINE_MONTHLY_SEARCHES` is retired); the pipeline only always leaves
-  `PIPELINE_PLAYER_RESERVE` (default 2,000) of the app's monthly searches (`MONTHLY_SEARCH_CAP`) for players. The
-  run's closing line on Discord shows these limits. Change them with `gcloud run jobs update guide-pipeline --update-env-vars …`.
-  - **Set since 2026-10-03, to finish the guide-review rebuilds quickly:** `MONTHLY_SEARCH_CAP=8500` on both the job
-    and the server (`gcloud run services update quest-compendium --update-env-vars …`; searches past the free 5,000 a
-    month cost $14 per 1,000), `PIPELINE_MONTHLY_AI_DOLLARS=15` and `PIPELINE_QUEUE_MINUTES=160`. The pipeline still
-    stops 2,000 below the cap (the player reserve), so it may use up to 6,500 searches a month app-wide. The cap stays
-    at 8,500 into later months until it's set back to 5000 on both.
+  `PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH` for one month), counting tokens and searches ($14 per 1,000).
+- **Searches (since Oct 14, 2026):** two separate monthly shares (searchGuard.ts, counted per month in
+  `system/searchBudget` as `pipeline`, `flagship` and `players`):
+  - the pipeline and the flagship builds together: `PIPELINE_MONTHLY_SEARCHES` (4,800), or one month's own share in
+    `PIPELINE_MONTHLY_SEARCHES_BY_MONTH` (default `2026-10:6500`). Every searching call of theirs stops there
+    (scripts/guides/common.ts), and the run plans within it.
+  - players: `PLAYER_MONTHLY_SEARCHES` (2,000), their own reserve, which the pipeline can never use. Past the free
+    5,000 a month, searches cost $14 per 1,000.
+  The run's closing line on Discord shows both, and the searches past the free 5,000. `MONTHLY_SEARCH_CAP` is retired
+  (it's still set to 8500 on the job and the server, and nothing reads it).
 - **Off switch:** set `enabled` to `false` on the `system/pipeline` document in Firestore. The month's totals and the
   last report are on that document too.

@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { apiLimits, searchesToday, recordSearchDay, pipelineRoom, SearchDayWait } from '../../apiLimits';
+import { pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY } from '../../searchGuard';
 import { GoogleGenAI } from '@google/genai';
 import { AsyncLocalStorage } from 'async_hooks';
 import { billedUsage, withOutputCap, maybeBilledFailure, worstCaseDollars } from '../../usage';
@@ -70,6 +71,8 @@ export function gemini(): GoogleGenAI {
     if ((request?.config?.tools || []).some((t: any) => t && t.googleSearch)) {
       const [l, d] = await Promise.all([apiLimits(), searchesToday()]);
       if (pipelineRoom(l, d) <= 0) throw new SearchDayWait(`search day limit: the pipeline's ${l.pipelineSearchDaily} searches for today are used up (${d.pipeline} pipeline, ${d.total} of ${l.searchDaily} in all)`);
+      // The month's share (the pipeline and the flagship builds together; players keep their own reserve).
+      if ((await pipelineSearchRoom()) <= 0) throw new SearchDayWait(`search day limit: the pipeline's month share (${pipelineShare()} searches) is used up until the 1st; players keep their own ${PLAYER_MONTHLY()}`);
     }
     request = withOutputCap(request);
     let res: any;

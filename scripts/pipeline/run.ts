@@ -34,8 +34,10 @@
  * Settings (environment variables; all optional):
  *   PIPELINE_MONTHLY_AI_DOLLARS   AI spending cap per month (default 10); searches are paid for out of it (and the daily
  *                                 cap), so there's no separate pipeline search count to keep under
- *   PIPELINE_PLAYER_RESERVE       searches always left for players under MONTHLY_SEARCH_CAP (default 2000)
- *   MONTHLY_SEARCH_CAP            the app's whole monthly search cap (default 5000; same setting as the server)
+ *   PIPELINE_MONTHLY_SEARCHES     the pipeline's searches a month, the flagship builds' included (default 4800);
+ *                                 PIPELINE_MONTHLY_SEARCHES_BY_MONTH sets one month's own ("2026-10:6500")
+ *   PLAYER_MONTHLY_SEARCHES       the players' own searches a month (default 2000), which the pipeline never uses
+ *                                 (searchGuard.ts; the same settings as the server)
  *   PIPELINE_MAX_ACTIONS          actions per run (default 6)
  *   PIPELINE_QUEUE_DAILY_SEARCHES searches the careful-build queue may use per run (default 1500); it also keeps the
  *                                 player reserve
@@ -71,6 +73,7 @@ import { deployToNetlify } from './netlify';
 import { steamCandidates } from './steam';
 import { promote } from '../guides/promote';
 import { SEARCH_DOLLARS } from '../../usage';
+import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY } from '../../searchGuard';
 import { postDiscord, summaryText } from './summary';
 import { waitForGuideLock, isRefusal, lockedLine, SITE_LOCK } from '../guides/guideLock';
 import { apiLimits, searchesToday, pipelineRoom, searchDayLine } from '../../apiLimits';
@@ -102,8 +105,6 @@ const AI_CAP = (() => {
   const m = (process.env.PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH || '').split(',').map((x) => x.trim().split(':')).find(([k]) => k === month);
   return m && Number.isFinite(Number(m[1])) ? Number(m[1]) : env('PIPELINE_MONTHLY_AI_DOLLARS', 10);
 })();
-const RESERVE = env('PIPELINE_PLAYER_RESERVE', 2000);
-const APP_CAP = env('MONTHLY_SEARCH_CAP', 5000);
 const MAX_ACTIONS = env('PIPELINE_MAX_ACTIONS', 6); // most actions are cheap now (see the plan order below)
 const WISH_SLOTS = Math.min(env('PIPELINE_WISHLIST_SLOTS', 2), MAX_ACTIONS);
 const MIN_PLAYERS = env('PIPELINE_MIN_PLAYERS', 3);
@@ -185,10 +186,6 @@ function runScript(args: string[]): { ok: boolean; searches: number; dollars: nu
   return { ok: r.status === 0, searches, dollars, summary, out };
 }
 
-async function appSearchesThisMonth(month: string): Promise<number> {
-  const d = (await db().collection('system').doc('searchBudget').get()).data();
-  return d?.month === month ? Number(d.count || 0) : 0;
-}
 
 async function main() {
   // How this run shows up to other processes while it holds a guide's lock (its child scripts share the lock).
@@ -340,9 +337,10 @@ async function main() {
   }
 
   // ---- 3. run, inside the budget ----
-  const appUsed = await appSearchesThisMonth(month);
-  // Searches are limited by money (the daily and monthly caps, through affordable()) and the app-wide player reserve.
-  let searchRoom = APP_CAP - RESERVE - appUsed;
+  // Searches are limited by money (the daily and monthly caps, through affordable()) and the pipeline's month share
+  // (the flagship builds' included; players have their own reserve, searchGuard.ts).
+  const shareRoom = await pipelineSearchRoom(true);
+  let searchRoom = shareRoom;
   let aiRoom = AI_CAP - (state.dollars || 0);
   // ---- spending: every step is charged its real cost; the daily cap is hard (each script gets what's left as its
   // limit, and its searches are capped to fit), and one run passing RUN_ALERT dollars posts an alert ----
@@ -456,7 +454,7 @@ async function main() {
   }
   let correctionSearches = 0;
   if (!DRY && room() >= 0.25) {
-    const cRoom = affordable(Math.min(120, APP_CAP - RESERVE - appUsed));
+    const cRoom = affordable(Math.min(120, shareRoom));
     if (cRoom >= 8) {
       const c = runScript(['scripts/guides/corrections.ts', '--max-searches', String(cRoom)]);
       correctionSearches = c.searches;
@@ -478,7 +476,7 @@ async function main() {
     await charge(sg, 'suggestions');
     if (sg.summary && !/^suggestions: 0 checked, 0 waiting for approval, 0 now/.test(sg.summary)) report.push(`${sg.ok ? '✍️' : '⚠️'} ${sg.summary || 'suggestions check failed (see the job log)'}`);
   }
-  let queueRoom = Math.min(QUEUE_DAILY, APP_CAP - RESERVE - appUsed) - correctionSearches;
+  let queueRoom = Math.min(QUEUE_DAILY, shareRoom) - correctionSearches;
   const waiting: QueueItem[] = [];
   const queueStart = Date.now();
   if (paused && queue.length) report.push(`⏸️ Repair queue paused (${queue.length} waiting, careful builds too); delete system/pipeline.queuePaused to resume.`);
@@ -593,8 +591,7 @@ async function main() {
   }
   state.carefulQueue = [...waiting, ...queue, ...held];
   if (state.carefulQueue.length) report.push(`⏳ Repair queue: ${state.carefulQueue.length} waiting (next: ${state.carefulQueue[0].game}).`);
-  const appUsedNow = await appSearchesThisMonth(month);
-  searchRoom = APP_CAP - RESERVE - appUsedNow;
+  searchRoom = await pipelineSearchRoom(true);
   // Wish-list guides have their own slots, so the long queue of achievement guides doesn't hold them back; slots the
   // wish list can't fill (it ran out) go to everything else.
   const otherSlots = MAX_ACTIONS - Math.min(WISH_SLOTS, plan.filter((a) => a.wish).length);
@@ -873,7 +870,7 @@ async function main() {
   }
   // The closing line: how the run ended (finished, or stopped by which cap) and what it spent.
   // The limits that apply: the daily and monthly dollar caps, and the app's monthly searches minus the player reserve.
-  const appSearches = await appSearchesThisMonth(month).catch(() => appUsedNow);
+  const sm = await searchMonth(true).catch(() => null);
   // The month's AI spending across every budget, as the summary's first line: the core programme, the flagship
   // programme (a one-off total; counted in the month it was spent), the pipeline's own work, and work run locally.
   try {
@@ -903,7 +900,7 @@ async function main() {
   } catch (e: any) {
     console.warn(`Unpriced-model line skipped: ${e?.message}`);
   }
-  const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches, ${state.searches || 0} pipeline searches); app searches ${appSearches} of ${APP_CAP} (the pipeline stops at ${APP_CAP - RESERVE}, the rest kept for players).`;
+  const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches, ${state.searches || 0} pipeline searches).${sm ? ` 🔎 Searches this month: pipeline ${sm.pipeline + sm.flagship} of its ${pipelineShare(month)} (flagship ${sm.flagship}); players ${sm.players} of their ${PLAYER_MONTHLY()}; ${sm.count} in all, ${Math.max(0, sm.count - 5000)} past the free 5,000 (≈ $${(Math.max(0, sm.count - 5000) * 0.014).toFixed(2)}).` : ''}`;
   const closing = RUN.stoppedBy ? `🛑 Run stopped early: ${RUN.stoppedBy}. ${totals}` : `🏁 Run finished. ${totals}`;
   state.lastRun = Date.now();
   state.lastReport = report;
