@@ -23,6 +23,7 @@ import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
 import { registerSpot } from './spot';
+import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
@@ -1796,8 +1797,12 @@ percentages:
       }
 
       logDebug(`[API Chat] Sending response for uid: ${(req as any).user?.uid}, modelUsed: ${modelUsed}`);
+      // An older Steam Deck plugin (below config/deck.minPluginVersion): a short update note once a day (deckNotice.ts).
+      const deckNote = await deckUpdateNote(req.headers['user-agent'], String(userId || ''), !!isGuest, language).catch(() => '');
       return res.json({
-        text: responseText.trim(),
+        text: responseText.trim() + (deckNote ? `
+
+*${deckNote}*` : ''),
         modelUsed,
         bannerImageUrl,
         ...(points.length ? { points } : {}),
