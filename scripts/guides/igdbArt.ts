@@ -8,6 +8,28 @@ export type IgdbInfo = { id?: number; name?: string; url?: string; released?: st
   /** Time to beat from players' submissions (whole hours; 0 = none given) and how many submissions there are. */
   ttb?: { main: number; extras: number; complete: number; count: number } };
 
+/** The time-to-beat rules: at least this many players' submissions by default (config/igdb.ttbMinCount overrides it). */
+export const TTB_MIN_DEFAULT = 10;
+export type TtbShown = { main: number; extras: number; complete: number; count: number };
+/**
+ * What a guide shows of IGDB's time to beat (whole hours; 0 = left out), or null for nothing. Players' averages can be
+ * thrown off by a few wild entries (Baldur's Gate 3: 5,650 h completionist next to 132 h main + extras) or barely differ,
+ * so a longer category is left out when it's
+ *   - shorter than the category before it, or more than 5 times it,
+ *   - within 10% of it (Baldur's Gate 3: 132 h main + extras after 128 h main story says nothing new),
+ *   - over 1,000 h;
+ * and nothing shows below `min` submissions or for a guide hidden in config/igdb.ttbHide.
+ */
+export function ttbShown(t: { main?: number; extras?: number; complete?: number; count?: number } | null | undefined, min = TTB_MIN_DEFAULT, hidden = false): TtbShown | null {
+  if (!t || hidden || (Number(t.count) || 0) < min) return null;
+  const h = (v: unknown) => (Number(v) >= 1 && Number(v) <= 1000 ? Math.round(Number(v)) : 0);
+  const out = { main: h(t.main), extras: h(t.extras), complete: h(t.complete), count: Number(t.count) || 0 };
+  const fits = (longer: number, shorter: number) => !shorter || (longer > shorter * 1.1 && longer <= shorter * 5);
+  if (out.extras && !fits(out.extras, out.main)) out.extras = 0;
+  if (out.complete && !fits(out.complete, out.extras || out.main)) out.complete = 0;
+  return out.main || out.extras || out.complete ? out : null;
+}
+
 export const igdbUrl = (id: string, size: string, ext: 'webp' | 'jpg' = 'webp') => `https://images.igdb.com/igdb/image/upload/t_${size}/${id}.${ext}`;
 
 /** IGDB's landscape sizes, by width. */

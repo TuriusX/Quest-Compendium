@@ -23,7 +23,9 @@ const RATES: Record<string, { input: number; output: number }> = {
   'gemini-3.1-pro-preview': { input: 2.0, output: 12.0 },
   'gemini-3.1-flash-tts-preview': { input: 0.5, output: 20.0 }, // audio output (rate from the project's billing report)
   'gemini-3.8-flash-tts': { input: 0.5, output: 9.0 }, // audio output, per Google's price list
-  // gemini-3.8-flash-lite-tts: priced below Flash TTS; logged without an estimate until its rate is confirmed
+  // The read-aloud voice: text in, audio out, per Google's price list (Oct 14, 2026): $0.50 / $6.00 through Dec 31, 2026,
+  // $1.00 / $12.00 from Jan 1, 2027 (like Flash and Flash TTS, whose prices also double then).
+  'gemini-3.8-flash-lite-tts': { input: 0.5, output: 6.0 },
 };
 const SEARCH_COST = 14 / 1000; // after the monthly free allowance
 /**
