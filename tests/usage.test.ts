@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/usage.test.ts)
 import assert from "node:assert/strict";
-import { estimateCost, worstCaseDollars, billedUsage, UNKNOWN_RATE, hasPrice } from "../usage";
+import { estimateCost, worstCaseDollars, billedUsage, UNKNOWN_RATE, hasPrice, rateOn } from "../usage";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -23,6 +23,16 @@ test("a model with no price on file is counted at the most expensive known rate,
 test("priced models keep their own rates", () => {
   assert.equal(hasPrice("gemini-3.8-flash"), true);
   assert.equal(estimateCost("gemini-3.8-flash", r(1_000_000, 0)), 0.75);
+});
+
+test("announced price changes apply from their day: Flash and both voices double on Jan 1, 2027", () => {
+  assert.deepEqual(rateOn("gemini-3.8-flash", "2026-12-31"), { input: 0.75, output: 3.75 });
+  assert.deepEqual(rateOn("gemini-3.8-flash", "2027-01-01"), { input: 1.5, output: 7.5 });
+  assert.deepEqual(rateOn("gemini-3.8-flash-tts", "2027-01-01"), { input: 1.0, output: 18.0 });
+  assert.deepEqual(rateOn("gemini-3.8-flash-lite-tts", "2026-10-14"), { input: 0.5, output: 6.0 });
+  assert.deepEqual(rateOn("gemini-3.8-flash-lite-tts", "2027-02-01"), { input: 1.0, output: 12.0 });
+  assert.deepEqual(rateOn("gemini-3.1-pro-preview", "2027-06-01"), { input: 2.0, output: 12.0 });
+  assert.equal(rateOn("gemini-9-mystery"), undefined);
 });
 
 console.log(`\n${passed} tests passed`);

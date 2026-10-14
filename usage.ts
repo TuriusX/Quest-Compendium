@@ -4,7 +4,8 @@
  * so the cost of each feature (and each question) can be read straight from the server logs.
  *
  * Rates: Google's Gemini API price list (ai.google.dev/gemini-api/docs/pricing, Sept 2026), per million tokens.
- * Gemini 3.8 Flash is at introductory prices through Dec 31, 2026; they double on Jan 1, 2027 ($1.50 / $7.50).
+ * Gemini 3.8 Flash and both voices are at introductory prices through Dec 31, 2026; they double on Jan 1, 2027
+ * (RATE_CHANGES: the new rates apply from that day by themselves).
  * Output includes thinking. Search grounding: 5,000 free searches a month across the Gemini 3 family, then $14 per
  * 1,000 searches (one question can run several). A model with no price on file is counted at the most expensive rate
  * we know (UNKNOWN_RATE), so budgets and caps can never miss its spending, and each call is recorded (per day and
@@ -27,6 +28,17 @@ const RATES: Record<string, { input: number; output: number }> = {
   // $1.00 / $12.00 from Jan 1, 2027 (like Flash and Flash TTS, whose prices also double then).
   'gemini-3.8-flash-lite-tts': { input: 0.5, output: 6.0 },
 };
+/** Price changes Google has announced: from that day (UTC) on, the model's rate. */
+const RATE_CHANGES: Record<string, { from: string; input: number; output: number }[]> = {
+  'gemini-3.8-flash': [{ from: '2027-01-01', input: 1.5, output: 7.5 }],
+  'gemini-3.8-flash-tts': [{ from: '2027-01-01', input: 1.0, output: 18.0 }],
+  'gemini-3.8-flash-lite-tts': [{ from: '2027-01-01', input: 1.0, output: 12.0 }],
+};
+/** A model's rate on a day (default today, UTC): its latest announced change on or before that day, else RATES. */
+export function rateOn(model: string, day = new Date().toISOString().slice(0, 10)): { input: number; output: number } | undefined {
+  const change = (RATE_CHANGES[model] || []).filter((c) => c.from <= day).sort((a, b) => b.from.localeCompare(a.from))[0];
+  return change ? { input: change.input, output: change.output } : RATES[model];
+}
 const SEARCH_COST = 14 / 1000; // after the monthly free allowance
 /**
  * What the pipeline counts a search as: billed in full (no free allowance assumed, since the project's credits ran out
@@ -41,10 +53,10 @@ const LONG_RATES: Record<string, { input: number; output: number }> = {
 export const BANNER_IMAGE_COST = 0.0336; // one 1K image from the Flash-Lite image model
 
 /** The rate for a model with no price on file: the most expensive input and output rates we know (long prompts included). */
-export const UNKNOWN_RATE = [...Object.values(RATES), ...Object.values(LONG_RATES)].reduce((m, r) => ({ input: Math.max(m.input, r.input), output: Math.max(m.output, r.output) }), { input: 0, output: 0 });
+export const UNKNOWN_RATE = [...Object.values(RATES), ...Object.values(LONG_RATES), ...Object.values(RATE_CHANGES).flat()].reduce((m, r) => ({ input: Math.max(m.input, r.input), output: Math.max(m.output, r.output) }), { input: 0, output: 0 });
 /** Whether a model has a price on file (text and audio models; banner images are priced per image). */
 export const hasPrice = (model: string) => !!RATES[model];
-const rateOf = (model: string) => RATES[model] || UNKNOWN_RATE;
+const rateOf = (model: string) => rateOn(model) || UNKNOWN_RATE;
 
 /**
  * A call to a model with no price on file: recorded per day and model in system/unpricedModels (calls, dollars at

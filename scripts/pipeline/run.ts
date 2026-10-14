@@ -508,6 +508,14 @@ async function main() {
     report.push(`🏰 ${covered.length} repair(s) dropped from the queue: the flagship build covers ${[...new Set(covered.map((q) => q.game))].join(', ')}.`);
   }
   const held = hold ? queue.filter((q) => !q.approved) : [];
+  // December 2026: the Fast/Flash cost review before Gemini 3.8 Flash and both voices double in price on Jan 1, 2027
+  // (docs/ROADMAP.md, Running the business). Every run in December until system/pipeline.flashCostReviewDone is set.
+  {
+    const today = new Date().toISOString().slice(0, 10);
+    if (today >= '2026-12-01' && today < '2027-01-01' && !state.flashCostReviewDone) {
+      RUN.head.push(`📅 Before Jan 1: Flash and both read-aloud voices double in price. Review Fast/Flash costs: the monthly cost at current usage with the new prices, and options (allowances, Premium price, or a cheaper model tested with scripts/evals/model-compare).`);
+    }
+  }
   if (daysLeft < 7 && !nextCapSet) RUN.head.push(`📅 Before ${nextName} 1: set ${nextName}'s pipeline cap. Without one it falls back to the default $${env('PIPELINE_MONTHLY_AI_DOLLARS', 10)} a month (this month: $${AI_CAP}).`);
   if (holdPendingDecision && (daysLeft < 7 || (state.queueHold?.until && month >= String(state.queueHold.until)))) RUN.head.push(`📅 Decide which held repairs to approve (${held.length} waiting). The repair queue stays on hold until you do; it won't resume on ${state.queueHold?.until && month < String(state.queueHold.until) ? `${nextName} 1` : 'its own'}.`);
   if (held.length) {

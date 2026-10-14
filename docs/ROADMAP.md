@@ -57,6 +57,7 @@ Owner: Noah. Source: the project mind map (Oct 13, 2026). Keep this file in the 
 | 15 | **Cloud budget alert** | Noah's task in the Google Cloud console (Billing → Budgets & alerts, about $150/month, emails at 50/90/100%). | Noah |
 | 16 | **Revenue vs. AI cost** | A monthly line in the Discord summary: Premium income (from the payment provider) against total AI spending across all ledgers. Propose the data source first. | Idea |
 | 17 | **Model comparisons** | Rerun `scripts/evals/model-compare` (README there) when Gemini prices drop or a cheaper model comes out: player answers on production prompts and the guide reviewer on known pages. Gemini 4 Argon vs 3.1 Pro (Oct 14, 2026, $1.55): switch nothing. Before switching any model, add its price to usage.ts (unpriced models are counted at the top rate and flagged in the Discord summary). | Idea |
+| 18 | **Flash price doubling (Jan 1, 2027)** | December: review Fast/Flash costs before the Jan 1 price doubling. Estimate the monthly cost at current usage with the new prices, and propose options (allowances, Premium price, or a cheaper model tested with scripts/evals/model-compare). The Discord summary reminds from Dec 1 (until `system/pipeline.flashCostReviewDone` is set); usage.ts applies the new rates on Jan 1 by itself. | December |
 
 ## Already built (for context)
 
