@@ -304,6 +304,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     <span className="text-[10px] text-zinc-500 font-mono">Ctrl+Shift+F</span>
                   </button>
                 )}
+                <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); window.dispatchEvent(new CustomEvent('qc-open-tour')); })} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
+                  <span className="w-4 h-4 flex items-center justify-center text-[13px]" aria-hidden="true">?</span>
+                  <span className="flex-1">{t('tour.title')}</span>
+                </button>
                 {onOpenSettings && (
                   <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); onOpenSettings(); })} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
                     <SettingsIcon className="w-4 h-4 text-zinc-400" />

@@ -2446,6 +2446,8 @@ export default function App() {
                 activeGame={activeGame}
                 screenshotKeys={prettyShortcut(settings.autoScreenshotShortcut)}
                 hideKeys={formatShortcut(settings.hideAppShortcut)}
+                tickKeys={formatShortcut(settings.trackerTickShortcut || 'CmdOrCtrl+Shift+Enter')}
+                nextKeys={formatShortcut(settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down')}
                 immersiveReadAloud={settings.immersiveReadAloud !== false}
                 soundEnabled={settings.soundEnabled}
                 onAppendToNotes={handleAppendToNotes}

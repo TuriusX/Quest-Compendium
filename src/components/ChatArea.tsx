@@ -47,7 +47,7 @@ import { PlaceBar } from './PlaceBar';
 import { KnownHere } from './KnownHere';
 import { QcGuidesView } from './QcGuidesView';
 import { GlainIcon } from './GlainIcon';
-import { Walkthrough, walkthroughDone } from './Walkthrough';
+import { Walkthrough, walkthroughDone, OPEN_TOUR_EVENT } from './Walkthrough';
 import { SignInCard } from './SignInCard';
 import { isPhone } from '../utils/source';
 import { samePlace, tipMatches, useAchievementGuide } from '../utils/achievementGuide';
@@ -73,6 +73,9 @@ interface ChatAreaProps {
   screenshotKeys?: string;
   /** The show/hide shortcut ("Ctrl+\"), for the quick tour's "free your mouse" step. */
   hideKeys?: string;
+  /** The quest log's tick and cycle shortcuts, for the quick tour. */
+  tickKeys?: string;
+  nextKeys?: string;
   /** Immersive mode: hold-to-talk answers are read aloud (Settings; default on). */
   immersiveReadAloud?: boolean;
   /** Desktop: show an answer's markers in the on-screen objectives tracker (hides the panel). */
@@ -204,6 +207,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   activeGame,
   screenshotKeys,
   hideKeys,
+  tickKeys,
+  nextKeys,
   immersiveReadAloud = true,
   onTrackOnScreen,
   onNextTurn,
@@ -272,6 +277,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   }, [achGuideHere, placeNow, activeGame?.achievements]);
   const [nudgeDismissed, setNudgeDismissed] = useState<string>('');
   const [showTour, setShowTour] = useState(() => !walkthroughDone());
+  // The ⋯ menu's "Quick tour" opens it again.
+  useEffect(() => {
+    const open = () => setShowTour(true);
+    window.addEventListener(OPEN_TOUR_EVENT, open);
+    return () => window.removeEventListener(OPEN_TOUR_EVENT, open);
+  }, []);
   const [mode, setModeState] = useState<'ask' | 'guide'>(() => {
     try {
       return localStorage.getItem('qc-main-mode') === 'guide' ? 'guide' : 'ask';
@@ -1535,7 +1546,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
       )}
 
-      {activeTab && showTour && <Walkthrough isDesktop={isDesktopApp} screenshotKeys={screenshotKeys} hideKeys={hideKeys} onDone={() => setShowTour(false)} />}
+      {activeTab && showTour && <Walkthrough isDesktop={isDesktopApp} screenshotKeys={screenshotKeys} hideKeys={hideKeys} tickKeys={tickKeys} nextKeys={nextKeys} onDone={() => setShowTour(false)} />}
 
       {activeTab && guideLoaded && (
         <div className={mode === 'guide' ? 'flex-1 flex flex-col min-h-0' : 'hidden'}>
