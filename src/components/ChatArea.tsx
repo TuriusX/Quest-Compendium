@@ -81,6 +81,8 @@ interface ChatAreaProps {
    * here"; ids are the log's g:<area>:<entry>): listed under the latest answer about that area.
    */
   missablesHere?: { area: string; items: { id: string; label: string; why?: string; where?: string }[] } | null;
+  /** The compact view's "Near you": the next unticked thing the guide lists in this area (missables first). */
+  nearYou?: { id: string; label: string; where?: string; missable?: boolean } | null;
   /** Immersive mode: hold-to-talk answers are read aloud (Settings; default on). */
   immersiveReadAloud?: boolean;
   /** Desktop: show an answer's markers in the on-screen objectives tracker (hides the panel). */
@@ -215,6 +217,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   tickKeys,
   nextKeys,
   missablesHere,
+  nearYou,
   immersiveReadAloud = true,
   onTrackOnScreen,
   onNextTurn,
@@ -851,6 +854,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           game: activeTab?.activeSteamGame?.name || activeGame?.name || activeTab?.name || '',
           markers: !!(markersOn && msg.points && msg.points.length), question, answer: msg.text,
           client: isDesktopApp ? 'desktop' : 'web', appVersion: BUILD.version,
+          ...(msg.kind ? { kind: msg.kind } : {}),
         }),
       });
     } catch {
@@ -1461,6 +1465,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <span className="text-[12.5px] text-zinc-400">{t('compact.noObjective')}</span>
           )}
         </button>
+        {/* Near you: the next thing the guide lists here, unticked (missables first). Opens it in the guide. Free. */}
+        {nearYou && (
+          <button
+            type="button"
+            onClick={() => {
+              playBlipSound(soundEnabled);
+              const [, slug, ...rest] = nearYou.id.split(':');
+              onExpand?.();
+              setTimeout(() => window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug, entry: rest.join(':').split('+')[0] } })), 50);
+            }}
+            title={t('answer.missOpen')}
+            className="mx-3.5 mb-1 flex items-center gap-1.5 min-w-0 text-left text-[11.5px] text-zinc-400 hover:text-zinc-200 cursor-pointer"
+            style={{ WebkitAppRegion: 'no-drag' } as any}
+          >
+            {nearYou.missable ? <AlertTriangle className="w-3 h-3 text-amber-300 flex-shrink-0" aria-hidden="true" /> : <BookOpen className="w-3 h-3 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />}
+            <span className="flex-shrink-0 font-semibold text-zinc-300">{t('compact.nearYou')}</span>
+            <span className="truncate">{nearYou.label}{nearYou.where ? ` · ${nearYou.where}` : ''}</span>
+          </button>
+        )}
         {askForm}
       </div>
     );

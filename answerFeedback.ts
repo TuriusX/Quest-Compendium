@@ -2,7 +2,8 @@
  * Answer quality: players' one-tap 👍 / 👎 on AI answers, and how often the markers' close-up check drops a marker.
  *
  *   POST /api/answer-feedback        { messageId, vote: 'up' | 'down', reason?: 'place' | 'info' | 'marker' | 'unhelpful',
- *                                      qtype?, game?, model?, markers?, question?, answer?, client? }
+ *                                      qtype?, game?, model?, markers?, question?, answer?, client?, kind? }
+ *                                    kind "spot": a "Spot it" result (spot.ts), counted on its own for its hit rate
  *                                    saved in Firestore answerFeedback/{id}, one per answer per player (voting again
  *                                    replaces it; vote 'none' takes it back)
  *   GET  /api/admin/answer-quality   the Quality tab of /admin/reviews: the 👍 rate per game, per question type and per
@@ -94,6 +95,7 @@ export function registerAnswerFeedback(app: Express, deps: { requireAuth: Mw; op
       const qtype = (QUESTION_TYPES as string[]).includes(String(b.qtype)) ? String(b.qtype) : 'general';
       await col().doc(id).set({
         vote, reason, qtype, game: cut(b.game, 160), model: cut(b.model, 80), markers: b.markers === true,
+        ...(b.kind === 'spot' ? { kind: 'spot' } : {}),
         client: cut(b.client, 20) || 'desktop', question: cut(b.question, 1000),
         // The answer is kept for 👎s only (the Quality tab shows them).
         answer: vote === 'down' ? cut(b.answer, 6000) : null,

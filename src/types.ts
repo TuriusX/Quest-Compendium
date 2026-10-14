@@ -65,6 +65,10 @@ export interface ScreenPoint {
   missable?: boolean;
   /** A fight: kill order of the top 2-3 targets (1 = first), numbered and drawn stronger. */
   rank?: number;
+  /** A guide entry the answer found on screen (roadmap item 7): its id, guide and area. Ticking it ticks the entry. */
+  guideId?: string;
+  guideKey?: string;
+  guideSlug?: string;
 }
 
 /** Something the AI knows is in this area but wasn't on screen yet. */
@@ -83,6 +87,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   text: string;
   timestamp: number;
+  /** A "Spot it" result (roadmap item 7), not an answer: its 👍 / 👎 are counted on their own. */
+  kind?: 'spot';
   imageUrl?: string;
   bannerImageUrl?: string;
   modelUsed?: string;

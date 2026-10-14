@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Check, ChevronDown, ChevronRight, ArrowLeft, Gem, Skull, Sparkles, TriangleAlert, MapPin, Play, MessageCircleQuestion } from './icons';
+import { BookOpen, Check, ChevronDown, ChevronRight, ArrowLeft, Gem, Skull, Sparkles, TriangleAlert, MapPin, Play, MessageCircleQuestion, ScanSearch } from './icons';
+import { SPOT_EVENT } from '../utils/spotIt';
 import { guideApi } from '../utils/guideApi';
 import { orderGuides, readRecentGuides, rememberGuideOpened, useGuideIndex, type GuideIndexGame, type GuideSort } from '../utils/guideIndex';
 import { GUIDE_DONE_EVENT, readDone, writeDone } from '../utils/guideProgress';
@@ -656,7 +657,9 @@ function AreaPage({
   const n = (ids: string[]) => ids.filter((id) => done.has(id)).length;
   const ask = (q: string) => onAsk?.(q);
 
-  const check = (id: string, label: React.ReactNode, askAbout?: string) => (
+  // "Spot it" (desktop): look for this entry on a fresh screenshot of the game and mark it there.
+  const canSpot = typeof window !== 'undefined' && !!(window as any).electronAPI?.captureFresh;
+  const check = (id: string, label: React.ReactNode, askAbout?: string, spot?: { label: string; where?: string }) => (
     <div key={id} data-entry={id} className="group flex items-start gap-1">
       <button
         type="button"
@@ -678,6 +681,17 @@ function AreaPage({
           className="mt-1 h-7 w-7 flex-shrink-0 rounded-lg text-zinc-500 hover:text-[var(--accent-color)] hover:bg-white/[0.06] flex items-center justify-center cursor-pointer opacity-60 group-hover:opacity-100 focus:opacity-100"
         >
           <MessageCircleQuestion className="w-4 h-4" />
+        </button>
+      )}
+      {canSpot && spot && !done.has(id) && (
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent(SPOT_EVENT, { detail: { id: `g:${slug}:${id}`, label: spot.label, where: spot.where || '' } }))}
+          title={t('tracker.spotIt')}
+          aria-label={`${t('tracker.spotIt')}: ${spot.label}`}
+          className="mt-1 h-7 w-7 flex-shrink-0 rounded-lg text-zinc-500 hover:text-amber-300 hover:bg-white/[0.06] flex items-center justify-center cursor-pointer opacity-60 group-hover:opacity-100 focus:opacity-100"
+        >
+          <ScanSearch className="w-4 h-4" />
         </button>
       )}
     </div>
@@ -724,6 +738,7 @@ function AreaPage({
         {e.lockout && <span className="block text-amber-300/90 mt-0.5">{t('qcg.lockout')}: {e.lockout}</span>}
       </>,
       t('qcg.askItem', { item: e.name || '', area: pg.name }),
+      e.name ? { label: e.name, where: e.where } : undefined,
     );
 
   return (

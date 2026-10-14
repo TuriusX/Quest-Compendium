@@ -71,6 +71,8 @@ import { deployToNetlify } from './netlify';
 import { steamCandidates } from './steam';
 import { promote } from '../guides/promote';
 import { SEARCH_DOLLARS } from '../../usage';
+import { spotWeekLine } from '../../spot';
+import { FieldPath } from 'firebase-admin/firestore';
 import { postDiscord, summaryText } from './summary';
 import { waitForGuideLock, isRefusal, lockedLine, SITE_LOCK } from '../guides/guideLock';
 import { apiLimits, searchesToday, pipelineRoom, searchDayLine } from '../../apiLimits';
@@ -515,6 +517,20 @@ async function main() {
     if (today >= '2026-12-01' && today < '2027-01-01' && !state.flashCostReviewDone) {
       RUN.head.push(`📅 Before Jan 1: Flash and both read-aloud voices double in price. Review Fast/Flash costs: the monthly cost at current usage with the new prices, and options (allowances, Premium price, or a cheaper model tested with scripts/evals/model-compare).`);
     }
+  }
+  // "Spot it" (roadmap item 7, 0.5.8): its weekly numbers and hit rate, on Mondays for the first four weeks after its
+  // first use (spotStats/{day}, and 👎 "marker" reports on its results in answerFeedback).
+  try {
+    const now = new Date();
+    if (now.getUTCDay() === 1) {
+      const first = (await db().collection('spotStats').orderBy(FieldPath.documentId()).limit(1).get()).docs[0]?.id;
+      if (first && now.getTime() - Date.parse(`${first}T00:00:00Z`) <= 35 * 86_400_000) {
+        const line = await spotWeekLine(now);
+        if (line) RUN.head.push(line);
+      }
+    }
+  } catch (e: any) {
+    console.warn('[run] Spot it numbers:', e?.message);
   }
   if (daysLeft < 7 && !nextCapSet) RUN.head.push(`📅 Before ${nextName} 1: set ${nextName}'s pipeline cap. Without one it falls back to the default $${env('PIPELINE_MONTHLY_AI_DOLLARS', 10)} a month (this month: $${AI_CAP}).`);
   if (holdPendingDecision && (daysLeft < 7 || (state.queueHold?.until && month >= String(state.queueHold.until)))) RUN.head.push(`📅 Decide which held repairs to approve (${held.length} waiting). The repair queue stays on hold until you do; it won't resume on ${state.queueHold?.until && month < String(state.queueHold.until) ? `${nextName} 1` : 'its own'}.`);

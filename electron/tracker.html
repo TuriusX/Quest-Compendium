@@ -365,7 +365,7 @@
     mouseHint: '{keys} to use your mouse here', mouseHintClose: 'Hide this tip',
     headFold: 'Click: fold the log to this line or open it. Drag: move.', openBook: 'Open the Compendium',
     foldHint: 'Click to fold or open', detWhere: 'Where', detHow: 'How', detMissable: 'Missable', detNotes: 'Notes',
-    openInGuide: 'Open in guide', askAbout: 'Ask about this', expandHint: 'Click for details', missableTip: 'Can be missed for good',
+    openInGuide: 'Open in guide', askAbout: 'Ask about this', spotIt: 'Spot it (landmarks, NPCs, chests)', expandHint: 'Click for details', missableTip: 'Can be missed for good',
     loadSteps: "Load the guide's steps", loadStepsHint: "The guide covers this quest: its steps become your objectives (no question used)",
     unloadSteps: "Back to your answer's objectives", dismissOffer: 'Not now', part: 'Part {n} of {total}',
   };
@@ -437,7 +437,9 @@
     // A missable entry says why when the guide does; otherwise the tag alone.
     const miss = o.missable || d.missable ? `<div class="dl"><span class="dk amber">${esc(L('detMissable'))}</span>${esc(d.missable || '')}</div>` : '';
     const guide = /^[ghn]:/.test(o.id) || !!(state.data && state.data.areas);
-    const acts = `<div class="dacts">${guide ? `<span class="dbtn" data-act="open-entry">${esc(L('openInGuide'))}</span>` : ''}<span class="dbtn" data-act="ask-about">${esc(L('askAbout'))}</span></div>`;
+    // A guide entry can be looked for on screen ("Spot it": one cheap check of a fresh screenshot, no question used).
+    const spot = /^g:/.test(o.id) && !o.done ? `<span class="dbtn" data-act="spot">${esc(L('spotIt'))}</span>` : '';
+    const acts = `<div class="dacts">${guide ? `<span class="dbtn" data-act="open-entry">${esc(L('openInGuide'))}</span>` : ''}${spot}<span class="dbtn" data-act="ask-about">${esc(L('askAbout'))}</span></div>`;
     return `<div class="det">${full}${row('detWhere', where)}${row('detHow', d.how)}${miss}${row('detNotes', d.notes)}${acts}</div>`;
   }
 

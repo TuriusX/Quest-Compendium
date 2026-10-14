@@ -44,7 +44,8 @@ import { useGuideSteps } from './utils/guideSteps';
 import { AppUpdates } from './components/AppUpdates';
 import { showFirstRunHints } from './utils/sessions';
 import { formatShortcut } from './utils/shortcut';
-import { setEntryDone, exportAllDone, importAllDone, GUIDE_DONE_EVENT } from './utils/guideProgress';
+import { setEntryDone, readDone, exportAllDone, importAllDone, GUIDE_DONE_EVENT } from './utils/guideProgress';
+import { SPOT_EVENT, type SpotRequest } from './utils/spotIt';
 import { appSource, isPhone } from './utils/source';
 import { useGameArt } from './utils/gameArt';
 
@@ -545,6 +546,19 @@ export default function App() {
   /** Update one message wherever it is (used by the marker features). */
   // Bumps the tab's lastActive: a sync keeps whichever copy of a tab is newer, so an edit made after the answer was
   // saved (like the precision pass removing a marker) must count as newer, or the cloud copy would bring it back.
+  /**
+   * Guide-backed markers (roadmap item 7): the first time a player sees one, its note says it comes from the guide and
+   * may be a little off (after that, the amber style and book icon say it).
+   */
+  const withGuideNote = (points: ScreenPoint[]): ScreenPoint[] => {
+    if (!points.some((p) => p.guideId)) return points;
+    let seen = true;
+    try {
+      seen = localStorage.getItem('qc-guide-marker-seen') === '1';
+      if (!seen) localStorage.setItem('qc-guide-marker-seen', '1');
+    } catch {}
+    return seen ? points : points.map((p) => (p.guideId ? { ...p, note: tr('marker.guideFirst') } : p));
+  };
   const updateMessageById = (msgId: string, fn: (m: ChatMessage) => ChatMessage) =>
     setTabs((prev) =>
       prev.map((t) =>
@@ -712,6 +726,65 @@ export default function App() {
       setLocating(false);
     }
   };
+  /**
+   * "Spot it (landmarks, NPCs, chests)" (roadmap item 7): a guide entry looked for on a fresh screenshot (spot.ts, the
+   * cheapest model; no question used, its own daily limit). Found: a marker in the guide's style over the game, ticked
+   * with the entry. The result goes in the conversation as a short note, so a wrong marker can get a 👎 "Marker"
+   * (counted on its own: the weekly hit rate in the Discord summary).
+   */
+  const spottingRef = useRef(false);
+  const runSpot = async (req: SpotRequest) => {
+    const api = (window as any).electronAPI;
+    const tab = activeTab;
+    const [kind, slug, ...rest] = String(req.id || '').split(':');
+    if (spottingRef.current || !tab || kind !== 'g' || !slug || !api?.captureFresh) return;
+    const entryId = rest.join(':').split('+')[0];
+    const key = trackerGuideKeyRef.current || '';
+    spottingRef.current = true;
+    showLocateNote(tr('spot.looking', { item: req.label }));
+    try {
+      const captured: string | null = await api.captureFresh();
+      if (!captured) throw new Error('no screenshot');
+      const image = await shrinkForLocate(captured);
+      const token = user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken() : null;
+      const res = await fetch(`${getApiBaseUrl()}/api/spot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ imageBase64: image, game: tab.activeSteamGame?.name || activeGame?.name || tab.name, entry: req.label, where: req.where || '', guideKey: key, slug, id: entryId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showLocateNote(data?.spotLimitReached ? tr('spot.limit') : tr('spot.fail'));
+        return;
+      }
+      const msgId = `spot_${Date.now()}`;
+      const points: ScreenPoint[] | undefined = data.visible
+        ? [{ x: data.x, y: data.y, label: req.label.slice(0, 40), category: 'lore', note: tr('marker.guideFirst'), ...(key ? { guideId: entryId, guideKey: key, guideSlug: slug } : {}) }]
+        : undefined;
+      const note: ChatMessage = {
+        id: msgId, role: 'assistant', kind: 'spot', modelUsed: 'Spot it', timestamp: Date.now(),
+        text: data.visible ? tr('spot.found', { item: req.label }) : req.where ? tr('spot.notInView', { item: req.label, where: req.where }) : tr('spot.notInViewNoWhere', { item: req.label }),
+        ...(points ? { points, donePoints: [] } : {}),
+      };
+      setTabs((prev) => prev.map((x) => (x.id === tab.id ? { ...x, messages: [...x.messages, note], lastActive: Date.now() } : x)));
+      showLocateNote(data.visible ? '' : tr('spot.notInViewShort', { item: req.label }));
+      if (points && settings.showPointersOnScreen !== false) {
+        const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+        api.showScreenPointers?.(points, accent, { refImage: image, sessionId: msgId, hidden: [] });
+      }
+    } catch {
+      showLocateNote(tr('spot.fail'));
+    } finally {
+      spottingRef.current = false;
+    }
+  };
+  const runSpotRef = useRef(runSpot);
+  runSpotRef.current = runSpot;
+  useEffect(() => {
+    const on = (e: Event) => void runSpotRef.current((e as CustomEvent).detail as SpotRequest);
+    window.addEventListener(SPOT_EVENT, on);
+    return () => window.removeEventListener(SPOT_EVENT, on);
+  }, []);
   const trackerMsg = trackedMessage(activeTab, trackerPickId);
   // Guide-backed objectives: the guide's steps for the player's current quest, offered on the quest log and loaded in
   // place of the answer's objectives (utils/guideSteps). A newer answer takes the log back.
@@ -764,8 +837,29 @@ export default function App() {
   const missablesHere = trackerGame.guideArea && missSection
     ? { area: trackerGame.guideArea.name, items: missSection.items.filter((it) => !it.done).map((it) => ({ id: it.id, label: it.label, why: it.detail?.missable, where: it.where })) }
     : null;
+  // "Near you" on the compact view (roadmap item 7): the next thing the guide lists here that isn't ticked, missables
+  // first, in the guide's order. The guides have no map positions, so it's "next in this area", not a distance.
+  const nearYou = (() => {
+    const secs = builtTrackerPayload?.data.sections || [];
+    for (const id of ['missable', 'collect'] as const) {
+      const it = secs.find((x) => x.id === id)?.items.find((i) => !i.done && i.id.startsWith('g:'));
+      if (it) return { id: it.id, label: it.label, where: it.where, missable: id === 'missable' };
+    }
+    return null;
+  })();
   const trackerGuideKeyRef = useRef(trackerGame.guideKey);
   trackerGuideKeyRef.current = trackerGame.guideKey;
+  // A guide entry's marker ticked (on screen, in the answer's list or on the quest log): the entry is ticked in the
+  // guide too, so it leaves the quest log, the missables under answers and the next answers' guide markers.
+  const recentMessages = activeTab?.messages;
+  useEffect(() => {
+    for (const m of (recentMessages || []).slice(-6)) {
+      (m.points || []).forEach((p, i) => {
+        if (!p.guideId || !p.guideKey || !p.guideSlug || !(m.donePoints || []).includes(i)) return;
+        if (!readDone(p.guideKey, p.guideSlug).has(p.guideId)) setEntryDone(p.guideKey, p.guideSlug, p.guideId, true);
+      });
+    }
+  }, [recentMessages]);
   const latestTrackedId = trackedMessage(activeTab)?.id;
   // A newer finished answer takes over from the one picked with "Track on screen".
   useEffect(() => {
@@ -917,6 +1011,9 @@ export default function App() {
       const entry = kind === 'g' ? tail.split('+')[0] : kind === 'h' ? `ach:${tail}` : undefined;
       // A loaded quest step opens its quest page; a walkthrough step its area.
       if (slug) window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug, entry, ...(kind === 'q' ? { entity: true } : {}) } }));
+    } else if (e.type === 'spot' && typeof e.item === 'string') {
+      // "Spot it" on a quest-log entry: looked for on a fresh screenshot, marked over the game.
+      void runSpotRef.current({ id: e.item, label: String(e.label || ''), where: String(e.where || '') });
     } else if (e.type === 'ask-about' && typeof e.label === 'string' && e.label.trim()) {
       // "Ask about this": the panel opens with a question about the entry in the box, not sent.
       const area = trackerPlaceRef.current?.name?.trim() || '';
@@ -1703,6 +1800,8 @@ export default function App() {
           place: activeTab.place || settings.gameProgress?.[gameProgressKey(activeTab)] || null,
           // Progress memory: what the player has already done in this game, so answers never send them back.
           done: doneForRequest(settings.gameDone?.[gameProgressKey(activeTab)]),
+          // The guide area's ticked entries: the answer only marks guide entries the player hasn't ticked.
+          ...(trackerGameRef.current.guideArea ? { guideDone: { slug: trackerGameRef.current.guideArea.slug, ids: [...trackerGameRef.current.guideArea.done].slice(0, 300) } } : {}),
         }),
       });
       clearTimeout(timeoutId);
@@ -1856,7 +1955,7 @@ export default function App() {
       if (aiMessage.points && settings.showPointersOnScreen !== false) {
         const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
         // The screenshot this answer is about is the reference the markers track against.
-        (window as any).electronAPI?.showScreenPointers?.(aiMessage.points, accent, {
+        (window as any).electronAPI?.showScreenPointers?.(withGuideNote(aiMessage.points), accent, {
           refImage: imageBase64,
           sessionId: aiMessage.id,
           hidden: [],
@@ -2454,6 +2553,7 @@ export default function App() {
                 hideKeys={formatShortcut(settings.hideAppShortcut)}
                 tickKeys={formatShortcut(settings.trackerTickShortcut || 'CmdOrCtrl+Shift+Enter')}
                 missablesHere={missablesHere}
+                nearYou={nearYou}
                 nextKeys={formatShortcut(settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down')}
                 immersiveReadAloud={settings.immersiveReadAloud !== false}
                 soundEnabled={settings.soundEnabled}

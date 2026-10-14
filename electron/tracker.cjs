@@ -318,7 +318,7 @@ function cleanDetail(d) {
 const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
-  'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part'];
+  'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -679,6 +679,13 @@ function onMessage(event, msg) {
       if (!item) break;
       openPanel();
       tell({ type: msg.type, item: item.id, label: item.label });
+      break;
+    }
+    case 'spot': {
+      // "Spot it": the app looks for the entry on a fresh screenshot and marks it over the game (the panel stays away).
+      const item = current && current.data.sections.flatMap((x) => x.items).find((o) => o.id === msg.item);
+      if (!item) break;
+      tell({ type: 'spot', item: item.id, label: (item.detail && item.detail.full) || item.label, where: item.where || (item.detail && item.detail.where) || '' });
       break;
     }
     default:

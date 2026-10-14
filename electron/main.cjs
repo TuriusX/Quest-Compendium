@@ -1339,6 +1339,8 @@ function showScreenPointers(points, accent, opts = {}) {
       category: /^[a-z]{2,12}$/.test(String(p.category || '')) ? String(p.category) : '',
       note: String(p.note || '').slice(0, 140),
       ...(combat && Number.isInteger(p.rank) && p.rank >= 1 && p.rank <= 3 ? { rank: p.rank } : {}),
+      // A guide entry found on screen (roadmap item 7): drawn in the guide's amber, with a book icon.
+      ...(p.guideId ? { guide: true } : {}),
     }));
   if (!valid.length) return false;
   const display = lastCaptureDisplay || screen.getDisplayNearestPoint(screen.getCursorScreenPoint());

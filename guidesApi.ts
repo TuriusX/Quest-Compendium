@@ -533,6 +533,28 @@ export type GuidePageForPlace = {
  * The published guide page for a place in a game, matched by name: exact first, then with extra detail on either side
  * ("South Figaro" vs "South Figaro, Relic Shop"), then loosely ("Returner Hideout" vs "Returners' Hideout").
  */
+/** At most this many of an answer's markers are guide entries, so they never crowd out its own. */
+export const GUIDE_MARKER_LIMIT = 2;
+/**
+ * The guide entries an answer with a screenshot may mark (roadmap item 7): the area page's items and secrets the player
+ * hasn't ticked (`done`: the app's ticks for this area, { slug, ids }), missables first, at most 12.
+ */
+export function guideEntriesForMarkers(page: GuidePageForPlace, done?: { slug?: unknown; ids?: unknown } | null): { id: string; name: string; where: string; missable: boolean }[] {
+  const ticked = new Set(done && done.slug === page.slug && Array.isArray(done.ids) ? done.ids.map(String) : []);
+  const all = [...(page.items || []), ...(page.secrets || [])]
+    .map((e: any) => ({ id: String(e?.id || ''), name: String(e?.name || e?.text || '').replace(/\s+/g, ' ').trim().slice(0, 80), where: String(e?.where || '').replace(/\s+/g, ' ').trim().slice(0, 120), missable: e?.missable === true }))
+    .filter((e) => e.id && e.name && !ticked.has(e.id) && ![...ticked].some((t) => t.split('+').includes(e.id)));
+  return [...all.filter((e) => e.missable), ...all.filter((e) => !e.missable)].slice(0, 12);
+}
+/** The prompt block listing them: the model marks one only when it can see the thing itself. */
+export function guideMarkersPrompt(entries: { id: string; name: string; where: string; missable: boolean }[]): string {
+  return `[AREA GUIDE ENTRIES: things our guide lists in this area that the player hasn't ticked yet]
+${entries.map((e) => `- ${e.id} | ${e.name}${e.where ? ` | ${e.where}` : ''}${e.missable ? ' | MISSABLE' : ''}`).join('\n')}
+If one of these is itself clearly visible in the screenshot (the object, character or container the guide names, not just
+the kind of place it might be in), you may point at it with a normal marker and add "guide": "<its id from the list>".
+At most ${GUIDE_MARKER_LIMIT} such markers, and only when you're sure it's that exact thing. Don't mention this list in your answer.`;
+}
+
 export async function guidePageFor(game: string | undefined, place: string | undefined): Promise<GuidePageForPlace | null> {
   if (!game || !place) return null;
   try {

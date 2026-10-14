@@ -22,8 +22,9 @@ import { recordGroundingMiss, registerBlueprints } from './blueprints';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
+import { registerSpot } from './spot';
 import { DONE_RULES, extractDone } from './src/utils/progressMemory';
-import { registerGuidesApi, guidePageFor, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor } from './guidesApi';
+import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
@@ -415,6 +416,7 @@ async function startServer() {
   registerLocate(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed });
   // "Locate me" (the tracker and the PlaceBar): its own daily limit, never the player's questions.
   registerLocateMe(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST, updateUserDoc: updateFirestoreDocREST, loadGuide: guideAreasWithPages });
+  registerSpot(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST });
   registerRefine(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed, onChecked: (game, checked, kept) => void recordMarkerCheck(game, checked, kept) });
 
   // --- API Health Check ---
@@ -1286,6 +1288,10 @@ percentages:
         if (corrected) systemInstruction += `\n\n${corrected}`;
         systemInstruction += `\n${CORRECTION_RULES}`;
       }
+      // Guide-backed markers (roadmap item 7): with a screenshot and markers on, the area's guide entries the player
+      // hasn't ticked (the app sends its ticks for the area), so the answer can mark any that are visible. No extra call.
+      const guideMarkable = imageBase64 && wantMarkers && guidePage ? guideEntriesForMarkers(guidePage, req.body.guideDone) : [];
+      if (guideMarkable.length) systemInstruction += `\n\n${guideMarkersPrompt(guideMarkable)}`;
       // A quick question (a chip in the app): its short label is the question, and this is what it asks for
       // (src/utils/quickQuestions.ts). "Show me where" only makes sense with markers on.
       const quick = isQuickId(req.body.quick) && !(req.body.quick === 'where' && !wantMarkers) ? req.body.quick : null;
@@ -1676,7 +1682,8 @@ percentages:
       const combatParsed = extractCombat(responseText);
       responseText = combatParsed.text;
       if (combatParsed.combat && qtype === 'general') qtype = 'fight';
-      const { text: answerText, points, nearby } = extractScreenPoints(responseText, Boolean(imageBase64), combatParsed.combat);
+      const { text: answerText, points, nearby } = extractScreenPoints(responseText, Boolean(imageBase64), combatParsed.combat,
+        guidePage && guideMarkable.length ? { key: guidePage.key, slug: guidePage.slug, ids: new Set(guideMarkable.map((e) => e.id)) } : null);
       responseText = answerText;
       // The quest-log title for the on-screen objectives tracker (any in-game answer, markers or not).
       const titleParsed = extractTitle(responseText);
@@ -1865,7 +1872,7 @@ percentages:
    * The block is always removed, even when no screenshot was sent (the points would be meaningless then).
    */
   const MARKER_CATEGORIES = new Set(['weapon', 'armor', 'consumable', 'key', 'quest', 'lore', 'secret', 'character', 'enemy', 'danger', 'action', 'place']);
-  type ParsedPoint = { x: number; y: number; label: string; where?: string; category?: string; note?: string; detail?: string; missable?: boolean; rank?: number };
+  type ParsedPoint = { x: number; y: number; label: string; where?: string; category?: string; note?: string; detail?: string; missable?: boolean; rank?: number; guideId?: string; guideKey?: string; guideSlug?: string };
 
   /** The model's <qc-title> line (a short quest-log name for the objectives tracker), always removed from the answer. */
   function extractTitle(text: string): { text: string; title: string } {
@@ -1877,7 +1884,12 @@ percentages:
     if (title.length > 60) title = title.slice(0, 60).replace(/\s+\S*$/, '').trim();
     return { text: cleaned || text, title };
   }
-  function extractScreenPoints(text: string, hadImage: boolean, combat = false): { text: string; points: ParsedPoint[]; nearby: { label: string; hint: string; onMap: boolean }[] } {
+  function extractScreenPoints(
+    text: string, hadImage: boolean, combat = false,
+    /** The guide entries the answer could mark (guideEntriesForMarkers): a marker naming one of them carries its id. */
+    guide: { key: string; slug: string; ids: Set<string> } | null = null,
+  ): { text: string; points: ParsedPoint[]; nearby: { label: string; hint: string; onMap: boolean }[] } {
+    let guideMarks = 0;
     // Other items in the same area that aren't on screen yet (the desktop app looks for them as the player walks).
     let nearbyRaw = '';
     text = text.replace(/(?:```[a-z]*\s*)?<qc-nearby>([\s\S]*?)<\/qc-nearby>(?:\s*```)?/gi, (_m, inner) => {
@@ -1942,6 +1954,9 @@ percentages:
                 ...(p?.missable === true ? { missable: true } : {}),
                 // Kill order (combat): the top 2-3 targets, numbered and drawn stronger.
                 ...(combat && Number.isInteger(p?.rank) && p.rank >= 1 && p.rank <= 3 ? { rank: p.rank } : {}),
+                // A guide entry it found on screen (at most GUIDE_MARKER_LIMIT): drawn in the guide's style, ticked with the entry.
+                ...(!combat && guide && typeof p?.guide === 'string' && guide.ids.has(p.guide) && guideMarks++ < GUIDE_MARKER_LIMIT
+                  ? { guideId: p.guide, guideKey: guide.key, guideSlug: guide.slug } : {}),
               });
             }
           }
