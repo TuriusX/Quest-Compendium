@@ -42,6 +42,31 @@ const objOf = (text: string): any => {
 };
 
 export type BenchPoint = { point: string; kind: string; core: boolean; covered?: boolean };
+
+/**
+ * A point about what the entity is NOT or does NOT do ("plays no role in the critical path and cannot become a
+ * companion"). The page writer is told never to write such lines (entityV2.ts, compendium.ts), so they're never core:
+ * a page would be held for a point it isn't allowed to state. A conditional one stays (it's timing, a missable or a
+ * consequence: "cannot be recruited after Act 1", "won't join if you sided with the goblins").
+ */
+const NEGATION = /\b(?:is not|isn['’]t|are not|aren['’]t|was not|wasn['’]t|does not|doesn['’]t|do not|don['’]t|cannot|can['’]t|can not|will not|won['’]t|never|not an?|no role|no part|has no|have no|plays no|neither|nor)\b/i;
+const CONDITIONAL = /\b(?:after|before|once|until|unless|if|when|while|without|unless|by the time|past|beyond|anymore|any more|missable|permanently|for good|locks?|locked)\b/i;
+export const negativePoint = (point: string): boolean => NEGATION.test(point) && !CONDITIONAL.test(point);
+/**
+ * A point without its negative parts: a point joining several facts with ";" keeps the ones that say what the entity
+ * is or does ("Plays no role in the critical path and cannot become an ally; his possible outcomes are…" keeps the
+ * outcomes). '' when nothing is left.
+ */
+export function positivePart(point: string): string {
+  const parts = String(point || '').split(/;\s*/).map((x) => x.trim()).filter(Boolean);
+  const kept = parts.filter((x) => !negativePoint(x));
+  if (kept.length === parts.length) return point;
+  const out = kept.join('; ');
+  return out ? out.charAt(0).toUpperCase() + out.slice(1) : '';
+}
+/** The benchmark's core points a page must cover: core, without anything about what the entity is not or doesn't do. */
+export const corePoints = (points: BenchPoint[] | undefined): BenchPoint[] =>
+  (points || []).filter((p) => p.core).map((p) => ({ ...p, point: positivePart(p.point) })).filter((p) => p.point.length > 5);
 export type Benchmark = { at: number; v?: number; answer: string; points: BenchPoint[]; questions: string[]; evidence: Evidence[]; sites: string[]; cost: { dollars: number; searches: number } };
 
 /** Everything a page says, as plain text (for the coverage check). */
@@ -78,6 +103,7 @@ export async function benchmarkAnswer(game: string, name: string, typeLabel: str
     'QUESTIONS:',
     '- <a question players ask about it>',
     'Give 5 to 10 points and 3 to 8 questions, most important first. Only facts the sources state. State everything plainly, story events and endings included; no spoiler warnings.',
+    'Every point says what the entity IS or DOES. Never a point about what it is not or does not do ("not a companion", "plays no role in the main story"); a condition is fine ("can\'t be recruited after Act 1").',
     CORE_MUST[entityKind(typeLabel)] || '',
   ].filter(Boolean).join('\n');
   let res: any = null;
@@ -101,7 +127,8 @@ export async function benchmarkAnswer(game: string, name: string, typeLabel: str
     const [a, b, ...rest] = l.split('|').map((x) => x.trim());
     if (!rest.length) return null;
     const kind = (KINDS as readonly string[]).find((k) => k === String(b || '').toLowerCase()) || 'other';
-    return { point: cut(rest.join(' | '), 240), kind, core: /core/i.test(a) };
+    const point = cut(rest.join(' | '), 240);
+    return { point, kind, core: /core/i.test(a) && !!positivePart(point) };
   }).filter((x): x is BenchPoint => !!x && x.point.length > 5).slice(0, 12);
   const questions = part('QUESTIONS').split('\n').map((l) => cut(l.replace(/^[\s*-]+/, ''), 160)).filter((l) => l.length > 5).slice(0, 8);
   // The sentences the sources back (allowed sources only) are evidence the rebuild can reuse.
@@ -167,7 +194,7 @@ export async function benchmarkPage(key: string, slug: string) {
   });
   const out: Benchmark = { at: Date.now(), v: BENCH_V, ...b, cost: { dollars: Math.round(scope.dollars * 10000) / 10000, searches: scope.searches } };
   await ref.set({ benchmark: JSON.parse(JSON.stringify(out)) }, { merge: true });
-  const missing = out.points.filter((p) => p.core && !p.covered);
+  const missing = corePoints(out.points).filter((p) => !p.covered);
   console.log(`${key} / ${e.name}: ${out.points.filter((p) => p.covered).length}/${out.points.length} points covered, ${missing.length} core missing${missing.length ? ` (${missing.map((p) => p.kind).join(', ')})` : ''}, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);
   return out;
 }
@@ -192,7 +219,7 @@ export async function report(only?: Set<string>) {
     if (b?.points) {
       g.benched++;
       g.cost += Number(b.cost?.dollars || 0);
-      const miss = b.points.filter((x: BenchPoint) => x.core && !x.covered);
+      const miss = corePoints(b.points).filter((x) => !x.covered);
       if (miss.length) g.missingCore++;
       for (const m of miss) g.kinds.set(m.kind, (g.kinds.get(m.kind) || 0) + 1);
     }

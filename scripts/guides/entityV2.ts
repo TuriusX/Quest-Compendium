@@ -24,7 +24,7 @@ import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, usageScope, searchesIn } from './common';
 import { supportedSegments, trusted, trustedSites, evidenceText, claimCheck, claimReview, claimSlots, type Evidence, type EvidencePack, type ClaimPage } from './claimCheck';
 import { entitySlug, entityKind, entityEvidenceFor, claimPageOf, applyVerdicts, type EntityPage } from './compendium';
-import { benchmarkAnswer, coverage, pageText, BENCH_V, type BenchPoint } from './benchmark';
+import { benchmarkAnswer, coverage, pageText, corePoints, BENCH_V, type BenchPoint } from './benchmark';
 import { lintEntity, fuzzyScore } from './siteText';
 import { ProQuotaWait } from './reviewerQuota';
 
@@ -226,7 +226,8 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
   const out = await usageScope.run(scope, async () => {
     // The benchmark (reused when the measurement already ran it).
     const bench = live.benchmark?.points?.length && Number(live.benchmark.v || 1) >= BENCH_V ? live.benchmark : { ...(await benchmarkAnswer(game, name, typeLabel)), at: Date.now(), v: BENCH_V };
-    const core: BenchPoint[] = (bench.points || []).filter((p: BenchPoint) => p.core);
+    // Core points only; never one about what the entity is not or doesn't do (the writer may not state those).
+    const core: BenchPoint[] = corePoints(bench.points);
     // The live page against the same points (for the before/after).
     const beforeCov = await coverage(game, name, pageText(live), core);
     // 1-2. Intent, then research those questions on top of what's stored.
