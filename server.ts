@@ -970,7 +970,11 @@ async function startServer() {
       let targetModel = hasFullAccess(isPremium) ? MAIN_MODEL : FREE_MODEL;
       const skipPrimary = true;
       const wanted = wantedBucket(req.body);
-      const picked = pickBucket(wanted, { pro: Number(userData.proQueriesAvailable) || 0, flash: Number(userData.flashQueriesAvailable) || 0 });
+      // Model comparisons (scripts/evals/model-compare): with QC_EVAL_CAPTURE set on a LOCAL server (never on Cloud Run)
+      // and a test account, the Pro answer request is built as a signed-in player's (search allowed) and written to that
+      // file instead of being sent: no model is called, no quota or shared Pro budget is used.
+      const evalCapture = !!process.env.QC_EVAL_CAPTURE && !process.env.K_SERVICE && /^guest_(dev|local|test)(_|$)/.test(String(userId));
+      const picked = evalCapture ? ({ bucket: 'pro' } as any) : pickBucket(wanted, { pro: Number(userData.proQueriesAvailable) || 0, flash: Number(userData.flashQueriesAvailable) || 0 });
 
       if (!picked.bucket) {
         const resetAt = nextReset(tz);
@@ -1290,7 +1294,7 @@ percentages:
       // Pro (players' share of today's Pro requests isn't used up, chatRouting.ts); otherwise Flash.
       let qtype = questionType(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null));
       const routingCfg = await routing();
-      const usePro = picked.bucket === 'pro' && (await takePlayerPro(routingCfg));
+      const usePro = evalCapture ? true : picked.bucket === 'pro' && (await takePlayerPro(routingCfg));
 
       // Search (searchPolicy.ts): always for a game released after the answering model's cutoff (past the player's own
       // daily search allowance; the app-wide caps still apply); offered for unfamiliar games and for exact-data questions
@@ -1301,7 +1305,7 @@ percentages:
       const searchMode: SearchMode = !effectiveGame?.name
         ? 'ask'
         : searchModeFor({ newRelease, dated: release?.source !== 'unknown', type: qtype, covered: Boolean(guidePage?.verified) });
-      const searchOk = searchMode === 'force'
+      const searchOk = evalCapture ? true : searchMode === 'force'
         ? (await playerSearchesToday()) && (await monthlyBudgetOk())
         : await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
       const searchTools = searchOk && searchMode !== 'ask';
@@ -1524,6 +1528,11 @@ percentages:
           // Pro: no longer than the routing allows, then the Flash fallback below answers (players never wait on Pro).
           // Pro with search takes longer (about 30-40 s): up to 45 s then, still inside the app's 75 s with the fallback.
           const proWait = searchTools ? Math.max(routingCfg.proTimeoutMs, 45000) : routingCfg.proTimeoutMs;
+          if (evalCapture) {
+            const fs = await import('node:fs');
+            fs.appendFileSync(String(process.env.QC_EVAL_CAPTURE), JSON.stringify({ id: req.body.evalId, model: answerModel, contents: contentsPayload, systemInstruction: firstSystem, withSearch: !!searchTools, searchMode, temperature: aiMode === 'roleplay' ? 0.9 : 0.7, qtype }) + String.fromCharCode(10));
+            return res.json({ text: 'captured', modelUsed: 'eval' });
+          }
           let response = await withTimeout(answerCall(firstSystem, searchTools), usePro ? proWait : 25000, usePro ? 'Pro query' : 'Flash query') as any;
           logUsage(usePro ? `chat-pro:${qtype}` : 'chat', answerModel, response);
           // A new release must be answered from a search: if the model skipped it, once more, told to search first.

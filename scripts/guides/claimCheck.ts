@@ -246,7 +246,7 @@ export const CLAIM_RULES = [
   'An "appears in" claim names a part of the game the guide covers: a chapter or act, or an area or place. It is supported when the evidence puts the entity there, or has the player meet, visit or fight it there; that the part is a place rather than a story chapter does not matter.',
 ];
 
-function claimPrompt(game: string, area: string, slots: ClaimSlot[], evidence: string) {
+export function claimPrompt(game: string, area: string, slots: ClaimSlot[], evidence: string) {
   return [
     `Check a guide page for the video game "${game}", the area "${area}", claim by claim against the EVIDENCE (sentences from sources, each with an id).`,
     ...CLAIM_RULES,
