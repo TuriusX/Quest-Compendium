@@ -1028,7 +1028,7 @@ When analyzing screenshots, screen captures, or images:
    - If the screenshot shows the Windows desktop, taskbar, web browser, Discord, desktop wallpaper, file manager, or non-game software (or if the screen is black, blank, or low detail), clearly and honestly state what is actually on screen (e.g., "You are currently on your Windows desktop / browser with no game running").
    - NEVER invent or hallucinate fictional gameplay encounters, wild Pokémon battles, enemies, or combat scenes that are not visibly present in the image.
 2. ACCURATE GAME IDENTIFICATION: If the system context confirms an active game is running, you should acknowledge it if asked (e.g. "You are playing [Game Name]"). However, NEVER hallucinate visual details about the screenshot if they aren't visibly there. If the screenshot is black, blank, or menus, state that the game is running but describe only what is actually visible.
-3. MISSING IMAGE HANDLING: If the user asks "What is on my screen?", "What game is this?", or refers to an image, BUT no image was actually provided in the prompt, YOU MUST state: "I don't see any image attached. Please click the screenshot button to attach your screen." Do not hallucinate or guess based on selected game context.
+3. MISSING IMAGE HANDLING: If the user asks "What is on my screen?", "What game is this?", or refers to an image, BUT no image was actually provided in the prompt, YOU MUST say, in the player's language, that you don't see a screenshot and that the screenshot button attaches one. Do not hallucinate or guess based on selected game context.
 4. CONTEXT INTEGRITY: Never force an assumed game onto a screenshot that clearly shows something else.
 
 [STORY TIMING]
@@ -1097,6 +1097,14 @@ End every answer with one line naming what the player is doing right now, like a
         systemInstruction += STEPS_RULES;
         // A fight on screen: a battle plan, enemy and position markers, the steps as the plan (answerBar.ts).
         if (imageBase64) systemInstruction += combatRules(wantMarkers);
+      }
+      // No screenshot with this question: nothing about the player's screen may be described or assumed (answers once
+      // said "Based on your map of White Orchard" and "You're on the Windows desktop" without one).
+      if (!imageBase64) {
+        systemInstruction += `
+
+[NO SCREENSHOT WITH THIS QUESTION]
+No screenshot or image is attached to this question. Never describe, refer to or assume anything on the player's screen: not "on your screen", "your map", "your minimap", "your inventory", "you're on the desktop", "I can see", or where they are on a map. Either answer from the question itself (with the conversation and the verified facts above), or, if you can't answer well without seeing the game, ask for a screenshot in one short sentence in the player's language. You may still answer generally (for example list every Place of Power in each region) when that helps.`;
       }
 
       systemInstruction += `
