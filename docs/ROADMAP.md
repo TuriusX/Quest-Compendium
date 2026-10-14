@@ -17,14 +17,14 @@ Owner: Noah. Source: the project mind map (Oct 13, 2026). Keep this file in the 
 | 1 | **Auto-update** | electron-updater against GitHub releases: check at startup and every 6 hours, download quietly, show a non-blocking "Version X is ready, restart to update" with a Later button, install on quit. Store builds skip it. Add `latest.yml` and the `.blockmap` to the release routine. | Done (0.5.6) |
 | 2 | **Code signing** | Azure Trusted Signing via `win.azureSignOptions` in electron-builder, credentials from Secret Manager. **Blocked until Noah confirms what his $9.99/month Azure "Security" charge is.** If there's no signing account, propose the setup steps instead. | Waiting on Noah |
 | 3 | **Quest log redesign** | Already specified in the Oct 13 prompt: short label plus dim detail line per objective, one progress count, quieter location row, highlight the next objective, hotkey and controller ticking, missable ⚠. | Done (0.5.6) |
-| 4 | **First-run tour** | 30-second tour on first launch: the panel hotkey, screenshot hotkey, compact view, quest log, Pro/Fast. Skippable, shown once, reachable later from the ⋯ menu. Controller-navigable, all nine languages. | Built (0.5.7) |
+| 4 | **First-run tour** | 30-second tour on first launch: the panel hotkey, screenshot hotkey, compact view, quest log, Pro/Fast. Skippable, shown once, reachable later from the ⋯ menu. Controller-navigable, all nine languages. | Done (0.5.7) |
 
 ## Phase 2: get more out of the guides (0.5.7)
 
 | # | Item | What it is | Status |
 |---|------|-----------|--------|
 | 5 | **Guide-backed objectives** *(propose first)* | When the player's current quest matches a guide quest page or walkthrough step, offer to load its checked steps into the quest log. No AI question used. Ticks sync with the guide ticks on the player's account. Start with RDR2 (quest pages exist). | Done (0.5.6) |
-| 6 | **Missable warnings from guide data** | Objectives and answers show a ⚠ when the guide marks something missable at the player's location. | Built (0.5.7) |
+| 6 | **Missable warnings from guide data** | Objectives and answers show a ⚠ when the guide marks something missable at the player's location. | Done (0.5.7) |
 | 7 | **Guide-backed markers** *(propose first)* | Point at collectibles and missables near the player using guide data, without spending a question. Explain the accuracy limits honestly in the proposal. | Built (0.5.8) |
 
 ## Phase 3: answers that know your save (0.5.8+)
