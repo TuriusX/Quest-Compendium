@@ -30,7 +30,8 @@ export const ledgerDollars = () => ledger.tokenDollars + ledger.searchDollars;
  */
 const IS_LOCAL = !process.env.CLOUD_RUN_JOB && !process.env.K_SERVICE;
 async function recordLocal(dollars: number, searches: number) {
-  if (!IS_LOCAL || !(dollars > 0)) return;
+  // Core programme work run locally is charged to the core budget already (core.ts): not counted twice.
+  if (!IS_LOCAL || !(dollars > 0) || process.env.CORE_CHARGED === '1') return;
   const m = new Date().toISOString().slice(0, 7);
   await getFirestore().collection('system').doc('localSpend').set({ months: { [m]: { dollars: FieldValue.increment(dollars), calls: FieldValue.increment(1), searches: FieldValue.increment(searches) } }, updatedAt: Date.now() }, { merge: true }).catch(() => {});
 }
