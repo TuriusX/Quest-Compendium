@@ -605,6 +605,9 @@ export function pageClaimPage(a: any): ClaimPage {
  * pack, the walkthrough and choices written from it, every claim checked (unsupported ones removed), the rules, then
  * the claim-by-claim review. Nothing goes live. Returns the page, what was removed and the cost.
  */
+/** Gap filling (buildPageEvidence 5b): the share of a page's specific claims that must be verified for it to pass. */
+export const GAP_KEEP = 0.75;
+
 async function buildPageEvidence(key: string, game: string, slug: string, order: { slug: string; name: string }[], from = key, opts: { rebuild?: boolean } = {}) {
   const scope = usageScope.getStore();
   const before = scope ? { ...scope } : { searches: ledger.searches, dollars: ledgerDollars() };
@@ -669,8 +672,36 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   };
   const rules = pageRules(proto, ev);
   // 5. The review, claim by claim (Pro), on the page as it will be.
-  const review = await claimReview(game, p.name, pageClaimPage(proto), ev);
+  let review = await claimReview(game, p.name, pageClaimPage(proto), ev);
   console.log(`  review: ${review.status}, ${review.supported}/${review.total} specific claims supported (score ${review.score})${review.reason ? `: ${review.reason}` : ''}`);
+  // 5b. Fill gaps, don't fail: a page the review fails gets one targeted search for the claims it couldn't support or
+  // found contradicted, then the review again with that evidence. What's still unsupported or contradicted is dropped
+  // (below, like every review), so the evidence check still holds for everything that stays. The page passes when no
+  // more than 2 claims are contradicted and at least GAP_KEEP of its specific claims are supported.
+  const gapFill = { tried: false, searches: 0, added: 0, before: review.score };
+  if (review.status === 'failed' && review.total) {
+    const weak = [...review.contradicted, ...review.unsupported].slice(0, 15);
+    if (weak.length) {
+      gapFill.tried = true;
+      const { searchedEvidence } = await import('./entityV2');
+      const more = await searchedEvidence(`In the video game "${game}", in the area "${p.name}": check each of these statements against the game's wikis and guides, and state what the sources actually say about each: ${weak.map((c) => `"${cut(c.text, 200)}"`).join('; ')}`, 'gapfill', 'gap check');
+      gapFill.searches = more.searches;
+      gapFill.added = more.evidence.length;
+      if (more.evidence.length) {
+        ev.evidence.push(...more.evidence);
+        ev.sites = [...new Set([...ev.sites, ...more.evidence.flatMap((e) => e.sources)])];
+        review = await claimReview(game, p.name, pageClaimPage(proto), ev);
+        console.log(`  gap search: ${more.evidence.length} sourced sentence(s); review again: ${review.supported}/${review.total} supported, ${review.contradicted.length} contradicted`);
+      } else console.log('  gap search: nothing sourced');
+      const share = review.total ? review.supported / review.total : 0;
+      if (review.contradicted.length <= 2 && share >= GAP_KEEP) {
+        review = { ...review, status: 'passed', reason: undefined };
+        console.log(`  passes after the gap search: ${review.total - review.supported} claim(s) the sources still don't support are dropped`);
+      } else if (review.contradicted.length <= 2) {
+        review = { ...review, status: 'failed', reason: `only ${review.supported} of ${review.total} specific claims could be verified, even after a gap search` };
+      }
+    }
+  }
   // What the reviewer couldn't support goes too (the page never keeps a claim the review found unsupported).
   const rd: Draft = {
     steps: proto.walkthrough, news: [], choices: proto.choices, advice: proto.advice,
@@ -689,6 +720,7 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
     ...proto, mode: 'evidence', sources: ev.sites.slice(0, 12), cost: spent, model: MODEL, at: Date.now(),
     status: review.status, score: review.score, ...(review.reason ? { reason: review.reason } : {}),
     claims: { checked: verdicts.length, removed: applied.removed, rules: rules.removed, cleaned: rules.cleaned, review: { supported: review.supported, total: review.total, contradicted: review.contradicted, unsupported: review.unsupported } },
+    ...(gapFill.tried ? { gapFill } : {}),
     sourceLinks: { wiki: ev.sites.slice(0, 3).join(', '), license: 'facts from the sources named, in our own words', licenseUrl: '', pages: [] },
   });
   // Sections the sources couldn't fully cover (something had to be removed, or no source lists them all): marked
