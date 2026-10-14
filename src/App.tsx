@@ -41,6 +41,7 @@ import { markersActiveFor, activeMarkersId, rememberAreaFind, setPointersActive 
 import { buildTrackerPayload, trackedMessage, trackerGameKey, trackerLabels, type TrackerData } from './utils/trackerPayload';
 import { useTrackerGuide } from './utils/trackerGuide';
 import { useGuideSteps } from './utils/guideSteps';
+import { AppUpdates } from './components/AppUpdates';
 import { showFirstRunHints } from './utils/sessions';
 import { formatShortcut } from './utils/shortcut';
 import { setEntryDone, exportAllDone, importAllDone, GUIDE_DONE_EVENT } from './utils/guideProgress';
@@ -2081,6 +2082,8 @@ export default function App() {
   };
 
   const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
+  // A local dev server shows the update bar and "What's new" with sample notes at ?previewUpdate (for screenshots).
+  const previewUpdate = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /[?&]previewUpdate/.test(location.search);
   // Tuck the panel away without the shortcut: exactly what the shortcut does (focus back to the game, quest log as is).
   const tuckAway = () => (window as any).electronAPI?.hidePanel?.();
   const tuckSide: 'left' | 'right' = String(settings.dockPosition).endsWith('left') ? 'left' : 'right';
@@ -2234,6 +2237,16 @@ export default function App() {
           onSync={syncDiagnostics?.triggerSyncNow}
           onCompact={isDesktop && activeTab ? () => chooseView('compact') : undefined}
         />}
+        {/* Updates (desktop), under the header: "Version X is ready" and, after one installs, a one-time "What's new". A dev server shows
+            both with sample notes at ?previewUpdate (for screenshots). */}
+        {(isDesktop || previewUpdate) && (
+          <AppUpdates
+            compact={compact}
+            preview={previewUpdate
+              ? { ready: '0.5.7', ...(/whatsnew/.test(location.search) ? { whatsNew: { v: '0.5.6', text: 'a cleaner quest log with short objectives and a highlight on the next one; tick and move between objectives without your mouse; load a guide’s steps for your current quest' } } : {}) }
+              : undefined}
+          />
+        )}
 
         {/* Main Body: Left Sidebar + Central Chat/Browser + Right Achievements Drawer */}
         {/* overflow-clip, not overflow-hidden: a clipped box isn't scrollable, so focusing a field can't shift the

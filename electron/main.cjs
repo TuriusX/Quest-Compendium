@@ -98,6 +98,7 @@ const { spawn } = require('child_process');
 const { createControllerService } = require('./controller.cjs');
 const { createFocusHelper } = require('./focus.cjs');
 const tracker = require('./tracker.cjs');
+const { initUpdater } = require('./updater.cjs');
 const spine = require('./spine.cjs');
 const focusHelper = createFocusHelper();
 const http = require('http');
@@ -637,6 +638,8 @@ app.whenReady().then(() => {
   });
   tracker.setMouseTip(tipMode());
   tracker.setVisibleInRecordings(markersInRecordings);
+  // Updates for the direct-download app (electron/updater.cjs; the Store updates its own package).
+  initUpdater({ app, ipcMain, getMainWindow: () => mainWindow });
   tracker.setScale(currentUiScale);
   // The hidden panel's spine on the dock edge (electron/spine.cjs): a click opens the panel. Its look (the theme's accent
   // and its label) comes from the app (set-look), so it follows the theme even when no quest log has been shown.
@@ -1013,6 +1016,11 @@ setInterval(() => {
 }, 3000);
 
 // The Microsoft Store package (MSIX/AppX): the Store updates the app, so it skips the app's own version check.
+// The installed version ("0.5.6"), for the app's one-time "What's new" after an update.
+ipcMain.on('get-app-version', (event) => {
+  event.returnValue = app.getVersion();
+});
+
 ipcMain.on('is-store-build', (event) => {
   event.returnValue = process.windowsStore === true;
 });

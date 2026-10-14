@@ -205,6 +205,21 @@ export function registerGuidesApi(app: Express): void {
     }
   });
 
+  // A release's line from the website's Recent updates (system/changelog, scripts/pipeline/changelog.ts), in the app's
+  // language: the desktop app's one-time "What's new" after an update.
+  app.get('/api/changelog', async (req, res) => {
+    try {
+      const v = String(req.query.v || '').trim().replace(/^v/, '').slice(0, 20);
+      const entries: any[] = await cached('changelog', async () => ((await getFirestore().collection('system').doc('changelog').get()).data()?.entries || []) as any[]);
+      const e = entries.find((x) => x?.v === v);
+      if (!e) return res.status(404).json({ error: 'No notes for this version yet.' });
+      const lang = langOf(req.query.lang);
+      send(res, { v: e.v, date: e.date || '', text: (lang !== 'en' && e.tr?.[lang]) || e.text || '' });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
   app.get('/api/game-art', async (req, res) => {
     try {
       res.set('Cache-Control', 'public, max-age=3600');

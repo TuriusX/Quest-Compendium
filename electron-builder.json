@@ -11,7 +11,9 @@
   "icon": "public/icon.png",
   "mac": {},
   "linux": {
-    "target": ["AppImage"],
+    "target": [
+      "AppImage"
+    ],
     "icon": "public/icon.png",
     "category": "Game"
   },
@@ -20,11 +22,15 @@
     "target": [
       {
         "target": "nsis",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       },
       {
         "target": "appx",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       }
     ]
   },
@@ -33,7 +39,8 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "Quest Compendium"
+    "shortcutName": "Quest Compendium",
+    "artifactName": "Quest-Compendium-Setup-${version}.${ext}"
   },
   "appx": {
     "identityName": "Turius.QuestCompendium",
@@ -49,5 +56,13 @@
   ],
   "asarUnpack": [
     "node_modules/koffi/**"
+  ],
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "TuriusX",
+      "repo": "Quest-Compendium",
+      "releaseType": "release"
+    }
   ]
 }
