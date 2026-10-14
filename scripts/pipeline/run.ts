@@ -105,6 +105,8 @@ const AI_CAP = (() => {
   const m = (process.env.PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH || '').split(',').map((x) => x.trim().split(':')).find(([k]) => k === month);
   return m && Number.isFinite(Number(m[1])) ? Number(m[1]) : env('PIPELINE_MONTHLY_AI_DOLLARS', 10);
 })();
+/** Mondays (UTC): the summary's full detail for finished programmes (the re-verification, the per-guide core list). */
+const MONDAY = new Date().getUTCDay() === 1;
 const MAX_ACTIONS = env('PIPELINE_MAX_ACTIONS', 6); // most actions are cheap now (see the plan order below)
 const WISH_SLOTS = Math.min(env('PIPELINE_WISHLIST_SLOTS', 2), MAX_ACTIONS);
 const MIN_PLAYERS = env('PIPELINE_MIN_PLAYERS', 3);
@@ -769,6 +771,11 @@ async function main() {
     }
     const rate = st.pages ? Math.round((st.passed / st.pages) * 100) : 0;
     const fb: any = flagship.budget || {};
+    // Finished: one line, with the full breakdown and the failed pages on Mondays only.
+    const failedCount = (rv.order as string[]).reduce((n, k) => n + ((rv.progress?.[k]?.failed || []) as any[]).length, 0);
+    if (rv.done && !MONDAY) {
+      report.push(`🔎 Flagship re-verification done: ${st.passed} of ${st.pages} passed (${rate}%), $${Number(st.dollars || 0).toFixed(2)}; ${failedCount} page(s) kept their old content (listed on Mondays).`);
+    } else {
     report.push(`🔎 Flagship re-verification (part of the flagship programme's one-off $${Number(fb.total || 0)}${flagship.spent != null ? `, $${Number(flagship.spent).toFixed(2)} spent` : ''}${Number(flagship.spent || 0) >= Number(fb.total || 0) - 1 ? '; stopped at its total' : ''})${rv.done ? ' done' : ''}: ${per.join(' · ')}. Pass rate ${rate}% (${st.passed} of ${st.pages}), $${st.pages ? (st.dollars / st.pages).toFixed(2) : '0.00'} a page; re-verification $${Number(st.dollars || 0).toFixed(2)} in all since it started.`);
     // Pages that failed keep their old content without the badge: listed so the owner can decide on retries.
     const failedPages: string[] = [];
@@ -779,6 +786,7 @@ async function main() {
       for (const f of fl) failedPages.push(`${name} / ${f.name}${f.score != null ? ` (${f.score})` : ''}: ${String(f.reason || 'failed review').slice(0, 80)}`);
     }
     if (failedPages.length) report.push(`⚠️ Re-verification failed (old content kept, no badge; ${failedPages.length} page(s), say which to retry): ${failedPages.slice(0, 25).join('; ')}${failedPages.length > 25 ? `; and ${failedPages.length - 25} more` : ''}.`);
+    }
   }
   // Core guides (scripts/guides/core.ts): completeness per guide, this month's shared budget, and what's left.
   try {
@@ -791,15 +799,22 @@ async function main() {
       const dayLog = ((coreSt.pageLog || []) as any[]).filter((x) => Number(x.at) >= Date.now() - 24 * 3600_000);
       const dayCost = dayLog.reduce((a, x) => a + Number(x.dollars || 0), 0);
       RUN.head.push(`📚 Core programme, last day: ${dayLog.length} page(s) built, ${dayLog.filter((x) => /passed|published/.test(String(x.status))).length} passed, $${dayCost.toFixed(2)}. October: $${b.spentMonth.toFixed(2)} of $${b.monthly} spent, $${Math.max(0, b.monthly - b.spentMonth).toFixed(2)} left ($${b.daily} a day).`);
-      report.push(`📚 Core guides${coreSt.approved ? '' : ' (waiting for the list to be approved)'}${coreSt.paused ? ` (paused: ${coreSt.paused.why || 'until the owner says go'})` : ''}: $${b.spentMonth.toFixed(2)} of $${b.monthly} this month. Left to complete them all: ≈ $${e.total.toFixed(0)}, about ${e.months.toFixed(1)} month(s) at $${e.monthly} a month.`);
+      // "Left": what's left at the current method's real cost per page that went live (core.ts realRates).
+      const doneGuides = e.rows.filter((r) => !!coreSt.perGuide?.[r.key]?.done || r.left === 0);
+      const next = e.rows.find((r) => !coreSt.perGuide?.[r.key]?.done && r.left > 0);
+      const failCount = (coreSt.guides as string[]).reduce((n, k) => n + (coreSt.perGuide?.[k]?.failedPages || []).length + (coreSt.perGuide?.[k]?.failedEntities || []).length, 0);
+      report.push(`📚 Core guides${coreSt.approved ? '' : ' (waiting for the list to be approved)'}${coreSt.paused ? ` (paused: ${coreSt.paused.why || 'until the owner says go'})` : ''}: ${doneGuides.length} of ${e.rows.length} complete${next ? `, now ${shortName(next.game)}` : ''}; $${b.spentMonth.toFixed(2)} of $${b.monthly} this month. Left: ≈ $${e.total.toFixed(0)} at the current method's real cost ($${e.rates.page.toFixed(2)} a walkthrough page, $${e.rates.entity.toFixed(2)} an entity page, failures included), about ${e.months.toFixed(1)} month(s) at $${e.monthly} a month.${failCount ? ` ${failCount} piece(s) failed review${MONDAY ? '' : ' (listed on Mondays)'}.` : ''}`);
       const cp = coreSt.checkpoint?.result;
       if (cp) RUN.head.push(`🧮 Core checkpoint (first ${cp.pages} pages): $${Number(cp.avg).toFixed(3)} a page, ${Math.round(Number(cp.pass) * 100)}% passed${cp.paused ? ' — over the limits, so the programme paused itself' : ' — within the limits'}.`);
-      for (const r of e.rows) {
-        const done = !!coreSt.perGuide?.[r.key]?.done;
-        report.push(`${done ? '✅' : '•'} ${shortName(r.game)}: flagship pages ${r.corePages}/${r.pages}${r.keptPages ? ' (kept)' : ''} · compendium pages ${r.entitiesPublished}/${r.entitiesTotal} (cap ${r.cap}) · $${r.cost.toFixed(2)} so far, ≈ $${r.left.toFixed(2)} left`);
+      if (MONDAY) {
+        for (const r of e.rows) {
+          const done = !!coreSt.perGuide?.[r.key]?.done;
+          // Compendium: the guide's live entity pages against the cap (every live page counts, the rollout's too).
+          report.push(`${done ? '✅' : '•'} ${shortName(r.game)}: flagship pages ${r.corePages}/${r.pages}${r.keptPages ? ' (kept)' : ''} · compendium pages ${Math.min(r.entitiesLive, r.cap)}/${r.cap}${r.entitiesLive > r.cap ? ` (${r.entitiesLive} live in all)` : ''} · $${r.cost.toFixed(2)} so far, ≈ $${r.left.toFixed(2)} left`);
+        }
+        const fails = (coreSt.guides as string[]).flatMap((k) => [...(coreSt.perGuide?.[k]?.failedPages || []).map((f: any) => `${f.name} (page)`), ...(coreSt.perGuide?.[k]?.failedEntities || []).map((f: any) => `${f.name} (entity)`)]);
+        if (fails.length) report.push(`⚠️ Core pieces that failed review (not retried; add them to system/core.retry to try again): ${fails.slice(0, 15).join(', ')}${fails.length > 15 ? `, and ${fails.length - 15} more` : ''}.`);
       }
-      const fails = (coreSt.guides as string[]).flatMap((k) => [...(coreSt.perGuide?.[k]?.failedPages || []).map((f: any) => `${f.name} (page)`), ...(coreSt.perGuide?.[k]?.failedEntities || []).map((f: any) => `${f.name} (entity)`)]);
-      if (fails.length) report.push(`⚠️ Core pieces that failed review (not retried; add them to system/core.retry to try again): ${fails.slice(0, 15).join(', ')}${fails.length > 15 ? `, and ${fails.length - 15} more` : ''}.`);
     }
   } catch (e: any) {
     console.warn(`Core guides summary skipped: ${e?.message}`);

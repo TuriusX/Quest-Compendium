@@ -4,6 +4,9 @@
  * merged). The weekly Search Console entity pages (compendium.ts demandEntities) are paid from the same budget.
  *
  *   npx tsx scripts/guides/core.ts --estimate [--keys a,b,c]   what's left and what it would cost (nothing built)
+ *   npx tsx scripts/guides/core.ts --retry-only "key/slug,key:entity-slug,..."   just those pages (key/slug) and
+ *                                                               entity pages (key:slug), in that order, the same way
+ *                                                               as a run (budget, review, failed lists, publish)
  *   npx tsx scripts/guides/core.ts --run                        build the next pieces (the guide-flagship job runs this
  *                                                               through flagship.ts --program once the list is approved)
  *
@@ -73,12 +76,26 @@ async function coreConfig() {
 }
 
 /** The guide's planned core entities: the core tiers only, in build order, the first `cap`. */
+/**
+ * An entity type's tier: its own, or (a taxonomy made before tiers, like The Witcher 3's or Elden Ring's) one read
+ * from its id and label: characters and NPCs are people, monsters and bosses are bosses, places are locations.
+ */
+export function tierOf(t: { id?: string; label?: string; tier?: string }): string {
+  if (t?.tier) return t.tier;
+  const s = `${t?.id || ''} ${t?.label || ''}`.toLowerCase();
+  if (/companion|character|npc|people|merchant|vendor|notable|ally|allies|romance/.test(s)) return 'people';
+  if (/boss|monster|enem|elite|creature|beast/.test(s)) return 'bosses';
+  if (/location|place|landmark|region|area|town|dungeon|cave|site/.test(s)) return 'locations';
+  if (/collectible|item|gear|weapon|armou?r|talisman|ash|spell|sorcer|incantation|card|tome|book/.test(s)) return 'collectibles';
+  return 'other';
+}
+
 function plannedCore(comp: any, cap: number): any[] {
   const tierIdx = (tier: string) => CORE_TIERS.indexOf(tier);
-  const tierOf = new Map<string, number>((comp?.taxonomy || []).map((t: any) => [t.id, tierIdx(t.tier)]));
+  const typeTier = new Map<string, number>((comp?.taxonomy || []).map((t: any) => [t.id, tierIdx(tierOf(t))]));
   return (comp?.entities || [])
-    .filter((e: any) => e?.slug && (tierOf.get(e.type) ?? -1) >= 0)
-    .sort((a: any, b: any) => (tierOf.get(a.type)! - tierOf.get(b.type)!) || (Number(a.rank) || 999) - (Number(b.rank) || 999))
+    .filter((e: any) => e?.slug && (typeTier.get(e.type) ?? -1) >= 0)
+    .sort((a: any, b: any) => (typeTier.get(a.type)! - typeTier.get(b.type)!) || (Number(a.rank) || 999) - (Number(b.rank) || 999))
     .slice(0, cap);
 }
 
@@ -108,7 +125,7 @@ export async function chargeCore(dollars: number, key?: string): Promise<void> {
 }
 
 /** One guide's completeness: flagship pages, compendium entities, and what it has cost so far (pages and entities). */
-export async function coreStatus(key: string, cfg?: { keep: Set<string>; cap: number }) {
+export async function coreStatus(key: string, cfg?: { keep: Set<string>; cap: number }, rates?: { page: number; entity: number }) {
   const { keep, cap } = cfg || (await coreConfig());
   const gref = db().collection('guides').doc(key);
   const info: any = (await gref.get()).data() || {};
@@ -128,11 +145,56 @@ export async function coreStatus(key: string, cfg?: { keep: Set<string>; cap: nu
   // Until the taxonomy is built, the cap is the plan (pages already published count toward it).
   const entitiesTotal = comp?.core ? planned.length : cap;
   const entitiesPublished = comp?.core ? published.filter((e) => plannedSlugs.has(e.slug)).length : Math.min(cap, published.length);
-  const entitiesLeft = comp?.core ? planned.filter((e) => !ents.some((x) => x.slug === e.slug)).length : Math.max(0, cap - published.length);
-  const left = pagesLeft * PAGE_COST + entitiesLeft * ENTITY_COST + (comp?.core ? 0 : TAXONOMY_COST);
+  // The cap counts every live entity page (the rollout's and Search Console's too), not just the plan's.
+  const entitiesLeft = Math.max(0, Math.min(comp?.core ? planned.filter((e) => !ents.some((x) => x.slug === e.slug)).length : cap, cap - published.length));
+  const rate = rates || { page: PAGE_COST, entity: ENTITY_COST };
+  const left = pagesLeft * rate.page + entitiesLeft * rate.entity + (comp?.core ? 0 : TAXONOMY_COST);
   return {
     key, game: String(info.game || key), pages: pages.length, corePages: corePages.length, pagesLeft, keptPages: keep.has(key),
     taxonomy: !!comp?.core, entitiesTotal, entitiesPublished, entitiesTried: tried.length, entitiesLeft, cap, cost, left,
+    // Every live compendium page of the guide (the core plan, the rollout and Search Console demand).
+    entitiesLive: published.length,
+  };
+}
+
+/** When the compendium's current method became the standard (entityV2.ts; commit e142c4374). */
+export const ENTITY_METHOD_SINCE = Date.parse('2026-10-12T12:00:00Z');
+/**
+ * What the current method really costs per page that goes live, from the core programme's log (system/core.pageLog),
+ * failed attempts included, divided by the pages that passed: walkthrough pages (the evidence method, last 30 days),
+ * and core entity pages (characters, bosses, places; the compendium's current method, since it became the standard).
+ * Quest and list units from blueprints are left out (they aren't what's left). The measured constants stand in where
+ * there are fewer than 3 passes.
+ */
+export async function realRates(days = 30): Promise<{ page: number; entity: number; pages: number; entities: number }> {
+  const st: any = (await cref().get()).data() || {};
+  const log = ((st.pageLog || []) as any[]).filter((x) => Number(x.at) >= Date.now() - days * 86_400_000);
+  const areaSlugs = new Map<string, Set<string>>();
+  const entTier = new Map<string, Map<string, string>>();
+  const kindOf = async (x: any): Promise<'page' | 'entity' | null> => {
+    if (!areaSlugs.has(x.key)) areaSlugs.set(x.key, new Set((await db().collection('guides').doc(x.key).collection('areas').get()).docs.map((d) => d.id)));
+    if (areaSlugs.get(x.key)!.has(x.slug)) return 'page';
+    if (Number(x.at) < ENTITY_METHOD_SINCE) return null;
+    if (!entTier.has(x.key)) {
+      const comp: any = (await db().collection('guideCompendium').doc(x.key).get()).data() || {};
+      const tiers = new Map<string, string>((comp.taxonomy || []).map((t: any) => [t.id, tierOf(t)]));
+      const m = new Map<string, string>();
+      for (const d of (await db().collection('guideCompendium').doc(x.key).collection('entities').get()).docs) m.set(d.id, tiers.get(String(d.data().type)) || tierOf({ id: String(d.data().type || ''), label: String(d.data().typeLabel || '') }));
+      entTier.set(x.key, m);
+    }
+    return CORE_TIERS.includes(entTier.get(x.key)!.get(x.slug) || '') ? 'entity' : null;
+  };
+  const t = { page: { d: 0, n: 0 }, entity: { d: 0, n: 0 } };
+  for (const x of log) {
+    const k = await kindOf(x);
+    if (!k) continue;
+    t[k].d += Number(x.dollars || 0);
+    if (/passed|published/.test(String(x.status))) t[k].n++;
+  }
+  return {
+    page: t.page.n >= 3 ? t.page.d / t.page.n : PAGE_COST,
+    entity: t.entity.n >= 3 ? t.entity.d / t.entity.n : ENTITY_COST,
+    pages: t.page.n, entities: t.entity.n,
   };
 }
 
@@ -141,11 +203,12 @@ export async function coreEstimate(keys?: string[]) {
   const st: any = (await cref().get()).data() || {};
   const list = keys?.length ? keys : (st.guides || []);
   const cfg = await coreConfig();
+  const rates = await realRates();
   const rows = [];
-  for (const k of list) rows.push(await coreStatus(k, cfg));
+  for (const k of list) rows.push(await coreStatus(k, cfg, rates));
   const total = rows.reduce((n, r) => n + r.left, 0);
   const monthly = Number(st.monthly) || CORE_MONTHLY_DEFAULT;
-  return { rows, total, monthly, months: total / monthly };
+  return { rows, total, monthly, months: total / monthly, rates };
 }
 
 /** The guide's pages still to build, the most-visited first (Search Console impressions, then the guide's order). */
@@ -166,8 +229,11 @@ async function pagesToBuild(key: string, failed: Set<string>, retry: Set<string>
 
 /** The guide's planned core entities still to build (the core tiers, in order, within the cap). */
 async function entitiesToBuild(key: string, comp: any, failed: Set<string>, retry: Set<string>, cap: number) {
-  const built = new Set((await db().collection('guideCompendium').doc(key).collection('entities').get()).docs.filter((d) => d.data().status === 'published' || !retry.has(`${key}:${d.id}`)).map((d) => d.id));
-  return plannedCore(comp, cap).filter((e: any) => !built.has(e.slug) && (!failed.has(e.slug) || retry.has(`${key}:${e.slug}`)));
+  const docs = (await db().collection('guideCompendium').doc(key).collection('entities').get()).docs;
+  const built = new Set(docs.filter((d) => d.data().status === 'published' || !retry.has(`${key}:${d.id}`)).map((d) => d.id));
+  // The cap counts every live entity page of the guide, so a guide already at it builds nothing more here.
+  const room = Math.max(0, cap - docs.filter((d) => d.data().status === 'published').length);
+  return plannedCore(comp, cap).filter((e: any) => !built.has(e.slug) && (!failed.has(e.slug) || retry.has(`${key}:${e.slug}`))).slice(0, room);
 }
 
 /**
@@ -361,8 +427,84 @@ ${r.stopped}; the next run carries on.`); if (wentLive) await publishSiteForCore
   if (wentLive) await publishSiteForCore();
 }
 
+/**
+ * Retry chosen pieces, in the given order: pages ("key/slug", the evidence method) and entity pages ("key:slug", the
+ * compendium's current method), each charged to the core budget, logged, and taken off (or put on) the guide's failed
+ * list like in a run. The site is published once at the end when anything went live. Prints each one's cost and result.
+ */
+export async function retryOnly(items: string[]): Promise<{ item: string; status: string; dollars: number; detail: string }[]> {
+  const { buildPageEvidenceForCore, writePageForCore, publishSiteForCore } = await import('./flagship');
+  const { buildEntity } = await import('./compendium');
+  const out: { item: string; status: string; dollars: number; detail: string }[] = [];
+  let wentLive = false;
+  for (const item of items) {
+    const page = item.match(/^([^/:]+)\/(.+)$/), ent = item.match(/^([^/:]+):(.+)$/);
+    const key = (page || ent)?.[1];
+    if (!key) { out.push({ item, status: 'skipped', dollars: 0, detail: 'not key/slug or key:slug' }); continue; }
+    const st: any = (await cref().get()).data() || {};
+    const pg = { failedPages: [], failedEntities: [], ...((st.perGuide || {})[key] || {}) } as any;
+    const savePg = () => cref().set({ perGuide: { [key]: { failedPages: pg.failedPages, failedEntities: pg.failedEntities, ...(pg.done ? { done: pg.done } : {}) } } }, { merge: true });
+    const gref = db().collection('guides').doc(key);
+    const info: any = (await gref.get()).data();
+    if (!info) { out.push({ item, status: 'skipped', dollars: 0, detail: 'no such guide' }); continue; }
+    const b = await coreBudget();
+    if (b.room < (page ? PAGE_COST : ENTITY_COST) * 1.5) { out.push({ item, status: 'stopped', dollars: 0, detail: `no budget left today ($${b.room.toFixed(2)})` }); break; }
+    const lk = await acquireGuideLock(key, 'core retry');
+    if (isRefusal(lk)) { out.push({ item, status: 'skipped', dollars: 0, detail: lockedLine(lk, key) }); continue; }
+    const scope = { dollars: 0, searches: 0 };
+    try {
+      if (page) {
+        const slug = page[2];
+        const area = (info.areas || []).find((a: any) => a.slug === slug);
+        const r: any = await usageScope.run(scope, () => buildPageEvidenceForCore(key, String(info.game || key), slug, info.areas || [], key));
+        await chargeCore(scope.dollars, key);
+        if (r?.review?.status === 'passed') {
+          await writePageForCore(key, slug, r.proto);
+          await gref.set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(slug) } }, { merge: true });
+          wentLive = true;
+          pg.failedPages = pg.failedPages.filter((f: any) => f.slug !== slug);
+        } else if (r?.review?.status !== 'waiting') {
+          pg.failedPages = [...pg.failedPages.filter((f: any) => f.slug !== slug), { slug, name: area?.name || slug, reason: cut(r?.review?.reason || 'failed review', 160), score: r?.review?.score ?? null }];
+        }
+        await savePg();
+        await cref().set({ pageLog: FieldValue.arrayUnion({ key, slug, status: r?.review?.status || 'not built', dollars: Math.round(scope.dollars * 1000) / 1000, at: Date.now() }) }, { merge: true });
+        out.push({ item, status: r?.review?.status || 'not built', dollars: scope.dollars, detail: `${r?.review?.score ?? ''} ${cut(r?.review?.reason || '', 300)}`.trim() });
+      } else {
+        const slug = ent![2];
+        const comp: any = (await db().collection('guideCompendium').doc(key).get()).data() || {};
+        const known = [...(comp.entities || []), ...(comp.core?.entities || [])].find((e: any) => e && (e.slug === slug || String(e.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === slug));
+        const doc: any = (await db().collection('guideCompendium').doc(key).collection('entities').doc(slug).get()).data();
+        const name = String(doc?.name || known?.name || pg.failedEntities.find((f: any) => f.slug === slug)?.name || slug);
+        const r = await usageScope.run(scope, () => buildEntity(key, name, { type: doc?.type || known?.type }));
+        await chargeCore(scope.dollars, key);
+        if (r.status === 'published') {
+          wentLive = true;
+          pg.failedEntities = pg.failedEntities.filter((f: any) => f.slug !== slug);
+        } else pg.failedEntities = [...pg.failedEntities.filter((f: any) => f.slug !== slug), { slug, name, reason: cut((r.reasons || []).join(' | ') || `review ${r.score}`, 200) }];
+        await savePg();
+        await cref().set({ pageLog: FieldValue.arrayUnion({ key, slug, status: r.status === 'published' ? 'passed' : 'failed', dollars: Math.round(scope.dollars * 1000) / 1000, at: Date.now() }) }, { merge: true });
+        out.push({ item, status: r.status, dollars: scope.dollars, detail: cut((r.reasons || []).join(' | '), 400) });
+      }
+    } catch (e: any) {
+      await chargeCore(scope.dollars, key);
+      out.push({ item, status: 'error', dollars: scope.dollars, detail: cut(e?.message || e, 200) });
+      if (e instanceof SearchDayWait || e instanceof ProQuotaWait) break;
+    } finally {
+      await lk.release().catch(() => {});
+    }
+    const last = out[out.length - 1];
+    console.log(`  [retry] ${item}: ${last.status}, $${last.dollars.toFixed(3)}${last.detail ? ` (${last.detail})` : ''}`);
+  }
+  if (wentLive) await publishSiteForCore();
+  console.log(`
+Retries: ${out.map((o) => `${o.item} ${o.status} $${o.dollars.toFixed(3)}`).join('; ')}; $${out.reduce((a, o) => a + o.dollars, 0).toFixed(3)} in all.`);
+  return out;
+}
+
 async function main() {
-  if (arg('estimate') === 'true') {
+  if (arg('retry-only') && arg('retry-only') !== 'true') {
+    await retryOnly(String(arg('retry-only')).split(',').map((s) => s.trim()).filter(Boolean));
+  } else if (arg('estimate') === 'true') {
     const keys = arg('keys') && arg('keys') !== 'true' ? String(arg('keys')).split(',').map((s) => s.trim()).filter(Boolean) : undefined;
     const e = await coreEstimate(keys);
     for (const r of e.rows) console.log(`${r.game}: flagship pages ${r.corePages}/${r.pages}${r.keptPages ? ' (existing pages kept)' : ''}, compendium ${r.entitiesPublished}/${r.entitiesTotal} (cap ${r.cap}), cost so far $${r.cost.toFixed(2)}, left ≈ $${r.left.toFixed(2)}`);
