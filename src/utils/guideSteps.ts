@@ -63,22 +63,12 @@ export function findWalkStep(page: { walkthrough?: WalkStep[] } | null | undefin
   return null;
 }
 
-const VERB_ES = /(sh|ch|x|ss|o|z)es$/;
 /**
- * A quest step as a quest-log label: "The player returns to Gill Landing to meet Gill" becomes "Return to Gill Landing
- * to meet Gill" (the guide's steps describe what happens; the log says what to do), cut to a few words.
+ * A quest step as a quest-log label: the guide writes steps as actions the player takes (scripts/guides/quests.ts), so
+ * this only tidies and cuts them.
  */
 export function stepLabel(text: string): string {
-  let t = String(text || '').replace(/\s+/g, ' ').trim().replace(/[.;]+$/, '');
-  const base = (verb: string) => (/ies$/.test(verb) ? verb.replace(/ies$/, 'y') : VERB_ES.test(verb) ? verb.replace(/es$/, '') : /[^s]s$/.test(verb) ? verb.slice(0, -1) : verb);
-  const m = t.match(/^(?:the player|players|you)\s+(\w+)(.*)$/i);
-  if (m) {
-    const verb = base(m[1]);
-    // "…and mails it" follows: "…and mail it".
-    const rest = m[2].replace(/\b(and|then)\s+(\w+s)\b/g, (_x, c, v) => `${c} ${base(v)}`);
-    t = verb.charAt(0).toUpperCase() + verb.slice(1) + rest;
-  }
-  return clipWords(t, 70);
+  return clipWords(String(text || '').replace(/\s+/g, ' ').trim().replace(/[.;]+$/, ''), 70);
 }
 
 /**

@@ -9,6 +9,10 @@
  *
  *   npx tsx scripts/guides/quests.ts --key red-dead-redemption-2 --story "Who Is Not Without Sin" [--story ...]
  *   npx tsx scripts/guides/quests.ts --key red-dead-redemption-2 --stranger "The Noblest of Men, and a Woman"
+ *   npx tsx scripts/guides/quests.ts --key red-dead-redemption-2 --rewrite-steps [--max-dollars 1]
+ *     rewrites the published quest pages' steps as actions the player takes (the quest log loads them as objectives),
+ *     from the stored evidence only (no searches), checked like a new page; a page whose new steps don't pass keeps
+ *     its old ones. Step ids stay the same, so players' ticks still apply.
  * -> guideCompendium/{key}/entities/{slug} { kind: 'quest', type: 'story-missions' | 'stranger-missions', quest: {...} }
  * Stored as structured data (giver, chapter, parts and steps with ids, rewards, missables, choices, walkthrough link)
  * so the app's quest log can use it later.
@@ -68,6 +72,12 @@ async function questEvidence(key: string, game: string, name: string, kind: Ques
   return trusted(pack);
 }
 
+/**
+ * Steps are what the player does, in order, written to them: the quest log shows them as objectives. Not what happens
+ * ("Gill sends an invitation") or what the game does ("Small fish are stored in the satchel").
+ */
+const STEP_RULE = 'Write each step as an action the player takes, in order, addressed to the player in the imperative and at most 120 characters: "Store small fish in your satchel and large ones on your horse", "Mail each fish to Jeremy Gill from a post office", "Read Gill\'s invitation at a post office". Never describe what happens or what the game does ("Gill sends an invitation", "Small fish are stored in the satchel"); turn it into what the player does about it, or leave it out.';
+
 const WRITER = (game: string, name: string, kind: QuestKind, ev: EvidencePack, chapters: string[]) => [
   `Write a compendium page for the ${kind === 'story' ? 'story mission' : 'Stranger mission strand'} "${name}" in the video game "${game}", from the EVIDENCE only.`,
   'Every fact must come from an evidence line; leave a field empty rather than guess. Use the game\'s exact names. Never write generic advice.',
@@ -77,8 +87,9 @@ const WRITER = (game: string, name: string, kind: QuestKind, ev: EvidencePack, c
   ' "rewards": ["each reward"], "missables": ["anything missable, only if the evidence says so"], "choices": [{"choice": "...", "outcome": "..."}],',
   kind === 'story'
     ? ' "goldMedal": ["each gold medal requirement"]}'
-    : ' "parts": [{"name": "part name (e.g. Mission – I)", "chapter": "...", "where": "where it starts", "steps": ["what the player does, one step each"]}]}',
+    : ' "parts": [{"name": "part name (e.g. Mission – I)", "chapter": "...", "where": "where it starts", "steps": ["one action the player takes, one step each"]}]}',
   kind === 'story' ? 'No step-by-step: the guide\'s walkthrough has it.' : 'List every part of the strand the evidence names, in order.',
+  kind === 'story' ? '' : STEP_RULE,
   '',
   'EVIDENCE:',
   evidenceText(ev),
@@ -184,8 +195,77 @@ export async function buildQuest(key: string, name: string, kind: QuestKind) {
   return { name, status: doc.status, score: out.review.score, dollars: scope.dollars, searches: scope.searches };
 }
 
+/**
+ * A published quest page's steps rewritten as actions the player takes, from its stored evidence (no searches): the
+ * same ids, checked against the evidence and reviewed like a new page. A rewrite that doesn't pass changes nothing.
+ */
+export async function rewriteSteps(key: string, slug: string): Promise<{ name: string; changed: boolean; dollars: number; note: string }> {
+  const ref = db().collection('guideCompendium').doc(key).collection('entities').doc(slug);
+  const doc: any = (await ref.get()).data();
+  const scope = { dollars: 0, searches: 0 };
+  if (!doc?.quest?.parts?.some((p: any) => p.steps?.length)) return { name: doc?.name || slug, changed: false, dollars: 0, note: 'no steps' };
+  const have = (await db().collection('evidencePacks').doc(`${key}__quest__${slug}`).get()).data() as EvidencePack | undefined;
+  if (!have?.evidence?.length) return { name: doc.name, changed: false, dollars: 0, note: 'no stored evidence (not searching)' };
+  const ev = trusted(have);
+  const info: any = (await db().collection('guides').doc(key).get()).data() || {};
+  const game = String(info.game || key);
+  const res = await usageScope.run(scope, async () => {
+    const parts = doc.quest.parts.map((p: any) => ({ id: p.id, name: p.name, steps: p.steps.map((st: any) => ({ id: st.id, text: st.text })) }));
+    const r: any = await gemini().models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: [{ text: [
+        `These are the steps of the Stranger mission strand "${doc.name}" in "${game}", per part. Rewrite each step from the EVIDENCE.`,
+        STEP_RULE,
+        'Keep every step\'s id and its order; one rewritten text per id. A step with no action in it (only what happens next) becomes the action that leads to it, or "" when there is none. Only facts from the evidence.',
+        'Reply with JSON only: {"steps": [{"id": "...", "text": "..."}]}',
+        '', 'STEPS:', JSON.stringify(parts), '', 'EVIDENCE:', evidenceText(ev),
+      ].join('\n') }] }],
+      config: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    });
+    const j = objOf(String(r?.text || ''));
+    const byId = new Map<string, string>((Array.isArray(j.steps) ? j.steps : []).map((x: any) => [String(x?.id || ''), cut(x?.text, 160)]));
+    const q: Quest = JSON.parse(JSON.stringify(doc.quest));
+    for (const p of q.parts) for (const st of p.steps) if (byId.has(st.id)) st.text = byId.get(st.id) || '';
+    q.parts = q.parts.map((p) => ({ ...p, steps: p.steps.filter((st) => st.text) }));
+    // Checked and reviewed like a new page (the steps are what changed; the page's other facts are as published).
+    const c1 = claimsOf(doc.name, doc.overview || '', q);
+    const v1 = await claimCheck(game, doc.name, claimSlots(c1.page), ev);
+    applyQuestVerdicts(doc.overview || '', q, c1.map, v1);
+    const c2 = claimsOf(doc.name, doc.overview || '', q);
+    const review = await claimReview(game, doc.name, c2.page, ev);
+    applyQuestVerdicts(doc.overview || '', q, c2.map, review.claims);
+    return { q, review };
+  });
+  const steps = (q: Quest) => q.parts.reduce((n, p) => n + p.steps.length, 0);
+  const before = steps(doc.quest), after = steps(res.q);
+  // Kept only when it passes and keeps most of the steps (a rewrite that loses steps is worse than the old wording).
+  if (res.review.status !== 'passed' || after < Math.ceil(before * 0.8)) {
+    return { name: doc.name, changed: false, dollars: scope.dollars, note: `kept the old steps (review ${res.review.status} ${res.review.score}, ${after}/${before} steps)` };
+  }
+  await ref.set({ quest: { ...doc.quest, parts: res.q.parts }, stepsRewrittenAt: Date.now(), cost: { ...(doc.cost || {}), stepsRewrite: Math.round(scope.dollars * 10000) / 10000 } }, { merge: true });
+  return { name: doc.name, changed: true, dollars: scope.dollars, note: `review ${res.review.score}, ${after}/${before} steps` };
+}
+
 async function main() {
   const key = (() => { const i = process.argv.indexOf('--key'); return i > 0 ? process.argv[i + 1] : ''; })();
+  if (process.argv.includes('--rewrite-steps')) {
+    const i = process.argv.indexOf('--max-dollars');
+    const max = i > 0 ? Number(process.argv[i + 1]) || 1 : 1;
+    const only = (() => { const k = process.argv.indexOf('--only'); return k > 0 ? process.argv[k + 1] : ''; })();
+    const snap = await db().collection('guideCompendium').doc(key).collection('entities').where('kind', '==', 'quest').get();
+    const pages = snap.docs.map((d) => d.data() as any).filter((e) => e.status === 'published' && e.quest?.parts?.some((p: any) => p.steps?.length) && (!only || e.slug === only));
+    let total = 0, changed = 0, dearest = 0;
+    for (const e of pages) {
+      // Stops before going over the cap: the next page is assumed to cost what the dearest one so far did.
+      if (dearest > 0 && total + dearest > max) { console.log(`Stopping: $${total.toFixed(3)} spent of $${max}.`); break; }
+      const r = await rewriteSteps(key, e.slug);
+      total += r.dollars; dearest = Math.max(dearest, r.dollars); if (r.changed) changed++;
+      console.log(`${r.name}: ${r.changed ? 'rewritten' : 'unchanged'} (${r.note}), $${r.dollars.toFixed(3)}`);
+    }
+    console.log(`\nSteps rewritten on ${changed} of ${pages.length} page(s), $${total.toFixed(3)}.`);
+    setTimeout(() => process.exit(0), 300);
+    return;
+  }
   const want: { name: string; kind: QuestKind }[] = [];
   process.argv.forEach((a, i) => { if (a === '--story' || a === '--stranger') want.push({ name: process.argv[i + 1], kind: a === '--story' ? 'story' : 'stranger' }); });
   let total = 0, passed = 0;
