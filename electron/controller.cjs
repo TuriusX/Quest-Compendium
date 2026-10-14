@@ -73,7 +73,7 @@ function loadXInput() {
   }
 }
 
-const { comboFor, createComboDetector, createHoldToTalk, BITS } = require('./padCombo.cjs');
+const { comboFor, chordFor, createComboDetector, createChord, createHoldToTalk, BITS } = require('./padCombo.cjs');
 
 /** Triggers past this (0-255) count as pressed: they page through long answers. */
 const TRIGGER_DOWN = 128;
@@ -92,6 +92,10 @@ function createControllerService(opts) {
 
   let config = { enabled: true };
   let combo = createComboDetector(comboFor('hold-view-menu'));
+  // The quest log's tick and cycle chords (the show / hide modifier + a button; off until turned on in Settings),
+  // whether or not the overlay is visible.
+  let tickChord = createChord(null);
+  let nextChord = createChord(null);
   let talk = null; // hold-to-talk on one button (only while the overlay is visible)
   let talkBit = 0;
   let timer = null;
@@ -140,6 +144,15 @@ function createControllerService(opts) {
       opts.onToggle();
     }
     if ((buttons & combo.mask) === 0 && !combo.pendingUntil()) firedDuringPress = false;
+
+    // The quest log's tick / cycle chords. The modifier press that starts one isn't also reported as its own press.
+    for (const [chord, action] of [[tickChord, 'tick'], [nextChord, 'next']]) {
+      if (chord.step(buttons) && opts.onTrackerKey) {
+        opts.onTrackerKey(action);
+        const mod = SIMPLE.find(([, bit]) => bit === chord.modBit);
+        if (mod) { suppressed.add(mod[0]); pendingMember.delete(mod[0]); }
+      }
+    }
 
     const visible = opts.isVisible();
 
@@ -234,11 +247,17 @@ function createControllerService(opts) {
     timer = null;
   }
 
-  /** { enabled, toggle: preset, custom: { buttons, mode }, talk: button name or 'off' } (older apps: { chord }). */
+  /**
+   * { enabled, toggle: preset, custom: { buttons, mode }, talk: button name or 'off', trackerTick, trackerNext: chord
+   * presets or 'off' } (older apps: { chord }).
+   */
   function setConfig(next) {
     const n = next || {};
     config = { enabled: n.enabled !== false };
-    combo = createComboDetector(comboFor(n.toggle || n.chord || 'hold-view-menu', n.custom));
+    const toggleCombo = comboFor(n.toggle || n.chord || 'hold-view-menu', n.custom);
+    combo = createComboDetector(toggleCombo);
+    tickChord = createChord(chordFor(n.trackerTick || 'off', toggleCombo));
+    nextChord = createChord(chordFor(n.trackerNext || 'off', toggleCombo));
     const tb = n.talk === undefined ? 'y' : n.talk;
     talkBit = tb && tb !== 'off' && BITS[tb] ? BITS[tb] : 0;
     talk = talkBit ? createHoldToTalk(talkBit) : null;

@@ -15,7 +15,16 @@ export function keyLabel(k: string, mac = isMac()): string {
   if (/^shift$/i.test(k)) return 'Shift';
   if (/^plus$/i.test(k)) return '+';
   if (/^(escape|esc)$/i.test(k)) return 'Esc';
+  if (/^(enter|return)$/i.test(k)) return 'Enter';
+  const arrow = ({ up: '↑', down: '↓', left: '←', right: '→' } as Record<string, string>)[k.toLowerCase()];
+  if (arrow) return arrow;
   return k.length === 1 ? k.toUpperCase() : k;
+}
+
+/** Two accelerators for the same keys ("CmdOrCtrl+Shift+S" and "CommandOrControl+Shift+s")? */
+export function sameShortcut(a?: string | null, b?: string | null): boolean {
+  const norm = (x?: string | null) => shortcutKeys(x).map((k) => keyLabel(k, false).toLowerCase()).sort().join('+');
+  return !!norm(a) && norm(a) === norm(b);
 }
 
 /** The keys of an accelerator, split (a trailing "++" is the + key). */

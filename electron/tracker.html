@@ -13,11 +13,11 @@
     --fs: calc(16px * var(--scale)); /* text size: 14 / 16 / 19 (small / medium / large) times the scale */
     --alpha: 1;            /* whole-tracker transparency, from the slider */
     --ink: #f3eefc;
-    --dim: rgba(243, 238, 252, .55);
-    --done: rgba(243, 238, 252, .38);
+    --dim: rgba(243, 238, 252, .7);
+    --done: rgba(243, 238, 252, .5);
     --warn: #ffc14d;
     --ok: #4ade80;
-    --shadow: 0 1px 2px rgba(0,0,0,.95), 0 0 6px rgba(0,0,0,.85), 0 2px 10px rgba(0,0,0,.6);
+    --shadow: 0 1px 2px rgba(0,0,0,1), 0 0 3px rgba(0,0,0,.95), 0 0 8px rgba(0,0,0,.8), 0 2px 12px rgba(0,0,0,.6);
     --maxh: 70vh;
     --bd: .45;            /* the backdrop's darkness at its centre (the Backdrop slider) */          /* the tallest the tracker may grow (set by the app in px) */
   }
@@ -31,8 +31,8 @@
   /* The soft dark backdrop (the Backdrop slider, 0 = off to 95%): a gradient that fades out, so it reads as a shade
      behind the text rather than a box. --bd is the darkness at its centre; at the top of the range the centre is nearly
      opaque and only the edges fade. */
-  #tracker.backdrop { background: radial-gradient(ellipse at 45% 40%, rgba(10,8,18,var(--bd)) 0%, rgba(10,8,18,var(--bd)) 38%,
-    rgba(10,8,18,calc(var(--bd) * .72)) 68%, rgba(10,8,18,0) 100%); }
+  #tracker.backdrop { background: radial-gradient(ellipse 80% 78% at 50% 48%, rgba(10,8,18,var(--bd)) 0%, rgba(10,8,18,var(--bd)) 66%,
+    rgba(10,8,18,calc(var(--bd) * .7)) 88%, rgba(10,8,18,0) 100%); }
   /* Area navigation on the place line: ‹ › step through the guide's areas, the name opens the list of them. */
   .place .arr { cursor: pointer; color: var(--dim); font-weight: 800; font-size: 1.15em; line-height: 1; padding: 0 .15em; }
   .place .arr:hover { color: #fff; }
@@ -49,26 +49,30 @@
   li .x { margin-left: auto; padding-left: .45em; flex-shrink: 0; color: var(--dim); font-weight: 800; cursor: pointer; opacity: 0; }
   li:hover .x { opacity: .8; }
   li .x:hover { color: #fff; opacity: 1; }
-  .unhide { font-size: .74em; color: var(--dim); font-style: italic; cursor: pointer; margin: .1em 0 0 1.75em; }
+  .unhide { font-size: .74em; color: var(--dim); font-style: italic; cursor: pointer; margin: .1em 0 0 2.3em; }
   .unhide:hover { color: var(--ink); }
-  .sechead .cnt { cursor: pointer; border-bottom: 1px dotted transparent; }
-  .sechead .cnt:hover { border-bottom-color: currentColor; }
+  .sechead .lim { cursor: pointer; opacity: 0; letter-spacing: 0; font-weight: 800; padding: 0 .2em; }
+  .sechead:hover .lim { opacity: .8; }
+  .sechead .lim:hover { opacity: 1; color: #fff; }
   .notice { font-size: .8em; color: var(--warn); margin-top: .3em; line-height: 1.3; }
   .notice:empty { display: none; }
   #tracker.collapsed .arealist, #tracker.collapsed .notice { display: none; }
-  /* "Locate me": a crosshair right after the place name, as tall as the place text; its label slides out on hover. */
-  .place .loc { display: inline-flex; vertical-align: -.25em; margin: 0 .2em 0 .35em; align-items: center; gap: .3em; height: 1.35em; padding: 0 .3em; border-radius: 3px; box-sizing: border-box;
-    border: 1px solid rgba(168,127,251,.55); background: rgba(16,12,28,.55); color: var(--accent); cursor: pointer;
-    text-shadow: none; flex-shrink: 0; }
-  .place .loc svg { width: 1em; height: 1em; }
-  .place .loc .ll { font-size: .8em; font-weight: 700; color: var(--ink); white-space: nowrap; max-width: 0; overflow: hidden;
-    transition: max-width .15s steps(3); }
-  .place .loc:hover { border-color: var(--accent); background: rgba(168,127,251,.18); }
-  .place .loc:hover .ll { max-width: 9em; }
-  .place .loc.busy svg { animation: qcspin 1.1s linear infinite; }
+  /* The place line's controls: small icons after the place, shown while the line is hovered or focused. */
+  .place .pctl { display: inline-flex; align-items: center; gap: .25em; margin-left: .2em; opacity: 0; transition: opacity .12s steps(2); }
+  .place:hover .pctl, .place:focus-within .pctl, .place.locating .pctl { opacity: 1; }
+  .place .arr { opacity: 0; transition: opacity .12s steps(2); }
+  .place:hover .arr, .place:focus-within .arr { opacity: 1; }
+  .place .arr.dis { opacity: 0; }
+  .place:hover .arr.dis { opacity: .25; }
+  .place .ic { display: inline-flex; align-items: center; justify-content: center; width: 1.45em; height: 1.35em; border-radius: 3px;
+    border: 1px solid rgba(255,255,255,.16); background: rgba(16,12,28,.72); color: var(--accent); cursor: pointer; text-shadow: none; }
+  .place .ic svg { width: .95em; height: .95em; }
+  .place .ic:hover { border-color: var(--accent); background: rgba(168,127,251,.2); color: #fff; }
+  .place.sure .ic.ok { display: none; }
+  .place .ic.busy svg { animation: qcspin 1.1s linear infinite; }
   @keyframes qcspin { to { transform: rotate(360deg); } }
   /* While locating, the place line says only "Locating…" until the result arrives. */
-  .place.locating .arr, .place.locating .story, .place.locating .tick, .place.locating .confirm { display: none; }
+  .place.locating .arr, .place.locating .story, .place.locating .ic.ok { display: none; }
   .place.locating .name { color: var(--dim); font-style: italic; text-decoration: none; }
   #tracker.collapsed .body, #tracker.collapsed .warn, #tracker.collapsed .hint, #tracker.collapsed .place,
   #tracker.collapsed .quest, #tracker.collapsed .next { display: none; }
@@ -95,16 +99,11 @@
   .head .hb + .book { margin-left: 0; }
   body.edge-left .head .hb svg { transform: scaleX(-1); }
 
-  .place { display: flex; align-items: center; gap: .4em; margin: .15em 0 .35em 0; font-size: .9em; color: var(--dim); cursor: pointer; line-height: 1.3; }
-  .place .pin { color: var(--accent); flex-shrink: 0; width: .95em; height: .95em; }
-  .place .name { color: var(--ink); font-weight: 600; }
-  .place .story { opacity: .85; }
-  .place .confirm { margin-left: .25em; font-size: .85em; font-weight: 700; color: var(--accent); border: 1px solid var(--accent);
-    border-radius: 999px; padding: 0 .55em; line-height: 1.5; opacity: .9; transition: opacity .15s; }
-  .place:hover .confirm { opacity: 1; filter: brightness(1.2); }
-  .place.sure .confirm { display: none; }
-  .place.sure .tick { color: var(--ok); font-weight: 800; }
-  .place:not(.sure) .tick { display: none; }
+  .place { display: flex; align-items: center; gap: .3em; margin: .1em 0 .3em 0; font-size: .84em; color: var(--dim); line-height: 1.3; }
+  .place .pin { color: var(--dim); flex-shrink: 0; width: .9em; height: .9em; }
+  .place .ptxt { min-width: 0; }
+  .place .name { color: rgba(243,238,252,.82); font-weight: 600; }
+  .place .story { color: var(--dim); }
 
   .source { font-size: .78em; color: var(--dim); font-style: italic; margin: -.15em 0 .25em 0; }
   .source:empty { display: none; }
@@ -122,7 +121,6 @@
     border-radius: 3px; }
   .sechead:hover { color: var(--ink); background: rgba(255,255,255,.09); }
   .sechead svg { width: 1.1em; height: 1.1em; }
-  .sechead .cnt { font-weight: 700; letter-spacing: 0; opacity: .85; }
   .sechead .chev { margin-left: auto; }
   .sec.amber .sechead { color: var(--warn); }
   .sec.folded ol, .sec.folded .more, .sec.folded .unhide { display: none; }
@@ -131,7 +129,7 @@
            color: var(--accent); border: 1px solid var(--accent); border-radius: 99px; cursor: pointer; }
   .nturn:hover { background: var(--accent); color: #16101f; }
   .nturn.busy { opacity: .55; pointer-events: none; }
-  .more { font-size: .78em; font-weight: 700; color: var(--accent); cursor: pointer; margin: .1em 0 0 1.75em; }
+  .more { font-size: .78em; font-weight: 700; color: var(--accent); cursor: pointer; margin: .1em 0 0 2.3em; }
   .more:hover { filter: brightness(1.25); }
   /* A guide entry: an empty square that fills in when collected. An info line (a point of no return): no box. */
   .box { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 1.05em; height: 1.05em;
@@ -140,10 +138,10 @@
   li.done .box { background: #6b6678; border-color: #6b6678; color: #e9e6f0; }
   li.miss .box { border-color: var(--warn); }
   li.info { cursor: default; }
-  li.info .obj { color: var(--warn); font-weight: 600; }
-  li.info .where { color: var(--ink); opacity: .8; }
+  li.info .lb { color: var(--warn); }
+  li.info .sub { color: var(--ink); opacity: .8; }
   li.static { cursor: default; }
-  li.miss:not(.done) .obj { color: #ffe1a6; }
+  li.miss:not(.done) .lb { color: #ffe1a6; }
   .next { display: flex; align-items: center; gap: .5em; margin-top: .45em; font-size: .88em; color: var(--dim); }
   .next .nm { color: var(--ink); font-weight: 600; }
   .next .go { margin-left: auto; font-size: .85em; font-weight: 700; color: var(--accent); border: 1px solid var(--accent);
@@ -152,8 +150,24 @@
   .next .go:hover { filter: brightness(1.25); }
   .next.off { display: none; }
   /* An entry: ticking happens only on its square (or number) badge; clicking the text opens its details in place. */
-  li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 .5em; line-height: 1.35; margin: .2em 0; cursor: default; }
+  li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 .45em; line-height: 1.3; margin: .12em -.3em .12em 0; padding: .14em .3em .14em 0;
+    border-radius: 3px; cursor: default; }
+  li .mk { flex: 0 0 .7em; width: .7em; min-width: 0; overflow: visible; margin-top: .05em; color: #fff; font-weight: 900; line-height: 1.3; text-align: center; }
   li .obj { flex: 1 1 0; min-width: 0; cursor: pointer; }
+  li .lb { font-weight: 700; color: rgba(243,238,252,.92); }
+  li .sub { display: block; font-size: .84em; font-weight: 400; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  li.cur { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, rgba(10,8,18,.6)), color-mix(in srgb, var(--accent) 22%, rgba(10,8,18,.35)) 65%, transparent); }
+  li.cur .lb { color: #fff; }
+  li.cur .sub { color: rgba(243,238,252,.78); }
+  li.cur .box { border-color: #fff; }
+  li.flash { animation: qcflash .6s steps(3); }
+  @keyframes qcflash { 0% { background: color-mix(in srgb, var(--accent) 60%, transparent); } }
+  /* A missable objective: ⚠ after its label; hovering it shows the warning in place of the dim line (inside the log,
+     so the window's edge never cuts it off). */
+  li .mw { display: inline-block; margin-left: .3em; color: var(--warn); font-size: .85em; cursor: help; }
+  li .wsub { display: none; font-size: .84em; color: #ffe1a6; font-weight: 600; }
+  li .mw:hover ~ .sub { display: none; }
+  li .mw:hover ~ .wsub { display: block; }
   li .obj:hover, li.open .obj { color: #fff; }
   li .badge.tk, li .box.tk { cursor: pointer; }
   li .badge.tk:hover, li .box.tk:hover { filter: brightness(1.25); box-shadow: 0 0 0 1.5px var(--accent), 0 2px 4px rgba(0,0,0,.6); }
@@ -161,7 +175,7 @@
   li .obj:hover .ex { opacity: .9; }
   li.open .ex { opacity: .9; }
   /* The details: everything the guide has on the entry, then "Open in guide" and "Ask about this". */
-  li .det { flex: 0 0 calc(100% - 1.55em); box-sizing: border-box; margin: .25em 0 .35em 1.55em; padding: .35em .55em .45em .55em;
+  li .det { flex: 0 0 calc(100% - 2.25em); box-sizing: border-box; margin: .25em 0 .35em 2.25em; padding: .35em .55em .45em .55em;
     border-left: 2px solid var(--accent); background: rgba(10,8,18,.55); border-radius: 0 3px 3px 0; font-size: .86em;
     line-height: 1.4; color: var(--ink); cursor: default; }
   li .det .dl { margin: .1em 0; }
@@ -177,10 +191,9 @@
     font-weight: 800; text-shadow: none; box-shadow: 0 0 0 1.5px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.6);
     transition: background .2s steps(3), color .2s steps(3); }
   .obj { font-weight: 500; }
-  .obj .where { color: var(--dim); font-weight: 400; }
   li.done .badge { background: #6b6678; color: #e9e6f0; }
-  li.done .obj { color: var(--done); text-decoration: line-through; text-decoration-color: rgba(243,238,252,.35); }
-  li.done .where { display: none; }
+  li.done .lb { color: var(--done); font-weight: 600; text-decoration: line-through; text-decoration-color: rgba(243,238,252,.35); }
+  li.done .sub, li.done .mw { display: none; }
 
   .warn { display: flex; align-items: flex-start; gap: .4em; margin-top: .4em; font-size: .9em; color: var(--warn); font-weight: 600; line-height: 1.3; }
   .warn svg { width: 1em; height: 1em; flex-shrink: 0; margin-top: .15em; }
@@ -256,10 +269,12 @@
   <div class="place" id="place">
     <svg class="pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
     <span class="arr off" id="prevArea">‹</span>
-    <span class="ptxt"><span class="name" id="placeName"></span><span class="loc" id="bLocate" title="Locate me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.5"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg><span class="ll" id="locLbl">Locate me</span></span><span class="story" id="placeStory"></span></span>
+    <span class="ptxt"><span class="name" id="placeName"></span><span class="story" id="placeStory"></span></span>
     <span class="arr off" id="nextArea">›</span>
-    <span class="tick">✓</span>
-    <span class="confirm" id="placeConfirm">Confirm</span>
+    <span class="pctl">
+      <span class="ic" id="bLocate" title="Locate me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.5"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></span>
+      <span class="ic ok" id="placeConfirm" title="Confirm where you are"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span>
+    </span>
   </div>
   <div class="arealist off" id="areaList"></div>
   <div class="source" id="source"></div>
@@ -273,7 +288,6 @@
   <div class="warn off" id="warn"></div>
   <div class="hint" id="hint"><kbd>Ctrl+G</kbd> or click the title: open the Compendium</div>
   <div class="ctl" id="ctl">
-    <span class="btn" id="bConfirm" title="Confirm where you are"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span>
     <span class="btn aa" id="bSize" title="Text size">Aa</span>
     <span class="sl" id="alphaWrap" title="Transparency"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg><input type="range" id="alpha" min="30" max="100" value="100"></span>
     <span class="sl" id="bdWrap" title="Backdrop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18" opacity=".5"/></svg><input type="range" id="bd" min="0" max="95" value="45"></span>
@@ -284,7 +298,7 @@
   <div class="rib"><svg class="logo" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><g> <rect x="1" y="1" width="12" height="1" fill="#0b0916" /> <rect x="1" y="2" width="1" height="1" fill="#0b0916" /> <rect x="2" y="2" width="1" height="1" fill="#1c1635" /> <rect x="3" y="2" width="7" height="1" fill="#16112c" /> <rect x="10" y="2" width="2" height="1" fill="#f4c535" /> <rect x="12" y="2" width="1" height="1" fill="#0b0916" /> <rect x="13" y="2" width="1" height="1" fill="#d6cda4" /> <rect x="0" y="3" width="2" height="1" fill="#f4c535" /> <rect x="2" y="3" width="1" height="1" fill="#1c1635" /> <rect x="3" y="3" width="8" height="1" fill="#16112c" /> <rect x="11" y="3" width="1" height="1" fill="#f4c535" /> <rect x="12" y="3" width="1" height="1" fill="#0b0916" /> <rect x="13" y="3" width="1" height="1" fill="#a49a71" /> <rect x="1" y="4" width="1" height="1" fill="#0b0916" /> <rect x="2" y="4" width="1" height="1" fill="#1c1635" /> <rect x="3" y="4" width="9" height="1" fill="#16112c" /> <rect x="12" y="4" width="1" height="1" fill="#0b0916" /> <rect x="13" y="4" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="5" width="1" height="1" fill="#0b0916" /> <rect x="2" y="5" width="1" height="1" fill="#1c1635" /> <rect x="3" y="5" width="9" height="1" fill="#16112c" /> <rect x="12" y="5" width="1" height="1" fill="#0b0916" /> <rect x="13" y="5" width="1" height="1" fill="#a49a71" /> <rect x="1" y="6" width="1" height="1" fill="#0b0916" /> <rect x="2" y="6" width="1" height="1" fill="#1c1635" /> <rect x="3" y="6" width="3" height="1" fill="#16112c" /> <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="9" y="6" width="3" height="1" fill="#16112c" /> <rect x="12" y="6" width="1" height="1" fill="#0b0916" /> <rect x="13" y="6" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="7" width="1" height="1" fill="#0b0916" /> <rect x="2" y="7" width="1" height="1" fill="#1c1635" /> <rect x="3" y="7" width="2" height="1" fill="#16112c" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill="#16112c" /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="10" y="7" width="2" height="1" fill="#16112c" /> <rect x="12" y="7" width="1" height="1" fill="#0b0916" /> <rect x="13" y="7" width="1" height="1" fill="#a49a71" /> <rect x="1" y="8" width="1" height="1" fill="#0b0916" /> <rect x="2" y="8" width="1" height="1" fill="#1c1635" /> <rect x="3" y="8" width="2" height="1" fill="#16112c" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="3" height="1" fill="#16112c" /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="10" y="8" width="2" height="1" fill="#16112c" /> <rect x="12" y="8" width="1" height="1" fill="#0b0916" /> <rect x="13" y="8" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="9" width="1" height="1" fill="#0b0916" /> <rect x="2" y="9" width="1" height="1" fill="#1c1635" /> <rect x="3" y="9" width="2" height="1" fill="#16112c" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill="#16112c" /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="10" y="9" width="2" height="1" fill="#16112c" /> <rect x="12" y="9" width="1" height="1" fill="#0b0916" /> <rect x="13" y="9" width="1" height="1" fill="#a49a71" /> <rect x="1" y="10" width="1" height="1" fill="#0b0916" /> <rect x="2" y="10" width="1" height="1" fill="#1c1635" /> <rect x="3" y="10" width="3" height="1" fill="#16112c" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> <rect x="9" y="10" width="3" height="1" fill="#16112c" /> <rect x="12" y="10" width="1" height="1" fill="#0b0916" /> <rect x="13" y="10" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="11" width="1" height="1" fill="#0b0916" /> <rect x="2" y="11" width="1" height="1" fill="#1c1635" /> <rect x="3" y="11" width="9" height="1" fill="#16112c" /> <rect x="12" y="11" width="1" height="1" fill="#0b0916" /> <rect x="13" y="11" width="1" height="1" fill="#a49a71" /> <rect x="0" y="12" width="2" height="1" fill="#f4c535" /> <rect x="2" y="12" width="1" height="1" fill="#1c1635" /> <rect x="3" y="12" width="9" height="1" fill="#16112c" /> <rect x="12" y="12" width="1" height="1" fill="#0b0916" /> <rect x="13" y="12" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="13" width="1" height="1" fill="#0b0916" /> <rect x="2" y="13" width="1" height="1" fill="#1c1635" /> <rect x="3" y="13" width="8" height="1" fill="#16112c" /> <rect x="11" y="13" width="1" height="1" fill="#f4c535" /> <rect x="12" y="13" width="1" height="1" fill="#0b0916" /> <rect x="13" y="13" width="1" height="1" fill="#a49a71" /> <rect x="1" y="14" width="1" height="1" fill="#0b0916" /> <rect x="2" y="14" width="1" height="1" fill="#1c1635" /> <rect x="3" y="14" width="7" height="1" fill="#16112c" /> <rect x="10" y="14" width="2" height="1" fill="#f4c535" /> <rect x="12" y="14" width="1" height="1" fill="#0b0916" /> <rect x="13" y="14" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="15" width="13" height="1" fill="#0b0916" /> </g> <g > <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill=var(--accent) /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="1" height="1" fill=var(--accent) /> <rect x="7" y="8" width="1" height="1" fill=#ffffff /> <rect x="8" y="8" width="1" height="1" fill=var(--accent) /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill=var(--accent) /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> </g></svg><span class="n" id="tabN"></span></div>
 </div>
 
-<div id="demo">demo: <b>1/2/3</b> state · <b>G</b> peek · <b>L</b> locating · drag the header to move · <b>B</b> backdrop · <b>T</b> text size · click items/place</div>
+<div id="demo">demo: <b>1/2/3</b> state · <b>G</b> peek · <b>L</b> locating · drag the header to move · <b>B</b> backdrop · <b>T</b> text size · <b>Enter</b> tick · <b>N</b> next · click items/place</div>
 
 <script>
   'use strict';
@@ -313,6 +327,8 @@
     openItem: null,               // the entry whose details are open (one at a time), until the next place
     scale: 1,                     // the app's UI scale (Settings), applied on top of the text size
     keys: 'Ctrl+Space',           // the show/hide shortcut as shown ('' = none)
+    cur: null,                    // the highlighted objective (its id): the next unticked one, or the one the cycle key picked
+    curShown: null,               // the one highlighted at the last render (the tick key ticks this one)
   };
   let peekTimer = null, hintTimer = null;
 
@@ -334,7 +350,7 @@
     mouseHint: '{keys} to use your mouse here', mouseHintClose: 'Hide this tip',
     headFold: 'Click: fold the log to this line or open it. Drag: move.', openBook: 'Open the Compendium',
     foldHint: 'Click to fold or open', detWhere: 'Where', detHow: 'How', detMissable: 'Missable', detNotes: 'Notes',
-    openInGuide: 'Open in guide', askAbout: 'Ask about this', expandHint: 'Click for details',
+    openInGuide: 'Open in guide', askAbout: 'Ask about this', expandHint: 'Click for details', missableTip: 'Can be missed for good',
   };
   const L = (k, vars) => {
     const own = state.data && state.data.labels && state.data.labels[k];
@@ -344,15 +360,12 @@
   };
   function applyLabels() {
     $('title').textContent = L('title');
-    $('placeConfirm').textContent = L('confirm');
     $('fold').title = L('headFold');
     $('bBook').title = L('openBook');
-    $('locLbl').textContent = L('locate');
-    $('placeConfirm').title = L('placeHint');
+    $('placeConfirm').title = L('confirmHint');
     $('prevArea').title = L('prevArea');
     $('nextArea').title = L('nextArea');
     $('placeName').title = state.data && state.data.areas ? L('areaList') : '';
-    $('bConfirm').title = L('confirmHint');
     $('bAway').title = L('awayEdge');
     $('bSize').title = L('size');
     $('alphaWrap').title = L('alpha');
@@ -377,20 +390,25 @@
   const WARN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
 
   /**
-   * One line: the answer's markers get their number badge, guide entries a box, other lines (no return) none. Ticking
-   * is on the badge or box only; clicking the text opens the entry's details below it (one at a time). Every line has a
-   * × (on hover) that hides it.
+   * One objective: the answer's markers get their number badge, guide entries a box, other lines (no return) none; then
+   * its short label (bold) and one dim line with where / how. A missable one has a ⚠ with its warning on hover. The
+   * highlighted one (cur) gets a ▸. Ticking is on the badge or box only; clicking the text opens the entry's details
+   * below it (one at a time). Every line has a × (on hover) that hides it.
    */
-  function itemHtml(o, sectionId) {
+  function itemHtml(o, sectionId, cur) {
     const open = state.openItem === o.id;
-    const cls = [o.done ? 'done' : '', o.missable ? 'miss' : '', sectionId === 'noreturn' ? 'info' : '', !o.tick && sectionId !== 'noreturn' ? 'static' : '', open ? 'open' : ''].filter(Boolean).join(' ');
+    const cls = [o.done ? 'done' : '', o.missable ? 'miss' : '', sectionId === 'noreturn' ? 'info' : '', !o.tick && sectionId !== 'noreturn' ? 'static' : '', open ? 'open' : '', cur ? 'cur' : ''].filter(Boolean).join(' ');
     const tickTitle = o.tick ? ` title="${esc(o.done ? L('itemDone') : L('itemTodo'))}"` : '';
     const tk = o.tick ? ' tk' : '';
     const mark = o.badge ? `<span class="badge${tk}"${tickTitle}>${o.done ? '✓' : o.badge}</span>`
       : sectionId === 'noreturn' ? ''
       : `<span class="box${tk}"${tickTitle}>${o.done ? '✓' : ''}</span>`;
-    const where = o.where && !o.done ? ` <span class="where">— ${esc(o.where)}</span>` : '';
-    return `<li class="${cls}" data-item="${esc(o.id)}">${mark}<span class="obj" title="${esc(L('expandHint'))}">${esc(o.label)}${where}<span class="ex">${open ? '▾' : '▸'}</span></span><span class="x" title="${esc(L('hideEntry'))}">×</span>${open ? detailHtml(o) : ''}</li>`;
+    const d = o.detail || {};
+    const warnTip = o.missable && sectionId !== 'noreturn' && !o.done ? (d.missable || (d.full && d.full !== o.label ? d.full : '') || L('missableTip')) : '';
+    const mw = warnTip ? `<span class="mw">⚠</span>` : '';
+    const sub = o.where ? `<span class="sub" title="${esc(o.where)}">${esc(o.where)}</span>` : '';
+    const wsub = warnTip ? `<span class="wsub">⚠ ${esc(warnTip)}</span>` : '';
+    return `<li class="${cls}" data-item="${esc(o.id)}"><span class="mk">${cur ? '▸' : ''}</span>${mark}<span class="obj" title="${esc(L('expandHint'))}"><span class="lb">${esc(o.label)}</span>${mw}<span class="ex">${open ? '▾' : '▸'}</span>${sub}${wsub}</span><span class="x" title="${esc(L('hideEntry'))}">×</span>${open ? detailHtml(o) : ''}</li>`;
   }
 
   /** An entry's details: its full text and everything the guide has (where, how, why it's missable, notes). */
@@ -415,9 +433,19 @@
     const hidden = new Set(state.hidden || []);
     const sections = (d.sections || []).map((x) => ({
       ...x,
-      items: x.items.filter((o) => !hidden.has(o.id)),
+      items: x.items.filter((o) => !hidden.has(o.id)).map((o, i) => ({ o, i })).sort((a, b) => Number(!!a.o.done) - Number(!!b.o.done) || a.i - b.i).map((v) => v.o),
       hiddenIds: x.items.filter((o) => hidden.has(o.id)).map((o) => o.id),
     }));
+    // What each section shows (its limit, "+N more"), and the highlighted objective among the unticked ones on show.
+    const shownOf = (x) => {
+      const limit = state.limits && state.limits[x.id];
+      const max = limit === 0 ? Infinity : limit || SHOW;
+      return state.more[x.id] ? x.items : x.items.slice(0, max);
+    };
+    const open = sections.filter((x) => !state.collapsed[x.id]).flatMap((x) => shownOf(x)).filter((o) => o.tick && !o.done);
+    const curId = open.some((o) => o.id === state.cur) ? state.cur : open[0] ? open[0].id : null;
+    state.curShown = curId;
+    state.openIds = open.map((o) => o.id);
     // The header count and the away tab's number: what's left to tick.
     const ticks = sections.flatMap((x) => x.items).filter((o) => o.tick);
     const done = ticks.filter((o) => o.done).length;
@@ -434,9 +462,10 @@
     $('place').classList.toggle('locating', !!d.locating);
     if (p) {
       $('placeName').textContent = d.locating ? L('locating') : p.name || '';
-      $('placeStory').textContent = p.story && !d.locating ? ` · ${p.story}` : '';
+      // A story beat reads on in the line: "before the Griffin", not "Before the Griffin".
+      const story = String(p.story || '').replace(/^(Before|After|During|Just|Right|Still|Early|Late|Near|Halfway)\b/, (w) => w.toLowerCase());
+      $('placeStory').textContent = story && !d.locating ? ` · ${story}` : '';
       $('place').classList.toggle('sure', !!p.sure);
-      $('bConfirm').classList.toggle('on', !!p.sure);
     }
     // ‹ › and the area list, from the guide's area order (disabled at the ends).
     const ar = d.areas && Array.isArray(d.areas.names) && d.areas.names.length ? d.areas : null;
@@ -457,16 +486,15 @@
     secs.innerHTML = sections.map((x) => {
       const folded = !!state.collapsed[x.id];
       // The section's limit (its count cycles 3 / 6 / all; unset = SHOW), and "+N more" past it.
-      const limit = state.limits && state.limits[x.id];
-      const max = limit === 0 ? Infinity : limit || SHOW;
-      const shown = state.more[x.id] ? x.items : x.items.slice(0, max);
+      const shown = shownOf(x);
       const left = x.items.length - shown.length;
-      const tickable = x.items.filter((o) => o.tick);
-      const n = tickable.length ? `${tickable.filter((o) => o.done).length}/${tickable.length}` : `${x.items.length}`;
-      const cnt = `<span class="cnt" title="${esc(L('limitHint'))}">${n}</span>`;
-      return `<div class="sec${x.tone === 'amber' ? ' amber' : ''}${folded ? ' folded' : ''}" data-sec="${esc(x.id)}">
-        <div class="sechead" title="${esc(L('foldHint'))}">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${cnt}<span class="chev">${folded ? '▸' : '▾'}</span></div>
-        <ol>${shown.map((o) => itemHtml(o, x.id)).join('')}</ol>
+      // The count lives in the header only; the section's "show 3 / 6 / all" is a small control shown on hover.
+      const lim = `<span class="lim" title="${esc(L('limitHint'))}">≡</span>`;
+      // The answer's objectives are the log itself: no heading (a fight keeps "Battle plan" and its Next turn).
+      const head = x.id === 'answer' && !x.nextTurn ? '' : `<div class="sechead" title="${esc(L('foldHint'))}">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${lim}<span class="chev">${folded ? '▸' : '▾'}</span></div>`;
+      return `<div class="sec${x.tone === 'amber' ? ' amber' : ''}${folded && head ? ' folded' : ''}" data-sec="${esc(x.id)}">
+        ${head}
+        <ol>${shown.map((o) => itemHtml(o, x.id, o.id === curId)).join('')}</ol>
         ${x.nextTurn ? `<div class="nturn${state.turnBusy ? ' busy' : ''}" title="${esc(L('nextTurnHint'))}">⟳ ${esc(L('nextTurn'))}</div>` : ''}
         ${left > 0 ? `<div class="more">${esc(L('more', { n: left }))}</div>` : ''}
         ${x.hiddenIds.length ? `<div class="unhide">${esc(L('showHidden', { n: x.hiddenIds.length }))}</div>` : ''}
@@ -485,7 +513,6 @@
     $('notice').textContent = d.notice || '';
     $('bLocate').classList.toggle('busy', !!d.locating);
     $('bLocate').title = d.locating ? L('locating') : L('locate');
-    $('locLbl').textContent = d.locating ? L('locating') : L('locate');
     const warnText = d.warning || '';
     $('warn').classList.toggle('off', !warnText);
     $('warn').innerHTML = warnText ? `${WARN_ICON}<span>${esc(warnText)}</span>` : '';
@@ -620,7 +647,7 @@
     const sec = e.target.closest('.sec'); if (!sec || !state.data) return;
     const id = sec.dataset.sec;
     const x = (state.data.sections || []).find((s2) => s2.id === id);
-    if (e.target.closest('.cnt')) {
+    if (e.target.closest('.lim')) {
       // The count: show 3, then 6, then all (remembered per game by the app).
       const cur = state.limits && state.limits[id];
       const next = cur === 3 ? 6 : cur === 6 ? 0 : 3;
@@ -672,7 +699,9 @@
     // Ticking: the square box or the number badge only.
     if (e.target.closest('.badge, .box')) {
       if (!o.tick) return;
-      o.done = !o.done; render();
+      o.done = !o.done;
+      if (o.done && state.cur === o.id) state.cur = null;
+      render();
       send('tick', { item: o.id, done: o.done });
       return;
     }
@@ -709,7 +738,6 @@
     send('confirm-place', { id: state.data.id, name: p.name, story: p.story || '' });
   };
   $('placeConfirm').addEventListener('click', confirmPlace);
-  $('bConfirm').addEventListener('click', confirmPlace);
   tab.addEventListener('click', () => setView('full'));
   $('bSize').addEventListener('click', () => {
     state.size = state.size === 'small' ? 'medium' : state.size === 'medium' ? 'large' : 'small';
@@ -753,6 +781,27 @@
     applyView();
   };
   window.qcTrackerPeek = peek;
+  window.qcTrackerKey = (action) => {
+    if (!state.data) return false;
+    const all = (state.data.sections || []).flatMap((x) => x.items);
+    if (action === 'next') {
+      const ids = state.openIds || [];
+      if (!ids.length) return false;
+      const i = ids.indexOf(state.curShown);
+      state.cur = ids[(i + 1) % ids.length];
+    } else if (action === 'tick') {
+      const o = all.find((it) => it.id === state.curShown && it.tick && !it.done);
+      if (!o) return false;
+      o.done = true;
+      state.cur = null;
+      send('tick', { item: o.id, done: true });
+    } else return false;
+    if (state.view !== 'full') { if (!state.peekFrom) state.peekFrom = state.view; setView('full', { peek: true }); armFold(); }
+    else render();
+    const li = state.curShown && secs.querySelector(`li[data-item="${CSS.escape(state.curShown)}"]`);
+    if (li) { li.classList.add('flash'); li.scrollIntoView({ block: 'nearest' }); }
+    return true;
+  };
   window.qcTrackerEdge = (edge) => { state.edge = edge; applyView(); };
   window.addEventListener('resize', reportSize);
 
@@ -764,8 +813,8 @@
       place: { name: 'Blackreach', story: 'Just after meeting Septimus', sure: false },
       sections: [
         { id: 'answer', title: 'From your last answer', items: [
-          { id: 'a:d:0', label: 'Crimson Nirnroot', where: 'by the glowing mushrooms, left of the lift', badge: 1, tick: true },
-          { id: 'a:d:1', label: 'Falmer sword', where: 'on the dead Falmer near the bridge', done: true, badge: 2, tick: true },
+          { id: 'a:d:0', label: 'Pick the Crimson Nirnroot', where: 'by the glowing mushrooms, left of the lift', tick: true },
+          { id: 'a:d:1', label: 'Take the Falmer sword', where: 'on the dead Falmer near the bridge', done: true, tick: true },
         ] },
         { id: 'missable', title: 'Missable here', tone: 'amber', items: [
           { id: 'g:b:1', label: 'Attunement sphere', where: 'top of the stairs', missable: true, tick: true,
@@ -785,6 +834,8 @@
       if (e.key.toLowerCase() === 'l') window.qcTrackerUpdate({ locating: !state.data.locating });
       if (e.key.toLowerCase() === 'b') { state.backdrop = state.backdrop >= 90 ? 0 : state.backdrop + 30; applyView(); }
       if (e.key.toLowerCase() === 't') $('bSize').click();
+      if (e.key === 'Enter') window.qcTrackerKey('tick');
+      if (e.key === 'n') window.qcTrackerKey('next');
     });
   }
 </script>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { formatShortcut } from '../utils/shortcut';
-import { keyLabel, shortcutKeys } from '../utils/shortcut';
+import { keyLabel, shortcutKeys, sameShortcut } from '../utils/shortcut';
 import { 
   X, 
   Sparkles, 
@@ -55,15 +55,27 @@ const DEFAULT_SHORTCUTS = {
   hideAppShortcut: 'CmdOrCtrl+Space',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
+  trackerTickShortcut: 'CmdOrCtrl+Shift+Enter',
+  trackerNextShortcut: 'CmdOrCtrl+Shift+Down',
+};
+/** Electron's names for keys the browser reports differently (ArrowDown is "Down"). */
+const NAMED_KEYS: Record<string, string> = {
+  ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace',
+  Delete: 'Delete', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown', Insert: 'Insert',
 };
 
 const ShortcutInput: React.FC<{
   value: string;
   onChange: (value: string) => void;
   label: string;
-}> = ({ value, onChange, label }) => {
+  /** The app's other shortcuts: new keys that are the same as one of them are refused (they'd clash), saying which. */
+  taken?: { keys: string; label: string }[];
+  /** A line under the field (when the shortcut works). */
+  hint?: string;
+}> = ({ value, onChange, label, taken = [], hint }) => {
   const t = useT();
   const [isRecording, setIsRecording] = useState(false);
+  const [clash, setClash] = useState('');
 
   React.useEffect(() => {
     if (!isRecording) return;
@@ -73,7 +85,7 @@ const ShortcutInput: React.FC<{
       e.stopPropagation();
 
       const key = e.key;
-      
+
       // Cancel on Escape
       if (key === 'Escape') {
         setIsRecording(false);
@@ -90,21 +102,28 @@ const ShortcutInput: React.FC<{
       if (e.altKey) parts.push('Alt');
       if (e.shiftKey) parts.push('Shift');
 
-      let normalizedKey = key.toUpperCase();
+      let normalizedKey = NAMED_KEYS[key] || key.toUpperCase();
       if (key === ' ') normalizedKey = 'Space';
-      if (key === '+') normalizedKey = 'Plus'; 
-      
+      if (key === '+') normalizedKey = 'Plus';
+
       parts.push(normalizedKey);
-      
-      onChange(parts.join('+'));
+      const next = parts.join('+');
       setIsRecording(false);
+      // The same keys as another of the app's shortcuts: refused, naming that one.
+      const other = taken.find((o) => sameShortcut(o.keys, next));
+      if (other) {
+        setClash(t('set.sc.clash', { name: other.label }));
+        return;
+      }
+      setClash('');
+      onChange(next);
     };
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
     };
-  }, [isRecording, onChange]);
+  }, [isRecording, onChange, taken, t]);
 
   return (
     <div>
@@ -113,8 +132,8 @@ const ShortcutInput: React.FC<{
         type="button"
         onClick={() => setIsRecording(true)}
         className={`w-full text-left bg-black/60 border rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none transition-all cursor-pointer ${
-          isRecording 
-            ? 'border-indigo-500/50 text-indigo-400 bg-indigo-500/5 shadow-[0_0_10px_rgba(99,102,241,0.2)]' 
+          isRecording
+            ? 'border-indigo-500/50 text-indigo-400 bg-indigo-500/5 shadow-[0_0_10px_rgba(99,102,241,0.2)]'
             : 'border-white/15 text-white hover:border-white/30 hover:bg-white/[0.02]'
         }`}
       >
@@ -136,6 +155,7 @@ const ShortcutInput: React.FC<{
           t('set.sc.none')
         )}
       </button>
+      {clash ? <p role="alert" className="mt-1 text-[11px] text-amber-300">{clash}</p> : hint ? <p className="mt-1 text-[11px] text-zinc-500">{hint}</p> : null}
     </div>
   );
 };
@@ -698,21 +718,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span>{tr('set.shortcuts')}</span>
                   </label>
                   <div className="space-y-3">
-                    <ShortcutInput
-                      label={tr('set.sc.hide')}
-                      value={settings.hideAppShortcut}
-                      onChange={(val) => onUpdateSettings({ hideAppShortcut: val })}
-                    />
-                    <ShortcutInput
-                      label={tr('set.sc.voice')}
-                      value={settings.voiceInputShortcut}
-                      onChange={(val) => onUpdateSettings({ voiceInputShortcut: val })}
-                    />
-                    <ShortcutInput
-                      label={tr('set.sc.shot')}
-                      value={settings.autoScreenshotShortcut || 'CmdOrCtrl+Shift+S'}
-                      onChange={(val) => onUpdateSettings({ autoScreenshotShortcut: val })}
-                    />
+                    {(() => {
+                      // Each shortcut, and the others it must not clash with (a clash is refused, naming the other one).
+                      const all = [
+                        { key: 'hideAppShortcut', label: tr('set.sc.hide'), keys: settings.hideAppShortcut || DEFAULT_SHORTCUTS.hideAppShortcut },
+                        { key: 'voiceInputShortcut', label: tr('set.sc.voice'), keys: settings.voiceInputShortcut || DEFAULT_SHORTCUTS.voiceInputShortcut },
+                        { key: 'autoScreenshotShortcut', label: tr('set.sc.shot'), keys: settings.autoScreenshotShortcut || DEFAULT_SHORTCUTS.autoScreenshotShortcut },
+                        { key: 'trackerTickShortcut', label: tr('set.sc.trackerTick'), keys: settings.trackerTickShortcut || DEFAULT_SHORTCUTS.trackerTickShortcut, hint: tr('set.sc.trackerHint') },
+                        { key: 'trackerNextShortcut', label: tr('set.sc.trackerNext'), keys: settings.trackerNextShortcut || DEFAULT_SHORTCUTS.trackerNextShortcut, hint: tr('set.sc.trackerHint') },
+                      ] as const;
+                      return all.map((sc) => (
+                        <ShortcutInput
+                          key={sc.key}
+                          label={sc.label}
+                          value={sc.keys}
+                          hint={'hint' in sc ? sc.hint : undefined}
+                          taken={all.filter((o) => o.key !== sc.key).map((o) => ({ keys: o.keys, label: o.label }))}
+                          onChange={(val) => onUpdateSettings({ [sc.key]: val } as Partial<AppSettings>)}
+                        />
+                      ));
+                    })()}
                     <div className="flex items-center justify-between gap-3 pt-1">
                       <p className="text-[11px] text-zinc-500 leading-relaxed">
                         {tr('set.sc.restart')}
@@ -930,6 +955,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           );
                         })()}
                       </div>
+
+                      {/* The quest log's tick and cycle buttons: off by default; when on, hold the show / hide combo's
+                          first button (the player chose it as safe for their game) and press the other one. */}
+                      {(() => {
+                        const toggle = padPreset(settings.controllerToggle);
+                        const toggleButtons: string[] = toggle === 'custom' ? (settings.controllerCustom?.buttons || []) : toggle === 'hold-ls-rs' ? ['ls', 'rs'] : toggle === 'off' ? [] : ['back', 'start'];
+                        const mod = toggleButtons[0] || 'back';
+                        const keyLabelOf = (k: string) => (k === 'up' ? tr('set.pad.dpadUp') : k === 'right' ? tr('set.pad.dpadRight') : tr(`set.pad.btn.${k}`));
+                        // The same rules as the desktop app (padCombo chordFor): never the modifier itself or a button of
+                        // the show / hide combo; and a note when it's the hold-to-talk button.
+                        const clashOf = (k: string) => {
+                          if (k === 'off') return '';
+                          if (k === mod || toggleButtons.includes(k)) return tr('set.pad.clashToggle');
+                          if (k === (settings.controllerTalk || 'y')) return tr('set.pad.clashTalk');
+                          return '';
+                        };
+                        const rows = [
+                          { key: 'controllerTick', label: tr('set.pad.trackerTick'), value: String(settings.controllerTick || 'off').replace(/^view-/, ''), options: ['off', 'up', 'a'] },
+                          { key: 'controllerNext', label: tr('set.pad.trackerNext'), value: String(settings.controllerNext || 'off').replace(/^view-/, ''), options: ['off', 'right', 'rb'] },
+                        ] as const;
+                        return (
+                          <div className="space-y-2">
+                            <div className="text-xs font-semibold text-white">{tr('set.pad.tracker')}</div>
+                            <div className="text-[11px] text-zinc-400">{tr('set.pad.trackerDesc', { mod: tr(`set.pad.btn.${mod}`) })}</div>
+                            {rows.map((r) => (
+                              <div key={r.key} className="space-y-1">
+                                <div className="text-[11px] font-semibold text-zinc-300">{r.label}</div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {r.options.map((o) => {
+                                    const selected = r.value === o;
+                                    return (
+                                      <button
+                                        key={o}
+                                        aria-pressed={selected}
+                                        onClick={() => {
+                                          playBlipSound(soundEnabled);
+                                          onUpdateSettings({ [r.key]: o } as Partial<AppSettings>);
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${selected ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white' : 'bg-black/30 border-white/[0.08] text-zinc-300'}`}
+                                      >
+                                        {o === 'off' ? tr('set.pad.preset.off') : tr('set.pad.chord', { mod: tr(`set.pad.btn.${mod}`), key: keyLabelOf(o) })}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                {clashOf(r.value) && <p className="text-[11px] text-amber-300">{clashOf(r.value)}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
 
                       {/* Hold to talk, and immersive read-aloud */}
                       <div className="space-y-2">

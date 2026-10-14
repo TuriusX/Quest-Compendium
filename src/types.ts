@@ -39,6 +39,10 @@ export interface SteamGameData {
 export interface QuestStep {
   kind: 'step' | 'choice' | 'warning';
   text: string;
+  /** A few words for the quest log ("Ask the commander about Yennefer"); older answers have only text. */
+  label?: string;
+  /** One short line under the label: where it is or how to do it. */
+  where?: string;
   /** The sentence of the answer it comes from (its details on the quest log). */
   detail?: string;
 }
@@ -196,6 +200,12 @@ export interface AppSettings {
   mouseTips?: { logSeen?: number; dismissed?: boolean; toastSeen?: number };
   voiceInputShortcut: string;
   autoScreenshotShortcut: string;
+  /**
+   * The quest log's keys (desktop): tick the highlighted objective, and move the highlight to the next unticked one,
+   * without taking the mouse. Registered only while the quest log is on screen (default Ctrl+Shift+Enter, Ctrl+Shift+Down).
+   */
+  trackerTickShortcut?: string;
+  trackerNextShortcut?: string;
   enableThematicBanners?: boolean;
   /** Interface style: 'lofi' (pixel art, default) or 'classic' (the original look). */
   uiStyle?: UiStyle;
@@ -212,6 +222,12 @@ export interface AppSettings {
   controllerCustom?: { buttons: string[]; mode: 'hold' | 'double' };
   /** Hold to talk on the controller while the overlay is open (default 'y'; 'off' turns it off). */
   controllerTalk?: 'y' | 'x' | 'lb' | 'rb' | 'off';
+  /**
+   * The quest log's tick and cycle buttons (off by default): hold the show / hide combo's first button and press this
+   * one (electron/padCombo.cjs chordFor).
+   */
+  controllerTick?: 'up' | 'a' | 'off';
+  controllerNext?: 'right' | 'rb' | 'off';
   /** Immersive mode: after a hold-to-talk question the panel steps aside and the answer is read aloud (default on). */
   immersiveReadAloud?: boolean;
   /** Desktop: screenshot the game just before the overlay opens (for games that pause when they lose focus). */

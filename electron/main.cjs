@@ -632,6 +632,8 @@ app.whenReady().then(() => {
     // The mouse tip: the log appeared (counted toward the prominent hint), or its × was clicked.
     onAppear: onLogAppear,
     onTipDismiss: () => tellApp({ type: 'mouse-tip', what: 'dismiss' }),
+    // The tick / cycle shortcuts are registered while the quest log is on screen, and only then.
+    onLogVisible: (visible) => syncTrackerKeys(visible),
   });
   tracker.setMouseTip(tipMode());
   tracker.setVisibleInRecordings(markersInRecordings);
@@ -669,6 +671,8 @@ app.whenReady().then(() => {
   // overlay with the controller while it's visible. See controller.cjs.
   controllerService = createControllerService({
     isVisible: () => !!mainWindow && !mainWindow.isDestroyed() && isAppVisible && mainWindow.isVisible(),
+    // The quest log's tick / cycle buttons (Settings), while a game is focused: no mouse needed.
+    onTrackerKey: (action) => tracker.key(action),
     onToggle: () => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       if (isAppVisible) {
@@ -707,6 +711,12 @@ app.whenReady().then(() => {
 
   ipcMain.on('update-shortcuts', (event, shortcuts) => {
     globalShortcut.unregisterAll();
+    trackerKeysOn = [];
+    trackerKeys = {
+      tick: shortcuts.trackerTickShortcut || 'CommandOrControl+Shift+Enter',
+      next: shortcuts.trackerNextShortcut || 'CommandOrControl+Shift+Down',
+    };
+    appKeys = [shortcuts.hideAppShortcut, shortcuts.voiceInputShortcut, shortcuts.autoScreenshotShortcut].filter(Boolean);
 
     // Always ensure a show/hide shortcut exists: the player's, else Ctrl+Space.
     const hideAppCmd = shortcuts.hideAppShortcut || 'CommandOrControl+Space';
@@ -734,6 +744,8 @@ app.whenReady().then(() => {
     } catch (err) {
       console.error("Failed to register autoScreenshotShortcut", err);
     }
+    // The quest log's tick / cycle shortcuts, if it's on screen now.
+    syncTrackerKeys(tracker.isLogVisible());
   });
 
   app.on('activate', () => {
@@ -791,6 +803,26 @@ function onVoiceKey() {
 
 // The panel slides away (hold-to-talk sends and goes back to the game; the answer is read aloud).
 ipcMain.on('hide-panel', () => { if (isAppVisible) slideOut(); });
+
+// The quest log's tick / cycle shortcuts (Settings: trackerTickShortcut, trackerNextShortcut). They're global, so they
+// are registered only while the log is on screen (a log put away or no game: the keys stay free for other apps), and
+// never when they're the same as one of the app's other shortcuts.
+let trackerKeys = { tick: 'CommandOrControl+Shift+Enter', next: 'CommandOrControl+Shift+Down' };
+let trackerKeysOn = [];
+let appKeys = [];
+const sameKeys = (a, b) => String(a || '').replace(/CmdOrCtrl|CommandOrControl/gi, 'Ctrl').toLowerCase() === String(b || '').replace(/CmdOrCtrl|CommandOrControl/gi, 'Ctrl').toLowerCase();
+function syncTrackerKeys(visible) {
+  for (const k of trackerKeysOn) { try { globalShortcut.unregister(k); } catch (_) {} }
+  trackerKeysOn = [];
+  if (!visible) return;
+  for (const [action, keys] of Object.entries(trackerKeys)) {
+    if (!keys || appKeys.some((k) => sameKeys(k, keys)) || trackerKeysOn.some((k) => sameKeys(k, keys))) continue;
+    try {
+      if (globalShortcut.register(keys, () => tracker.key(action))) trackerKeysOn.push(keys);
+      else console.warn(`[tracker] ${keys} is taken; the quest log's ${action} shortcut isn't set`);
+    } catch (err) { console.warn(`[tracker] couldn't register ${keys}:`, err && err.message); }
+  }
+}
 
 // The show/hide shortcut as registered ('' = none) and the mouse tips' state (from the app's settings.mouseTips).
 let hideKeysNow = '';

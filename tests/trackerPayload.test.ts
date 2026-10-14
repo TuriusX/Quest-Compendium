@@ -126,4 +126,21 @@ test("the place's story beat becomes the quest line (and leaves the place line) 
   assert.equal(p.data.sections.length, 0);
 });
 
+test("answer steps: the short label with its where line, the full step in the details; a warning's sentence is its missable reason", () => {
+  const msg = answer({ place: { name: "Port", sure: false, options: [] }, steps: [
+    { kind: "step", label: "Ask the commander", where: "garrison, centre of town", text: "Ask the commander at the garrison about Yennefer", detail: "The commander knows where she went." },
+    { kind: "warning", label: "Don't board yet", text: "Grab the Key before boarding", detail: "The ship leaves for good." },
+    { kind: "step", text: "An older answer's step" },
+  ] });
+  const items = buildTrackerPayload(tab(), msg, null, null, undefined, opts)!.data.sections[0].items;
+  assert.equal(items[0].label, "Ask the commander");
+  assert.equal(items[0].where, "garrison, centre of town");
+  assert.equal(items[0].detail?.full, "Ask the commander at the garrison about Yennefer");
+  assert.equal(items[0].detail?.notes, "The commander knows where she went.");
+  assert.equal(items[1].missable, true);
+  assert.equal(items[1].detail?.missable, "The ship leaves for good.");
+  assert.equal(items[2].label, "An older answer's step");
+  assert.equal(items[2].where, undefined);
+});
+
 console.log(`\n${passed} tests passed`);

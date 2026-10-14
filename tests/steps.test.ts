@@ -45,4 +45,18 @@ test("the rules ask for 1-4 imperative items with a one-line choice format", () 
   assert.match(STEPS_RULES, /Fight the Intellect Devourers or\s+climb the rock wall/);
 });
 
+test("a short label and a where line for the quest log; older lines without them still work", () => {
+  const r = extractSteps('A <qc-steps>[{"kind":"step","label":"Ask the commander about Yennefer","where":"Nilfgaardian garrison, centre of White Orchard","text":"Ask the commander at the garrison about Yennefer"}]</qc-steps>');
+  assert.equal(r.steps[0].label, "Ask the commander about Yennefer");
+  assert.equal(r.steps[0].where, "Nilfgaardian garrison, centre of White Orchard");
+  const long = extractSteps(`A <qc-steps>[{"kind":"step","label":"${"word ".repeat(20)}","text":"Do it"}]</qc-steps>`);
+  assert.ok(long.steps[0].label!.length <= 48);
+  const old = extractSteps('A <qc-steps>[{"kind":"step","text":"Search the chest left of the pod"}]</qc-steps>');
+  assert.equal(old.steps[0].label, undefined);
+  const labelOnly = extractSteps('A <qc-steps>[{"kind":"step","label":"Pick the lock"}]</qc-steps>');
+  assert.equal(labelOnly.steps[0].text, "Pick the lock");
+  assert.match(STEPS_RULES, /"label"/);
+  assert.match(STEPS_RULES, /2 to 6 words/);
+});
+
 console.log(`\n${passed} tests passed`);

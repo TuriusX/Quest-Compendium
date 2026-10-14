@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { comboFor, createComboDetector, createHoldToTalk, BITS } = require("../electron/padCombo.cjs");
+const { comboFor, chordFor, createComboDetector, createHoldToTalk, BITS } = require("../electron/padCombo.cjs");
 const { createControllerService } = require("../electron/controller.cjs");
 
 let passed = 0;
@@ -68,7 +68,9 @@ function rig(config: any, visible = true) {
   let buttons = 0, lt = 0, t = 0;
   const events: any[] = [];
   let toggles = 0;
+  const keys: string[] = [];
   const svc = createControllerService({
+    onTrackerKey: (a: string) => keys.push(a),
     readPad: (i: number) => (i === 0 ? { wButtons: buttons, bLeftTrigger: lt, bRightTrigger: 0, sThumbLX: 0, sThumbLY: 0, sThumbRY: 0 } : null),
     now: () => t, isVisible: () => visible, onToggle: () => toggles++, onInput: (e: any) => events.push(e),
   });
@@ -76,7 +78,7 @@ function rig(config: any, visible = true) {
   svc.setConfig(config);
   svc.stop();
   const at = (ms: number, b: number, trig = 0) => { t = ms; buttons = b; lt = trig; svc._tick(); };
-  return { at, events, toggles: () => toggles };
+  return { at, events, keys, toggles: () => toggles };
 }
 
 test("service: View pressed alone still works (after release); the 1-second hold toggles without it", () => {
@@ -111,6 +113,42 @@ test("service: hold Y to talk, tap Y for quick questions; triggers page", () => 
   const hidden = rig({ talk: "y" }, false);
   hidden.at(0, BITS.y); hidden.at(800, BITS.y); hidden.at(900, 0);
   assert.equal(hidden.events.length, 0, "no talking while the overlay is hidden");
+});
+
+test("quest log chords: off by default; when on, the show / hide modifier + Up ticks and + Right cycles, overlay hidden or not", () => {
+  const off = rig({ toggle: "hold-view-menu" }, false);
+  off.at(0, BITS.back); off.at(100, BITS.back | BITS.up); off.at(200, 0);
+  assert.equal(off.keys.length, 0, "off unless turned on");
+  const r = rig({ toggle: "hold-view-menu", trackerTick: "up", trackerNext: "right" }, false);
+  r.at(0, BITS.back); r.at(100, BITS.back | BITS.up); r.at(150, BITS.back | BITS.up); r.at(200, BITS.back); r.at(250, BITS.back | BITS.right); r.at(300, 0);
+  assert.deepEqual(r.keys, ["tick", "next"]);
+  const alone = rig({ toggle: "hold-view-menu", trackerTick: "up", trackerNext: "right" }, false);
+  alone.at(0, BITS.up); alone.at(100, 0); alone.at(200, BITS.right); alone.at(300, 0);
+  assert.equal(alone.keys.length, 0);
+  const extra = rig({ toggle: "hold-view-menu", trackerTick: "up" }, false);
+  extra.at(0, BITS.back | BITS.a); extra.at(100, BITS.back | BITS.a | BITS.up);
+  assert.equal(extra.keys.length, 0, "not while another button is down");
+});
+
+test("quest log chords: the modifier follows the show / hide combo (L3 for L3 + R3, a custom combo's first button)", () => {
+  const ls = rig({ toggle: "hold-ls-rs", trackerTick: "a" }, false);
+  ls.at(0, BITS.back); ls.at(100, BITS.back | BITS.a); ls.at(200, 0);
+  ls.at(300, BITS.ls); ls.at(400, BITS.ls | BITS.a); ls.at(500, 0);
+  assert.deepEqual(ls.keys, ["tick"]);
+  assert.deepEqual(chordFor("up", comboFor("custom", { buttons: ["lb", "back"], mode: "hold" })).buttons, ["lb", "up"]);
+  // Never a button of the show / hide combo (pressing the combo would tick), never the modifier itself.
+  assert.equal(chordFor("rb", comboFor("custom", { buttons: ["lb", "rb", "back"], mode: "hold" })), null);
+  assert.equal(chordFor("a", comboFor("custom", { buttons: ["a", "b"], mode: "hold" })), null);
+  // Older values that named View still work.
+  assert.deepEqual(chordFor("view-up", comboFor("hold-view-menu")).buttons, ["back", "up"]);
+  assert.equal(chordFor("off", comboFor("hold-view-menu")), null);
+});
+
+test("quest log chords: the modifier press that starts one isn't a press on the overlay", () => {
+  const r = rig({ toggle: "hold-view-menu", trackerTick: "up" });
+  r.at(0, BITS.back); r.at(100, BITS.back | BITS.up); r.at(200, 0); r.at(1500, 0);
+  assert.deepEqual(r.keys, ["tick"]);
+  assert.equal(r.events.filter((e) => e.button === "back").length, 0);
 });
 
 console.log(`\n${passed} passed`);

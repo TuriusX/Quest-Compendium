@@ -7,7 +7,8 @@
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, isFillerStep, sharpenAction, clipWords } from './answerBar';
 
 export type StepKind = 'step' | 'choice' | 'warning';
-export type QuestStep = { kind: StepKind; text: string; detail?: string };
+/** label: a few words for the quest log ("Ask the commander about Yennefer"); where: one short line, where or how. */
+export type QuestStep = { kind: StepKind; text: string; label?: string; where?: string; detail?: string };
 
 /** What the model is asked to add to every in-game answer. */
 export const STEPS_RULES = `
@@ -16,9 +17,15 @@ export const STEPS_RULES = `
 After your answer, add one line with the 1 to 4 most important things the player should keep in front of them while
 they play (it goes on their on-screen quest log), most important first. Only what they should actually do or decide
 next, never filler:
-<qc-steps>[{"kind": "step", "text": "<what to do>", "detail": "<the sentence from your answer it comes from>"}]</qc-steps>
+<qc-steps>[{"kind": "step", "label": "<a few words>", "where": "<where or how, one short line>", "text": "<what to do>", "detail": "<the sentence from your answer it comes from>"}]</qc-steps>
 - "kind": "step" (something to do), "choice" (a decision the player has to make) or "warning" (something they can miss
   for good or that can go badly: a missable, a point of no return, a dangerous fight).
+- "label": the objective as the quest log shows it: 2 to 6 words, at most 40 characters, a short imperative, never a
+  sentence ("Ask the commander about Yennefer", "Search for the Griffin's tracks", "Pick: spare or kill Duncan"). Choices
+  and warnings too ("Don't read the Elder Scroll yet").
+- "where": one short line (at most 70 characters) with where it is or how to do it, the part the label leaves out
+  ("Nilfgaardian garrison, centre of White Orchard", "burned-out village to the south; use Witcher Senses"). Leave
+  it out when the label says it all.
 - "text": at most 90 characters, imperative and specific, in the player's language ("Search the chest left of the
   crashed pod", not "Explore the area"). A choice lists the options in one line ("Fight the Intellect Devourers or
   climb the rock wall to avoid them").
@@ -45,7 +52,9 @@ export function extractSteps(text: string, opts: { combat?: boolean } = {}): { t
       steps = list
         .map((s: any) => ({
           kind: (KINDS.includes(s?.kind) ? s.kind : 'step') as StepKind,
-          text: clipWords(String(s?.text ?? ''), 140),
+          text: clipWords(String(s?.text ?? s?.label ?? ''), 140),
+          ...(str(s?.label, 80) ? { label: clipWords(String(s?.label ?? ''), 48) } : {}),
+          ...(str(s?.where, 140) ? { where: clipWords(String(s?.where ?? ''), 90) } : {}),
           ...(str(s?.detail, 400) ? { detail: clipWords(String(s?.detail ?? ''), 400) } : {}),
         }))
         .filter((s: QuestStep) => s.text)

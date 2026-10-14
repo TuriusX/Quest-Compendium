@@ -92,7 +92,7 @@ const LABEL_KEYS = [
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
   'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
-  'expandHint', 'spine', 'choice', 'secBattle', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose',
+  'expandHint', 'spine', 'choice', 'secBattle', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
   Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));
@@ -269,10 +269,12 @@ export function buildTrackerPayload(
       // In the answer's order (most important first): a choice says so, a warning shows in amber like a missable.
       items: steps.map((st, i) => ({
         id: `s:${msg.id}:${i}`,
-        label: st.kind === 'choice' ? (L.choice || 'Choice: {text}').replace('{text}', st.text) : st.text,
+        // A short label (a few words) with one where / how line under it; older answers have only the full step.
+        label: st.label || (st.kind === 'choice' ? (L.choice || 'Choice: {text}').replace('{text}', st.text) : st.text),
+        where: st.label ? st.where : undefined,
         done: done.has(i), missable: st.kind === 'warning', tick: true,
-        // Its details: the sentence of the answer it comes from.
-        detail: detail({ full: st.detail }),
+        // Its details: the whole step and the sentence of the answer it comes from.
+        detail: detail({ full: st.label && st.text !== st.label ? st.text : st.detail, notes: st.label && st.text !== st.label ? st.detail : undefined, missable: st.kind === 'warning' ? st.detail : undefined }),
       })),
     });
   }
@@ -280,8 +282,9 @@ export function buildTrackerPayload(
   const page = guideArea?.page;
   if (guideArea && page) {
     const done = guideArea.done;
+    // A label is a few words: a long guide sentence is cut for the log (the whole of it is in the details).
     const entry = (id: string, label: string, where?: string, missable?: boolean, more?: TrackerDetail): TrackerItem => ({
-      id: `g:${guideArea.slug}:${id}`, label, where, done: done.has(id), missable, tick: true,
+      id: `g:${guideArea.slug}:${id}`, label: clipWords(label, 60), where, done: done.has(id), missable, tick: true,
       detail: detail({ full: label, where, ...more }),
     });
     // A guide entry's notes, for its details.

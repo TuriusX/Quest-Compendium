@@ -40,6 +40,7 @@ import { ControllerLayer } from './components/ControllerLayer';
 import { markersActiveFor, activeMarkersId, rememberAreaFind, setPointersActive } from './components/pointerStore';
 import { buildTrackerPayload, trackedMessage, trackerGameKey, trackerLabels, type TrackerData } from './utils/trackerPayload';
 import { useTrackerGuide } from './utils/trackerGuide';
+import { showFirstRunHints } from './utils/sessions';
 import { formatShortcut } from './utils/shortcut';
 import { setEntryDone, exportAllDone, importAllDone, GUIDE_DONE_EVENT } from './utils/guideProgress';
 import { appSource, isPhone } from './utils/source';
@@ -76,6 +77,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   hideAppShortcut: 'CmdOrCtrl+Space',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
+  trackerTickShortcut: 'CmdOrCtrl+Shift+Enter',
+  trackerNextShortcut: 'CmdOrCtrl+Shift+Down',
   enableThematicBanners: false,
   uiStyle: 'lofi',
   language: detectLocale(),
@@ -508,12 +511,16 @@ export default function App() {
         hideAppShortcut: settings.hideAppShortcut,
         voiceInputShortcut: settings.voiceInputShortcut,
         autoScreenshotShortcut: settings.autoScreenshotShortcut,
+        trackerTickShortcut: settings.trackerTickShortcut || 'CmdOrCtrl+Shift+Enter',
+        trackerNextShortcut: settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down',
       });
     }
   }, [
     settings.hideAppShortcut, 
     settings.voiceInputShortcut,
-    settings.autoScreenshotShortcut
+    settings.autoScreenshotShortcut,
+    settings.trackerTickShortcut,
+    settings.trackerNextShortcut,
   ]);
 
   // Controller: tell the desktop app which chord shows / hides the overlay.
@@ -523,8 +530,10 @@ export default function App() {
       toggle: settings.controllerToggle || 'hold-view-menu',
       custom: settings.controllerCustom,
       talk: settings.controllerTalk || 'y',
+      trackerTick: settings.controllerTick || 'off',
+      trackerNext: settings.controllerNext || 'off',
     });
-  }, [settings.controllerEnabled, settings.controllerToggle, settings.controllerCustom, settings.controllerTalk]);
+  }, [settings.controllerEnabled, settings.controllerToggle, settings.controllerCustom, settings.controllerTalk, settings.controllerTick, settings.controllerNext]);
 
   // Snapshot on open (desktop): capture the game before the overlay takes focus.
   useEffect(() => {
@@ -767,7 +776,7 @@ export default function App() {
   const [mouseToast, setMouseToast] = useState<string | null>(null);
   const mouseToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    (window as any).electronAPI?.setMouseTips?.({ logSeen: settings.mouseTips?.logSeen || 0, dismissed: !!settings.mouseTips?.dismissed });
+    (window as any).electronAPI?.setMouseTips?.({ logSeen: settings.mouseTips?.logSeen || 0, dismissed: !!settings.mouseTips?.dismissed || !showFirstRunHints() });
   }, [settings.mouseTips?.logSeen, settings.mouseTips?.dismissed]);
   const handleMouseTip = (e: any) => {
     const tips = settings.mouseTips || {};

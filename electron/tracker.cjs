@@ -315,7 +315,7 @@ function cleanDetail(d) {
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
 const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
-  'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose'];
+  'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -366,6 +366,19 @@ const logVisible = () => !!current && alive() && settingsFor(current.gameKey).sh
 /** The panel header's toggle shows whether the quest log is out. */
 function sendVisibility() {
   tell({ type: 'visibility', visible: logVisible(), hasData: !!current });
+  // The tick / cycle shortcuts are registered only while the log is on screen (main.cjs).
+  if (deps && deps.onLogVisible) deps.onLogVisible(logVisible());
+}
+
+/**
+ * The tick and cycle keys (global shortcuts and controller buttons, without taking the mouse): tick the highlighted
+ * objective, or move the highlight to the next unticked one. Only for a log on screen (full or folded; a folded one
+ * opens for a moment to show it). Returns whether there was a log to act on.
+ */
+function key(action) {
+  if (!['tick', 'next'].includes(action) || !logVisible() || captureHidden || !alive()) return false;
+  js(`window.qcTrackerKey(${JSON.stringify(action)})`);
+  return true;
 }
 
 /**
@@ -680,7 +693,9 @@ function init(d) {
 
 module.exports = {
   init, show, update, hide, toggle, showLog, panelShown, panelHidden, setKeys, setMouseTip, getTipLabels, hideForCapture, showAfterCapture, getBounds,
-  setVisibleInRecordings, setScale, openPanel, raise, getLook,
+  setVisibleInRecordings, setScale, openPanel, raise, getLook, key,
+  /** The log is on screen (full or folded): the tick / cycle shortcuts are registered only then. */
+  isLogVisible: () => logVisible(),
   isOpen: () => alive(),
   /** On screen right now (not hidden behind the open panel). */
   isShowing: () => alive() && win.isVisible(),

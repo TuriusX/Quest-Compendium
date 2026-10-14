@@ -20,6 +20,9 @@ function formatAccelerator(accelerator, platform = process.platform) {
       if (/^shift$/i.test(k)) return 'Shift';
       if (/^plus$/i.test(k)) return '+';
       if (/^(escape|esc)$/i.test(k)) return 'Esc';
+      if (/^(enter|return)$/i.test(k)) return 'Enter';
+      const arrow = { up: '↑', down: '↓', left: '←', right: '→' }[k.toLowerCase()];
+      if (arrow) return arrow;
       return k.length === 1 ? k.toUpperCase() : k;
     })
     .join('+');

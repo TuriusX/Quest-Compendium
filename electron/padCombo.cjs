@@ -118,4 +118,44 @@ function createHoldToTalk(bit, ms = TALK_HOLD_MS) {
   return { step, reset, active: () => started };
 }
 
-module.exports = { BITS, PRESETS, comboFor, createComboDetector, createHoldToTalk, HOLD_MS, TAP_MAX_MS, TAP_GAP_MS, TALK_HOLD_MS };
+/**
+ * The quest log's tick and cycle buttons (Settings: controllerTick, controllerNext; off by default): hold the player's
+ * show / hide modifier, then press the other button. The modifier is the first button of their show / hide combo (View
+ * for View + Menu or double-tap View, L3 for L3 + R3, the first of a custom combo; View when show / hide is off), since
+ * they already chose it as safe for their game. Pressing the other button alone keeps its normal action; only the
+ * pair counts, and never while other buttons are down.
+ *   tick: 'up' | 'a' | 'off' (default)      cycle: 'right' | 'rb' | 'off' (default)
+ * Older values name View: 'view-up', 'view-a', 'view-right', 'view-rb'.
+ */
+const CHORD_KEYS = ['up', 'a', 'right', 'rb'];
+/** The modifier of the show / hide combo (a button name). */
+function chordModifier(toggleCombo) {
+  return toggleCombo && toggleCombo.buttons && toggleCombo.buttons[0] && BITS[toggleCombo.buttons[0]] !== undefined ? toggleCombo.buttons[0] : 'back';
+}
+/**
+ * A chord's buttons, or null: off, unknown, the modifier itself, or a button of the show / hide combo (pressing that
+ * combo would tick by accident).
+ */
+function chordFor(preset, toggleCombo) {
+  const key = String(preset || 'off').replace(/^view-/, '');
+  if (!CHORD_KEYS.includes(key)) return null;
+  const mod = chordModifier(toggleCombo);
+  if (key === mod || (toggleCombo && (toggleCombo.mask & BITS[key]))) return null;
+  const buttons = [mod, key];
+  const mask = BITS[mod] | BITS[key];
+  return { buttons, mask, mod: BITS[mod], key: BITS[key] };
+}
+/** step(buttons) fires once when the second button goes down while the first is held (and nothing else is down). */
+function createChord(chord) {
+  let prevKey = false;
+  function step(buttons) {
+    if (!chord) return false;
+    const keyDown = (buttons & chord.key) !== 0;
+    const fire = keyDown && !prevKey && (buttons & chord.mod) !== 0 && (buttons & ~chord.mask) === 0;
+    prevKey = keyDown;
+    return fire;
+  }
+  return { step, mask: chord ? chord.mask : 0, modBit: chord ? chord.mod : 0 };
+}
+
+module.exports = { BITS, PRESETS, CHORD_KEYS, comboFor, chordFor, chordModifier, createComboDetector, createChord, createHoldToTalk, HOLD_MS, TAP_MAX_MS, TAP_GAP_MS, TALK_HOLD_MS };
