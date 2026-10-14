@@ -103,13 +103,13 @@ export const isStriking = (p: { position: number; impressions: number }) => p.po
 
 // ---------------------------------------------------------------- Search Console API
 
-async function token(): Promise<string> {
+export async function token(): Promise<string> {
   const r = await fetch(`http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token?scopes=${encodeURIComponent(SCOPE)}`, { headers: { 'Metadata-Flavor': 'Google' } });
   if (!r.ok) throw new Error(`no token from the metadata server (HTTP ${r.status}): this runs on Cloud Run`);
   return String((await r.json()).access_token || '');
 }
 
-async function findSite(tok: string): Promise<string> {
+export async function findSite(tok: string): Promise<string> {
   const r = await fetch(`${API}/sites`, { headers: { Authorization: `Bearer ${tok}` } });
   const j: any = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(`Search Console sites: HTTP ${r.status} ${JSON.stringify(j).slice(0, 200)}`);
@@ -120,7 +120,7 @@ async function findSite(tok: string): Promise<string> {
   return site;
 }
 
-async function pullRows(tok: string, site: string, start: string, end: string): Promise<Row[]> {
+export async function pullRows(tok: string, site: string, start: string, end: string): Promise<Row[]> {
   const out: Row[] = [];
   for (let startRow = 0; startRow < 100_000; startRow += 25_000) {
     const r = await fetch(`${API}/sites/${encodeURIComponent(site)}/searchAnalytics/query`, {
