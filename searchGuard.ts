@@ -5,9 +5,14 @@
  * month across the project, then $14 per 1,000. Three guards, all tunable with environment variables:
  *   - per player per day: FREE_DAILY_SEARCHES (default 3), PREMIUM_DAILY_SEARCHES (default 10); counted on the player's
  *     user document (searchesToday / searchDay). Guests share the free allowance, counted in memory per guest id.
- *   - whole app per month: MONTHLY_SEARCH_CAP (default 5000, the free allowance), counted in Firestore at
- *     system/searchBudget { month: 'YYYY-MM', count }. Chat and the Steam Deck web search both count toward it.
- *   - a warning in the logs at 80% of the monthly cap, and when it's reached.
+ *   - per month, two separate shares, counted in Firestore at system/searchBudget { month: 'YYYY-MM', count, pipeline,
+ *     players, flagship } (count: all of them):
+ *       players (chat, the Steam Deck's web search): PLAYER_MONTHLY_SEARCHES (2,000), their own reserve, which the
+ *         pipeline can never use; past the free 5,000 a month they're paid ($14 per 1,000).
+ *       the pipeline and the flagship builds together: pipelineShare(month), PIPELINE_MONTHLY_SEARCHES (4,800) or a
+ *         month's own share in PIPELINE_MONTHLY_SEARCHES_BY_MONTH ("2026-10:6500"); every searching call of theirs
+ *         stops there (scripts/guides/common.ts).
+ *   - a warning in the logs when the players' reserve is 80% used, and when it's used up.
  * When a guard says no, the question is answered without search (never an error for the player), and the AI is told to
  * mark exact game data as unconfirmed.
  *
@@ -22,7 +27,15 @@ import { apiLimits, searchesToday, recordSearchDay, playerSearchOk } from './api
 const num = (v: string | undefined, d: number) => (v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
 const FREE_DAILY = () => num(process.env.FREE_DAILY_SEARCHES, 3);
 const PREMIUM_DAILY = () => num(process.env.PREMIUM_DAILY_SEARCHES, 10);
-const MONTHLY_CAP = () => num(process.env.MONTHLY_SEARCH_CAP, 5000);
+/** The players' own searches a month (their reserve; the pipeline never uses it). */
+export const PLAYER_MONTHLY = () => num(process.env.PLAYER_MONTHLY_SEARCHES, 2000);
+/** The pipeline's (and the flagship builds') searches for a month: that month's own share, else the default. */
+export function pipelineShare(month = new Date().toISOString().slice(0, 7)): number {
+  const m = (process.env.PIPELINE_MONTHLY_SEARCHES_BY_MONTH ?? '2026-10:6500').split(',').map((x) => x.trim().split(':')).find(([k]) => k === month);
+  return m && Number.isFinite(Number(m[1])) ? Number(m[1]) : num(process.env.PIPELINE_MONTHLY_SEARCHES, 4800);
+}
+export type SearchWho = 'pipeline' | 'players' | 'flagship';
+export type SearchMonth = { month: string; count: number; pipeline: number; players: number; flagship: number };
 
 const today = () => new Date().toISOString().slice(0, 10);
 const thisMonth = () => new Date().toISOString().slice(0, 7);
@@ -33,49 +46,70 @@ export function countSearches(response: any): number {
   return Array.isArray(q) ? q.length : 0;
 }
 
-// ---- whole-app monthly budget (cached for a minute, so it isn't read on every question) ----
-let monthly = { month: '', count: 0, readAt: 0 };
+// ---- the month's searches, by who (cached for a minute, so it isn't read on every question) ----
+const zero = (month: string): SearchMonth => ({ month, count: 0, pipeline: 0, players: 0, flagship: 0 });
+/**
+ * The month's counts from the document. A month counted before the split (October 2026 until the shares were
+ * deployed) has only `count`: all of it is taken as the pipeline's, which it nearly all was.
+ */
+export function splitOf(d: any): SearchMonth {
+  const count = Number(d?.count) || 0;
+  const players = Number(d?.players) || 0, flagship = Number(d?.flagship) || 0;
+  const pipeline = d?.pipeline === undefined ? Math.max(0, count - players - flagship) : Number(d.pipeline) || 0;
+  return { month: String(d?.month || ''), count, pipeline, players, flagship };
+}
+let monthly: SearchMonth & { readAt: number } = { ...zero(''), readAt: 0 };
 let warned80 = '';
 let warnedCap = '';
 
-async function monthlyCount(): Promise<number> {
+/** This month's searches: all of them, and the pipeline's, the players' and the flagship builds'. */
+export async function searchMonth(fresh = false): Promise<SearchMonth> {
   const m = thisMonth();
-  if (monthly.month === m && Date.now() - monthly.readAt < 60_000) return monthly.count;
+  if (!fresh && monthly.month === m && Date.now() - monthly.readAt < 60_000) return monthly;
   try {
     const snap = await getFirestore().collection('system').doc('searchBudget').get();
-    const d = snap.exists ? snap.data() : null;
-    monthly = { month: m, count: d && d.month === m ? Number(d.count) || 0 : 0, readAt: Date.now() };
+    const d: any = snap.exists ? snap.data() : null;
+    monthly = d && d.month === m ? { ...splitOf(d), month: m, readAt: Date.now() } : { ...zero(m), readAt: Date.now() };
   } catch {
-    monthly = { month: m, count: monthly.month === m ? monthly.count : 0, readAt: Date.now() };
+    monthly = { ...(monthly.month === m ? monthly : zero(m)), readAt: Date.now() };
   }
-  return monthly.count;
+  return monthly;
 }
 
+/** Searches the pipeline and the flagship builds may still run this month (their share; never the players'). */
+export async function pipelineSearchRoom(fresh = false): Promise<number> {
+  const s = await searchMonth(fresh);
+  return Math.max(0, pipelineShare(s.month) - s.pipeline - s.flagship);
+}
+
+/** May players' features search this month? Their own reserve, whatever the pipeline has used. */
 export async function monthlyBudgetOk(): Promise<boolean> {
-  const cap = MONTHLY_CAP();
-  const used = await monthlyCount();
+  const cap = PLAYER_MONTHLY();
+  const used = (await searchMonth()).players;
   if (used >= cap) {
     if (warnedCap !== thisMonth()) {
       warnedCap = thisMonth();
-      console.warn(`[search] Monthly search cap reached (${used}/${cap}). Answers run without Google Search until next month. Raise MONTHLY_SEARCH_CAP to allow more.`);
+      console.warn(`[search] Players' monthly searches used up (${used}/${cap}). Answers run without Google Search until next month. Raise PLAYER_MONTHLY_SEARCHES to allow more.`);
     }
     return false;
   }
   return true;
 }
 
-/** Add searches to the monthly count (fire-and-forget). */
-export function recordMonthly(n: number): void {
+/**
+ * Add searches to the month's count (fire-and-forget), for who ran them. Scripts default to the pipeline, or the
+ * flagship builds when the job says so (SEARCH_BUDGET_EXEMPT=1: their dollars are a separate budget, their searches
+ * count toward the pipeline's share).
+ */
+export function recordMonthly(n: number, who: SearchWho = process.env.SEARCH_BUDGET_EXEMPT === '1' ? 'flagship' : 'pipeline'): void {
   if (!n) return;
-  // Separately funded work (the flagship guide builds) keeps its own budget and doesn't use up the players' searches.
-  if (process.env.SEARCH_BUDGET_EXEMPT === '1') return;
   const m = thisMonth();
-  if (monthly.month !== m) monthly = { month: m, count: 0, readAt: 0 };
+  if (monthly.month !== m) monthly = { ...zero(m), readAt: 0 };
   monthly.count += n;
-  const cap = MONTHLY_CAP();
-  if (monthly.count >= cap * 0.8 && warned80 !== m) {
+  monthly[who] += n;
+  if (who === 'players' && monthly.players >= PLAYER_MONTHLY() * 0.8 && warned80 !== m) {
     warned80 = m;
-    console.warn(`[search] ${monthly.count} of ${cap} monthly searches used (80%).`);
+    console.warn(`[search] ${monthly.players} of the players' ${PLAYER_MONTHLY()} monthly searches used (80%).`);
   }
   let db: ReturnType<typeof getFirestore>;
   try {
@@ -87,9 +121,9 @@ export function recordMonthly(n: number): void {
   db
     .runTransaction(async (tx) => {
       const snap = await tx.get(ref);
-      const d = snap.exists ? snap.data() : null;
-      const count = d && d.month === m ? Number(d.count) || 0 : 0;
-      tx.set(ref, { month: m, count: count + n, updatedAt: Date.now() });
+      const d: any = snap.exists ? snap.data() : null;
+      const cur = d && d.month === m ? splitOf(d) : zero(m);
+      tx.set(ref, { month: m, count: cur.count + n, pipeline: cur.pipeline, players: cur.players, flagship: cur.flagship, [who]: cur[who] + n, updatedAt: Date.now() });
     })
     .catch((e) => console.warn('[search] could not update the monthly count:', e?.message));
 }
@@ -133,7 +167,7 @@ export async function playerSearchesToday(): Promise<boolean> {
 /** Searches players' features ran (chat, the Steam Deck's web search): the month's count and today's. */
 export function recordPlayerSearches(n: number): void {
   if (!n) return;
-  recordMonthly(n);
+  recordMonthly(n, 'players');
   void recordSearchDay(n, 'players');
 }
 
