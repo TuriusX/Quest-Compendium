@@ -35,6 +35,13 @@ service cloud.firestore {
 
       // No deleting: a fresh record would reset the daily question counts.
       allow delete: if false;
+
+      // Your playthrough (the app's playthrough memory), one document per game: the player's own, to read, write,
+      // clear or delete.
+      match /playthrough/{game} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && request.resource.data.entries is list && request.resource.data.entries.size() <= 40;
+      }
     }
 
     // App configuration (client update checks, desktop version info): public read, no client writes

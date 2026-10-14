@@ -74,13 +74,33 @@ export const DONE_RULES = `
 <qc-done>["Defend the Emerald Grove gate"]</qc-done>
   Only for things that are actually finished, never for what's still to do.`;
 
+/**
+ * With playthrough memory on (utils/playthrough.ts): the same block can also note a choice the player made or a key
+ * item they now have, as objects.
+ */
+export const PLAYTHROUGH_RULES = `
+- Playthrough memory: in the same <qc-done> line you may also note, as objects, a choice the player has clearly made
+  (from what they said or what the screen shows) and a key item they now have:
+<qc-done>["Defend the Emerald Grove gate", {"choice": "Sided with the tieflings"}, {"found": "Moonlantern"}]</qc-done>
+  When the player tells you they made a choice or got a key item ("I sided with…", "I gave the Deathroot to Gurranq",
+  "I picked up the Golden Seed"), always add this line with it. Only what's certain; a few words each; never guess,
+  never note ordinary loot.`;
+
 /** Pull the <qc-done> list out of an answer (always removed from the text). */
-export function extractDone(text: string): { text: string; done: string[] } {
+export function extractDone(text: string): { text: string; done: string[]; remember: { kind: 'choice' | 'found'; text: string }[] } {
   const done: string[] = [];
+  const remember: { kind: 'choice' | 'found'; text: string }[] = [];
   const cleaned = String(text || '').replace(/(?:```[a-z]*\s*)?<qc-done>([\s\S]*?)<\/qc-done>(?:\s*```)?/gi, (_m, body) => {
     try {
       const j = JSON.parse(String(body).trim());
       for (const x of Array.isArray(j) ? j : [j]) {
+        // A choice or key item (playthrough memory).
+        if (x && typeof x === 'object' && (typeof x.choice === 'string' || typeof x.found === 'string')) {
+          const kind: 'choice' | 'found' = typeof x.choice === 'string' ? 'choice' : 'found';
+          const t = clean(x[kind]);
+          if (t.length >= 3) remember.push({ kind, text: t });
+          continue;
+        }
         const t = clean(typeof x === 'string' ? x : x?.text);
         if (t.length >= 3) done.push(t);
       }
@@ -89,5 +109,5 @@ export function extractDone(text: string): { text: string; done: string[] } {
     }
     return '';
   });
-  return { text: done.length || cleaned !== text ? cleaned.replace(/\n{3,}/g, '\n\n').trimEnd() : cleaned, done: done.slice(0, 3) };
+  return { text: done.length || remember.length || cleaned !== text ? cleaned.replace(/\n{3,}/g, '\n\n').trimEnd() : cleaned, done: done.slice(0, 3), remember: remember.slice(0, 3) };
 }

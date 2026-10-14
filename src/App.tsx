@@ -46,6 +46,12 @@ import { showFirstRunHints } from './utils/sessions';
 import { formatShortcut } from './utils/shortcut';
 import { setEntryDone, readDone, exportAllDone, importAllDone, GUIDE_DONE_EVENT } from './utils/guideProgress';
 import { SPOT_EVENT, type SpotRequest } from './utils/spotIt';
+import {
+  addEntries, editEntry, removeEntry, clearPlaythrough, mergePlaythrough, playthroughForRequest, readLocal, writeLocal,
+  emptyPlaythrough, OPEN_PLAYTHROUGH_EVENT, type Playthrough, type PlayKind,
+} from './utils/playthrough';
+import { readCloud, writeCloud } from './utils/playthroughCloud';
+import { PlaythroughPanel } from './components/PlaythroughPanel';
 import { appSource, isPhone } from './utils/source';
 import { useGameArt } from './utils/gameArt';
 
@@ -849,6 +855,33 @@ export default function App() {
   })();
   const trackerGuideKeyRef = useRef(trackerGame.guideKey);
   trackerGuideKeyRef.current = trackerGame.guideKey;
+  // Playthrough memory: an item ticked in the guide of the area the player is in (in the Guide, on the quest log, or with
+  // its marker) goes on "Found" in Your playthrough.
+  const guideTickPrev = useRef<{ id: string; set: Set<string> } | null>(null);
+  const areaPageLoaded = !!trackerGame.guideArea?.page;
+  useEffect(() => {
+    const area = trackerGame.guideArea;
+    const key = trackerGame.guideKey;
+    if (!area || !key || !area.page) return;
+    const id = `${key}:${area.slug}`;
+    guideTickPrev.current = { id, set: readDone(key, area.slug) };
+    const on = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (d.key !== key || d.slug !== area.slug) return;
+      const now = readDone(key, area.slug);
+      const prev = guideTickPrev.current?.id === id ? guideTickPrev.current.set : new Set<string>();
+      guideTickPrev.current = { id, set: now };
+      const items = [...now]
+        .filter((x) => !prev.has(x))
+        .flatMap((x) => x.split('+'))
+        .map((x) => (area.page?.items || []).find((it: any) => it.id === x))
+        .filter(Boolean)
+        .map((it: any) => ({ kind: 'found' as PlayKind, text: String(it.name || it.text || ''), source: 'guide' as const }));
+      rememberPlayRef.current(items);
+    };
+    window.addEventListener(GUIDE_DONE_EVENT, on);
+    return () => window.removeEventListener(GUIDE_DONE_EVENT, on);
+  }, [trackerGame.guideKey, trackerGame.guideArea?.slug, areaPageLoaded]);
   // A guide entry's marker ticked (on screen, in the answer's list or on the quest log): the entry is ticked in the
   // guide too, so it leaves the quest log, the missables under answers and the next answers' guide markers.
   const recentMessages = activeTab?.messages;
@@ -1091,9 +1124,72 @@ export default function App() {
   /** Progress memory: add finished things to this game's "already done" list (utils/progressMemory). */
   const rememberDone = (t: GameTab, items: { text: string; kind: DoneKind }[]) => {
     const key = gameProgressKey(t);
-    if (!key || !items.length) return;
+    if (!key || !items.length || settings.playthroughMemory === false) return;
     setSettings((s) => ({ ...s, gameDone: { ...(s.gameDone || {}), [key]: addDone(s.gameDone?.[key], items) } }));
   };
+  // ---- Playthrough memory (roadmap item 8, utils/playthrough.ts) ----
+  // The active game's record: this computer's copy merged with the account's (signed in), saved to both on change.
+  const memoryOn = settings.playthroughMemory !== false;
+  const playGame = activeTab ? (activeTab.activeSteamGame?.name || activeTab.name || '').trim() : '';
+  const playOwner = user && !(user as any).isGuest ? String((user as any).uid) : 'guest';
+  const playUid = user && !(user as any).isGuest ? String((user as any).uid) : '';
+  const [play, setPlay] = useState<Playthrough>(emptyPlaythrough());
+  const playRef = useRef(play);
+  playRef.current = play;
+  const playFor = useRef('');
+  useEffect(() => {
+    if (!playGame) return;
+    const id = `${playOwner}:${playGame}`;
+    playFor.current = id;
+    const local = readLocal(playOwner, playGame);
+    setPlay(local);
+    if (!playUid) return;
+    void readCloud(playUid, playGame).then((cloud) => {
+      if (playFor.current !== id || !cloud) return;
+      const merged = mergePlaythrough(readLocal(playOwner, playGame), cloud);
+      setPlay(merged);
+      writeLocal(playOwner, playGame, merged);
+    });
+  }, [playGame, playOwner, playUid]);
+  const playSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const updatePlay = (fn: (p: Playthrough) => Playthrough) => {
+    if (!playGame) return;
+    const next = fn(playRef.current);
+    if (next === playRef.current) return;
+    playRef.current = next;
+    setPlay(next);
+    writeLocal(playOwner, playGame, next);
+    if (!playUid) return;
+    const uid = playUid, game = playGame;
+    if (playSaveTimer.current) clearTimeout(playSaveTimer.current);
+    playSaveTimer.current = setTimeout(() => void writeCloud(uid, game, next), 800);
+  };
+  /** Choices and key items an answer noted, or a guide entry ticked: added when the memory is on. */
+  const rememberPlay = (items: { kind: PlayKind; text: string; source: 'answer' | 'guide' }[]) => {
+    if (!memoryOn || !items.length) return;
+    updatePlay((p) => addEntries(p, items));
+  };
+  const rememberPlayRef = useRef(rememberPlay);
+  rememberPlayRef.current = rememberPlay;
+  const [playOpen, setPlayOpen] = useState(false);
+  useEffect(() => {
+    const open = () => setPlayOpen(true);
+    window.addEventListener(OPEN_PLAYTHROUGH_EVENT, open);
+    return () => window.removeEventListener(OPEN_PLAYTHROUGH_EVENT, open);
+  }, []);
+  /** "Already done" edits from the panel (settings.gameDone). */
+  const editDone = (index: number, text: string | null) => {
+    const key = activeTab ? gameProgressKey(activeTab) : '';
+    if (!key) return;
+    setSettings((s) => {
+      const list = [...(s.gameDone?.[key] || [])];
+      if (index < 0 || index >= list.length) return s;
+      if (text === null || text.trim().length < 2) list.splice(index, 1);
+      else list[index] = { ...list[index], text: text.replace(/\s+/g, ' ').trim().slice(0, 120) };
+      return { ...s, gameDone: { ...(s.gameDone || {}), [key]: list } };
+    });
+  };
+
   /** Moving on to a later guide area: the area left behind goes on the "already done" list. */
   const noteAreaChange = (t: GameTab, from: string | undefined, to: string | undefined) => {
     const names = (trackerGameRef.current.guideArea?.areas || []).map((a) => a.name);
@@ -1799,7 +1895,9 @@ export default function App() {
           // game starts from what the player's other compendiums for it already know.
           place: activeTab.place || settings.gameProgress?.[gameProgressKey(activeTab)] || null,
           // Progress memory: what the player has already done in this game, so answers never send them back.
-          done: doneForRequest(settings.gameDone?.[gameProgressKey(activeTab)]),
+          done: memoryOn ? doneForRequest(settings.gameDone?.[gameProgressKey(activeTab)]) : [],
+          // Playthrough memory: choices made, key items and (if the player wants) their Notes. Off: nothing is sent.
+          ...(memoryOn ? { playthrough: playthroughForRequest(play, activeTab.notes) || { choices: [], found: [], notes: '' } } : {}),
           // The guide area's ticked entries: the answer only marks guide entries the player hasn't ticked.
           ...(trackerGameRef.current.guideArea ? { guideDone: { slug: trackerGameRef.current.guideArea.slug, ids: [...trackerGameRef.current.guideArea.done].slice(0, 300) } } : {}),
         }),
@@ -1986,6 +2084,11 @@ export default function App() {
         ...(fightOver ? [{ text: fightOver, kind: 'fight' as DoneKind }] : []),
         ...(Array.isArray(data.done) ? data.done.filter((x: unknown) => typeof x === 'string').slice(0, 3).map((text: string) => ({ text, kind: 'quest' as DoneKind })) : []),
       ]);
+      // Playthrough memory: a choice the player made or a key item they have, as the answer noted it.
+      rememberPlay((Array.isArray(data.remember) ? data.remember : [])
+        .filter((x: any) => x && (x.kind === 'choice' || x.kind === 'found') && typeof x.text === 'string')
+        .slice(0, 3)
+        .map((x: any) => ({ kind: x.kind as PlayKind, text: x.text, source: 'answer' as const })));
 
       setTabs(prev => {
         const nextTabs = prev.map(t => {
@@ -2586,6 +2689,39 @@ export default function App() {
                 openAiApiKey={settings.openAiApiKey}
                 compact={compact}
                 onExpand={() => chooseView('full')}
+              />
+            )}
+
+            {/* Your playthrough (roadmap item 8) */}
+            {activeTab && (
+              <PlaythroughPanel
+                open={playOpen}
+                onClose={() => setPlayOpen(false)}
+                game={playGame}
+                memoryOn={memoryOn}
+                place={activeTab.place?.name || ''}
+                story={activeTab.place?.story || ''}
+                onPlace={(name, story) => {
+                  const next = { ...(activeTab.place || {}), name, confirmed: !!name, ...(story ? { story, storyConfirmed: true } : { story: undefined, storyConfirmed: false }) };
+                  setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));
+                  if (name) rememberGameProgress(activeTab, next);
+                }}
+                play={play}
+                done={settings.gameDone?.[gameProgressKey(activeTab)] || []}
+                onAdd={(kind, text) => updatePlay((p) => addEntries(p, [{ kind, text, source: 'you' }]))}
+                onEdit={(id, text) => updatePlay((p) => editEntry(p, id, text))}
+                onRemove={(id) => updatePlay((p) => removeEntry(p, id))}
+                onEditDone={(i, text) => editDone(i, text)}
+                onRemoveDone={(i) => editDone(i, null)}
+                notesInAnswers={play.notesInAnswers !== false}
+                onNotesInAnswers={(on) => updatePlay((p) => ({ ...p, notesInAnswers: on, updatedAt: Date.now() }))}
+                onOpenNotes={() => { setPlayOpen(false); setIsNotesOpen(true); }}
+                onClear={() => {
+                  updatePlay((p) => clearPlaythrough(p));
+                  const key = gameProgressKey(activeTab);
+                  setSettings((s) => ({ ...s, gameDone: { ...(s.gameDone || {}), [key]: [] } }));
+                }}
+                onOpenSettings={() => { setPlayOpen(false); setIsSettingsOpen(true); }}
               />
             )}
 

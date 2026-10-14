@@ -23,7 +23,7 @@ import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
 import { registerSpot } from './spot';
-import { DONE_RULES, extractDone } from './src/utils/progressMemory';
+import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode } from './searchPolicy';
@@ -1189,6 +1189,20 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       if (doneList.length) {
         situationalContext += `\n[ALREADY DONE in this game (most recent first): ${doneList.join(' | ')}. Never suggest doing any of these, or going back for them, unless the player asks about one.]\n`;
       }
+      // Playthrough memory (src/utils/playthrough.ts): the choices the player made, the key items they have and their
+      // own notes, as the app sends them (at most 1,200 characters; the player sees and edits all of it).
+      const play = req.body.playthrough && typeof req.body.playthrough === 'object' ? req.body.playthrough : null;
+      if (play) {
+        const list = (v: unknown) => (Array.isArray(v) ? v : []).map((x) => String(x ?? '').replace(/\s+/g, ' ').trim().slice(0, 160)).filter(Boolean).slice(0, 40);
+        const choices = list(play.choices), found = list(play.found);
+        const notes = String(play.notes ?? '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+        const parts = [
+          choices.length ? `choices made: ${choices.join(' | ')}` : '',
+          found.length ? `key items they have: ${found.join(' | ')}` : '',
+          notes ? `their own notes: ${notes}` : '',
+        ].filter(Boolean);
+        if (parts.length) situationalContext += `\n[YOUR PLAYTHROUGH (what the player's save looks like; they can see and edit this): ${parts.join('. ').slice(0, 1400)}. Fit the answer to it, but trust a newer screenshot or what the player says over it.]\n`;
+      }
       if (story?.confirmed) {
         situationalContext += `\n[PLAYER'S CONFIRMED STORY POINT: ${story.text}. The player confirmed this; trust it over your own guess, and only mention what's available at this point.]\n`;
       } else if (story) {
@@ -1226,7 +1240,7 @@ Many games reuse near-identical rooms and tiles, so never assume a specific plac
     even when you're sure.
   - If a confirmed story point is given above and the screen still fits it, repeat it with storySure true.
   - Leave the line out entirely for menus, title screens, battles, loading screens, or anything that isn't a place.
-${DONE_RULES}
+${DONE_RULES}${req.body.playthrough ? PLAYTHROUGH_RULES : ''}
 ${ANSWER_IDENTITY}
 - Markers and on-screen people: only mark people and things you can actually see in this screenshot right now. Never
   mark someone who "should" be there (an NPC from a story event); if you can't see them, don't mark them.
@@ -1798,6 +1812,8 @@ percentages:
         ...(placeRead ? { placeRead: { area: placeRead.area, seenText: placeRead.seenText, ...(placeRead.story ? { story: placeRead.story } : {}) } } : {}),
         // Finished content the answer reported, and the fight a combat answer was about (progress memory).
         ...(doneParsed.done.length ? { done: doneParsed.done } : {}),
+        // Choices and key items the answer noted (playthrough memory; only when the app has it on).
+        ...(req.body.playthrough && doneParsed.remember.length ? { remember: doneParsed.remember } : {}),
         ...(combatParsed.combat && combatParsed.fight ? { fight: combatParsed.fight } : {}),
         ...(factsSaved ? { factsSaved } : {}),
         ...(correctionIds.length ? { correctionIds } : {}),
@@ -2380,6 +2396,7 @@ percentages:
       <li><strong>Account Information:</strong> If you sign in, we collect your email address and authentication credentials managed securely through Firebase Authentication.</li>
       <li><strong>Steam Profile & Gameplay Data:</strong> If you link your public Steam ID, we retrieve publicly accessible profile data, game libraries, and achievements via the public Steam Web API to display your in-game statistics and patch notes. We never collect or access your Steam passwords or login credentials.</li>
       <li><strong>User-Submitted Queries & Content:</strong> Questions you ask the AI compendium, chat histories, personal playthrough notes, and quest checklist items you save.</li>
+      <li><strong>Your Playthrough:</strong> For each game, Quest Compendium keeps a short record of your playthrough so answers fit your save: where you are, choices you made, what you've finished and found, and any notes you choose to include. It is built from your questions and answers, your quest log and your guide checklists, and is used only to answer your own questions. You can see, edit or clear it at any time in &ldquo;Your playthrough&rdquo;, and turn it off in Settings. If you're signed in, it's stored with your account so it syncs across your devices.</li>
       <li><strong>User-Initiated Audio & Screenshots:</strong> If you explicitly initiate voice input or attach an in-game screenshot for visual puzzle solving, the audio or image data is sent securely to our backend and processed by AI models to fulfill your request. We do not perform background screen recording or passive microphone listening.</li>
       <li><strong>Reported Answers:</strong> If you report an AI answer (the Report button on an answer), we store the report for review: the reason and any comment you add, the question and the answer, the game and place, the AI model and app version, the date, and an anonymised identifier instead of your account. Reports are used only to review and improve answers and guides, and are deleted on request with your other data.</li>
       <li><strong>Payment Information:</strong> Subscriptions and upgrades are processed securely via Stripe. We do not store or process credit card numbers or financial account details on our servers.</li>
@@ -2408,7 +2425,7 @@ percentages:
     <p>All data transmitted between the application, our server, and third-party APIs is encrypted in transit using industry-standard Transport Layer Security (TLS/HTTPS). Local settings and cache files are stored securely on your local device.</p>
 
     <h2>5. Data Retention and Deletion</h2>
-    <p>You can delete your local compendium tabs and notes at any time from within the application. If you would like to request deletion of your account or cloud-stored data, please contact us at the email below.</p>
+    <p>You can delete your local compendium tabs and notes at any time from within the application. Clearing a game in &ldquo;Your playthrough&rdquo; deletes that record from your device and from our servers. If you would like to request deletion of your account or cloud-stored data, please contact us at the email below.</p>
 
     <h2>6. Children&rsquo;s Privacy</h2>
     <p>Quest Compendium is not directed to children under the age of 13, and we do not knowingly collect personal information from children under 13.</p>

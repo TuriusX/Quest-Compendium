@@ -249,6 +249,11 @@ export interface AppSettings {
    * never feed the quest log (its "From your last answer" comes from the answer's steps).
    */
   showPointersOnScreen?: boolean;
+  /**
+   * Playthrough memory (utils/playthrough.ts, on by default): off, nothing is noted about the player's playthrough
+   * (choices, key items, what's done) and none of it is sent with questions.
+   */
+  playthroughMemory?: boolean;
   /** Desktop: markers stay on the things they point at while the game scrolls. */
   stickyPointers?: boolean;
   /** Desktop: markers show up in screenshots and screen recordings. */

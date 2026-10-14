@@ -16,6 +16,7 @@ import {
 } from './icons';
 import { GameTab } from '../types';
 import { playBlipSound } from '../utils/audio';
+import { useT } from '../i18n';
 
 interface PlaythroughNotepadProps {
   isOpen: boolean;
@@ -32,6 +33,7 @@ export const PlaythroughNotepad: React.FC<PlaythroughNotepadProps> = ({
   onUpdateNotes,
   soundEnabled,
 }) => {
+  const t = useT();
   const gameName = activeTab?.name || 'Current Game';
   const initialNotes = activeTab?.notes || '';
   const [content, setContent] = useState(initialNotes);
@@ -105,6 +107,10 @@ export const PlaythroughNotepad: React.FC<PlaythroughNotepadProps> = ({
               <p className="text-[11px] text-zinc-400 font-mono">
                 {gameName} • Auto-saved ({lastSaved})
               </p>
+              {/* Your playthrough: what answers remember about this game (the Notes can go with it). */}
+              <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('qc-open-playthrough'))} className="mt-0.5 text-[11px] font-semibold text-[var(--accent-color)] hover:brightness-125 cursor-pointer">
+                {t('play.title')} →
+              </button>
             </div>
           </div>
 

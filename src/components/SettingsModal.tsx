@@ -1070,6 +1070,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {activeTab === 'account' && (
               <div className="space-y-3 animate-in slide-in-from-right-4 fade-in duration-300">
+                {/* Playthrough memory (on by default): off, nothing about the playthrough is noted or sent with questions. */}
+                <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
+                  <div>
+                    <div className="text-xs font-semibold text-white">{tr('set.playMemory')}</div>
+                    <div className="text-[11px] text-zinc-400">{tr('set.playMemoryDesc')}</div>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={settings.playthroughMemory !== false}
+                    aria-label={tr('set.playMemory')}
+                    onClick={() => {
+                      playBlipSound(soundEnabled);
+                      onUpdateSettings({ playthroughMemory: settings.playthroughMemory === false });
+                    }}
+                    className={`w-11 h-6 flex-shrink-0 rounded-full p-0.5 flex transition-colors cursor-pointer ${
+                      settings.playthroughMemory !== false ? 'bg-[var(--accent-color)] justify-end' : 'bg-white/15 justify-start'
+                    }`}
+                  >
+                    <span className="w-5 h-5 rounded-full bg-[#16101f]" />
+                  </button>
+                </div>
+
                 {/* Plain-language sync status */}
                 <div className={`p-4 rounded-xl border flex items-center gap-3 ${
                   effectiveDiag?.lastWriteError ? 'bg-rose-500/[0.06] border-rose-500/30' : 'bg-emerald-500/[0.05] border-emerald-500/25'

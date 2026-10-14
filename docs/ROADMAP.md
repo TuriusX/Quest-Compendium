@@ -31,7 +31,7 @@ Owner: Noah. Source: the project mind map (Oct 13, 2026). Keep this file in the 
 
 | # | Item | What it is | Status |
 |---|------|-----------|--------|
-| 8 | **Playthrough memory** *(propose first)* | Per game, per account: the choices the player made, where they are, what they've found, built from conversations, quest log and guide ticks. Shown to the player in a "Your playthrough" panel where they can edit or clear it. Added to answer context so answers fit their save. | Idea |
+| 8 | **Playthrough memory** *(propose first)* | Per game, per account: the choices the player made, where they are, what they've found, built from conversations, quest log and guide ticks. Shown to the player in a "Your playthrough" panel where they can edit or clear it. Added to answer context so answers fit their save. | Built (0.5.8) |
 | 9 | **"Previously on…" recap** | When a player returns to a game after 3+ days, a three-line catch-up from playthrough memory and the quest log. Uses Fast, or no AI if it can be built from stored data. | Idea |
 | 10 | **Steam progress sync** *(propose first)* | With explicit permission, read the player's unlocked Steam achievements for the running game to estimate story progress. Include privacy wording and how the Steam ID is obtained. | Idea |
 
