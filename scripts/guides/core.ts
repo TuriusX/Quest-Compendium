@@ -404,6 +404,8 @@ ${r.stopped}; the next run carries on.`); if (wentLive) await publishSiteForCore
         const scope = { dollars: 0, searches: 0 };
         try {
           const r = await usageScope.run(scope, () => buildEntity(key, e.name, { type: e.type }));
+          // The entity build counts its spending in its own scope: its result carries the real cost.
+          scope.dollars = Math.max(scope.dollars, Number(r.dollars) || 0);
           if (r.status === 'published') wentLive = true;
           else pg.failedEntities = [...pg.failedEntities.filter((f: any) => f.slug !== e.slug), { slug: e.slug, name: e.name, reason: `review ${r.score}` }];
         } catch (err: any) {
@@ -476,6 +478,8 @@ export async function retryOnly(items: string[]): Promise<{ item: string; status
         const doc: any = (await db().collection('guideCompendium').doc(key).collection('entities').doc(slug).get()).data();
         const name = String(doc?.name || known?.name || pg.failedEntities.find((f: any) => f.slug === slug)?.name || slug);
         const r = await usageScope.run(scope, () => buildEntity(key, name, { type: doc?.type || known?.type }));
+        // The entity build counts its spending in its own scope: its result carries the real cost.
+        scope.dollars = Math.max(scope.dollars, Number(r.dollars) || 0);
         await chargeCore(scope.dollars, key);
         if (r.status === 'published') {
           wentLive = true;
