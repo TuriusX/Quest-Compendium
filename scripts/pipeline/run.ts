@@ -74,6 +74,7 @@ import { steamCandidates } from './steam';
 import { promote } from '../guides/promote';
 import { SEARCH_DOLLARS } from '../../usage';
 import { spotWeekLine } from '../../spot';
+import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
 import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY } from '../../searchGuard';
 import { FieldPath } from 'firebase-admin/firestore';
 import { postDiscord, summaryText } from './summary';
@@ -517,6 +518,28 @@ async function main() {
     if (today >= '2026-12-01' && today < '2027-01-01' && !state.flashCostReviewDone) {
       RUN.head.push(`📅 Before Jan 1: Flash and both read-aloud voices double in price. Review Fast/Flash costs: the monthly cost at current usage with the new prices, and options (allowances, Premium price, or a cheaper model tested with scripts/evals/model-compare).`);
     }
+  }
+  // The core programme's order by demand (system/core.guides), re-ranked on the month's first run: Search Console
+  // impressions over 30 days plus players' questions (demandReport.ts); complete guides stay first, deferred ones
+  // (system/core.deferred) stay out until the owner puts them back. The new order goes at the top of the summary.
+  try {
+    const coreRef = db().collection('system').doc('core');
+    const cs: any = (await coreRef.get()).data() || {};
+    if (Array.isArray(cs.guides) && cs.guides.length && cs.rankedMonth !== month) {
+      const dm = await guideDemand();
+      const done = new Set<string>((cs.guides as string[]).filter((k) => cs.perGuide?.[k]?.done));
+      const deferred = new Set<string>((cs.deferred || []).map(String));
+      const order = rankByDemand(cs.guides, done, deferred, dm.guides);
+      await coreRef.set({ guides: order, rankedMonth: month, rankedAt: Date.now() }, { merge: true });
+      const nameOf = async (k: string) => shortName(String((await db().collection('guides').doc(k).get()).data()?.game || k));
+      const open: string[] = [];
+      for (const k of order.filter((x) => !done.has(x))) open.push(`${await nameOf(k)} ${demandScore(dm.guides[k])}`);
+      const def: string[] = [];
+      for (const k of deferred) def.push(`${await nameOf(k)} ${demandScore(dm.guides[k])}`);
+      RUN.head.push(`🔀 Core guides re-ranked for ${new Date().toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })} by demand (${dm.from} to ${dm.to}: search impressions + ${QUESTION_WEIGHT} × players' questions): ${open.join(', ') || 'none left'}.${def.length ? ` Deferred: ${def.join(', ')} (put one back in system/core.guides to build it).` : ''}`);
+    }
+  } catch (e: any) {
+    console.warn(`Core re-rank skipped: ${e?.message}`);
   }
   // "Spot it" (roadmap item 7, 0.5.8): its weekly numbers and hit rate, on Mondays for the first four weeks after its
   // first use (spotStats/{day}, and 👎 "marker" reports on its results in answerFeedback).

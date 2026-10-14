@@ -13,7 +13,13 @@ import { token, findSite, pullRows } from './searchConsole';
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
-async function main() {
+export type GuideDemand = { impressions: number; clicks: number; questions: number; players: number };
+/** A player's question counts as this many search impressions when ranking guides by demand. */
+export const QUESTION_WEIGHT = 10;
+export const demandScore = (g: Partial<GuideDemand> | undefined) => Number(g?.impressions || 0) + QUESTION_WEIGHT * Number(g?.questions || 0);
+
+/** Pull the last 30 days (Search Console needs the job's account) and save system/demand. Returns it. */
+export async function guideDemand(): Promise<{ from: string; to: string; rows: number; guides: Record<string, GuideDemand> }> {
   const end = new Date(Date.now() - 3 * 86_400_000);
   const start = new Date(end.getTime() - 29 * 86_400_000);
   const tok = await token();
@@ -42,9 +48,24 @@ async function main() {
     if (q || guides.has(d.id)) { const g = get(d.id); g.questions = q; g.players = p; guides.set(d.id, g); }
   }
   const out = Object.fromEntries([...guides.entries()].sort((a, b) => b[1].impressions - a[1].impressions));
-  await db().collection('system').doc('demand').set({ at: Date.now(), from: ymd(start), to: ymd(end), rows: rows.length, guides: out });
-  for (const [k, g] of Object.entries(out).slice(0, 60)) console.log(`${k}: ${g.impressions} impressions, ${g.clicks} clicks, ${g.questions} questions (${g.players} players)`);
-  console.log(`\n${rows.length} Search Console rows, ${ymd(start)} to ${ymd(end)}; saved to system/demand.`);
+  const res = { from: ymd(start), to: ymd(end), rows: rows.length, guides: out };
+  await db().collection('system').doc('demand').set({ at: Date.now(), ...res });
+  return res;
 }
 
-main().then(() => process.exit(0)).catch((e) => { console.error('demand report failed:', e?.message || e); process.exit(1); });
+/**
+ * The core programme's order by demand: guides already complete stay first (in their order), the rest by demand score,
+ * highest first; deferred guides (system/core.deferred) are left out of the order. Pure, for the monthly re-rank.
+ */
+export function rankByDemand(guides: string[], done: Set<string>, deferred: Set<string>, demand: Record<string, Partial<GuideDemand>>): string[] {
+  const keep = guides.filter((k) => !deferred.has(k));
+  return [...keep.filter((k) => done.has(k)), ...keep.filter((k) => !done.has(k)).sort((a, b) => demandScore(demand[b]) - demandScore(demand[a]))];
+}
+
+if (/demandReport\.ts$/.test(process.argv[1] || '')) {
+  guideDemand().then((r) => {
+    for (const [k, g] of Object.entries(r.guides).slice(0, 60)) console.log(`${k}: ${g.impressions} impressions, ${g.clicks} clicks, ${g.questions} questions (${g.players} players)`);
+    console.log(`\n${r.rows} Search Console rows, ${r.from} to ${r.to}; saved to system/demand.`);
+    process.exit(0);
+  }).catch((e) => { console.error('demand report failed:', e?.message || e); process.exit(1); });
+}
