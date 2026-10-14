@@ -25,9 +25,12 @@ the Store and skips all of this. Releases go to everyone at once (no staged roll
    The release must be published (not a draft, not a pre-release): that's what installed apps and the website follow.
 5. **Recent updates.** `npx tsx scripts/pipeline/changelog.ts --add 0.5.N --text "<one line>"` (translated; the
    app's "What's new" uses it too), then publish the site from the qc-deploy worktree.
-6. **Pipeline.** Rebuild the guide-pipeline image and update both jobs (guide-pipeline, guide-flagship). Check no
+6. **Server.** If anything the app relies on changed on the server since the last deploy (for example `/api/changelog`,
+   which the app's "What's new" reads), deploy it from the qc-deploy worktree: `gcloud run deploy quest-compendium
+   --source . --region us-east1 --project quest-compendium-1bccf`. Server changes stay backward compatible.
+7. **Pipeline.** Rebuild the guide-pipeline image and update both jobs (guide-pipeline, guide-flagship). Check no
    core run is publishing before publishing the site or rebuilding the image.
-7. **Microsoft Store.** Submit `Quest Compendium 0.5.N.appx` in Partner Center. Raise `config/desktop_client.minVersion`
+8. **Microsoft Store.** Submit `Quest Compendium 0.5.N.appx` in Partner Center. Raise `config/desktop_client.minVersion`
    only after Noah confirms the Store version is live.
 
 ## Rollback: pulling a bad release
