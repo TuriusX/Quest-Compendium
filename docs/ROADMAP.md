@@ -17,7 +17,7 @@ Owner: Noah. Source: the project mind map (Oct 13, 2026). Keep this file in the 
 | 1 | **Auto-update** | electron-updater against GitHub releases: check at startup and every 6 hours, download quietly, show a non-blocking "Version X is ready, restart to update" with a Later button, install on quit. Store builds skip it. Add `latest.yml` and the `.blockmap` to the release routine. | Done (0.5.6) |
 | 2 | **Code signing** | Azure Trusted Signing via `win.azureSignOptions` in electron-builder, credentials from Secret Manager. **Blocked until Noah confirms what his $9.99/month Azure "Security" charge is.** If there's no signing account, propose the setup steps instead. | Waiting on Noah |
 | 3 | **Quest log redesign** | Already specified in the Oct 13 prompt: short label plus dim detail line per objective, one progress count, quieter location row, highlight the next objective, hotkey and controller ticking, missable ⚠. | Done (0.5.6) |
-| 4 | **First-run tour** | 30-second tour on first launch: the panel hotkey, screenshot hotkey, compact view, quest log, Pro/Fast. Skippable, shown once, reachable later from the ⋯ menu. Controller-navigable, all nine languages. | Planned |
+| 4 | **First-run tour** | 30-second tour on first launch: the panel hotkey, screenshot hotkey, compact view, quest log, Pro/Fast. Skippable, shown once, reachable later from the ⋯ menu. Controller-navigable, all nine languages. | Built (0.5.7) |
 
 ## Phase 2: get more out of the guides (0.5.7)
 
