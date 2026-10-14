@@ -135,6 +135,31 @@ function igdbFacts(key: string, game: string): string {
 }
 const igdbCredit = () => !IGDB_ON ? '' : esc(ui('igdbCredit')).replace('{igdb}', '<a href="https://www.igdb.com" class="text-[#a87ffb] hover:underline" rel="noopener">IGDB</a>');
 
+/** Time to beat (IGDB players' submissions): shown only with at least this many submissions (config/igdb.ttbMinCount). */
+let TTB_MIN = 5;
+/** The game's HowLongToBeat search page: a link only (nothing is fetched or copied from that site). */
+const hltbLink = (game: string) => `<a href="https://howlongtobeat.com/?q=${encodeURIComponent(shortGame(game))}" class="underline decoration-dotted underline-offset-2 hover:text-zinc-300" rel="nofollow noopener" target="_blank">${esc(ui('ttbMore'))}</a>`;
+/** The game's IGDB time to beat in whole hours, or null when IGDB is off or has too few submissions. */
+function ttbOf(key: string): { main: number; complete: number } | null {
+  const t = IGDB_ON ? IGDB.get(key)?.ttb : null;
+  if (!t || (t.count || 0) < TTB_MIN) return null;
+  return t.main >= 1 || t.complete >= 1 ? { main: t.main >= 1 ? t.main : 0, complete: t.complete >= 1 ? t.complete : 0 } : null;
+}
+/**
+ * A guide front page's quiet line: "About 50 h main story · 170 h to complete · More on HowLongToBeat" (the numbers left
+ * out when IGDB has too few submissions; the link always there).
+ */
+function ttbFront(key: string, game: string): string {
+  const t = ttbOf(key);
+  const parts = t ? [t.main ? ui('ttbMain', { h: t.main }) : '', t.complete ? ui(t.main ? 'ttbComplete' : 'ttbCompleteOnly', { h: t.complete }) : ''].filter(Boolean).map(esc) : [];
+  return `<p class="mt-2 text-xs text-zinc-500">${[...parts, hltbLink(game)].join(' · ')}</p>`;
+}
+/** The top of the achievement roadmap: the completionist time ("About 170 h to complete everything"), and the link. */
+function ttbAch(key: string, game: string): string {
+  const t = ttbOf(key);
+  return `<p class="mt-2 text-xs text-zinc-500">${[t?.complete ? esc(ui('ttbAch', { h: t.complete })) : '', hltbLink(game)].filter(Boolean).join(' · ')}</p>`;
+}
+
 /** The achievement guide with a translation merged in: Steam's official names, translated tips and roadmap. */
 function localizeAch(ach: any, t: any) {
   const tr = t?.achievements;
@@ -1214,6 +1239,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           ${artBox(gameName, appId, 'rounded-2xl border border-white/10 mb-5', key, true)}
           <h1 class="text-3xl font-bold text-white">${esc(ui('gameH1', { game: gameName }))}</h1>
           ${igdbFacts(key, gameName)}
+          ${ttbFront(key, gameName)}
           <p class="text-zinc-400 mt-2">${esc(ui('gameIntro'))}</p>
           <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, one(links.length, 'statAreas'))}${stat(totalChecks, one(totalChecks, 'statThings'))}${stat(missables, one(missables, 'statMissables'))}${checked ? stat(checked === checkedTotal ? ui('statAll') : ui('statOf', { n: checked, total: checkedTotal }), one(checkedTotal, 'statChecked')) : ''}</div>
           ${achHere ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${esc(ui('achCount', { n: (achHere.list || []).length }))} · ${(achHere.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
@@ -1525,6 +1551,7 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
         <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a></p>
         <h1 class="text-3xl font-bold text-white">${esc(ui('achH1', { game: gameName }))}</h1>
         <p class="text-zinc-400 mt-2">${esc(ui('achIntro'))}</p>
+        ${ttbAch(key, gameName)}
         <div class="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">${stat(r.time, ui('rmTime'))}${stat(r.difficulty, ui('rmDifficulty'))}${stat(r.playthroughs, ui('rmPlaythroughs'))}${stat(String(list.filter((x) => x.missable).length || r.missables || ''), ui('rmMissables'))}</div>
         ${flagChips.filter((f) => f !== 'missable').length ? `<p class="mt-2 text-xs text-zinc-400">${flagChips.filter((f) => f !== 'missable').map((f) => `<span class="mr-3"><strong class="text-zinc-200">${flagCount(f)}</strong> ${esc(flagLabel(f).toLowerCase())}</span>`).join('')}</p>` : ''}
         ${steps.length ? `<nav class="mt-4 flex flex-wrap gap-1.5 text-xs"><a href="#roadmap" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white">${esc(ui('rmSteps'))}</a><a href="#all-achievements" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white">${esc(ui('achAll'))}</a></nav>` : ''}
@@ -1624,6 +1651,7 @@ async function main() {
   const igdbCfg: any = (await db().collection('config').doc('igdb').get()).data() || {};
   if (!IGDB_ON) IGDB_ON = igdbCfg.site === true;
   if (!CARD_MODE) CARD_MODE = String(igdbCfg.cards || '').toUpperCase();
+  if (Number.isFinite(Number(igdbCfg.ttbMinCount)) && igdbCfg.ttbMinCount !== undefined) TTB_MIN = Math.max(1, Number(igdbCfg.ttbMinCount));
   const contribCfg: any = (await db().collection('config').doc('contrib').get()).data() || {};
   if (!CONTRIB_ON) CONTRIB_ON = contribCfg.enabled === true;
   CHANGELOG = (((await db().collection('system').doc('changelog').get()).data() || {}).entries || []) as any[];

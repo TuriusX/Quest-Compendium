@@ -4,7 +4,9 @@
  * upscaled. A guide IGDB has no art for falls back to its Steam art (callers keep that path).
  */
 export type IgdbImg = { id: string; w: number; h: number };
-export type IgdbInfo = { id?: number; name?: string; url?: string; released?: string | null; platforms?: string[]; genres?: string[]; cover?: IgdbImg | null; art?: IgdbImg | null; screenshots?: IgdbImg[]; missing?: boolean };
+export type IgdbInfo = { id?: number; name?: string; url?: string; released?: string | null; platforms?: string[]; genres?: string[]; cover?: IgdbImg | null; art?: IgdbImg | null; screenshots?: IgdbImg[]; missing?: boolean;
+  /** Time to beat from players' submissions (whole hours; 0 = none given) and how many submissions there are. */
+  ttb?: { main: number; extras: number; complete: number; count: number } };
 
 export const igdbUrl = (id: string, size: string, ext: 'webp' | 'jpg' = 'webp') => `https://images.igdb.com/igdb/image/upload/t_${size}/${id}.${ext}`;
 

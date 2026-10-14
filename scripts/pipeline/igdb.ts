@@ -7,6 +7,9 @@
  *   2. Its metadata (name, first release date, platforms, genres) and images: the cover, the key art (the widest
  *      landscape artwork) and a few screenshots (widest first), saved as guides/{key}.igdb. The site and the app build
  *      IGDB image URLs from the image ids (scripts/guides/igdbArt.ts); a guide IGDB has no art for keeps its Steam art.
+ *   3. Its time to beat (the game_time_to_beats endpoint, for the matched games only: it isn't in the dumps), from
+ *      players' submissions: main story (hastily), main + extras (normally) and completionist (completely), in whole
+ *      hours, with the number of submissions (the site leaves the numbers out below config/igdb.ttbMinCount).
  *
  * Credentials: the Client ID is plain config (env IGDB_CLIENT_ID, or config/igdb.clientId); the Client Secret only
  * reaches the job from Secret Manager (env IGDB_CLIENT_SECRET, secret igdb-client-secret) and is never logged.
@@ -168,6 +171,20 @@ async function main() {
   const names = async (endpoint: string) => { const m = new Map<number, string>(); for await (const r of rows(clientId, tok, endpoint)) m.set(Number(r.id), r.name); return m; };
   const platforms = await names('platforms');
   const genres = await names('genres');
+  // 3b. Time to beat, from the API (200 games a request): seconds in, whole hours out (0 = no time given).
+  const ttb = new Map<number, { main: number; extras: number; complete: number; count: number }>();
+  const idsNeeded = [...need];
+  const hours = (v: unknown) => Math.round((Number(v) || 0) / 3600);
+  for (let i = 0; i < idsNeeded.length; i += 200) {
+    const chunk = idsNeeded.slice(i, i + 200);
+    const r = await fetch(`${API}/game_time_to_beats`, {
+      method: 'POST', headers: { 'Client-ID': clientId, Authorization: `Bearer ${tok}`, 'Content-Type': 'text/plain' },
+      body: `fields game_id,hastily,normally,completely,count; where game_id = (${chunk.join(',')}); limit 500;`,
+    });
+    if (!r.ok) { console.log(`igdb: time to beat unavailable (${r.status}); kept as before`); break; }
+    for (const x of (await r.json()) as any[]) ttb.set(Number(x.game_id), { main: hours(x.hastily), extras: hours(x.normally), complete: hours(x.completely), count: Number(x.count) || 0 });
+    await new Promise((res) => setTimeout(res, 300)); // under IGDB's 4 requests a second
+  }
   // 4. Save on each guide.
   let withArt = 0, none: string[] = [];
   for (const g of guides) {
@@ -185,8 +202,9 @@ async function main() {
       platforms: x.platforms.map((p: number) => platforms.get(p)).filter(Boolean),
       genres: x.genres.map((p: number) => genres.get(p)).filter(Boolean),
       cover, art, screenshots: ss, matchedBy: how.get(g.key) || 'name', at: Date.now(),
+      ...(ttb.has(x.id) ? { ttb: ttb.get(x.id) } : {}),
     } });
   }
-  console.log(`igdb: ${guides.length} guide(s): ${guides.length - none.length} matched, ${withArt} with images; no IGDB match: ${none.join(', ') || 'none'}.`);
+  console.log(`igdb: ${guides.length} guide(s): ${guides.length - none.length} matched, ${withArt} with images, ${[...game.values()].filter((id) => ttb.has(id)).length} with time to beat; no IGDB match: ${none.join(', ') || 'none'}.`);
 }
 main().then(() => process.exit(0), (e) => { console.error('igdb failed:', String(e?.message || e).replace(/client_secret=[^&\s]+/g, 'client_secret=…')); process.exit(1); });
