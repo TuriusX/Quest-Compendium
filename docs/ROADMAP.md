@@ -24,7 +24,7 @@ Owner: Noah. Source: the project mind map (Oct 13, 2026). Keep this file in the 
 | # | Item | What it is | Status |
 |---|------|-----------|--------|
 | 5 | **Guide-backed objectives** *(propose first)* | When the player's current quest matches a guide quest page or walkthrough step, offer to load its checked steps into the quest log. No AI question used. Ticks sync with the guide ticks on the player's account. Start with RDR2 (quest pages exist). | Done (0.5.6) |
-| 6 | **Missable warnings from guide data** | Objectives and answers show a ⚠ when the guide marks something missable at the player's location. | Planned |
+| 6 | **Missable warnings from guide data** | Objectives and answers show a ⚠ when the guide marks something missable at the player's location. | Built (0.5.7) |
 | 7 | **Guide-backed markers** *(propose first)* | Point at collectibles and missables near the player using guide data, without spending a question. Explain the accuracy limits honestly in the proposal. | Planned |
 
 ## Phase 3: answers that know your save (0.5.8+)

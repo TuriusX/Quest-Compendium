@@ -76,6 +76,11 @@ interface ChatAreaProps {
   /** The quest log's tick and cycle shortcuts, for the quick tour. */
   tickKeys?: string;
   nextKeys?: string;
+  /**
+   * What the guide marks missable in the area the player is in and they haven't ticked (the quest log's "Missable
+   * here"; ids are the log's g:<area>:<entry>): listed under the latest answer about that area.
+   */
+  missablesHere?: { area: string; items: { id: string; label: string; why?: string; where?: string }[] } | null;
   /** Immersive mode: hold-to-talk answers are read aloud (Settings; default on). */
   immersiveReadAloud?: boolean;
   /** Desktop: show an answer's markers in the on-screen objectives tracker (hides the panel). */
@@ -209,6 +214,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   hideKeys,
   tickKeys,
   nextKeys,
+  missablesHere,
   immersiveReadAloud = true,
   onTrackOnScreen,
   onNextTurn,
@@ -2027,6 +2033,51 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   )}
                   </>)}
                 </div>
+
+                {/* Missable here: the guide's missables in the area the latest answer is about, not ticked yet. Each opens
+                    the guide at its entry. From guide data, no AI. */}
+                {!isUser && msg.id === lastAssistantId && !isLoading && missablesHere && missablesHere.items.length > 0 &&
+                  (!(msg.placeChosen || msg.place?.name) || samePlace(msg.placeChosen || msg.place?.name, missablesHere.area)) && (
+                  <div className="qc-px-frame mt-2.5 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2.5 max-w-full">
+                    <div className="flex items-center gap-1.5 text-[12px] font-bold text-amber-200">
+                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+                      <span>{t('answer.missHere', { area: missablesHere.area })}</span>
+                    </div>
+                    <ul className="mt-1.5 space-y-1">
+                      {missablesHere.items.slice(0, 3).map((it) => {
+                        const [, slug, ...rest] = it.id.split(':');
+                        const entry = rest.join(':').split('+')[0];
+                        // Why it can be missed when the guide says so (a section title like "Don't miss" says nothing), else where it is.
+                        const sub = it.why && it.why.length > 24 ? it.why : it.where;
+                        return (
+                          <li key={it.id}>
+                            <button
+                              type="button"
+                              onClick={() => window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug, entry } }))}
+                              title={t('answer.missOpen')}
+                              className="w-full text-left text-[12.5px] leading-snug rounded-md px-1.5 py-1 -mx-1.5 hover:bg-amber-500/10 cursor-pointer"
+                            >
+                              <span className="font-semibold text-zinc-100">{it.label}</span>
+                              {sub && <span className="block text-[11.5px] text-zinc-400 line-clamp-2">{sub.charAt(0).toUpperCase() + sub.slice(1)}</span>}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {missablesHere.items.length > 3 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const [, slug] = missablesHere.items[0].id.split(':');
+                          window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug } }));
+                        }}
+                        className="mt-1 text-[11.5px] font-semibold text-amber-200 hover:text-amber-100 cursor-pointer"
+                      >
+                        {t('answer.missMore', { n: missablesHere.items.length - 3 })} →
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* A fight: "Next turn" asks again with a fresh screenshot (a normal question) */}
                 {!isUser && msg.combat && msg.id === lastAssistantId && !isLoading && onNextTurn && (

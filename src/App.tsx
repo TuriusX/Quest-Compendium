@@ -758,6 +758,12 @@ export default function App() {
       : builtTrackerPayload;
   const trackerPayloadRef = useRef(trackerPayload);
   trackerPayloadRef.current = trackerPayload;
+  // What the guide marks missable where the player is and they haven't ticked yet (the quest log's "Missable here"):
+  // shown under the latest answer about this place too.
+  const missSection = builtTrackerPayload?.data.sections.find((x) => x.id === 'missable');
+  const missablesHere = trackerGame.guideArea && missSection
+    ? { area: trackerGame.guideArea.name, items: missSection.items.filter((it) => !it.done).map((it) => ({ id: it.id, label: it.label, why: it.detail?.missable, where: it.where })) }
+    : null;
   const trackerGuideKeyRef = useRef(trackerGame.guideKey);
   trackerGuideKeyRef.current = trackerGame.guideKey;
   const latestTrackedId = trackedMessage(activeTab)?.id;
@@ -2447,6 +2453,7 @@ export default function App() {
                 screenshotKeys={prettyShortcut(settings.autoScreenshotShortcut)}
                 hideKeys={formatShortcut(settings.hideAppShortcut)}
                 tickKeys={formatShortcut(settings.trackerTickShortcut || 'CmdOrCtrl+Shift+Enter')}
+                missablesHere={missablesHere}
                 nextKeys={formatShortcut(settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down')}
                 immersiveReadAloud={settings.immersiveReadAloud !== false}
                 soundEnabled={settings.soundEnabled}
