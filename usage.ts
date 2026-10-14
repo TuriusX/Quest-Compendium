@@ -6,7 +6,9 @@
  * Rates: Google's Gemini API price list (ai.google.dev/gemini-api/docs/pricing, Sept 2026), per million tokens.
  * Gemini 3.8 Flash is at introductory prices through Dec 31, 2026; they double on Jan 1, 2027 ($1.50 / $7.50).
  * Output includes thinking. Search grounding: 5,000 free searches a month across the Gemini 3 family, then $14 per
- * 1,000 searches (one question can run several). Unknown models log tokens without a price.
+ * 1,000 searches (one question can run several). A model with no price on file is counted at the most expensive rate
+ * we know (UNKNOWN_RATE), so budgets and caps can never miss its spending, and each call is recorded (per day and
+ * model, system/unpricedModels) for the pipeline's Discord summary to flag until its price is added here.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -36,12 +38,37 @@ const LONG_RATES: Record<string, { input: number; output: number }> = {
 };
 export const BANNER_IMAGE_COST = 0.0336; // one 1K image from the Flash-Lite image model
 
+/** The rate for a model with no price on file: the most expensive input and output rates we know (long prompts included). */
+export const UNKNOWN_RATE = [...Object.values(RATES), ...Object.values(LONG_RATES)].reduce((m, r) => ({ input: Math.max(m.input, r.input), output: Math.max(m.output, r.output) }), { input: 0, output: 0 });
+/** Whether a model has a price on file (text and audio models; banner images are priced per image). */
+export const hasPrice = (model: string) => !!RATES[model];
+const rateOf = (model: string) => RATES[model] || UNKNOWN_RATE;
+
+/**
+ * A call to a model with no price on file: recorded per day and model in system/unpricedModels (calls, dollars at
+ * UNKNOWN_RATE), for the Discord summary's warning. In the background; a failure to record never fails the call.
+ */
+export function noteUnpriced(model: string, dollars: number): void {
+  if (!model || hasPrice(model) || /image/i.test(model)) return;
+  console.warn(`[usage] ${model} has no price on file: counted at the top rate ($${UNKNOWN_RATE.input} / $${UNKNOWN_RATE.output} per million)`);
+  void (async () => {
+    try {
+      const { getFirestore, FieldValue } = await import('firebase-admin/firestore');
+      const day = new Date().toISOString().slice(0, 10);
+      await getFirestore().collection('system').doc('unpricedModels').set({ days: { [day]: { [model]: { calls: FieldValue.increment(1), dollars: FieldValue.increment(dollars) } } } }, { merge: true });
+    } catch {
+      /* not recorded */
+    }
+  })();
+}
+
 /** Estimated cost of one response in dollars (tokens only, searches excluded), or null for a model without a known rate. */
 export function estimateCost(model: string, response: any): number | null {
   const u = response?.usageMetadata;
-  if (!u || !RATES[model]) return null;
+  if (!u) return null;
   const input = Number(u.promptTokenCount ?? 0);
-  const rate = (input > LONG_PROMPT && LONG_RATES[model]) || RATES[model];
+  // No price on file: the most expensive known rate (noteUnpriced flags it).
+  const rate = (input > LONG_PROMPT && LONG_RATES[model]) || rateOf(model);
   const out = Number(u.candidatesTokenCount ?? 0) + Number(u.thoughtsTokenCount ?? 0);
   return (input * rate.input + out * rate.output) / 1_000_000;
 }
@@ -70,8 +97,7 @@ export function maybeBilledFailure(e: unknown): boolean {
 }
 export function worstCaseDollars(request: { model?: string; contents?: any; config?: any }): number {
   const model = String(request?.model || '');
-  const rate = RATES[model];
-  if (!rate) return 0;
+  const rate = rateOf(model);
   // Text in the prompt at about 4 characters a token; an image is about 1,100 tokens.
   let chars = 0, images = 0;
   const walk = (v: any) => {
@@ -96,9 +122,10 @@ export function billedUsage(model: string, response: any) {
   const q = response?.candidates?.[0]?.groundingMetadata?.webSearchQueries;
   const searches = Array.isArray(q) ? q.length : 0;
   const tokens = estimateCost(model, response);
+  if (tokens !== null && !hasPrice(model)) noteUnpriced(model, tokens);
   return {
     input: Number(u.promptTokenCount ?? 0), output: Number(u.candidatesTokenCount ?? 0), thinking: Number(u.thoughtsTokenCount ?? 0),
-    searches, tokenDollars: tokens ?? 0, searchDollars: searches * SEARCH_DOLLARS, priced: tokens !== null,
+    searches, tokenDollars: tokens ?? 0, searchDollars: searches * SEARCH_DOLLARS, priced: hasPrice(model),
   };
 }
 
@@ -114,8 +141,10 @@ export function logUsage(feature: string, model: string, response: any): void {
   const searches = Array.isArray(response?.candidates?.[0]?.groundingMetadata?.webSearchQueries)
     ? response.candidates[0].groundingMetadata.webSearchQueries.length
     : 0;
-  const rate = RATES[model];
-  const cost = rate ? (input * rate.input + (answer + thinking) * rate.output) / 1_000_000 : null;
+  // No price on file: counted at the most expensive known rate, and flagged (noteUnpriced).
+  const rate = (input > LONG_PROMPT && LONG_RATES[model]) || rateOf(model);
+  const cost = (input * rate.input + (answer + thinking) * rate.output) / 1_000_000;
+  if (!hasPrice(model)) noteUnpriced(model, cost);
   const scope = requestCost.getStore();
   if (scope) {
     scope.dollars += (cost ?? 0) + searches * SEARCH_DOLLARS;
@@ -124,7 +153,7 @@ export function logUsage(feature: string, model: string, response: any): void {
   console.log(
     `[usage] ${feature} ${model} in=${input}${image ? ` (image ${image})` : ''} out=${answer} thinking=${thinking}` +
       (searches ? ` searches=${searches}` : '') +
-      (cost !== null ? ` ≈ $${cost.toFixed(4)}` : '') +
+      ` ≈ $${cost.toFixed(4)}${hasPrice(model) ? '' : ' (no price on file: top rate)'}` +
       (searches ? ` (+$${(searches * SEARCH_COST).toFixed(3)} search once past the free 5,000/month)` : ''),
   );
 }

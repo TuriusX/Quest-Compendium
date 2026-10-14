@@ -881,6 +881,20 @@ async function main() {
   } catch (e: any) {
     console.warn(`Spending line skipped: ${e?.message}`);
   }
+  // AI calls to a model with no price on file (usage.ts noteUnpriced): counted at the top rate until its price is added.
+  try {
+    const days: any = ((await db().collection('system').doc('unpricedModels').get()).data() || {}).days || {};
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const seen = new Map<string, { calls: number; dollars: number }>();
+    for (const d of [yesterday, today]) for (const [model, v] of Object.entries<any>(days[d] || {})) {
+      const x = seen.get(model) || { calls: 0, dollars: 0 };
+      seen.set(model, { calls: x.calls + Number(v?.calls || 0), dollars: x.dollars + Number(v?.dollars || 0) });
+    }
+    if (seen.size) RUN.head.unshift(`⚠️ AI calls to a model with no price on file (since yesterday): ${[...seen].map(([m, v]) => `${m} ${v.calls} call(s), $${v.dollars.toFixed(2)}`).join('; ')}. Counted at the most expensive known rate so budgets include it; add its price to usage.ts.`);
+  } catch (e: any) {
+    console.warn(`Unpriced-model line skipped: ${e?.message}`);
+  }
   const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches, ${state.searches || 0} pipeline searches); app searches ${appSearches} of ${APP_CAP} (the pipeline stops at ${APP_CAP - RESERVE}, the rest kept for players).`;
   const closing = RUN.stoppedBy ? `🛑 Run stopped early: ${RUN.stoppedBy}. ${totals}` : `🏁 Run finished. ${totals}`;
   state.lastRun = Date.now();
