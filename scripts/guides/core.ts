@@ -268,6 +268,7 @@ export async function logUnit(u: { key: string; slug: string; status: string; do
 
 /** One run: the first incomplete guide in the list, then the next, while the budget, time and limits allow. */
 export async function runCore(): Promise<void> {
+  process.env.CORE_CHARGED = '1'; // charged to the core budget, so not to the local-runs ledger too (a local run)
   const st: any = (await cref().get()).data() || {};
   if (!st.approved || !Array.isArray(st.guides) || !st.guides.length) { console.log('Core guides: no approved list yet (system/core.approved and guides). Nothing to do.'); return; }
   if (st.paused) { console.log(`Core guides: paused (${st.paused.why || 'until the owner says go'}).`); return; }
@@ -435,6 +436,7 @@ ${r.stopped}; the next run carries on.`); if (wentLive) await publishSiteForCore
  * list like in a run. The site is published once at the end when anything went live. Prints each one's cost and result.
  */
 export async function retryOnly(items: string[]): Promise<{ item: string; status: string; dollars: number; detail: string }[]> {
+  process.env.CORE_CHARGED = '1'; // charged to the core budget, so not to the local-runs ledger too
   const { buildPageEvidenceForCore, writePageForCore, publishSiteForCore } = await import('./flagship');
   const { buildEntity } = await import('./compendium');
   const out: { item: string; status: string; dollars: number; detail: string }[] = [];
