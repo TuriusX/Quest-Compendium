@@ -137,15 +137,22 @@ const igdbCredit = () => !IGDB_ON ? '' : esc(ui('igdbCredit')).replace('{igdb}',
 
 /** Time to beat (IGDB players' submissions): shown only with at least this many submissions (config/igdb.ttbMinCount). */
 let TTB_MIN = 5;
+/** Time to beat on the site: on when config/igdb.ttbSite is true, or for a local look (QC_TTB=1). */
+let TTB_ON = process.env.QC_TTB === '1';
 type Ttb = { main: number; extras: number; complete: number; count: number };
 /** The game's IGDB time to beat in whole hours (0 = not given), or null when IGDB is off or has too few submissions. */
 function ttbOf(key: string): Ttb | null {
   // A local look with sample numbers (QC_TTB_SAMPLE="main,extras,complete,count"), never set on the live site.
   const sample = process.env.QC_TTB_SAMPLE ? process.env.QC_TTB_SAMPLE.split(',').map(Number) : null;
-  const t: any = sample ? { main: sample[0], extras: sample[1], complete: sample[2], count: sample[3] } : IGDB_ON ? IGDB.get(key)?.ttb : null;
+  const t: any = sample ? { main: sample[0], extras: sample[1], complete: sample[2], count: sample[3] } : IGDB_ON && TTB_ON ? IGDB.get(key)?.ttb : null;
   if (!t || (t.count || 0) < TTB_MIN) return null;
-  const h = (v: unknown) => (Number(v) >= 1 ? Math.round(Number(v)) : 0);
+  const h = (v: unknown) => (Number(v) >= 1 && Number(v) <= 1000 ? Math.round(Number(v)) : 0);
   const out = { main: h(t.main), extras: h(t.extras), complete: h(t.complete), count: Number(t.count) || 0 };
+  // Players' averages can be thrown off by a few wild entries (Baldur's Gate 3: 5,650 h completionist next to 132 h
+  // main + extras): a longer category must be at least the shorter one and at most 5 times it, or it's left out.
+  const fits = (longer: number, shorter: number) => !shorter || (longer >= shorter && longer <= shorter * 5);
+  if (out.extras && !fits(out.extras, out.main)) out.extras = 0;
+  if (out.complete && !fits(out.complete, out.extras || out.main)) out.complete = 0;
   return out.main || out.extras || out.complete ? out : null;
 }
 const hoursLabel = (h: number) => ui(h === 1 ? 'ttbHour' : 'ttbHours', { h });
@@ -1658,6 +1665,7 @@ async function main() {
   if (!IGDB_ON) IGDB_ON = igdbCfg.site === true;
   if (!CARD_MODE) CARD_MODE = String(igdbCfg.cards || '').toUpperCase();
   if (Number.isFinite(Number(igdbCfg.ttbMinCount)) && igdbCfg.ttbMinCount !== undefined) TTB_MIN = Math.max(1, Number(igdbCfg.ttbMinCount));
+  if (!TTB_ON) TTB_ON = igdbCfg.ttbSite === true;
   const contribCfg: any = (await db().collection('config').doc('contrib').get()).data() || {};
   if (!CONTRIB_ON) CONTRIB_ON = contribCfg.enabled === true;
   CHANGELOG = (((await db().collection('system').doc('changelog').get()).data() || {}).entries || []) as any[];
