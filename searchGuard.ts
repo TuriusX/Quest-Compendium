@@ -470,6 +470,39 @@ export function recordGameDemand(game: string | undefined, userId: string, langu
 // stats/{YYYY-MM-DD} (Central time): questions from signed-in players vs guests, how many different ones (counted by a
 // short one-way hash, nothing personal stored), and desktop / web / Deck. The guide pipeline's Discord summary shows it.
 export const statsDay = (t = Date.now()) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+/** The owner's own accounts (ADMIN_EMAILS on the server): marked in the daily stats so player reports can leave them out. */
+const ownerEmails = () => (process.env.ADMIN_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+const playerHashOf = (userId: string) => crypto.createHash('sha256').update(`qc:${userId}`).digest('hex').slice(0, 12);
+export type PlayerTier = 'free' | 'premium' | 'guest';
+
+/**
+ * One answer's AI cost for the weekly player report (scripts/pipeline/playerWeek.ts): stats/{day}.costs.{player}
+ * { dollars, questions, tier }, by the same anonymous id as the daily activity. An owner's account (ADMIN_EMAILS) is
+ * also listed in stats/{day}.owners, so reports can leave it out. Test traffic isn't counted.
+ */
+export function recordDailyCost(userId: string, tier: PlayerTier, dollars: number, email?: string): void {
+  const d = db();
+  if (!d || !userId || isTestTraffic(userId)) return;
+  const who = playerHashOf(userId);
+  const owner = !!email && ownerEmails().includes(String(email).toLowerCase());
+  d.collection('stats').doc(statsDay()).set({
+    costs: { [who]: { dollars: FieldValue.increment(Math.max(0, Number(dollars) || 0)), questions: FieldValue.increment(1), tier } },
+    ...(owner ? { owners: FieldValue.arrayUnion(who) } : {}),
+  }, { merge: true }).catch(() => {});
+}
+
+/** A player who asked with no questions left today ("You've used today's…"): stats/{day}.limitHit.{player} = tier. */
+export function recordLimitHit(userId: string, tier: PlayerTier, email?: string): void {
+  const d = db();
+  if (!d || !userId || isTestTraffic(userId)) return;
+  const who = playerHashOf(userId);
+  const owner = !!email && ownerEmails().includes(String(email).toLowerCase());
+  d.collection('stats').doc(statsDay()).set({
+    limitHit: { [who]: tier },
+    ...(owner ? { owners: FieldValue.arrayUnion(who) } : {}),
+  }, { merge: true }).catch(() => {});
+}
+
 export function recordDailyActivity(userId: string, isGuest: boolean, userAgent: string | undefined, appHeader = '', from = ''): void {
   const d = db();
   if (!d || !userId || isTestTraffic(userId)) return; // test scripts and local servers aren't players
