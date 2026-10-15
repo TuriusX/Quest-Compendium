@@ -74,6 +74,7 @@ import { steamCandidates } from './steam';
 import { promote } from '../guides/promote';
 import { SEARCH_DOLLARS } from '../../usage';
 import { spotWeekLine } from '../../spot';
+import { isCorePage } from '../guides/core';
 import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
 import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY } from '../../searchGuard';
 import { FieldPath } from 'firebase-admin/firestore';
@@ -799,27 +800,42 @@ async function main() {
   // ---- the flagship programme (scripts/guides/flagship.ts, its own job and budget): pages live per guide, its cost,
   // and pages that failed review since the last summary ----
   // Re-verification of the search-pack pages with the evidence method: per guide, the pass rate and the cost per page.
+  // A page listed as failed that has since passed (a core retry rebuilt it: now a verified evidence page) isn't failed
+  // any more: it's left out of every failed list below.
+  const passedSince = new Map<string, boolean>();
+  const stillFailed = async (key: string, f: any): Promise<boolean> => {
+    const slug = String(f?.slug || '');
+    if (!key || !slug) return true;
+    const id = `${key}/${slug}`;
+    if (!passedSince.has(id)) passedSince.set(id, isCorePage((await db().collection('guides').doc(key).collection('areas').doc(slug).get()).data()));
+    return !passedSince.get(id);
+  };
   const rv = flagship.reverify;
   if (rv?.order?.length) {
     const st = rv.stats || { pages: 0, passed: 0, failed: 0, dollars: 0 };
+    const failedOf: Record<string, any[]> = {};
+    for (const k of rv.order as string[]) {
+      failedOf[k] = [];
+      for (const f of (rv.progress?.[k]?.failed || []) as any[]) if (await stillFailed(k, f)) failedOf[k].push(f);
+    }
     const per: string[] = [];
     for (const k of rv.order as string[]) {
       const p = rv.progress?.[k] || { done: [], failed: [] };
       const name = shortName(String((await db().collection('guides').doc(k).get()).data()?.game || k));
-      per.push(`${name} ${(p.done || []).length} passed${(p.failed || []).length ? `, ${(p.failed || []).length} failed` : ''}${p.complete ? ' ✓' : ''}`);
+      per.push(`${name} ${(p.done || []).length} passed${failedOf[k].length ? `, ${failedOf[k].length} failed` : ''}${p.complete ? ' ✓' : ''}`);
     }
     const rate = st.pages ? Math.round((st.passed / st.pages) * 100) : 0;
     const fb: any = flagship.budget || {};
-    // Finished: one line, with the full breakdown and the failed pages on Mondays only.
-    const failedCount = (rv.order as string[]).reduce((n, k) => n + ((rv.progress?.[k]?.failed || []) as any[]).length, 0);
-    if (rv.done && !MONDAY) {
-      report.push(`🔎 Flagship re-verification done: ${st.passed} of ${st.pages} passed (${rate}%), $${Number(st.dollars || 0).toFixed(2)}; ${failedCount} page(s) kept their old content (listed on Mondays).`);
+    // One line except on Mondays (the full breakdown and the failed pages then).
+    const failedCount = Object.values(failedOf).reduce((n, l) => n + l.length, 0);
+    if (!MONDAY) {
+      report.push(`🔎 Flagship re-verification${rv.done ? ' done' : ''}: ${st.passed} of ${st.pages} passed (${rate}%), $${Number(st.dollars || 0).toFixed(2)}; ${failedCount} page(s) still failed, keeping their old content (listed on Mondays).`);
     } else {
     report.push(`🔎 Flagship re-verification (part of the flagship programme's one-off $${Number(fb.total || 0)}${flagship.spent != null ? `, $${Number(flagship.spent).toFixed(2)} spent` : ''}${Number(flagship.spent || 0) >= Number(fb.total || 0) - 1 ? '; stopped at its total' : ''})${rv.done ? ' done' : ''}: ${per.join(' · ')}. Pass rate ${rate}% (${st.passed} of ${st.pages}), $${st.pages ? (st.dollars / st.pages).toFixed(2) : '0.00'} a page; re-verification $${Number(st.dollars || 0).toFixed(2)} in all since it started.`);
     // Pages that failed keep their old content without the badge: listed so the owner can decide on retries.
     const failedPages: string[] = [];
     for (const k of rv.order as string[]) {
-      const fl = (rv.progress?.[k]?.failed || []) as any[];
+      const fl = failedOf[k];
       if (!fl.length) continue;
       const name = shortName(String((await db().collection('guides').doc(k).get()).data()?.game || k));
       for (const f of fl) failedPages.push(`${name} / ${f.name}${f.score != null ? ` (${f.score})` : ''}: ${String(f.reason || 'failed review').slice(0, 80)}`);
@@ -893,8 +909,9 @@ async function main() {
     const tried = runP.length + (r.runFailures || []).length;
     const costs = runP.map((x) => Number(x.dollars || 0)).filter((x) => x > 0);
     report.push(`🏰 Flagship rollout${flagship.paused ? ' (paused)' : ''}${r.enabled === false ? ' (off)' : ''}: ${Number(r.pagesMonth || 0)} page(s) live this month, $${Number(r.spentMonth || 0).toFixed(2)} of $${Number(r.monthly || 20)}.${tried ? ` Last run: ${runP.length} of ${tried} passed${costs.length ? `, $${(costs.reduce((a, b) => a + b, 0) / costs.length).toFixed(2)} a page` : ''}${runP.length ? ` (${runP.map((x) => `${x.name}${x.score != null ? ` ${x.score}` : ''}`).join(', ')})` : ''}.` : ''}`);
-    const fails = (r.runFailures || []).slice(0, 6);
-    if (fails.length) report.push(`⚠️ Flagship pages that failed review: ${fails.map((f: any) => `${f.name}: ${String(f.reason).slice(0, 90)}`).join('; ')}.`);
+    const fails: any[] = [];
+    for (const f of (r.runFailures || []) as any[]) if (await stillFailed(String(f.key || ''), f)) fails.push(f);
+    if (fails.length) report.push(`⚠️ Flagship pages that failed review: ${fails.slice(0, 6).map((f: any) => `${f.name}: ${String(f.reason).slice(0, 90)}`).join('; ')}.`);
   }
   if (flagship.guides?.length && !guidesDone) {
     const fb = { total: 90, daily: 15, ...(flagship.budget || {}) };
@@ -906,9 +923,16 @@ async function main() {
       if (pg.phase === 'outline') return `${shortName(names[g.key])} outline rebuild`;
       return `${shortName(names[g.key])} ${pg.done.length}/${pg.total || '?'}${pg.phase === 'done' ? ' ✓' : ''}${pg.failed.length ? ` (${pg.failed.length} failed)` : ''}`;
     });
-    report.push(`🏰 Flagship guides: ${per.join(' · ')}. $${Number(flagship.spent || 0).toFixed(2)} of $${fb.total} spent ($${Number(flagship.spentToday || 0).toFixed(2)} of $${fb.daily} on ${flagship.day || '?'}), estimate to finish $${Number(flagship.estimate || 0).toFixed(2)}.${flagship.halted ? ` ⚠️ Stopped: ${flagship.halted}.` : ''}`);
-    const fails = (flagship.runFailures || []).slice(0, 6);
-    if (fails.length) report.push(`⚠️ Flagship pages that failed review: ${fails.map((f: any) => `${shortName(names[f.key] || f.key)} / ${f.name}: ${String(f.reason).slice(0, 90)}`).join('; ')}.`);
+    const fails: any[] = [];
+    for (const f of (flagship.runFailures || []) as any[]) if (await stillFailed(String(f.key || ''), f)) fails.push(f);
+    if (!MONDAY) {
+      // One line except on Mondays.
+      const doneN = flagship.guides.filter((g: any) => flagship.progress?.[g.key]?.phase === 'done').length;
+      report.push(`🏰 Flagship guides: ${doneN} of ${flagship.guides.length} done; $${Number(flagship.spent || 0).toFixed(2)} of $${fb.total} spent${fails.length ? `; ${fails.length} page(s) failed review` : ''} (details on Mondays).${flagship.halted ? ` ⚠️ Stopped: ${flagship.halted}.` : ''}`);
+    } else {
+      report.push(`🏰 Flagship guides: ${per.join(' · ')}. $${Number(flagship.spent || 0).toFixed(2)} of $${fb.total} spent ($${Number(flagship.spentToday || 0).toFixed(2)} of $${fb.daily} on ${flagship.day || '?'}), estimate to finish $${Number(flagship.estimate || 0).toFixed(2)}.${flagship.halted ? ` ⚠️ Stopped: ${flagship.halted}.` : ''}`);
+      if (fails.length) report.push(`⚠️ Flagship pages that failed review: ${fails.slice(0, 6).map((f: any) => `${shortName(names[f.key] || f.key)} / ${f.name}: ${String(f.reason).slice(0, 90)}`).join('; ')}.`);
+    }
   }
   // ---- items skipped because another process held the guide's lock: this run's, and the flagship job's last run ----
   const flagSkips = [...((flagship.runSkips || []) as any[]), ...((flagship.rollout?.runSkips || []) as any[])].slice(0, 6);
