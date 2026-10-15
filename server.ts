@@ -2396,7 +2396,7 @@ percentages:
   <div class="container">
     <div class="badge">Official Legal Document</div>
     <h1>Privacy Policy for Quest Compendium</h1>
-    <div class="updated">Last updated: October 5, 2026</div>
+    <div class="updated">Last updated: October 15, 2026</div>
 
     <p>Welcome to <strong>Quest Compendium</strong> (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;the application&rdquo;). This Privacy Policy explains how personal information and application data are collected, used, and protected when you use our desktop application and web services.</p>
 
