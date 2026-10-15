@@ -53,6 +53,9 @@ export const TIERS = ['people', 'bosses', 'locations', 'collectibles', 'other'] 
 /** The tiers the programme builds (the rest only by Search Console demand), and the default cap per guide. */
 export const CORE_TIERS = ['people', 'bosses', 'locations'];
 export const ENTITY_CAP_DEFAULT = 40;
+/** Retried pages that hit a download or network error are tried again on this many nightly runs at most. */
+export const RETRY_NIGHTS = 3;
+export const TRANSIENT_ERROR = /fetch failed|network|ECONNRESET|ETIMEDOUT|ENOTFOUND|socket hang up|timed? ?out|UNAVAILABLE|deadline|\b50[0-4]\b|overloaded/i;
 
 const MINUTES = Number(process.env.FLAGSHIP_MINUTES || 150);
 const RUN_STARTED = Date.now();
@@ -285,9 +288,15 @@ export async function runCore(): Promise<void> {
   if (pageRetries.length) {
     const res = await retryOnly(pageRetries, { publish: false });
     if (res.some((r) => r.status === 'passed')) wentLive = true;
-    const ran = new Set(res.filter((r) => !['stopped', 'error', 'skipped'].includes(r.status) || /no such guide|not key/.test(r.detail)).map((r) => r.item));
-    for (const x of ran) retry.delete(x);
-    await cref().set({ retry: [...retry] }, { merge: true });
+    // A download or network error ("fetch failed") isn't the page's fault: it stays queued, up to RETRY_NIGHTS runs.
+    // Any other error (too little evidence) or a result takes it off the queue.
+    const tries: Record<string, number> = { ...(st.retryTries || {}) };
+    const transient = (r: { status: string; detail: string }) => r.status === 'error' && TRANSIENT_ERROR.test(r.detail);
+    const keep = (r: { item: string; status: string; detail: string }) =>
+      r.status === 'stopped' || r.status === 'skipped' && !/no such guide|not key/.test(r.detail) || (transient(r) && (tries[r.item] = (tries[r.item] || 0) + 1) < RETRY_NIGHTS);
+    const ran = new Set(res.filter((r) => !keep(r)).map((r) => r.item));
+    for (const x of ran) { retry.delete(x); delete tries[x]; }
+    await cref().set({ retry: [...retry], retryTries: tries }, { merge: true });
     if (res.some((r) => r.status === 'stopped')) { console.log('\nPage retries stopped by the budget; the next run carries on.'); if (wentLive) await publishSiteForCore(); return; }
   }
   // The compendium rollout to the new method first (rollout.ts): rebuilds across guides by demand, then (from
