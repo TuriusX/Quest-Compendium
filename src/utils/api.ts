@@ -1,4 +1,8 @@
-export const DEFAULT_CLOUD_URL = 'https://quest-compendium-890629309063.us-east1.run.app';
+/**
+ * The server the installed app talks to. A test build can point at a hidden test revision instead (VITE_QC_API_URL
+ * at build time, e.g. a Cloud Run tag URL with no traffic); normal builds leave it unset.
+ */
+export const DEFAULT_CLOUD_URL: string = String((import.meta as any).env?.VITE_QC_API_URL || '').replace(/\/+$/, '') || 'https://quest-compendium-890629309063.us-east1.run.app';
 export const DEFAULT_PREVIEW_URL = DEFAULT_CLOUD_URL;
 
 export const getApiBaseUrl = (): string => {
