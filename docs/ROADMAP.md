@@ -25,13 +25,13 @@ Owner: Noah. Source: the project mind map (Oct 13, 2026). Keep this file in the 
 |---|------|-----------|--------|
 | 5 | **Guide-backed objectives** *(propose first)* | When the player's current quest matches a guide quest page or walkthrough step, offer to load its checked steps into the quest log. No AI question used. Ticks sync with the guide ticks on the player's account. Start with RDR2 (quest pages exist). | Done (0.5.6) |
 | 6 | **Missable warnings from guide data** | Objectives and answers show a ⚠ when the guide marks something missable at the player's location. | Done (0.5.7) |
-| 7 | **Guide-backed markers** *(propose first)* | Point at collectibles and missables near the player using guide data, without spending a question. Explain the accuracy limits honestly in the proposal. | Built (0.5.8) |
+| 7 | **Guide-backed markers** *(propose first)* | Point at collectibles and missables near the player using guide data, without spending a question. Explain the accuracy limits honestly in the proposal. | Done (0.5.8) |
 
 ## Phase 3: answers that know your save (0.5.8+)
 
 | # | Item | What it is | Status |
 |---|------|-----------|--------|
-| 8 | **Playthrough memory** *(propose first)* | Per game, per account: the choices the player made, where they are, what they've found, built from conversations, quest log and guide ticks. Shown to the player in a "Your playthrough" panel where they can edit or clear it. Added to answer context so answers fit their save. | Built (0.5.8) |
+| 8 | **Playthrough memory** *(propose first)* | Per game, per account: the choices the player made, where they are, what they've found, built from conversations, quest log and guide ticks. Shown to the player in a "Your playthrough" panel where they can edit or clear it. Added to answer context so answers fit their save. | Done (0.5.8) |
 | 9 | **"Previously on…" recap** | When a player returns to a game after 3+ days, a three-line catch-up from playthrough memory and the quest log. Uses Fast, or no AI if it can be built from stored data. | Idea |
 | 10 | **Steam progress sync** *(propose first)* | With explicit permission, read the player's unlocked Steam achievements for the running game to estimate story progress. Include privacy wording and how the Steam ID is obtained. | Idea |
 
