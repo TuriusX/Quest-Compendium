@@ -41,6 +41,7 @@ import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifie
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
+import { recordDailyCost, recordLimitHit } from './searchGuard';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, playerSearchesToday, recordPlayerSearches, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
@@ -978,6 +979,8 @@ async function startServer() {
       const picked = evalCapture ? ({ bucket: 'pro' } as any) : pickBucket(wanted, { pro: Number(userData.proQueriesAvailable) || 0, flash: Number(userData.flashQueriesAvailable) || 0 });
 
       if (!picked.bucket) {
+        // Counted for the weekly player report: who ran out of questions today.
+        recordLimitHit(userId, isGuest ? 'guest' : isPremium ? 'premium' : 'free', (req as any).user?.email);
         const resetAt = nextReset(tz);
         const allow = await allowances();
         const p = isGuest ? allow.guest : isPremium ? allow.premium : allow.free;
@@ -1722,6 +1725,8 @@ percentages:
       }
       if (searchesUsed > 0) recordSearches(searchCtx, searchesUsed);
       if (chargedBucket) recordPlayerCost({ uid: userId, premium: isPremium, guest: isGuest, dollars: costScope.dollars, searches: costScope.searches });
+      // The same cost by day, for the weekly player report (free, Premium or guest).
+      if (chargedBucket) recordDailyCost(userId, isGuest ? 'guest' : isPremium ? 'premium' : 'free', costScope.dollars, (req as any).user?.email);
       // One line per answer, for the search rate per question (searchPolicy.ts).
       console.log(`[chat-search] mode=${searchMode} allowed=${searchOk} asked=${searchAsked} searches=${searchesUsed} model=${chargedBucket || '-'}${newRelease ? ' new-release' : ''}`);
       // Only file a fact under a place or story point that's actually known: confirmed by the player, or settled on

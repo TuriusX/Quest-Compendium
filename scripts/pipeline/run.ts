@@ -74,6 +74,7 @@ import { steamCandidates } from './steam';
 import { promote } from '../guides/promote';
 import { SEARCH_DOLLARS } from '../../usage';
 import { isCorePage } from '../guides/core';
+import { playerWeekLines } from './playerWeek';
 import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
 import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY } from '../../searchGuard';
 import { postDiscord, summaryText } from './summary';
@@ -825,6 +826,16 @@ async function main() {
       for (const f of fl) failedPages.push(`${name} / ${f.name}${f.score != null ? ` (${f.score})` : ''}: ${String(f.reason || 'failed review').slice(0, 80)}`);
     }
     if (failedPages.length) report.push(`⚠️ Re-verification failed (old content kept, no badge; ${failedPages.length} page(s), say which to retry): ${failedPages.slice(0, 25).join('; ')}${failedPages.length > 25 ? `; and ${failedPages.length - 25} more` : ''}.`);
+    }
+  }
+  // Mondays: the weekly player section (playerWeek.ts): active players, their AI cost, who ran out of questions, and
+  // the alert for revisiting the free limits (at the top of the summary).
+  if (MONDAY) {
+    try {
+      const lines = await playerWeekLines();
+      for (const l of lines) (l.startsWith('⚠️') ? RUN.head : report).push(l);
+    } catch (e: any) {
+      console.warn(`Player section skipped: ${e?.message}`);
     }
   }
   // Core guides (scripts/guides/core.ts): completeness per guide, this month's shared budget, and what's left.
