@@ -769,7 +769,10 @@ export default function App() {
         : undefined;
       const note: ChatMessage = {
         id: msgId, role: 'assistant', kind: 'spot', modelUsed: 'Spot it', timestamp: Date.now(),
-        text: data.visible ? tr('spot.found', { item: req.label }) : req.where ? tr('spot.notInView', { item: req.label, where: req.where }) : tr('spot.notInViewNoWhere', { item: req.label }),
+        // What it found, and how many checks are left today (its own daily allowance, not questions).
+        text: `${data.visible ? tr('spot.found', { item: req.label }) : req.where ? tr('spot.notInView', { item: req.label, where: req.where }) : tr('spot.notInViewNoWhere', { item: req.label })}${Number.isFinite(Number(data.spotsLeft)) ? `
+
+${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         ...(points ? { points, donePoints: [] } : {}),
       };
       setTabs((prev) => prev.map((x) => (x.id === tab.id ? { ...x, messages: [...x.messages, note], lastActive: Date.now() } : x)));

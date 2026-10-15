@@ -298,6 +298,7 @@ const en: Dict = {
   "spot.looking": "Looking for {item} on your screen…",
   "spot.found": "Spotted **{item}** on your screen: it's marked over your game. If the marker is in the wrong place, tap 👎 and pick \"Marker\".",
   "spot.notInView": "**{item}** isn't in view right now. The guide says: {where}. Turn toward it and try Spot it again.",
+  "spot.left": "{n} Spot it checks left today (they don't use your questions).",
   "spot.notInViewNoWhere": "**{item}** isn't in view right now. Turn the camera around and try Spot it again.",
   "spot.notInViewShort": "{item} isn't in view",
   "spot.limit": "You've used today's Spot it checks. They reset at midnight UTC; your questions aren't affected.",
