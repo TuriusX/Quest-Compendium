@@ -59,9 +59,9 @@ test("a fight ends when a combat answer is followed by a screenshot with no figh
 
 test("<qc-done> reports finished content and is always removed", () => {
   const r = extractDone('Head into the Hollow.\n<qc-done>["Defend the Emerald Grove gate", "Rescue Arabella"]</qc-done>');
-  assert.deepEqual(r, { text: "Head into the Hollow.", done: ["Defend the Emerald Grove gate", "Rescue Arabella"] });
-  assert.deepEqual(extractDone("No block."), { text: "No block.", done: [] });
-  assert.deepEqual(extractDone("Go.\n<qc-done>{oops</qc-done>"), { text: "Go.", done: [] });
+  assert.deepEqual(r, { text: "Head into the Hollow.", done: ["Defend the Emerald Grove gate", "Rescue Arabella"], remember: [] });
+  assert.deepEqual(extractDone("No block."), { text: "No block.", done: [], remember: [] });
+  assert.deepEqual(extractDone("Go.\n<qc-done>{oops</qc-done>"), { text: "Go.", done: [], remember: [] });
   assert.match(DONE_RULES, /<qc-done>\["Defend the Emerald Grove gate"\]<\/qc-done>/);
 });
 
