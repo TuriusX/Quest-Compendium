@@ -284,7 +284,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     if (!achGuideHere || !placeNow) return [];
     return achGuideHere.list.filter((a) => a.missable && a.areaName && samePlace(a.areaName, placeNow) && !activeGame?.achievements?.some((x) => x.unlocked && tipMatches(a, x.name)));
   }, [achGuideHere, placeNow, activeGame?.achievements]);
-  const [nudgeDismissed, setNudgeDismissed] = useState<string>('');
   const [showTour, setShowTour] = useState(() => !walkthroughDone());
   // The ⋯ menu's "Quick tour" opens it again.
   useEffect(() => {
@@ -1186,7 +1185,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     handleSubmit(undefined, t(`quick.${id}`), image, id);
   };
 
-  const questionCount = activeTab?.messages?.filter((m) => m.role === 'user').length ?? 0;
   // Immersive mode: a hold-to-talk question's answer is read aloud as soon as it arrives.
   useEffect(() => {
     if (isLoading || !readAloudPendingRef.current) return;
@@ -1491,86 +1489,40 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-[#0d0e14] via-[#090a0f] to-[#07070b] relative crt-grid">
-      {/* Conversation header: which compendium, which game, which persona */}
       {activeTab && (
-        <div className="h-11 flex-shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 border-b border-white/[0.06] bg-black/20">
-          <div className="flex items-baseline gap-2.5 min-w-0">
-            <span className="font-fantasy font-bold text-sm text-white truncate">{activeTab.name}</span>
-            <span className="hidden sm:inline text-[11px] text-zinc-500 truncate">
-              {[gameLabel, t('chat.personaLabel', { name: t(`chat.persona.${aiMode}`) })].filter(Boolean).join(' · ')}
-            </span>
+        <div className="flex-shrink-0 h-10 px-3 sm:px-4 flex items-center gap-2.5 text-[11px] text-zinc-300 min-w-0 border-b border-white/[0.06] bg-black/15">
+          {/* Ask | Guide */}
+          <div role="tablist" aria-label={t('main.modeLabel')} className="flex-shrink-0 flex items-center p-0.5 rounded-lg bg-black/40 border border-white/10" title={t('main.modeHint')}>
+            {(['ask', 'guide'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={mode === m}
+                onClick={() => setMode(m)}
+                className={`h-6 px-2.5 rounded-md text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  mode === m ? 'bg-[var(--accent-dim)] text-white border border-[var(--accent-border)]' : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
+                }`}
+              >
+                {m === 'ask' ? <QuestLogo size={14} compact /> : <BookOpen className="w-3.5 h-3.5 text-[var(--accent-color)]" />}
+                {t(m === 'ask' ? 'main.ask' : 'main.guide')}
+              </button>
+            ))}
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {mode === 'ask' && questionCount > 0 && (
-              <span className="hidden sm:inline text-[10px] font-mono uppercase text-zinc-500">
-                {t(questionCount === 1 ? 'chat.q1' : 'chat.qN', { n: questionCount })}
-              </span>
-            )}
-            {/* Ask | Guide */}
-            <div role="tablist" aria-label={t('main.modeLabel')} className="flex items-center p-0.5 rounded-lg bg-black/40 border border-white/10" title={t('main.modeHint')}>
-              {(['ask', 'guide'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  role="tab"
-                  aria-selected={mode === m}
-                  onClick={() => setMode(m)}
-                  className={`h-7 px-3 rounded-md text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                    mode === m ? 'bg-[var(--accent-dim)] text-white border border-[var(--accent-border)]' : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
-                  }`}
-                >
-                  {m === 'ask' ? <QuestLogo size={16} compact /> : <BookOpen className="w-3.5 h-3.5 text-[var(--accent-color)]" />}
-                  {t(m === 'ask' ? 'main.ask' : 'main.guide')}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab && (
-        <div className="flex-shrink-0 border-b border-white/[0.06] bg-black/10">
-          {/* Status strip: the current moment at a glance */}
-          <div className="h-8 px-4 sm:px-6 flex items-center gap-2 text-[11px] text-zinc-300 min-w-0">
+          {/* Where you are, and what can be missed here (opens the guide at the missables) */}
+          <span className="ml-auto min-w-0 flex items-center gap-1.5">
             <MapPin className="w-3.5 h-3.5 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />
             <span className={`truncate ${placeNow ? 'text-zinc-100 font-semibold' : 'text-zinc-500'}`}>{placeNow || t('strip.noPlace')}</span>
-            {placeNow && !activeTab.place?.confirmed && <span className="text-zinc-500 flex-shrink-0">· {t('strip.unconfirmed')}</span>}
-            {missHere.length > 0 && (
-              <button
-                type="button"
-                onClick={() => missHere[0].area && window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug: missHere[0].area } }))}
-                className="flex-shrink-0 flex items-center gap-1 px-1.5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-200 font-semibold hover:bg-amber-500/25 cursor-pointer"
-                title={t('strip.missableHint')}
-              >
-                ⚠ {t('strip.missable', { n: missHere.length })}
-              </button>
-            )}
+          </span>
+          {missHere.length > 0 && (
             <button
               type="button"
-              onClick={() => setMode(mode === 'ask' ? 'guide' : 'ask')}
-              className="ml-auto flex-shrink-0 text-[var(--accent-color)] hover:brightness-125 font-semibold cursor-pointer"
+              onClick={() => missHere[0].area && window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug: missHere[0].area } }))}
+              className="flex-shrink-0 flex items-center gap-1 px-1.5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-200 font-semibold hover:bg-amber-500/25 cursor-pointer"
+              title={t('strip.missableHint')}
             >
-              {mode === 'ask' ? t('strip.toGuide') : t('strip.toAsk')} →
+              ⚠ {t('strip.missable', { n: missHere.length })}
             </button>
-          </div>
-          {/* Spoiler-safe nudge: something missable here, shown once per place, no names unless you ask */}
-          {missHere.length > 0 && nudgeDismissed !== placeNow && mode === 'ask' && (
-            <div className="px-4 sm:px-6 pb-2 flex items-center gap-2 text-[12px] text-amber-100 animate-in fade-in slide-in-from-top-1 duration-200">
-              <span className="flex-1 min-w-0 truncate">⚠ {t('strip.nudge')}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setNudgeDismissed(placeNow);
-                  if (missHere[0].area) window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug: missHere[0].area } }));
-                }}
-                className="flex-shrink-0 h-6 px-2.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-100 font-semibold hover:bg-amber-500/30 cursor-pointer"
-              >
-                {t('strip.showMe')}
-              </button>
-              <button type="button" onClick={() => setNudgeDismissed(placeNow)} aria-label={t('strip.dismiss')} className="flex-shrink-0 h-6 w-6 rounded-md text-zinc-400 hover:text-white hover:bg-white/10 flex items-center justify-center cursor-pointer">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
           )}
         </div>
       )}

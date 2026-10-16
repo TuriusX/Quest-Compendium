@@ -20,9 +20,9 @@ function useMinute(): number {
 }
 
 /**
- * Pro / Fast next to the send button, each with the questions left today ("Pro 7 · Fast 24"). A radio group: click
+ * Pro / Fast next to the send button (the questions left are in the header's pill and the tooltips). A radio group: click
  * either side, or Left / Right (and Up / Down) when it has focus; a controller's R3 switches too (ControllerLayer).
- * Under it, a small line counts down to the next daily top-up ("+8 Pro · +25 Fast in 13h 20m"), also in the tooltips.
+ * The tooltips add the next daily top-up ("+8 Pro · +25 Fast in 13h 20m"); the header's questions pill counts it down.
  */
 export function ModelToggle({ value, onChange, pro, fast, disabled, balances }: { value: AnswerModel; onChange: (m: AnswerModel) => void; pro: number; fast: number; disabled?: boolean; balances?: Balances }) {
   const t = useT();
@@ -39,7 +39,6 @@ export function ModelToggle({ value, onChange, pro, fast, disabled, balances }: 
     }
   };
   return (
-    <div className="flex flex-col items-end gap-0.5">
     <div
       role="radiogroup"
       aria-label={t('model.label')}
@@ -63,12 +62,9 @@ export function ModelToggle({ value, onChange, pro, fast, disabled, balances }: 
             } ${o.left === 0 ? 'opacity-60' : ''}`}
           >
             <span>{o.label}</span>
-            <span className={`tabular-nums ${on ? 'text-[var(--accent-color)]' : ''}`}>{o.left}</span>
           </button>
         );
       })}
-    </div>
-    {next && <span className="text-[10px] leading-none text-zinc-500 tabular-nums whitespace-nowrap">{next}</span>}
     </div>
   );
 }

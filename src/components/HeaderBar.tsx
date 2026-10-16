@@ -1,46 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Trophy, 
-  FileText, 
-  Globe, 
-  Settings as SettingsIcon, 
-  Type, 
-  ScrollText, 
-  Maximize2, 
-  Gamepad2, 
-  Search,
-  ChevronDown,
-  Activity,
-  Cpu,
-  LogOut,
+import {
+  Trophy,
+  Settings as SettingsIcon,
+  ScrollText,
   ArrowRightToLine,
   Square,
   RefreshCw,
-  LogIn
+  LogIn,
+  MessageSquareText
 } from './icons';
 import { PWAInstallButton } from './PWAInstallButton';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
-import { logOut } from '../lib/firebase';
 import { useT } from '../i18n';
 import { QuestLogo } from './QuestLogo';
-import { displayGameName } from '../utils/gameName';
+import { GameSwitcher } from './GameSwitcher';
+import { QuestionsPill } from './QuestionsPill';
 
 interface HeaderBarProps {
   userData?: any;
-  activeTab: GameTab | null;
-  tabsCount?: number;
+  tabs: GameTab[];
+  activeTabId: string | null;
   activeGame: SteamGameData | null;
   isGameRunningLocally: boolean;
-  isSidebarOpen: boolean;
-  onToggleSidebar: () => void;
-  isAchDrawerOpen: boolean;
+  onSelectTab: (tabId: string) => void;
+  onStartCreateTab: () => void;
+  onStartRenameTab: (tabId: string, currentName: string) => void;
+  onDeleteTab: (tabId: string) => void;
+  onOpenGuides: () => void;
+  onOpenNotes: () => void;
+  onOpenQuests: () => void;
   onToggleAchDrawer: () => void;
-  isNotesOpen: boolean;
-  onToggleNotes: () => void;
-  isBrowserMode: boolean;
-  onToggleBrowserMode: () => void;
-  onOpenGameSearch: () => void;
   onOpenFeedback: () => void;
   onOpenPaywall?: () => void;
   onOpenSettings?: () => void;
@@ -49,7 +39,6 @@ interface HeaderBarProps {
   soundEnabled: boolean;
   isDocked: boolean;
   onToggleDock: () => void;
-  /** Desktop: hide the panel; the objectives tracker shows the latest answer's markers over the game. */
   /** The quest log over the game (desktop): show it (if away or never shown) or send it away. */
   onToggleQuestLog?: () => void;
   /** The quest log is out (not away as the ribbon). */
@@ -66,21 +55,24 @@ interface HeaderBarProps {
   onCompact?: () => void;
 }
 
+/**
+ * One header row: a small logo, the game switcher ("● Elden Ring ▾"), the questions pill with its live countdown,
+ * then Sign in (guests), tuck away and the quest log (desktop), the ⋯ menu, and close (desktop).
+ */
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   userData,
-  activeTab,
-  tabsCount = 1,
+  tabs,
+  activeTabId,
   activeGame,
   isGameRunningLocally,
-  isSidebarOpen,
-  onToggleSidebar,
-  isAchDrawerOpen,
+  onSelectTab,
+  onStartCreateTab,
+  onStartRenameTab,
+  onDeleteTab,
+  onOpenGuides,
+  onOpenNotes,
+  onOpenQuests,
   onToggleAchDrawer,
-  isNotesOpen,
-  onToggleNotes,
-  isBrowserMode,
-  onToggleBrowserMode,
-  onOpenGameSearch,
   onOpenFeedback,
   onOpenPaywall,
   onOpenSettings,
@@ -93,13 +85,13 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onTuckAway,
   tuckSide = 'right',
   questLogReady = true,
-  theme,
   onSync,
   onCompact,
 }) => {
   const t = useT();
+  const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
   const [isClosing, setIsClosing] = useState(false);
-  // The "More" menu: the header's less-used controls (achievements, settings, compact view, dock).
+  // The "More" menu: the header's less-used controls.
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
   const menuBtnRef = React.useRef<HTMLButtonElement>(null);
@@ -142,83 +134,33 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const achievements = activeGame?.achievements || [];
   const unlockedCount = achievements.filter(a => a.unlocked).length;
   const totalCount = achievements.length;
+  const menuItem = 'w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer';
 
   return (
-    <header className="qc-stars h-14 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between px-3 sm:px-4 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
-      {/* Left side: Brand Logo + Game Library Toggle (shrinks, so the buttons on the right always stay visible) */}
-      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-        <div className="relative flex items-center">
-          <button
-            style={{ WebkitAppRegion: "no-drag" } as any}
-            onClick={() => {
-              playPageTurnSound(soundEnabled);
-              onToggleSidebar();
-            }}
-            title={isSidebarOpen ? t('header.collapseLibrary') : t('header.expandLibrary')}
-            className={`group relative flex items-center justify-center p-2 rounded-xl border transition-all cursor-pointer ${
-              tabsCount === 0 && !isSidebarOpen
-                ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] ring-2 ring-[var(--accent-color)] ring-offset-2 ring-offset-[#0a0b10] shadow-[0_0_15px_var(--accent-glow)]'
-                : 'hover:bg-white/[0.06] border-transparent hover:border-white/10'
-            }`}
-          >
-            {/* Pulsing Beacon Rings when no tabs */}
-            {tabsCount === 0 && !isSidebarOpen && (
-              <>
-                <span className="absolute -inset-1 rounded-2xl bg-[var(--accent-color)] opacity-40 animate-ping pointer-events-none" />
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 rounded-full border-2 border-[#0a0b10] animate-bounce z-20 shadow-md" />
-              </>
-            )}
-
-            {/* Magical Aura */}
-            <div className={`absolute inset-0 rounded-xl bg-[var(--accent-glow)] blur-md transition-opacity ${
-              tabsCount === 0 && !isSidebarOpen ? 'opacity-80 animate-pulse' : 'opacity-40 group-hover:opacity-80'
-            }`} />
-            
-            <div className="relative flex-shrink-0 z-10">
-              <QuestLogo
-                size={32}
-                compact
-                className="drop-shadow-[0_0_10px_var(--accent-glow)] group-hover:scale-105 transition-transform"
-              />
-            </div>
-          </button>
-
-          {/* Floating animated callout badge */}
-          {tabsCount === 0 && !isSidebarOpen && (
-            <div 
-              onClick={() => {
-                playPageTurnSound(soundEnabled);
-                onToggleSidebar();
-              }}
-              className="hidden sm:flex items-center gap-1.5 ml-2.5 px-2.5 py-1 rounded-full bg-[var(--accent-color)] text-white text-[11px] font-semibold shadow-lg shadow-[var(--accent-glow)] animate-pulse cursor-pointer hover:brightness-110 whitespace-nowrap"
-            >
-              <span>👈 Click to Open Tabs</span>
-            </div>
-          )}
-        </div>
-        
-        <div className="flex flex-col text-left py-1 min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="font-fantasy font-bold text-sm tracking-wider text-white truncate">
-              QUEST COMPENDIUM
-            </span>
-            <span className="hidden xl:inline-block px-1.5 py-0.2 rounded text-[10px] font-pixel bg-[var(--accent-dim)] text-[var(--accent-color)] border border-[var(--accent-border)]">
-              AI HUD
-            </span>
-          </div>
-          <span
-            className="flex items-center gap-1 text-[10px] text-zinc-400 font-mono uppercase min-w-0"
-            title={isGameRunningLocally ? t('header.playing', { game: activeGame?.name ?? '' }) : t('header.noGame')}
-          >
-            <span className={`w-1.5 h-1.5 flex-shrink-0 rounded-full ${isGameRunningLocally ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
-            {/* The game's name matters most, so a narrow window shows just the name. */}
-            <span className="truncate">{isGameRunningLocally ? displayGameName(activeGame?.name) : t('header.noGame')}</span>
-          </span>
-        </div>
+    <header className="qc-stars h-12 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center gap-2 px-2.5 sm:px-3 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
+      {/* Left: a small logo and the game switcher (it shrinks, so the controls on the right always stay visible) */}
+      <QuestLogo size={22} compact className="flex-shrink-0 drop-shadow-[0_0_8px_var(--accent-glow)]" />
+      <div className="min-w-0 flex-1 flex">
+        <GameSwitcher
+          tabs={tabs}
+          activeTabId={activeTabId}
+          activeGame={activeGame}
+          isGameRunningLocally={isGameRunningLocally}
+          soundEnabled={soundEnabled}
+          onSelectTab={onSelectTab}
+          onStartCreateTab={onStartCreateTab}
+          onStartRenameTab={onStartRenameTab}
+          onDeleteTab={onDeleteTab}
+          onOpenGuides={onOpenGuides}
+          onOpenNotes={onOpenNotes}
+          onOpenQuests={onOpenQuests}
+        />
       </div>
-      {/* Right Controls Toolbar */}
-      <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 ml-2">
-        {/* Questions left: shown on the Pro / Fast switch next to the send button (ChatArea, ModelToggle). */}
+
+      {/* Right controls */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <QuestionsPill userData={userData} onOpenPaywall={onOpenPaywall} />
+
         {onSignIn && (
           <button
             style={{ WebkitAppRegion: "no-drag" } as any}
@@ -227,7 +169,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               onSignIn();
             }}
             title={t('signin.headerTitle')}
-            className="px-2.5 py-1.5 rounded-xl border border-[var(--accent-border)] text-[var(--accent-color)] hover:text-white hover:bg-[var(--accent-dim)] transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+            className="ml-0.5 h-7 px-2 rounded-lg border border-[var(--accent-border)] text-[var(--accent-color)] hover:text-white hover:bg-[var(--accent-dim)] transition-all cursor-pointer flex items-center gap-1.5 text-[11.5px] font-semibold whitespace-nowrap"
           >
             <LogIn className="w-3.5 h-3.5" />
             {t('signin.header')}
@@ -235,7 +177,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         )}
 
         {/* The desktop app's two most used controls: tuck the panel away, and the quest log. */}
-        {typeof window !== 'undefined' && !!(window as any).electronAPI && (
+        {isDesktop && (
           <>
             {/* Tuck away: the panel slides to the screen edge (Esc does the same) */}
             {onTuckAway && (
@@ -244,7 +186,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 onClick={onTuckAway}
                 title={t('header.tuckAway')}
                 aria-label={t('header.tuckAway')}
-                className="p-2 rounded-xl text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer"
               >
                 <svg viewBox="0 0 12 12" width="16" height="16" shape-rendering="crispEdges" aria-hidden="true" style={tuckSide === 'left' ? { transform: 'scaleX(-1)' } : undefined}>
                   <path fill="currentColor" d="M1 2h2v2h2v2h2v2H5v2H3v2H1v-2h2V8h2V6H3V4H1zM9 1h2v10H9z" />
@@ -260,16 +202,15 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 aria-pressed={questLogVisible}
                 title={!questLogReady ? t('header.questLogEmpty') : questLogVisible ? t('header.questLogHide') : t('header.questLogShow')}
                 aria-label={t('header.questLog')}
-                className={`p-2 rounded-xl transition-all cursor-pointer disabled:opacity-40 disabled:cursor-default ${questLogVisible ? 'text-[var(--accent-color)] bg-[var(--accent-dim)] hover:bg-white/10' : 'text-zinc-400 hover:text-white hover:bg-white/10'}`}
+                className={`p-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-default ${questLogVisible ? 'text-[var(--accent-color)] bg-[var(--accent-dim)] hover:bg-white/10' : 'text-zinc-400 hover:text-white hover:bg-white/10'}`}
               >
                 <ScrollText className="w-4 h-4" />
               </button>
             )}
-
           </>
         )}
 
-        {/* "More": achievements, settings, compact view, dock / undock */}
+        {/* "More": your playthrough, achievements, compact view, settings, quick tour, dock / undock, beta feedback */}
         <div className="relative" style={{ WebkitAppRegion: "no-drag" } as any}>
           <button
             ref={menuBtnRef}
@@ -282,48 +223,53 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             aria-expanded={menuOpen}
             title={t('header.menu')}
             aria-label={t('header.menu')}
-            className={`p-2 rounded-xl transition-all cursor-pointer ${menuOpen ? 'text-white bg-white/[0.08]' : 'text-zinc-400 hover:text-white hover:bg-white/[0.08]'}`}
+            className={`p-1.5 rounded-lg transition-all cursor-pointer ${menuOpen ? 'text-white bg-white/[0.08]' : 'text-zinc-400 hover:text-white hover:bg-white/[0.08]'}`}
           >
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="3" cy="8" r="1.6" fill="currentColor" /><circle cx="8" cy="8" r="1.6" fill="currentColor" /><circle cx="13" cy="8" r="1.6" fill="currentColor" /></svg>
           </button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden="true" />
-              <div ref={menuRef} role="menu" aria-label={t('header.menu')} onKeyDown={onMenuKey} className="absolute right-0 top-11 z-50 w-56 py-1.5 rounded-xl bg-[#161620] border border-white/15 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+              <div ref={menuRef} role="menu" aria-label={t('header.menu')} onKeyDown={onMenuKey} className="absolute right-0 top-10 z-50 w-56 py-1.5 rounded-xl bg-[#161620] border border-white/15 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); window.dispatchEvent(new CustomEvent('qc-open-playthrough')); })} className={menuItem}>
+                  <span className="w-4 h-4 flex items-center justify-center text-[13px]" aria-hidden="true">✦</span>
+                  <span className="flex-1">{t('play.title')}</span>
+                </button>
                 {activeGame && (
-                  <button type="button" role="menuitem" onClick={pick(() => { playPageTurnSound(soundEnabled); onToggleAchDrawer(); })} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
+                  <button type="button" role="menuitem" onClick={pick(() => { playPageTurnSound(soundEnabled); onToggleAchDrawer(); })} className={menuItem}>
                     <Trophy className="w-4 h-4 text-amber-400" />
                     <span className="flex-1">{t('common.achievements')}</span>
                     {totalCount > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.08] text-zinc-300 font-mono font-bold">{unlockedCount}/{totalCount}</span>}
                   </button>
                 )}
                 {onCompact && (
-                  <button type="button" role="menuitem" onClick={pick(onCompact)} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
+                  <button type="button" role="menuitem" onClick={pick(onCompact)} className={menuItem}>
                     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" className="text-zinc-400"><path fill="none" stroke="currentColor" strokeWidth="1.5" d="M2 10h12v4H2zM4 6h8M6 3h4" /></svg>
                     <span className="flex-1">{t('compact.collapse')}</span>
                     <span className="text-[10px] text-zinc-500 font-mono">Ctrl+Shift+F</span>
                   </button>
                 )}
-                <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); window.dispatchEvent(new CustomEvent('qc-open-playthrough')); })} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
-                  <span className="w-4 h-4 flex items-center justify-center text-[13px]" aria-hidden="true">✦</span>
-                  <span className="flex-1">{t('play.title')}</span>
-                </button>
-                <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); window.dispatchEvent(new CustomEvent('qc-open-tour')); })} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
-                  <span className="w-4 h-4 flex items-center justify-center text-[13px]" aria-hidden="true">?</span>
-                  <span className="flex-1">{t('tour.title')}</span>
-                </button>
                 {onOpenSettings && (
-                  <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); onOpenSettings(); })} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
+                  <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); onOpenSettings(); })} className={menuItem}>
                     <SettingsIcon className="w-4 h-4 text-zinc-400" />
                     <span className="flex-1">{t('common.settings')}</span>
                   </button>
                 )}
-                {typeof window !== 'undefined' && !!(window as any).electronAPI && (
-                  <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); onToggleDock(); })} className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
+                <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); window.dispatchEvent(new CustomEvent('qc-open-tour')); })} className={menuItem}>
+                  <span className="w-4 h-4 flex items-center justify-center text-[13px]" aria-hidden="true">?</span>
+                  <span className="flex-1">{t('tour.title')}</span>
+                </button>
+                {isDesktop && (
+                  <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); onToggleDock(); })} className={menuItem}>
                     {isDocked ? <Square className="w-4 h-4 text-zinc-400" /> : <ArrowRightToLine className="w-4 h-4 text-zinc-400" />}
                     <span className="flex-1">{isDocked ? t('header.undock') : t('header.dock')}</span>
                   </button>
                 )}
+                <div className="h-px bg-white/[0.08] my-1 mx-2" />
+                <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); onOpenFeedback(); })} className={menuItem}>
+                  <MessageSquareText className="w-4 h-4 text-amber-400" />
+                  <span className="flex-1">{t('side.feedback')}</span>
+                </button>
               </div>
             </>
           )}
@@ -333,32 +279,25 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <PWAInstallButton />
         </div>
 
-        {/* Desktop Window Controls (Close & Dock) - only rendered in Electron desktop mode */}
-        {typeof window !== 'undefined' && !!(window as any).electronAPI && (
-          <>
-            {/* Vertical Divider */}
-            <div className="h-4 w-[1px] bg-white/10 mx-0.5 hidden sm:block" />
-
-            {/* Close Button */}
-            <button
-              style={{ WebkitAppRegion: "no-drag" } as any}
-              onClick={handleCloseApp}
-              disabled={isClosing}
-              title={isClosing ? t('header.closing') : t('header.close')}
-              aria-label={t('header.close')}
-              className="p-2 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer ml-1 disabled:opacity-50"
-            >
-              {isClosing ? (
-                <RefreshCw className="w-4 h-4 animate-spin text-zinc-300" />
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              )}
-            </button>
-
-          </>
+        {/* Close (desktop) */}
+        {isDesktop && (
+          <button
+            style={{ WebkitAppRegion: "no-drag" } as any}
+            onClick={handleCloseApp}
+            disabled={isClosing}
+            title={isClosing ? t('header.closing') : t('header.close')}
+            aria-label={t('header.close')}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer disabled:opacity-50"
+          >
+            {isClosing ? (
+              <RefreshCw className="w-4 h-4 animate-spin text-zinc-300" />
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            )}
+          </button>
         )}
       </div>
     </header>

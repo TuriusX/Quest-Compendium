@@ -12,7 +12,6 @@ import {
 } from './types';
 import { POPULAR_STEAM_GAMES } from './data/mockGames';
 import { HeaderBar } from './components/HeaderBar';
-import { GamesSidebar } from './components/GamesSidebar';
 import { ChatArea } from './components/ChatArea';
 import { AchievementsDrawer } from './components/AchievementsDrawer';
 const PlaythroughNotepad = React.lazy(() => import('./components/PlaythroughNotepad').then(module => ({ default: module.PlaythroughNotepad })));
@@ -296,7 +295,6 @@ export default function App() {
   }, [tabs, activeTabId]);
 
   // --- UI Drawer & Modal States ---
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAchDrawerOpen, setIsAchDrawerOpen] = useState(false);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isQuestsOpen, setIsQuestsOpen] = useState(false);
@@ -333,9 +331,7 @@ export default function App() {
   const [globalActiveGame, setGlobalActiveGame] = useState<SteamGameData | null>(null);
 
   // --- Resizing States ---
-  const [sidebarWidth, setSidebarWidth] = useState(288);
   const [achDrawerWidth, setAchDrawerWidth] = useState(384);
-  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
   const [isDraggingAch, setIsDraggingAch] = useState(false);
   const dragStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -344,22 +340,18 @@ export default function App() {
       if (!dragStartRef.current) return;
       const { startX, startWidth } = dragStartRef.current;
       
-      if (isDraggingSidebar) {
-        const delta = e.clientX - startX;
-        setSidebarWidth(Math.max(200, Math.min(800, startWidth + delta)));
-      } else if (isDraggingAch) {
+      if (isDraggingAch) {
         const delta = startX - e.clientX;
         setAchDrawerWidth(Math.max(250, Math.min(800, startWidth + delta)));
       }
     };
 
     const handleMouseUp = () => {
-      setIsDraggingSidebar(false);
       setIsDraggingAch(false);
       dragStartRef.current = null;
     };
 
-    if (isDraggingSidebar || isDraggingAch) {
+    if (isDraggingAch) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = 'col-resize';
@@ -373,7 +365,7 @@ export default function App() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingSidebar, isDraggingAch]);
+  }, [isDraggingAch]);
 
   const { user, subscriptionStatus, userData, isInitializing, isOutdated, syncDiagnostics } = useCloudSync(settings, tabs, setSettings, setTabs);
 
@@ -492,12 +484,11 @@ export default function App() {
       const baseWidth = 550;
       
       let totalWidth = baseWidth;
-      if (isSidebarOpen) totalWidth += sidebarWidth;
       if (isAchDrawerOpen) totalWidth += achDrawerWidth;
 
       (window as any).electronAPI.resizeWindow(totalWidth);
     }
-  }, [isSidebarOpen, isAchDrawerOpen, sidebarWidth, achDrawerWidth]);
+  }, [isAchDrawerOpen, achDrawerWidth]);
 
   // Sync Dock Position to Electron
   useEffect(() => {
@@ -2320,7 +2311,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     (window as any).electronAPI?.setCompact?.(compact);
     // The side panels close, so the window is back to its base width.
     if (compact) {
-      setIsSidebarOpen(false);
       setIsAchDrawerOpen(false);
     }
   }, [compact]);
@@ -2413,19 +2403,18 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         {/* Header Bar (not in the compact view) */}
         {!compact && <HeaderBar
           userData={userData}
-          activeTab={activeTab}
-          tabsCount={tabs.length}
+          tabs={tabs}
+          activeTabId={activeTabId}
           activeGame={activeGame}
           isGameRunningLocally={globalActiveGame !== null}
-          isSidebarOpen={isSidebarOpen}
-          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-          isAchDrawerOpen={isAchDrawerOpen}
+          onSelectTab={handleSelectTab}
+          onStartCreateTab={handleStartCreateTab}
+          onStartRenameTab={handleStartRenameTab}
+          onDeleteTab={handleDeleteTab}
+          onOpenGuides={() => setIsBrowserMode(true)}
+          onOpenNotes={() => setIsNotesOpen(true)}
+          onOpenQuests={() => setIsQuestsOpen(true)}
           onToggleAchDrawer={() => setIsAchDrawerOpen(!isAchDrawerOpen)}
-          isNotesOpen={isNotesOpen}
-          onToggleNotes={() => setIsNotesOpen(!isNotesOpen)}
-          isBrowserMode={isBrowserMode}
-          onToggleBrowserMode={() => setIsBrowserMode(!isBrowserMode)}
-          onOpenGameSearch={() => setIsGameSearchOpen(true)}
           onOpenFeedback={() => setIsFeedbackOpen(true)}
           onOpenPaywall={() => setIsPaywallOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
@@ -2459,47 +2448,12 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           />
         )}
 
-        {/* Main Body: Left Sidebar + Central Chat/Browser + Right Achievements Drawer */}
+        {/* Main Body: Central Chat/Browser + Right Achievements Drawer */}
         {/* overflow-clip, not overflow-hidden: a clipped box isn't scrollable, so focusing a field can't shift the
             layout (the closed side panels are wider and taller than the window). Unlike overflow-hidden it doesn't
             stop a flex item growing to its content, hence min-h-0 / min-w-0 here and on the panel and main (without
             them a long conversation pushed the question box below the window). */}
         <div className="flex-1 min-h-0 min-w-0 flex overflow-clip relative">
-          {/* Games Sidebar */}
-          {!compact && <GamesSidebar
-            width={sidebarWidth}
-            isDragging={isDraggingSidebar}
-            isOpen={isSidebarOpen}
-            onClose={() => setIsSidebarOpen(false)}
-            tabs={tabs}
-            activeTabId={activeTabId}
-            globalActiveGame={activeGame}
-            onSelectTab={handleSelectTab}
-            onStartCreateTab={handleStartCreateTab}
-            onStartRenameTab={handleStartRenameTab}
-            onDeleteTab={handleDeleteTab}
-            tabFontSize={settings.tabFontSize}
-            onChangeTabFontSize={(size) => setSettings(s => ({ ...s, tabFontSize: size }))}
-            soundEnabled={settings.soundEnabled}
-            onOpenNotes={() => setIsNotesOpen(true)}
-            onOpenGuides={() => setIsBrowserMode(true)}
-            onOpenQuests={() => setIsQuestsOpen(true)}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onOpenFeedback={() => setIsFeedbackOpen(true)}
-            onSync={syncDiagnostics?.triggerSyncNow}
-          />}
-
-          {/* Sidebar Drag Handle */}
-          {isSidebarOpen && !compact && (
-            <div 
-              className="w-1.5 cursor-col-resize hover:bg-[var(--accent-color)]/50 active:bg-[var(--accent-color)] transition-colors z-30 flex-shrink-0"
-              onMouseDown={(e) => {
-                setIsDraggingSidebar(true);
-                dragStartRef.current = { startX: e.clientX, startWidth: sidebarWidth };
-              }}
-            />
-          )}
-
           {/* Central Workspace: Chat OR Browser */}
           <main className="qc-scanlines flex-1 min-h-0 min-w-0 flex flex-col overflow-clip relative">
             {isBrowserMode ? (
