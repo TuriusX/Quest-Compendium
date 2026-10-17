@@ -45,6 +45,10 @@ interface SettingsModalProps {
   onUpdateSettings: (newSettings: Partial<AppSettings>) => void;
   soundEnabled: boolean;
   syncDiagnostics?: CloudSyncDiagnostics | null;
+  /** The player's plan (the main window only): the Account tab's plan row. */
+  plan?: { isGuest: boolean; isPremium: boolean; source?: string; periodEnd?: number; cancelAtPeriodEnd?: boolean };
+  /** The Premium / Your plan screen. */
+  onOpenPlan?: () => void;
 }
 
 type TabId = 'appearance' | 'persona' | 'shortcuts' | 'connection' | 'account';
@@ -175,6 +179,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUpdateSettings,
   soundEnabled,
   syncDiagnostics,
+  plan,
+  onOpenPlan,
 }) => {
   const tr = useT();
   const [activeTab, setActiveTab] = useState<TabId>('appearance');
@@ -1112,6 +1118,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {activeTab === 'account' && (
               <div className="space-y-3 animate-in slide-in-from-right-4 fade-in duration-300">
+                {/* Your plan: Free / Guest with See Premium, or Premium with when it renews (or ends) and Manage or cancel. */}
+                {plan && onOpenPlan && (
+                  <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[var(--accent-dim)] border border-[var(--accent-border)]">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-white">
+                        {tr('prem.yourPlan')}: {plan.isPremium ? tr('prem.premiumPlan') : plan.isGuest ? tr('prem.guestPlan') : tr('prem.free')}
+                      </div>
+                      <div className="text-[11px] text-zinc-300">
+                        {plan.isPremium
+                          ? plan.source === 'stripe' && plan.periodEnd
+                            ? tr(plan.cancelAtPeriodEnd ? 'prem.endsOn' : 'prem.renewsOn', { date: new Date(plan.periodEnd).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) })
+                            : plan.source === 'grant' ? tr('prem.granted') : tr('prem.premiumQ')
+                          : plan.isGuest ? tr('prem.guestQ') : tr('prem.freeQ')}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { playBlipSound(soundEnabled); onOpenPlan(); }}
+                      className="flex-shrink-0 h-8 px-3 rounded-lg text-xs font-semibold border border-[var(--accent-border)] text-white hover:bg-[var(--accent-dim)] cursor-pointer"
+                    >
+                      {plan.isPremium ? (plan.source === 'stripe' ? tr('prem.manage') : tr('prem.details')) : tr('prem.see')}
+                    </button>
+                  </div>
+                )}
                 {/* Playthrough memory (on by default): off, nothing about the playthrough is noted or sent with questions. */}
                 <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
                   <div>

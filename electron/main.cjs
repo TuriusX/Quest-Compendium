@@ -1052,6 +1052,17 @@ ipcMain.handle('get-active-game', async () => {
   return activeSteamGame;
 });
 
+// Premium checkout and the Stripe customer portal (and our own pages) open in the system browser, never in the
+// overlay: only https links to Stripe's checkout / billing pages and Quest Compendium's own addresses.
+ipcMain.on('open-external', (event, url) => {
+  try {
+    const u = new URL(String(url || ''));
+    const ok = u.protocol === 'https:' && (/^(checkout|billing)\.stripe\.com$/.test(u.hostname) || u.hostname === 'questcompendium.com' || /^quest-compendium-[a-z0-9-]+\.run\.app$/.test(u.hostname));
+    if (ok) shell.openExternal(u.toString());
+    else console.warn('[open-external] refused', u.hostname);
+  } catch { /* not a URL */ }
+});
+
 // Trigger external browser for login
 ipcMain.on('start-desktop-login', () => {
   shell.openExternal(`http://localhost:${localAuthPort}/desktop-login`);

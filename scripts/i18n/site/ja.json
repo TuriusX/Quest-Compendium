@@ -178,5 +178,11 @@
   "You can try it for free with 2 Pro and 5 Fast questions a day, no credit card needed. Premium is $4.99/month for 8 Pro and 25 Fast questions a day, with unused questions carrying over (up to 100 of each), plus premium features like on-screen markers and Gemini voices. During the beta, every player gets every feature. See": "クレジットカード不要で、毎日 Pro 2回＆ Fast 5回まで無料でお試しいただけます。Premium は月額 $4.99 で毎日 Pro 8回＆ Fast 25回質問でき、余った回数は繰り越し可能（それぞれ最大100回まで）。さらに画面上マーカーや Gemini 音声などのプレミアム機能も利用できます。ベータ期間中は全プレイヤーがすべての機能をお使いいただけます。詳細は",
   "Quest Compendium is an AI game guide that sees your screen and answers in the context of your game. Hints, boss tips and step-by-step help in an overlay on Windows, in your browser, or on Steam Deck. Free to try.": "Quest Compendiumは、あなたの画面を認識してゲームの状況に合わせた答えをくれるAIゲームガイドです。ヒントやボスの攻略法、詳細な手引きを、Windowsのオーバーレイ、ブラウザ、Steam Deckで確認できます。まずはお試し無料！",
   "An AI game guide that sees your screen and knows what you're looking at. Hints, boss tips and step-by-step help without leaving your game. Free to try.": "ゲーム画面を認識して、今見ているものを理解するAIゲームガイド。ゲーム画面を開いたまま、ヒントやボスの攻略法、詳細な手引きがチェックできます。まずはお試し無料！",
-  "Version 0.5.4 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "バージョン 0.5.4 ベータ版、64ビット Windows対応。お試し無料：クレジットカード不要で、Pro質問1日2回、Fast質問1日5回まで利用可能。"
+  "Version 0.5.4 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "バージョン 0.5.4 ベータ版、64ビット Windows対応。お試し無料：クレジットカード不要で、Pro質問1日2回、Fast質問1日5回まで利用可能。",
+  "Version 0.6.0 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "バージョン 0.6.0 ベータ版（64ビット Windows）。無料でお試し可能：Pro 質問が1日2回、Fast 質問が1日5回まで、クレジットカード不要。",
+  "Get Premium": "Premium を手に入れる",
+  "Sign in, then pay securely with Stripe. Cancel any time.": "サインイン後、Stripe で安全にお支払い。いつでも解約可能です。",
+  "During the beta, every player gets on-screen markers and the Gemini voices too.": "ベータ期間中は、すべてのプレイヤーが画面上のマーカーや Gemini 音声も利用できます。",
+  "Upgrade any time": "いつでもアップグレード可能",
+  ", also from inside the app.": "（アプリ内からも可能）"
 }

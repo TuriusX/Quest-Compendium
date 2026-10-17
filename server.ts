@@ -42,6 +42,7 @@ import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifie
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
+import { decidePremium, stripeViewFor, cachedStripeView, forgetStripeView } from './premium';
 import { recordDailyCost, recordLimitHit } from './searchGuard';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, playerSearchesToday, recordPlayerSearches, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
@@ -181,6 +182,23 @@ dotenv.config();
 
 // Lazy Stripe initialization
 let stripeClient: Stripe | null = null;
+/** Owner accounts (ADMIN_EMAILS): their Premium is a grant, never turned off by Stripe. */
+const isOwnerEmail = (email: string | null) => !!email && (process.env.ADMIN_EMAILS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean).includes(email);
+
+/**
+ * Premium for a signed-in player (premium.ts): Stripe decides, manual grants and owners stay, a Stripe outage changes
+ * nothing. What changed is saved on users/{uid}. fresh: skip the few-minute cache (back from checkout or the portal).
+ */
+async function premiumFor(idToken: string, uid: string, email: string | null, userData: any, fresh = false) {
+  const view = await cachedStripeView(uid, () => stripeViewFor(getStripe(), userData?.stripeCustomerId, email), fresh);
+  const d = decidePremium(userData, view, { owner: isOwnerEmail(email) });
+  if (Object.keys(d.save).length) {
+    await updateFirestoreDocREST(idToken, uid, d.save).catch(() => {});
+    Object.assign(userData, d.save);
+  }
+  return d;
+}
+
 function getStripe(): Stripe {
   if (!stripeClient) {
     const key = process.env.STRIPE_SECRET_KEY;
@@ -259,19 +277,33 @@ async function startServer() {
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as any;
-      const userId = session.client_reference_id;
-      if (userId) {
-        try {
-          console.log("Stripe webhook received checkout for", userId);
-          // Skipping server-side Firestore admin write due to AI Studio IAM sandbox restrictions.
-          // The client will perform the update upon redirect.
-          console.log(`Successfully upgraded user ${userId} to Premium!`);
-        } catch (dbErr) {
-          console.error('Failed to update user in Firestore:', dbErr);
+    // A finished checkout: the player's account gets the Stripe customer and Premium at once (the status check would
+    // find it too, by id or email, within minutes). Subscription changes (the portal: cancel, payment failed, ended):
+    // that player's status is looked up again on their next request.
+    try {
+      const db = getFirestore();
+      if (event.type === 'checkout.session.completed') {
+        const session = event.data.object as any;
+        const userId = typeof session.client_reference_id === 'string' ? session.client_reference_id : '';
+        if (userId && !userId.startsWith('guest_')) {
+          await db.collection('users').doc(userId).set({
+            ...(session.customer ? { stripeCustomerId: String(session.customer) } : {}),
+            ...(session.mode === 'subscription' && session.payment_status === 'paid' ? { isPremium: true, subscriptionStatus: 'active' } : {}),
+          }, { merge: true });
+          forgetStripeView(userId);
+          console.log('[stripe] checkout completed for', userId.slice(-6));
+        }
+      } else if (event.type.startsWith('customer.subscription.')) {
+        const sub = event.data.object as any;
+        const customer = String(sub.customer || '');
+        if (customer) {
+          const found = await db.collection('users').where('stripeCustomerId', '==', customer).limit(3).get();
+          for (const u of found.docs) forgetStripeView(u.id);
+          console.log(`[stripe] ${event.type} (${sub.status}) for ${found.size} account(s)`);
         }
       }
+    } catch (dbErr: any) {
+      console.error('[stripe] webhook handling failed:', dbErr?.message);
     }
 
     res.json({received: true});
@@ -528,33 +560,12 @@ async function startServer() {
       }
 
       let userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
-      
+
       const rawEmail = (req as any).user?.email;
       const userEmail = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : null;
-      let isStripePremium = false;
-      if (userEmail) {
-        try {
-          const stripe = getStripe();
-          const customers = await stripe.customers.list({ email: userEmail, limit: 5 });
-          for (const customer of customers.data) {
-            const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'active', limit: 1 });
-            if (subs.data.length > 0) {
-              isStripePremium = true;
-              break;
-            }
-          }
-          // Persist the premium status to Firestore if it changed
-          if (isStripePremium && (userData.isPremium !== true || userData.subscriptionStatus !== 'active')) {
-            await updateFirestoreDocREST(idToken, userId, { isPremium: true, subscriptionStatus: 'active' });
-            userData.isPremium = true;
-            userData.subscriptionStatus = 'active';
-          }
-        } catch (e: any) {
-          console.warn('[Stripe status check warn]:', e.message);
-        }
-      }
-      
-      const isEffectivePremium = Boolean(userData.isPremium === true || isStripePremium || userData.subscriptionStatus === 'active');
+      // Premium (premium.ts): Stripe decides; ?fresh=1 when the app is back from checkout or the portal.
+      const premium = await premiumFor(idToken, userId, userEmail, userData, req.query.fresh === '1');
+      const isEffectivePremium = premium.isPremium;
       const before = `${userData.proQueriesAvailable}|${userData.flashQueriesAvailable}|${userData.lastResetDate}|${userData.allowancePlan}`;
       userData = await syncUserLimits(userData, tz, isEffectivePremium);
       // A new day (or a plan change) is saved now, so the carry-over is applied once.
@@ -562,12 +573,7 @@ async function startServer() {
         updateFirestoreDocREST(idToken, userId, { proQueriesAvailable: userData.proQueriesAvailable, flashQueriesAvailable: userData.flashQueriesAvailable, lastResetDate: userData.lastResetDate, allowancePlan: userData.allowancePlan }).catch(() => {});
       }
       userData.isPremium = isEffectivePremium;
-      userData.subscriptionStatus = isEffectivePremium ? 'active' : (userData.subscriptionStatus || 'beta');
-
-      // If effective premium was identified, ensure Firestore is in sync
-      if (isEffectivePremium && (userData.isPremium !== true || userData.subscriptionStatus !== 'active')) {
-        updateFirestoreDocREST(idToken, userId, { isPremium: true, subscriptionStatus: 'active' }).catch(() => {});
-      }
+      userData.subscriptionStatus = isEffectivePremium ? 'active' : (userData.subscriptionStatus === 'active' ? 'inactive' : userData.subscriptionStatus || 'beta');
 
       // A new account's first source, once per account (the daily summary's sign-ups by source).
       if (!userData.signupSource) {
@@ -586,11 +592,61 @@ async function startServer() {
         ...(await quotaView(userData, isEffectivePremium, tz)),
         fullAccess: hasFullAccess(isEffectivePremium),
         beta: BETA_ALL_ACCESS,
+        // The plan, for Settings and the paywall: who manages it, and when it renews or ends.
+        premiumSource: premium.source,
+        ...(premium.source === 'stripe' && userData.premiumPeriodEnd ? { premiumPeriodEnd: userData.premiumPeriodEnd, premiumCancelAtPeriodEnd: userData.premiumCancelAtPeriodEnd === true } : {}),
       });
     } catch (err) {
       console.error('Status fetch error:', err);
       res.status(500).json({ error: 'Failed to fetch user status' });
     }
+  });
+
+  // --- API: Stripe customer portal (Settings: "Manage or cancel") ---
+  // The player's own Stripe customer: change the card, see invoices, cancel at the end of the period.
+  app.post('/api/billing-portal', requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.uid;
+      if ((req as any).user.isGuest || String(userId).startsWith('guest_')) return res.status(401).json({ error: 'Sign in first.' });
+      const idToken = req.headers.authorization!.split('Bearer ')[1];
+      const rawEmail = (req as any).user?.email;
+      const userEmail = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : null;
+      const userData = (await getFirestoreDocREST(idToken, userId)) || {};
+      const stripe = getStripe();
+      const customer = userData.stripeCustomerId || (await stripeViewFor(stripe, undefined, userEmail)).customerId;
+      if (!customer) return res.status(404).json({ error: 'No subscription found for this account.' });
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const inBrowserOnly = ['desktop', 'deck'].includes(String(req.body?.client || ''));
+      const session = await stripe.billingPortal.sessions.create({
+        customer,
+        return_url: inBrowserOnly ? `${protocol}://${host}/premium/thanks?portal=1` : `${protocol}://${host}/?portal=done`,
+      });
+      forgetStripeView(userId);
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error('Stripe portal error:', err?.message);
+      res.status(500).json({ error: 'Could not open subscription settings right now.' });
+    }
+  });
+
+  // After checking out (or the portal) in a browser from the desktop app or the Deck: back to the app.
+  app.get('/premium/thanks', (req, res) => {
+    const canceled = req.query.canceled === '1';
+    const portal = req.query.portal === '1';
+    const title = canceled ? 'No charge made' : portal ? 'All set' : 'Thanks, Premium is on';
+    const body = canceled
+      ? 'You left checkout before paying. You can close this tab and keep using Quest Compendium for free.'
+      : portal
+        ? 'Your subscription settings are saved. You can close this tab and go back to Quest Compendium.'
+        : 'Your account now has Premium: more Pro and Fast questions every day, and unused ones carry over. Close this tab and go back to Quest Compendium; it picks up Premium by itself within a few seconds.';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · Quest Compendium</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#07070b;color:#f3eefc;font:16px/1.5 'Segoe UI',system-ui,sans-serif;padding:24px;box-sizing:border-box}
+.card{max-width:420px;text-align:center;background:#0e0e14;border:1px solid rgba(168,127,251,.4);border-radius:16px;padding:32px 28px;box-shadow:0 0 40px rgba(168,127,251,.15)}
+h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
+<body><div class="card"><h1>${title}</h1><p>${body}</p></div></body></html>`);
   });
 
   // --- API: Stripe Checkout ---
@@ -607,18 +663,30 @@ async function startServer() {
       const protocol = req.headers['x-forwarded-proto'] || req.protocol;
       const host = req.headers['x-forwarded-host'] || req.get('host');
       const baseUrl = `${protocol}://${host}`;
+      if ((req as any).user.isGuest || String(userId).startsWith('guest_')) return res.status(401).json({ error: 'Sign in first.' });
+      // The account's own Stripe customer (or its email, so Stripe makes the customer with it): the payment always
+      // lands on this account, whatever email is typed at checkout.
+      const rawEmail = (req as any).user?.email;
+      const userEmail = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+      const saved = await getFirestoreDocREST(req.headers.authorization!.split('Bearer ')[1], userId).catch(() => null);
+      // Desktop and Deck check out in the system or phone browser: they land on a thanks page, not in the web app.
+      const inBrowserOnly = ['desktop', 'deck'].includes(String(req.body?.client || ''));
+      const done = inBrowserOnly ? `${baseUrl}/premium/thanks` : `${baseUrl}/?upgrade=success`;
+      const back = inBrowserOnly ? `${baseUrl}/premium/thanks?canceled=1` : `${baseUrl}/?upgrade=canceled`;
 
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         client_reference_id: userId,
+        ...(saved?.stripeCustomerId ? { customer: saved.stripeCustomerId } : userEmail ? { customer_email: userEmail } : {}),
+        subscription_data: { metadata: { uid: userId } },
         line_items: [
           {
             price: priceId,
             quantity: 1,
           },
         ],
-        success_url: `${baseUrl}/?upgrade=success`,
-        cancel_url: `${baseUrl}/?upgrade=canceled`,
+        success_url: done,
+        cancel_url: back,
       });
 
       res.json({ url: session.url });
@@ -913,27 +981,7 @@ async function startServer() {
         userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
         const rawEmail = (req as any).user?.email;
         const userEmail = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : null;
-        let isStripePremium = false;
-        if (userEmail) {
-          try {
-            const stripe = getStripe();
-            const customers = await stripe.customers.list({ email: userEmail, limit: 5 });
-            for (const customer of customers.data) {
-              const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'active', limit: 1 });
-              if (subs.data.length > 0) {
-                isStripePremium = true;
-                break;
-              }
-            }
-            if (isStripePremium && userData.isPremium !== true) {
-              await updateFirestoreDocREST(idToken, userId, { isPremium: true });
-            }
-          } catch (e: any) {
-            console.warn('[Stripe chat check warn]:', e.message);
-          }
-        }
-        
-        const isEffectivePremium = Boolean(userData.isPremium === true || isStripePremium);
+        const isEffectivePremium = (await premiumFor(idToken, userId, userEmail, userData)).isPremium;
         userData = await syncUserLimits(userData, tz, isEffectivePremium);
         userData.isPremium = isEffectivePremium;
       } else {

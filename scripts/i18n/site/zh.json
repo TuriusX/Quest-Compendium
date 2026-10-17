@@ -178,5 +178,11 @@
   "You can try it for free with 2 Pro and 5 Fast questions a day, no credit card needed. Premium is $4.99/month for 8 Pro and 25 Fast questions a day, with unused questions carrying over (up to 100 of each), plus premium features like on-screen markers and Gemini voices. During the beta, every player gets every feature. See": "你可以免费试用，每天享 2 次 Pro 和 5 次 Fast 提问机会，无需绑定信用卡。升级 Premium 仅需 $4.99/月，每天享 8 次 Pro 和 25 次 Fast 提问机会，未用完的次数可累计保留（各最多 100 次），并解锁屏幕标记和 Gemini 语音等高级功能。Beta 测试期间，所有玩家均可畅享全部功能。查看",
   "Quest Compendium is an AI game guide that sees your screen and answers in the context of your game. Hints, boss tips and step-by-step help in an overlay on Windows, in your browser, or on Steam Deck. Free to try.": "Quest Compendium 是一款能“看懂”你游戏画面的 AI 游戏攻略助手，结合当前游戏语境为你实时解答。无论是任务线索、Boss 打法还是保姆级通关指引，都能通过 Windows 悬浮窗、浏览器或 Steam Deck 轻松获取。免费试用。",
   "An AI game guide that sees your screen and knows what you're looking at. Hints, boss tips and step-by-step help without leaving your game. Free to try.": "能看懂你屏幕画面、心领神会的 AI 游戏攻略助手。无需切出游戏，即可获取任务线索、Boss 攻略和手把手通关指引。免费试用。",
-  "Version 0.5.4 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "版本 0.5.4 Beta，适用于 64 位 Windows。免费试用：每天可享 2 次 Pro 和 5 次 Fast 提问，无需绑定信用卡。"
+  "Version 0.5.4 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "版本 0.5.4 Beta，适用于 64 位 Windows。免费试用：每天可享 2 次 Pro 和 5 次 Fast 提问，无需绑定信用卡。",
+  "Version 0.6.0 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "版本 0.6.0 测试版，适用于 64 位 Windows。免费试用：每天可提问 2 次 Pro 和 5 次 Fast 问题，无需绑定信用卡。",
+  "Get Premium": "获取 Premium",
+  "Sign in, then pay securely with Stripe. Cancel any time.": "登录后通过 Stripe 安全支付。随时可取消。",
+  "During the beta, every player gets on-screen markers and the Gemini voices too.": "测试期间，所有玩家均可体验屏幕标记功能和 Gemini 语音。",
+  "Upgrade any time": "随时升级",
+  ", also from inside the app.": "，也可以直接在应用内完成。"
 }

@@ -16,6 +16,7 @@ import { useT } from '../i18n';
 import { QuestLogo } from './QuestLogo';
 import { GameSwitcher } from './GameSwitcher';
 import { QuestionsPill } from './QuestionsPill';
+import { GlainIcon } from './GlainIcon';
 
 interface HeaderBarProps {
   userData?: any;
@@ -245,6 +246,13 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" className="text-zinc-400"><path fill="none" stroke="currentColor" strokeWidth="1.5" d="M2 10h12v4H2zM4 6h8M6 3h4" /></svg>
                     <span className="flex-1">{t('compact.collapse')}</span>
                     <span className="text-[10px] text-zinc-500 font-mono">Ctrl+Shift+F</span>
+                  </button>
+                )}
+                {/* Premium (free players and guests) or Your plan (Premium players): the same screen */}
+                {onOpenPaywall && (
+                  <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); onOpenPaywall(); })} className={menuItem}>
+                    <span className="w-4 h-4 flex items-center justify-center"><GlainIcon size={14} /></span>
+                    <span className="flex-1">{userData?.isPremium ? t('prem.yourPlan') : t('prem.title')}</span>
                   </button>
                 )}
                 {onOpenSettings && (

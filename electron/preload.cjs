@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fetchSteamProfileLocally: (steamId) => ipcRenderer.invoke('fetch-steam-profile-locally', steamId),
   fetchNewsLocally: (appId) => ipcRenderer.invoke('fetch-news-locally', appId),
   startDesktopLogin: () => ipcRenderer.send('start-desktop-login'),
+  // Premium checkout and "Manage or cancel" (Stripe), and our own pages: in the system browser, not the overlay.
+  openExternal: (url) => ipcRenderer.send('open-external', url),
   startSteamLogin: () => ipcRenderer.send('start-steam-login'),
   setUiScale: (scale) => ipcRenderer.send('set-ui-scale', scale),
   resizeWindow: (width) => ipcRenderer.send('resize-window', width),

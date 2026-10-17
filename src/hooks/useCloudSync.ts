@@ -230,6 +230,30 @@ export function useCloudSync(
     };
   }, []);
 
+  // "Refresh my plan" (qc-refresh-plan): the status again, past the server's few-minute Stripe cache. Sent after a
+  // checkout or the portal was opened in a browser (utils/billing.ts) until Premium shows up.
+  useEffect(() => {
+    const refresh = async () => {
+      const u = auth.currentUser;
+      if (!u) return;
+      try {
+        const token = await u.getIdToken();
+        const res = await fetch(`${getApiBaseUrl()}/api/user/status?fresh=1`, {
+          headers: { Authorization: `Bearer ${token}`, 'X-QC-TZ': deviceTimeZone(), 'X-QC-App': (window as any).electronAPI ? 'desktop' : 'web' },
+        });
+        const data = await res.json();
+        if (!data || typeof data.proQueriesAvailable !== 'number') return;
+        const isPrem = Boolean(data.isPremium || data.subscriptionStatus === 'active');
+        if (isPrem) localStorage.setItem(`quest_pro_${u.uid}`, 'true');
+        else localStorage.removeItem(`quest_pro_${u.uid}`);
+        setUserData((prev: any) => ({ ...prev, ...data, isPremium: isPrem, isGuest: false }));
+        setSubscriptionStatus(isPrem ? 'active' : (data.subscriptionStatus || 'beta'));
+      } catch { /* next time */ }
+    };
+    window.addEventListener('qc-refresh-plan', refresh);
+    return () => window.removeEventListener('qc-refresh-plan', refresh);
+  }, []);
+
   // Listen for manual quota updates (e.g., from chat responses)
   useEffect(() => {
     const handleQuotaUpdate = (e: any) => {
@@ -296,8 +320,10 @@ export function useCloudSync(
           .then(data => {
             if (data && typeof data.proQueriesAvailable === 'number') {
               const isPrem = Boolean(data.isPremium || data.subscriptionStatus === 'active');
-              if (isPrem && typeof window !== 'undefined') {
-                localStorage.setItem(`quest_pro_${currentUser.uid}`, 'true');
+              // The server's answer is the truth (Premium can end now: cancelled in the portal), on and off.
+              if (typeof window !== 'undefined') {
+                if (isPrem) localStorage.setItem(`quest_pro_${currentUser.uid}`, 'true');
+                else localStorage.removeItem(`quest_pro_${currentUser.uid}`);
               }
               setUserData((prev: any) => ({
                 ...prev,
@@ -475,12 +501,14 @@ export function useCloudSync(
 
           if (docSnap.exists()) {
             const data = docSnap.data();
-            const cachedPro = typeof window !== 'undefined' && localStorage.getItem(`quest_pro_${user.uid}`) === 'true';
-            
+            // The account document is written by the server (Stripe decides), so it's the truth, on and off.
+            const isEffectivePrem = Boolean(data.isPremium === true || data.subscriptionStatus === 'active');
+            const cachedPro = isEffectivePrem;
+
             setUserData((prev: any) => {
-              const isEffectivePrem = Boolean(data.isPremium || data.subscriptionStatus === 'active' || prev?.isPremium || cachedPro);
-              if (isEffectivePrem && typeof window !== 'undefined') {
-                localStorage.setItem(`quest_pro_${user.uid}`, 'true');
+              if (typeof window !== 'undefined') {
+                if (isEffectivePrem) localStorage.setItem(`quest_pro_${user.uid}`, 'true');
+                else localStorage.removeItem(`quest_pro_${user.uid}`);
               }
               return {
                 ...prev,

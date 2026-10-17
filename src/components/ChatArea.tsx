@@ -49,6 +49,7 @@ import { QcGuidesView } from './QcGuidesView';
 import { GlainIcon } from './GlainIcon';
 import { Walkthrough, walkthroughDone, OPEN_TOUR_EVENT } from './Walkthrough';
 import { SignInCard } from './SignInCard';
+import { PremiumCard } from './PremiumCard';
 import { isPhone } from '../utils/source';
 import { samePlace, tipMatches, useAchievementGuide } from '../utils/achievementGuide';
 import { useLocale } from '../i18n';
@@ -94,6 +95,8 @@ interface ChatAreaProps {
   onChangeMarkerLifetime?: (seconds: number) => void;
   /** Hint mode (Settings): "Just a hint" among the quick questions. */
   hintMode?: boolean;
+  /** A free player out of questions: See Premium on the card under the limit message. */
+  onOpenPremium?: () => void;
   /** The quest log is attached and showing: the controller's LB / RB reach it between Ask and Guide. */
   logAttached?: boolean;
   /** The player picked where they are (one tap or voice): remember it for this game. */
@@ -239,6 +242,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   markerLifetime,
   onChangeMarkerLifetime,
   hintMode = false,
+  onOpenPremium,
   logAttached = false,
   onSetPlace,
   onLocate,
@@ -2112,6 +2116,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         {/* A guest's last question today: one card under it (what signing in gives), dismissible for the day. */}
         {isGuest && onSignIn && !isLoading && activeTab?.messages?.length && activeTab.messages[activeTab.messages.length - 1].signInNudge ? (
           <SignInCard onSignIn={onSignIn} pro={quota?.signedInPro} fast={quota?.signedInFlash} />
+        ) : null}
+        {/* A free player out of questions: the Premium card under the limit message (not a pop-up), dismissible for the day. */}
+        {!isGuest && onOpenPremium && !isLoading && quota?.isPremium !== true && activeTab?.messages?.length && activeTab.messages[activeTab.messages.length - 1].premiumNudge ? (
+          <PremiumCard onSeePremium={onOpenPremium} />
         ) : null}
 
         {/* Animated 3D Levitating Tome Loader */}

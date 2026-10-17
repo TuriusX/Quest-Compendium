@@ -84,6 +84,8 @@ export interface ChatMessage {
   id: string;
   /** A guest's answer that used their last question today (or their limit message): the sign-in card shows under it. */
   signInNudge?: boolean;
+  /** A free player's limit message: the Premium card under it (PremiumCard), never a pop-up. */
+  premiumNudge?: boolean;
   role: 'user' | 'assistant' | 'system';
   text: string;
   timestamp: number;

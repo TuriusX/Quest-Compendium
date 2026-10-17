@@ -178,5 +178,11 @@
   "You can try it for free with 2 Pro and 5 Fast questions a day, no credit card needed. Premium is $4.99/month for 8 Pro and 25 Fast questions a day, with unused questions carrying over (up to 100 of each), plus premium features like on-screen markers and Gemini voices. During the beta, every player gets every feature. See": "신용카드 등록 없이 매일 Pro 2회, Fast 5회 질문으로 무료 체험해 보세요. Premium은 월 $4.99에 매일 Pro 8회, Fast 25회 질문이 제공되며, 남은 질문 횟수는 이월(각각 최대 100회)됩니다. 여기에 화면 마커 표시와 Gemini 음성 등 프리미엄 기능까지 모두 누릴 수 있습니다. 베타 기간에는 모든 플레이어에게 모든 기능이 제공됩니다. 자세히 보기:",
   "Quest Compendium is an AI game guide that sees your screen and answers in the context of your game. Hints, boss tips and step-by-step help in an overlay on Windows, in your browser, or on Steam Deck. Free to try.": "Quest Compendium은 플레이어의 화면을 직접 보고 게임 상황에 맞춰 답변해 주는 AI 게임 가이드입니다. 힌트, 보스 공략 팁, 단계별 가이드를 Windows 오버레이, 브라우저, Steam Deck에서 바로 확인해 보세요. 무료로 체험할 수 있습니다.",
   "An AI game guide that sees your screen and knows what you're looking at. Hints, boss tips and step-by-step help without leaving your game. Free to try.": "내 화면을 실시간으로 인식해 상황에 맞는 답변을 제공하는 AI 게임 가이드. 게임을 중단할 필요 없이 힌트, 보스 팁, 단계별 공략을 바로 확인하세요. 무료로 체험할 수 있습니다.",
-  "Version 0.5.4 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "버전 0.5.4 베타, 64비트 Windows. 무료 체험: 신용카드 등록 없이 하루 Pro 질문 2회, Fast 질문 5회 제공."
+  "Version 0.5.4 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "버전 0.5.4 베타, 64비트 Windows. 무료 체험: 신용카드 등록 없이 하루 Pro 질문 2회, Fast 질문 5회 제공.",
+  "Version 0.6.0 beta, 64-bit Windows. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "버전 0.6.0 베타, 64비트 Windows. 무료 체험 가능: 신용카드 등록 없이 매일 Pro 질문 2회, Fast 질문 5회 제공.",
+  "Get Premium": "Premium 시작하기",
+  "Sign in, then pay securely with Stripe. Cancel any time.": "로그인 후 Stripe로 안전하게 결제하세요. 언제든 해지할 수 있습니다.",
+  "During the beta, every player gets on-screen markers and the Gemini voices too.": "베타 기간 동안 모든 플레이어에게 화면 내 마커와 Gemini 음성 기능까지 제공됩니다.",
+  "Upgrade any time": "언제든지 업그레이드하세요",
+  ", also from inside the app.": "(앱 내에서도 가능합니다)."
 }

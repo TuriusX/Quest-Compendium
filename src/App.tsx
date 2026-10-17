@@ -31,6 +31,7 @@ import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
 import { playBlipSound } from './utils/audio';
 import { samePlace, placeAfterMove, singleArea } from './utils/placeName';
 import { addDone, doneForRequest, areaMovedPast, endedFight, type DoneKind } from './utils/progressMemory';
+import { watchPlan, stopWatchingPlan } from './utils/billing';
 import { useCloudSync } from './hooks/useCloudSync';
 import { recordTombstone } from './hooks/tabMerge';
 import pixelSceneUrl from './pixel-scene.png';
@@ -928,6 +929,55 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // The "free your mouse" tips (settings.mouseTips): the desktop app shows the quest log's and the spine's hint from
   // this state, and reports back when the log appeared, the hint was dismissed, or the shortcut opened the panel.
   const [mouseToast, setMouseToast] = useState<string | null>(null);
+  // Premium arrived while the app is open (back from checkout in the browser): a short note, and no more asking.
+  const wasPremiumRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const now = userData?.isPremium === true;
+    if (wasPremiumRef.current === false && now) {
+      stopWatchingPlan();
+      setIsPaywallOpen(false);
+      setMouseToast(tr('prem.nowOn'));
+      if (mouseToastTimer.current) clearTimeout(mouseToastTimer.current);
+      mouseToastTimer.current = setTimeout(() => setMouseToast(null), 6000);
+    }
+    if (userData && !userData.isGuest) wasPremiumRef.current = now;
+  }, [userData?.isPremium]);
+  // Premium asked for from outside (the website's "Get Premium", the Deck's QR code: ?premium=1), or by a guest who
+  // then signed in: the plan / Premium screen, after sign-in for a guest.
+  useEffect(() => {
+    if (isInitializing || !user) return;
+    let want = false;
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('premium') === '1') {
+        want = true;
+        q.delete('premium');
+        const rest = q.toString();
+        window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`);
+      }
+      if (!user.isGuest && sessionStorage.getItem('qc-after-signin') === 'premium') {
+        want = true;
+        sessionStorage.removeItem('qc-after-signin');
+      }
+    } catch {}
+    if (!want) return;
+    if (user.isGuest) {
+      try { sessionStorage.setItem('qc-after-signin', 'premium'); } catch {}
+      openSignIn();
+    } else setIsPaywallOpen(true);
+  }, [isInitializing, user?.uid, user?.isGuest]);
+  // Back from the web checkout or the portal: the plan again, past the server's cache.
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('upgrade') === 'success' || q.get('portal') === 'done') {
+        watchPlan();
+        q.delete('portal');
+        const rest = q.toString();
+        window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`);
+      }
+    } catch {}
+  }, []);
   const mouseToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     (window as any).electronAPI?.setMouseTips?.({ logSeen: settings.mouseTips?.logSeen || 0, dismissed: !!settings.mouseTips?.dismissed || !showFirstRunHints() });
@@ -1851,6 +1901,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     // Both models' questions used up today: the limit message, with when they come back (and Premium for free players).
     let limitText = '';
     let guestLimit = false; // a guest at their limit: the sign-in card, not the Premium screen
+    let premiumNudge = false; // a free player at their limit: the Premium card in the conversation (never a pop-up)
     const backendUrl = getApiBaseUrl();
     const chatEndpoint = backendUrl ? `${backendUrl}/api/chat` : '/api/chat';
 
@@ -1932,7 +1983,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         }
 
         let errorText = `HTTP ${res.status}`;
-        let shouldOpenPaywall = false;
         try {
           const errData = await res.json();
           errorText = errData.error || errData.text || errorText;
@@ -1949,7 +1999,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
               : lim.dailyPro != null
                 ? tr('limit.free', { pro: lim.dailyPro, fast: lim.dailyFlash, ppro: lim.premiumPro, pfast: lim.premiumFlash, when })
                 : errorText;
-            shouldOpenPaywall = !lim.isPremium && !guestLimit;
+            premiumNudge = !lim.isPremium && !guestLimit;
             // When the next questions arrive: "+2 Pro · +5 Fast in 3h 20m".
             const next = topUpLine(balancesOf(errData.userData), tr);
             if (next && limitText) limitText = `${limitText}\n\n${next}`;
@@ -1962,10 +2012,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           } else {
              errorText = `HTTP ${res.status} (Non-JSON response)`;
           }
-        }
-        
-        if (shouldOpenPaywall) {
-           setIsPaywallOpen(true);
         }
         
         throw new Error(errorText);
@@ -2154,6 +2200,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         timestamp: nowCatch,
         modelUsed: isLimitReached ? 'Limit Reached' : 'Offline Fallback',
         ...(isLimitReached && guestLimit ? { signInNudge: true } : {}),
+        ...(isLimitReached && premiumNudge ? { premiumNudge: true } : {}),
       };
 
       setTabs(prev => {
@@ -2634,6 +2681,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 onAppendToNotes={handleAppendToNotes}
                 markerLifetime={settings.markerLifetime ?? 120}
                 hintMode={settings.hintMode === true}
+                onOpenPremium={() => setIsPaywallOpen(true)}
                 onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
                 onSetPlace={handleSetPlace}
                 onLocate={isDesktop && trackerGame.guideArea?.areas?.length ? runLocate : undefined}
@@ -2749,6 +2797,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         onUpdateSettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
         soundEnabled={settings.soundEnabled}
         syncDiagnostics={syncDiagnostics}
+        plan={user ? { isGuest: !!user.isGuest, isPremium: userData?.isPremium === true, source: userData?.premiumSource, periodEnd: Number(userData?.premiumPeriodEnd) || undefined, cancelAtPeriodEnd: userData?.premiumCancelAtPeriodEnd === true } : undefined}
+        onOpenPlan={() => { setIsSettingsOpen(false); setIsPaywallOpen(true); }}
       />
 
       {/* Rename/Create Modal */}
@@ -2779,11 +2829,15 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       )}
       {/* Upgrade / Paywall Modal */}
       {!isInitializing && user && !isOutdated && isPaywallOpen && (
-        <PaywallModal 
-          userId={user.uid} 
-          onClose={() => setIsPaywallOpen(false)} 
+        <PaywallModal
+          onClose={() => setIsPaywallOpen(false)}
           isGuest={!!user.isGuest}
-          onSignIn={openSignIn}
+          onSignIn={() => { setIsPaywallOpen(false); openSignIn(); }}
+          isPremium={userData?.isPremium === true}
+          beta={userData?.beta === true}
+          premiumSource={userData?.premiumSource}
+          periodEnd={Number(userData?.premiumPeriodEnd) || undefined}
+          cancelAtPeriodEnd={userData?.premiumCancelAtPeriodEnd === true}
         />
       )}
 
