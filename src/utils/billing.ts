@@ -29,13 +29,17 @@ export function stopWatchingPlan(): void {
   watch = null;
 }
 
-async function open(path: '/api/checkout' | '/api/billing-portal'): Promise<void> {
+/** Premium's two plans: monthly (the default) and yearly. The yearly saving is against twelve months at the monthly price. */
+export type Interval = 'month' | 'year';
+export const PRICES = { month: { label: '$4.99', cents: 499 }, year: { label: '$39.99', cents: 3999 }, yearPerMonth: '$3.33', savePercent: Math.floor((1 - 3999 / (499 * 12)) * 100) };
+
+async function open(path: '/api/checkout' | '/api/billing-portal', extra: Record<string, unknown> = {}): Promise<void> {
   const token = await auth.currentUser?.getIdToken();
   if (!token) throw new Error('signin');
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ client: isDesktop() ? 'desktop' : 'web' }),
+    body: JSON.stringify({ client: isDesktop() ? 'desktop' : 'web', ...extra }),
   });
   const data = await res.json().catch(() => ({}));
   if (!data?.url) throw new Error(data?.error || 'unavailable');
@@ -48,6 +52,6 @@ async function open(path: '/api/checkout' | '/api/billing-portal'): Promise<void
 }
 
 /** Subscribe to Premium (signed-in players). Throws 'signin' for a guest. */
-export const startCheckout = () => open('/api/checkout');
+export const startCheckout = (interval: Interval = 'month') => open('/api/checkout', { interval });
 /** Change the card, see invoices, cancel (Premium players managed by Stripe). */
 export const openBillingPortal = () => open('/api/billing-portal');

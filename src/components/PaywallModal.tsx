@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, CreditCard, X } from './icons';
 import { useT } from '../i18n';
 import { GlainIcon } from './GlainIcon';
-import { startCheckout, openBillingPortal } from '../utils/billing';
+import { startCheckout, openBillingPortal, PRICES, type Interval } from '../utils/billing';
 
 interface PaywallModalProps {
   onClose?: () => void;
@@ -29,6 +29,8 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = f
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [opened, setOpened] = useState(false);
+  // Monthly is the default; yearly is one click away, with its saving shown.
+  const [interval, setBillingInterval] = useState<Interval>('month');
   const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
   // Escape closes it (wherever the focus is).
   useEffect(() => {
@@ -61,7 +63,7 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = f
       onSignIn?.();
       return;
     }
-    void go(startCheckout);
+    void go(() => startCheckout(interval));
   };
 
   const extra = (label: string) => (
@@ -90,6 +92,14 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = f
             {premiumSource === 'grant' && <div className="text-zinc-400">{t('prem.granted')}</div>}
           </div>
         ) : (
+          <>
+          <div role="radiogroup" aria-label={t('prem.billing')} className="mx-auto mb-4 grid w-full max-w-xs grid-cols-2 gap-1 rounded-xl border border-white/10 bg-black/30 p-1 text-[12.5px]">
+            {(['month', 'year'] as Interval[]).map((iv) => (
+              <button key={iv} type="button" role="radio" aria-checked={interval === iv} onClick={() => setBillingInterval(iv)} className={`rounded-lg px-2 py-1.5 font-semibold transition-colors cursor-pointer ${interval === iv ? 'bg-[var(--accent-color)] text-black' : 'text-zinc-300 hover:text-white'}`}>
+                {iv === 'month' ? t('prem.monthly') : <>{t('prem.yearly')} <span className={interval === iv ? 'text-black/70' : 'text-emerald-300'}>· {t('prem.save', { n: PRICES.savePercent })}</span></>}
+              </button>
+            ))}
+          </div>
           <div className="grid grid-cols-2 gap-3 mb-5 text-[12.5px]">
             <div className={`rounded-xl border p-3.5 ${isGuest ? 'border-white/10' : 'border-white/25'} bg-white/[0.03]`}>
               <div className="flex items-center justify-between mb-2"><span className="font-semibold text-white">{t('prem.free')}</span>{!isGuest && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-zinc-300">{t('prem.current')}</span>}</div>
@@ -101,7 +111,14 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = f
             </div>
             <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-dim)] p-3.5">
               <div className="flex items-center justify-between mb-2"><span className="font-semibold text-white flex items-center gap-1.5"><GlainIcon size={14} /> {t('prem.premiumPlan')}</span></div>
-              <div className="text-[var(--accent-color)] font-bold mb-2">$4.99<span className="text-zinc-400 font-normal">{t('pay.perMonth')}</span></div>
+              {interval === 'month' ? (
+                <div className="text-[var(--accent-color)] font-bold mb-2">{PRICES.month.label}<span className="text-zinc-400 font-normal">{t('pay.perMonth')}</span></div>
+              ) : (
+                <div className="mb-2">
+                  <div className="text-[var(--accent-color)] font-bold">{PRICES.year.label}<span className="text-zinc-400 font-normal">{t('prem.perYear')}</span> <span className="ml-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10.5px] font-bold text-emerald-300">{t('prem.save', { n: PRICES.savePercent })}</span></div>
+                  <div className="text-[11px] text-zinc-400">{t('prem.yearlyEach', { price: PRICES.yearPerMonth })}</div>
+                </div>
+              )}
               <ul className="space-y-1.5 text-zinc-200">
                 <li className="flex items-start gap-2"><Check className="w-4 h-4 mt-0.5 flex-shrink-0 text-[var(--accent-color)]" /><span>{t('prem.premiumQ')}</span></li>
                 {extra(t('prem.markers'))}
@@ -109,6 +126,7 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = f
               </ul>
             </div>
           </div>
+          </>
         )}
 
         {errorMsg && <div role="alert" className="bg-red-500/10 border border-red-500/40 text-red-300 text-[13px] p-3 rounded-lg mb-3">{errorMsg}</div>}
@@ -124,7 +142,7 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = f
           <>
             <button onClick={subscribe} disabled={loading} className="w-full flex items-center justify-center gap-2 bg-[var(--accent-color)] text-black font-bold py-3 px-6 rounded-xl hover:brightness-110 transition disabled:opacity-50 cursor-pointer">
               <CreditCard className="w-5 h-5" />
-              {loading ? t('pay.connecting') : isGuest ? t('prem.signInToSubscribe') : t('prem.subscribe')}
+              {loading ? t('pay.connecting') : isGuest ? t('prem.signInToSubscribe') : interval === 'year' ? t('prem.subscribeYearly') : t('prem.subscribe')}
             </button>
             <p className="mt-3 text-[11.5px] text-zinc-500 text-center">{isGuest ? t('prem.guestNote') : t('prem.cancelNote')}</p>
           </>
