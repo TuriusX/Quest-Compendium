@@ -17,6 +17,7 @@ import { QuestLogo } from './QuestLogo';
 import { GameSwitcher } from './GameSwitcher';
 import { QuestionsPill } from './QuestionsPill';
 import { GlainIcon } from './GlainIcon';
+import type { Detection } from './DetectionLine';
 
 interface HeaderBarProps {
   userData?: any;
@@ -24,6 +25,8 @@ interface HeaderBarProps {
   activeTabId: string | null;
   activeGame: SteamGameData | null;
   isGameRunningLocally: boolean;
+  /** The running game: the switcher's dot is green only when the open compendium is it. */
+  detection?: Detection;
   onSelectTab: (tabId: string) => void;
   onStartCreateTab: () => void;
   onStartRenameTab: (tabId: string, currentName: string) => void;
@@ -68,6 +71,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   activeTabId,
   activeGame,
   isGameRunningLocally,
+  detection,
   onSelectTab,
   onStartCreateTab,
   onStartRenameTab,
@@ -150,6 +154,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           activeTabId={activeTabId}
           activeGame={activeGame}
           isGameRunningLocally={isGameRunningLocally}
+          detection={detection}
           soundEnabled={soundEnabled}
           onSelectTab={onSelectTab}
           onStartCreateTab={onStartCreateTab}

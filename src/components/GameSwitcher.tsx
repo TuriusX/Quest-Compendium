@@ -5,6 +5,7 @@ import { GameTab, SteamGameData } from '../types';
 import { playBlipSound } from '../utils/audio';
 import { useT } from '../i18n';
 import { displayGameName } from '../utils/gameName';
+import type { Detection } from './DetectionLine';
 
 /** "yesterday", "3 days ago": when a compendium was last used. */
 function ago(ms: number, t: (k: string, v?: Record<string, string | number>) => string, now = Date.now()): string {
@@ -26,6 +27,7 @@ export function GameSwitcher({
   activeTabId,
   activeGame,
   isGameRunningLocally,
+  detection,
   soundEnabled,
   onSelectTab,
   onStartCreateTab,
@@ -39,6 +41,8 @@ export function GameSwitcher({
   activeTabId: string | null;
   activeGame: SteamGameData | null;
   isGameRunningLocally: boolean;
+  /** Set: the dot is green only when the open compendium is the running game. */
+  detection?: Detection;
   soundEnabled: boolean;
   onSelectTab: (id: string) => void;
   onStartCreateTab: () => void;
@@ -83,10 +87,10 @@ export function GameSwitcher({
 
   // The running game's compendium first, then the rest by last played.
   const runningName = isGameRunningLocally && activeGame?.isAutoDetected ? activeGame.name : '';
-  const isRunning = (tab: GameTab) => !!runningName && tab.id === activeTabId;
+  const isRunning = (tab: GameTab) => !!runningName && tab.id === activeTabId && (!detection || detection.open);
   const sorted = [...tabs].sort((a, b) => Number(isRunning(b)) - Number(isRunning(a)) || (b.lastActive || 0) - (a.lastActive || 0));
   const label = active ? active.name : t('switch.choose');
-  const live = !!active && isGameRunningLocally;
+  const live = !!active && isGameRunningLocally && (!detection || detection.open);
 
   const item = 'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer';
   return (

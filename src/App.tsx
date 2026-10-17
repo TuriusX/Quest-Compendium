@@ -56,6 +56,8 @@ import { PlaythroughPanel } from './components/PlaythroughPanel';
 import { appSource, isPhone } from './utils/source';
 import { useGameArt } from './utils/gameArt';
 import { deviceId } from './utils/deviceId';
+import { tabForGame } from './utils/runningGame';
+import { DetectionLine, type Detection } from './components/DetectionLine';
 
 /** The running game's picture: IGDB's key art when its guide has it, else Steam's header; hidden if neither loads. */
 function RunningGameArt({ appId, name }: { appId: number; name?: string }) {
@@ -439,20 +441,40 @@ export default function App() {
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || null;
   
-  let activeGame = activeTab?.activeSteamGame || null;
-  if (globalActiveGame) {
+  // The running game's compendium, and whether it's the open one. Questions are about the open compendium's game;
+  // the running game's live data (achievements, news, "running now") joins in only on its own compendium.
+  const runningTab = tabForGame(tabs, globalActiveGame);
+  const runningOpen = !!runningTab && runningTab.id === activeTab?.id;
+  let activeGame = activeTab?.activeSteamGame?.isAutoDetected ? null : activeTab?.activeSteamGame || null;
+  if (globalActiveGame && runningOpen) {
     const autoHeaderImage = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${globalActiveGame.appId}/header.jpg`;
-    // We unconditionally prioritize the globally running game for the activeGame object so Gemini always sees the truth
-    activeGame = { 
-      ...globalActiveGame, 
-      isAutoDetected: true, 
+    activeGame = {
+      ...globalActiveGame,
+      isAutoDetected: true,
       headerImage: activeGame?.headerImage || autoHeaderImage,
       achievements: (globalActiveGame as any).achievements || activeGame?.achievements,
       patchNotes: (globalActiveGame as any).patchNotes || activeGame?.patchNotes
     } as SteamGameData;
-  } else if (activeGame?.isAutoDetected) {
-    activeGame = null;
   }
+  // What the app sees on Steam, said plainly under the header: the running game (with Switch when another compendium
+  // is open) or "No game detected".
+  const detection: Detection = {
+    running: globalActiveGame?.name || '',
+    open: runningOpen,
+    available: typeof window !== 'undefined' && !!(window as any).electronAPI,
+    onSwitch: () => {
+      if (!globalActiveGame) return;
+      if (runningTab) handleSelectTab(runningTab.id);
+      else handleCreateTab(globalActiveGame.name, { ...globalActiveGame, isAutoDetected: false });
+    },
+  };
+  // Ctrl+Shift+S photographs the running game, so it asks in that game's compendium (opened or started first).
+  const toRunningForShot = useRef<() => boolean>(() => false);
+  toRunningForShot.current = () => {
+    if (!globalActiveGame || runningOpen) return false;
+    detection.onSwitch();
+    return true;
+  };
 
 
   // Global focus fix for Electron webview stealing focus
@@ -595,7 +617,7 @@ export default function App() {
     setTrackerPickId(id);
   };
   const trackerAccent = (THEME_STYLES[settings.theme] || THEME_STYLES.purple).color;
-  const trackerKeyOfGame = trackerGameKey(activeTab, activeTab?.activeSteamGame || globalActiveGame);
+  const trackerKeyOfGame = trackerGameKey(activeTab, activeTab?.activeSteamGame || (runningOpen ? globalActiveGame : null));
   const trackerWords = trackerLabels(tr); // the tracker's words follow the app language
   // Where the player is: the tab's place, else the place saved for this game.
   // (The same key as gameProgressKey below, which is declared later in this component.)
@@ -1468,9 +1490,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     if ((window as any).electronAPI?.onTriggerAutoScreenshot) {
       (window as any).electronAPI.onTriggerAutoScreenshot(() => {
         setIsBrowserMode(false);
+        // On another game's compendium: open the running game's first, and ask once it's on screen.
+        const switched = toRunningForShot.current();
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('trigger-auto-screenshot-submit'));
-        }, 100);
+        }, switched ? 450 : 100);
       });
     }
   }, []);
@@ -1941,7 +1965,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           timeZone: deviceTimeZone(),
           // A quick question's id (src/utils/quickQuestions.ts): the server adds what it asks for.
           ...(quick ? { quick } : {}),
-          isGameRunningLocally: globalActiveGame !== null,
+          isGameRunningLocally: runningOpen,
           activeGame: activeGame ? {
             name: activeGame.name,
             appId: activeGame.appId,
@@ -2124,7 +2148,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       }
       // Precision pass: zoom in on each marked spot so markers land on the exact object (free, rate-limited).
       if (aiMessage.points?.length && imageBase64 && settings.showPointersOnScreen !== false) {
-        refineMarkers(aiMessage.id, imageBase64, aiMessage.points, activeTab.activeSteamGame?.name || globalActiveGame?.name || '', token);
+        refineMarkers(aiMessage.id, imageBase64, aiMessage.points, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token);
       }
 
       const readArea: string = data.placeRead && typeof data.placeRead.area === 'string' ? data.placeRead.area.trim().slice(0, 80) : '';
@@ -2358,6 +2382,15 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // The compact view: a small resting state (where you are, the current objective, the question box) over the game.
   const runningKey = globalActiveGame ? String(globalActiveGame.appId || globalActiveGame.name || '') : '';
   useEffect(() => setViewNow(null), [runningKey]);
+  // A game starting (or already running when the app opens) brings its compendium up, once: after that the player's
+  // own choice of compendium stands until the game closes.
+  const autoOpenedFor = useRef('');
+  useEffect(() => {
+    if (!runningKey) { autoOpenedFor.current = ''; return; }
+    if (isInitializing || !tabs.length || autoOpenedFor.current === runningKey) return;
+    autoOpenedFor.current = runningKey;
+    if (runningTab && runningTab.id !== activeTab?.id) setActiveTabId(runningTab.id);
+  }, [runningKey, isInitializing, tabs.length, runningTab?.id]);
   const view = viewNow ?? (runningKey ? viewByGame[runningKey] ?? 'compact' : 'full');
   const compact = isDesktop && !!activeTab && !isBrowserMode && view === 'compact';
   // The player chose a view (Ctrl+Shift+F, the ⋯ menu, the compact card): remembered for the running game.
@@ -2477,6 +2510,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           activeTabId={activeTabId}
           activeGame={activeGame}
           isGameRunningLocally={globalActiveGame !== null}
+          detection={detection}
           onSelectTab={handleSelectTab}
           onStartCreateTab={handleStartCreateTab}
           onStartRenameTab={handleStartRenameTab}
@@ -2508,6 +2542,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           onSync={syncDiagnostics?.triggerSyncNow}
           onCompact={isDesktop && activeTab ? () => chooseView('compact') : undefined}
         />}
+        {!compact && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
         {/* Updates (desktop), under the header: "Version X is ready" and, after one installs, a one-time "What's new". A dev server shows
             both with sample notes at ?previewUpdate (for screenshots). */}
         {(isDesktop || previewUpdate) && (
@@ -2720,6 +2755,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 customApiKey={settings.customApiKey}
                 openAiApiKey={settings.openAiApiKey}
                 compact={compact}
+                detectionLine={<DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
                 onExpand={() => chooseView('full')}
               />
             )}

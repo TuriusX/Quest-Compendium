@@ -191,6 +191,11 @@ const en: Dict = {
   // header
   'header.playing': 'Playing on Steam · {game}',
   'header.noGame': 'No game detected',
+  'detect.playing': 'Playing {game}',
+  'detect.playingHere': 'Playing {game} · this compendium',
+  'detect.none': 'No game detected · start one in Steam and it shows here',
+  'detect.switch': 'Switch',
+  'detect.switchTitle': 'Open the {game} compendium',
   'header.proLeft': '{n} Pro left',
   'header.flashUnlimited': 'Unlimited Flash',
   'header.flashLeft': '{n} Flash left',

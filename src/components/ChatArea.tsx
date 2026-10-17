@@ -124,6 +124,8 @@ interface ChatAreaProps {
   steamAvatar?: string;
   /** Compact view: a small resting state (where you are, the current objective, the question box). */
   compact?: boolean;
+  /** The compact view's top line: what's running on Steam (and Switch). */
+  detectionLine?: React.ReactNode;
   /** Open the full view (from the compact one). */
   onExpand?: () => void;
 }
@@ -237,6 +239,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   steamName,
   steamAvatar,
   compact = false,
+  detectionLine,
   onExpand,
   onUpdateMessage,
   markerLifetime,
@@ -1457,6 +1460,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
     return (
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-[#0d0e14] to-[#07070b] relative">
+        {detectionLine}
         {/* Where you are, the questions pill (its live countdown) and ⤢ for the full view */}
         <div className="flex items-center gap-2 min-w-0 px-3.5 pt-2.5 text-[11px] text-zinc-400" style={{ WebkitAppRegion: 'no-drag' } as any}>
           <MapPin className="w-3.5 h-3.5 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />
