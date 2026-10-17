@@ -113,4 +113,23 @@ test("test traffic: test guest ids and local servers aren't counted; real player
   assert.ok(isTestId("guest_e2e_x") && !isTestId("guest_x"));
 });
 
+test("free and guest never hold more than their day: every path from any stored balance", () => {
+
+  const starts = [
+    { proQueriesAvailable: 97, flashQueriesAvailable: 100, lastResetDate: "2026-10-17", allowancePlan: "premium" as const }, // Premium cancelled today
+    { proQueriesAvailable: 97, flashQueriesAvailable: 100, lastResetDate: "2026-10-10", allowancePlan: "premium" as const }, // a week later
+    { proQueriesAvailable: 2, flashQueriesAvailable: 5, lastResetDate: "2026-10-16", allowancePlan: "free" as const },       // unused yesterday
+    { proQueriesAvailable: 50, flashQueriesAvailable: 50, lastResetDate: "2026-10-17", allowancePlan: "free" as const },     // a bad stored value
+    {},                                                                                                                   // brand new
+  ];
+  for (const b of starts) {
+    for (const today of ["2026-10-17", "2026-10-18", "2026-11-30"]) {
+      const f = applyDay(b, A, false, today);
+      assert.ok(f.proQueriesAvailable <= A.free.pro && f.flashQueriesAvailable <= A.free.flash, `free ${JSON.stringify(b)} ${today} -> ${f.proQueriesAvailable}/${f.flashQueriesAvailable}`);
+      const g = applyDay(b, A, false, today, true);
+      assert.ok(g.proQueriesAvailable <= A.guest.pro && g.flashQueriesAvailable <= A.guest.flash, `guest ${JSON.stringify(b)} ${today} -> ${g.proQueriesAvailable}/${g.flashQueriesAvailable}`);
+    }
+  }
+});
+
 console.log(`\n${passed} tests passed`);

@@ -62,7 +62,7 @@ export function balancesOf(d: any): Balances {
  * (carry-over) gets the day's amount up to the cap: atMax when a model is already at it. Free and guest players get
  * their day's amounts. null while the reset time or the amounts aren't known.
  */
-export function topUp(b: Balances, now = Date.now()): { pro: number; fast: number; proMax: boolean; fastMax: boolean; cap: number; h: number; m: number } | null {
+export function topUp(b: Balances, now = Date.now()): { pro: number; fast: number; proMax: boolean; fastMax: boolean; cap: number; h: number; m: number; reset: boolean } | null {
   if (!b.resetAt || (!b.dailyPro && !b.dailyFast)) return null;
   const cap = b.rollover && b.bankCap ? b.bankCap : 0;
   const add = (left: number, daily: number) => (cap ? Math.min(daily, Math.max(0, cap - left)) : daily);
@@ -75,16 +75,23 @@ export function topUp(b: Balances, now = Date.now()): { pro: number; fast: numbe
     cap,
     h,
     m,
+    // Free and guest days don't carry over: midnight sets the balance back to the day's amount, it doesn't add to it.
+    reset: !cap,
   };
 }
 
-/** The top-up as one line: "+8 Pro · +25 Fast in 13h 20m" ("Pro at max 100 · +25 Fast in 45m"). */
+/** A free or guest day's amounts, as what the balance goes back to: "2 Pro · 5 Fast". */
+export const resetParts = (u: { pro: number; fast: number }, t: (k: string, v?: Record<string, string | number>) => string) =>
+  [u.pro > 0 ? t('topup.back', { model: t('model.pro'), n: u.pro }) : '', u.fast > 0 ? t('topup.back', { model: t('model.fast'), n: u.fast }) : ''].filter(Boolean).join(' · ');
+
+/** The top-up as one line: "+8 Pro · +25 Fast in 13h 20m" ("Pro at max 100 · +25 Fast in 45m"); free and guest: "Back to 2 Pro · 5 Fast in 13h 20m". */
 export function topUpLine(b: Balances, t: (k: string, v?: Record<string, string | number>) => string, now = Date.now()): string {
   const u = topUp(b, now);
   if (!u) return '';
+  const when = u.h > 0 ? t('topup.hm', { h: u.h, m: u.m }) : t('topup.m', { m: u.m });
+  if (u.reset) return t('topup.backLine', { parts: resetParts(u, t), when });
   const part = (model: string, n: number, max: boolean) => (max ? t('topup.max', { model, n: u.cap }) : n > 0 ? t('topup.add', { model, n }) : '');
   const parts = [part(t('model.pro'), u.pro, u.proMax), part(t('model.fast'), u.fast, u.fastMax)].filter(Boolean).join(' · ');
-  const when = u.h > 0 ? t('topup.hm', { h: u.h, m: u.m }) : t('topup.m', { m: u.m });
   return t('topup.line', { parts, when });
 }
 

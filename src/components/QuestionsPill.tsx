@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
-import { balancesOf, topUp } from '../utils/answerModel';
+import { balancesOf, topUp, resetParts } from '../utils/answerModel';
 
 /** Re-renders every second while the page is visible (the countdown), on the second. */
 function useSecond(): number {
@@ -55,16 +55,19 @@ export function QuestionsPill({ userData, onOpenPaywall, small, onPress }: { use
     if (!open) return;
     setTimeout(() => popRef.current?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true }), 0);
   }, [open]);
-  if (!userData) return null;
+  // Nothing until the server has said (the app's placeholder before it answers isn't a real balance).
+  if (!userData || !(Number(userData.resetAt) > 0)) return null;
   const b = balancesOf(userData);
   const out = b.pro + b.fast === 0;
   const left = b.resetAt ? clock(b.resetAt - now) : '';
   const u = topUp(b, now);
-  const refill = u
-    ? [
+  const refill = u && u.reset
+    ? t('pill.reset', { parts: resetParts(u, t) })
+    : u
+    ? t('pill.refill', { parts: [
         u.proMax ? t('topup.max', { model: t('model.pro'), n: u.cap }) : u.pro > 0 ? t('topup.add', { model: t('model.pro'), n: u.pro }) : '',
         u.fastMax ? t('topup.max', { model: t('model.fast'), n: u.cap }) : u.fast > 0 ? t('topup.add', { model: t('model.fast'), n: u.fast }) : '',
-      ].filter(Boolean).join(' · ')
+      ].filter(Boolean).join(' · ') })
     : '';
   const row = (label: string, n: number, daily: number) => {
     const of = b.rollover && b.bankCap ? b.bankCap : daily;
@@ -139,7 +142,7 @@ export function QuestionsPill({ userData, onOpenPaywall, small, onPress }: { use
                 <div className={`text-[22px] font-bold tabular-nums leading-tight ${out ? 'text-amber-300' : 'text-[var(--accent-color)]'}`}>{left}</div>
               </>
             )}
-            {refill && <div className="text-[11.5px] text-zinc-400 mt-0.5">{t('pill.refill', { parts: refill })}</div>}
+            {refill && <div className="text-[11.5px] text-zinc-400 mt-0.5">{refill}</div>}
             <div className="text-[11.5px] text-zinc-500 mt-1">{t('pill.pick')}</div>
             {b.rollover ? (
               <div className="mt-2.5 text-[11.5px] text-zinc-300">{t('pill.carryOver', { n: b.bankCap || 0 })}</div>

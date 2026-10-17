@@ -120,6 +120,11 @@ export function applyDay(b: Balances, a: Allowances, premium: boolean, today: st
       flash = Math.min(flash, plan.flash);
     }
   }
+  // Free and guest days never carry over or stack: whatever was stored, the balance is at most the day's amount.
+  if (!plan.rollover) {
+    pro = Math.min(pro, plan.pro);
+    flash = Math.min(flash, plan.flash);
+  }
   // A day string only moves forward (a time-zone change never resets twice).
   const day = !last || today > last ? today : last;
   return { proQueriesAvailable: pro, flashQueriesAvailable: flash, lastResetDate: day, allowancePlan: planName };
