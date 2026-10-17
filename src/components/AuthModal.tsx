@@ -7,6 +7,7 @@ import { DEFAULT_PREVIEW_URL } from '../utils/api';
 import { useLocale, useT } from '../i18n';
 import { isPhone } from '../utils/source';
 import { saveGuestHandover } from '../utils/guestHandover';
+import { EmailSignInForm } from './EmailSignInForm';
 
 interface AuthModalProps {
   onSignInSuccess: () => void;
@@ -182,6 +183,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess, initialMe
           {loading ? t('auth.authenticating') : t('auth.google')}
         </button>
         {!isEmbedded && !alreadyGuest && <p className="mt-2 text-[11px] text-zinc-500 leading-snug">{t('auth.googleWhy')}</p>}
+
+        {/* Or a one-time sign-in link by email (no password). */}
+        {!isEmbedded && <EmailSignInForm onSignedIn={onSignInSuccess} />}
 
         {errorMessage && !isEmbedded && !(window as any).electronAPI?.startDesktopLogin && (
           <button

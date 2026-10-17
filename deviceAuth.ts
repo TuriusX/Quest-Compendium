@@ -160,7 +160,7 @@ export function registerDeviceAuth(app: Express, deps: DeviceAuthDeps): void {
   app.post('/api/device/approve', deps.requireAuth, (req: Request, res: Response) => {
     const user = (req as any).user;
     if (!user || user.isGuest || String(user.uid).startsWith('guest_')) {
-      return res.status(403).json({ error: 'Please sign in with Google to link a device.' });
+      return res.status(403).json({ error: 'Please sign in first to link a device.' });
     }
     if (!approveFailLimiter.take(`uid:${user.uid}`) ) {
       return res.status(429).json({ error: 'Too many wrong codes. Please wait a few minutes.' });
@@ -196,6 +196,11 @@ export function registerDeviceAuth(app: Express, deps: DeviceAuthDeps): void {
 
     try {
       const customToken = await deps.getAuth().createCustomToken(pending.uid);
+      // The desktop app signs in with the pass itself (Firebase's own sign-in keeps the session there).
+      if (req.body?.custom === true) {
+        dropPending(deviceCode); // single use
+        return res.json({ status: 'linked', customToken, email: pending.email ?? null });
+      }
       const r = await doFetch(
         `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${encodeURIComponent(apiKey)}`,
         {
@@ -290,14 +295,21 @@ function renderLinkPage(config: FirebaseWebConfig): string {
   button:disabled { opacity: .5; cursor: default; }
   #msg { margin-top: 20px; min-height: 1.5em; }
   .ok { color: #4ade80; } .err { color: #f87171; }
+  .or { display: flex; align-items: center; gap: 12px; color: #71717a; margin: 20px 0 16px; font-size: .9rem; }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: #3f3f46; }
+  input.email { font-size: 1.05rem; letter-spacing: normal; text-transform: none; text-align: left; }
+  button.alt { background: transparent; color: #f4f4f5; border: 1px solid #52525b; }
 </style>
 </head>
 <body>
 <main>
   <h1>Link your Steam Deck</h1>
-  <p>Enter the code shown on your device, then sign in with Google to connect your Quest Compendium account.</p>
+  <p>Enter the code shown on your device, then sign in with Google, or get a sign-in link by email, to connect your Quest Compendium account.</p>
   <input id="code" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-EFGH" aria-label="Device code">
   <button id="go">Sign in with Google &amp; link</button>
+  <div class="or"><span>or</span></div>
+  <input id="email" class="email" type="email" inputmode="email" autocomplete="email" spellcheck="false" placeholder="you@example.com" aria-label="Email address">
+  <button id="mail" class="alt">Email me a sign-in link</button>
   <p id="msg" role="status"></p>
 </main>
 <script type="module">
@@ -309,6 +321,28 @@ function renderLinkPage(config: FirebaseWebConfig): string {
   const msg = (text, cls) => { $('msg').textContent = text; $('msg').className = cls || ''; };
 
   $('code').value = (new URLSearchParams(location.search).get('code') || '').toUpperCase().slice(0, 9);
+
+  $('mail').addEventListener('click', async () => {
+    const code = $('code').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length !== 8) return msg('Enter the 8-character code from your device.', 'err');
+    const email = $('email').value.trim();
+    if (!/^[^@ ]+@[^@ ]+[.][^@ ]+$/.test(email)) return msg('Enter your email address.', 'err');
+    $('mail').disabled = true;
+    msg('Sending…');
+    try {
+      const r = await fetch('/api/email-link/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, userCode: code }) });
+      const body = await r.json().catch(() => ({}));
+      if (r.ok) {
+        try { localStorage.setItem('qc_email_for_signin', email); } catch {}
+        msg('Check your email (' + email + ') and open the link, on this phone or any other device. It asks you to confirm the code on your device.', 'ok');
+        return;
+      }
+      msg(body.error === 'too_many' ? 'Too many links sent. Please wait a while and try again.' : 'Could not send the email. Check the address and try again.', 'err');
+    } catch {
+      msg('Could not send the email. Please try again.', 'err');
+    }
+    $('mail').disabled = false;
+  });
 
   $('go').addEventListener('click', async () => {
     const code = $('code').value.toUpperCase().replace(/[^A-Z0-9]/g, '');

@@ -11,7 +11,8 @@ import {
   signInWithPopup, 
   signInWithRedirect, 
   getRedirectResult, 
-  signOut 
+  signOut,
+  connectAuthEmulator
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
@@ -45,6 +46,11 @@ export const auth = (() => {
     } catch (e) {
       console.warn("[Firebase] Could not attach fallback popup resolver:", e);
     }
+  }
+  // Local development only (never in a build): localStorage qc_auth_emulator = 1 uses the Firebase Auth emulator
+  // (port 9099), so sign-in flows can be tried without real accounts or emails.
+  if ((import.meta as any).env?.DEV && typeof localStorage !== 'undefined' && localStorage.getItem('qc_auth_emulator') === '1') {
+    try { connectAuthEmulator(a, 'http://127.0.0.1:9099', { disableWarnings: true }); } catch { /* already connected */ }
   }
   return a;
 })();

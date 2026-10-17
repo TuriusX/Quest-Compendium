@@ -17,6 +17,7 @@ import { AchievementsDrawer } from './components/AchievementsDrawer';
 const PlaythroughNotepad = React.lazy(() => import('./components/PlaythroughNotepad').then(module => ({ default: module.PlaythroughNotepad })));
 const PersonalQuestsModal = React.lazy(() => import('./components/PersonalQuestsModal').then(module => ({ default: module.PersonalQuestsModal })));
 const GameGuidesBrowser = React.lazy(() => import('./components/GameGuidesBrowser').then(module => ({ default: module.GameGuidesBrowser })));
+const EmailSignInPage = React.lazy(() => import('./components/EmailSignInPage').then(module => ({ default: module.EmailSignInPage })));
 const SettingsModal = React.lazy(() => import('./components/SettingsModal').then(module => ({ default: module.SettingsModal })));
 const QuickGameSearchModal = React.lazy(() => import('./components/QuickGameSearchModal').then(module => ({ default: module.QuickGameSearchModal })));
 const GameScreenModal = React.lazy(() => import('./components/GameScreenModal').then(module => ({ default: module.GameScreenModal })));
@@ -54,6 +55,7 @@ import { readCloud, writeCloud } from './utils/playthroughCloud';
 import { PlaythroughPanel } from './components/PlaythroughPanel';
 import { appSource, isPhone } from './utils/source';
 import { useGameArt } from './utils/gameArt';
+import { deviceId } from './utils/deviceId';
 
 /** The running game's picture: IGDB's key art when its guide has it, else Steam's header; hidden if neither loads. */
 function RunningGameArt({ appId, name }: { appId: number; name?: string }) {
@@ -219,6 +221,11 @@ export default function App() {
   const tr = useT();
   if (window.location.hash === '#settings') {
     return <Suspense fallback={<div className="w-screen h-screen bg-[#0c0d14]" />}><SettingsStandalone /></Suspense>;
+  }
+
+  // The email's sign-in link (components/EmailSignInPage.tsx).
+  if (window.location.pathname === '/email-signin') {
+    return <Suspense fallback={<div className="w-screen h-screen bg-[#0c0d14]" />}><EmailSignInPage /></Suspense>;
   }
 
   if (window.location.pathname === '/desktop-login') {
@@ -1913,6 +1920,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           'Content-Type': 'application/json',
           // Which app is asking (for the daily activity tally); the desktop app's browser identity looks like Chrome.
           'X-QC-App': (window as any).electronAPI ? 'desktop' : 'web',
+          'X-QC-Device': deviceId(),
           // Where the player first came from (?from= on the link into the app), for the daily summary's sources.
           ...(appSource() ? { 'X-QC-From': appSource() } : {}),
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})

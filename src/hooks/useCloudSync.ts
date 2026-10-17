@@ -7,6 +7,7 @@ import { onAuthStateChanged, User, signOut, getRedirectResult, browserPopupRedir
 import { doc, onSnapshot, setDoc, getDoc, runTransaction } from 'firebase/firestore';
 import { AppSettings, GameTab, CloudSyncDiagnostics, SyncEventLog } from '../types';
 import { getApiBaseUrl } from '../utils/api';
+import { deviceId } from '../utils/deviceId';
 import {
   canonicalStringify, removeUndefinedFields, isLegacyWelcomeTab, sanitizeTabsForCloud,
   mergeTabState, readTombstones, writeTombstones, cleanTombstones, dropLegacyDeletedList, UploadGovernor,
@@ -239,7 +240,7 @@ export function useCloudSync(
       try {
         const token = await u.getIdToken();
         const res = await fetch(`${getApiBaseUrl()}/api/user/status?fresh=1`, {
-          headers: { Authorization: `Bearer ${token}`, 'X-QC-TZ': deviceTimeZone(), 'X-QC-App': (window as any).electronAPI ? 'desktop' : 'web' },
+          headers: { Authorization: `Bearer ${token}`, 'X-QC-TZ': deviceTimeZone(), 'X-QC-App': (window as any).electronAPI ? 'desktop' : 'web', 'X-QC-Device': deviceId() },
         });
         const data = await res.json();
         if (!data || typeof data.proQueriesAvailable !== 'number') return;
@@ -313,7 +314,7 @@ export function useCloudSync(
 
         currentUser.getIdToken().then(token => {
           return fetch(`${getApiBaseUrl()}/api/user/status`, {
-            headers: { Authorization: `Bearer ${token}`, 'X-QC-TZ': deviceTimeZone(), 'X-QC-App': (window as any).electronAPI ? 'desktop' : 'web', ...(appSource() ? { 'X-QC-From': appSource() } : {}) }
+            headers: { Authorization: `Bearer ${token}`, 'X-QC-TZ': deviceTimeZone(), 'X-QC-App': (window as any).electronAPI ? 'desktop' : 'web', 'X-QC-Device': deviceId(), ...(appSource() ? { 'X-QC-From': appSource() } : {}) }
           });
         })
           .then(res => res.json())

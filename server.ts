@@ -17,6 +17,7 @@ import nodePath from 'path';
 import cors from 'cors';
 import { registerDeviceAuth } from './deviceAuth';
 import { registerGuestGuard, clientIp } from './guestGuard';
+import { registerEmailSignIn, freePoolKeys, isDisposable, poolLeft } from './emailSignIn';
 import { cleanTag, recordSignupSource, recordVisit } from './visitSources';
 import { recordGroundingMiss, registerBlueprints } from './blueprints';
 import { registerWebSearch } from './webSearch';
@@ -375,6 +376,14 @@ async function startServer() {
     },
   });
 
+  // Signing in with an email link (emailSignIn.ts): the apps ask for the link here, with its limits.
+  registerEmailSignIn(app, {
+    apiKey: process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY',
+    requireAuth,
+    getAuth,
+    clientIp: (req) => clientIp(req, 1),
+  });
+
   // The Deck's web search runs Google searches too, so it shares the monthly search budget.
   registerWebSearch(app, { requireAuth, getGeminiClient, searchBudget: { allowed: async () => (await playerSearchesToday()) && monthlyBudgetOk(), record: recordPlayerSearches } });
   // Published guides as JSON for the Steam Deck plugin, which shows them natively (public, read-only).
@@ -490,7 +499,7 @@ async function startServer() {
   const tzOf = (req: any) => safeTimeZone(req.body?.timeZone || req.headers['x-qc-tz']);
 
   /** A player's balances brought up to today in their time zone (Premium's carry-over applied at the new day). */
-  async function syncUserLimits(userData: any, tz: string, isPremium: boolean) {
+  async function syncUserLimits(userData: any, tz: string, isPremium: boolean, guestDay = false) {
     const today = dayIn(tz);
     // Security Verification: If tampering is detected, reset to 0
     if (userData.lastResetDate === today && userData.securitySeal && !verifySeal(userData)) {
@@ -500,14 +509,52 @@ async function startServer() {
       userData.securitySeal = generateSeal(userData);
       return userData;
     }
-    Object.assign(userData, applyDay(userData, await allowances(), isPremium, today));
+    Object.assign(userData, applyDay(userData, await allowances(), isPremium, today, guestDay && !isPremium));
     return userData;
   }
 
+  // ---- Free questions follow the person (emailSignIn.ts) ------------------------------------------------------
+  // A free account's day is capped by its pools: its address (name+x@gmail.com is name@gmail.com) and the device it
+  // asks from, so extra accounts give no extra free questions. A disposable address gets the guest day. Premium and
+  // guests never touch the pools.
+  type FreeRules = { keys: string[]; limited: boolean };
+  function freeRulesFor(req: any, isPremium: boolean): FreeRules {
+    if (isPremium) return { keys: [], limited: false };
+    const email = (req as any).user?.email;
+    return { keys: freePoolKeys(email, req.headers['x-qc-device']), limited: isDisposable(email) };
+  }
+  /** Caps the balances by what's left in each pool today (userData.lastResetDate is the player's day). */
+  async function capByPools(userData: any, rules: FreeRules) {
+    if (!rules.keys.length) return;
+    try {
+      const a = await allowances();
+      const plan = rules.limited ? a.guest : a.free;
+      const snaps = await getFirestore().getAll(...rules.keys.map((k) => getFirestore().collection('freePools').doc(k)));
+      for (const snap of snaps) {
+        const left = poolLeft(snap.exists ? (snap.data() as any) : undefined, String(userData.lastResetDate), plan);
+        userData.proQueriesAvailable = Math.min(Number(userData.proQueriesAvailable) || 0, left.pro);
+        userData.flashQueriesAvailable = Math.min(Number(userData.flashQueriesAvailable) || 0, left.flash);
+      }
+    } catch (e: any) {
+      console.warn('[free pool] read failed:', e?.message);
+    }
+  }
+  /** One question used from each pool. */
+  function spendFromPools(rules: FreeRules, day: string, bucket: 'pro' | 'flash') {
+    for (const key of rules.keys) {
+      const ref = getFirestore().collection('freePools').doc(key);
+      getFirestore().runTransaction(async (tx) => {
+        const d: any = (await tx.get(ref)).data() || {};
+        const used = d.day === day ? d : { pro: 0, flash: 0 };
+        tx.set(ref, { day, pro: (Number(used.pro) || 0) + (bucket === 'pro' ? 1 : 0), flash: (Number(used.flash) || 0) + (bucket === 'flash' ? 1 : 0), at: Date.now() });
+      }).catch((e: any) => console.warn('[free pool] write failed:', e?.message));
+    }
+  }
+
   /** What the apps show: both balances, the day's allowance, the carry-over cap and when the day resets. */
-  async function quotaView(userData: any, isPremium: boolean, tz: string, isGuest = false) {
+  async function quotaView(userData: any, isPremium: boolean, tz: string, isGuest = false, limited = false) {
     const a = await allowances();
-    const plan = isGuest ? a.guest : isPremium ? a.premium : a.free;
+    const plan = isGuest || (limited && !isPremium) ? a.guest : isPremium ? a.premium : a.free;
     return {
       // A guest's day is smaller: what signing in gives (the free allowance), for the sign-in card.
       ...(isGuest ? { signedInPro: a.free.pro, signedInFlash: a.free.flash } : {}),
@@ -567,11 +614,14 @@ async function startServer() {
       const premium = await premiumFor(idToken, userId, userEmail, userData, req.query.fresh === '1');
       const isEffectivePremium = premium.isPremium;
       const before = `${userData.proQueriesAvailable}|${userData.flashQueriesAvailable}|${userData.lastResetDate}|${userData.allowancePlan}`;
-      userData = await syncUserLimits(userData, tz, isEffectivePremium);
+      const free = freeRulesFor(req, isEffectivePremium);
+      userData = await syncUserLimits(userData, tz, isEffectivePremium, free.limited);
       // A new day (or a plan change) is saved now, so the carry-over is applied once.
       if (before !== `${userData.proQueriesAvailable}|${userData.flashQueriesAvailable}|${userData.lastResetDate}|${userData.allowancePlan}`) {
         updateFirestoreDocREST(idToken, userId, { proQueriesAvailable: userData.proQueriesAvailable, flashQueriesAvailable: userData.flashQueriesAvailable, lastResetDate: userData.lastResetDate, allowancePlan: userData.allowancePlan }).catch(() => {});
       }
+      // What the pools leave (not saved: the account's own balance stays as it is).
+      await capByPools(userData, free);
       userData.isPremium = isEffectivePremium;
       userData.subscriptionStatus = isEffectivePremium ? 'active' : (userData.subscriptionStatus === 'active' ? 'inactive' : userData.subscriptionStatus || 'beta');
 
@@ -589,7 +639,7 @@ async function startServer() {
 
       res.json({
         ...userData,
-        ...(await quotaView(userData, isEffectivePremium, tz)),
+        ...(await quotaView(userData, isEffectivePremium, tz, false, free.limited)),
         fullAccess: hasFullAccess(isEffectivePremium),
         beta: BETA_ALL_ACCESS,
         // The plan, for Settings and the paywall: who manages it, and when it renews or ends.
@@ -977,12 +1027,15 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
 
       let guestQuota: GuestQuota | null = null;
       const tz = tzOf(req);
+      let free: FreeRules = { keys: [], limited: false };
       if (!isGuest) {
         userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
         const rawEmail = (req as any).user?.email;
         const userEmail = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : null;
         const isEffectivePremium = (await premiumFor(idToken, userId, userEmail, userData)).isPremium;
-        userData = await syncUserLimits(userData, tz, isEffectivePremium);
+        free = freeRulesFor(req, isEffectivePremium);
+        userData = await syncUserLimits(userData, tz, isEffectivePremium, free.limited);
+        await capByPools(userData, free);
         userData.isPremium = isEffectivePremium;
       } else {
         // Guests: the free allowance, kept in memory per guest id.
@@ -1033,20 +1086,20 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
         recordLimitHit(userId, isGuest ? 'guest' : isPremium ? 'premium' : 'free', (req as any).user?.email);
         const resetAt = nextReset(tz);
         const allow = await allowances();
-        const p = isGuest ? allow.guest : isPremium ? allow.premium : allow.free;
+        const p = isGuest || free.limited ? allow.guest : isPremium ? allow.premium : allow.free;
         return res.status(429).json({
           text: isGuest
             // Guests are asked to sign in (more questions today, conversations saved), never sent to Premium.
-            ? `You've used today's guest questions. Sign in with Google to keep going: ${allow.free.pro} Pro and ${allow.free.flash} Fast questions a day, and your conversations saved on all your devices.`
+            ? `You've used today's guest questions. Sign in to keep going: ${allow.free.pro} Pro and ${allow.free.flash} Fast questions a day, and your conversations saved on all your devices.`
             : isPremium
             ? `You've used today's Pro and Fast questions. They're topped up at midnight, and what you don't use carries over.`
-            : `You've used today's ${allow.free.pro} Pro and ${allow.free.flash} Fast questions. They reset at midnight. Premium gives you ${allow.premium.pro} Pro and ${allow.premium.flash} Fast questions a day, and what you don't use carries over.`,
+            : `You've used today's ${p.pro} Pro and ${p.flash} Fast questions. They reset at midnight. Premium gives you ${allow.premium.pro} Pro and ${allow.premium.flash} Fast questions a day, and what you don't use carries over.`,
           modelUsed: 'Limit Reached',
           limit: {
             resetAt, isPremium, dailyPro: p.pro, dailyFlash: p.flash, premiumPro: allow.premium.pro, premiumFlash: allow.premium.flash,
             ...(isGuest ? { isGuest: true, signedInPro: allow.free.pro, signedInFlash: allow.free.flash } : {}),
           },
-          userData: { isPremium, isGuest, ...(await quotaView(userData, isPremium, tz, isGuest)) },
+          userData: { isPremium, isGuest, ...(await quotaView(userData, isPremium, tz, isGuest, free.limited)) },
         });
       }
 
@@ -1397,6 +1450,7 @@ percentages:
         if (b === 'pro') userData.proQueriesAvailable = Math.max(0, Number(userData.proQueriesAvailable) - 1);
         else userData.flashQueriesAvailable = Math.max(0, Number(userData.flashQueriesAvailable) - 1);
         chargedBucket = b;
+        if (free.keys.length) spendFromPools(free, String(userData.lastResetDate), b);
       };
       const saveBalances = async () => {
         if (!isGuest) {
@@ -1889,7 +1943,7 @@ percentages:
         userData: {
           isPremium: userData.isPremium === true,
           isGuest,
-          ...(await quotaView(userData, userData.isPremium === true, tz, isGuest)),
+          ...(await quotaView(userData, userData.isPremium === true, tz, isGuest, free.limited)),
         }
       });
 
@@ -2444,14 +2498,14 @@ percentages:
   <div class="container">
     <div class="badge">Official Legal Document</div>
     <h1>Privacy Policy for Quest Compendium</h1>
-    <div class="updated">Last updated: October 15, 2026</div>
+    <div class="updated">Last updated: October 17, 2026</div>
 
     <p>Welcome to <strong>Quest Compendium</strong> (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;the application&rdquo;). This Privacy Policy explains how personal information and application data are collected, used, and protected when you use our desktop application and web services.</p>
 
     <h2>1. Information We Collect</h2>
     <p>Quest Compendium accesses, collects, or processes the following categories of data solely to provide gaming companion features:</p>
     <ul>
-      <li><strong>Account Information:</strong> If you sign in, we collect your email address and authentication credentials managed securely through Firebase Authentication.</li>
+      <li><strong>Account Information:</strong> If you sign in, we collect your email address and the sign-in method you used (Google, or a sign-in link sent to your email). Sign-in is handled by Firebase Authentication (Google). If you choose an email link, Firebase sends one email containing a single-use sign-in link to the address you enter; we don't send marketing email and never ask for or store a password. To prevent abuse of free questions, we keep a one-way fingerprint of your email address and of the device you sign in on, used only to apply the daily question allowance.</li>
       <li><strong>Steam Profile & Gameplay Data:</strong> If you link your public Steam ID, we retrieve publicly accessible profile data, game libraries, and achievements via the public Steam Web API to display your in-game statistics and patch notes. We never collect or access your Steam passwords or login credentials.</li>
       <li><strong>User-Submitted Queries & Content:</strong> Questions you ask the AI compendium, chat histories, personal playthrough notes, and quest checklist items you save.</li>
       <li><strong>Your Playthrough:</strong> For each game, Quest Compendium keeps a short record of your playthrough so answers fit your save: where you are, choices you made, what you've finished and found, and any notes you choose to include. It is built from your questions and answers, your quest log and your guide checklists, and is used only to answer your own questions. You can see, edit or clear it at any time in &ldquo;Your playthrough&rdquo;, and turn it off in Settings. If you're signed in, it's stored with your account so it syncs across your devices.</li>
@@ -2473,7 +2527,7 @@ percentages:
     <h2>3. Third-Party Services and Data Sharing</h2>
     <p>We do not sell, rent, or trade your personal information. We share data only with the following trusted infrastructure providers to deliver the service:</p>
     <ul>
-      <li><strong>Google Cloud & Firebase:</strong> Provides user authentication and encrypted cloud database synchronization (Firestore).</li>
+      <li><strong>Google Cloud & Firebase:</strong> Provides user authentication and encrypted cloud database synchronization (Firestore), and sends sign-in link emails.</li>
       <li><strong>Google Gemini API:</strong> Processes your submitted gameplay inquiries, images, and voice queries to generate answers, guides, and text-to-speech narration.</li>
       <li><strong>Valve Steam Web API:</strong> Provides public game details, achievement lists, and news.</li>
       <li><strong>Stripe:</strong> Secure payment gateway for managing subscriptions and checkout.</li>
