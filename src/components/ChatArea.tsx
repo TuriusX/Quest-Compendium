@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { ModelToggle } from './ModelToggle';
 import { QuestionsPill } from './QuestionsPill';
-import { balancesOf, readAnswerModel, saveAnswerModel, startingModel, type AnswerModel } from '../utils/answerModel';
+import { balancesOf, modelKind, readAnswerModel, saveAnswerModel, startingModel, type AnswerModel } from '../utils/answerModel';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
@@ -1697,10 +1697,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       )}
                     </>
                   ) : (
-                    // One small grey line: "Fast · 10:38" (there's only one speaker)
+                    // One small grey line: "Fast · 10:38" (there's only one speaker; Spot it says so)
                     <span className="text-zinc-500 font-sans">
                       {[
-                        !['Offline Fallback', 'Limit Reached', 'Session Expired'].includes(msg.modelUsed || '') ? msg.modelUsed : '',
+                        msg.kind === 'spot' ? msg.modelUsed : modelKind(msg.modelUsed) ? t(`model.${modelKind(msg.modelUsed)}`) : '',
                         new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                       ].filter(Boolean).join(' · ')}
                     </span>

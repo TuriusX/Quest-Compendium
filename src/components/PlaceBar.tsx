@@ -113,13 +113,15 @@ export function PlaceBar({
     const unconfirmed = !placeNow || (place.story && !storyNow);
     const small = 'h-6 px-2 rounded-md text-[11.5px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1';
     return (
-      <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px] min-w-0">
-        <span className="inline-flex items-center gap-1.5 min-w-0">
+      <div className="mb-3">
+      <div className="flex items-center gap-2 text-[12px] min-w-0">
+        {/* One line: the place keeps its name, a long story point is cut with "…" (whole in the tooltip) */}
+        <span className="inline-flex items-center gap-1.5 min-w-0 flex-1" title={[placeNow || place.name, storyPhrase(storyNow || place.story)].filter(Boolean).join(' · ')}>
           <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-color)]" aria-hidden="true" />
-          <span className="text-zinc-200 font-medium">{placeNow || place.name}</span>
-          {(storyNow || place.story) && <span className="text-zinc-400">· {storyPhrase(storyNow || place.story)}</span>}
+          <span className="text-zinc-200 font-medium flex-shrink-0 max-w-[60%] truncate">{placeNow || place.name}</span>
+          {(storyNow || place.story) && <span className="text-zinc-400 truncate min-w-0">· {storyPhrase(storyNow || place.story)}</span>}
         </span>
-        {reask}
+        {reask && <span className="flex-shrink-0">{reask}</span>}
         {!reask && unconfirmed && (
           <button
             type="button"
@@ -127,18 +129,19 @@ export function PlaceBar({
               if (!placeNow) onChoosePlace(place.name);
               if (place.story && !storyNow) onChooseStory(place.story);
             }}
-            className={`${small} border border-[var(--accent-border)] bg-[var(--accent-dim)] text-zinc-100 hover:brightness-125`}
+            className={`${small} flex-shrink-0 whitespace-nowrap border border-[var(--accent-border)] bg-[var(--accent-dim)] text-zinc-100 hover:brightness-125`}
           >
             <Check className="w-3.5 h-3.5" aria-hidden="true" />
             {t('place.rightShort')}
           </button>
         )}
         {!reask && (
-          <button type="button" onClick={() => setOpen(true)} className={`${small} text-[var(--accent-color)] hover:bg-[var(--accent-dim)]`}>
+          <button type="button" onClick={() => setOpen(true)} className={`${small} flex-shrink-0 whitespace-nowrap text-[var(--accent-color)] hover:bg-[var(--accent-dim)]`}>
             {t('place.change')}
           </button>
         )}
-        {note}
+      </div>
+      {note}
       </div>
     );
   }

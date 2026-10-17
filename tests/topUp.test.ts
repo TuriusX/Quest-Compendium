@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/topUp.test.ts)
 import assert from "node:assert/strict";
-import { topUp, topUpLine } from "../src/utils/answerModel";
+import { modelKind, topUp, topUpLine } from "../src/utils/answerModel";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -27,6 +27,16 @@ test("Premium at the carry-over cap: says so; near the cap: only what fits", () 
 test("nothing known yet: no line", () => {
   assert.equal(topUpLine({ pro: 1, fast: 1, dailyPro: 0, dailyFast: 0, resetAt: at(5) }, t, now), "");
   assert.equal(topUpLine({ pro: 1, fast: 1, dailyPro: 2, dailyFast: 5 }, t, now), "");
+});
+
+test("an answer's grey line says Pro or Fast, never the model's name", () => {
+  assert.equal(modelKind("Gemini 3.1 Pro"), "pro");
+  assert.equal(modelKind("Gemini 3.8 Flash"), "fast");
+  assert.equal(modelKind("Gemini Flash-Lite"), "fast");
+  assert.equal(modelKind("Gemini 3.1 Flash Lite (Emergency Fallback)"), "fast");
+  assert.equal(modelKind("Limit Reached"), "");
+  assert.equal(modelKind("Offline / Unavailable"), "");
+  assert.equal(modelKind(undefined), "");
 });
 
 console.log(`\n${passed} tests passed`);

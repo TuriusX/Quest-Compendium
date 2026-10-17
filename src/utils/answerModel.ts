@@ -20,6 +20,19 @@ export function saveAnswerModel(m: AnswerModel): void {
   } catch {}
 }
 
+/**
+ * What an answer's grey line says about its model: "Pro" or "Fast" (the player's two choices), never the model's
+ * own name ("Gemini 3.1 Pro" -> Pro; any Flash, Flash-Lite or fallback -> Fast). '' for the app's own notes (the limit
+ * message, an expired session, offline) and anything else.
+ */
+export function modelKind(modelUsed?: string): AnswerModel | '' {
+  const m = String(modelUsed || '');
+  if (/offline|limit reached|session expired|unavailable|^eval$/i.test(m)) return '';
+  if (/flash|lite|fast/i.test(m)) return 'fast';
+  if (/\bpro\b/i.test(m)) return 'pro';
+  return '';
+}
+
 /** The device's time zone, for the midnight reset (the server falls back to UTC without it). */
 export function deviceTimeZone(): string {
   try {
