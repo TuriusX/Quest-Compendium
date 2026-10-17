@@ -181,7 +181,8 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx, opts: { only?
       await ctx.charge(dollars);
       await save(s.id);
       if (status === 'published' || status === 'passed') wentLive = true;
-      return ctx.logUnit({ key, slug, status: status === 'published' ? 'passed' : status, dollars });
+      // A held rebuild passed its review (it's held only because it would drop content), so it counts as a pass.
+      return ctx.logUnit({ key, slug, status: status === 'published' || status === 'held' ? 'passed' : status, dollars });
     };
 
     if (s.kind === 'walkthrough' || (s.unit === 'page' && isDeepen(s))) {
@@ -193,14 +194,14 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx, opts: { only?
       const scope = { dollars: 0, searches: 0 };
       const r: any = await usageScope.run(scope, () => buildPageEvidenceForCore(key, game, target.slug, order, key, { rebuild: isDeepen(s) })).catch((e: any) => ({ error: String(e?.message || e), stop: isStop(e) }));
       if (r?.stop) { await ctx.charge(scope.dollars); return { wentLive, stopped: `Stopped: ${cut(r.error, 120)}`, done: false }; }
-      const passed = r?.review?.status === 'passed';
-      if (passed) {
-        await writePageForCore(key, target.slug, r.proto);
-        await db().collection('guides').doc(key).collection('areas').doc(target.slug).set({ status: 'published', translationsDue: { at: Date.now() } }, { merge: true });
-      }
-      console.log(`  [blueprint] ${game} / ${target.name}: ${passed ? 'passed' : r?.error ? `not built (${cut(r.error, 80)})` : `failed ${r?.review?.score ?? ''}`}, $${scope.dollars.toFixed(3)}`);
+      let passed = r?.review?.status === 'passed';
+      // A deepened live page whose rebuild would lose content is held by the rebuild guard: the live page stays.
+      const held = passed && !(await writePageForCore(key, target.slug, r.proto));
+      if (passed && !held) await db().collection('guides').doc(key).collection('areas').doc(target.slug).set({ status: 'published', translationsDue: { at: Date.now() } }, { merge: true });
+      if (held) passed = false;
+      console.log(`  [blueprint] ${game} / ${target.name}: ${held ? 'passed, held for review (it would drop content)' : passed ? 'passed' : r?.error ? `not built (${cut(r.error, 80)})` : `failed ${r?.review?.score ?? ''}`}, $${scope.dollars.toFixed(3)}`);
       p.done = Date.now();
-      const paused = await record(target.name, target.slug, passed ? 'published' : 'failed', scope.dollars);
+      const paused = await record(target.name, target.slug, held ? 'held' : passed ? 'published' : 'failed', scope.dollars);
       if (paused) return { wentLive, stopped: paused, done: false };
       continue;
     }

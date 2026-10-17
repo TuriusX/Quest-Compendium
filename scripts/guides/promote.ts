@@ -8,13 +8,20 @@
  * The staged pages replace the live guide: they're published under the live key in the staged order and layout, and
  * live pages that aren't in the new outline are held back (never deleted). The guide's other data (Steam id,
  * achievement guide, translations, pipeline notes) stays. Then the staging document is deleted. Republish the website.
+ *
+ * Do no harm (rebuildGuard.ts): every live page a staged one replaces is saved to areaHistory first; a staged page that
+ * would drop sourced content, or content of a page people find in Google, is held for the owner (the live page stays,
+ * flagged rebuildHeld); and a live page with Search Console impressions stays live, at the end of the order, unless the
+ * new outline has a page with its name.
  */
 import { db, arg, stageKey, liveKey, translatableText } from './common';
+import { rebuildVerdict, keepOnRestructure, historyRef, notifyOwner } from './rebuildGuard';
+import { loadPageStats, statOf } from './pageStats';
 
 export const REPLACED = 'replaced by a reviewed rebuild';
 
 /** Returns how many pages went live, or null if there was nothing staged. */
-export async function promote(key: string): Promise<{ published: number; retired: number; changed: number } | null> {
+export async function promote(key: string): Promise<{ published: number; retired: number; changed: number; held: number; kept: number } | null> {
   const live = liveKey(key);
   const stageRef = db().collection('guides').doc(stageKey(live));
   const stage: any = (await stageRef.get()).data();
@@ -39,22 +46,67 @@ export async function promote(key: string): Promise<{ published: number; retired
   // A page counts as changed only when its player-facing text changed (or it's new): only those get a new updatedAt,
   // so translations redo just the changed pages.
   const livePages = new Map((await liveRef.collection('areas').get()).docs.map((d) => [d.id, d.data() as any]));
+  const stats = await loadPageStats();
+  const impressionsOf = (slug: string) => statOf(stats, live, slug)?.impressions || 0;
+  // Player corrections rewrite single checked entries (corrections.ts); everything else a stage can hold is a rebuild
+  // or a repair, compared with the live page before it replaces it.
+  const guarded = stage.repair !== 'correction';
   const changed: string[] = [];
+  const held: string[] = [];
+  const now = Date.now();
   for (const [i, o] of order.entries()) {
     const { staged, ...page } = pages.get(o.slug);
     const was = livePages.get(o.slug);
     const same = !!was && ['draft', 'published'].includes(was.status) && translatableText(was) === translatableText(page);
+    const ref = liveRef.collection('areas').doc(o.slug);
+    if (!same && was && guarded && was.status === 'published') {
+      const v = rebuildVerdict(was, page, impressionsOf(o.slug));
+      if (v.hold) {
+        // The live page stays as it is (in its new place in the order); the rebuild waits in its history for the owner.
+        const flag = { at: now, reasons: v.reasons, lost: v.lost.slice(0, 40), history: String(now + i), impressions: impressionsOf(o.slug) };
+        batch.set(historyRef(live, o.slug, now + i), JSON.parse(JSON.stringify({ role: 'held', at: now, page: { ...page, status: 'published' }, reasons: v.reasons, lost: v.lost, impressions: flag.impressions })));
+        batch.set(ref, { order: i, rebuildHeld: JSON.parse(JSON.stringify(flag)) }, { merge: true });
+        held.push(`${was.name || o.slug}: ${v.reasons.join('; ')}`);
+        ops += 2;
+        if (ops >= 400) await flush();
+        continue;
+      }
+    }
     if (!same) changed.push(o.slug);
-    batch.set(liveRef.collection('areas').doc(o.slug), { ...page, order: i, status: 'published', heldReason: null, unpublishedAt: null, updatedAt: same ? was.updatedAt || Date.now() : Date.now() });
+    // The version it replaces, for rollback.
+    if (!same && was) {
+      batch.set(historyRef(live, o.slug, now + i), JSON.parse(JSON.stringify({ role: 'replaced', at: now, page: was })));
+      ops++;
+    }
+    batch.set(ref, { ...page, order: i, status: 'published', heldReason: null, unpublishedAt: null, rebuildHeld: null, updatedAt: same ? was.updatedAt || Date.now() : Date.now() });
     if (++ops >= 400) await flush();
   }
   const keep = new Set(order.map((o: any) => o.slug));
+  const newNames = order.map((o: any) => String(pages.get(o.slug)?.name || o.name || ''));
   let retired = 0;
+  const kept: any[] = [];
   for (const d of (await liveRef.collection('areas').get()).docs) {
     if (keep.has(d.id) || !['draft', 'published'].includes(d.data().status)) continue;
+    // A page people find in Google isn't retired by a restructure unless the new outline has a page with its name (the
+    // redirect would otherwise go to a weakly related page, as Lakay went to Guarma): it stays live, after the new
+    // outline's pages.
+    if (d.data().status === 'published' && keepOnRestructure(String(d.data().name || d.id), impressionsOf(d.id), newNames)) {
+      kept.push((Array.isArray(before.areas) ? before.areas : []).find((a: any) => a.slug === d.id) || { slug: d.id, name: d.data().name || d.id });
+      batch.update(d.ref, { order: order.length + kept.length - 1 });
+      if (++ops >= 400) await flush();
+      continue;
+    }
     batch.update(d.ref, { status: 'held', heldReason: REPLACED, updatedAt: Date.now() });
     retired++;
     if (++ops >= 400) await flush();
+  }
+  if (kept.length) order.push(...kept);
+  if (held.length || kept.length) {
+    await notifyOwner([
+      `Promote ${live}:`,
+      ...held.map((h) => `- rebuild held for review (the live page stays): ${h}`),
+      ...(kept.length ? [`- kept live (Search Console impressions, and no page with its name in the new outline): ${kept.map((k) => k.name || k.slug).join(', ')}`] : []),
+    ].join('\n'));
   }
   batch.set(liveRef, {
     game: stage.game || before.game,
@@ -76,7 +128,7 @@ export async function promote(key: string): Promise<{ published: number; retired
   ops++;
   await flush();
   await db().recursiveDelete(stageRef);
-  return { published: order.length, retired, changed: changed.length };
+  return { published: order.length, retired, changed: changed.length, held: held.length, kept: kept.length };
 }
 
 /** Start a staged build as a copy of the live guide (its published and draft pages, as drafts), to fix or extend it. */
@@ -124,7 +176,7 @@ if (/promote\.ts$/.test(process.argv[1] || '')) {
     if (arg('discard') === 'true') console.log((await discard(key)) ? `Discarded the staged build of ${key}.` : `Nothing staged for ${key}.`);
     else {
       const r = await promote(key);
-      console.log(r ? `Promoted ${key}: ${r.published} page(s) live, ${r.retired} old page(s) held back.` : `Nothing staged for ${key}.`);
+      console.log(r ? `Promoted ${key}: ${r.published} page(s) live, ${r.retired} old page(s) held back${r.held ? `, ${r.held} rebuilt page(s) held for review (the live version stays)` : ''}${r.kept ? `, ${r.kept} page(s) with search impressions kept live` : ''}.` : `Nothing staged for ${key}.`);
     }
     setTimeout(() => process.exit(0), 500);
   })().catch((e) => {
