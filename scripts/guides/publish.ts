@@ -429,19 +429,17 @@ function mentions(textIn: string, name: string): number {
 }
 
 /**
- * The live page that covers a place best: a compendium page whose own location fields put it there (a mission's
- * "where", a character's "where to find") scores highest, then any page by how often it names the place.
+ * The live page that covers a place best, by how often it names it: guide pages (areas, chapters) count in full, a
+ * mission or place page three quarters, a character who passes through half. The best score wins; guide pages win ties.
  */
 function bestMention(name: string, pages: { slug: string; text: string }[], entities: any[]): string {
   const scored = [
+    ...pages.map((p) => ({ slug: p.slug, n: mentions(p.text, name), guide: 1 })),
     ...entities.map((e) => {
-      // A mission set there or a place's own location is strong evidence; a character who passes through counts less.
-      const where = [e.quest?.where, e.summary?.where].filter(Boolean).join(' ');
       const person = ((e.summary?.whereToFind || []) as any[]).length > 0;
-      return { slug: e.slug, n: (mentions(where, name) ? 10 : 0) + mentions(JSON.stringify([e.overview, e.summary, e.story, e.quest]), name) * (person ? 0.5 : 1) };
+      return { slug: e.slug, n: mentions(JSON.stringify([e.overview, e.summary, e.story, e.quest]), name) * (person ? 0.5 : 0.75), guide: 0 };
     }),
-    ...pages.map((p) => ({ slug: p.slug, n: mentions(p.text, name) })),
-  ].filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  ].filter((x) => x.n > 0).sort((a, b) => b.n - a.n || b.guide - a.guide);
   return scored[0]?.slug || '';
 }
 
