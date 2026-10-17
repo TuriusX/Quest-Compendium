@@ -17,6 +17,7 @@ import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, gameKey, arg, steamAchievements, type GuideArea } from './common';
 import { estimateCost } from '../../usage';
 import { acquireGuideLock, isRefusal, lockedLine, releaseGuideLocks } from './guideLock';
+import { untranslated, UNTRANSLATED_LIMIT } from './translateCheck';
 
 const LANGS: Record<string, string> = {
   es: 'Spanish (Latin American, neutral)', pt: 'Brazilian Portuguese', de: 'German', fr: 'French', ru: 'Russian',
@@ -37,14 +38,19 @@ type Tr = {
   enemies: { id: string; name?: string; weakness?: string; steal?: string; notes?: string }[];
   shops: { id: string; name?: string; sells?: string }[];
   fights?: { id: string; name?: string; enemies?: string; threats?: string; weaknesses?: string; tactics?: string; rewards?: string }[];
-  info?: { region?: string; quests?: string[]; services?: string[]; enemyTypes?: string[]; directions?: string; connected?: string[] };
+  info?: { region?: string; levels?: string; quests?: string[]; services?: string[]; enemyTypes?: string[]; directions?: string; connected?: string[] };
+  people?: { groups: { group: string; people: { name: string; role?: string; where?: string }[] }[] };
   tips: string[];
   sections: { title: string; entries: { id: string; text: string }[] }[];
   src: number;
 };
 
-/** What gets translated on a page (ids kept so translations line up). */
+/**
+ * What gets translated on a page (ids kept so translations line up). The levels line and the people cards (who's here:
+ * merchants, quest NPCs, services) are prose too: left out, they stayed English on every translated page.
+ */
 function source(a: GuideArea) {
+  const people = (a as any).people?.groups;
   return {
     name: a.name, story: a.story || '', overview: a.overview || '',
     items: a.items.map((e) => ({ id: e.id, name: e.name, where: e.where, ...(e.how ? { how: e.how } : {}), ...(e.lockout ? { lockout: e.lockout } : {}) })),
@@ -52,7 +58,10 @@ function source(a: GuideArea) {
     enemies: a.enemies.map((e) => ({ id: e.id, name: e.name, weakness: e.weakness, steal: e.steal, notes: e.notes })),
     shops: a.shops.map((e) => ({ id: e.id, name: e.name, sells: e.sells })),
     fights: (a.fights || []).map((e) => ({ id: e.id, name: e.name, enemies: e.enemies, threats: e.threats, weaknesses: e.weaknesses, tactics: e.tactics, rewards: e.rewards })),
-    ...(a.info ? { info: { region: a.info.region, quests: a.info.quests, services: a.info.services, enemyTypes: a.info.enemyTypes, directions: a.info.directions, connected: a.info.connected } } : {}),
+    ...(a.info ? { info: { region: a.info.region, levels: a.info.levels, quests: a.info.quests, services: a.info.services, enemyTypes: a.info.enemyTypes, directions: a.info.directions, connected: a.info.connected } } : {}),
+    ...(Array.isArray(people) && people.length
+      ? { people: { groups: people.map((g: any) => ({ group: String(g?.group || ''), people: (Array.isArray(g?.people) ? g.people : []).map((x: any) => ({ name: String(x?.name || ''), ...(x?.role ? { role: String(x.role) } : {}), ...(x?.where ? { where: String(x.where) } : {}) })) })) } }
+      : {}),
     tips: a.tips || [],
     sections: (a.sections || []).map((x) => ({ title: x.title, entries: x.entries.map((e) => ({ id: e.id, text: e.text })) })),
     // Flagship pages: the walkthrough, the choices and the short version.
@@ -110,6 +119,7 @@ async function main() {
   const ai = gemini();
   let dollars = 0;
   let translatedPages = 0;
+  const incompleteAll: { lang: string; slug: string; share: number }[] = [];
 
   const call = async (prompt: string) => {
     const res: any = await ai.models.generateContent({
@@ -158,6 +168,8 @@ async function main() {
     };
 
     let done = 0, failed = 0, inconsistent = 0;
+    // Pages whose translation is more than UNTRANSLATED_LIMIT English (slug → share), kept from earlier runs until redone.
+    const incomplete: Record<string, number> = { ...(existing.incomplete || {}) };
     translatedPages += todo.length;
     for (const p of todo) {
       const src = source(p);
@@ -180,6 +192,13 @@ async function main() {
           const page = fit(src, tr);
           areas[p.slug] = { ...page, name: glossary[p.name] || page.name, src: p.updatedAt || Date.now() };
           ok = true;
+          // How much of it is still English (fields the reply left empty or mis-shaped keep the original): reported,
+          // not retried (a retry is new spend; the owner decides with --redo).
+          const u = untranslated(src, page);
+          if (u.share > UNTRANSLATED_LIMIT) {
+            incomplete[p.slug] = Math.round(u.share * 100) / 100;
+            console.warn(`  ${p.name}: ${u.same} of ${u.prose} prose field(s) still in English (${Math.round(u.share * 100)}%)`);
+          } else delete incomplete[p.slug];
         } catch (e: any) {
           if (attempt) console.warn(`  ${p.name}: ${e?.message}`);
         }
@@ -206,6 +225,12 @@ async function main() {
     // Remove translations of pages that are no longer published.
     const live = new Set(pages.map((p) => p.slug));
     for (const s of Object.keys(areas)) if (!live.has(s)) delete areas[s];
+    for (const s of Object.keys(incomplete)) if (!areas[s]) delete incomplete[s];
+    const over = Object.entries(incomplete).sort((a, b) => b[1] - a[1]);
+    if (over.length) {
+      console.log(`  ${over.length} page(s) over ${UNTRANSLATED_LIMIT * 100}% English: ${over.slice(0, 10).map(([s, v]) => `${s} ${Math.round(v * 100)}%`).join(', ')}${over.length > 10 ? ', …' : ''}`);
+      incompleteAll.push(...over.map(([slug, share]) => ({ lang, slug, share })));
+    }
     // The achievement guide, if the game has one: official names and descriptions from Steam in this language,
     // tips and roadmap translated (place names from the glossary). Redone only when the achievement guide changed.
     let achievements = existing.achievements || null;
@@ -263,11 +288,13 @@ async function main() {
         console.warn(`  achievement guide not translated: ${e?.message}`);
       }
     }
-    await trRef.set({ lang, areas, groups: groupNames, glossary, ...(achievements ? { achievements } : {}), updatedAt: Date.now() });
+    await trRef.set({ lang, areas, groups: groupNames, glossary, incomplete, ...(achievements ? { achievements } : {}), updatedAt: Date.now() });
     await ref.set({ languages: [...new Set([...(info.languages || []), lang])] }, { merge: true });
     console.log(`${lang}: ${done} translated, ${failed} left in English, ${Object.keys(areas).length} pages available in this language.`);
   }
-  console.log(`Done: ${translatedPages} page translation(s) in ${langs.join(', ')}. Estimated cost ≈ $${dollars.toFixed(3)}. Next: npx tsx scripts/guides/publish.ts`);
+  if (incompleteAll.length) console.log(`Half translated: ${incompleteAll.length} page translation(s) over ${UNTRANSLATED_LIMIT * 100}% English (${incompleteAll.slice(0, 8).map((x) => `${x.lang} ${x.slug}`).join(', ')}${incompleteAll.length > 8 ? ', …' : ''}); not retried, see guides/${key}/i18n/{lang}.incomplete.`);
+  // The count goes in the Done line too: the pipeline's Discord summary is made from it.
+  console.log(`Done: ${translatedPages} page translation(s) in ${langs.join(', ')}${incompleteAll.length ? ` (${incompleteAll.length} still over ${UNTRANSLATED_LIMIT * 100}% English)` : ''}. Estimated cost ≈ $${dollars.toFixed(3)}. Next: npx tsx scripts/guides/publish.ts`);
   await releaseGuideLocks();
   setTimeout(() => process.exit(0), 1500);
 }
