@@ -15,13 +15,13 @@
  * existing is renamed), the shared budget.
  */
 import { ThinkingLevel } from '@google/genai';
-import { FieldValue } from 'firebase-admin/firestore';
 import { db, gemini, MODEL, usageScope, searchesIn } from './common';
 import { entitySlug } from './compendium';
 import { chapterKey } from './siteText';
 import { apiLimits, searchesToday, pipelineRoom } from '../../apiLimits';
 import { isTransient } from './claimCheck';
 import { notifyOwner } from '../pipeline/summary';
+import { mergeTaxonomy, type TaxType } from './taxonomy';
 
 /** A stop that isn't the unit's fault (the day's search or Pro limit, the API down): the run stops, nothing is recorded. */
 const isStop = (e: any) => /search day limit|ProQuotaWait|Pro reviewer|no Pro reviewer/i.test(String(e?.message || e) + String(e?.name || '')) || isTransient(e);
@@ -156,10 +156,8 @@ export async function planEntitySection(key: string, sectionId: string): Promise
     await ref.set({ progress: { [s.id]: p }, updatedAt: Date.now() }, { merge: true });
   }
   const { coreTaxonomy } = await import('./compendium');
-  const cref = db().collection('guideCompendium').doc(key);
-  if (!((await cref.get()).data() || {}).taxonomy) await coreTaxonomy(key).catch(() => null);
-  const tax = ((await cref.get()).data()?.taxonomy || []) as any[];
-  if (!tax.some((t) => t.id === s.id)) await cref.set({ taxonomy: FieldValue.arrayUnion({ id: s.id, label: s.title, description: cut(s.what, 200), tier: 'other', examples: p.plan.slice(0, 12) }) }, { merge: true });
+  if (!((await db().collection('guideCompendium').doc(key).get()).data() || {}).taxonomy) await coreTaxonomy(key).catch(() => null);
+  await addSectionType(key, s, p.plan);
   await warnPlanLength(key, s, p);
   return { names: p.plan.slice(0, unitsToBuild(s, p.plan, []).want), section: s };
 }
@@ -183,6 +181,20 @@ async function warnPlanLength(key: string, s: Section, p: Progress & { warned?: 
   await notifyOwner(text);
   p.warned = sig;
   await db().collection('guideBlueprints').doc(key).set({ progress: { [s.id]: { warned: sig } } }, { merge: true });
+}
+
+/**
+ * An entity section's own compendium type, unless the taxonomy has it already or has the same kind under another name
+ * ("Gang Hideouts" when "Gang Hideouts and Camps" exists): then the section's id becomes an alias of that type
+ * (taxonomy.ts), and its pages are typed with it.
+ */
+async function addSectionType(key: string, s: Section, plan: string[]) {
+  const cref = db().collection('guideCompendium').doc(key);
+  const comp: any = (await cref.get()).data() || {};
+  const tax = (comp.taxonomy || []) as TaxType[];
+  if (tax.some((t) => t.id === s.id) || comp.typeAliases?.[s.id]) return;
+  const merged = mergeTaxonomy([...tax, { id: s.id, label: s.title, description: cut(s.what, 200), tier: 'other', examples: plan.slice(0, 12) }], [], comp.typeAliases || {});
+  await cref.set({ taxonomy: merged.taxonomy, typeAliases: merged.typeAliases }, { merge: true });
 }
 
 /** Record a unit built outside the runner (the new-pages phase) in the blueprint's progress; the section is done when all its names are. */
@@ -285,11 +297,8 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx, opts: { only?
       console.log(`  [plan] ${s.title}: ${p.plan.length} of ${want} named, $${scope.dollars.toFixed(3)}`);
       if (s.unit === 'entity') {
         // The section's own compendium type (if the taxonomy lacks it), so its pages are grouped and typed.
-        const cref = db().collection('guideCompendium').doc(key);
-        const comp: any = (await cref.get()).data() || {};
-        if (!comp.taxonomy) await coreTaxonomy(key).catch(() => null);
-        const tax = ((await cref.get()).data()?.taxonomy || []) as any[];
-        if (!tax.some((t) => t.id === s.id)) await cref.set({ taxonomy: FieldValue.arrayUnion({ id: s.id, label: s.title, description: cut(s.what, 200), tier: 'other', examples: p.plan.slice(0, 12) }) }, { merge: true });
+        if (!((await db().collection('guideCompendium').doc(key).get()).data() || {}).taxonomy) await coreTaxonomy(key).catch(() => null);
+        await addSectionType(key, s, p.plan);
       }
     }
     await warnPlanLength(key, s, p);

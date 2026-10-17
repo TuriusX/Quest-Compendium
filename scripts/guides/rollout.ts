@@ -18,6 +18,7 @@ import { apiLimits, searchesToday, pipelineRoom, SearchDayWait } from '../../api
 import { ProQuotaWait } from './reviewerQuota';
 import { isTransient } from './claimCheck';
 import { CORE_TIERS } from './core';
+import { resolveType } from './taxonomy';
 /** What the core programme lends the rollout: its budget room and charge, the checkpoint log, the run's time limit. */
 export type RolloutCtx = {
   room: () => Promise<number>;
@@ -38,8 +39,9 @@ type Unit = { key: string; name: string; slug: string; type?: string; section?: 
 export async function rebuildQueue(guides: string[]): Promise<Unit[]> {
   const out: Unit[] = [];
   for (const key of guides) {
-    const tax = (((await db().collection('guideCompendium').doc(key).get()).data() || {}).taxonomy || []) as any[];
-    const tier = (type: string) => { const t = tax.find((x) => x.id === type)?.tier; return CORE_TIERS.includes(t) ? CORE_TIERS.indexOf(t) : 9; };
+    const comp: any = (await db().collection('guideCompendium').doc(key).get()).data() || {};
+    const tax = (comp.taxonomy || []) as any[];
+    const tier = (type: string) => { const t = tax.find((x) => x.id === resolveType(type, comp.typeAliases))?.tier; return CORE_TIERS.includes(t) ? CORE_TIERS.indexOf(t) : 9; };
     const docs = (await db().collection('guideCompendium').doc(key).collection('entities').where('status', '==', 'published').get()).docs;
     docs.forEach((d, i) => {
       const e: any = d.data();
