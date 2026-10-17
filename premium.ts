@@ -21,6 +21,8 @@ export type StripeView = {
   periodEnd?: number;
   /** Cancelled in the portal: it stays Premium until periodEnd, then ends. */
   cancelAtPeriodEnd?: boolean;
+  /** Billed monthly or yearly (the subscription's price), for "Premium, yearly". */
+  interval?: 'month' | 'year';
 };
 
 export type PremiumDecision = {
@@ -49,6 +51,7 @@ export function decidePremium(doc: any, stripe: StripeView | null, opts: { owner
     if (d.subscriptionStatus !== 'active') save.subscriptionStatus = 'active';
     if (stripe.periodEnd && d.premiumPeriodEnd !== stripe.periodEnd) save.premiumPeriodEnd = stripe.periodEnd;
     if (!!stripe.cancelAtPeriodEnd !== !!d.premiumCancelAtPeriodEnd) save.premiumCancelAtPeriodEnd = !!stripe.cancelAtPeriodEnd;
+    if (stripe.interval && d.premiumInterval !== stripe.interval) save.premiumInterval = stripe.interval;
     return { isPremium: true, source: 'stripe', save };
   }
   if (granted) return { isPremium: true, source: 'grant', save };
@@ -82,7 +85,10 @@ export async function stripeViewFor(stripe: Stripe, savedCustomerId: string | un
   for (const id of customers) {
     const subs = await stripe.subscriptions.list({ customer: id, status: 'all', limit: 5 });
     const live = subs.data.find((s: any) => LIVE.has(s.status));
-    if (live) return { customerId: id, active: true, periodEnd: periodEndOf(live), cancelAtPeriodEnd: !!(live as any).cancel_at_period_end || !!(live as any).cancel_at };
+    if (live) {
+      const iv = (live as any).items?.data?.[0]?.price?.recurring?.interval;
+      return { customerId: id, active: true, periodEnd: periodEndOf(live), cancelAtPeriodEnd: !!(live as any).cancel_at_period_end || !!(live as any).cancel_at, ...(iv === 'year' || iv === 'month' ? { interval: iv } : {}) };
+    }
   }
   return { customerId: firstCustomer, active: false };
 }

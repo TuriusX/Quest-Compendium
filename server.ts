@@ -645,6 +645,7 @@ async function startServer() {
         // The plan, for Settings and the paywall: who manages it, and when it renews or ends.
         premiumSource: premium.source,
         ...(premium.source === 'stripe' && userData.premiumPeriodEnd ? { premiumPeriodEnd: userData.premiumPeriodEnd, premiumCancelAtPeriodEnd: userData.premiumCancelAtPeriodEnd === true } : {}),
+        ...(premium.source === 'stripe' && userData.premiumInterval ? { premiumInterval: userData.premiumInterval } : {}),
       });
     } catch (err) {
       console.error('Status fetch error:', err);
@@ -704,7 +705,14 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
     try {
       const stripe = getStripe();
       const userId = (req as any).user.uid;
-      const priceId = process.env.STRIPE_PRICE_ID;
+      // Monthly (the default) or yearly: the yearly price is STRIPE_PRICE_ID_YEARLY, else the price with lookup key
+      // premium_yearly (created 17 Oct 2026 on the same Premium product).
+      const yearly = req.body?.interval === 'year';
+      let priceId = process.env.STRIPE_PRICE_ID;
+      if (yearly) {
+        priceId = process.env.STRIPE_PRICE_ID_YEARLY || (await stripe.prices.list({ lookup_keys: ['premium_yearly'], active: true, limit: 1 })).data[0]?.id;
+        if (!priceId) return res.status(500).json({ error: 'The yearly price is not set up.' });
+      }
       
       if (!priceId) {
         return res.status(500).json({ error: 'STRIPE_PRICE_ID environment variable is missing.' });

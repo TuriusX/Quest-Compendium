@@ -949,6 +949,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     }
     if (userData && !userData.isGuest) wasPremiumRef.current = now;
   }, [userData?.isPremium]);
+  // The plan the Premium screen starts on: monthly, or yearly when a link asks for it (?plan=year).
+  const [paywallInterval, setPaywallInterval] = useState<'month' | 'year'>('month');
   // Premium asked for from outside (the website's "Get Premium", the Deck's QR code: ?premium=1), or by a guest who
   // then signed in: the plan / Premium screen, after sign-in for a guest.
   useEffect(() => {
@@ -958,7 +960,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       const q = new URLSearchParams(window.location.search);
       if (q.get('premium') === '1') {
         want = true;
+        if (q.get('plan') === 'year') setPaywallInterval('year');
         q.delete('premium');
+        q.delete('plan');
         const rest = q.toString();
         window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`);
       }
@@ -2805,7 +2809,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         onUpdateSettings={(updated) => setSettings(s => ({ ...s, ...updated }))}
         soundEnabled={settings.soundEnabled}
         syncDiagnostics={syncDiagnostics}
-        plan={user ? { isGuest: !!user.isGuest, isPremium: userData?.isPremium === true, source: userData?.premiumSource, periodEnd: Number(userData?.premiumPeriodEnd) || undefined, cancelAtPeriodEnd: userData?.premiumCancelAtPeriodEnd === true } : undefined}
+        plan={user ? { isGuest: !!user.isGuest, isPremium: userData?.isPremium === true, source: userData?.premiumSource, periodEnd: Number(userData?.premiumPeriodEnd) || undefined, cancelAtPeriodEnd: userData?.premiumCancelAtPeriodEnd === true, interval: userData?.premiumInterval } : undefined}
         onOpenPlan={() => { setIsSettingsOpen(false); setIsPaywallOpen(true); }}
       />
 
@@ -2846,6 +2850,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           premiumSource={userData?.premiumSource}
           periodEnd={Number(userData?.premiumPeriodEnd) || undefined}
           cancelAtPeriodEnd={userData?.premiumCancelAtPeriodEnd === true}
+          interval={userData?.premiumInterval}
+          initialInterval={paywallInterval}
         />
       )}
 

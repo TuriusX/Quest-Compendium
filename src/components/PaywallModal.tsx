@@ -17,6 +17,10 @@ interface PaywallModalProps {
   premiumSource?: string;
   periodEnd?: number;
   cancelAtPeriodEnd?: boolean;
+  /** A Premium player's billing: monthly or yearly. */
+  interval?: string;
+  /** The plan to start on (a ?plan=year link); monthly otherwise. */
+  initialInterval?: Interval;
 }
 
 /**
@@ -24,13 +28,13 @@ interface PaywallModalProps {
  * already do everything, Premium gives more questions. During the beta the extras are labelled as free for everyone.
  * Premium players see "Your plan" with when it renews (or ends) and Manage or cancel.
  */
-export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = false, onSignIn, isPremium = false, beta = false, premiumSource, periodEnd, cancelAtPeriodEnd }) => {
+export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = false, onSignIn, isPremium = false, beta = false, premiumSource, periodEnd, cancelAtPeriodEnd, interval: billed, initialInterval = 'month' }) => {
   const t = useT();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [opened, setOpened] = useState(false);
   // Monthly is the default; yearly is one click away, with its saving shown.
-  const [interval, setBillingInterval] = useState<Interval>('month');
+  const [interval, setBillingInterval] = useState<Interval>(initialInterval);
   const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
   // Escape closes it (wherever the focus is).
   useEffect(() => {
@@ -86,7 +90,7 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = f
 
         {isPremium ? (
           <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-dim)] p-4 mb-5 text-[13px] text-zinc-200 space-y-1.5">
-            <div className="flex items-center gap-2 font-semibold text-white"><GlainIcon size={15} /> {t('prem.premiumPlan')}</div>
+            <div className="flex items-center gap-2 font-semibold text-white"><GlainIcon size={15} /> {t('prem.premiumPlan')}{billed === 'year' ? ` · ${t('prem.yearly')}` : billed === 'month' ? ` · ${t('prem.monthly')}` : ''}</div>
             <div>{t('prem.premiumQ')}</div>
             {premiumSource === 'stripe' && date && <div className="text-zinc-300">{cancelAtPeriodEnd ? t('prem.endsOn', { date }) : t('prem.renewsOn', { date })}</div>}
             {premiumSource === 'grant' && <div className="text-zinc-400">{t('prem.granted')}</div>}

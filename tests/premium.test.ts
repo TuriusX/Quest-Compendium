@@ -57,4 +57,10 @@ test("Stripe can't be reached: the saved status stands, nothing saved", () => {
   assert.deepEqual(decidePremium({ isPremium: true }, null).save, {});
 });
 
+test("a yearly subscription: Premium, and the interval is saved for the plan screen", () => {
+  const d = decidePremium({ isPremium: true, subscriptionStatus: "active", stripeCustomerId: "cus_1" }, { customerId: "cus_1", active: true, periodEnd: 9, interval: "year" });
+  assert.equal(d.isPremium, true);
+  assert.equal(d.save.premiumInterval, "year");
+});
+
 console.log(`\n${passed} passed`);

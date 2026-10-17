@@ -206,5 +206,9 @@
   "Markers from our guides on your screen, a \"Spot it\" button, and \"Your playthrough\": answers now remember your choices and finds (edit it or turn it off any time).": "ガイドのマーカーを画面上に表示する機能、「見つける」ボタン、「プレイスルー記録」を追加。回答があなたの選択や発見を記憶するようになりました（いつでも編集・オフ可能）。",
   "A new quick tour for new players (open it again from the ⋯ menu), and answers now list what you could miss for good where you are, from our guides.": "初心者向けのクイックツアーを追加（⋯ メニューからいつでも再確認可能）。また、ガイド情報をもとに、現在地で取り返しのつかない要素を回答に一覧表示するようになりました。",
   "the question box no longer disappears in long conversations; the app now updates itself; a cleaner quest log you can tick without your mouse; load a guide's steps for the quest you're on": "長い会話でも質問ボックスが消えないように改善、アプリの自動アップデートに対応、マウスを使わずにチェックできる整理されたクエストログ、進行中のクエストに応じたガイド手順の読み込み",
-  "a calmer Ask view with a compact mode for playing, clearer messages, game cover art in your library, a countdown to your next questions, and one search box for each whole guide": "プレイ中に使いやすいコンパクトモードを備えた落ち着いたAsk画面、より分かりやすいメッセージ、ライブラリのゲームカバーアート、次の質問までのカウントダウン、各ガイド全体を検索できる検索ボックス"
+  "a calmer Ask view with a compact mode for playing, clearer messages, game cover art in your library, a countdown to your next questions, and one search box for each whole guide": "プレイ中に使いやすいコンパクトモードを備えた落ち着いたAsk画面、より分かりやすいメッセージ、ライブラリのゲームカバーアート、次の質問までのカウントダウン、各ガイド全体を検索できる検索ボックス",
+  "or": "または",
+  "$39.99/year": "$39.99/年",
+  "save 33%": "33%お得",
+  "You can try it for free with 2 Pro and 5 Fast questions a day, no credit card needed. Premium is $4.99/month or $39.99/year (save 33%) for 8 Pro and 25 Fast questions a day, with unused questions carrying over (up to 100 of each), plus premium features like on-screen markers and Gemini voices. During the beta, every player gets every feature. See": "クレジットカード不要で、毎日Pro質問2回とFast質問5回を無料でお試しいただけます。Premiumプランは$4.99/月、または$39.99/年（33%お得）で、毎日Pro質問8回とFast質問25回が利用可能。使わなかった分は繰り越せます（それぞれ最大100回まで）。さらに画面上のマーカー機能やGeminiの音声といったプレミアム機能も使い放題。ベータ期間中は、すべてのプレイヤーが全機能を利用できます。詳細は"
 }

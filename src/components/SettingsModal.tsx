@@ -46,7 +46,7 @@ interface SettingsModalProps {
   soundEnabled: boolean;
   syncDiagnostics?: CloudSyncDiagnostics | null;
   /** The player's plan (the main window only): the Account tab's plan row. */
-  plan?: { isGuest: boolean; isPremium: boolean; source?: string; periodEnd?: number; cancelAtPeriodEnd?: boolean };
+  plan?: { isGuest: boolean; isPremium: boolean; source?: string; periodEnd?: number; cancelAtPeriodEnd?: boolean; interval?: string };
   /** The Premium / Your plan screen. */
   onOpenPlan?: () => void;
 }
@@ -1123,14 +1123,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[var(--accent-dim)] border border-[var(--accent-border)]">
                     <div className="min-w-0">
                       <div className="text-xs font-semibold text-white">
-                        {tr('prem.yourPlan')}: {plan.isPremium ? tr('prem.premiumPlan') : plan.isGuest ? tr('prem.guestPlan') : tr('prem.free')}
+                        {tr('prem.yourPlan')}: {plan.isPremium ? `${tr('prem.premiumPlan')}${plan.interval === 'year' ? ` · ${tr('prem.yearly')}` : plan.interval === 'month' ? ` · ${tr('prem.monthly')}` : ''}` : plan.isGuest ? tr('prem.guestPlan') : tr('prem.free')}
                       </div>
                       <div className="text-[11px] text-zinc-300">
                         {plan.isPremium
                           ? plan.source === 'stripe' && plan.periodEnd
                             ? tr(plan.cancelAtPeriodEnd ? 'prem.endsOn' : 'prem.renewsOn', { date: new Date(plan.periodEnd).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) })
                             : plan.source === 'grant' ? tr('prem.granted') : tr('prem.premiumQ')
-                          : plan.isGuest ? tr('prem.guestQ') : tr('prem.freeQ')}
+                          : plan.isGuest ? tr('prem.guestQ') : `${tr('prem.freeQ')} · ${tr('prem.prices')}`}
                       </div>
                     </div>
                     <button
