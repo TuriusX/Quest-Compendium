@@ -227,6 +227,8 @@ const SITE_REDIRECTS: Record<string, Record<string, string>> = JSON.parse(fs.rea
 const GUIDE_LANGS = new Set<string>(['en']);
 /** Each sitemap URL's last update (from the page's updatedAt), for <lastmod>. */
 const LASTMOD = new Map<string, number>();
+/** Search Console impressions per guide (system/searchConsole: every page's figures when stored, else the top pages). */
+const DEMAND = new Map<string, number>();
 const PREVIEW = arg('preview') && arg('preview') !== 'true' ? String(arg('preview')) : '';
 const ONLY = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
 const OUT = path.resolve(PREVIEW || 'Marketing_Website_Files');
@@ -521,7 +523,7 @@ function writeRedirects(moved: { key: string; from: string; to: string }[], live
   console.log(`Redirects: ${lines.length} old URL(s) to the pages that replaced them.`);
 }
 
-function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string; entries?: { id: string; label: string }[]; ld?: object[] }) {
+function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string; entries?: { id: string; label: string }[]; ld?: object[]; wide?: boolean }) {
   // A guide or compendium page (/guides/{key}/{slug}/): its approved player suggestions, and the "Suggest an edit" links.
   const at = opts.guide ? (opts.canonical.match(/\/guides\/([a-z0-9-]+)\/([a-z0-9-]+)\/$/) || []) : [];
   if (at[1] && at[2] && at[2] !== 'achievements') {
@@ -544,8 +546,8 @@ function page(opts: { title: string; description: string; depth: number; canonic
   // Every language version (this one included), and x-default: the English page.
   const hreflang = [...langs.map((c) => `<link rel="alternate" hreflang="${LANG_TAG[c]}" href="${SITE}/${langPath(c)}${opts.path}">`), ...(langs.includes('en') ? [`<link rel="alternate" hreflang="x-default" href="${SITE}/${opts.path}">`] : [])].join('\n  ');
   const menu = langs.length
-    ? `<details class="relative"><summary class="list-none cursor-pointer select-none hover:text-white" aria-label="${esc(ui('language'))}">${esc(LANG_LABEL[LANG])} &#9662;</summary><div class="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-[#0c0d14] p-1 shadow-xl z-50">${langs
-        .map((c) => `<a href="${up}${langPath(c)}${opts.path}index.html" hreflang="${LANG_TAG[c]}" lang="${LANG_TAG[c]}" class="block px-3 py-1.5 rounded-lg ${c === LANG ? 'text-white bg-white/10' : 'text-zinc-300 hover:bg-white/5 hover:text-white'}">${esc(LANG_LABEL[c])}</a>`)
+    ? `<details class="relative"><summary class="list-none cursor-pointer select-none flex items-center gap-1.5 hover:text-white" aria-label="${esc(ui('language'))}"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><span class="hidden sm:inline">${esc(LANG_LABEL[LANG])}</span></summary><div class="absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-[#0c0d14] p-1 shadow-xl z-50">${langs
+        .map((c) => `<a href="/${langPath(c)}${opts.path}" hreflang="${LANG_TAG[c]}" lang="${LANG_TAG[c]}" class="block px-3 py-1.5 rounded-lg ${c === LANG ? 'text-white bg-white/10' : 'text-zinc-300 hover:bg-white/5 hover:text-white'}">${esc(LANG_LABEL[c])}</a>`)
         .join('')}</div></details>`
     : '';
   return `<!doctype html>
@@ -594,18 +596,21 @@ function page(opts: { title: string; description: string; depth: number; canonic
   </style>
 </head>
 <body class="min-h-screen"${opts.guide ? ` data-guide="${esc(opts.guide)}"` : ''}${opts.area ? ` data-area="${esc(opts.area)}"` : ''}>
-  <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5">
-    <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
-      <a href="${up}${LP}index.html" class="flex shrink-0 items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="${up}icon.svg" alt="" class="w-7 h-7 qc-pixel"><span class="max-[419px]:sr-only">Quest Compendium</span></a>
-      <div class="flex items-center gap-3 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
-        <a href="${up}${GUIDE_LANGS.has(LANG) ? LP : ''}guides/index.html" class="hover:text-white">${esc(ui('navGuides'))}</a>
-        <a href="${up}${LP}index.html?from=guide#download" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('navGetApp'))}</a>
+  <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5" aria-label="Main">
+    <div class="max-w-7xl mx-auto px-5 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <a href="/${LP}" class="flex shrink-0 items-center gap-2 font-bold text-white whitespace-nowrap"><img src="/icon.svg" alt="" class="w-8 h-8 qc-pixel"><span class="max-[419px]:sr-only">Quest Compendium</span></a>
+      <div class="flex items-center gap-4 sm:gap-6 text-sm text-zinc-400 whitespace-nowrap">
+        <a href="/${GUIDE_LANGS.has(LANG) ? LP : ''}guides/" class="hover:text-white">${esc(ui('navGuides'))}</a>
+        <a href="/${LP}#steam-deck" class="hidden md:inline hover:text-white">${esc(ui('navSteamDeck'))}</a>
+        <a href="/${LP}#pricing" class="hidden md:inline hover:text-white">${esc(ui('navPricing'))}</a>
+        <a href="/${LP}#faq" class="hidden md:inline hover:text-white">${esc(ui('navFaq'))}</a>
+        <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('navGetApp'))}</a>
         ${menu}
       </div>
     </div>
   </nav>
   ${opts.draft ? '<div class="bg-amber-500/15 border-b border-amber-500/30 text-amber-300 text-sm text-center py-2">DRAFT preview: not public yet</div>' : ''}
-  <main class="max-w-6xl mx-auto px-5 sm:px-6 py-8">${opts.body}</main>
+  <main class="${opts.wide ? 'max-w-[88rem]' : 'max-w-6xl'} mx-auto px-5 sm:px-6 py-8">${opts.body}</main>
   <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     ${esc(ui('footerReport'))
       .replace('{report}', `<button type="button" data-report class="text-[#a87ffb] hover:underline">${esc(ui('reportLink'))}</button>`)
@@ -675,6 +680,18 @@ function fold(title: string, icon: string, body: string, opts: { ids?: string[];
 
 /** "Sources checked": the sites the research used, without our own site and code or mod hosts (not sources of game facts). */
 const publicSources = (xs: string[]) => (xs || []).filter((d) => !/(^|\.)(questcompendium\.com|github\.com|nexusmods\.com)$/i.test(String(d).trim()));
+
+/**
+ * The right-hand column on wide screens: "On this page" (the page's sections, sticky) and a small card for the app.
+ * Hidden below 1280px, where the page keeps its row of section links at the top.
+ */
+function rail(links: [string, string][]): string {
+  const list = links.length > 1
+    ? `<nav aria-label="${esc(ui('onThisPage'))}"><p class="text-xs font-bold uppercase tracking-wide text-zinc-500">${esc(ui('onThisPage'))}</p><ul class="mt-2 space-y-0.5 border-l border-white/10">${links.map(([id, label]) => `<li><a href="#${esc(id)}" class="-ml-px block border-l border-transparent pl-3 py-1 text-sm text-zinc-400 hover:border-[#a87ffb] hover:text-white">${esc(label)}</a></li>`).join('')}</ul></nav>`
+    : '';
+  const app = `<div class="rounded-xl border border-[#a87ffb]/25 bg-[#a87ffb]/[0.07] p-4"><p class="text-sm font-semibold text-white">${esc(ui('railApp'))}</p><p class="mt-1.5 text-xs leading-relaxed text-zinc-400">${esc(ui('railAppBody'))}</p><a href="/${LP}?from=guide#download" class="mt-3 inline-block rounded-full bg-[#a87ffb] px-3.5 py-1.5 text-xs font-bold text-black hover:bg-white">${esc(ui('railAppButton'))}</a></div>`;
+  return `<aside class="hidden xl:block"><div class="sticky top-24 space-y-6">${list}${app}</div></aside>`;
+}
 
 /** The area list: the sidebar on area pages and the main list on a game's page. */
 function areaList(gameKey: string, areas: AreaLink[], current: string | null, base: string) {
@@ -820,7 +837,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     ...(a.tips.length ? [['tips', ui('tips')] as [string, string]] : []),
   ];
   const jump = sectionLinks.length > 2
-    ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">${esc(ui('onThisPage'))}:</span>${sectionLinks.map(([id, label]) => `<a href="#${id}" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(label)}</a>`).join('')}</nav>`
+    ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex xl:hidden flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">${esc(ui('onThisPage'))}:</span>${sectionLinks.map(([id, label]) => `<a href="#${id}" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(label)}</a>`).join('')}</nav>`
     : '';
   // Prefer the page's own quest list (its summary box) over names found in the entries.
   const quests = a.info?.quests?.length ? [] : relatedQuests(a);
@@ -853,6 +870,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const dontMiss = missIds.length
     ? `<section id="dont-miss" class="mt-6 scroll-mt-20 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
         <h2 class="flex items-center gap-2 px-1 pb-1 text-base font-bold text-amber-200">${ICON.warn} ${esc(ui('dontMiss'))} <span class="text-xs font-normal text-amber-200/70" data-count="${esc(missIds.join(','))}">0/${missIds.length}</span></h2>
+        <div class="px-1"><p class="mt-1.5 text-xs text-zinc-500">${esc(ui('appMissables'))} <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white">${esc(ui('appLink'))} &rarr;</a></p></div>
         ${missGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g), true)).join('')}${miss.map((e) => checkRow(e.id, itemHtml(e), true)).join('')}${missSec.flatMap((x) => x.entries.map((e) => checkRow(e.id, esc(e.text), true))).join('')}
       </section>`
     : '';
@@ -892,6 +910,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     ? `<section id="walkthrough" class="mt-8 scroll-mt-20">
         <h2 class="text-xl font-bold text-white">${esc(ui('walkthrough'))}${(a.incomplete || []).includes('walkthrough') ? incompleteTag() : ''}</h2>
         <p class="mt-1 text-sm text-zinc-500">${esc(ui('walkthroughIntro'))}</p>
+        <p class="mt-1.5 text-xs text-zinc-500">${esc(ui('appSteps'))} <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white">${esc(ui('appLink'))} &rarr;</a></p>
         <ol class="mt-4 space-y-5">${(a.walkthrough || [])
           .map((st, i) => `<li id="${esc(st.id)}" class="relative pl-10 scroll-mt-20">
             <span class="absolute left-0 top-0 flex h-7 w-7 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-sm font-bold text-[#c4b0ff]">${i + 1}</span>
@@ -932,9 +951,9 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const sidebar = (id: string) => `<nav aria-label="${esc(game)}" class="qc-scroll">${`<a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>`}${guideSearchBox(gameKey, `#${id}`, 'mb-2')}<ul id="${id}" class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
 
   return `
-  <div class="lg:grid lg:grid-cols-[16rem_1fr] lg:gap-8">
+  <div class="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_15rem] lg:gap-8">
     <aside class="hidden lg:block"><div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto qc-scroll pr-1">${sidebar('qc-areas-side')}</div></aside>
-    <article class="min-w-0 max-w-3xl">
+    <article class="min-w-0 w-full max-w-3xl mx-auto">
       <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="${up}${LP}guides/index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(game)}</a></p>
       <h1 class="text-3xl font-bold text-white leading-tight">${esc(a.name)}</h1>
       <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
@@ -977,6 +996,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
           `<p class="mt-6 text-xs text-zinc-500">${ui('sourcesFrom', { wiki: esc(a.sourceLinks.wiki), pages: a.sourceLinks.pages.map((x) => (x.url ? `<a class="text-zinc-400 underline hover:text-white" href="${esc(x.url)}" rel="nofollow noopener" target="_blank">${esc(x.title)}</a>` : esc(x.title))).join(', ') })}${a.sourceLinks.license ? ` ${ui('sourcesLicence', { licence: a.sourceLinks.licenseUrl ? `<a class="text-zinc-400 underline hover:text-white" href="${esc(a.sourceLinks.licenseUrl)}" rel="nofollow noopener" target="_blank">${esc(a.sourceLinks.license)}</a>` : esc(a.sourceLinks.license) })}` : ''}</p>`
         : publicSources(a.sources).length ? `<p class="mt-6 text-xs text-zinc-500">${esc(ui('sourcesChecked', { list: publicSources(a.sources).join(', ') }))}</p>` : ''}
     </article>
+    ${rail(sectionLinks)}
   </div>`;
 }
 
@@ -1058,7 +1078,7 @@ function renderUpdates(sitemap: string[]) {
     setLang(code);
     const dir = path.join(OUT, langPath(code), 'updates');
     fs.mkdirSync(dir, { recursive: true });
-    const body = `<div class="max-w-3xl">
+    const body = `<div class="max-w-3xl mx-auto">
       <h1 class="text-3xl font-bold text-white">${esc(ui('updatesTitle'))}</h1>
       <p class="text-zinc-400 mt-2">${esc(ui('updatesIntro'))}</p>
       <ol class="mt-6 space-y-3">${CHANGELOG.map((e) => `<li id="v${esc(e.v.replace(/\./g, '-'))}" class="scroll-mt-20 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="flex flex-wrap items-baseline gap-x-3"><span class="font-bold text-white">${esc(e.v)}</span><span class="text-xs text-zinc-500">${esc(e.date)}</span></div><p class="mt-1 text-zinc-300 leading-relaxed">${esc(releaseText(e, code))}</p></li>`).join('')}</ol>
@@ -1122,9 +1142,10 @@ function updateHomepage(games: { key: string; game: string; published: number; l
       console.log(`Homepage guides section not found in ${path.relative(OUT, pg.file)} (no QC-GUIDES markers); skipped.`);
       continue;
     }
+    // The games people search for most come first (Search Console impressions per guide), then the biggest guides.
     const tiles = games
       .slice()
-      .sort((x, y) => y.published - x.published)
+      .sort((x, y) => (DEMAND.get(y.key) || 0) - (DEMAND.get(x.key) || 0) || y.published - x.published)
       .slice(0, 8)
       .map(
         (g) =>
@@ -1278,6 +1299,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
         depth: 3 + extra,
         canonical: untranslated ? `${SITE}/guides/${key}/${o.slug}/` : url,
         ld,
+        wide: true,
         body: areaBody(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra), achHere ? (achHere.list || []).filter((x: any) => x.area === o.slug) : []) + entPreview(),
         draft,
         guide: key,
@@ -1333,7 +1355,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
       guide: key,
       langs,
       path: `guides/${key}/`,
-      body: `<div class="max-w-3xl">
+      body: `<div class="max-w-3xl mx-auto">
           <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">${esc(ui('navGuides'))}</a></p>
           ${artBox(gameName, appId, 'rounded-2xl border border-white/10 mb-5', key, true)}
           <h1 class="text-3xl font-bold text-white">${esc(ui('gameH1', { game: gameName }))}</h1>
@@ -1552,6 +1574,8 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
   // missions only mentioned in a step's text wait for quest pages).
   const stepTitles = visible.flatMap((o) => (byslug.get(o.slug)!.walkthrough || []).filter((st: any) => st.id && st.title).map((st: any) => ({ slug: o.slug, id: String(st.id), title: String(st.title) })));
   const missionLink = (name: string) => stepTitles.find((st) => entitySegments(st.title, [{ name, slug: 'x' }]).some((sg) => sg.slug));
+  // The guide's own pages, for the left-hand list (as on area pages).
+  const guideLinks: AreaLink[] = visible.map((o) => { const a = byslug.get(o.slug)!; return { slug: o.slug, name: a.name, story: a.story, group: String((o as any).group || a.group || '') || undefined, total: totalOf(a), search: '' }; });
   for (const e of COMP!.entities) {
     // A guide page already at this address wins: a compendium page never replaces it.
     if (visible.some((o) => o.slug === e.slug)) { console.warn(`  compendium page ${e.slug} skipped: a guide page has that address`); continue; }
@@ -1565,7 +1589,9 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     const list = (xs: string[]) => (xs.length ? `<ul class="space-y-1">${xs.map((x) => `<li>${x}</li>`).join('')}</ul>` : '');
     const dir = path.join(OUT, 'guides', key, e.slug);
     fs.mkdirSync(dir, { recursive: true });
-    const body = `<article class="max-w-3xl">
+    const body = `<div class="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_15rem] lg:gap-8">
+    <aside class="hidden lg:block"><div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto qc-scroll pr-1"><nav aria-label="${esc(gameName)}"><a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(gameName)}</a><ul>${areaList(key, guideLinks, null, '../')}</ul></nav></div></aside>
+    <article class="min-w-0 w-full max-w-3xl mx-auto">
       <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a> / <span>${esc(label)}</span></p>
       <h1 class="text-3xl font-bold text-white leading-tight">${esc(searchName(e))}</h1>
       <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400"><span class="rounded-md bg-[#a87ffb]/15 px-2 py-0.5 text-[#c4b0ff]">${esc(label)}</span><span>${esc(gameName)}</span>
@@ -1624,14 +1650,16 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
       ${e.ref ? refBlocks(e.ref, e.slug) : ''}
       ${(sm.notes || []).length ? `<ul class="mt-4 space-y-1.5 text-sm text-zinc-300">${sm.notes.map((x: string) => `<li class="flex gap-2"><span class="text-[#c4b0ff]">&bull;</span><span>${rich(x, '../', e.slug)}</span></li>`).join('')}</ul>` : ''}
       ${publicSources(e.sources || []).length ? `<p class="mt-6 text-xs text-zinc-500">Sources: ${publicSources(e.sources).map(esc).join(', ')}</p>` : ''}
-    </article>`;
+    </article>
+    ${rail([...(e.story || []).map((x: any, i: number) => [`story-${i + 1}`, x.heading] as [string, string]), ...(e.gameplay || []).map((x: any, i: number) => [`play-${i + 1}`, gameplayHeading(x, person)] as [string, string])])}
+    </div>`;
     const url = `${SITE}/guides/${key}/${e.slug}/`;
     const ld: object[] = [breadcrumb([{ name: ui('navGuides'), url: `${SITE}/guides/` }, { name: shortGame(gameName), url: `${SITE}/guides/${key}/` }, { name: e.name, url }])];
     // The title and description say what the page answers, with the full name people search (siteText.entitySeo).
     const seo = entitySeo(e.quest ? { ...e, quest: { ...e.quest, stepShown: !!missionStep(e, byslug) } } : e, shortGame(gameName), person);
     ld.push(guideArticle({ headline: seo.title, description: seo.description, url, game: gameName, modified: Number((e as any).builtAt) || undefined }));
     const title = seo.title.length + 19 <= 60 ? `${seo.title} | Quest Compendium` : seo.title;
-    fs.writeFileSync(path.join(dir, 'index.html'), page({ title, description: seo.description, depth: 3, canonical: url, ld, body: body + entPreview(), draft: !!PREVIEW, guide: key }));
+    fs.writeFileSync(path.join(dir, 'index.html'), page({ title, description: seo.description, depth: 3, canonical: url, ld, body: body + entPreview(), draft: !!PREVIEW, guide: key, wide: true }));
     if (!PREVIEW) {
       sitemap.push(url);
       if (Number((e as any).builtAt)) LASTMOD.set(url, Number((e as any).builtAt));
@@ -1709,7 +1737,7 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
       area: 'achievements',
       langs,
       path: `guides/${key}/achievements/`,
-      body: `<div class="max-w-3xl">
+      body: `<div class="max-w-3xl mx-auto">
         <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a></p>
         <h1 class="text-3xl font-bold text-white">${esc(ui('achH1', { game: gameName }))}</h1>
         <p class="text-zinc-400 mt-2">${esc(ui('achIntro'))}</p>
@@ -1818,6 +1846,10 @@ async function main() {
   const contribCfg: any = (await db().collection('config').doc('contrib').get()).data() || {};
   if (!CONTRIB_ON) CONTRIB_ON = contribCfg.enabled === true;
   CHANGELOG = (((await db().collection('system').doc('changelog').get()).data() || {}).entries || []) as any[];
+  {
+    const sc: any = (await db().collection('system').doc('searchConsole').get()).data() || {};
+    for (const x of [...(Array.isArray(sc.pages) ? sc.pages : []), ...(Array.isArray(sc.pages) ? [] : sc.topPages || [])]) if (x?.key) DEMAND.set(String(x.key), (DEMAND.get(String(x.key)) || 0) + (Number(x.impressions) || 0));
+  }
   CONTRIB_SITE_AUTH = contribCfg.siteAuth === true;
   {
     const { approvedContributions } = await import('./contribEvidence');
