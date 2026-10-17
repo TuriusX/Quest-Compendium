@@ -106,7 +106,9 @@ export function rebuildVerdict(oldPage: any, newPage: any, impressions = 0): Reb
   const reasons: string[] = [];
   const list = (xs: Lost[]) => xs.slice(0, 8).map((x) => (x.kind === 'walkthrough' ? `walkthrough ${x.name}` : `${x.kind} "${x.name}"`)).join(', ') + (xs.length > 8 ? ` and ${xs.length - 8} more` : '');
   if (sourced.length) reasons.push(`the rebuild drops ${sourced.length} sourced entr${sourced.length === 1 ? 'y' : 'ies'}: ${list(sourced)}`);
-  if (impressions > 0 && lost.length > sourced.length) {
+  // A page never checked against sources (verified: false) losing its unsourced entries is the point of re-verifying it:
+  // only a checked page with search traffic is held for unsourced losses too.
+  if (impressions > 0 && oldPage.verified !== false && lost.length > sourced.length) {
     const rest = lost.filter((x) => !x.sourced);
     reasons.push(`the page has ${impressions} Search Console impressions and the rebuild drops ${rest.length} more: ${list(rest)}`);
   }

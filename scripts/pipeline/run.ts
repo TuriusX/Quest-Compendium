@@ -844,6 +844,14 @@ async function main() {
     if (failedPages.length) report.push(`⚠️ Re-verification failed (old content kept, no badge; ${failedPages.length} page(s), say which to retry): ${failedPages.slice(0, 25).join('; ')}${failedPages.length > 25 ? `; and ${failedPages.length - 25} more` : ''}.`);
     }
   }
+  // The site audit's November content work (roadmap 22, novemberWork.ts): its own owner-approved allowance, at most
+  // AUDIT_DAILY a day, re-verification of the most-searched unchecked pages first. Does nothing outside November 2026.
+  try {
+    const { runAuditWork } = await import('../guides/novemberWork');
+    for (const l of await runAuditWork()) report.push(l);
+  } catch (e: any) {
+    console.warn(`November site work skipped: ${e?.message}`);
+  }
   // Mondays: the weekly player section (playerWeek.ts): active players, their AI cost, who ran out of questions, and
   // the alert for revisiting the free limits (at the top of the summary).
   if (MONDAY) {

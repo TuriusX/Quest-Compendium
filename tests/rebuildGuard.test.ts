@@ -47,14 +47,17 @@ test("the same content reworded, reordered or moved into the walkthrough isn't a
   assert.deepEqual(v.lost, []);
 });
 
-test("unsourced entries may go from a page nobody finds; not from one with impressions", () => {
+test("unsourced entries may go from a page nobody finds, or from an unchecked one; not from a checked page with impressions", () => {
   const quick = { name: "New Londo Ruins", status: "published", verified: false, items: [{ name: "Invented Ring" }, { name: "Transient Curse" }], secrets: [{ text: "An illusory wall behind the third bell hides a chest" }] };
   const rebuilt = { ...quick, items: [{ name: "Transient Curse" }], secrets: [] };
   const free = rebuildVerdict(quick, rebuilt, 0);
   assert.equal(free.hold, false);
   assert.equal(free.lost.length, 2);
   assert.ok(free.lost.every((x) => !x.sourced));
-  const ranking = rebuildVerdict(quick, rebuilt, 120);
+  // An unchecked page with traffic is re-verified freely; a checked one (verified) with traffic is still protected.
+  assert.equal(rebuildVerdict(quick, rebuilt, 120).hold, false);
+  const checked = { ...quick, verified: true, sources: [] };
+  const ranking = rebuildVerdict(checked, { ...rebuilt, verified: true }, 120);
   assert.equal(ranking.hold, true);
   assert.match(ranking.reasons[0], /120 Search Console impressions and the rebuild drops 2 more/);
 });
@@ -87,6 +90,12 @@ test("restructures keep a page with impressions unless the new outline has its n
   assert.equal(keepOnRestructure("The Lakay!", 46, ["Lakay"]), false);
   assert.equal(keepOnRestructure("Lakay", 0, ["Saint Denis"]), false);
   assert.equal(normName("Crow’s Perch"), "crows perch");
+});
+
+test("re-verifying an unchecked page with traffic: unsourced losses don't hold it", () => {
+  const old = { verified: false, items: [{ name: "Invented Chest" }], secrets: [{ text: "A hidden wall nobody can source" }] };
+  const v = rebuildVerdict(old, { verified: true, items: [], secrets: [] }, 500);
+  assert.equal(v.hold, false);
 });
 
 console.log(`\n${passed} tests passed`);
