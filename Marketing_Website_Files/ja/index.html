@@ -63,24 +63,22 @@
 
   <!-- Top navigation -->
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5" aria-label="メイン">
-    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
+    <div class="max-w-7xl mx-auto px-5 sm:px-6 h-16 flex items-center justify-between gap-4">
       <a href="#top" class="flex items-center gap-2 font-bold text-white">
         <img src="../icon.svg" alt="" class="w-8 h-8 qc-pixel">
-        <span>Quest Compendium</span>
+        <span class="max-[419px]:sr-only">Quest Compendium</span>
       </a>
-      <div class="hidden md:flex items-center gap-6 text-sm text-zinc-400">
-        <a href="#download" class="hover:text-white transition-colors">ダウンロード</a>
-        <a href="#markers" class="hover:text-white transition-colors">マーカー</a>
-        <a href="#steam-deck" class="hover:text-white transition-colors">Steam Deck</a>
-        <a href="../guides/" class="hover:text-white transition-colors">ガイド</a>
-        <a href="#pricing" class="hover:text-white transition-colors">料金プラン</a>
-        <a href="#community" class="hover:text-white transition-colors">コミュニティ</a>
-        <a href="#faq" class="hover:text-white transition-colors">よくある質問</a>
+      <div class="ml-auto flex items-center gap-4 sm:gap-6 text-sm text-zinc-400 whitespace-nowrap">
+        <a href="/guides/" class="hover:text-white transition-colors">ガイド</a>
+        <a href="#steam-deck" class="hidden md:inline hover:text-white transition-colors">Steam Deck</a>
+        <a href="#pricing" class="hidden md:inline hover:text-white transition-colors">料金プラン</a>
+        <a href="#faq" class="hidden md:inline hover:text-white transition-colors">よくある質問</a>
+        <a href="#download" class="text-[#a87ffb] hover:text-white font-semibold transition-colors">アプリを入手</a>
       </div>
       <!-- QC-LANGS:START -->
       <details class="relative">
         <summary class="list-none cursor-pointer flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white select-none" aria-label="Language">
-          <i data-lucide="globe" class="w-4 h-4"></i><span>日本語</span>
+          <i data-lucide="globe" class="w-4 h-4"></i><span class="hidden sm:inline">日本語</span>
         </summary>
         <div class="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-[#0c0d14] p-1 shadow-xl z-50">
           <a href="../" hreflang="en" lang="en" class="block px-3 py-1.5 rounded-lg text-sm text-zinc-300 hover:bg-white/5 hover:text-white">English</a>
@@ -104,9 +102,9 @@
     <header class="max-w-4xl mx-auto px-6 pt-16 pb-12 text-center">
       <img src="../logo.svg" alt="Quest Compendiumのロゴ：輝くグレインストーンがあしらわれたドット絵の魔道書" class="w-24 h-24 mx-auto mb-6 drop-shadow-[0_0_30px_rgba(168,127,251,0.4)]" style="image-rendering: pixelated;">
 
-      <h1 class="text-4xl sm:text-5xl font-bold text-white mb-4 tracking-tight">Quest Compendium</h1>
+      <h1 class="text-4xl sm:text-5xl font-bold text-white mb-4 tracking-tight">Quest Compendium<span class="block mt-3 text-2xl sm:text-3xl font-semibold text-zinc-300">ゲームの隣に寄り添うAIゲームガイド</span></h1>
       <p class="text-lg sm:text-xl text-zinc-400 mb-3 max-w-2xl mx-auto">
-        画面を見て、状況を把握するAIゲームガイド。ゲームを中断することなく、ヒントやボスの攻略法、世界観を壊さないサポートを受けられます。
+        画面を見るだけで状況を認識。ゲームを中断することなく、ヒントやボスの攻略法、世界観に沿ったサポートをお届けします。
       </p>
       <p class="text-sm text-zinc-500 mb-8">Windows用オーバーレイ、各種ブラウザ向けWebアプリ、Steam Deck用プラグインに対応</p>
 
@@ -114,7 +112,7 @@
         <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-full sm:w-auto">
           <img src="https://get.microsoft.com/images/ja%20dark.svg" alt="Microsoft Storeからダウンロード" class="h-[52px] w-auto">
         </a>
-        <a href="https://quest-compendium-890629309063.us-east1.run.app/?from=home" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+        <a href="https://quest-compendium-890629309063.us-east1.run.app/?from=home" target="_blank" rel="noopener" class="order-first sm:order-none inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="external-link" class="w-5 h-5"></i>
           Webアプリを起動
         </a>
@@ -123,8 +121,11 @@
           Steam Deck版を入手
         </a>
       </div>
-      <p class="text-sm text-zinc-500 mt-4">バージョン0.6.1ベータ版（64ビットWindows対応）。クレジットカード不要で無料体験：毎日Pro質問2回＆Fast質問5回まで利用可能。</p>
+      <p class="text-sm text-zinc-500 mt-4">バージョン 0.6.1 ベータ。無料でお試し：クレジットカード不要、1日あたりPro質問2回＆Fast質問5回まで。</p>
       <p class="text-sm text-zinc-500 mt-1">直接ダウンロードをご希望ですか？ <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="text-[#a87ffb] hover:text-white">インストーラーをダウンロード</a>してください。Windowsで警告が表示される場合があります（<a href="#faq-smartscreen" class="text-[#a87ffb] hover:text-white">理由は？</a>).</p>
+      <figure class="mt-10">
+        <img src="../assets/app-home.webp" width="1280" height="800" alt="Quest Compendiumアプリ：ゲームを選んで、今いる場所についてそのまま質問" class="mx-auto w-full max-w-4xl rounded-2xl border border-white/10 shadow-[0_0_60px_rgba(168,127,251,0.15)]" fetchpriority="high">
+      </figure>
     </header>
 
     <!-- Download options -->
@@ -141,12 +142,12 @@
             <a href="https://apps.microsoft.com/detail/9NN4DDKMD1X3" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center w-full">
               <img src="https://get.microsoft.com/images/ja%20dark.svg" alt="Microsoft Storeからダウンロード" class="h-[52px] w-auto">
             </a>
-            <p class="text-sm text-zinc-500 mt-3">Microsoft Store経由でインストールおよびアップデートされます。</p>
+            <p class="text-sm text-zinc-500 mt-3">Windows 10/11（64ビット）。Microsoft Store経由でインストールとアップデートが可能。</p>
             <p class="text-sm text-zinc-500 mt-2">または、GitHubから <a href="https://github.com/TuriusX/Quest-Compendium/releases/latest/download/Quest-Compendium-Setup.exe" class="text-[#a87ffb] hover:text-white">インストーラーを直接ダウンロード</a> することもできます。まだコード署名がされていないため、Windowsで警告が表示される場合があります（<a href="#faq-smartscreen" class="text-[#a87ffb] hover:text-white">理由は？</a>).</p>
           </div>
         </div>
 
-        <div class="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col">
+        <div class="order-first lg:order-none bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col">
           <i data-lucide="globe" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
           <h3 class="text-xl font-bold text-white mb-2">Webアプリ</h3>
           <p class="text-zinc-400 text-base mb-6">インストール不要。サブモニターやスマホ、またはゲームの横でブラウザタブを開いて利用可能。ゲストとして試すことも、サインインしてメモを同期することもできます。</p>
@@ -171,6 +172,52 @@
           <p class="text-sm text-zinc-500 mt-auto">Deckyストアにはまだないため、手動でインストールします。 <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHubでソースコードを見る</a></p>
         </div>
       </div>
+    </section>
+
+    <!-- The guides inside the app -->
+    <section id="guide-in-app" class="max-w-6xl mx-auto px-6 py-12">
+      <h2 class="text-2xl sm:text-3xl font-bold text-white text-center mb-3">ゲーム画面の中に、あなた専用のガイドを</h2>
+      <p class="text-zinc-400 text-center mb-10 max-w-2xl mx-auto">本サイトの無料ガイドがアプリ内に組み込まれているため、わざわざAlt+Tabでwikiを見に行く必要はありません。</p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="notebook-pen" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">クエストログで手順をチェック</h3>
+          <p class="text-zinc-400 text-base">クエストログがゲームの横でガイドの手順をトラッキング。不要なときはサッと隠せます。</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="info" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">取り返しのつかない要素も、見逃す前に</h3>
+          <p class="text-zinc-400 text-base">ガイド対象のエリアについて質問すれば、そこで見落としがちな要素も最後にまとめて教えてくれます。</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <i data-lucide="sparkles" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
+          <h3 class="text-xl font-bold text-white mb-2">画面の「ここ」について質問できる</h3>
+          <p class="text-zinc-400 text-base">スクリーンショットを送って、まさに今いる場所について質問できます。Windowsなら、回答に出てきた場所を画面上に直接マーキングすることも可能です。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Guides: filled in automatically by scripts/guides/publish.ts on every run (don't edit between the markers) -->
+    <section id="guides" class="max-w-6xl mx-auto px-6 py-12">
+<!-- QC-GUIDES:START -->
+      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+        <div>
+          <h2 class="text-2xl sm:text-3xl font-bold text-white">無料ガイド：見逃せないもの</h2>
+          <p class="text-zinc-400 mt-2 max-w-2xl">エリアごとのアイテム、秘密、取り逃し要素、敵の弱点をチェックリストで。大事なものを見逃しません。</p>
+        </div>
+        <a href="../guides/" class="text-[#a87ffb] hover:text-white font-semibold whitespace-nowrap">すべてのガイドを見る &rarr;</a>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        <a href="../guides/the-witcher-3-wild-hunt-complete-edition/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[2/3] overflow-hidden bg-[#0c0d14]"><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">W3</span></div><img src="https://images.igdb.com/igdb/image/upload/t_cover_big/cocsd9.webp" srcset="https://images.igdb.com/igdb/image/upload/t_cover_big/cocsd9.webp 264w, https://images.igdb.com/igdb/image/upload/t_cover_big_2x/cocsd9.webp 528w" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 48vw" alt="The Witcher 3: Wild Hunt - Complete Edition cover art" loading="lazy" decoding="async" width="264" height="374" class="absolute inset-0 w-full h-full object-cover" data-fb="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/292030/dd1c19c4e41b120ddfa35734cc31f79254c25082/library_capsule.jpg?t=1790845156" onerror="if(this.dataset.fb){this.removeAttribute('srcset');this.src=this.dataset.fb;this.removeAttribute('data-fb')}else this.remove()"></div><div class="p-3"><div class="text-white font-bold leading-snug text-sm break-words">The Witcher 3: Wild Hunt - Complete Edition</div><div class="text-sm text-zinc-400 mt-1">66エリア</div></div></a>
+        <a href="../guides/red-dead-redemption-2/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[2/3] overflow-hidden bg-[#0c0d14]"><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">RD</span></div><img src="https://images.igdb.com/igdb/image/upload/t_cover_big/co1q1f.webp" srcset="https://images.igdb.com/igdb/image/upload/t_cover_big/co1q1f.webp 264w, https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co1q1f.webp 528w" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 48vw" alt="Red Dead Redemption 2 cover art" loading="lazy" decoding="async" width="264" height="374" class="absolute inset-0 w-full h-full object-cover" data-fb="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1174180/library_600x900.jpg?t=1759502961" onerror="if(this.dataset.fb){this.removeAttribute('srcset');this.src=this.dataset.fb;this.removeAttribute('data-fb')}else this.remove()"></div><div class="p-3"><div class="text-white font-bold leading-snug text-sm break-words">Red Dead Redemption 2</div><div class="text-sm text-zinc-400 mt-1">8エリア</div></div></a>
+        <a href="../guides/the-elder-scrolls-v-skyrim-special-edition/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[2/3] overflow-hidden bg-[#0c0d14]"><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">ES</span></div><img src="https://images.igdb.com/igdb/image/upload/t_cover_big/co1vco.webp" srcset="https://images.igdb.com/igdb/image/upload/t_cover_big/co1vco.webp 264w, https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co1vco.webp 528w" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 48vw" alt="The Elder Scrolls V: Skyrim Special Edition cover art" loading="lazy" decoding="async" width="264" height="374" class="absolute inset-0 w-full h-full object-cover" data-fb="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/489830/library_600x900.jpg?t=1786648247" onerror="if(this.dataset.fb){this.removeAttribute('srcset');this.src=this.dataset.fb;this.removeAttribute('data-fb')}else this.remove()"></div><div class="p-3"><div class="text-white font-bold leading-snug text-sm break-words">The Elder Scrolls V: Skyrim Special Edition</div><div class="text-sm text-zinc-400 mt-1">60エリア</div></div></a>
+        <a href="../guides/dark-souls-remastered/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[2/3] overflow-hidden bg-[#0c0d14]"><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">DS</span></div><img src="https://images.igdb.com/igdb/image/upload/t_cover_big/cobazz.webp" srcset="https://images.igdb.com/igdb/image/upload/t_cover_big/cobazz.webp 264w, https://images.igdb.com/igdb/image/upload/t_cover_big_2x/cobazz.webp 528w" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 48vw" alt="DARK SOULS™: REMASTERED cover art" loading="lazy" decoding="async" width="264" height="374" class="absolute inset-0 w-full h-full object-cover" data-fb="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/570940/library_600x900.jpg?t=1778518110" onerror="if(this.dataset.fb){this.removeAttribute('srcset');this.src=this.dataset.fb;this.removeAttribute('data-fb')}else this.remove()"></div><div class="p-3"><div class="text-white font-bold leading-snug text-sm break-words">DARK SOULS™: REMASTERED</div><div class="text-sm text-zinc-400 mt-1">28エリア</div></div></a>
+        <a href="../guides/baldur-s-gate-3/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[2/3] overflow-hidden bg-[#0c0d14]"><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">BG</span></div><img src="https://images.igdb.com/igdb/image/upload/t_cover_big/co670h.webp" srcset="https://images.igdb.com/igdb/image/upload/t_cover_big/co670h.webp 264w, https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co670h.webp 528w" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 48vw" alt="Baldur&#39;s Gate 3 cover art" loading="lazy" decoding="async" width="264" height="374" class="absolute inset-0 w-full h-full object-cover" data-fb="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1086940/library_600x900.jpg?t=1777363040" onerror="if(this.dataset.fb){this.removeAttribute('srcset');this.src=this.dataset.fb;this.removeAttribute('data-fb')}else this.remove()"></div><div class="p-3"><div class="text-white font-bold leading-snug text-sm break-words">Baldur&#39;s Gate 3</div><div class="text-sm text-zinc-400 mt-1">59エリア</div></div></a>
+        <a href="../guides/control-ultimate-edition/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[2/3] overflow-hidden bg-[#0c0d14]"><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">CU</span></div><img src="https://images.igdb.com/igdb/image/upload/t_cover_big/co2evj.webp" srcset="https://images.igdb.com/igdb/image/upload/t_cover_big/co2evj.webp 264w, https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co2evj.webp 528w" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 48vw" alt="CONTROL Ultimate Edition cover art" loading="lazy" decoding="async" width="264" height="374" class="absolute inset-0 w-full h-full object-cover" data-fb="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/870780/library_600x900.jpg?t=1781607969" onerror="if(this.dataset.fb){this.removeAttribute('srcset');this.src=this.dataset.fb;this.removeAttribute('data-fb')}else this.remove()"></div><div class="p-3"><div class="text-white font-bold leading-snug text-sm break-words">CONTROL Ultimate Edition</div><div class="text-sm text-zinc-400 mt-1">36エリア</div></div></a>
+        <a href="../guides/fallout-3-game-of-the-year-edition/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[2/3] overflow-hidden bg-[#0c0d14]"><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">F3</span></div><img src="https://images.igdb.com/igdb/image/upload/t_cover_big/co1yc1.webp" srcset="https://images.igdb.com/igdb/image/upload/t_cover_big/co1yc1.webp 264w, https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co1yc1.webp 528w" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 48vw" alt="Fallout 3: Game of the Year Edition cover art" loading="lazy" decoding="async" width="264" height="374" class="absolute inset-0 w-full h-full object-cover" data-fb="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/22370/library_600x900.jpg?t=1732208097" onerror="if(this.dataset.fb){this.removeAttribute('srcset');this.src=this.dataset.fb;this.removeAttribute('data-fb')}else this.remove()"></div><div class="p-3"><div class="text-white font-bold leading-snug text-sm break-words">Fallout 3: Game of the Year Edition</div><div class="text-sm text-zinc-400 mt-1">37エリア</div></div></a>
+        <a href="../guides/runescape-dragonwilds/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[2/3] overflow-hidden bg-[#0c0d14]"><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">RD</span></div><img src="https://images.igdb.com/igdb/image/upload/t_cover_big/ar65bx.webp" srcset="https://images.igdb.com/igdb/image/upload/t_cover_big/ar65bx.webp 264w, https://images.igdb.com/igdb/image/upload/t_cover_big_2x/ar65bx.webp 528w" sizes="(min-width: 1024px) 180px, (min-width: 640px) 24vw, 48vw" alt="RuneScape: Dragonwilds cover art" loading="lazy" decoding="async" width="264" height="374" class="absolute inset-0 w-full h-full object-cover" data-fb="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1374490/ddbd1ec51f44a7d188478e00075ffb5ed2a190da/library_capsule.jpg?t=1791278745" onerror="if(this.dataset.fb){this.removeAttribute('srcset');this.src=this.dataset.fb;this.removeAttribute('data-fb')}else this.remove()"></div><div class="p-3"><div class="text-white font-bold leading-snug text-sm break-words">RuneScape: Dragonwilds</div><div class="text-sm text-zinc-400 mt-1">13エリア</div></div></a>
+      </div>
+<!-- QC-GUIDES:END -->
     </section>
 
     <!-- On-screen markers: an early feature, described honestly -->
@@ -201,20 +248,6 @@
       </div>
     </section>
 
-    <!-- What's new -->
-    <section id="whats-new" class="max-w-6xl mx-auto px-6 pb-12">
-      <div class="border border-white/10 rounded-2xl p-6 sm:p-8">
-        <h2 class="text-xl font-bold text-white mb-4">最近のアップデート</h2>
-        <ul class="space-y-2 text-zinc-400">
-          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.6:</strong> ガイド機能がさらに使いやすく：アプリ上部（Ctrl+G）で「質問」と「ガイド」をサッと切り替え。今いるエリアのガイドを即座に開き、チェックリストの進捗や見逃しやすい要素を優先表示。気になる項目はワンクリックですぐ質問可能</span></li>
-          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.5:</strong> 「既知の情報」パネルを追加。今いる場所の情報を無料で事前確認可能。ワンタップで現在地を確定できるほか、公式サイト上の多数のゲームガイドにもアクセス可能</span></li>
-          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.4:</strong> マーカーに短いメモとアイコンが付き、画面上でより安定して追従。ゲーム内の現在地をワンタップで確認可能。敵の弱点検索の精度が向上し、「戦闘をサポート」ボタンも新登場</span></li>
-          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.3:</strong> 1日の質問回数カウントに、テーマカラーに合わせたロゴのストーンアイコンを表示</span></li>
-          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.2:</strong> 新しいドット絵ロゴに変更</span></li>
-          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.3.1:</strong> 3Dゲームでのマーカー表示を改良。カメラを回すとフェードアウト、ゲーム終了時に連動してクローズ。デザインもすっきりし、動作もより軽量に</span></li>
-        </ul>
-      </div>
-    </section>
 
     <!-- Features -->
     <section class="max-w-6xl mx-auto px-6 py-12">
@@ -293,28 +326,6 @@
       </ol>
     </section>
 
-    <!-- Guides: filled in automatically by scripts/guides/publish.ts on every run (don't edit between the markers) -->
-    <section id="guides" class="max-w-6xl mx-auto px-6 py-12">
-<!-- QC-GUIDES:START -->
-      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
-        <div>
-          <h2 class="text-2xl sm:text-3xl font-bold text-white">Free guides: what not to miss</h2>
-          <p class="text-zinc-400 mt-2 max-w-2xl">Area-by-area checklists of items, secrets, missables and enemy weaknesses, so you never walk past the good stuff.</p>
-        </div>
-        <a href="../guides/" class="text-[#a87ffb] hover:text-white font-semibold whitespace-nowrap">See all guides &rarr;</a>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <a href="../guides/the-witcher-3-wild-hunt-complete-edition/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] "><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">W3</span></div><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/292030/e8afc4252e3fee8ed2525ab2fd7675cca39aa38d/header_alt_assets_1.jpg?t=1790845156" alt="The Witcher 3: Wild Hunt - Complete Edition" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()"></div><div class="p-4"><div class="text-white font-bold leading-snug">The Witcher 3: Wild Hunt - Complete Edition</div><div class="text-sm text-zinc-400 mt-1">66 areas</div></div></a>
-        <a href="../guides/fallout-4/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] "><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">F4</span></div><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/377160/header.jpg?t=1786648137" alt="Fallout 4" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()"></div><div class="p-4"><div class="text-white font-bold leading-snug">Fallout 4</div><div class="text-sm text-zinc-400 mt-1">62 areas</div></div></a>
-        <a href="../guides/fallout-new-vegas/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] "><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">FN</span></div><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/22380/header.jpg?t=1765992876" alt="Fallout: New Vegas" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()"></div><div class="p-4"><div class="text-white font-bold leading-snug">Fallout: New Vegas</div><div class="text-sm text-zinc-400 mt-1">62 areas</div></div></a>
-        <a href="../guides/the-elder-scrolls-v-skyrim-special-edition/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] "><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">ES</span></div><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/489830/header.jpg?t=1786648247" alt="The Elder Scrolls V: Skyrim Special Edition" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()"></div><div class="p-4"><div class="text-white font-bold leading-snug">The Elder Scrolls V: Skyrim Special Edition</div><div class="text-sm text-zinc-400 mt-1">60 areas</div></div></a>
-        <a href="../guides/baldur-s-gate-3/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] "><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">BG</span></div><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1086940/48a2fcbda8565bb45025e98fd8ebde8a7203f6a0/header.jpg?t=1777363040" alt="Baldur&#39;s Gate 3" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()"></div><div class="p-4"><div class="text-white font-bold leading-snug">Baldur&#39;s Gate 3</div><div class="text-sm text-zinc-400 mt-1">59 areas</div></div></a>
-        <a href="../guides/dragon-quest-xi-s-echoes-of-an-elusive-age-definitive-edition/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] "><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">DQ</span></div><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1295510/header.jpg?t=1774588986" alt="DRAGON QUEST® XI S: Echoes of an Elusive Age™ - Definitive Edition" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()"></div><div class="p-4"><div class="text-white font-bold leading-snug">DRAGON QUEST® XI S: Echoes of an Elusive Age™ - Definitive Edition</div><div class="text-sm text-zinc-400 mt-1">52 areas</div></div></a>
-        <a href="../guides/final-fantasy-vi/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] "><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">FF</span></div><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1173820/header.jpg?t=1773825867" alt="FINAL FANTASY VI" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()"></div><div class="p-4"><div class="text-white font-bold leading-snug">FINAL FANTASY VI</div><div class="text-sm text-zinc-400 mt-1">51 areas</div></div></a>
-        <a href="../guides/final-fantasy-ix/" class="block rounded-2xl overflow-hidden border border-white/10 bg-white/5 hover:border-[#a87ffb]/50 hover:bg-white/[0.07] transition-colors"><div class="relative aspect-[460/215] overflow-hidden bg-[#0c0d14] "><div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#a87ffb]/30 via-[#1a1530] to-[#0c0d14]"><span class="text-2xl font-bold text-white/80 tracking-wide">FF</span></div><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/377840/header.jpg?t=1775119109" alt="FINAL FANTASY IX" loading="lazy" decoding="async" width="460" height="215" class="absolute inset-0 w-full h-full object-cover" onerror="this.remove()"></div><div class="p-4"><div class="text-white font-bold leading-snug">FINAL FANTASY IX</div><div class="text-sm text-zinc-400 mt-1">50 areas</div></div></a>
-      </div>
-<!-- QC-GUIDES:END -->
-    </section>
 
     <!-- Pricing -->
     <section id="pricing" class="max-w-4xl mx-auto px-6 py-12">
@@ -335,8 +346,8 @@
           <ul class="space-y-3 text-zinc-300">
             <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">1日あたり Pro 8回 ＋ Fast 25回</strong></span></li>
             <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>使わなかった質問は繰り越し可能（それぞれ最大100回まで）</span></li>
-            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>画面上マーカー（先行機能、Windows向け）</span></li>
-            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>Premium Gemini読み上げ音声</span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>画面上マーカー（先行機能、Windows向け） <span class="text-zinc-500">· ベータ期間中は誰でも無料</span></span></li>
+            <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>Premium Gemini読み上げ音声 <span class="text-zinc-500">· ベータ期間中は誰でも無料</span></span></li>
             <li class="flex gap-3"><i data-lucide="check" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span>1つのサブスクでWindows、Web、Steam Deckに対応</span></li>
           </ul>
           <a href="https://quest-compendium-890629309063.us-east1.run.app/?premium=1&amp;from=site" class="mt-6 inline-flex items-center justify-center w-full gap-2 rounded-xl bg-[#a87ffb] px-5 py-3 font-bold text-[#16101f] hover:bg-white transition-colors">Premium を手に入れる</a>
@@ -411,6 +422,21 @@
       </div>
     </section>
 
+
+    <!-- What's new -->
+    <section id="whats-new" class="max-w-6xl mx-auto px-6 pb-12">
+      <div class="border border-white/10 rounded-2xl p-6 sm:p-8">
+        <div class="flex flex-wrap items-baseline justify-between gap-3 mb-4"><h2 class="text-xl font-bold text-white">最近のアップデート</h2><a href="../ja/updates/" class="text-[#a87ffb] hover:text-white font-semibold whitespace-nowrap">すべてのアップデート &rarr;</a></div>
+        <ul class="space-y-2 text-zinc-400">
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.6.1:</strong> メールリンクでログイン可能に（Googleアカウントやパスワードは不要）。「⋯」メニューと設定にPremiumを追加（管理や解約が可能）。質問回数が上限に達した際のポップアップを廃止</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.6.0:</strong> ヘッダーの統合、ゲーム切り替え、リアルタイムカウントダウン付きの質問表示で画面がスッキリしました。回答表示の整理に加え、パネル固定やブックマーク収納ができ、Ctrl+Shift+Lで開けるクエストログ、現在地に応じたクイック質問機能も追加されています。</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.5.8:</strong> 攻略ガイドのマーカー画面表示、「見つける」ボタン、「あなたのプレイスルー」機能を追加：選択や発見が回答に記録されるようになりました（いつでも編集・オフ可能）。</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.5.7:</strong> 新規プレイヤー向けのクイックツアーを追加（「⋯」メニューから再表示可能）。また、ガイド情報をもとに、現在地で二度と手に入らなくなる取り返しのつかない要素が回答に表示されるようになりました。</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.5.6:</strong> 長い会話でも質問ボックスが消えないように修正、アプリの自動アップデートに対応、マウスなしでチェックできるすっきりしたクエストログ、進行中クエストの攻略手順を読み込む機能を追加</span></li>
+          <li class="flex gap-3"><i data-lucide="sparkles" class="w-5 h-5 text-[#a87ffb] shrink-0 mt-0.5"></i><span><strong class="text-white">0.5.5:</strong> プレイ中に便利なコンパクトモードを備えた落ち着いたデザインの「Ask」画面、より見やすくなったメッセージ、ライブラリのゲームカバーアート表示、次回質問可能までのカウントダウン、ガイド全体を一括検索できる検索ボックスを追加</span></li>
+        </ul>
+      </div>
+    </section>
   </main>
 
   <footer class="max-w-4xl mx-auto px-6 pt-12 text-center text-sm text-zinc-500 border-t border-white/5">
@@ -437,7 +463,7 @@
     } else {
       discordLinks.forEach((a) => { a.style.display = "none"; });
       document.querySelectorAll(".qc-discord-mention").forEach((el) => { el.style.display = "none"; });
-    }
+    }
     lucide.createIcons();
   </script>
 <script>(function(){try{var f=new URLSearchParams(location.search).get('from');if(f!=='guide')return;document.querySelectorAll('a[href^="https://quest-compendium-890629309063.us-east1.run.app/?from="]').forEach(function(a){a.href=a.href.replace(/from=[a-z]+/,'from=guide');});}catch(e){}})();</script>

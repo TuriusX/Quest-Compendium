@@ -139,7 +139,7 @@ function langMenu(current: string, depth: number): string {
   return `<!-- QC-LANGS:START -->
       <details class="relative">
         <summary class="list-none cursor-pointer flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white select-none" aria-label="Language">
-          <i data-lucide="globe" class="w-4 h-4"></i><span>${esc(cur.label)}</span>
+          <i data-lucide="globe" class="w-4 h-4"></i><span class="hidden sm:inline">${esc(cur.label)}</span>
         </summary>
         <div class="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-[#0c0d14] p-1 shadow-xl z-50">
           ${SITE_LANGS.map((l) => `<a href="${link(l)}" hreflang="${l.tag}" lang="${l.tag}" class="block px-3 py-1.5 rounded-lg text-sm ${l.code === current ? 'text-white bg-white/10' : 'text-zinc-300 hover:bg-white/5 hover:text-white'}">${esc(l.label)}</a>`).join('\n          ')}
