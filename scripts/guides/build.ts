@@ -317,8 +317,12 @@ const pageKind = () =>
     metroidvania: 'map region',
   } as Partial<Record<Layout, string>>)[layout] || 'area';
 
-/** The detail lines a page can have. Calendar and chapter guides add the lines that matter for how they're played. */
-const detailFormats = () =>
+/**
+ * The detail lines a page can have. Calendar and chapter guides add the lines that matter for how they're played.
+ * Quick mode (no sources: the model's memory, published unchecked) isn't asked for secrets or weaknesses: those were the
+ * slots it filled by inventing them. Their fields stay in the line, empty, so the parser reads the others as before.
+ */
+const detailFormats = (quick = false) =>
   'OVERVIEW: 2 to 3 sentences on what happens here and what to do\n' +
   (layout === 'calendar'
     ? 'DEADLINE: a deadline in this period and what must be done by then\n' +
@@ -330,12 +334,14 @@ const detailFormats = () =>
       : '') +
   'ITEM: item name | exactly where: from a findable anchor (a waypoint, a named NPC, a major landmark, or the map coordinates if the game shows them) to the exact container or object | how: the exact final step, the action or check needed (empty if you just pick it up) | missable because: what locks it out (empty if it can\'t be missed)\n' +
   `(${MISSABLE_STANDARD})\n` +
-  'SECRET: hidden thing and how to find it\n' +
-  'ENEMY: enemy name | weakness (empty if it has none or the game has no weaknesses) | what can be stolen, or a notable drop (only if the game has stealing or drops worth noting; otherwise empty) | short note\n' +
+  (quick ? '' : 'SECRET: hidden thing and how to find it\n') +
+  (quick
+    ? 'ENEMY: enemy name | (always empty: no weaknesses without a source) | what can be stolen, or a notable drop (only if the game has stealing or drops worth noting; otherwise empty) | short note\n'
+    : 'ENEMY: enemy name | weakness (empty if it has none or the game has no weaknesses) | what can be stolen, or a notable drop (only if the game has stealing or drops worth noting; otherwise empty) | short note\n') +
   'SHOP: shop or NPC name | what they sell or offer\n' +
   `${INFO_FORMAT} (one line)\n` +
   `${WAY_FORMAT} (one line)\n` +
-  'FIGHT: name of a boss or major set-piece battle here | the enemies | their notable abilities and threats | weaknesses and resistances | the tactics and positions that win it | the rewards (one line per key fight; never ordinary enemies; leave out if there are none)\n' +
+  `FIGHT: name of a boss or major set-piece battle here | the enemies | their notable abilities and threats | ${quick ? '(always empty: no weaknesses without a source)' : 'weaknesses and resistances'} | the tactics and positions that win it | the rewards (one line per key fight; never ordinary enemies; leave out if there are none)\n` +
   'TIP: short practical tip';
 
 /** Structure-specific sections for the page, from the extra detail lines. */
@@ -507,11 +513,13 @@ async function quickArea(area: { name: string; story: string; group?: string }):
     `Write guide notes for the ${pageKind()} "${area.name}" in the video game "${game}"${area.story ? ` (${area.story})` : ''}, from what you know.${visitNote(area.name)}${note} ` +
       "Only include details you're confident about; leave out anything you're unsure of. Write in your own words." +
       `${EDITION} Reply with one detail per line, using exactly these formats:\n` +
-      detailFormats(),
+      detailFormats(true),
     `write ${area.name}`,
     MODEL,
   );
-  return parseDetails(text, []);
+  // Whatever the reply holds anyway: no secrets or weaknesses from memory.
+  const d = parseDetails(text, []);
+  return { ...d, secrets: [], enemies: d.enemies.map((e) => ({ ...e, weakness: '' })), fights: d.fights.map((f) => ({ ...f, weaknesses: '' })) };
 }
 
 /** A quick guide with fewer published pages than this isn't published (the AI barely knows the game). */
