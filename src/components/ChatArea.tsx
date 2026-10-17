@@ -44,7 +44,6 @@ import { useT } from '../i18n';
 import { QuestLogo } from './QuestLogo';
 import { ReportAnswerModal, type ReportTarget } from './ReportAnswerModal';
 import { PlaceBar } from './PlaceBar';
-import { KnownHere } from './KnownHere';
 import { QcGuidesView } from './QcGuidesView';
 import { GlainIcon } from './GlainIcon';
 import { Walkthrough, walkthroughDone, OPEN_TOUR_EVENT } from './Walkthrough';
@@ -1813,14 +1812,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   </div>
                   {isDesktopApp && markerCard(true)}
 
-                  {/* The answer taught the game knowledge base something (shown in "Known here" for this place) */}
-                  {!isUser && msg.factsSaved ? (
-                    <div className="mt-3 flex items-center gap-1.5 text-[11px] text-zinc-500">
-                      <BookOpen className="w-3.5 h-3.5 text-[var(--accent-color)]" aria-hidden="true" />
-                      {msg.factsSaved === 1 ? t('here.learnedOne') : t('here.learned', { n: msg.factsSaved })}
-                    </div>
-                  ) : null}
-
                   {/* Answer actions: a small bar on the answer's bottom edge, shown on hover or keyboard / controller
                       focus (always on touch screens), and kept while reading aloud, just copied or saved, or asking
                       what was wrong after a 👎. It takes no room in the answer. */}
@@ -2106,17 +2097,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         )}
       </div>
-
-      {/* What the Compendium already knows about the confirmed place (free, from the game knowledge base) */}
-      {mode === 'ask' && (
-        <KnownHere
-          game={activeTab.activeSteamGame?.name || activeTab.name}
-          place={activeTab.place?.name || undefined}
-          story={activeTab.place?.storyConfirmed ? activeTab.place.story : undefined}
-          refreshKey={activeTab.messages.length}
-          onOpenGuide={() => setMode('guide')}
-        />
-      )}
 
       {/* Screenshot Upload / Attached Thumbnail Preview Bar */}
       {attachedImage && (
