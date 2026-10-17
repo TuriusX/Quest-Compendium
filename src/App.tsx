@@ -87,6 +87,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
   trackerTickShortcut: 'CmdOrCtrl+Shift+Enter',
   trackerNextShortcut: 'CmdOrCtrl+Shift+Down',
+  questLogShortcut: 'CmdOrCtrl+Shift+L',
   enableThematicBanners: false,
   uiStyle: 'lofi',
   language: detectLocale(),
@@ -513,6 +514,7 @@ export default function App() {
         autoScreenshotShortcut: settings.autoScreenshotShortcut,
         trackerTickShortcut: settings.trackerTickShortcut || 'CmdOrCtrl+Shift+Enter',
         trackerNextShortcut: settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down',
+        questLogShortcut: settings.questLogShortcut || 'CmdOrCtrl+Shift+L',
       });
     }
   }, [
@@ -521,6 +523,7 @@ export default function App() {
     settings.autoScreenshotShortcut,
     settings.trackerTickShortcut,
     settings.trackerNextShortcut,
+    settings.questLogShortcut,
   ]);
 
   // Controller: tell the desktop app which chord shows / hides the overlay.
@@ -2347,6 +2350,26 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     return () => window.removeEventListener('keydown', onKey);
   }, [isDesktop]);
 
+  // The tuck-away tab, built into the frame: a slim strip down the docked edge (the screen edge), its own column so
+  // nothing of the content is under it, with the pull-tab in the middle. Desktop, docked only.
+  const tuckStrip = (edge: 'left' | 'right') =>
+    isDesktop && settings.dockPosition !== 'undocked' && tuckSide === edge ? (
+      <div className={`qc-tuck-strip flex-shrink-0 w-3.5 h-full flex items-center justify-center bg-black/30 ${edge === 'left' ? 'border-r' : 'border-l'} border-white/[0.06]`}>
+        <button
+          type="button"
+          onClick={tuckAway}
+          title={tr('header.tuckHandle')}
+          aria-label={tr('header.tuckHandle')}
+          className="w-full h-16 flex items-center justify-center cursor-pointer text-[var(--accent-color)] bg-[var(--accent-dim)] border-y border-[var(--accent-border)] hover:bg-[var(--accent-color)] hover:text-black transition-colors"
+          style={{ WebkitAppRegion: 'no-drag' } as any}
+        >
+          <svg viewBox="0 0 6 10" width="6" height="10" shape-rendering="crispEdges" aria-hidden="true" className={edge === 'left' ? 'scale-x-[-1]' : ''}>
+            <path fill="currentColor" d="M0 0h2v2h2v2h2v2H4v2H2v2H0V8h2V6h2V4H2V2H0z" />
+          </svg>
+        </button>
+      </div>
+    ) : null;
+
   const getDockClasses = (dock: DockPosition) => {
     if (!isDesktop) {
       return 'w-full h-full rounded-none border-none shadow-none';
@@ -2371,13 +2394,14 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
 
       {/* Main App Window Frame */}
       <div 
-        className={`flex flex-col min-h-0 min-w-0 overflow-clip backdrop-blur-2xl relative transition-all ${getDockClasses(settings.dockPosition)}`}
+        className={`flex flex-row min-h-0 min-w-0 overflow-clip backdrop-blur-2xl relative transition-all ${getDockClasses(settings.dockPosition)}`}
         style={{
           backgroundColor: `rgba(14, 14, 18, ${settings.windowOpacity / 100})`,
           boxShadow: '0 0 35px var(--accent-glow)'
         }}
       >
-        {/* The tuck-away tab sticks out of the panel's inner edge, outside this window (electron/edgetab.cjs). */}
+        {tuckStrip('left')}
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col relative">
         {/* "Mouse unlocked": the panel opened with the show/hide shortcut (the first 10 times) */}
         {mouseToast && (
           <div role="status" aria-live="polite" className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 z-[80] max-w-[90%] animate-in fade-in slide-in-from-top-2 duration-200">
@@ -2416,6 +2440,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
             }
           }}
           onToggleQuestLog={isDesktop ? toggleQuestLog : undefined}
+          questLogKeys={formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L')}
           onTuckAway={isDesktop ? tuckAway : undefined}
           tuckSide={tuckSide}
           questLogVisible={questLogVisible}
@@ -2712,6 +2737,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
             soundEnabled={settings.soundEnabled}
           />}
         </div>
+        </div>
+        {tuckStrip('right')}
       </div>
 
       {/* Settings Modal */}

@@ -217,6 +217,8 @@ export interface AppSettings {
    */
   trackerTickShortcut?: string;
   trackerNextShortcut?: string;
+  /** Show or put away the quest log (default Ctrl+Shift+L). */
+  questLogShortcut?: string;
   enableThematicBanners?: boolean;
   /** Interface style: 'lofi' (pixel art, default) or 'classic' (the original look). */
   uiStyle?: UiStyle;

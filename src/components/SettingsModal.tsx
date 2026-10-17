@@ -57,6 +57,7 @@ const DEFAULT_SHORTCUTS = {
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
   trackerTickShortcut: 'CmdOrCtrl+Shift+Enter',
   trackerNextShortcut: 'CmdOrCtrl+Shift+Down',
+  questLogShortcut: 'CmdOrCtrl+Shift+L',
 };
 /** Electron's names for keys the browser reports differently (ArrowDown is "Down"). */
 const NAMED_KEYS: Record<string, string> = {
@@ -747,6 +748,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         { key: 'autoScreenshotShortcut', label: tr('set.sc.shot'), keys: settings.autoScreenshotShortcut || DEFAULT_SHORTCUTS.autoScreenshotShortcut },
                         { key: 'trackerTickShortcut', label: tr('set.sc.trackerTick'), keys: settings.trackerTickShortcut || DEFAULT_SHORTCUTS.trackerTickShortcut, hint: tr('set.sc.trackerHint') },
                         { key: 'trackerNextShortcut', label: tr('set.sc.trackerNext'), keys: settings.trackerNextShortcut || DEFAULT_SHORTCUTS.trackerNextShortcut, hint: tr('set.sc.trackerHint') },
+                        { key: 'questLogShortcut', label: tr('set.sc.questLog'), keys: settings.questLogShortcut || DEFAULT_SHORTCUTS.questLogShortcut },
                       ] as const;
                       return all.map((sc) => (
                         <ShortcutInput

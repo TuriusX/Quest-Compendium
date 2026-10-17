@@ -125,7 +125,7 @@ async function test(name, fn) {
     tracker.hide();
   });
 
-  await test('tucked in: a bookmark on the panel edge near its top; dragging does nothing; the cycle key brings it out', async () => {
+  await test('tucked in: a bookmark on the panel edge near its top; dragging does nothing; the quest log shortcut brings it out', async () => {
     const { tracker, win, env, handlers } = await setup({ existing: false });
     env.panel = { x: 1370, y: 0, width: 550, height: 800 };
     tracker.panelShown();
@@ -137,11 +137,10 @@ async function test(name, fn) {
     assert.deepEqual(win.getBounds(), { x: 1298, y: 8, width: 72, height: 40 }, 'flush with the panel, 8 px down');
     assert.equal(win.opacity, 1, 'the bookmark shows');
     assert.ok(win.js.some((c) => c.includes('"edge":"right"')), 'anchored on the side facing the panel');
-    assert.deepEqual(env.keys, { visible: false, available: true }, 'the cycle key stays registered');
-    assert.deepEqual(tracker.getEdgeBounds(), win.getBounds(), 'the tuck tab keeps clear of it');
+    assert.equal(env.keys.visible, false, 'the tick / next keys are off while it is tucked in');
     assert.equal(tracker.getBounds(), null, 'the spine does not step around an attached log');
-    assert.equal(await handlers['tracker-key'](null, 'next'), true);
-    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(await handlers['tracker-key'](null, 'next'), false, 'next is only next: it does not bring the log back');
+    assert.equal(await tracker.toggle(null), 'shown', 'the quest log shortcut (and the bookmark, the menu) brings it out');
     assert.equal(tracker.isLogVisible(), true, 'out again');
     tracker.hide();
   });

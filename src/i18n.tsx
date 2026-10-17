@@ -774,6 +774,7 @@ const en: Dict = {
   "tracker.tuckIn": "Tuck into the panel (a bookmark brings it back)",
   "tracker.slideOut": "Slide the quest log out",
   "menu.questLogShow": "Show the quest log",
+  "set.sc.questLog": "Quest log: show / put away",
   "menu.questLogHide": "Put the quest log away",
   "pad.askLogGuide": "/ RB Ask · Quest log · Guide · games",
   "pad.logMove": "Move",

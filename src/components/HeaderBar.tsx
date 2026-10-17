@@ -41,6 +41,8 @@ interface HeaderBarProps {
   onToggleDock: () => void;
   /** The quest log over the game (desktop): show it (if away or never shown) or send it away. */
   onToggleQuestLog?: () => void;
+  /** The quest log's show / put away shortcut as shown ("Ctrl+Shift+L"). */
+  questLogKeys?: string;
   /** The quest log is out (not away as the ribbon). */
   questLogVisible?: boolean;
   /** Tuck the panel away (desktop): the same as the show/hide shortcut. */
@@ -81,6 +83,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   isDocked,
   onToggleDock,
   onToggleQuestLog,
+  questLogKeys,
   questLogVisible = false,
   onTuckAway,
   tuckSide = 'right',
@@ -227,6 +230,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   <button type="button" role="menuitem" disabled={!questLogReady} onClick={pick(() => { playBlipSound(soundEnabled); onToggleQuestLog(); })} title={!questLogReady ? t('header.questLogEmpty') : undefined} className={`${menuItem} disabled:opacity-40 disabled:cursor-default`}>
                     <ScrollText className="w-4 h-4 text-[var(--accent-color)]" />
                     <span className="flex-1">{questLogVisible ? t('menu.questLogHide') : t('menu.questLogShow')}</span>
+                    {questLogKeys && <span className="text-[10px] text-zinc-500 font-mono">{questLogKeys}</span>}
                   </button>
                 )}
                 {activeGame && (

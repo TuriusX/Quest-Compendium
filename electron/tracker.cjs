@@ -488,7 +488,7 @@ const logVisible = () => !!current && alive() && settingsFor(current.gameKey).sh
 function sendVisibility() {
   tell({ type: 'visibility', visible: logVisible(), hasData: !!current, attached: isAttached() });
   // The tick / cycle shortcuts are registered only while the log is on screen (main.cjs).
-  if (deps && deps.onLogVisible) deps.onLogVisible(logVisible(), !!current);
+  if (deps && deps.onLogVisible) deps.onLogVisible(logVisible());
 }
 
 /**
@@ -500,11 +500,6 @@ function key(action) {
   // tick / next / prev; focus and blur: the controller is in the log (RB from the conversation, attached).
   if (!['tick', 'next', 'prev', 'focus', 'blur'].includes(action) || !alive()) return false;
   if (action === 'blur') { js(`window.qcTrackerKey('blur')`); return true; }
-  // The cycle key with the log put away (tucked in as a bookmark, or the ribbon): it comes back out.
-  if (action === 'next' && current && !logVisible() && !captureHidden && !(isAttached() && !anchor())) {
-    toggle(null).catch(() => {});
-    return true;
-  }
   if (!logVisible() || captureHidden) return false;
   js(`window.qcTrackerKey(${JSON.stringify(action)})`);
   return true;
@@ -648,11 +643,7 @@ function getBounds() {
   // Attached, the spine sticks to it (anchor), so it doesn't step around it.
   return alive() && !captureHidden && !attachHidden && !isAttached() && win.isVisible() ? win.getBounds() : null;
 }
-/** The attached log or its bookmark on the panel's edge, for the tuck-away tab to keep clear of (null otherwise). */
-function getEdgeBounds() {
-  const a = isAttached() ? anchor() : null;
-  return a && a.kind === 'panel' && alive() && !captureHidden && !attachHidden && win.isVisible() ? win.getBounds() : null;
-}
+
 
 /** The markers' "show in recordings" setting: off hides the tracker from all screen capture. */
 function setVisibleInRecordings(on) {
@@ -883,7 +874,7 @@ function init(d) {
 }
 
 module.exports = {
-  init, show, update, hide, toggle, showLog, panelShown, panelHidden, follow, getEdgeBounds,
+  init, show, update, hide, toggle, showLog, panelShown, panelHidden, follow,
   /** The spine appeared or went: an attached log moves to (or from) it. */
   anchorChanged: () => syncAttach(), setKeys, setMouseTip, getTipLabels, hideForCapture, showAfterCapture, getBounds,
   setVisibleInRecordings, setScale, openPanel, raise, getLook, key,

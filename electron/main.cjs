@@ -100,7 +100,6 @@ const { createFocusHelper } = require('./focus.cjs');
 const tracker = require('./tracker.cjs');
 const { initUpdater } = require('./updater.cjs');
 const spine = require('./spine.cjs');
-const edgetab = require('./edgetab.cjs');
 const focusHelper = createFocusHelper();
 const http = require('http');
 
@@ -413,7 +412,7 @@ async function slideIn(opts = {}) {
   
   if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(false);
-    animateWindow(coords.x, coords.y, 150).then(() => { tracker.panelShown(); edgetab.sync(); });
+    animateWindow(coords.x, coords.y, 150).then(() => tracker.panelShown());
   } else {
     tracker.panelShown();
   }
@@ -452,7 +451,6 @@ function slideOut() {
   focusHelper.restore(mainWindow, handBack, { detected: !!detected });
   focusBeforeOverlay = null;
   openSnapshot = null; // the snapshot only lives for one visit
-  edgetab.hide();
   if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(true);
     animateWindow(coords.x, coords.y, 150).then(parkPanel);
@@ -515,11 +513,10 @@ function createWindow() {
       baseLogicalHeight = bounds.height / currentUiScale;
     }
     tracker.follow(); // an attached quest log keeps to the panel (compact, UI scale, the achievements drawer)
-    edgetab.sync();
   });
   // The panel moved (sliding to its dock, a new dock, dragged while undocked, onto another screen): an attached quest
   // log goes with it.
-  mainWindow.on('move', () => { tracker.follow(); edgetab.sync(); });
+  mainWindow.on('move', () => tracker.follow());
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return {
@@ -648,8 +645,7 @@ app.whenReady().then(() => {
     onAppear: onLogAppear,
     onTipDismiss: () => tellApp({ type: 'mouse-tip', what: 'dismiss' }),
     // The tick / cycle shortcuts are registered while the quest log is on screen, and only then.
-    // The cycle key also brings back a log that's put away (its bookmark or ribbon), so it's registered while one exists.
-    onLogVisible: (visible, available) => syncTrackerKeys(visible, available),
+    onLogVisible: (visible) => syncTrackerKeys(visible),
   });
   tracker.setMouseTip(tipMode());
   tracker.setVisibleInRecordings(markersInRecordings);
@@ -669,16 +665,6 @@ app.whenReady().then(() => {
     if (JSON.stringify(next) === JSON.stringify(appLook)) return;
     appLook = next;
     spine.refresh();
-    edgetab.hide(); edgetab.sync(); // drawn again in the new look
-  });
-  // The tuck-away tab outside the open docked panel's frame (electron/edgetab.cjs).
-  edgetab.init({
-    ipcMain, screen,
-    getPanelRect: () => panelRect(),
-    getDock: () => currentDockPosition,
-    getTrackerBounds: () => tracker.getEdgeBounds(),
-    onTuck: () => { if (isAppVisible) slideOut(); },
-    getLook: () => ({ accent: (appLook && appLook.accent) || tracker.getLook().accent, label: (appLook && appLook.tuckLabel) || 'Tuck the panel away' }),
   });
   spine.init({
     ipcMain, screen,
@@ -746,7 +732,7 @@ app.whenReady().then(() => {
       tick: shortcuts.trackerTickShortcut || 'CommandOrControl+Shift+Enter',
       next: shortcuts.trackerNextShortcut || 'CommandOrControl+Shift+Down',
     };
-    appKeys = [shortcuts.hideAppShortcut, shortcuts.voiceInputShortcut, shortcuts.autoScreenshotShortcut].filter(Boolean);
+    appKeys = [shortcuts.hideAppShortcut, shortcuts.voiceInputShortcut, shortcuts.autoScreenshotShortcut, shortcuts.questLogShortcut].filter(Boolean);
 
     // Always ensure a show/hide shortcut exists: the player's, else Ctrl+Space.
     const hideAppCmd = shortcuts.hideAppShortcut || 'CommandOrControl+Space';
@@ -773,6 +759,14 @@ app.whenReady().then(() => {
       });
     } catch (err) {
       console.error("Failed to register autoScreenshotShortcut", err);
+    }
+    // The quest log: shown or put away (Settings: questLogShortcut, default Ctrl+Shift+L), from the game or the panel.
+    // Attached, put away is its bookmark on the panel's edge (or the spine's); popped out, the ribbon at the screen edge.
+    const questLogCmd = shortcuts.questLogShortcut || 'CommandOrControl+Shift+L';
+    try {
+      if (!globalShortcut.register(questLogCmd, () => { tracker.toggle(null).catch(() => {}); })) console.warn(`[tracker] ${questLogCmd} is taken; the quest log shortcut isn't set`);
+    } catch (err) {
+      console.error('Failed to register questLogShortcut', err);
     }
     // The quest log's tick / cycle shortcuts, if it's on screen now.
     syncTrackerKeys(tracker.isLogVisible());
@@ -841,12 +835,11 @@ let trackerKeys = { tick: 'CommandOrControl+Shift+Enter', next: 'CommandOrContro
 let trackerKeysOn = [];
 let appKeys = [];
 const sameKeys = (a, b) => String(a || '').replace(/CmdOrCtrl|CommandOrControl/gi, 'Ctrl').toLowerCase() === String(b || '').replace(/CmdOrCtrl|CommandOrControl/gi, 'Ctrl').toLowerCase();
-function syncTrackerKeys(visible, available = visible) {
+function syncTrackerKeys(visible) {
   for (const k of trackerKeysOn) { try { globalShortcut.unregister(k); } catch (_) {} }
   trackerKeysOn = [];
-  if (!visible && !available) return;
+  if (!visible) return;
   for (const [action, keys] of Object.entries(trackerKeys)) {
-    if (!visible && action !== 'next') continue; // put away: only "next" (it brings the log back)
     if (!keys || appKeys.some((k) => sameKeys(k, keys)) || trackerKeysOn.some((k) => sameKeys(k, keys))) continue;
     try {
       if (globalShortcut.register(keys, () => tracker.key(action))) trackerKeysOn.push(keys);
@@ -1181,11 +1174,10 @@ ipcMain.on('set-dock-position', (event, pos) => {
       // allow dragging
       mainWindow.setIgnoreMouseEvents(false);
       spine.hide();
-      edgetab.hide();
       tracker.follow(); // an attached quest log picks the side with more room
     } else {
       const coords = getDockCoords(!isAppVisible);
-      animateWindow(coords.x, coords.y, 150).then(() => { if (isAppVisible) { tracker.panelShown(); edgetab.sync(); } });
+      animateWindow(coords.x, coords.y, 150).then(() => { if (isAppVisible) tracker.panelShown(); });
       if (!isAppVisible) spine.show(); // the spine moves to the new dock edge
     }
   }
@@ -1237,7 +1229,6 @@ async function captureScreenImage() {
   // Never capture our own on-screen pointers in the next screenshot.
   closeScreenPointers();
   // ...or the objectives tracker (hidden for the capture, then back; a moment for the screen to redraw without it).
-  edgetab.setCaptureHidden(true);
   if (tracker.hideForCapture()) await new Promise((resolve) => setTimeout(resolve, 80));
   let base64Image = null;
   try {
@@ -1293,7 +1284,6 @@ async function captureScreenImage() {
     }
   } finally {
     tracker.showAfterCapture();
-    edgetab.setCaptureHidden(false);
   }
   lastCaptureImage = base64Image || lastCaptureImage;
   return base64Image;
