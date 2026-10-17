@@ -435,8 +435,10 @@ function mentions(textIn: string, name: string): number {
 function bestMention(name: string, pages: { slug: string; text: string }[], entities: any[]): string {
   const scored = [
     ...entities.map((e) => {
-      const where = [e.quest?.where, e.summary?.where, ...((e.summary?.whereToFind || []) as any[]).map((w) => w?.where)].filter(Boolean).join(' ');
-      return { slug: e.slug, n: (mentions(where, name) ? 10 : 0) + mentions(JSON.stringify([e.overview, e.summary, e.story, e.quest]), name) };
+      // A mission set there or a place's own location is strong evidence; a character who passes through counts less.
+      const where = [e.quest?.where, e.summary?.where].filter(Boolean).join(' ');
+      const person = ((e.summary?.whereToFind || []) as any[]).length > 0;
+      return { slug: e.slug, n: (mentions(where, name) ? 10 : 0) + mentions(JSON.stringify([e.overview, e.summary, e.story, e.quest]), name) * (person ? 0.5 : 1) };
     }),
     ...pages.map((p) => ({ slug: p.slug, n: mentions(p.text, name) })),
   ].filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
