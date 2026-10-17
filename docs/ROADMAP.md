@@ -47,8 +47,8 @@ Noah's approved plan (Oct 16, 2026; first planned as 0.5.9, renamed 0.6.0): one 
 
 | # | Item | What it is | Status |
 |---|------|-----------|--------|
-| 19 | **0.6.0 cleanup** | Header, answer view, Known here removed, quest log tidy-up, compact pill, starter chips (steps 1–4, 6, 7). | Built, waiting on Noah's dev-build test |
-| 20 | **Attached quest log** | Step 5: attached to the panel's inner side, moving and hiding with it; 📌 / ⇱ per game; new installs attached, existing players popped out with a one-time offer; controller RB into the log. Noah tests on two monitors and at 150%. | Built, waiting on Noah's dev-build test |
+| 19 | **0.6.0 cleanup** | Header, answer view, Known here removed, quest log tidy-up, compact pill, starter chips (steps 1–4, 6, 7). | Done (0.6.0) |
+| 20 | **Attached quest log** | Step 5: attached to the panel's inner side and moving with it; tucked in as a bookmark on the panel's edge (a count badge on the book with the panel away); Ctrl+Shift+L shows or puts it away; 📌 / ⇱ per game; new installs attached, existing players popped out with a one-time offer; controller RB into the log. Also from testing: the tuck tab built into the frame, undocked tuck-away leaves the book. | Done (0.6.0) |
 | 21 | **Steam Deck plugin 0.15.x** | The questions line ticking every second, the same starter chips, Hint mode in its Settings. Committed in Quest-Compendium-Decky. | Held until after desktop 0.6.0 |
 
 ## Growth
