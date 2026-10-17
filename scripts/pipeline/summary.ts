@@ -124,6 +124,12 @@ export async function postDiscord(webhook: string, text: string): Promise<boolea
   return ok;
 }
 
+/** A warning for the owner from inside a pipeline step: the job log always, Discord when the job has the webhook. */
+export async function notifyOwner(text: string): Promise<void> {
+  console.warn(text);
+  if (process.env.DISCORD_WEBHOOK_URL) await postDiscord(process.env.DISCORD_WEBHOOK_URL, text).catch(() => false);
+}
+
 /** The summary message: a heading, the grouped lines as bullets, then the closing line. */
 export function summaryText(report: string[], closing: string, heading = '**Quest Compendium guide pipeline**') {
   return `${heading}\n${summarize(report).map((l) => `• ${l}`).join('\n')}\n${closing}`;

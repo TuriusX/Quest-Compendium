@@ -385,9 +385,11 @@ ${r.stopped}; the next run carries on.`); if (wentLive) await publishSiteForCore
         await chargeCore(scope.dollars, key);
         if (r?.review?.status === 'waiting') { stopped = stop('No Pro reviewer requests left today'); break; }
         if (r?.review?.status === 'passed') {
-          await writePageForCore(key, p.slug, r.proto);
-          await gref.set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(p.slug) } }, { merge: true });
-          wentLive = true;
+          // false: held by the rebuild guard (the live page stays; the owner decides), so nothing to translate or publish.
+          if (await writePageForCore(key, p.slug, r.proto)) {
+            await gref.set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(p.slug) } }, { merge: true });
+            wentLive = true;
+          }
           pg.failedPages = pg.failedPages.filter((f: any) => f.slug !== p.slug);
         } else {
           pg.failedPages = [...pg.failedPages.filter((f: any) => f.slug !== p.slug), { slug: p.slug, name: p.name, reason: cut(r?.review?.reason || 'failed review', 160), score: r?.review?.score ?? null }];
@@ -485,9 +487,10 @@ export async function retryOnly(items: string[], opts: { publish?: boolean } = {
         const r: any = await usageScope.run(scope, () => buildPageEvidenceForCore(key, String(info.game || key), slug, info.areas || [], key));
         await chargeCore(scope.dollars, key);
         if (r?.review?.status === 'passed') {
-          await writePageForCore(key, slug, r.proto);
-          await gref.set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(slug) } }, { merge: true });
-          wentLive = true;
+          if (await writePageForCore(key, slug, r.proto)) {
+            await gref.set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(slug) } }, { merge: true });
+            wentLive = true;
+          }
           pg.failedPages = pg.failedPages.filter((f: any) => f.slug !== slug);
         } else if (r?.review?.status !== 'waiting') {
           pg.failedPages = [...pg.failedPages.filter((f: any) => f.slug !== slug), { slug, name: area?.name || slug, reason: cut(r?.review?.reason || 'failed review', 160), score: r?.review?.score ?? null }];

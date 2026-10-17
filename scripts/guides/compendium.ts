@@ -29,6 +29,7 @@
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, parseJson, searchesIn, usageScope } from './common';
 import { fuzzyScore, lintEntity } from './siteText';
+import { mergeTaxonomy, resolveType, retypeEntityDocs } from './taxonomy';
 import {
   supportedSegments, trusted, gameLinesFor, evidenceText, claimCheck, claimReview, cleanEntryText,
   type Evidence, type EvidencePack, type GameEvidence, type ClaimPage, type ClaimVerdict,
@@ -80,7 +81,8 @@ async function taxonomy(demand: string[] = []) {
   const types = (Array.isArray(j.taxonomy) ? j.taxonomy : []).filter((t: any) => t?.id && t?.label).map((t: any) => ({ id: entitySlug(t.id), label: cut(t.label, 60), description: cut(t.description, 200), examples: (t.examples || []).map((x: any) => cut(x, 80)).filter(Boolean).slice(0, 12) }));
   const ids = new Set(types.map((t: any) => t.id));
   const entities = (Array.isArray(j.entities) ? j.entities : []).filter((e: any) => e?.name).map((e: any) => ({ name: cut(e.name, 80), slug: entitySlug(e.name), type: ids.has(entitySlug(e.type)) ? entitySlug(e.type) : types[0]?.id, aliases: (e.aliases || []).map((x: any) => cut(x, 80)).filter(Boolean).slice(0, 6) }));
-  await ref().set({ key, game, taxonomy: types, entities, builtAt: Date.now(), prototype: true, cost: scope }, { merge: true });
+  const merged = mergeTaxonomy(types, entities);
+  await ref().set({ key, game, taxonomy: merged.taxonomy, typeAliases: merged.typeAliases, entities: merged.entities, builtAt: Date.now(), prototype: true, cost: scope }, { merge: true });
   console.log(`${game}: ${types.length} types: ${types.map((t: any) => `${t.label} (${t.examples.slice(0, 4).join(', ')})`).join(' | ')}`);
   console.log(`  entities: ${entities.map((e: any) => `${e.name} [${e.type}]`).join(', ')}`);
   console.log(`  cost $${scope.dollars.toFixed(4)}`);
@@ -133,9 +135,13 @@ export async function coreTaxonomy(k: string) {
   for (const t of types) t.examples = fresh.filter((e: any) => e.type === t.id).slice(0, 12).map((e: any) => e.name);
   // Existing entities stay (with their types when still known); new ones are added once each.
   const oldTypes = (old.taxonomy || []).filter((t: any) => !ids.has(t.id)).map((t: any) => ({ ...t, tier: t.tier || 'other' }));
-  const seen = new Set<string>();
-  const entities = [...(old.entities || []), ...fresh].filter((e: any) => e?.slug && !seen.has(e.slug) && seen.add(e.slug));
-  await ref().set({ key, game, taxonomy: [...types, ...oldTypes], entities, core: { builtAt: Date.now(), cost: scope } }, { merge: true });
+  // An older type that's the same kind as a new one ("Companions & Allies" and "Companions & Origin Paths") is merged
+  // into it (taxonomy.ts), its id kept as an alias; each entity listed once, with one type.
+  const merged = mergeTaxonomy([...types, ...oldTypes], [...(old.entities || []), ...fresh].filter((e: any) => e?.slug), old.typeAliases || {});
+  const entities = merged.entities;
+  await ref().set({ key, game, taxonomy: merged.taxonomy, typeAliases: merged.typeAliases, entities, core: { builtAt: Date.now(), cost: scope } }, { merge: true });
+  const retyped = await retypeEntityDocs(key, merged.taxonomy, merged.typeAliases);
+  if (Object.keys(merged.typeAliases).length) console.log(`  merged types: ${Object.entries(merged.typeAliases).map(([a, b]) => `${a} → ${b}`).join(', ')}${retyped ? `; ${retyped} entity page(s) retyped` : ''}`);
   console.log(`${game}: core taxonomy, ${types.length} types (${types.map((t: any) => `${t.label} [${t.tier}] ${fresh.filter((e: any) => e.type === t.id).length}`).join(', ')}), ${entities.length} entities, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`);
   return { types: types.length, entities: entities.length, dollars: scope.dollars };
 }
@@ -313,7 +319,7 @@ async function entity(name: string, opts: { type?: string; rebuild?: boolean; ke
   const info: any = (await db().collection('guides').doc(key).get()).data() || {};
   const game = String(info.game || key);
   const known = (comp.entities || []).find((e: any) => entitySlug(e.name) === entitySlug(name));
-  const typeId = opts.type || arg('type') || known?.type || comp.taxonomy?.[0]?.id || 'locations';
+  const typeId = resolveType(opts.type || arg('type') || known?.type || comp.taxonomy?.[0]?.id || 'locations', comp.typeAliases);
   const typeLabel = (comp.taxonomy || []).find((t: any) => t.id === typeId)?.label || typeId;
   const chapters = (info.areas || []).map((a: any) => a.name);
   const scope = { dollars: 0, searches: 0 };
@@ -498,8 +504,12 @@ export async function demandEntities(rows: { query: string; key: string; slug?: 
     const info: any = (await db().collection('guides').doc(k).get()).data();
     if (!info) continue;
     const game = String(info.game || k);
-    // What the guide already has a page about: its live pages and its published entity pages.
-    const live = (await db().collection('guides').doc(k).collection('areas').where('status', '==', 'published').get()).docs.map((d) => String(d.data().name || d.id));
+    // What the guide already has a page about: its live pages, its held ones and its entity pages. A held place keeps
+    // its address (for its redirect, or its return), so it counts as covered: an entity page never takes over a held
+    // area's address (rdr2/thieves-landing).
+    const areaDocs = (await db().collection('guides').doc(k).collection('areas').get()).docs;
+    const live = areaDocs.filter((d) => ['published', 'held'].includes(d.data().status)).map((d) => String(d.data().name || d.id));
+    const areaSlugs = new Set(areaDocs.map((d) => d.id));
     const cref = db().collection('guideCompendium').doc(k);
     const ents = (await cref.collection('entities').get()).docs.map((d) => d.data() as any);
     const covered = (thing: string) => [...live, ...ents.map((e) => e.name)].some((n) => fuzzyScore(thing, n) > 0 && fuzzyScore(n, thing) > 0);
@@ -524,6 +534,7 @@ export async function demandEntities(rows: { query: string; key: string; slug?: 
       const e = matchIn(comp, thing);
       if (!e) { skipped.push(`${game}: "${thing}" (not a ${game} entity)`); continue; }
       if (ents.some((x) => x.slug === e.slug)) continue; // built before (held after a failed review)
+      if (areaSlugs.has(e.slug || entitySlug(e.name))) { skipped.push(`${game}: ${e.name} (a guide page has its address)`); continue; }
       cands.push({ key: k, game, name: e.name, type: e.type, impressions: imp });
     }
   }

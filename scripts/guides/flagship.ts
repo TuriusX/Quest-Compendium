@@ -51,6 +51,7 @@ import { promote, stageCopy, discard } from './promote';
 import { deployToNetlify } from '../pipeline/netlify';
 import { FieldValue } from 'firebase-admin/firestore';
 import { acquireGuideLock, waitForGuideLock, isRefusal, lockedLine, releaseGuideLocks, SITE_LOCK, type GuideLock } from './guideLock';
+import { guardRebuild } from './rebuildGuard';
 
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const none = (v: string | undefined) => !v || /^(none|n\/a|-+|no|nothing)\.?$/i.test(v.trim());
@@ -782,19 +783,29 @@ async function reviewOnly(key: string, game: string, slug: string, order: { slug
   return { searches: 0, dollars: (scope ? scope.dollars : ledgerDollars()) - before, verdict, proto: clean };
 }
 
-/** The flagship fields written onto a page (the live guide's, or the staged rebuild's). */
-async function writePage(target: string, slug: string, pr: any) {
+/**
+ * The flagship fields written onto a page (the live guide's, or the staged rebuild's). Returns false when the rebuild
+ * was held for the owner instead (rebuildGuard.ts: it would drop sourced content, or content of a page people find in
+ * Google); the live page then stays as it was, so the caller doesn't mark it for translation or a site publish.
+ */
+async function writePage(target: string, slug: string, pr: any): Promise<boolean> {
   // "Checked against sources" only for a page that passed the evidence method, or one written from a wiki we fetch; a
   // search-pack page (the old method the owner found inaccurate) is never marked checked.
   const verified = pr.mode === 'evidence' ? pr.status === 'passed' : pr.mode !== 'pack' || WIKI_HOSTS.has(String(pr.sourceLinks?.wiki || ''));
-  await db().collection('guides').doc(target).collection('areas').doc(slug).set(JSON.parse(JSON.stringify({
+  const fields = JSON.parse(JSON.stringify({
     walkthrough: pr.walkthrough, choices: pr.choices, advice: pr.advice, items: pr.items, secrets: pr.secrets, fights: pr.fights || [],
     ...(pr.info ? { info: pr.info } : {}), ...(pr.people ? { people: pr.people } : {}), sources: pr.sources || [], verified,
     ...(pr.mode === 'evidence' ? { incomplete: pr.incomplete || [], reverify: verified ? null : { at: Date.now(), why: pr.reason || 'did not pass the evidence review' } } : {}),
     ...(!verified && pr.mode === 'pack' ? { reverify: { at: Date.now(), why: 'built from a search pack', was: 'search pack' } } : {}),
     ...(pr.sourceLinks ? { sourceLinks: pr.sourceLinks } : {}),
     flagship: { at: Date.now(), cost: pr.cost?.dollars ?? null, model: pr.model, mode: pr.mode || 'searched' }, updatedAt: Date.now(),
-  })), { merge: true });
+  }));
+  const ref = db().collection('guides').doc(target).collection('areas').doc(slug);
+  // The live version is saved first, and a rebuild that would lose content is held (a staged build goes through the
+  // same check when promote.ts puts it live).
+  if (!(await guardRebuild(target, slug, ref, fields))) return false;
+  await ref.set({ ...fields, rebuildHeld: null }, { merge: true });
+  return true;
 }
 
 // ---------- the programme ----------
@@ -876,9 +887,12 @@ async function reverifyPhase(st: any, budget: any, save: () => Promise<any>, cha
         charge(scope.dollars);
         rv.stats.pages++; rv.stats.dollars += scope.dollars;
         if (r?.review.status === 'passed') {
-          await writePage(key, slug, r.proto);
-          await gref.set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(slug) } }, { merge: true });
-          pg.done.push(slug); rv.stats.passed++; wentLive = true;
+          // A rebuild held by the rebuild guard counts as done (it isn't rebuilt again); the owner decides on it.
+          if (await writePage(key, slug, r.proto)) {
+            await gref.set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(slug) } }, { merge: true });
+            wentLive = true;
+          }
+          pg.done.push(slug); rv.stats.passed++;
           st.runPages.push({ key, slug, name, score: r.review.score, dollars: Math.round(scope.dollars * 1000) / 1000, reverify: true });
         } else if (r) {
           pg.failed.push({ slug, name, reason: r.review.reason || 'failed review', score: r.review.score });
@@ -1084,8 +1098,8 @@ Google's spend-based rate limit, ${rateLimits} times: stopped; next run carries 
           st.pagesBuilt = Number(st.pagesBuilt || 0) + 1;
           st.pageDollars = Number(st.pageDollars || 0) + scope.dollars;
           if (r.verdict.status === 'passed') {
-            await writePage(src, o.slug, r.proto);
-            if (pg.source !== 'stage') {
+            const written = await writePage(src, o.slug, r.proto);
+            if (written && pg.source !== 'stage') {
               // Live now: its translations are brought up to date by the pipeline (translationsDue).
               await db().collection('guides').doc(g.key).set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(o.slug) } }, { merge: true });
               wentLive = true;
@@ -1220,11 +1234,11 @@ async function rollout(st: any, save: () => Promise<any>) {
     r.spentMonth += scope.dollars;
     built++;
     if (res?.verdict.status === 'passed') {
-      await writePage(c.key, c.slug, res.proto);
-      await gref.set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(c.slug) } }, { merge: true });
+      const written = await writePage(c.key, c.slug, res.proto);
+      if (written) await gref.set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(c.slug) } }, { merge: true });
       r.pagesMonth = Number(r.pagesMonth || 0) + 1;
       r.runPages.push({ key: c.key, slug: c.slug, name: page.name, score: res.verdict.score ?? null, dollars: Math.round(scope.dollars * 1000) / 1000 });
-      wentLive = true;
+      if (written) wentLive = true;
     } else if (res?.verdict.status === 'failed') {
       r.failed[id] = { at: Date.now(), reason: res.verdict.reason || 'failed review' };
       r.runFailures.push({ key: c.key, slug: c.slug, name: page.name, reason: res.verdict.reason || 'failed review' });

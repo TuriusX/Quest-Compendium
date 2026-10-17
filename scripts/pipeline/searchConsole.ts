@@ -9,7 +9,8 @@
  *    service account reads it (a Restricted user on the property); the token comes from the Cloud Run metadata server
  *    with the read-only Search Console scope, so this only runs on Cloud Run.
  * 2. Summary in Firestore (system/searchConsole): totals, top queries, top pages (with week-on-week click changes), the
- *    plan, and the wish-list games. Shown on /admin/reviews (Search tab).
+ *    plan, and the wish-list games. Shown on /admin/reviews (Search tab). Every page's own numbers go in
+ *    system/searchConsolePages (pageStats.ts), for the rebuild protections.
  * 3. For each guide page with meaningful impressions (MIN_IMPRESSIONS), a check without searches (Flash): does the page
  *    clearly answer its top queries? Missing or vague answers become a targeted repair for that page (repair.ts
  *    --action queries): the entries are rewritten or added with the queries passed to the writer as what players look
@@ -25,6 +26,7 @@ import { db, gemini, MODEL, arg, parseJson, gameKey, guideRelease, releasedAfter
 import { estimateCost } from '../../usage';
 import { monthCosts, summarizeCosts, costMonth } from '../../playerCosts';
 import { demandEntities } from '../guides/compendium';
+import { compactPageStats, PAGE_STATS_DOC } from '../guides/pageStats';
 
 const SITES = ['sc-domain:questcompendium.com', 'https://questcompendium.com/', 'https://www.questcompendium.com/'];
 const SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
@@ -315,6 +317,9 @@ async function weekly() {
       topQueries: sum.queries.slice(0, 50), topPages: sum.pages.slice(0, 50).map(({ queries, ...p }) => ({ ...p, topQuery: queries[0]?.query || '' })),
       plan, checked, estimate, repairsOn: REPAIRS_ON, queued, wishes, gained, pageClicks,
     });
+    // Every guide page's impressions, clicks and position (the summary above keeps only the top 50), in a sibling doc so
+    // the summary stays small: the rebuild protections read it so a page people find is never replaced blind.
+    await db().collection('system').doc(PAGE_STATS_DOC).set({ range: { start: iso(start), end: iso(end) }, pulledAt: Date.now(), pages: compactPageStats(sum.pages) });
     // The wish-list games, and when this ran (the daily pipeline runs it again a week later).
     await db().collection('system').doc('pipeline').set({ searchWishes: wishes, searchConsoleAt: Date.now() }, { merge: true });
   }

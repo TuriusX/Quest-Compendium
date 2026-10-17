@@ -27,6 +27,7 @@ import { entitySlug, entityKind, entityEvidenceFor, claimPageOf, applyVerdicts, 
 import { benchmarkAnswer, coverage, pageText, corePoints, BENCH_V, type BenchPoint } from './benchmark';
 import { lintEntity, fuzzyScore } from './siteText';
 import { ProQuotaWait } from './reviewerQuota';
+import { resolveType } from './taxonomy';
 
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const objOf = (text: string): any => {
@@ -213,8 +214,10 @@ export async function buildEntityV2(key: string, name: string, opts: { draft?: b
   const isNew = !found || found.status !== 'published';
   let live: any = found;
   if (!found || (isNew && !found.overview)) {
-    const tax = (((await db().collection('guideCompendium').doc(key).get()).data() || {}).taxonomy || []) as any[];
-    const type = opts.type || found?.type || tax[0]?.id || 'people';
+    const comp: any = (await db().collection('guideCompendium').doc(key).get()).data() || {};
+    const tax = (comp.taxonomy || []) as any[];
+    // A type merged into another (taxonomy.ts) is that type: one type per entity.
+    const type = resolveType(opts.type || found?.type || tax[0]?.id || 'people', comp.typeAliases);
     live = { name, slug, type, typeLabel: tax.find((t) => t.id === type)?.label || found?.typeLabel || type, title: '', description: '', overview: '', summary: {}, ...(found || {}) };
   }
   const info: any = (await db().collection('guides').doc(key).get()).data() || {};
