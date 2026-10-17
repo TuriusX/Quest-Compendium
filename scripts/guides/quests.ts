@@ -123,8 +123,12 @@ function claimsOf(name: string, overview: string, q: Quest): { page: ClaimPage; 
   q.choices.forEach((c, i) => { services.push(`In "${name}", choosing "${c.choice}" leads to: ${c.outcome}`); map.push(keep(q.choices, i)); });
   q.parts.forEach((p, i) => {
     // The part, its chapter and where it starts as separate claims: an unsupported chapter drops the chapter, not the part.
-    services.push(`"${p.name}" is a part of "${name}"`);
-    map.push(keep(q.parts, i));
+    // A story mission's one part is the mission itself (its steps are checked one by one below): "X is a part of X" is
+    // no claim to check, and an "unsupported" verdict on it would drop every step.
+    if (p.name.trim().toLowerCase() !== name.trim().toLowerCase()) {
+      services.push(`"${p.name}" is a part of "${name}"`);
+      map.push(keep(q.parts, i));
+    }
     if (p.chapter) { services.push(`"${p.name}" takes place in ${p.chapter}`); map.push((ok) => { if (!ok && q.parts[i]) q.parts[i].chapter = ''; }); }
     if (p.where) { services.push(`"${p.name}" starts ${p.where}`); map.push((ok) => { if (!ok && q.parts[i]) q.parts[i].where = ''; }); }
   });

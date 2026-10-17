@@ -33,7 +33,8 @@ export async function officialNames(key: string, lang: string, dry = false) {
   const ref = db().collection('guides').doc(key).collection('i18n').doc(lang);
   const t: any = (await ref.get()).data();
   if (!t?.areas) return { lang, changed: [] as string[], found: 0, note: 'no translation' };
-  const names = (info.areas || []).filter((a: any) => t.areas[a.slug]).map((a: any) => String(a.name));
+  // Our own qualifiers ("Crow's Perch (Underground)") aren't in-game names: those pages keep their translation.
+  const names = (info.areas || []).filter((a: any) => t.areas[a.slug] && !/[()]/.test(String(a.name))).map((a: any) => String(a.name));
   const found: Record<string, string> = {};
   for (let i = 0; i < names.length; i += 30) {
     const batch = names.slice(i, i + 30);
@@ -51,7 +52,10 @@ export async function officialNames(key: string, lang: string, dry = false) {
   for (const [en, official] of Object.entries(found)) {
     const slug = bySlug.get(en) as string | undefined;
     const cur = slug ? String(t.areas[slug]?.name || '') : '';
-    if (slug && cur && cur.toLowerCase() !== official.toLowerCase()) changes.push({ slug, en, from: cur, to: official });
+    // A page name starts with a capital; and never the same name as another page of the guide in this language.
+    const to = official.charAt(0).toUpperCase() + official.slice(1);
+    const taken = Object.entries(t.areas).some(([s2, x]: [string, any]) => s2 !== slug && String(x?.name || '').toLowerCase() === to.toLowerCase());
+    if (slug && cur && cur.toLowerCase() !== to.toLowerCase() && !taken) changes.push({ slug, en, from: cur, to });
   }
   if (!dry && changes.length) {
     let text = JSON.stringify({ areas: t.areas, glossary: t.glossary || {} });
