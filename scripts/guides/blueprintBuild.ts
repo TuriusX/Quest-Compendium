@@ -21,6 +21,7 @@ import { entitySlug } from './compendium';
 import { chapterKey } from './siteText';
 import { apiLimits, searchesToday, pipelineRoom } from '../../apiLimits';
 import { isTransient } from './claimCheck';
+import { notifyOwner } from '../pipeline/summary';
 
 /** A stop that isn't the unit's fault (the day's search or Pro limit, the API down): the run stops, nothing is recorded. */
 const isStop = (e: any) => /search day limit|ProQuotaWait|Pro reviewer|no Pro reviewer/i.test(String(e?.message || e) + String(e?.name || '')) || isTransient(e);
@@ -39,6 +40,40 @@ export type BlueprintCtx = {
   logUnit: (u: { key: string; slug: string; status: string; dollars: number }) => Promise<string | null>;
   timeUp: () => boolean;
 };
+
+/**
+ * How many names a section may build: its cap (the owner's limit) when it has one, else its estimated units. The
+ * estimate isn't a limit on a plan with a cap: RDR2's story missions were estimated at 108 units, capped at 120 and
+ * planned with 122 names, and building only the first 108 cut off all of Epilogue Part 2.
+ */
+export const sectionLimit = (s: { units: number; cap?: number }) => Math.max(0, s.cap != null ? Number(s.cap) || 0 : Number(s.units) || 0);
+
+/**
+ * A section's plan against what's built: the names to build next (in plan order, up to the limit), the names beyond
+ * the limit (waiting for the owner to raise the cap), whether the plan names more than the estimate, and whether
+ * every planned name is built (only then is the section done).
+ */
+/**
+ * A section's whole plan: its names, then any the plan's chapter list has that the names lost (plans saved before the
+ * names stopped being cut to the estimate), in the order they were researched.
+ */
+export function fullPlan(p: { plan?: string[]; planChapters?: Record<string, string> }): string[] {
+  const plan = Array.isArray(p.plan) ? p.plan : [];
+  const has = new Set(plan);
+  return [...plan, ...Object.keys(p.planChapters || {}).filter((n) => !has.has(n))];
+}
+
+export function unitsToBuild(s: { units: number; cap?: number }, plan: string[], built: { name: string }[]) {
+  const want = Math.min(sectionLimit(s), plan.length);
+  const has = new Set(built.map((b) => b.name));
+  return {
+    want,
+    next: plan.slice(0, want).filter((n) => !has.has(n)),
+    beyondCap: plan.slice(want).filter((n) => !has.has(n)),
+    overUnits: plan.length > (Number(s.units) || 0),
+    complete: plan.length > 0 && plan.every((n) => has.has(n)),
+  };
+}
 
 const isDeepen = (s: Section) => /deepen|expan|flesh|thin|enhance/i.test(`${s.id} ${s.title}`);
 const isRebuildExisting = (s: Section) => s.unit === 'entity' && /rebuild/i.test(`${s.id} ${s.title}`);
@@ -71,7 +106,9 @@ async function planSection(game: string, s: Section, n: number): Promise<{ names
     names.push(name);
     if (bar >= 0) chapters[name] = l.slice(0, bar).trim().slice(0, 60);
   }
-  return { names: names.slice(0, n), chapters };
+  // Every name the reply gives is kept: the plan is what the section covers, and the cap limits what gets built. (Cutting
+  // the list to the estimate here is how Epilogue Part 2 fell off RDR2's plan while its chapters were still recorded.)
+  return { names: names.slice(0, 400), chapters };
 }
 
 /** A new walkthrough page (Epilogue Part 1): its name and where it goes in the guide's order. */
@@ -112,11 +149,10 @@ export async function planEntitySection(key: string, sectionId: string): Promise
   const b: any = (await ref.get()).data();
   const s: Section | undefined = (b?.sections || []).find((x: Section) => x.id === sectionId);
   if (!s || s.unit !== 'entity') return null;
-  const want = Math.max(0, Math.min(Number(s.units) || 0, s.cap != null ? Number(s.cap) : Infinity));
   const p: Progress = b.progress?.[s.id] || { built: [] };
   if (!p.plan) {
     const game = String((await db().collection('guides').doc(key).get()).data()?.game || key);
-    p.plan = (await planSection(game, s, want)).names;
+    p.plan = (await planSection(game, s, sectionLimit(s))).names;
     await ref.set({ progress: { [s.id]: p }, updatedAt: Date.now() }, { merge: true });
   }
   const { coreTaxonomy } = await import('./compendium');
@@ -124,7 +160,29 @@ export async function planEntitySection(key: string, sectionId: string): Promise
   if (!((await cref.get()).data() || {}).taxonomy) await coreTaxonomy(key).catch(() => null);
   const tax = ((await cref.get()).data()?.taxonomy || []) as any[];
   if (!tax.some((t) => t.id === s.id)) await cref.set({ taxonomy: FieldValue.arrayUnion({ id: s.id, label: s.title, description: cut(s.what, 200), tier: 'other', examples: p.plan.slice(0, 12) }) }, { merge: true });
-  return { names: p.plan.slice(0, want), section: s };
+  await warnPlanLength(key, s, p);
+  return { names: p.plan.slice(0, unitsToBuild(s, p.plan, []).want), section: s };
+}
+
+/**
+ * A plan that names more than the section's estimate, or more than its cap, or a section marked done with names left:
+ * the owner hears once (the job log every run, Discord when it changes), since unbuilt names are missing pages.
+ */
+async function warnPlanLength(key: string, s: Section, p: Progress & { warned?: string }) {
+  const plan = fullPlan(p);
+  const u = unitsToBuild(s, plan, p.built || []);
+  const left = plan.filter((n) => !(p.built || []).some((b) => b.name === n));
+  if (!u.overUnits && !u.beyondCap.length && !(p.done && left.length)) return;
+  const text = [
+    `Blueprint ${key} / ${s.title}: the plan names ${plan.length}, the estimate was ${Number(s.units) || 0} units${s.cap != null ? `, the cap is ${s.cap}` : ''}.`,
+    u.beyondCap.length ? `${u.beyondCap.length} name(s) beyond the cap wait for it to be raised: ${u.beyondCap.slice(0, 12).join(', ')}${u.beyondCap.length > 12 ? ', …' : ''}.` : '',
+    p.done && left.length ? `The section was marked done with ${left.length} name(s) unbuilt: ${left.slice(0, 12).join(', ')}${left.length > 12 ? ', …' : ''}.` : '',
+  ].filter(Boolean).join(' ');
+  const sig = `${plan.length}/${left.length}/${sectionLimit(s)}/${p.done ? 1 : 0}`;
+  if (p.warned === sig) { console.log(`  ${text}`); return; }
+  await notifyOwner(text);
+  p.warned = sig;
+  await db().collection('guideBlueprints').doc(key).set({ progress: { [s.id]: { warned: sig } } }, { merge: true });
 }
 
 /** Record a unit built outside the runner (the new-pages phase) in the blueprint's progress; the section is done when all its names are. */
@@ -134,8 +192,8 @@ export async function recordEntityUnit(key: string, sectionId: string, u: { name
   const s: Section | undefined = (b.sections || []).find((x: Section) => x.id === sectionId);
   const p: Progress = b.progress?.[sectionId] || { built: [] };
   p.built = [...(p.built || []).filter((x) => x.name !== u.name), { ...u, dollars: Math.round(u.dollars * 1000) / 1000 }];
-  const want = s ? Math.max(0, Math.min(Number(s.units) || 0, s.cap != null ? Number(s.cap) : Infinity)) : 0;
-  if (p.plan && p.plan.slice(0, want).every((n) => p.built.some((x) => x.name === n))) p.done = Date.now();
+  // Done only when every planned name is built, not just the ones within the cap.
+  if (s && p.plan && unitsToBuild(s, fullPlan(p), p.built).complete) p.done = Date.now();
   await ref.set({ progress: { [sectionId]: p }, updatedAt: Date.now() }, { merge: true });
 }
 
@@ -156,6 +214,7 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx, opts: { only?
   const elsewhere = !!coreDoc.newPages;
   const save = (id: string) => ref.set({ progress: { [id]: progress[id] }, updatedAt: Date.now() }, { merge: true });
   let wentLive = false;
+  let incomplete = false;
   const { buildPageEvidenceForCore, writePageForCore } = await import('./flagship');
   const { buildQuest } = await import('./quests');
   const { buildEntity, coreTaxonomy } = await import('./compendium');
@@ -164,9 +223,11 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx, opts: { only?
   for (const s of (b.sections || []).slice().sort((x: Section, y: Section) => (x.priority || 99) - (y.priority || 99)) as Section[]) {
     if (opts.only && !opts.only.includes(s.id)) continue;
     const p: Progress = (progress[s.id] ||= { built: [] });
-    if (p.done) continue;
+    // A section marked done before this check could leave planned names unbuilt: said, not built here (that's the
+    // owner's call: it's new spend).
+    if (p.done) { if (p.plan && !unitsToBuild(s, fullPlan(p), p.built || []).complete) await warnPlanLength(key, s, p); continue; }
     if (s.unit === 'entity' && !isRebuildExisting(s) && (hold || elsewhere)) { if (hold) console.log(`  ${s.title}: held (${hold}).`); continue; }
-    const want = Math.max(0, Math.min(Number(s.units) || 0, s.cap != null ? Number(s.cap) : Infinity));
+    const want = sectionLimit(s);
     // Entity pages that only needed a rebuild (done by the re-research of existing pages): nothing new to build.
     if (isRebuildExisting(s) || want === 0) { p.done = Date.now(); await save(s.id); continue; }
     const est = UNIT_COST[s.unit] ?? 0.3;
@@ -231,7 +292,8 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx, opts: { only?
         if (!tax.some((t) => t.id === s.id)) await cref.set({ taxonomy: FieldValue.arrayUnion({ id: s.id, label: s.title, description: cut(s.what, 200), tier: 'other', examples: p.plan.slice(0, 12) }) }, { merge: true });
       }
     }
-    for (const name of (p.plan || []).slice(0, want)) {
+    await warnPlanLength(key, s, p);
+    for (const name of unitsToBuild(s, fullPlan(p), p.built).next) {
       if (p.built.some((x) => x.name === name)) continue;
       const why = await before();
       if (why) return { wentLive, stopped: why, done: false };
@@ -248,8 +310,11 @@ export async function runBlueprint(key: string, ctx: BlueprintCtx, opts: { only?
       const paused = await record(name, res.slug || entitySlug(name), res.status, res.dollars);
       if (paused) return { wentLive, stopped: paused, done: false };
     }
+    // Done only when every planned name is built: names beyond the cap keep the section open (and warned about) until
+    // the owner raises the cap.
+    if (!unitsToBuild(s, fullPlan(p), p.built).complete) { incomplete = true; continue; }
     p.done = Date.now();
     await save(s.id);
   }
-  return { wentLive, stopped: null, done: true };
+  return { wentLive, stopped: null, done: !incomplete };
 }
