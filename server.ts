@@ -724,8 +724,13 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       const done = inBrowserOnly ? `${baseUrl}/premium/thanks` : `${baseUrl}/?upgrade=success`;
       const back = inBrowserOnly ? `${baseUrl}/premium/thanks?canceled=1` : `${baseUrl}/?upgrade=canceled`;
 
+      // Managed Payments (Stripe is the merchant of record: sales tax, VAT and GST worked out, collected and filed by
+      // Stripe). Needs Managed Payments activated in the Stripe dashboard and an eligible tax code on the product, so
+      // it's on only with STRIPE_MANAGED_PAYMENTS=true on the server; checkout works as before without it.
+      const managed = process.env.STRIPE_MANAGED_PAYMENTS === 'true';
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
+        ...(managed ? { managed_payments: { enabled: true } } : {}),
         client_reference_id: userId,
         ...(saved?.stripeCustomerId ? { customer: saved.stripeCustomerId } : userEmail ? { customer_email: userEmail } : {}),
         subscription_data: { metadata: { uid: userId } },
