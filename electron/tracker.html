@@ -88,15 +88,16 @@
   .count { font-weight: 700; color: var(--dim); font-size: .9em; }
   .chev { color: var(--dim); font-size: .8em; display: inline-block; width: .8em; text-align: center; }
   .head .tg:hover .chev { color: var(--ink); }
-  .head .book { margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 1.7em; height: 1.35em;
+  .head .book { display: inline-flex; align-items: center; justify-content: center; width: 1.7em; height: 1.35em;
     border-radius: 3px; border: 1px solid rgba(255,255,255,.14); background: rgba(16,12,28,.7); color: var(--accent);
     text-shadow: none; opacity: .7; transition: opacity .12s steps(2); }
   #tracker:hover .head .book { opacity: 1; }
   .head .book:hover { border-color: var(--accent); background: rgba(168,127,251,.2); color: #fff; }
   .head .book svg { width: 1.15em; height: .9em; image-rendering: pixelated; }
-  /* Send to the edge: always visible next to the book, the arrow pointing at the edge the log goes to. */
-  .head .hb { margin-left: auto; opacity: .85; }
-  .head .hb + .book { margin-left: 0; }
+  /* The header's buttons at its right end: Aa (the look), then send to the edge (its arrow points at the edge). */
+  .head .hbs { margin-left: auto; display: inline-flex; gap: .3em; }
+  .head .book.aa { width: auto; padding: 0 .35em; font-weight: 800; font-size: .8em; height: 1.7em; letter-spacing: -.02em; }
+  .head .book.aa.on { border-color: var(--accent); color: #fff; opacity: 1; }
   body.edge-left .head .hb svg { transform: scaleX(-1); }
 
   .place { display: flex; align-items: center; gap: .3em; margin: .1em 0 .3em 0; font-size: .84em; color: var(--dim); line-height: 1.3; }
@@ -105,8 +106,9 @@
   .place .name { color: rgba(243,238,252,.82); font-weight: 600; }
   .place .story { color: var(--dim); }
 
-  .source { font-size: .78em; color: var(--dim); font-style: italic; margin: -.15em 0 .25em 0; }
-  .source:empty { display: none; }
+  .source { display: none; }
+  .place .approx { color: var(--dim); margin-left: .2em; cursor: help; }
+  .place .approx:empty { display: none; }
   #tracker.collapsed .source { display: none; }
   .quest { font-weight: 700; font-size: 1.02em; line-height: 1.3; margin: .1em 0 .2em 0; color: #fff; }
   /* The guide covers this quest: one quiet line offering its steps (no AI question), with a × for "not now". */
@@ -144,6 +146,10 @@
   .nturn:hover { background: var(--accent); color: #16101f; }
   .nturn.busy { opacity: .55; pointer-events: none; }
   .more { font-size: .78em; font-weight: 700; color: var(--accent); cursor: pointer; margin: .1em 0 0 2.3em; }
+  /* "+N more" and "Show N hidden" show while the section is hovered; its header says "3 of 9" meanwhile. */
+  .sec .more, .sec .unhide { visibility: hidden; }
+  .sec:hover .more, .sec:hover .unhide { visibility: visible; }
+  .sechead .of { letter-spacing: .04em; opacity: .8; font-weight: 700; }
   .more:hover { filter: brightness(1.25); }
   /* A guide entry: an empty square that fills in when collected. An info line (a point of no return): no box. */
   .box { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 1.05em; height: 1.05em;
@@ -158,6 +164,8 @@
   li.miss:not(.done) .lb { color: #ffe1a6; }
   .next { display: flex; align-items: center; gap: .5em; margin-top: .45em; font-size: .88em; color: var(--dim); }
   .next .nm { color: var(--ink); font-weight: 600; }
+  .next { cursor: pointer; }
+  .next:hover, .next:hover .nm { color: #fff; }
   .next .go { margin-left: auto; font-size: .85em; font-weight: 700; color: var(--accent); border: 1px solid var(--accent);
     border-radius: 999px; padding: 0 .6em; line-height: 1.55; cursor: pointer; white-space: nowrap; text-shadow: none;
     background: rgba(16,12,28,.55); }
@@ -227,11 +235,13 @@
   .hint.tip .tx { cursor: pointer; color: var(--dim); font-weight: 800; padding: 0 .25em; line-height: 1; }
   .hint.tip .tx:hover { color: var(--ink); }
 
-  /* Controls: hidden until the mouse is over the tracker. */
-  .ctl { display: flex; align-items: center; gap: .3em; margin-top: .45em; opacity: 0; pointer-events: none;
-    transition: opacity .15s steps(3); font-size: .8em; }
-  #tracker:hover .ctl, #tracker.pin .ctl { opacity: 1; pointer-events: auto; }
-  #tracker.collapsed .ctl { margin-top: .25em; }
+  /* The look (Aa in the header): text size, transparency and backdrop, in a small panel under the header. */
+  .look { display: flex; flex-direction: column; gap: .35em; margin: .25em 0 .35em 0; padding: .45em .55em; font-size: .8em;
+    border-radius: .35em; background: rgba(16,12,28,.88); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); text-shadow: none; }
+  .look.off, #tracker.collapsed .look { display: none; }
+  .look .lr { display: flex; align-items: center; gap: .5em; }
+  .look .lk { flex: 1; color: var(--dim); }
+  .look .sl { background: none; border: 0; padding: 0; height: auto; }
   .btn { display: inline-flex; align-items: center; justify-content: center; width: 1.9em; height: 1.9em; border-radius: .3em;
     background: rgba(16,12,28,.85); border: 1px solid rgba(255,255,255,.14); color: var(--ink); cursor: pointer; text-shadow: none; }
   .btn:hover { border-color: var(--accent); color: #fff; }
@@ -277,13 +287,20 @@
 <div id="tracker" class="in">
   <div class="head" id="head">
     <span class="tg" id="fold" title="Click: fold or open. Drag: move."><span class="title" id="title">Objectives</span><span class="count" id="count"></span><span class="chev" id="headChev">▾</span></span>
-    <span class="book hb" id="bAway" title="Send to the edge"><svg viewBox="0 0 16 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 5h8V3h1v1h1v1h1v1h1v1h-1v1h-1v1h-1v1H9V7H1zM14 0h2v12h-2z"/></svg></span>
-    <span class="book" id="bBook" title="Open the Compendium"><svg viewBox="0 0 16 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 1h5v1h1v9H6v-1H1zM15 1h-5v1H9v9h1v-1h5z"/><path fill="#16101f" d="M2 3h3v1H2zM2 5h3v1H2zM2 7h3v1H2zM11 3h3v1h-3zM11 5h3v1h-3zM11 7h3v1h-3z"/></svg></span>
+    <span class="hbs">
+      <span class="book aa" id="bLook" title="Text size and look">Aa</span>
+      <span class="book hb" id="bAway" title="Send to the edge"><svg viewBox="0 0 16 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 5h8V3h1v1h1v1h1v1h1v1h-1v1h-1v1h-1v1H9V7H1zM14 0h2v12h-2z"/></svg></span>
+    </span>
+  </div>
+  <div class="look off" id="look">
+    <div class="lr"><span class="lk" id="lkSize">Text size</span><span class="btn aa" id="bSize">Aa</span></div>
+    <div class="lr"><span class="lk" id="lkAlpha">Transparency</span><span class="sl" id="alphaWrap"><input type="range" id="alpha" min="30" max="100" value="100"></span></div>
+    <div class="lr"><span class="lk" id="lkBd">Backdrop</span><span class="sl" id="bdWrap"><input type="range" id="bd" min="0" max="95" value="45"></span></div>
   </div>
   <div class="place" id="place">
     <svg class="pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
     <span class="arr off" id="prevArea">‹</span>
-    <span class="ptxt"><span class="name" id="placeName"></span><span class="story" id="placeStory"></span></span>
+    <span class="ptxt"><span class="name" id="placeName"></span><span class="approx" id="approx"></span><span class="story" id="placeStory"></span></span>
     <span class="arr off" id="nextArea">›</span>
     <span class="pctl">
       <span class="ic" id="bLocate" title="Locate me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.5"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></span>
@@ -302,11 +319,7 @@
   <div class="notice" id="notice"></div>
   <div class="warn off" id="warn"></div>
   <div class="hint" id="hint"><kbd>Ctrl+G</kbd> or click the title: open the Compendium</div>
-  <div class="ctl" id="ctl">
-    <span class="btn aa" id="bSize" title="Text size">Aa</span>
-    <span class="sl" id="alphaWrap" title="Transparency"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg><input type="range" id="alpha" min="30" max="100" value="100"></span>
-    <span class="sl" id="bdWrap" title="Backdrop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18" opacity=".5"/></svg><input type="range" id="bd" min="0" max="95" value="45"></span>
-  </div>
+
 </div>
 
 <div id="tab" class="right" title="Bring the objectives back">
@@ -361,7 +374,9 @@
     limitHint: 'Click: show 3, 6 or all', prevArea: 'Previous area', nextArea: 'Next area', areaList: 'All areas in the guide',
     locate: 'Locate me', locating: 'Locating…',
     nextTurn: 'Next turn (asks a question)', nextTurnHint: 'Takes a new screenshot and asks what to do this turn',
-    hintPanel: '{keys} or the book icon: open the Compendium. This log stays where you put it.', hintPanelNoKeys: 'The book icon opens the Compendium. This log stays where you put it.',
+    hintPanel: '{keys}: open the Compendium. This log stays where you put it.', hintPanelNoKeys: 'Click Next or the place to open the Compendium. This log stays where you put it.',
+    hintOpen: '{keys}: open the Compendium. This log stays where you put it.', hintOpenNoKeys: 'Click Next or the place to open the Compendium. This log stays where you put it.',
+    look: 'Text size and look', shownOf: '{n} of {total}',
     mouseHint: '{keys} to use your mouse here', mouseHintClose: 'Hide this tip',
     headFold: 'Click: fold the log to this line or open it. Drag: move.', openBook: 'Open the Compendium',
     foldHint: 'Click to fold or open', detWhere: 'Where', detHow: 'How', detMissable: 'Missable', detNotes: 'Notes',
@@ -378,7 +393,11 @@
   function applyLabels() {
     $('title').textContent = L('title');
     $('fold').title = L('headFold');
-    $('bBook').title = L('openBook');
+    $('bLook').title = L('look');
+    $('lkSize').textContent = L('size');
+    $('lkAlpha').textContent = L('alpha');
+    $('lkBd').textContent = L('backdrop');
+    $('next').title = L('openBook');
     $('placeConfirm').title = L('confirmHint');
     $('prevArea').title = L('prevArea');
     $('nextArea').title = L('nextArea');
@@ -399,8 +418,8 @@
       return;
     }
     // The show/hide shortcut (state.keys), or a hint without one when none is registered.
-    if (!state.keys) { $('hint').textContent = L('hintPanelNoKeys'); return; }
-    const [before, after] = L('hintPanel').split('{keys}');
+    if (!state.keys) { $('hint').textContent = L('hintOpenNoKeys'); return; }
+    const [before, after] = L('hintOpen').split('{keys}');
     $('hint').innerHTML = after === undefined ? esc(before) : `${esc(before)}<kbd>${esc(state.keys)}</kbd>${esc(after)}`;
   }
 
@@ -473,6 +492,8 @@
     $('tabN').style.display = ticks.length - done > 0 ? '' : 'none';
     // The guide area is the closest match for the place (not one of its areas by name): say so under the place.
     $('source').textContent = d.source || '';
+    $('approx').textContent = d.source ? '≈' : '';
+    $('approx').title = d.source || '';
     $('quest').textContent = d.quest || '';
     $('quest').style.display = d.quest ? '' : 'none';
     // "Load the guide's steps: <name> (12)", while the guide covers the current quest and nothing is loaded.
@@ -516,7 +537,8 @@
       // The answer's objectives are the log itself: no heading (a fight keeps "Battle plan" and its Next turn).
       // Loaded guide steps: the quest's name, and a small × back to the answer's objectives.
       const unl = x.id === 'guide' ? `<span class="unl" title="${esc(L('unloadSteps'))}">×</span>` : '';
-      const head = x.id === 'answer' && !x.nextTurn ? '' : `<div class="sechead" title="${esc(L('foldHint'))}">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${lim}${unl}<span class="chev">${folded ? '▸' : '▾'}</span></div>`;
+      const of = left > 0 ? `<span class="of">· ${esc(L('shownOf', { n: shown.length, total: x.items.length }))}</span>` : '';
+      const head = x.id === 'answer' && !x.nextTurn ? '' : `<div class="sechead" title="${esc(L('foldHint'))}">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${of}${lim}${unl}<span class="chev">${folded ? '▸' : '▾'}</span></div>`;
       return `<div class="sec${x.tone === 'amber' ? ' amber' : ''}${x.id === 'guide' ? ' guide' : ''}${folded && head ? ' folded' : ''}" data-sec="${esc(x.id)}">
         ${head}
         <ol>${shown.map((o) => itemHtml(o, x.id, o.id === curId)).join('')}</ol>
@@ -555,6 +577,8 @@
     document.documentElement.style.setProperty('--bd', String(bd / 100));
     $('bd').value = bd;
     $('bSize').textContent = state.size === 'small' ? 'aa' : state.size === 'large' ? 'AA' : 'Aa';
+    $('look').classList.toggle('off', !state.lookOpen);
+    $('bLook').classList.toggle('on', !!state.lookOpen);
     tracker.classList.toggle('collapsed', state.view === 'collapsed');
     tracker.classList.toggle('away', state.view === 'away');
     document.body.classList.toggle('away', state.view === 'away');
@@ -629,12 +653,12 @@
     hintTimer = setTimeout(() => hint.classList.add('fade'), 4000);
   }
 
-  // Header: the book opens the panel here, the arrow sends the log to the edge, a click anywhere else folds the whole log to the header line (and back), and
+  // Header: Aa opens the look (text size, transparency, backdrop), the arrow sends the log to the edge, a click anywhere else folds the whole log to the header line (and back), and
   // a drag moves the whole tracker. (The press target is kept: under pointer capture the release reports the header.)
   let drag = null;
   $('head').addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    drag = { x: e.screenX, y: e.screenY, moved: false, book: !!e.target.closest('#bBook'), away: !!e.target.closest('#bAway') };
+    drag = { x: e.screenX, y: e.screenY, moved: false, look: !!e.target.closest('#bLook'), away: !!e.target.closest('#bAway') };
     $('head').setPointerCapture(e.pointerId);
   });
   $('head').addEventListener('pointermove', (e) => {
@@ -652,7 +676,7 @@
     const was = drag; drag = null;
     if (!was) return;
     if (was.moved) send('drag-end', {});
-    else if (was.book) send('open-panel', {});
+    else if (was.look) { state.lookOpen = !state.lookOpen; applyView(); }
     else if (was.away) setView('away');
     else setView(state.view === 'collapsed' ? 'full' : 'collapsed');
   });
@@ -746,8 +770,12 @@
   };
   $('prevArea').addEventListener('click', () => { const ar = state.data && state.data.areas; if (ar) gotoArea(ar.index - 1); });
   $('nextArea').addEventListener('click', () => { const ar = state.data && state.data.areas; if (ar) gotoArea(ar.index + 1); });
+  // The Next line and the place open the Compendium (the place name opens the guide's area list when there is one).
+  $('next').addEventListener('click', () => send('open-panel', {}));
+  $('placeStory').addEventListener('click', () => send('open-panel', {}));
   $('placeName').addEventListener('click', () => {
-    if (!state.data || !state.data.areas) return;
+    if (!state.data) return;
+    if (!state.data.areas) { send('open-panel', {}); return; }
     state.areaOpen = !state.areaOpen;
     render();
   });
