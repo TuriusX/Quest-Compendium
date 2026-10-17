@@ -785,8 +785,12 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const miss = items.filter((e) => e.missable && !mergedIds.has(e.id));
   const rest = items.filter((e) => !e.missable && !mergedIds.has(e.id));
   const secretsLeft = a.secrets.filter((e) => !mergedIds.has(e.id));
-  const missSec = (a.sections || []).filter((x: any) => x.check && /miss/i.test(x.orig || x.title));
-  const otherSec = (a.sections || []).filter((x) => !missSec.includes(x));
+  const missSecAll = (a.sections || []).filter((x: any) => x.check && /miss/i.test(x.orig || x.title));
+  const otherSec = (a.sections || []).filter((x) => !missSecAll.includes(x));
+  // A missable written twice (as a missable item and again as a "missable" line) shows once, as the item.
+  const nk = (x: unknown) => String(x || '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const missNames = items.filter((e) => e.missable).map((e) => nk(e.name)).filter((n) => n.length >= 4);
+  const missSec = missSecAll.map((x) => ({ ...x, entries: x.entries.filter((e) => !missNames.some((n) => nk(e.text).includes(n))) }));
   // The exact final step and what locks a missable out, under the item.
   const extra = (how?: string, lockout?: string) =>
     `${how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(how)}</span>` : ''}` +
@@ -1179,6 +1183,49 @@ function inlineHomeIcons() {
   }
 }
 
+/**
+ * A page never checked against sources (verified: false, written from the model's memory) shows no Secrets and no enemy
+ * weaknesses: the site audit found those slots were the most often invented (about 1 in 4 claims wrong in a sample).
+ * Items, missables, enemies and tips stay. The page shows them again once a sourced rebuild has verified it.
+ */
+function sourcedOnly(a: GuideArea): GuideArea {
+  if ((a as any).verified !== false) return a;
+  return {
+    ...a,
+    secrets: [],
+    enemies: (a.enemies || []).map(({ weakness, ...e }) => e),
+    fights: (a.fights || []).map((f: any) => { const { weaknesses, ...rest } = f; return rest; }),
+  };
+}
+
+/**
+ * A check of the built pages before they're deployed: text the assembly should never produce ("::", empty headings,
+ * ": .", "(s)", a title with a doubled separator). Reported with examples, so a template slip is seen the same night.
+ */
+function lintBuild() {
+  const checks: [string, RegExp][] = [
+    ['double colon', /<(?:title|h1|h2|h3)[^>]*>[^<]*::/],
+    ['empty heading', /<h[1-3][^>]*>\s*<\/h[1-3]>/],
+    ['empty field ": ."', /<(?:title|p|li|dd|span)[^>]*>[^<]*:\s\.(?:\s|<)/],
+    ['"(s)" plural', /<(?:title|p|li|dd|span|h[1-3])[^>]*>[^<]*\w\(s\)/],
+    ['description "(s)" or ": ."', /<meta name="description" content="[^"]*(?:\w\(s\)|:\s\.)/],
+  ];
+  const found = new Map<string, string[]>();
+  const walk = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name === 'index.html') {
+        const h = fs.readFileSync(p, 'utf8');
+        for (const [name, re] of checks) if (re.test(h)) found.set(name, [...(found.get(name) || []), path.relative(OUT, path.dirname(p)).split(path.sep).join('/')]);
+      }
+    }
+  };
+  walk(path.join(OUT, 'guides'));
+  if (!found.size) { console.log('Page check: no template problems found.'); return; }
+  for (const [name, pages] of found) console.warn(`Page check: ${pages.length} page(s) with ${name}, e.g. ${pages.slice(0, 5).join(', ')}`);
+}
+
 /** One game's pages (area pages and the game page) in the current language (setLang). */
 function renderGame(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, t: any, langs: string[], sitemap: string[], allTr: Record<string, any> = {}, ach: any = null, appId?: number) {
   const dir = path.join(OUT, LP, 'guides', key);
@@ -1547,6 +1594,22 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
         ${row('Missions', list((sm.quests || []).map((x: any) => { const st = missionLink(x.name); return `${st ? `<a class="font-semibold text-[#a87ffb] hover:text-white" href="../${esc(st.slug)}/#${esc(st.id)}">${esc(x.name)}</a>` : `<strong class="text-white">${esc(x.name)}</strong>`}<span class="text-zinc-400">${x.kind ? ` · ${esc(x.kind)}` : ''}${x.chapter ? ` · ${esc(x.chapter)}` : ''}</span>`; })))}
         ${row('In the guide', list(mentions.map((o) => `<a class="text-[#a87ffb] hover:text-white" href="../${esc(o.slug)}/index.html">${esc(o.name)}</a>`)))}
       </dl>
+      ${(() => {
+        // A mission's own part of the chapter walkthrough (the step its page links to), shown here so the page answers
+        // "how does this mission go" without new text: the same verified step, credited to its chapter page.
+        const w = e.quest?.walkthrough;
+        const ch = w?.slug ? byslug.get(w.slug) : undefined;
+        const steps = (ch?.walkthrough || []) as any[];
+        const at = w?.anchor ? steps.findIndex((st) => st.id === w.anchor) : -1;
+        if (!ch || at < 0) return '';
+        const st = steps[at];
+        return `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">Walkthrough</h2>
+          <h3 class="mt-3 text-base font-semibold text-white">${esc(st.title || e.name)}</h3>
+          ${st.text ? `<p class="mt-1 text-zinc-300 leading-relaxed">${rich(st.text, '../', e.slug)}</p>` : ''}
+          ${st.tip ? `<p class="mt-2 text-sm text-zinc-300"><span class="font-semibold text-[#c4b0ff]">Tip:</span> ${rich(st.tip, '../', e.slug)}</p>` : ''}
+          ${st.warn ? `<p class="mt-2 text-sm text-amber-200"><span class="font-semibold">Watch out:</span> ${rich(st.warn, '../', e.slug)}</p>` : ''}
+          <p class="mt-3 text-sm"><a class="text-[#a87ffb] hover:text-white" href="../${esc(w.slug)}/#${esc(w.anchor)}">From the ${esc(ch.name)} walkthrough &rarr;</a></p></section>`;
+      })()}
       ${e.ref ? refBlocks(e.ref, e.slug) : ''}
       ${(sm.notes || []).length ? `<ul class="mt-4 space-y-1.5 text-sm text-zinc-300">${sm.notes.map((x: string) => `<li class="flex gap-2"><span class="text-[#c4b0ff]">&bull;</span><span>${rich(x, '../', e.slug)}</span></li>`).join('')}</ul>` : ''}
       ${publicSources(e.sources || []).length ? `<p class="mt-6 text-xs text-zinc-500">Sources: ${publicSources(e.sources).map(esc).join(', ')}</p>` : ''}
@@ -1809,7 +1872,7 @@ async function main() {
     const byslug = new Map(snap.docs.map((d) => {
       const pr = protos.get(`${g.id}__${d.id}`);
       const a = d.data() as GuideArea;
-      return [d.id, pr ? { ...a, walkthrough: pr.walkthrough, choices: pr.choices, advice: pr.advice, items: pr.items, secrets: pr.secrets, fights: pr.fights, ...(pr.info ? { info: pr.info } : {}), sources: pr.sources || a.sources } : a];
+      return [d.id, sourcedOnly(pr ? { ...a, walkthrough: pr.walkthrough, choices: pr.choices, advice: pr.advice, items: pr.items, secrets: pr.secrets, fights: pr.fights, ...(pr.info ? { info: pr.info } : {}), sources: pr.sources || a.sources } : a)];
     }));
     // An unpublished guide (taken down after a failing review: info.unpublished) keeps its addresses: its held pages are
     // published as noindex, follow pages (drafts), out of the sitemap, the guide list, the homepage and the apps' index,
@@ -1907,6 +1970,7 @@ async function main() {
   updateHomepageUpdates();
   updateVersion();
   inlineHomeIcons();
+  lintBuild();
   writeRedirects(moved, new Set(sitemap));
   writeGuideIndex(guideIndex);
   write404();

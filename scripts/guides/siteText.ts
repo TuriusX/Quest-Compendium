@@ -395,7 +395,7 @@ export function entitySeo(e: any, game: string, person: boolean): { title: strin
   let tail: string[];
   let covers: string[];
   if (q) {
-    tail = [(q.parts || []).some((p: any) => (p.steps || []).length) ? 'Walkthrough' : '', (q.goldMedal || []).length ? 'Gold Medal' : '', (q.rewards || []).length ? 'Rewards' : '', (q.choices || []).length ? 'Choices' : ''].filter(Boolean);
+    tail = [(q.parts || []).some((p: any) => (p.steps || []).length) || q.walkthrough?.anchor ? 'Walkthrough' : '', (q.goldMedal || []).length ? 'Gold Medal' : '', (q.rewards || []).length ? 'Rewards' : '', (q.choices || []).length ? 'Choices' : ''].filter(Boolean);
     covers = [q.giver ? `given by ${q.giver}` : '', q.chapter ? `available in ${q.chapter}` : '', (q.rewards || []).length ? 'rewards' : '', (q.choices || []).length ? 'choices and outcomes' : '', (q.goldMedal || []).length ? 'gold medal requirements' : '', (q.missables || []).length ? 'what you can miss' : ''].filter(Boolean);
   } else if (person) {
     tail = [(sm.whereToFind || []).length ? 'Where to Find' : '', story.length ? 'Story' : '', fate ? 'Fate' : '', quests.length ? 'Missions' : ''].filter(Boolean);
