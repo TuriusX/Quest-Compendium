@@ -17,6 +17,7 @@ import { landscapeOf, wideSet, coverSet, ogImageOf, platformList, ttbShown, TTB_
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
+import { entryKind, entryIconSvg, type EntryKind } from '../../src/utils/entryKind';
 import { entityKind, shortGame, areaSeo, entitySeo, searchName, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterPage, coveringPage, singularLabel, type AchFlag } from './siteText';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
@@ -676,13 +677,18 @@ const ICON = {
 /**
  * A tickable row. anchor: the entry's canonical row (in its checklist) carries its stable id, "e-" + the entry id (rows
  * ticked together carry one id each), so links and text fragments can land on it; copies (a flagship walkthrough's)
- * don't, so ids stay unique.
+ * don't, so ids stay unique. icon: the entry's kind icon before the text (kindIcon); left out, the row has no slot.
  */
-const checkRow = (id: string, html: string, anchor = false) => {
+const checkRow = (id: string, html: string, anchor = false, icon = '') => {
   const ids = id.split('+');
   const extra = anchor ? ids.slice(1).map((x) => `<span id="e-${esc(x)}"></span>`).join('') : '';
-  return `<label${anchor ? ` id="e-${esc(ids[0])}"` : ''} class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer${anchor ? ' scroll-mt-20' : ''}" data-check="${esc(id)}"><input type="checkbox" aria-label="${esc(ui('gotIt'))}">${extra}<span class="text-sm leading-snug text-zinc-300">${html}</span></label>`;
+  return `<label${anchor ? ` id="e-${esc(ids[0])}"` : ''} class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer${anchor ? ' scroll-mt-20' : ''}" data-check="${esc(id)}"><input type="checkbox" aria-label="${esc(ui('gotIt'))}">${extra}${icon}<span class="text-sm leading-snug text-zinc-300">${html}</span></label>`;
 };
+/**
+ * A checklist row's kind icon (src/utils/entryKind.ts: chest, item, secret, signpost...), or an empty slot of the same
+ * width when the entry has no kind, so the labels in a list stay lined up.
+ */
+const kindIcon = (k: EntryKind | null) => (k ? entryIconSvg(k, 'mt-0.5 w-4 h-4 shrink-0') : '<span class="mt-0.5 w-4 h-4 shrink-0" aria-hidden="true"></span>');
 
 /** A folding section: the header shows its progress; content stays in the page for search engines. */
 /** "May be incomplete" next to a section the sources couldn't fully cover. */
@@ -831,6 +837,12 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     `${how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(how)}</span>` : ''}` +
     `${lockout ? `<span class="block text-xs text-amber-300/90 mt-0.5"><span class="text-amber-200/70">${esc(ui('itemLockout'))}:</span> ${esc(lockout)}</span>` : ''}`;
   const itemHtml = (e: GuideEntry) => `<strong class="text-white">${esc(e.name)}</strong>${e.where ? `<span class="text-zinc-400">: ${esc(e.where)}</span>` : ''}${extra(e.how, e.lockout)}`;
+  // Each row's kind icon. A same-spot line is named after its container ("Ornate Chest under the Scuffed Rock: ..."),
+  // so it's read as an item line by its label.
+  const itemIcon = (e: GuideEntry) => kindIcon(entryKind({ section: 'items', name: e.name, where: e.where }));
+  const groupIcon = (g: (typeof merged)[number]) => kindIcon(entryKind({ section: 'items', name: g.label, where: g.where }));
+  const secretIcon = (e: GuideEntry) => kindIcon(entryKind({ section: 'secrets', text: e.text }));
+  const sectionKind = (e: GuideEntry) => entryKind({ section: 'sections', text: e.text });
   const groupItems = (g: (typeof merged)[number]) => items.filter((e) => g.ids.includes(e.id));
   const groupHtml = (g: (typeof merged)[number]) => {
     const parts = groupItems(g);
@@ -889,21 +901,21 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     ? `<section id="dont-miss" class="mt-6 scroll-mt-20 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
         <h2 class="flex items-center gap-2 px-1 pb-1 text-base font-bold text-amber-200">${ICON.warn} ${esc(ui('dontMiss'))} <span class="text-xs font-normal text-amber-200/70" data-count="${esc(missIds.join(','))}">0/${missIds.length}</span></h2>
         <div class="px-1"><p class="mt-1.5 text-xs text-zinc-500">${esc(ui('appMissables'))} <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white">${esc(ui('appLink'))} &rarr;</a></p></div>
-        ${missGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g), true)).join('')}${miss.map((e) => checkRow(e.id, itemHtml(e), true)).join('')}${missSec.flatMap((x) => x.entries.map((e) => checkRow(e.id, esc(e.text), true))).join('')}
+        ${missGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g), true, groupIcon(g))).join('')}${miss.map((e) => checkRow(e.id, itemHtml(e), true, itemIcon(e))).join('')}${missSec.flatMap((x) => x.entries.map((e) => checkRow(e.id, esc(e.text), true, kindIcon(sectionKind(e))))).join('')}
       </section>`
     : '';
   const foes = a.enemies.map(cleanEntry);
   const chip = (label: string, v?: string) => (v ? `<span class="inline-flex items-center gap-1 rounded-md bg-white/[0.05] px-2 py-0.5 text-xs text-zinc-300"><span class="text-zinc-500">${label}</span> ${esc(v)}</span>` : '');
   const enemies = foes.length
     ? `<div class="grid sm:grid-cols-2 gap-2">${foes
-        .map((e) => `<div id="e-${esc(e.id)}" class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5 scroll-mt-20"><div class="font-semibold text-white text-sm">${esc(e.name)}</div><div class="mt-1.5 flex flex-wrap gap-1.5">${chip(ui('weakTo'), e.weakness)}${chip(ui('stealDrop'), e.steal)}</div>${e.notes ? `<p class="mt-1.5 text-xs text-zinc-400">${esc(e.notes)}</p>` : ''}</div>`)
+        .map((e) => `<div id="e-${esc(e.id)}" class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5 scroll-mt-20"><div class="flex items-center gap-2 font-semibold text-white text-sm">${entryIconSvg('enemy')}${esc(e.name)}</div><div class="mt-1.5 flex flex-wrap gap-1.5">${chip(ui('weakTo'), e.weakness)}${chip(ui('stealDrop'), e.steal)}</div>${e.notes ? `<p class="mt-1.5 text-xs text-zinc-400">${esc(e.notes)}</p>` : ''}</div>`)
         .join('')}</div>`
     : '';
   // Key fights: one card per boss or set-piece battle, its details as labelled lines.
   const fightRow = (label: string, v?: string) => (v ? `<p class="mt-1 text-sm text-zinc-300"><span class="text-zinc-500">${esc(label)}:</span> ${esc(v)}</p>` : '');
   const fights = (a.fights || []).length
     ? `<div class="space-y-2">${(a.fights || [])
-        .map((f) => `<div id="${esc(f.id)}" class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="font-semibold text-white">${esc(f.name)}</div>${fightRow(ui('fightEnemies'), f.enemies)}${fightRow(ui('fightThreats'), f.threats)}${fightRow(ui('fightWeak'), f.weaknesses)}${fightRow(ui('fightTactics'), f.tactics)}${fightRow(ui('fightRewards'), f.rewards)}</div>`)
+        .map((f) => `<div id="${esc(f.id)}" class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="flex items-center gap-2 font-semibold text-white">${entryIconSvg('boss')}${esc(f.name)}</div>${fightRow(ui('fightEnemies'), f.enemies)}${fightRow(ui('fightThreats'), f.threats)}${fightRow(ui('fightWeak'), f.weaknesses)}${fightRow(ui('fightTactics'), f.tactics)}${fightRow(ui('fightRewards'), f.rewards)}</div>`)
         .join('')}</div>`
     : '';
   const shops = a.shops.length ? `<ul class="space-y-1.5 px-3">${a.shops.map(cleanEntry).map((e) => `<li id="e-${esc(e.id)}" class="text-sm scroll-mt-20"><strong class="text-white">${esc(e.name)}</strong>${e.sells ? `<span class="text-zinc-400">: ${esc(e.sells)}</span>` : ''}</li>`).join('')}</ul>` : '';
@@ -918,17 +930,26 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     const it = items.find((e) => e.id === id);
     const isNew = /^fl\d+$/.test(id) ? ` <span class="ml-1 rounded bg-[#a87ffb]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#c4b0ff]">${esc(ui('newEntry'))}</span>` : '';
     const miss = (m?: boolean) => (m ? ` <span class="text-[10px] font-bold uppercase text-amber-300">${esc(ui('dontMiss'))}</span>` : '');
-    if (it) return checkRow(it.id, itemHtml(it) + miss(it.missable) + isNew);
+    if (it) return checkRow(it.id, itemHtml(it) + miss(it.missable) + isNew, false, itemIcon(it));
     const se = a.secrets.find((e) => e.id === id);
-    if (se) return checkRow(se.id, `<span class="text-zinc-300">${esc(se.text)}</span>${isNew}`);
+    if (se) return checkRow(se.id, `<span class="text-zinc-300">${esc(se.text)}</span>${isNew}`, false, secretIcon(se));
     const ce = (a.sections || []).flatMap((x) => x.entries).find((e) => e.id === id);
-    return ce ? checkRow(ce.id, esc(ce.text)) : '';
+    return ce ? checkRow(ce.id, esc(ce.text), false, kindIcon(sectionKind(ce))) : '';
   };
+  // The route: the steps' titles in a numbered line at the top (Signpost → Island approaches → ...), each a link to its
+  // step. Only worth it with 3 or more steps; long titles are cut by CSS, the full title is in the tooltip.
+  const steps = a.walkthrough || [];
+  const route = steps.length >= 3
+    ? `<nav aria-label="${esc(ui('route'))}" class="mt-3"><ol class="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">${steps
+        .map((st, i) => `<li class="flex min-w-0 items-center gap-2"><a href="#${esc(st.id)}" title="${esc(st.title)}" class="flex min-w-0 items-center gap-1.5 text-zinc-300 hover:text-white"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-xs font-bold text-[#c4b0ff]">${i + 1}</span><span class="max-w-[16rem] truncate">${esc(st.title)}</span></a>${i < steps.length - 1 ? '<span class="text-zinc-600" aria-hidden="true">&rarr;</span>' : ''}</li>`)
+        .join('')}</ol></nav>`
+    : '';
   const walk = (a.walkthrough || []).length
     ? `<section id="walkthrough" class="mt-8 scroll-mt-20">
         <h2 class="text-xl font-bold text-white">${esc(ui('walkthrough'))}${(a.incomplete || []).includes('walkthrough') ? incompleteTag() : ''}</h2>
         <p class="mt-1 text-sm text-zinc-500">${esc(ui('walkthroughIntro'))}</p>
         <p class="mt-1.5 text-xs text-zinc-500">${esc(ui('appSteps'))} <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white">${esc(ui('appLink'))} &rarr;</a></p>
+        ${route}
         <ol class="mt-4 space-y-5">${(a.walkthrough || [])
           .map((st, i) => `<li id="${esc(st.id)}" class="relative pl-10 scroll-mt-20">
             <span class="absolute left-0 top-0 flex h-7 w-7 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-sm font-bold text-[#c4b0ff]">${i + 1}</span>
@@ -992,7 +1013,8 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       ${dontMiss}
       ${otherSec
         .map((x) =>
-          fold(x.title, ICON.list, x.check ? x.entries.map((e) => checkRow(e.id, esc(e.text), true)).join('') : `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${x.entries.map((e) => `<li id="e-${esc(e.id)}" class="scroll-mt-20">${esc(e.text)}</li>`).join('')}</ul>`, {
+          // A custom list gets icon slots only when one of its lines has a kind (a signpost), so plain lists stay as they were.
+          fold(x.title, ICON.list, x.check ? x.entries.map((e, _i, all) => checkRow(e.id, esc(e.text), true, all.some((y) => sectionKind(y)) ? kindIcon(sectionKind(e)) : '')).join('') : `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${x.entries.map((e) => `<li id="e-${esc(e.id)}" class="scroll-mt-20">${esc(e.text)}</li>`).join('')}</ul>`, {
             ids: x.check ? x.entries.map((e) => e.id) : undefined,
             open: true,
             id: `sec-${otherSec.indexOf(x) + 1}`,
@@ -1000,8 +1022,8 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         )
         .join('')}
       ${achs.length ? fold(ui('achHere'), ICON.list, achs.slice().sort((x, y) => Number(!!y.missable) - Number(!!x.missable)).map((x) => `<div class="px-3 py-2 text-sm text-zinc-300"><strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${x.how ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.how)}</span>` : ''}</div>`).join('') + `<p class="px-3 pt-1 text-xs"><a class="text-[#a87ffb] hover:text-white" href="../achievements/index.html">${esc(ui('achLink'))} &rarr;</a></p>`, { open: achs.some((x) => x.missable), id: 'achievements' }) : ''}
-      ${fold(ui('items'), ICON.items, restGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g), true)).join('') + rest.map((e) => checkRow(e.id, itemHtml(e), true)).join(''), { ids: [...restGroups.flatMap((g) => g.ids), ...rest.map((e) => e.id)], open: true, id: 'items', incomplete: (a.incomplete || []).includes('items') })}
-      ${fold(ui('secrets'), ICON.secrets, secretsLeft.map((e) => checkRow(e.id, esc(e.text), true)).join(''), { ids: secretsLeft.map((e) => e.id), open: true, id: 'secrets', incomplete: (a.incomplete || []).includes('secrets') })}
+      ${fold(ui('items'), ICON.items, restGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g), true, groupIcon(g))).join('') + rest.map((e) => checkRow(e.id, itemHtml(e), true, itemIcon(e))).join(''), { ids: [...restGroups.flatMap((g) => g.ids), ...rest.map((e) => e.id)], open: true, id: 'items', incomplete: (a.incomplete || []).includes('items') })}
+      ${fold(ui('secrets'), ICON.secrets, secretsLeft.map((e) => checkRow(e.id, esc(e.text), true, secretIcon(e))).join(''), { ids: secretsLeft.map((e) => e.id), open: true, id: 'secrets', incomplete: (a.incomplete || []).includes('secrets') })}
       ${fold(ui('fights'), ICON.enemies, fights, { open: true, id: 'fights', incomplete: (a.incomplete || []).includes('fights') })}
       ${fold(ui('enemies'), ICON.enemies, enemies, { id: 'enemies' })}
       ${fold(ui('shops'), ICON.shops, shops, { id: 'shops' })}

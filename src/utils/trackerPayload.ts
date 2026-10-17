@@ -19,6 +19,7 @@ import type { AchievementGuide } from './achievementGuide';
 import { tipMatches } from './achievementGuide';
 import type { GuidePage } from './guideApi';
 import { nameKey, samePlace, storyPhrase } from './placeName';
+import { entryKind, type EntryKind } from './entryKind';
 
 export type TrackerItem = {
   /**
@@ -30,6 +31,8 @@ export type TrackerItem = {
   where?: string;
   done?: boolean;
   missable?: boolean;
+  /** What the guide entry is (a chest, a secret, a signpost...), for its small icon (src/utils/entryKind.ts). */
+  icon?: EntryKind;
   /** Can be ticked on the tracker. */
   tick?: boolean;
   /**
@@ -299,10 +302,14 @@ export function buildTrackerPayload(
   if (guideArea && page) {
     const done = guideArea.done;
     // A label is a few words: a long guide sentence is cut for the log (the whole of it is in the details).
-    const entry = (id: string, label: string, where?: string, missable?: boolean, more?: TrackerDetail): TrackerItem => ({
+    // icon: the entry's kind, as on the guide site's checklists (a missable keeps its ⚠ as well).
+    const entry = (id: string, label: string, where?: string, missable?: boolean, more?: TrackerDetail, icon?: EntryKind | null): TrackerItem => ({
       id: `g:${guideArea.slug}:${id}`, label: clipWords(label, 60), where, done: done.has(id), missable, tick: true,
+      ...(icon ? { icon } : {}),
       detail: detail({ full: label, where, ...more }),
     });
+    const itemKind = (e: { name?: string; text?: string; where?: string }) => entryKind({ section: 'items', name: e.name || e.text, where: e.where });
+    const lineKind = (text: string) => entryKind({ section: 'sections', text });
     // A guide entry's notes, for its details.
     // An item's details: the exact final step (how) and what locks a missable out.
     const itemMore = (e: { notes?: string; how?: string; lockout?: string }): TrackerDetail => ({ notes: e.notes, ...(e.how ? { how: e.how } : {}), ...(e.lockout ? { missable: e.lockout } : {}) });
@@ -311,6 +318,8 @@ export function buildTrackerPayload(
     const merged = mergeSameSpot(page);
     const mergedEntry = (g: MergedSpot): TrackerItem => ({
       id: `g:${guideArea.slug}:${g.ids.join('+')}`, label: g.label, done: g.ids.every((id) => done.has(id)), missable: g.missable || undefined, tick: true,
+      // Named after its container ("Ornate Chest under the Scuffed Rock: ..."), so usually a chest. Items always have a kind.
+      icon: itemKind({ name: g.label, where: g.where })!,
       detail: detail({ full: g.full, where: g.where }),
     });
     /** The merged entry in place of its first part, nothing for its other parts, the entry itself otherwise. */
@@ -327,9 +336,9 @@ export function buildTrackerPayload(
       return g ? g.missable : !!page.items.find((e) => e.id === id)?.missable;
     };
     const missable = items([
-      ...page.items.filter((e) => isMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.name || e.text || '', e.where, true, { ...itemMore(e), how: e.how || (e.name && e.text && e.text !== e.name ? e.text : undefined) }))),
+      ...page.items.filter((e) => isMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.name || e.text || '', e.where, true, { ...itemMore(e), how: e.how || (e.name && e.text && e.text !== e.name ? e.text : undefined) }, itemKind(e)))),
       // A missable checklist line says itself what can be missed and how.
-      ...missSec.flatMap((x) => x.entries.map((e) => entry(e.id, e.text, undefined, true, { missable: x.title }))),
+      ...missSec.flatMap((x) => x.entries.map((e) => entry(e.id, e.text, undefined, true, { missable: x.title }, lineKind(e.text)))),
     ]);
     if (missable.length) sections.push({ id: 'missable', title: title('missable'), tone: 'amber', items: openFirst(missable) });
 
@@ -345,9 +354,9 @@ export function buildTrackerPayload(
     // under Missable when any part is missable).
     const inMissable = (id: string) => isMissable(id) && merged.some((m) => m.ids.includes(id));
     const collect = items([
-      ...page.items.filter((e) => !isMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.name || e.text || '', e.where, undefined, { ...itemMore(e), how: e.how || (e.name && e.text && e.text !== e.name ? e.text : undefined) }))),
-      ...page.secrets.filter((e) => !inMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.text || e.name || '', undefined, undefined, { ...itemMore(e), where: e.where }))),
-      ...(page.sections || []).filter((x) => x.check && !missSec.includes(x)).flatMap((x) => x.entries.map((e) => entry(e.id, e.text))),
+      ...page.items.filter((e) => !isMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.name || e.text || '', e.where, undefined, { ...itemMore(e), how: e.how || (e.name && e.text && e.text !== e.name ? e.text : undefined) }, itemKind(e)))),
+      ...page.secrets.filter((e) => !inMissable(e.id)).map((e) => keep(e.id, () => entry(e.id, e.text || e.name || '', undefined, undefined, { ...itemMore(e), where: e.where }, entryKind({ section: 'secrets', name: e.name, text: e.text })))),
+      ...(page.sections || []).filter((x) => x.check && !missSec.includes(x)).flatMap((x) => x.entries.map((e) => entry(e.id, e.text, undefined, undefined, undefined, lineKind(e.text)))),
     ]);
     if (collect.length) sections.push({ id: 'collect', title: title('collect'), items: openFirst(collect) });
   }

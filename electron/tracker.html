@@ -176,6 +176,11 @@
     border-radius: 3px; cursor: default; }
   li .mk { flex: 0 0 .7em; width: .7em; min-width: 0; overflow: visible; margin-top: .05em; color: #fff; font-weight: 900; line-height: 1.3; text-align: center; }
   li .obj { flex: 1 1 0; min-width: 0; cursor: pointer; }
+  /* The entry's kind icon (chest, secret, signpost...) in a slot left of the label; in a section with icons every entry
+     keeps the slot, so the labels and dim lines stay lined up. */
+  li.ik .obj { position: relative; padding-left: 1.3em; }
+  li .ki { position: absolute; left: 0; top: .18em; width: .95em; height: .95em; }
+  li.done .ki { opacity: .45; }
   li .lb { font-weight: 700; color: rgba(243,238,252,.92); }
   li .sub { display: block; font-size: .84em; font-weight: 400; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   li.cur { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, rgba(10,8,18,.6)), color-mix(in srgb, var(--accent) 22%, rgba(10,8,18,.35)) 65%, transparent); }
@@ -470,9 +475,23 @@
    * highlighted one (cur) gets a ▸. Ticking is on the badge or box only; clicking the text opens the entry's details
    * below it (one at a time). Every line has a × (on hover) that hides it.
    */
-  function itemHtml(o, sectionId, cur) {
+  // Each guide entry's kind icon (chest, item, secret, boss, enemy, shop, signpost), as on the guide site. A copy: the
+  // source of truth is src/utils/entryKind.ts (ENTRY_ICON_PATHS, ENTRY_COLORS); change both together.
+  const KIND_ICON = {
+    chest: ['#fbbf24', '<path d="M4 20h16a1 1 0 0 0 1-1v-8a6 6 0 0 0-6-6H9a6 6 0 0 0-6 6v8a1 1 0 0 0 1 1Z"/><path d="M3 11h18"/><rect x="10" y="11" width="4" height="4" rx="1"/>'],
+    item: ['#a87ffb', '<path d="M6 3h12l4 6-10 13L2 9Z"/><path d="M11 3 8 9l4 13 4-13-3-6"/><path d="M2 9h20"/>'],
+    secret: ['#7dd3fc', '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>'],
+    boss: ['#ef4444', '<path d="m12.5 17-.5-1-.5 1h1z"/><path d="M15 22a1 1 0 0 0 1-1v-1a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20v1a1 1 0 0 0 1 1z"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="12" r="1"/>'],
+    enemy: ['#f87171', '<path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6"/><path d="m16 16 4 4"/><path d="m19 21 2-2"/><path d="M14.5 6.5 18 3h3v3l-3.5 3.5"/><path d="m5 14 4 4"/><path d="m7 17-3 3"/><path d="m3 19 2 2"/>'],
+    shop: ['#a87ffb', '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>'],
+    travel: ['#34d399', '<path d="M12 13v8"/><path d="M12 3v3"/><path d="M18 6a2 2 0 0 1 1.387.56l2.307 2.22a1 1 0 0 1 0 1.44l-2.307 2.22A2 2 0 0 1 18 13H6a2 2 0 0 1-1.387-.56l-2.306-2.22a1 1 0 0 1 0-1.44l2.306-2.22A2 2 0 0 1 6 6z"/>'],
+  };
+  const kindIcon = (k) => (KIND_ICON[k] ? `<svg class="ki" style="color:${KIND_ICON[k][0]}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${KIND_ICON[k][1]}</svg>` : '');
+
+  /** icons: the section has kind icons, so every entry keeps the icon's room (labels line up with or without one). */
+  function itemHtml(o, sectionId, cur, icons) {
     const open = state.openItem === o.id;
-    const cls = [o.done ? 'done' : '', o.missable ? 'miss' : '', sectionId === 'noreturn' ? 'info' : '', !o.tick && sectionId !== 'noreturn' ? 'static' : '', open ? 'open' : '', cur ? 'cur' : ''].filter(Boolean).join(' ');
+    const cls = [o.done ? 'done' : '', o.missable ? 'miss' : '', sectionId === 'noreturn' ? 'info' : '', !o.tick && sectionId !== 'noreturn' ? 'static' : '', open ? 'open' : '', cur ? 'cur' : '', icons ? 'ik' : ''].filter(Boolean).join(' ');
     const tickTitle = o.tick ? ` title="${esc(o.done ? L('itemDone') : L('itemTodo'))}"` : '';
     const tk = o.tick ? ' tk' : '';
     const mark = o.badge ? `<span class="badge${tk}"${tickTitle}>${o.done ? '✓' : o.badge}</span>`
@@ -483,7 +502,7 @@
     const mw = warnTip ? `<span class="mw">⚠</span>` : '';
     const sub = o.where ? `<span class="sub" title="${esc(o.where)}">${esc(o.where)}</span>` : '';
     const wsub = warnTip ? `<span class="wsub">⚠ ${esc(warnTip)}</span>` : '';
-    return `<li class="${cls}" data-item="${esc(o.id)}"><span class="mk">${cur ? '▸' : ''}</span>${mark}<span class="obj" title="${esc(L('expandHint'))}"><span class="lb">${esc(o.label)}</span>${mw}<span class="ex">${open ? '▾' : '▸'}</span>${sub}${wsub}</span><span class="x" title="${esc(L('hideEntry'))}">×</span>${open ? detailHtml(o) : ''}</li>`;
+    return `<li class="${cls}" data-item="${esc(o.id)}"><span class="mk">${cur ? '▸' : ''}</span>${mark}<span class="obj" title="${esc(L('expandHint'))}">${icons ? kindIcon(o.icon) : ''}<span class="lb">${esc(o.label)}</span>${mw}<span class="ex">${open ? '▾' : '▸'}</span>${sub}${wsub}</span><span class="x" title="${esc(L('hideEntry'))}">×</span>${open ? detailHtml(o) : ''}</li>`;
   }
 
   /** An entry's details: its full text and everything the guide has (where, how, why it's missable, notes). */
@@ -580,7 +599,7 @@
       const head = x.id === 'answer' && !x.nextTurn ? '' : `<div class="sechead" title="${esc(L('foldHint'))}">${x.icon === 'warn' ? WARN_ICON : ''}<span>${esc(x.title)}</span>${of}${lim}${unl}<span class="chev">${folded ? '▸' : '▾'}</span></div>`;
       return `<div class="sec${x.tone === 'amber' ? ' amber' : ''}${x.id === 'guide' ? ' guide' : ''}${folded && head ? ' folded' : ''}" data-sec="${esc(x.id)}">
         ${head}
-        <ol>${shown.map((o) => itemHtml(o, x.id, o.id === curId)).join('')}</ol>
+        <ol>${shown.map((o) => itemHtml(o, x.id, o.id === curId, x.items.some((y) => KIND_ICON[y.icon]))).join('')}</ol>
         ${x.nextTurn ? `<div class="nturn${state.turnBusy ? ' busy' : ''}" title="${esc(L('nextTurnHint'))}">⟳ ${esc(L('nextTurn'))}</div>` : ''}
         ${left > 0 ? `<div class="more">${esc(L('more', { n: left }))}</div>` : ''}
         ${x.hiddenIds.length ? `<div class="unhide">${esc(L('showHidden', { n: x.hiddenIds.length }))}</div>` : ''}
@@ -942,13 +961,19 @@
           { id: 'a:d:1', label: 'Take the Falmer sword', where: 'on the dead Falmer near the bridge', done: true, tick: true },
         ] },
         { id: 'missable', title: 'Missable here', tone: 'amber', items: [
-          { id: 'g:b:1', label: 'Attunement sphere', where: 'top of the stairs', missable: true, tick: true,
+          { id: 'g:b:1', label: 'Attunement sphere', where: 'top of the stairs', missable: true, tick: true, icon: 'item',
             detail: { where: 'Top of the stairs in the Tower of Mzark, on the lens control pedestal', how: 'Bring the Elder Scroll and the Lexicon from Septimus Signus', missable: 'The tower seals once you read the Elder Scroll', notes: "Pick up Auriel's Bow in the Chantry afterwards." } },
         ] },
         { id: 'noreturn', title: 'Point of no return', tone: 'amber', icon: 'warn', items: [
           { id: 'n:0', label: 'Reading the Elder Scroll', where: 'the Tower of Mzark closes' },
         ] },
-        { id: 'collect', title: 'To collect', items: Array.from({ length: 16 }, (_, i) => ({ id: 'g:b:c' + i, label: 'Crimson Nirnroot #' + (i + 1), tick: true, done: i < 3 })) },
+        { id: 'collect', title: 'To collect', items: [
+          { id: 'g:b:s', label: 'Blackreach signpost', where: 'by the lift to Mzinchaleft', tick: true, icon: 'travel' },
+          { id: 'g:b:k', label: 'Lever behind the throne', where: 'opens the side vault', tick: true, icon: 'secret' },
+          { id: 'g:b:ch', label: 'Dwarven chest', where: 'in the side vault', tick: true, icon: 'chest' },
+          { id: 'g:b:x', label: 'Speak to the Falmer captive', tick: true },
+          ...Array.from({ length: 12 }, (_, i) => ({ id: 'g:b:c' + i, label: 'Crimson Nirnroot #' + (i + 1), tick: true, done: i < 3, icon: 'item' })),
+        ] },
         { id: 'ach', title: 'Achievements here', items: [{ id: 'h:0:x', label: 'Elder Knowledge', where: 'read the scroll at the Tower of Mzark' }] },
       ],
       next: { name: 'Tower of Mzark' },
