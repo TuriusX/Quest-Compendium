@@ -23,6 +23,11 @@ import { acquireGuideLock, isRefusal, releaseGuideLocks } from './guideLock';
 export const AUDIT_MONTH = '2026-11';
 export const AUDIT_BUDGET = 115;
 export const AUDIT_DAILY = Number(process.env.AUDIT_DAILY || 5);
+/**
+ * Re-verification stops at this much, so the rest of item 22 (about $25: missions, places, names, contradictions) still
+ * fits the allowance. The test (17 Oct) measured $0.38-0.59 a page on thinly documented games, not the planned $0.22.
+ */
+export const REVERIFY_CAP = Number(process.env.AUDIT_REVERIFY_CAP || 90);
 const ref = () => db().collection('system').doc('auditWork');
 const month = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }).slice(0, 7);
 const day = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
@@ -139,14 +144,18 @@ export async function runAuditWork(max = AUDIT_DAILY): Promise<string[]> {
   let room = Math.min(max, AUDIT_DAILY - spentToday, AUDIT_BUDGET - Number(st.spent || 0));
   const lines: string[] = [];
   let next = Number(st.next || 0), spent = Number(st.spent || 0), today = spentToday, guess = 0.25;
+  let reverifySpent = Number(st.reverifySpent || 0);
   while (room > guess && next < st.queue.length) {
     const w: Work = st.queue[next];
+    // Past the re-verification cap, the rest of its queue is skipped (listed as left for later).
+    if (w.kind === 'reverify' && reverifySpent >= REVERIFY_CAP) { next++; continue; }
     const r = await doOne(w);
     if (r.status === 'busy') break;
     spent += r.dollars; today += r.dollars; room -= r.dollars; guess = Math.max(guess * 0.8, r.dollars);
+    if (w.kind === 'reverify') reverifySpent += r.dollars;
     next++;
     lines.push(`${w.kind} ${w.key}/${w.ref}: ${r.status}, $${r.dollars.toFixed(3)}${r.detail ? ` (${r.detail})` : ''}`);
-    await ref().set({ next, spent, day: day(), spentToday: today, log: FieldValue.arrayUnion({ at: Date.now(), kind: w.kind, key: w.key, ref: w.ref, status: r.status, dollars: Math.round(r.dollars * 1000) / 1000 }) }, { merge: true });
+    await ref().set({ next, spent, reverifySpent, day: day(), spentToday: today, log: FieldValue.arrayUnion({ at: Date.now(), kind: w.kind, key: w.key, ref: w.ref, status: r.status, dollars: Math.round(r.dollars * 1000) / 1000 }) }, { merge: true });
   }
   if (lines.length) lines.unshift(`🧭 November site work (roadmap 22): ${lines.length} item(s) today, $${(today - spentToday).toFixed(2)}; $${spent.toFixed(2)} of $${AUDIT_BUDGET} spent, ${st.queue.length - next} item(s) left.`);
   return lines;
