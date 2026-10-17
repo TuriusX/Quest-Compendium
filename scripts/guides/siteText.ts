@@ -323,6 +323,7 @@ export function compactGame(short: string): string {
     'Star Wars: Knights of the Old Republic': 'KOTOR', 'Kingdom Come: Deliverance II': 'Kingdom Come Deliverance 2',
     'Divinity: Original Sin 2': 'Divinity Original Sin 2', 'Indiana Jones and the Great Circle': 'Indiana Jones Great Circle',
     'Final Fantasy VII Remake Intergrade': 'FF7 Remake', 'Final Fantasy XII: The Zodiac Age': 'FF12 Zodiac Age',
+    'Red Dead Redemption 2': 'RDR2', "Baldur's Gate 3": 'BG3',
   };
   return COMPACT[short] || short.replace(/^The Legend of Zelda: /, 'Zelda: ');
 }
@@ -394,14 +395,14 @@ export function entitySeo(e: any, game: string, person: boolean): { title: strin
   let tail: string[];
   let covers: string[];
   if (q) {
-    tail = [(q.walkthrough || (q.parts || []).some((p: any) => (p.steps || []).length)) ? 'Walkthrough' : '', (q.goldMedal || []).length ? 'Gold Medal' : '', (q.rewards || []).length ? 'Rewards' : '', (q.choices || []).length ? 'Choices' : ''].filter(Boolean);
-    covers = [q.giver ? `who gives it (${q.giver})` : '', q.chapter ? `when it's available (${q.chapter})` : '', (q.rewards || []).length ? 'rewards' : '', (q.choices || []).length ? 'choices and outcomes' : '', (q.goldMedal || []).length ? 'gold medal requirements' : '', (q.missables || []).length ? 'what you can miss' : ''].filter(Boolean);
+    tail = [(q.parts || []).some((p: any) => (p.steps || []).length) ? 'Walkthrough' : '', (q.goldMedal || []).length ? 'Gold Medal' : '', (q.rewards || []).length ? 'Rewards' : '', (q.choices || []).length ? 'Choices' : ''].filter(Boolean);
+    covers = [q.giver ? `given by ${q.giver}` : '', q.chapter ? `available in ${q.chapter}` : '', (q.rewards || []).length ? 'rewards' : '', (q.choices || []).length ? 'choices and outcomes' : '', (q.goldMedal || []).length ? 'gold medal requirements' : '', (q.missables || []).length ? 'what you can miss' : ''].filter(Boolean);
   } else if (person) {
     tail = [(sm.whereToFind || []).length ? 'Where to Find' : '', story.length ? 'Story' : '', fate ? 'Fate' : '', quests.length ? 'Missions' : ''].filter(Boolean);
     covers = [story.length ? 'who they are' : '', (sm.whereToFind || []).length ? 'where to find them in each chapter' : '', quests.length ? `their missions (${quests.slice(0, 2).join(', ')})` : '', fate ? 'every possible fate' : ''].filter(Boolean);
   } else {
     tail = [sm.where || sm.region ? 'Location' : '', quests.length ? 'Missions' : '', (sm.shops || []).length ? 'Shops' : '', (sm.collectibles || []).length ? 'Collectibles' : ''].filter(Boolean);
-    covers = [sm.where || sm.region ? 'where it is' : '', sm.gettingThere ? 'how to get there' : '', quests.length ? `missions (${quests.slice(0, 2).join(', ')})` : '', (sm.shops || []).length ? 'shops and services' : '', (sm.collectibles || []).length ? 'collectibles' : ''].filter(Boolean);
+    covers = [sm.where || sm.region ? 'where it is' : '', sm.gettingThere ? 'how to get there' : '', quests.length ? `missions (${quests.slice(0, 2).join(', ')})` : '', (sm.shops || []).length ? 'shops' : '', (sm.collectibles || []).length ? 'collectibles' : ''].filter(Boolean);
   }
   const name = searchName(e);
   const title = fitTitle(name, game, tail.slice(0, 3));
