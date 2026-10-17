@@ -677,6 +677,8 @@ app.whenReady().then(() => {
     getTrackerBounds: () => tracker.getBounds(),
     raiseTracker: () => tracker.raise(),
     onShown: () => tracker.anchorChanged(),
+    // The attached quest log tucked in: its uncollected count on the book.
+    getBadge: () => tracker.badgeCount(),
     getLook: () => {
       const t = tracker.getLook();
       return { accent: (appLook && appLook.accent) || t.accent, label: (appLook && appLook.label) || t.label };

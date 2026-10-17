@@ -9,8 +9,9 @@
  * - Attached (new players' default, from 0.6.0): it sticks out of the panel's inner side (left of a panel docked right,
  *   right of one docked left; undocked, the side with more room), top-aligned with it, and moves, docks and goes compact
  *   with the panel (follow()). Tucked in (its header's bookmark button, the ⋯ menu), only a small bookmark sticks out
- *   of the panel's edge near its top; a click slides the log out again. With the panel away it does the same from the
- *   book spine (spine.anchor()). It's never dragged. Without anything to stick to (the panel sliding away, before the
+ *   of the panel's edge near its top; a click slides the log out again. With the panel away, slid out it sits beside the
+ *   book spine (spine.anchor()); tucked in it's invisible and the spine shows its uncollected count as a badge instead
+ *   (badgeCount()), so the book isn't cluttered with a bookmark too. It's never dragged. Without anything to stick to (the panel sliding away, before the
  *   spine shows) it's invisible like for a screenshot (transparent, click-through), not hidden and shown. Existing
  *   players keep popped-out, with a one-time offer in the log to attach it (store._meta).
  * - Popped out (below): its own window over the game.
@@ -323,7 +324,25 @@ function attachSettings() {
   const on = isAttached();
   return { attached: on, side, attachOffer: !on && !!meta().offer };
 }
-const shouldHideAttached = () => isAttached() && !anchor();
+const shouldHideAttached = () => {
+  if (!isAttached()) return false;
+  const a = anchor();
+  // Nothing to stick to, or tucked in while the panel is away (the spine's badge stands in for the bookmark).
+  return !a || (a.kind === 'spine' && settingsFor(current.gameKey).view === 'away');
+};
+
+/**
+ * The spine's badge: the attached log's uncollected count while it's tucked in and the panel is away (0 otherwise, or
+ * when everything is collected). The same count as the bookmark: tickable entries not hidden with their ×, not done.
+ */
+function badgeCount() {
+  if (!current || !alive() || !isAttached()) return 0;
+  const s = settingsFor(current.gameKey);
+  const a = anchor();
+  if (!s.shown || s.view !== 'away' || !a || a.kind !== 'spine') return 0;
+  const hidden = new Set(s.hidden || []);
+  return current.data.sections.flatMap((x) => x.items).filter((o) => o.tick && !o.done && !hidden.has(o.id)).length;
+}
 /** Tucked in, its bookmark sits this far below the panel's top edge (the tuck-away tab stays clear of it). */
 const BOOKMARK_TOP = 8;
 
@@ -876,7 +895,8 @@ function init(d) {
 module.exports = {
   init, show, update, hide, toggle, showLog, panelShown, panelHidden, follow,
   /** The spine appeared or went: an attached log moves to (or from) it. */
-  anchorChanged: () => syncAttach(), setKeys, setMouseTip, getTipLabels, hideForCapture, showAfterCapture, getBounds,
+  anchorChanged: () => syncAttach(),
+  badgeCount, setKeys, setMouseTip, getTipLabels, hideForCapture, showAfterCapture, getBounds,
   setVisibleInRecordings, setScale, openPanel, raise, getLook, key,
   /** The log is on screen (full or folded): the tick / cycle shortcuts are registered only then. */
   isLogVisible: () => logVisible(),

@@ -145,7 +145,7 @@ async function test(name, fn) {
     tracker.hide();
   });
 
-  await test('the panel tucked away: the log (or its bookmark) moves to the book spine', async () => {
+  await test('the panel tucked away: the log out beside the book, or tucked in as a count on the book', async () => {
     const { tracker, win, env } = await setup({ existing: false });
     env.panel = { x: 1370, y: 0, width: 550, height: 800 };
     tracker.panelShown();
@@ -157,6 +157,21 @@ async function test(name, fn) {
     assert.deepEqual([win.getBounds().x, win.getBounds().y], [1594, 344], 'on the inner side of the spine, level with its top');
     assert.equal(tracker.isLogVisible(), true);
     assert.ok(win.js.some((c) => c.includes('"maxHeight":728')), '70% of the screen beside the spine');
+    assert.equal(tracker.badgeCount(), 0, 'slid out: no badge on the book');
+    // Tucked in with the panel away: no bookmark beside the book, the count on the book instead.
+    assert.equal(await tracker.toggle(null), 'away');
+    assert.equal(win.opacity, 0, 'no bookmark beside the book');
+    assert.equal(tracker.badgeCount(), 1, 'the uncollected count for the book');
+    // The quest log shortcut slides just the log out beside the book.
+    assert.equal(await tracker.toggle(null), 'shown');
+    assert.equal(win.opacity, 1);
+    assert.equal(tracker.badgeCount(), 0);
+    // Tucked in again, then the panel opens: the bookmark is back on the panel's edge and the book's badge goes.
+    await tracker.toggle(null);
+    env.spine = null; env.panel = { x: 1370, y: 0, width: 550, height: 800 };
+    tracker.panelShown();
+    assert.equal(win.opacity, 1, 'the bookmark on the open panel');
+    assert.equal(tracker.badgeCount(), 0);
     tracker.hide();
   });
 

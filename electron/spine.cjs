@@ -65,8 +65,19 @@ function spot() {
   return { x, y, right, clash };
 }
 
+/** The uncollected count on the book (the attached quest log tucked in): sent when it changes. */
+let lastBadge = -1;
+function badge() {
+  if (!alive() || !deps.getBadge) return;
+  const n = Math.max(0, Number(deps.getBadge()) || 0);
+  if (n === lastBadge) return;
+  lastBadge = n;
+  win.webContents.executeJavaScript(`window.qcSpineBadge && window.qcSpineBadge(${n})`).catch(() => {});
+}
+
 function place() {
   if (!alive()) return;
+  badge();
   const s = spot();
   const b = win.getBounds();
   if (b.x !== s.x || b.y !== s.y || b.height !== h) win.setBounds({ x: s.x, y: s.y, width: W, height: h });
@@ -74,6 +85,7 @@ function place() {
 }
 
 function drop() {
+  lastBadge = -1;
   clearInterval(watch);
   watch = null;
   const w = win;
