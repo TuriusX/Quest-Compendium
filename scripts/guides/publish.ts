@@ -418,13 +418,29 @@ function writeGuideIndex(games: { key: string; game: string; areas: number; art?
  */
 export let heldRedirectCount = 0;
 /** The live page closest to a held one in the guide's play order: the one just before it, else the one after. */
-function nearestInOrder(d: any, docs: any[], live: Set<string>): string {
-  const at = Number(d.order);
-  if (!Number.isFinite(at)) return '';
-  const ordered = docs.filter((x) => live.has(x.slug) && Number.isFinite(Number(x.order)));
-  const before = ordered.filter((x) => Number(x.order) < at).sort((a, b) => Number(b.order) - Number(a.order))[0];
-  const after = ordered.filter((x) => Number(x.order) > at).sort((a, b) => Number(a.order) - Number(b.order))[0];
-  return (before || after)?.slug || '';
+/** How often a name appears in a text (whole words, case and punctuation ignored). */
+function mentions(textIn: string, name: string): number {
+  const nn = (x: string) => ` ${String(x || '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()} `;
+  const t = nn(textIn), n = nn(name);
+  if (n.trim().length < 3) return 0;
+  let c = 0;
+  for (let i = t.indexOf(n); i >= 0; i = t.indexOf(n, i + n.length - 1)) c++;
+  return c;
+}
+
+/**
+ * The live page that covers a place best: a compendium page whose own location fields put it there (a mission's
+ * "where", a character's "where to find") scores highest, then any page by how often it names the place.
+ */
+function bestMention(name: string, pages: { slug: string; text: string }[], entities: any[]): string {
+  const scored = [
+    ...entities.map((e) => {
+      const where = [e.quest?.where, e.summary?.where, ...((e.summary?.whereToFind || []) as any[]).map((w) => w?.where)].filter(Boolean).join(' ');
+      return { slug: e.slug, n: (mentions(where, name) ? 10 : 0) + mentions(JSON.stringify([e.overview, e.summary, e.story, e.quest]), name) };
+    }),
+    ...pages.map((p) => ({ slug: p.slug, n: mentions(p.text, name) })),
+  ].filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  return scored[0]?.slug || '';
 }
 
 function heldRedirects(key: string, docs: any[], visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, entities: { slug: string; name: string }[]) {
@@ -441,15 +457,17 @@ function heldRedirects(key: string, docs: any[], visible: { slug: string; name: 
     const same = visible.find((o) => norm(byslug.get(o.slug)?.name || o.name) === norm(name))
       // A page named after it ("Chapter 4: Saint Denis" for Saint Denis) before one that only mentions it.
       || (name.length >= 4 ? visible.find((o) => entitySegments(byslug.get(o.slug)?.name || o.name, [{ name, slug: 'x' }]).some((sg) => sg.slug)) : undefined);
-    const mention = name.length >= 4 ? visible.find((o) => entitySegments(text(byslug.get(o.slug)!), [{ name, slug: 'x' }]).some((sg) => sg.slug)) : undefined;
-    let to = ent?.slug || same?.slug || mention?.slug || '';
+    // The page that covers it best, not the first that names it: a compendium page whose own location says it's there
+    // (a mission set at Lakay) first, then the page that names it most often.
+    const mention = name.length >= 4 ? bestMention(name, visible.map((o) => ({ slug: o.slug, text: fullText(byslug.get(o.slug)!) })), entities as any[]) : '';
+    let to = ent?.slug || same?.slug || mention || '';
     // Never the front page when something fits better: a loosely matching entity page, else the page's own chapter.
     if (!to) to = entities.find((e) => fuzzyScore(name, e.name) > 0 && fuzzyScore(e.name, name) > 0)?.slug
       || chapterPage(String(d.story || ''), visible.map((o) => ({ slug: o.slug, name: byslug.get(o.slug)?.name || o.name })))
       // else the live page that covers most of its named entries (items, secrets, shops, enemies, fights)
       || coveringPage(entryNames(d), visible.map((o) => ({ slug: o.slug, name: byslug.get(o.slug)?.name || o.name, text: fullText(byslug.get(o.slug)!) })), 3, `${name} ${d.story || ''}`)
-      // else the nearest live page in play order (the one just before it, or after it), never the front page
-      || nearestInOrder(d, docs, live)
+      // else the guide's front page: a page that never mentions the place would only mislead (the old "nearest page in
+      // play order" sent Final Fantasy V's Phoenix Tower to the Forest of Moore).
       || '';
     out.push({ key, from: d.slug, to });
   }

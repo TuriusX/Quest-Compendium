@@ -854,6 +854,27 @@ async function main() {
       console.warn(`Player section skipped: ${e?.message}`);
     }
   }
+  // Mondays: how many live guide pages are still unchecked (written from memory, never verified against sources), and
+  // the change since last week, so the number can be watched shrinking as pages are re-verified.
+  if (MONDAY) {
+    try {
+      let live = 0, unchecked = 0;
+      for (const g of (await db().collection('guides').get()).docs) {
+        if (g.id.endsWith('--next')) continue;
+        for (const d of (await g.ref.collection('areas').where('status', '==', 'published').get()).docs) {
+          live++;
+          if ((d.data() as any).verified === false) unchecked++;
+        }
+      }
+      const ref = db().collection('system').doc('pipeline');
+      const prev: any = ((await ref.get()).data() || {}).uncheckedPages;
+      const diff = prev && Number.isFinite(Number(prev.count)) ? unchecked - Number(prev.count) : null;
+      report.push(`🔎 Unchecked pages: ${unchecked.toLocaleString('en-US')} of ${live.toLocaleString('en-US')} live guide pages are still unchecked (written without sources)${diff == null ? '' : diff === 0 ? ', no change since last week' : `, ${diff < 0 ? '' : '+'}${diff} since last week`}.`);
+      await ref.set({ uncheckedPages: { count: unchecked, live, at: Date.now() } }, { merge: true });
+    } catch (e: any) {
+      console.warn(`Unchecked-pages line skipped: ${e?.message}`);
+    }
+  }
   // Core guides (scripts/guides/core.ts): completeness per guide, this month's shared budget, and what's left.
   try {
     const coreSt: any = (await db().collection('system').doc('core').get()).data() || {};
@@ -864,7 +885,7 @@ async function main() {
       // The core programme's last day (every unit it built: quest pages, rebuilds, pages), first in the summary.
       const dayLog = ((coreSt.pageLog || []) as any[]).filter((x) => Number(x.at) >= Date.now() - 24 * 3600_000);
       const dayCost = dayLog.reduce((a, x) => a + Number(x.dollars || 0), 0);
-      RUN.head.push(`📚 Core programme, last day: ${dayLog.length} page(s) built, ${dayLog.filter((x) => /passed|published/.test(String(x.status))).length} passed, $${dayCost.toFixed(2)}. October: $${b.spentMonth.toFixed(2)} of $${b.monthly} spent, $${Math.max(0, b.monthly - b.spentMonth).toFixed(2)} left ($${b.daily} a day).`);
+      RUN.head.push(`📚 Core programme, last day: ${dayLog.length} page(s) built, ${dayLog.filter((x) => /passed|published/.test(String(x.status))).length} passed, $${dayCost.toFixed(2)}. ${new Date().toLocaleString('en-US', { month: 'long', timeZone: 'America/Chicago' })}: $${b.spentMonth.toFixed(2)} of $${b.monthly} spent, $${Math.max(0, b.monthly - b.spentMonth).toFixed(2)} left ($${b.daily} a day).`);
       // "Left": what's left at the current method's real cost per page that went live (core.ts realRates).
       const doneGuides = e.rows.filter((r) => !!coreSt.perGuide?.[r.key]?.done || r.left === 0);
       const next = e.rows.find((r) => !coreSt.perGuide?.[r.key]?.done && r.left > 0);
