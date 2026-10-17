@@ -277,6 +277,30 @@
     background: #16101f; color: var(--ink); font-size: .72em; font-weight: 800; display: flex; align-items: center;
     justify-content: center; text-shadow: none; }
 
+  /* Attached to the panel: a solid card against the panel's inner side (no gap), square on that side, flush with the
+     window's edges. It isn't dragged or sent to the edge, and the hint lines are for the popped-out log only. */
+  body.attached #tracker { left: 0 !important; top: 0 !important; background: rgba(13,14,20,.96); border: 1px solid rgba(255,255,255,.1);
+    text-shadow: 0 1px 2px rgba(0,0,0,.8); min-width: 16em; }
+  body.attached.side-left #tracker { border-right: 0; border-radius: .5em 0 0 .5em; }
+  body.attached.side-right #tracker { border-left: 0; border-radius: 0 .5em .5em 0; }
+  body.attached #bAway, body.attached .hint, body.attached #bdRow { display: none; }
+  body.attached .head { cursor: default; }
+  /* The attach / pop-out button's two faces. */
+  #bAttach .pop { display: none; }
+  body.attached #bAttach .pin { display: none; }
+  body.attached #bAttach .pop { display: inline; }
+  /* The controller is in the log (RB from the conversation): a ring around it. */
+  #tracker.padfocus { box-shadow: inset 0 0 0 2px var(--accent); }
+  .attachoffer { display: flex; align-items: center; gap: .4em; margin: 0 0 .3em 0; font-size: .82em; color: var(--dim); }
+  .attachoffer .go { cursor: pointer; color: var(--accent); font-weight: 700; border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    border-radius: 3px; padding: .05em .45em; background: rgba(16,12,28,.6); text-shadow: none; }
+  .attachoffer .go:hover { background: var(--accent); color: #16101f; }
+  .attachoffer .dx { cursor: pointer; font-weight: 800; padding: 0 .2em; opacity: .7; }
+  .attachoffer .dx:hover { opacity: 1; color: #fff; }
+  .attachoffer.off, #tracker.collapsed .attachoffer { display: none; }
+  .padhint { font-size: .74em; color: var(--dim); margin-top: .35em; }
+  .padhint.off { display: none; }
+
   @keyframes pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: var(--alpha); transform: none; } }
   #tracker.in { animation: pop .25s steps(3) both; }
   body.demo #demo { position: fixed; right: 12px; bottom: 12px; font: 12px/1.4 'Segoe UI', system-ui; color: #fff; background: rgba(0,0,0,.6); padding: 8px 10px; border-radius: 6px; }
@@ -289,14 +313,16 @@
     <span class="tg" id="fold" title="Click: fold or open. Drag: move."><span class="title" id="title">Objectives</span><span class="count" id="count"></span><span class="chev" id="headChev">▾</span></span>
     <span class="hbs">
       <span class="book aa" id="bLook" title="Text size and look">Aa</span>
+      <span class="book" id="bAttach" title="Attach to the panel"><svg class="pin" viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="currentColor" d="M3 0h6v1H8v4h2v2H7v5H5V7H2V5h2V1H3z"/></svg><svg class="pop" viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="currentColor" d="M6 0h6v6h-2V3.4L5.7 7.7 4.3 6.3 8.6 2H6zM0 2h4v2H2v6h6V8h2v4H0z"/></svg></span>
       <span class="book hb" id="bAway" title="Send to the edge"><svg viewBox="0 0 16 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 5h8V3h1v1h1v1h1v1h1v1h-1v1h-1v1h-1v1H9V7H1zM14 0h2v12h-2z"/></svg></span>
     </span>
   </div>
   <div class="look off" id="look">
     <div class="lr"><span class="lk" id="lkSize">Text size</span><span class="btn aa" id="bSize">Aa</span></div>
     <div class="lr"><span class="lk" id="lkAlpha">Transparency</span><span class="sl" id="alphaWrap"><input type="range" id="alpha" min="30" max="100" value="100"></span></div>
-    <div class="lr"><span class="lk" id="lkBd">Backdrop</span><span class="sl" id="bdWrap"><input type="range" id="bd" min="0" max="95" value="45"></span></div>
+    <div class="lr" id="bdRow"><span class="lk" id="lkBd">Backdrop</span><span class="sl" id="bdWrap"><input type="range" id="bd" min="0" max="95" value="45"></span></div>
   </div>
+  <div class="attachoffer off" id="attachOffer"><span id="aoText">Attach the quest log to the panel?</span><span class="go" id="aoYes">Attach</span><span class="dx" id="aoNo" title="Not now">×</span></div>
   <div class="place" id="place">
     <svg class="pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
     <span class="arr off" id="prevArea">‹</span>
@@ -318,6 +344,7 @@
   <div class="next off" id="next"><span id="nextLbl"></span></div>
   <div class="notice" id="notice"></div>
   <div class="warn off" id="warn"></div>
+  <div class="padhint off" id="padHint"></div>
   <div class="hint" id="hint"><kbd>Ctrl+G</kbd> or click the title: open the Compendium</div>
 
 </div>
@@ -377,6 +404,8 @@
     hintPanel: '{keys}: open the Compendium. This log stays where you put it.', hintPanelNoKeys: 'Click Next or the place to open the Compendium. This log stays where you put it.',
     hintOpen: '{keys}: open the Compendium. This log stays where you put it.', hintOpenNoKeys: 'Click Next or the place to open the Compendium. This log stays where you put it.',
     look: 'Text size and look', shownOf: '{n} of {total}',
+    attach: 'Attach to the panel', popOut: 'Pop out: its own window over the game', attachOffer: 'Attach the quest log to the panel?', attachYes: 'Attach',
+    padHint: '↑↓ move · A tick · B back',
     mouseHint: '{keys} to use your mouse here', mouseHintClose: 'Hide this tip',
     headFold: 'Click: fold the log to this line or open it. Drag: move.', openBook: 'Open the Compendium',
     foldHint: 'Click to fold or open', detWhere: 'Where', detHow: 'How', detMissable: 'Missable', detNotes: 'Notes',
@@ -394,6 +423,11 @@
     $('title').textContent = L('title');
     $('fold').title = L('headFold');
     $('bLook').title = L('look');
+    $('bAttach').title = state.attached ? L('popOut') : L('attach');
+    $('aoText').textContent = L('attachOffer');
+    $('aoYes').textContent = L('attachYes');
+    $('aoNo').title = L('dismissOffer');
+    $('padHint').textContent = L('padHint');
     $('lkSize').textContent = L('size');
     $('lkAlpha').textContent = L('alpha');
     $('lkBd').textContent = L('backdrop');
@@ -573,7 +607,14 @@
     document.documentElement.style.setProperty('--alpha', String(state.alpha / 100));
     $('alpha').value = state.alpha;
     const bd = Number.isFinite(state.backdrop) ? Math.max(0, Math.min(95, state.backdrop)) : 45;
-    tracker.classList.toggle('backdrop', bd > 0);
+    tracker.classList.toggle('backdrop', bd > 0 && !state.attached);
+    document.body.classList.toggle('attached', !!state.attached);
+    document.body.classList.toggle('side-left', state.side !== 'right');
+    document.body.classList.toggle('side-right', state.side === 'right');
+    $('bAttach').title = state.attached ? L('popOut') : L('attach');
+    $('attachOffer').classList.toggle('off', !(state.attachOffer && !state.attached));
+    tracker.classList.toggle('padfocus', !!state.padFocus);
+    $('padHint').classList.toggle('off', !state.padFocus);
     document.documentElement.style.setProperty('--bd', String(bd / 100));
     $('bd').value = bd;
     $('bSize').textContent = state.size === 'small' ? 'aa' : state.size === 'large' ? 'AA' : 'Aa';
@@ -603,7 +644,8 @@
         h = Math.ceil(tab.getBoundingClientRect().bottom + 6);
       } else {
         const r = tracker.getBoundingClientRect();
-        w = Math.ceil(r.right + 6); h = Math.ceil(r.bottom + 6);
+        const pad = state.attached ? 0 : 6;
+        w = Math.ceil(r.right + pad); h = Math.ceil(r.bottom + pad);
       }
       const key = `${w}x${h}:${state.view}`;
       if (key === lastSize) return;
@@ -658,13 +700,14 @@
   let drag = null;
   $('head').addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    drag = { x: e.screenX, y: e.screenY, moved: false, look: !!e.target.closest('#bLook'), away: !!e.target.closest('#bAway') };
+    drag = { x: e.screenX, y: e.screenY, moved: false, look: !!e.target.closest('#bLook'), away: !!e.target.closest('#bAway'), attach: !!e.target.closest('#bAttach') };
     $('head').setPointerCapture(e.pointerId);
   });
   $('head').addEventListener('pointermove', (e) => {
     if (!drag) return;
     const dx = e.screenX - drag.x, dy = e.screenY - drag.y;
     if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    if (state.attached) return; // attached: it moves with the panel
     drag.moved = true; drag.x = e.screenX; drag.y = e.screenY;
     if (demo) { // no app to move the window: move the tracker inside the page instead
       tracker.style.left = `${Math.max(0, tracker.offsetLeft + dx)}px`; tracker.style.top = `${Math.max(0, tracker.offsetTop + dy)}px`;
@@ -677,10 +720,20 @@
     if (!was) return;
     if (was.moved) send('drag-end', {});
     else if (was.look) { state.lookOpen = !state.lookOpen; applyView(); }
+    else if (was.attach) setAttached(!state.attached);
     else if (was.away) setView('away');
     else setView(state.view === 'collapsed' ? 'full' : 'collapsed');
   });
   $('head').addEventListener('pointercancel', () => { drag = null; });
+  // 📌 attach / ⇱ pop out, and the one-time offer (the app moves the window; it sends the new state back).
+  function setAttached(on) {
+    state.attached = on; state.attachOffer = false;
+    if (demo) { tracker.style.left = on ? '0' : `${Math.max(8, window.innerWidth - 440)}px`; tracker.style.top = on ? '0' : '24px'; }
+    applyView();
+    send('attach', { on });
+  }
+  $('aoYes').addEventListener('click', () => setAttached(true));
+  $('aoNo').addEventListener('click', () => { state.attachOffer = false; applyView(); send('attach-offer-dismiss', {}); });
 
   // A press or drag must never stay stuck (it would keep the app thinking the mouse is held): let go of it when new
   // data arrives, when the window hides or loses focus, and when the header loses its pointer capture.
@@ -842,11 +895,18 @@
   window.qcTrackerKey = (action) => {
     if (!state.data) return false;
     const all = (state.data.sections || []).flatMap((x) => x.items);
-    if (action === 'next') {
+    if (action === 'focus' || action === 'blur') {
+      // The controller entered (or left) the log: a ring and the button hints; a folded log opens while it's there.
+      state.padFocus = action === 'focus';
+      if (state.padFocus && state.view === 'collapsed') setView('full');
+      else applyView();
+      return true;
+    }
+    if (action === 'next' || action === 'prev') {
       const ids = state.openIds || [];
       if (!ids.length) return false;
       const i = ids.indexOf(state.curShown);
-      state.cur = ids[(i + 1) % ids.length];
+      state.cur = ids[(i + (action === 'next' ? 1 : ids.length - 1)) % ids.length];
     } else if (action === 'tick') {
       const o = all.find((it) => it.id === state.curShown && it.tick && !it.done);
       if (!o) return false;
@@ -886,6 +946,9 @@
       ],
       next: { name: 'Tower of Mzark' },
     }, { maxHeight: Math.round(window.innerHeight * 0.7) });
+    // ?attached=1 (screenshots): the attached look, against a panel on the right; &offer=1: the one-time offer.
+    if (/[?&]attached=1/.test(location.search)) { tracker.style.left = '0'; tracker.style.top = '0'; window.qcTrackerSettings({ attached: true, side: 'left' }); }
+    if (/[?&]offer=1/.test(location.search)) window.qcTrackerSettings({ attachOffer: true });
     document.addEventListener('keydown', (e) => {
       if (e.key === '1') setView('full'); if (e.key === '2') setView('collapsed'); if (e.key === '3') setView('away');
       if (e.key.toLowerCase() === 'g') peek();

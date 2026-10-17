@@ -510,7 +510,11 @@ function createWindow() {
       const bounds = mainWindow.getBounds();
       baseLogicalHeight = bounds.height / currentUiScale;
     }
+    tracker.follow(); // an attached quest log keeps to the panel (compact, UI scale, the achievements drawer)
   });
+  // The panel moved (sliding to its dock, a new dock, dragged while undocked, onto another screen): an attached quest
+  // log goes with it.
+  mainWindow.on('move', () => tracker.follow());
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return {
@@ -626,6 +630,9 @@ app.whenReady().then(() => {
     // The book icon opens the panel at its dock; the quest log stays where it is.
     onOpenPanel: () => { if (!isAppVisible) slideIn(); },
     getPanelRect: () => panelRect(),
+    // Attached quest log: which side of the panel it goes on, and its height limit in the compact view.
+    getDock: () => currentDockPosition,
+    isCompact: () => compactMode,
     // A new tracker opens on the game's screen: the one the last screenshot came from.
     getDisplay: () => lastCaptureDisplay,
     // Processor share while it's open, next to the markers' (startPerfLog).
@@ -1153,6 +1160,7 @@ ipcMain.on('set-dock-position', (event, pos) => {
       // allow dragging
       mainWindow.setIgnoreMouseEvents(false);
       spine.hide();
+      tracker.follow(); // an attached quest log picks the side with more room
     } else {
       const coords = getDockCoords(!isAppVisible);
       animateWindow(coords.x, coords.y, 150).then(() => { if (isAppVisible) tracker.panelShown(); });

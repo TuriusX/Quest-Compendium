@@ -895,6 +895,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // The quest log is independent of the panel: hiding or showing the panel never shows or hides it. Only its own
   // controls (send away, the ribbon) and the header's "Quest log" toggle do; its state comes back as tracker events.
   const [questLogVisible, setQuestLogVisible] = useState(false);
+  // The quest log is attached to the panel (0.6.0): it moves and hides with it, and the controller's RB reaches it.
+  const [questLogAttached, setQuestLogAttached] = useState(false);
   const toggleQuestLog = () => {
     const p = trackerPayloadRef.current;
     (window as any).electronAPI?.toggleQuestLog?.(p?.data, p?.gameKey);
@@ -953,6 +955,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     }
     if (e.type === 'visibility') {
       setQuestLogVisible(!!e.visible);
+      setQuestLogAttached(!!e.attached);
       return;
     }
     if (e.type === 'tick' && typeof e.item === 'string') {
@@ -2613,7 +2616,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 hideKeys={formatShortcut(settings.hideAppShortcut)}
                 tickKeys={formatShortcut(settings.trackerTickShortcut || 'CmdOrCtrl+Shift+Enter')}
                 missablesHere={missablesHere}
-                nearYou={nearYou}
+                // "Next here" is the attached quest log's list too: the compact view leaves it out while that shows.
+                nearYou={compact && questLogVisible && questLogAttached ? null : nearYou}
+                logAttached={questLogVisible && questLogAttached}
                 nextKeys={formatShortcut(settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down')}
                 immersiveReadAloud={settings.immersiveReadAloud !== false}
                 soundEnabled={settings.soundEnabled}
@@ -2772,7 +2777,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       )}
 
       {/* Controller support: focus navigation, quick questions, on-screen keyboard, button hints */}
-      <ControllerLayer enabled={settings.controllerEnabled !== false} talkButton={settings.controllerTalk || 'y'} hintMode={settings.hintMode === true} />
+      <ControllerLayer enabled={settings.controllerEnabled !== false} talkButton={settings.controllerTalk || 'y'} hintMode={settings.hintMode === true} logAttached={questLogVisible && questLogAttached && !isBrowserMode} />
 
       {/* Quick Game Search & Switcher Modal */}
       <QuickGameSearchModal

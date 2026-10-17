@@ -194,7 +194,7 @@ type Special = (typeof SPECIALS)[number];
 
 // ---- The layer ----------------------------------------------------------------------------------------------
 
-export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false }: { enabled: boolean; talkButton?: string; hintMode?: boolean }) {
+export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, logAttached = false }: { enabled: boolean; talkButton?: string; hintMode?: boolean; logAttached?: boolean }) {
   const [talking, setTalking] = useState(false);
   const t = useT();
   const locale = useLocale();
@@ -205,6 +205,19 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false }:
   const [kb, setKb] = useState({ row: 1, col: 0, shift: false, symbols: false });
   const [desktopPad, setDesktopPad] = useState<boolean | null>(null);
   const focusedRef = useRef<HTMLElement | null>(null);
+  // The controller is in the attached quest log (RB from Ask, LB from Guide): up / down move its highlight, A ticks,
+  // B or LB goes back to Ask, RB on to Guide. The log is another window: it's driven through the app.
+  const [logFocus, setLogFocus] = useState(false);
+  const logKey = (action: string) => (window as any).electronAPI?.trackerKey?.(action);
+  useEffect(() => {
+    const on = () => { setLogFocus(true); logKey('focus'); };
+    window.addEventListener('qc-log-focus', on);
+    return () => window.removeEventListener('qc-log-focus', on);
+  }, []);
+  // Out of the log when controller mode ends or the log goes (detached, put away, the panel hidden).
+  useEffect(() => {
+    if (logFocus && (!padMode || !logAttached || !enabled)) { setLogFocus(false); logKey('blur'); }
+  }, [logFocus, padMode, logAttached, enabled]);
 
   // The quick questions (src/utils/quickQuestions.ts): the starters, then the ones behind "More" (and "Just a hint"
   // with hint mode on).
@@ -301,6 +314,17 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false }:
         return;
       }
       const b = e.button;
+      // In the attached quest log.
+      if (logFocus) {
+        if (b === 'up' || b === 'down') logKey(b === 'down' ? 'next' : 'prev');
+        else if (b === 'a') logKey('tick');
+        else if (b === 'b' || b === 'lb' || b === 'rb') {
+          setLogFocus(false);
+          logKey('blur');
+          if (b === 'rb') emit('qc-pad-mode', { dir: 1, fromLog: true });
+        }
+        return;
+      }
       // Triggers page through long answers (and lists), most of a screen at a time.
       if (b === 'lt' || b === 'rt') {
         const el = scrollableIn(topScope());
@@ -374,7 +398,7 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false }:
         if (scope === document.body) emit('qc-toggle-answer-model');
       }
     },
-    [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus],
+    [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus, logFocus],
   );
 
   // Desktop: system-level controller service. Falls back to the Gamepad API if it isn't available.
@@ -501,6 +525,12 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false }:
             <Hint b="a" label={t('pad.ask')} />
             <Hint b="b" label={t('common.close')} />
           </>
+        ) : logFocus ? (
+          <>
+            <Hint b="↕" label={t('pad.logMove')} />
+            <Hint b="a" label={t('pad.logTick')} />
+            <Hint b="b" label={t('pad.back')} />
+          </>
         ) : (
           <>
             <Hint b="a" label={t('pad.select')} />
@@ -509,7 +539,7 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false }:
             <Hint b="y" label={t('pad.questions')} />
             {talkButton !== 'off' && <Hint b={talkButton} label={talking ? t('pad.listening') : t('pad.talk')} />}
             <Hint b="menu" label={t('pad.keyboard')} />
-            <Hint b="lb" label={t('pad.askGuide')} />
+            <Hint b="lb" label={t(logAttached ? 'pad.askLogGuide' : 'pad.askGuide')} />
             <Hint b="rt" label={t('pad.page')} />
           </>
         )}

@@ -98,6 +98,7 @@ const LABEL_KEYS = [
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'secBattle', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
   'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt', 'look', 'shownOf', 'hintOpen', 'hintOpenNoKeys',
+  'attach', 'popOut', 'attachOffer', 'attachYes', 'padHint',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
   Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));

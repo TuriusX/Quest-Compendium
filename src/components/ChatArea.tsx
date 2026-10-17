@@ -94,6 +94,8 @@ interface ChatAreaProps {
   onChangeMarkerLifetime?: (seconds: number) => void;
   /** Hint mode (Settings): "Just a hint" among the quick questions. */
   hintMode?: boolean;
+  /** The quest log is attached and showing: the controller's LB / RB reach it between Ask and Guide. */
+  logAttached?: boolean;
   /** The player picked where they are (one tap or voice): remember it for this game. */
   onSetPlace?: (name: string) => void;
   /** "Locate me" in the PlaceBar (desktop, games with a guide). */
@@ -237,6 +239,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   markerLifetime,
   onChangeMarkerLifetime,
   hintMode = false,
+  logAttached = false,
   onSetPlace,
   onLocate,
   locating,
@@ -596,6 +599,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   /** Bumpers (controller): RB goes Ask -> Guide -> the next game; LB the other way. */
   const handlePadMode = (e: Event) => {
     const dir = Number((e as CustomEvent).detail?.dir) || 0;
+    const fromLog = !!(e as CustomEvent).detail?.fromLog;
+    // With the quest log attached: Ask -> the quest log -> Guide (RB), and back (LB).
+    if (fromLog) {
+      if (dir > 0) setMode('guide');
+      return;
+    }
+    if (logAttached && ((dir > 0 && mode === 'ask') || (dir < 0 && mode === 'guide'))) {
+      if (dir < 0) setMode('ask');
+      window.dispatchEvent(new CustomEvent('qc-log-focus'));
+      return;
+    }
     if (dir > 0) {
       if (mode === 'ask') setMode('guide');
       else { window.dispatchEvent(new CustomEvent('qc-switch-tab', { detail: { delta: 1 } })); setMode('ask'); }

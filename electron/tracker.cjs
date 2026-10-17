@@ -5,7 +5,15 @@
  * mouse is over the text, so the game keeps playing underneath. Position, view (full / collapsed / away), text size,
  * transparency and backdrop are remembered per game in userData/tracker.json.
  *
- * It's independent of the panel: showing or hiding the panel (the shortcut, the spine, the tray, the controller) never
+ * Two modes, per game (the 📌 / ⇱ button in its header):
+ * - Attached (new players' default, from 0.6.0): it sticks out of the panel's inner side (left of a panel docked right,
+ *   right of one docked left; undocked, the side with more room), top-aligned with it, and moves, docks, goes compact
+ *   and hides with the panel (follow()). It's never dragged or sent to the edge. Hidden the same way as for a
+ *   screenshot (fully transparent, click-through), not with hide/show. Existing players keep popped-out, with a
+ *   one-time offer in the log to attach it (store._meta).
+ * - Popped out (below): its own window over the game.
+ *
+ * Popped out, it's independent of the panel: showing or hiding the panel (the shortcut, the spine, the tray, the controller) never
  * shows or hides it. Only its own controls do: send it away (a ribbon bookmark at the screen edge; the ribbon brings it
  * back) and the panel header's "Quest log" toggle (toggle()). It's shown by default for a game with no history. Its window
  * stays open across panel cycles (never hidden and shown again: that lost the button-down of every later click). While
@@ -32,6 +40,10 @@ let displaced = false; // moved off the open panel (panelShown); goes back to it
 let creating = null; // the window being created (its page load), shared by show() and restore()
 let revealPending = false, revealTimer = null; // a new window shows once its page has reported its size
 let captureHidden = false; // invisible (opacity 0) for a moment while the app takes a screenshot for the AI
+let attachHidden = false; // attached and the panel is away (or the log is put away): invisible like captureHidden
+let side = 'left'; // attached: which side of the panel the log is on
+let lastSize = null; // the size the page last reported (kept exact when the log moves to a screen with another scale)
+let lastMax = 0; // the height limit last sent to the page
 let inRecordings = true; // follows the markers' "show in recordings" setting (content protection when off)
 let scale = 1; // the app's UI scale (Settings)
 let store = null;   // per-game settings, loaded once
@@ -53,11 +65,18 @@ const MARGIN = 0;
 // backdrop (how dark the soft backdrop is, 0 = off to 95).
 // shown: the quest log is up for this game. A game with no quest log history starts with it shown (new players see it
 // without finding the header button); after that, up or away is remembered per game.
+// attach: stuck to the panel (see the top); unset = the default for this install (store._meta.attachDefault).
 const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: 45, x: null, y: null, edge: 'right', collapsed: {}, hidden: [], limits: {}, shown: true };
 const MAX_HIDDEN = 600;
 /** The tracker grows with its content up to this share of the screen's height, then scrolls inside. */
 const MAX_HEIGHT_SHARE = 0.7;
-const maxHeight = () => Math.round(display().workArea.height * MAX_HEIGHT_SHARE);
+/** Popped out: 70% of its screen. Attached: the panel's height (in the compact view, 70% of the panel's screen). */
+function maxHeight() {
+  const p = isAttached() && deps.getPanelRect ? deps.getPanelRect() : null;
+  if (!p) return Math.round(display().workArea.height * MAX_HEIGHT_SHARE);
+  if (deps.isCompact && deps.isCompact()) return Math.round(deps.screen.getDisplayMatching(p).workArea.height * MAX_HEIGHT_SHARE);
+  return Math.round(p.height);
+}
 
 function loadStore() {
   if (store) return store;
@@ -71,9 +90,24 @@ function saveStore() {
     try { fs.writeFileSync(storeFile, JSON.stringify(store)); } catch (err) { console.warn('[tracker] save failed:', err && err.message); }
   }, 400);
 }
+/**
+ * Install-wide: whether games without their own choice start attached, and the one-time offer to attach. Decided
+ * once, the first time 0.6.0 runs: a quest log history (an existing player) keeps popped-out and gets the offer; a new
+ * install starts attached.
+ */
+function meta() {
+  const st = loadStore();
+  if (!st._meta || typeof st._meta !== 'object') {
+    const existing = Object.keys(st).some((k) => k !== '_meta');
+    st._meta = existing ? { attachDefault: false, offer: true } : { attachDefault: true, offer: false };
+    saveStore();
+  }
+  return st._meta;
+}
 function settingsFor(gameKey) {
   const saved = loadStore()[gameKey || '_default'];
   const s = { ...DEFAULTS, ...(saved || {}) };
+  s.attach = saved && typeof saved.attach === 'boolean' ? saved.attach : !!meta().attachDefault;
   // Games with settings from before the toggle had their quest log shown already.
   if (saved && typeof saved.shown !== 'boolean') s.shown = true;
   // Saved before the backdrop slider: on was the old fixed shade (45%), off is 0.
@@ -90,6 +124,12 @@ function patchSettings(gameKey, patch) {
 }
 
 const alive = () => win && !win.isDestroyed();
+const isAttached = () => !!current && settingsFor(current.gameKey).attach;
+const panelOpen = () => !!(deps && deps.getPanelRect && deps.getPanelRect());
+/** Invisible for a screenshot, or attached while the panel is away (or the log is put away). */
+function applyOpacity() {
+  if (alive()) win.setOpacity(captureHidden || attachHidden ? 0 : 1);
+}
 const js = (code) => { if (alive()) win.webContents.executeJavaScript(code).catch(() => {}); };
 const tell = (payload) => { const m = deps.getMainWindow(); if (m && !m.isDestroyed()) m.webContents.send('tracker-event', payload); };
 
@@ -102,6 +142,7 @@ function display() {
 /** Keep the window on its screen. In the away view it sits flush against the nearest left/right edge. */
 function placeWindow(view) {
   if (!alive()) return;
+  if (isAttached()) { follow(); return; }
   const b = win.getBounds();
   const wa = display().workArea;
   let { x, y } = b;
@@ -129,7 +170,7 @@ function setMouse(on) {
 function startMouseWatch() {
   clearInterval(mouseTimer);
   mouseTimer = setInterval(() => {
-    if (!alive() || !win.isVisible() || captureHidden) { setMouse(false); return; } // off screen, or invisible for a capture
+    if (!alive() || !win.isVisible() || captureHidden || attachHidden) { setMouse(false); return; } // off screen, or invisible
     if (pressed) { setMouse(true); return; }
     const p = deps.screen.getCursorScreenPoint(), b = win.getBounds();
     setMouse(p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height);
@@ -232,7 +273,7 @@ async function open(spot) {
   if (!alive() || !current) return false;
   if (!settingsFor(current.gameKey).shown) { dropWindow(); return false; } // put away meanwhile
   const s = settingsFor(current.gameKey);
-  js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel(), tip, collapsed: s.collapsed || {}, hidden: s.hidden, limits: s.limits, maxHeight: maxHeight() })})`);
+  js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view: s.view, size: s.size, alpha: s.alpha, backdrop: s.backdrop, edge: s.edge, scale, keys: keysLabel(), tip, collapsed: s.collapsed || {}, hidden: s.hidden, limits: s.limits, maxHeight: maxHeight(), ...attachSettings() })})`);
   if (!win.isVisible() && !revealPending) {
     revealPending = true;
     clearTimeout(revealTimer);
@@ -245,11 +286,63 @@ async function open(spot) {
 function reveal() {
   revealPending = false; clearTimeout(revealTimer);
   if (!alive() || captureHidden || win.isVisible()) return;
+  // Attached: in place (and invisible if the panel is away) before it's shown, so it never flashes elsewhere.
+  if (isAttached()) { attachHidden = shouldHideAttached(); applyOpacity(); follow(); }
   win.showInactive();
   afterShow();
-  avoidPanel();
+  if (isAttached()) syncAttach();
+  else avoidPanel();
   sendVisibility();
-  if (deps.onAppear) deps.onAppear();
+  if (deps.onAppear && !attachHidden) deps.onAppear();
+}
+
+/** The page's attach state: attached, its side, and the one-time offer (existing players, while popped out). */
+function attachSettings() {
+  const on = isAttached();
+  return { attached: on, side, attachOffer: !on && !!meta().offer };
+}
+const shouldHideAttached = () => isAttached() && (!panelOpen() || settingsFor(current.gameKey).view === 'away');
+
+/**
+ * Attached: put the log against the panel's inner side, top-aligned (kept on the panel's screen), and keep its height
+ * limit at the panel's. Called on every panel move, resize, dock change, compact switch and UI-scale change. Its size
+ * is the one the page reported, set explicitly: a window moved onto a screen with another scale keeps its size.
+ */
+function follow() {
+  if (!alive() || !isAttached()) return;
+  const p = deps.getPanelRect ? deps.getPanelRect() : null;
+  if (!p) return;
+  const wa = deps.screen.getDisplayMatching(p).workArea;
+  const b = win.getBounds();
+  const w = lastSize ? lastSize.w : b.width, h = lastSize ? lastSize.h : b.height;
+  const dock = String(deps.getDock ? deps.getDock() : '');
+  let s;
+  if (dock.endsWith('right')) s = 'left';
+  else if (dock.endsWith('left')) s = 'right';
+  else s = p.x - wa.x >= wa.x + wa.width - (p.x + p.width) ? 'left' : 'right'; // undocked: the side with more room
+  let x = s === 'left' ? p.x - w : p.x + p.width;
+  x = Math.max(wa.x, Math.min(x, wa.x + wa.width - w));
+  const y = Math.max(wa.y, Math.min(p.y, wa.y + wa.height - h));
+  if (b.x !== x || b.y !== y || b.width !== w || b.height !== h) win.setBounds({ x: Math.round(x), y: Math.round(y), width: w, height: h });
+  const max = maxHeight();
+  if (s !== side || max !== lastMax) {
+    side = s; lastMax = max;
+    js(`window.qcTrackerSettings(${JSON.stringify({ side, maxHeight: max })})`);
+  }
+}
+
+/** Attached: shown with the open panel (and not put away), else invisible; then in place. */
+function syncAttach() {
+  if (!alive()) return;
+  if (!isAttached()) {
+    if (attachHidden) { attachHidden = false; applyOpacity(); }
+    return;
+  }
+  const hideNow = shouldHideAttached();
+  if (hideNow !== attachHidden) { attachHidden = hideNow; applyOpacity(); }
+  follow();
+  if (!attachHidden && win.isVisible()) { mouseOn = null; win.moveTop(); }
+  sendVisibility();
 }
 
 /** What the page gets: only known fields, trimmed to length. */
@@ -318,7 +411,8 @@ function cleanDetail(d) {
 const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
-  'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt'];
+  'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt', 'look', 'shownOf', 'hintOpen', 'hintOpenNoKeys',
+  'attach', 'popOut', 'attachOffer', 'attachYes', 'padHint'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -359,16 +453,16 @@ function update(patch, gameKey) {
 }
 
 function hide() {
-  current = null; displaced = false;
+  current = null; displaced = false; attachHidden = false;
   dropWindow();
   sendVisibility();
 }
 
 /** Visible as the full or folded log (not away as the ribbon, not closed). */
-const logVisible = () => !!current && alive() && settingsFor(current.gameKey).shown && settingsFor(current.gameKey).view !== 'away';
+const logVisible = () => !!current && alive() && settingsFor(current.gameKey).shown && settingsFor(current.gameKey).view !== 'away' && !(isAttached() && !panelOpen());
 /** The panel header's toggle shows whether the quest log is out. */
 function sendVisibility() {
-  tell({ type: 'visibility', visible: logVisible(), hasData: !!current });
+  tell({ type: 'visibility', visible: logVisible(), hasData: !!current, attached: isAttached() });
   // The tick / cycle shortcuts are registered only while the log is on screen (main.cjs).
   if (deps && deps.onLogVisible) deps.onLogVisible(logVisible());
 }
@@ -379,7 +473,10 @@ function sendVisibility() {
  * opens for a moment to show it). Returns whether there was a log to act on.
  */
 function key(action) {
-  if (!['tick', 'next'].includes(action) || !logVisible() || captureHidden || !alive()) return false;
+  // tick / next / prev; focus and blur: the controller is in the log (RB from the conversation, attached).
+  if (!['tick', 'next', 'prev', 'focus', 'blur'].includes(action) || !alive()) return false;
+  if (action === 'blur') { js(`window.qcTrackerKey('blur')`); return true; }
+  if (!logVisible() || captureHidden) return false;
   js(`window.qcTrackerKey(${JSON.stringify(action)})`);
   return true;
 }
@@ -399,6 +496,7 @@ async function toggle(data, gameKey) {
   if (logVisible()) {
     patchSettings(key, { view: 'away' });
     js(`window.qcTrackerSettings(${JSON.stringify({ view: 'away' })})`);
+    syncAttach();
     sendVisibility();
     return 'away';
   }
@@ -408,6 +506,7 @@ async function toggle(data, gameKey) {
     js(`window.qcTrackerShow(${JSON.stringify(current.data)}, ${JSON.stringify({ view })})`);
     backToSpot();
     setTimeout(avoidPanel, 80);
+    syncAttach();
   } else await open(null);
   sendVisibility();
   return 'shown';
@@ -427,6 +526,7 @@ async function showLog(data, gameKey) {
 /** Back to the game's saved spot (from the ribbon, or off the panel). */
 function backToSpot() {
   if (!alive() || !current) return;
+  if (isAttached()) { follow(); return; }
   const s = settingsFor(current.gameKey);
   if (Number.isFinite(s.x) && Number.isFinite(s.y)) win.setPosition(Math.round(s.x), Math.round(s.y));
   displaced = false;
@@ -438,6 +538,7 @@ function backToSpot() {
  */
 function avoidPanel() {
   if (!alive() || !win.isVisible()) return;
+  if (isAttached()) { follow(); return; }
   const p = deps.getPanelRect ? deps.getPanelRect() : null;
   const t = win.getBounds();
   if (!p || !overlaps(t, p)) { win.moveTop(); return; }
@@ -463,10 +564,12 @@ function avoidPanel() {
 
 /** The panel opened (or moved): keep the quest log clear of it and on top. */
 function panelShown() {
+  if (isAttached()) { syncAttach(); if (!attachHidden && deps.onAppear) deps.onAppear(); return; }
   avoidPanel();
 }
 /** The panel hid: a quest log moved off it goes back to its own spot (the ribbon back to its edge). */
 function panelHidden() {
+  if (isAttached()) { syncAttach(); return; } // hides with the panel
   // Back over the game: an appearance, for the mouse tip.
   if (alive() && win.isVisible() && deps.onAppear) deps.onAppear();
   if (!alive() || !displaced) return;
@@ -491,13 +594,13 @@ function hideForCapture() {
   if (!alive() || captureHidden || !win.isVisible()) return false;
   captureHidden = true;
   pressed = false;
-  win.setOpacity(0);
+  applyOpacity();
   return true;
 }
 function showAfterCapture() {
   if (!captureHidden) return;
   captureHidden = false;
-  if (alive()) win.setOpacity(1);
+  applyOpacity();
 }
 
 /** Put the tracker above other always-on-top windows (the hidden panel's spine never covers it). */
@@ -513,7 +616,7 @@ function getLook() {
 
 /** Where the tracker is on screen, or null when it's closed or hidden (for the sticky markers' exclude list). */
 function getBounds() {
-  return alive() && !captureHidden && win.isVisible() ? win.getBounds() : null;
+  return alive() && !captureHidden && !attachHidden && win.isVisible() ? win.getBounds() : null;
 }
 
 /** The markers' "show in recordings" setting: off hides the tracker from all screen capture. */
@@ -559,6 +662,7 @@ function onMessage(event, msg) {
       const w = Math.max(60, Math.min(900, Math.round(msg.width || 0)));
       const h = Math.max(40, Math.min(maxHeight() + 12, Math.round(msg.height || 0)));
       const b = win.getBounds();
+      lastSize = { w, h };
       if (w !== b.width || h !== b.height) win.setBounds({ x: b.x, y: b.y, width: w, height: h });
       placeWindow(msg.view);
       // A new window's first layout with the data: show it now, already at its size and spot.
@@ -574,11 +678,13 @@ function onMessage(event, msg) {
       if (pressed) setMouse(true);
       break;
     case 'drag': {
+      if (isAttached()) break; // attached: it moves with the panel
       const b = win.getBounds();
       win.setPosition(Math.round(b.x + (Number(msg.dx) || 0)), Math.round(b.y + (Number(msg.dy) || 0)));
       break;
     }
     case 'drag-end': {
+      if (isAttached()) break;
       placeWindow('full');
       const b = win.getBounds();
       const wa = display().workArea;
@@ -594,6 +700,7 @@ function onMessage(event, msg) {
       if (['full', 'collapsed', 'away'].includes(msg.view)) {
         patchSettings(gameKey, { view: msg.view, shown: true });
         if (msg.view !== 'away') backToSpot();
+        syncAttach();
         sendVisibility();
         setTimeout(avoidPanel, 60); // once the page has resized for the new view
       }
@@ -668,6 +775,36 @@ function onMessage(event, msg) {
       break;
     case 'peek':
       break;
+    case 'attach': {
+      // 📌 attach / ⇱ pop out (or the one-time offer's Attach): remembered for this game; the offer is done either way.
+      const on = !!msg.on;
+      patchSettings(gameKey, { attach: on });
+      meta().offer = false;
+      saveStore();
+      if (on) {
+        syncAttach();
+      } else {
+        // Popped out: back to its own spot (or the default spot on the panel's screen), visible over the game.
+        attachHidden = false;
+        applyOpacity();
+        const st = settingsFor(gameKey);
+        const p = deps.getPanelRect ? deps.getPanelRect() : null;
+        const wa = (p ? deps.screen.getDisplayMatching(p) : display()).workArea;
+        const at = onScreen(st, wa) ? { x: st.x, y: st.y } : defaultSpot(wa, (lastSize && lastSize.w) || 420);
+        win.setPosition(Math.round(at.x), Math.round(at.y));
+        lastMax = 0;
+        displaced = false;
+        avoidPanel();
+      }
+      js(`window.qcTrackerSettings(${JSON.stringify({ ...attachSettings(), maxHeight: maxHeight() })})`);
+      sendVisibility();
+      break;
+    }
+    case 'attach-offer-dismiss':
+      meta().offer = false;
+      saveStore();
+      js(`window.qcTrackerSettings(${JSON.stringify({ attachOffer: false })})`);
+      break;
     case 'open-panel':
       openPanel();
       break;
@@ -696,7 +833,10 @@ function onMessage(event, msg) {
 function init(d) {
   deps = d;
   storeFile = path.join(d.app.getPath('userData'), 'tracker.json');
+  meta(); // decided before any game's settings are saved: an existing quest log history keeps popped-out
   d.ipcMain.on('tracker-msg', onMessage);
+  // The controller in the attached log (RB from the conversation): move, tick, focus and leave.
+  d.ipcMain.handle('tracker-key', (e, action) => key(String(action || '')));
   d.ipcMain.handle('tracker-show', (e, payload) => show(payload && payload.data, payload && payload.gameKey).catch((err) => { console.warn('[tracker]', err && err.message); return false; }));
   d.ipcMain.on('tracker-update', (e, p) => update(p && p.data ? p.data : p, p && p.gameKey));
   d.ipcMain.on('tracker-hide', () => hide());
@@ -708,11 +848,11 @@ function init(d) {
 }
 
 module.exports = {
-  init, show, update, hide, toggle, showLog, panelShown, panelHidden, setKeys, setMouseTip, getTipLabels, hideForCapture, showAfterCapture, getBounds,
+  init, show, update, hide, toggle, showLog, panelShown, panelHidden, follow, setKeys, setMouseTip, getTipLabels, hideForCapture, showAfterCapture, getBounds,
   setVisibleInRecordings, setScale, openPanel, raise, getLook, key,
   /** The log is on screen (full or folded): the tick / cycle shortcuts are registered only then. */
   isLogVisible: () => logVisible(),
   isOpen: () => alive(),
   /** On screen right now (not hidden behind the open panel). */
-  isShowing: () => alive() && win.isVisible(),
+  isShowing: () => alive() && win.isVisible() && !attachHidden,
 };
