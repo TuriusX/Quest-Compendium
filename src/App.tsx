@@ -2619,6 +2619,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 soundEnabled={settings.soundEnabled}
                 onAppendToNotes={handleAppendToNotes}
                 markerLifetime={settings.markerLifetime ?? 120}
+                hintMode={settings.hintMode === true}
                 onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
                 onSetPlace={handleSetPlace}
                 onLocate={isDesktop && trackerGame.guideArea?.areas?.length ? runLocate : undefined}
@@ -2771,7 +2772,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       )}
 
       {/* Controller support: focus navigation, quick questions, on-screen keyboard, button hints */}
-      <ControllerLayer enabled={settings.controllerEnabled !== false} talkButton={settings.controllerTalk || 'y'} />
+      <ControllerLayer enabled={settings.controllerEnabled !== false} talkButton={settings.controllerTalk || 'y'} hintMode={settings.hintMode === true} />
 
       {/* Quick Game Search & Switcher Modal */}
       <QuickGameSearchModal

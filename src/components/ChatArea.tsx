@@ -52,7 +52,7 @@ import { SignInCard } from './SignInCard';
 import { isPhone } from '../utils/source';
 import { samePlace, tipMatches, useAchievementGuide } from '../utils/achievementGuide';
 import { useLocale } from '../i18n';
-import { QUICK_MAIN, QUICK_MORE, QUICK_FOLLOW, type QuickId } from '../utils/quickQuestions';
+import { quickChips, quickLabelKey, type QuickId } from '../utils/quickQuestions';
 import { displayGameName } from '../utils/gameName';
 import { showFirstRunHints } from '../utils/sessions';
 declare const __APP_BUILD__: { version: string } | undefined;
@@ -92,6 +92,8 @@ interface ChatAreaProps {
   /** Desktop: how long markers stay on screen, in seconds (0 = always). */
   markerLifetime?: number;
   onChangeMarkerLifetime?: (seconds: number) => void;
+  /** Hint mode (Settings): "Just a hint" among the quick questions. */
+  hintMode?: boolean;
   /** The player picked where they are (one tap or voice): remember it for this game. */
   onSetPlace?: (name: string) => void;
   /** "Locate me" in the PlaceBar (desktop, games with a guide). */
@@ -234,6 +236,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onUpdateMessage,
   markerLifetime,
   onChangeMarkerLifetime,
+  hintMode = false,
   onSetPlace,
   onLocate,
   locating,
@@ -1184,7 +1187,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const askQuick = (id: QuickId, image?: string) => {
     playBlipSound(soundEnabled);
-    handleSubmit(undefined, t(`quick.${id}`), image, id);
+    handleSubmit(undefined, t(quickLabelKey(id)), image, id);
   };
 
   // Immersive mode: a hold-to-talk question's answer is read aloud as soon as it arrives.
@@ -1225,9 +1228,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             const last = msgs.map((m) => m.id).lastIndexOf(lastAssistantId ?? '');
             for (let i = last - 1; i >= 0; i--) if (msgs[i].role === 'user') { shot = msgs[i].imageUrl; break; }
           }
-          const follow = QUICK_FOLLOW.filter((id) => id !== 'where' || (markersOn && !!shot));
-          const shown: QuickId[] = asked && lastAssistantId ? follow : QUICK_MAIN;
-          const extra: QuickId[] = asked && lastAssistantId ? [...QUICK_MAIN, ...QUICK_MORE] : QUICK_MORE;
+          const lastAnswer = lastAssistantId ? msgs.find((m) => m.id === lastAssistantId) : undefined;
+          const { shown, extra } = quickChips({ asked: asked && !!lastAssistantId, combat: !!lastAnswer?.combat, canShowWhere: markersOn && !!shot, hintMode });
           const ask = (id: QuickId) => {
             setShowMoreQuick(false);
             askQuick(id, id === 'where' && !isDesktopApp ? shot : undefined);
@@ -1243,7 +1245,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     onClick={() => ask(id)}
                     className="qc-px-frame shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11.5px] font-medium text-zinc-300 hover:text-white hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default"
                   >
-                    {t(`quick.${id}`)}
+                    {t(quickLabelKey(id))}
                   </button>
                 ))}
               </div>
@@ -1286,7 +1288,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         onClick={() => ask(id)}
                         className="w-full px-3 py-1.5 text-left text-[12.5px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer"
                       >
-                        {t(`quick.${id}`)}
+                        {t(quickLabelKey(id))}
                       </button>
                     ))}
                   </div>

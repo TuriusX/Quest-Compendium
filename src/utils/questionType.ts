@@ -14,7 +14,7 @@ export type QuestionType = 'location' | 'puzzle' | 'fight' | 'choice' | 'missabl
 export const QUESTION_TYPES: QuestionType[] = ['location', 'puzzle', 'fight', 'choice', 'missable', 'general'];
 
 const QUICK_TYPES: Record<QuickId, QuestionType> = {
-  next: 'general', stuck: 'puzzle', missable: 'missable', fight: 'fight', choice: 'choice', leave: 'missable',
+  next: 'general', stuck: 'puzzle', missable: 'missable', fight: 'fight', gear: 'general', choice: 'choice', leave: 'missable',
   keep: 'general', hint: 'puzzle', after: 'general', where: 'location', hintInstead: 'puzzle',
 };
 

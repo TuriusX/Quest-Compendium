@@ -18,7 +18,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useT } from '../i18n';
-import { QUICK_MAIN, QUICK_MORE } from '../utils/quickQuestions';
+import { QUICK_MAIN, QUICK_MORE, QUICK_HINTS, quickLabelKey } from '../utils/quickQuestions';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
 type PadEvent = { type: 'button'; button: Btn | 'lt' | 'rt' } | { type: 'scroll'; dy: number } | { type: 'talk'; state: 'start' | 'end' };
@@ -194,7 +194,7 @@ type Special = (typeof SPECIALS)[number];
 
 // ---- The layer ----------------------------------------------------------------------------------------------
 
-export function ControllerLayer({ enabled, talkButton = 'y' }: { enabled: boolean; talkButton?: string }) {
+export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false }: { enabled: boolean; talkButton?: string; hintMode?: boolean }) {
   const [talking, setTalking] = useState(false);
   const t = useT();
   const locale = useLocale();
@@ -206,9 +206,10 @@ export function ControllerLayer({ enabled, talkButton = 'y' }: { enabled: boolea
   const [desktopPad, setDesktopPad] = useState<boolean | null>(null);
   const focusedRef = useRef<HTMLElement | null>(null);
 
-  // The quick questions (src/utils/quickQuestions.ts): the main four, then the ones behind "More".
-  const quickIds = [...QUICK_MAIN, ...QUICK_MORE];
-  const questionLabels = quickIds.map((id) => t(`quick.${id}`));
+  // The quick questions (src/utils/quickQuestions.ts): the starters, then the ones behind "More" (and "Just a hint"
+  // with hint mode on).
+  const quickIds = [...QUICK_MAIN, ...QUICK_MORE, ...(hintMode ? [QUICK_HINTS[0]] : [])];
+  const questionLabels = quickIds.map((id) => t(quickLabelKey(id)));
 
   // Controller mode shows the focus ring and button hints; any mouse or keyboard use hides them again.
   useEffect(() => {

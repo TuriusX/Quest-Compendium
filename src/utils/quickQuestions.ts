@@ -3,14 +3,34 @@
  * what shows in the conversation; the app also sends the id, and the server adds the instruction below to the AI's
  * prompt, so a two-word chip gets a well-aimed answer (in the player's language, like any other).
  */
-export type QuickId = 'next' | 'stuck' | 'missable' | 'fight' | 'choice' | 'leave' | 'keep' | 'hint' | 'after' | 'where' | 'hintInstead';
+export type QuickId = 'next' | 'stuck' | 'missable' | 'fight' | 'gear' | 'choice' | 'leave' | 'keep' | 'hint' | 'after' | 'where' | 'hintInstead';
 
-/** Always visible. */
-export const QUICK_MAIN: QuickId[] = ['next', 'stuck', 'missable', 'fight'];
-/** Behind the "More" chip. */
-export const QUICK_MORE: QuickId[] = ['choice', 'leave', 'keep', 'hint'];
-/** Under the latest answer ('where' only when on-screen markers are on and the answer is about a screenshot). */
-export const QUICK_FOLLOW: QuickId[] = ['after', 'where', 'hintInstead'];
+/** Every question a player can start with (the controller's list, and the chips' "More"), in this order. */
+export const QUICK_MAIN: QuickId[] = ['next', 'missable', 'fight', 'gear', 'stuck'];
+export const QUICK_MORE: QuickId[] = ['choice', 'leave', 'keep'];
+/** The two hint questions: only with hint mode on (Settings). */
+export const QUICK_HINTS: QuickId[] = ['hint', 'hintInstead'];
+
+/** The label's i18n key: quick.{id}, except where the wording changed after it was translated. */
+const LABEL_KEYS: Partial<Record<QuickId, string>> = { missable: 'quick.canMiss', fight: 'quick.beat' };
+export const quickLabelKey = (id: QuickId): string => LABEL_KEYS[id] ?? `quick.${id}`;
+
+/**
+ * The chips that fit where the player is: before the first question three starters ("How do I beat this?" in a
+ * fight, else "Best gear for where I am"); after an answer two follow-ups (in a fight: beat this, then what's after;
+ * else what's after, then "Show me where on screen" when it can, else anything missable). The rest are behind "More",
+ * and the hint questions only with hint mode on.
+ */
+export function quickChips(o: { asked: boolean; combat?: boolean; canShowWhere?: boolean; hintMode?: boolean }): { shown: QuickId[]; extra: QuickId[] } {
+  const shown: QuickId[] = !o.asked
+    ? ['next', 'missable', o.combat ? 'fight' : 'gear']
+    : o.combat
+      ? ['fight', 'after']
+      : ['after', o.canShowWhere ? 'where' : 'missable'];
+  const hints: QuickId[] = o.hintMode ? (o.asked ? ['hintInstead', 'hint'] : ['hint']) : [];
+  const extra = [...hints, ...QUICK_MAIN, ...QUICK_MORE].filter((id) => !shown.includes(id));
+  return { shown, extra };
+}
 
 /** A gentle nudge, never the solution: shared by the two hint questions. */
 const HINT_RULES =
@@ -36,6 +56,11 @@ export const QUICK_PROMPTS: Record<QuickId, string> = {
     'missable items, quests, companions, achievements and choices that lock content out. For each one, say exactly ' +
     'where it is, the last step to get it, and what would lock it out. If nothing here is missable, say so plainly ' +
     'in one line instead of inventing something.',
+  gear:
+    'The player asks for the best gear for where they are now. From the screenshot and where they are in the game and ' +
+    'the story, recommend the best weapons, armor, accessories or upgrades they can realistically get now or nearby, ' +
+    'with where and how to get each, then what to aim for next. Stay at their stage of the game: nothing they cannot ' +
+    'reach yet, and no story spoilers beyond where they are.',
   fight:
     'The player wants help with this fight. Name the enemy or boss, its dangerous attacks and its weaknesses, and ' +
     'give a clear plan: what to do right now (this turn, or this phase), what to avoid, and which skills, gear or ' +
