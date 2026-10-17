@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { pageRefOf, summarise, isStriking, HIGH_IMPRESSIONS } from "../scripts/pipeline/searchConsole";
 import { parseQueryFixLines, applyQueryFixes } from "../scripts/guides/queryRepair";
+import { compactPageStats, statOf } from "../scripts/guides/pageStats";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -64,6 +65,34 @@ test("the repair: a vague entry rewritten, a missing answer added, a clearer tit
   assert.ok(!["x1", "s1"].includes(out.items[1].id));
   assert.equal(out.seoTitle, "Ravaged Beach – Baldur's Gate 3: Thieves' Tools, Harper Cache");
   assert.match(out.seoDescription!, /step by step/);
+});
+
+test("every page's numbers kept compactly (only pages with impressions), read back per page", () => {
+  const pages = [
+    { key: "rdr2", slug: "lakay", impressions: 40, clicks: 2, position: 11.26 },
+    { key: "rdr2", slug: "colter", impressions: 900, clicks: 30, position: 6.04 },
+    { key: "rdr2", slug: "nobody", impressions: 0, clicks: 0, position: 0 },
+  ];
+  const map = compactPageStats(pages);
+  assert.deepEqual(Object.keys(map), ["rdr2/colter", "rdr2/lakay"]);
+  assert.deepEqual(map["rdr2/lakay"], [40, 2, 11.3]);
+  assert.deepEqual(statOf(map, "rdr2", "colter"), { impressions: 900, clicks: 30, position: 6 });
+  // A staged key reads the live page's numbers; a page with no impressions has none.
+  assert.equal(statOf(map, "rdr2--next", "lakay")!.impressions, 40);
+  assert.equal(statOf(map, "rdr2", "nobody"), null);
+  assert.equal(statOf(null, "rdr2", "lakay"), null);
+});
+
+test("the page map stays under the size limit, dropping the pages with the fewest impressions", () => {
+  const many = Array.from({ length: 5000 }, (_, i) => ({ key: "a-very-long-guide-key-for-the-size-test", slug: `page-number-${i}`, impressions: 5000 - i, clicks: 0, position: 10 }));
+  const map = compactPageStats(many, 50_000);
+  const n = Object.keys(map).length;
+  assert.ok(n > 100 && n < 5000);
+  assert.ok(JSON.stringify(map).length < 60_000);
+  assert.ok(map["a-very-long-guide-key-for-the-size-test/page-number-0"]);
+  assert.equal(map["a-very-long-guide-key-for-the-size-test/page-number-4999"], undefined);
+  // The real limit holds every guide page with room to spare (the site has about 2,500 English pages).
+  assert.equal(Object.keys(compactPageStats(many)).length, 5000);
 });
 
 console.log(`\n${passed} tests passed`);
