@@ -22,8 +22,38 @@ const STORY_HEADS: Record<string, string[]> = {
   person: ['Who they are', 'History with the main character', 'Role in the story', 'Possible fates'],
   boss: ['Who or what it is', 'Role in the story'], place: ['History', 'Story events here'], thing: ['Lore'],
 };
-/** The "Gameplay" section's parts. */
-export const GAMEPLAY_HEADS = ['Recruitment', 'Romance', 'Choices and consequences', 'How to reach it', 'Quest steps', 'Rewards', 'Combat', 'Missables'];
+/**
+ * The "Gameplay" section's parts, by kind of entity. One list for every kind filed a person's grave under "How to reach
+ * it" (Arthur, Hosea, Shani): a person gets "Where to find them" and "Fate", a place "How to reach it".
+ */
+const GAMEPLAY_BY_KIND: Record<string, string[]> = {
+  person: ['Where to find them', 'Recruitment', 'Romance', 'Quest steps', 'Choices and consequences', 'Fate', 'Rewards', 'Combat', 'Missables'],
+  place: ['How to reach it', 'Quest steps', 'Choices and consequences', 'Rewards', 'Combat', 'Missables'],
+  boss: ['Where to find it', 'Combat', 'Rewards', 'Choices and consequences', 'Missables'],
+  thing: ['Where to find it', 'Quest steps', 'Choices and consequences', 'Rewards', 'Missables'],
+};
+/** What each part is about, for the prompt. */
+const GAMEPLAY_WHAT: Record<string, string> = {
+  'Where to find them': 'where to find them', 'Where to find it': 'where to find it', 'How to reach it': 'getting there', Recruitment: 'recruiting',
+  Romance: 'romance', 'Quest steps': 'quest steps', 'Choices and consequences': 'choices and their consequences', Fate: 'what becomes of them (death, grave, ending)',
+  Rewards: 'rewards', Combat: 'combat', Missables: 'missables',
+};
+export const gameplayHeads = (kind: string) => GAMEPLAY_BY_KIND[kind] || GAMEPLAY_BY_KIND.person;
+/** Every gameplay heading of any kind (older pages' parts keep their order with these). */
+export const GAMEPLAY_HEADS = [...new Set(Object.values(GAMEPLAY_BY_KIND).flat())];
+/**
+ * The part a "G:<heading>" reply goes to, for this kind: one of its headings, or the kind's own word for getting there
+ * when the model answers with another kind's ("How to reach it" on a person is where to find them). Null if none fits.
+ */
+export function gameplayHeadFor(kind: string, raw: string): string | null {
+  const heads = gameplayHeads(kind);
+  const h = String(raw || '').trim().toLowerCase();
+  const own = heads.find((x) => x.toLowerCase() === h);
+  if (own) return own;
+  if (/^(how to reach it|how to get there|getting there|where to find (them|it|him|her))$/.test(h)) return heads.find((x) => /^(where to find|how to reach)/i.test(x)) || null;
+  if (kind === 'person' && /^(possible )?fates?$|^death$|^grave( location)?$/.test(h)) return 'Fate';
+  return null;
+}
 /** A moved sentence stands on its own: no leading "Alternatively," / "However,". */
 const standalone = (t: string) => t.replace(/^(Alternatively|However|Additionally|Also|Moreover|Instead|Otherwise|Furthermore|In addition|Likewise),\s*/i, '').replace(/^./, (c) => c.toUpperCase());
 
@@ -32,6 +62,7 @@ export async function arrangeQA(game: string, name: string, page: { overview: st
   const story = (page.story || []).map((s) => ({ ...s }));
   const gameplay = (page.gameplay || []).map((s) => ({ ...s }));
   const storyHeads = STORY_HEADS[kind] || STORY_HEADS.person;
+  const gameHeads = gameplayHeads(kind);
   const notes = [...(page.summary?.notes || [])];
   const qa = page.qa || [];
   const sents = qa.flatMap((x, qi) => sentencesOf(x.a).map((t, si) => ({ id: `A${qi + 1}.${si + 1}`, qi, t })));
@@ -50,7 +81,7 @@ export async function arrangeQA(game: string, name: string, page: { overview: st
       '"dup": the page already says this (anywhere above), even in other words',
       ...story.map((s, i) => `"S${i + 1}": it belongs in the story part "${s.heading}" and adds something new to it`),
       `"NS:<heading>": story or background with no part yet; heading one of: ${storyHeads.join(' | ')}`,
-      `"G:<heading>": how it plays (recruiting, romance, choices and their consequences, getting there, quest steps, rewards, combat, missables); heading one of: ${GAMEPLAY_HEADS.join(' | ')}`,
+      `"G:<heading>": how it plays (${gameHeads.map((h) => GAMEPLAY_WHAT[h] || h.toLowerCase()).join(', ')}); heading one of: ${gameHeads.join(' | ')}`,
       '"N": a small extra fact that fits none of those (a note)',
       '"X": only if it fits nowhere above',
       ...sents.map((s) => `${s.id} [question: ${qa[s.qi].q}]: ${s.t}`),
@@ -70,7 +101,7 @@ export async function arrangeQA(game: string, name: string, page: { overview: st
     if (w === 'DUP') { dropped++; continue; }
     if (si && story[Number(si[1]) - 1]) { const p = story[Number(si[1]) - 1]; p.text = `${p.text.trim()} ${t}`.trim(); moved++; continue; }
     if (w.startsWith('NS:')) { const h = storyHeads.find((x) => x.toLowerCase() === raw.slice(3).trim().toLowerCase()); if (h) { add(story, h); continue; } }
-    if (w.startsWith('G:')) { const h = GAMEPLAY_HEADS.find((x) => x.toLowerCase() === raw.slice(2).trim().toLowerCase()); if (h) { add(gameplay, h); continue; } }
+    if (w.startsWith('G:')) { const h = gameplayHeadFor(kind, raw.slice(2)); if (h) { add(gameplay, h); continue; } }
     if (w === 'N') { notes.push(cut(t, 400)); moved++; continue; }
     also.set(s.qi, [...(also.get(s.qi) || []), s.t]); kept++;
   }
@@ -78,7 +109,8 @@ export async function arrangeQA(game: string, name: string, page: { overview: st
   // Story parts in their usual order; gameplay parts in the list's order.
   const rank = (h: string) => { const i = storyHeads.indexOf(/^History with /i.test(h) && kind === 'person' ? 'History with the main character' : h); return i < 0 ? 99 : i; };
   story.sort((a, b) => rank(a.heading) - rank(b.heading));
-  gameplay.sort((a, b) => GAMEPLAY_HEADS.indexOf(a.heading) - GAMEPLAY_HEADS.indexOf(b.heading));
+  const gRank = (h: string) => { const i = gameHeads.indexOf(h); return i < 0 ? 50 + GAMEPLAY_HEADS.indexOf(h) : i; };
+  gameplay.sort((a, b) => gRank(a.heading) - gRank(b.heading));
   return { story, gameplay, notes, alsoAsked, moved, dropped, kept };
 }
 
