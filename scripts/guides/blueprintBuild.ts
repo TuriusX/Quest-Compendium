@@ -46,7 +46,9 @@ export type BlueprintCtx = {
  * estimate isn't a limit on a plan with a cap: RDR2's story missions were estimated at 108 units, capped at 120 and
  * planned with 122 names, and building only the first 108 cut off all of Epilogue Part 2.
  */
-export const sectionLimit = (s: { units: number; cap?: number }) => Math.max(0, s.cap != null ? Number(s.cap) || 0 : Number(s.units) || 0);
+// The estimate stays the limit (as before; building past it is new spend, the owner's call): a plan that names more is
+// reported and the section stays open, so raising the estimate or the cap builds the rest.
+export const sectionLimit = (s: { units: number; cap?: number }) => Math.max(0, Math.min(Number(s.units) || 0, s.cap != null ? Number(s.cap) || 0 : Infinity));
 
 /**
  * A section's plan against what's built: the names to build next (in plan order, up to the limit), the names beyond

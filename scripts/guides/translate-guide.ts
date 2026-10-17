@@ -18,6 +18,8 @@ import { db, gemini, MODEL, gameKey, arg, steamAchievements, type GuideArea } fr
 import { estimateCost } from '../../usage';
 import { acquireGuideLock, isRefusal, lockedLine, releaseGuideLocks } from './guideLock';
 import { untranslated, UNTRANSLATED_LIMIT } from './translateCheck';
+/** The levels line and people cards go to the translator only with TRANSLATE_EXTRA_FIELDS=on (more text per page: the owner's OK first). */
+const EXTRA = process.env.TRANSLATE_EXTRA_FIELDS === 'on';
 
 const LANGS: Record<string, string> = {
   es: 'Spanish (Latin American, neutral)', pt: 'Brazilian Portuguese', de: 'German', fr: 'French', ru: 'Russian',
@@ -58,8 +60,8 @@ function source(a: GuideArea) {
     enemies: a.enemies.map((e) => ({ id: e.id, name: e.name, weakness: e.weakness, steal: e.steal, notes: e.notes })),
     shops: a.shops.map((e) => ({ id: e.id, name: e.name, sells: e.sells })),
     fights: (a.fights || []).map((e) => ({ id: e.id, name: e.name, enemies: e.enemies, threats: e.threats, weaknesses: e.weaknesses, tactics: e.tactics, rewards: e.rewards })),
-    ...(a.info ? { info: { region: a.info.region, levels: a.info.levels, quests: a.info.quests, services: a.info.services, enemyTypes: a.info.enemyTypes, directions: a.info.directions, connected: a.info.connected } } : {}),
-    ...(Array.isArray(people) && people.length
+    ...(a.info ? { info: { region: a.info.region, ...(EXTRA ? { levels: a.info.levels } : {}), quests: a.info.quests, services: a.info.services, enemyTypes: a.info.enemyTypes, directions: a.info.directions, connected: a.info.connected } } : {}),
+    ...(EXTRA && Array.isArray(people) && people.length
       ? { people: { groups: people.map((g: any) => ({ group: String(g?.group || ''), people: (Array.isArray(g?.people) ? g.people : []).map((x: any) => ({ name: String(x?.name || ''), ...(x?.role ? { role: String(x.role) } : {}), ...(x?.where ? { where: String(x.where) } : {}) })) })) } }
       : {}),
     tips: a.tips || [],
