@@ -176,7 +176,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </button>
         )}
 
-        {/* The desktop app's two most used controls: tuck the panel away, and the quest log. */}
+        {/* Tuck the panel away (the quest log has its own bookmark on the panel's edge, and is in the ⋯ menu). */}
         {isDesktop && (
           <>
             {/* Tuck away: the panel slides to the screen edge (Esc does the same) */}
@@ -194,19 +194,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               </button>
             )}
 
-            {onToggleQuestLog && (
-              <button
-                style={{ WebkitAppRegion: "no-drag" } as any}
-                onClick={onToggleQuestLog}
-                disabled={!questLogReady}
-                aria-pressed={questLogVisible}
-                title={!questLogReady ? t('header.questLogEmpty') : questLogVisible ? t('header.questLogHide') : t('header.questLogShow')}
-                aria-label={t('header.questLog')}
-                className={`p-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-default ${questLogVisible ? 'text-[var(--accent-color)] bg-[var(--accent-dim)] hover:bg-white/10' : 'text-zinc-400 hover:text-white hover:bg-white/10'}`}
-              >
-                <ScrollText className="w-4 h-4" />
-              </button>
-            )}
           </>
         )}
 
@@ -235,6 +222,13 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   <span className="w-4 h-4 flex items-center justify-center text-[13px]" aria-hidden="true">✦</span>
                   <span className="flex-1">{t('play.title')}</span>
                 </button>
+                {/* The quest log: shown or put away (tucked in as a bookmark when attached, the ribbon when popped out). */}
+                {onToggleQuestLog && (
+                  <button type="button" role="menuitem" disabled={!questLogReady} onClick={pick(() => { playBlipSound(soundEnabled); onToggleQuestLog(); })} title={!questLogReady ? t('header.questLogEmpty') : undefined} className={`${menuItem} disabled:opacity-40 disabled:cursor-default`}>
+                    <ScrollText className="w-4 h-4 text-[var(--accent-color)]" />
+                    <span className="flex-1">{questLogVisible ? t('menu.questLogHide') : t('menu.questLogShow')}</span>
+                  </button>
+                )}
                 {activeGame && (
                   <button type="button" role="menuitem" onClick={pick(() => { playPageTurnSound(soundEnabled); onToggleAchDrawer(); })} className={menuItem}>
                     <Trophy className="w-4 h-4 text-amber-400" />

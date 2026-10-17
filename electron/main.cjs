@@ -100,6 +100,7 @@ const { createFocusHelper } = require('./focus.cjs');
 const tracker = require('./tracker.cjs');
 const { initUpdater } = require('./updater.cjs');
 const spine = require('./spine.cjs');
+const edgetab = require('./edgetab.cjs');
 const focusHelper = createFocusHelper();
 const http = require('http');
 
@@ -412,7 +413,7 @@ async function slideIn(opts = {}) {
   
   if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(false);
-    animateWindow(coords.x, coords.y, 150).then(() => tracker.panelShown());
+    animateWindow(coords.x, coords.y, 150).then(() => { tracker.panelShown(); edgetab.sync(); });
   } else {
     tracker.panelShown();
   }
@@ -451,11 +452,14 @@ function slideOut() {
   focusHelper.restore(mainWindow, handBack, { detected: !!detected });
   focusBeforeOverlay = null;
   openSnapshot = null; // the snapshot only lives for one visit
+  edgetab.hide();
   if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(true);
     animateWindow(coords.x, coords.y, 150).then(parkPanel);
   } else {
-    mainWindow.hide(); // if undocked, just hide it
+    // Undocked: the panel goes and the book spine stays where it was (a click brings the panel back there).
+    mainWindow.hide();
+    spine.show();
   }
   // The quest log stays as it is; one that stepped off the panel goes back to its own spot.
   tracker.panelHidden();
@@ -511,10 +515,11 @@ function createWindow() {
       baseLogicalHeight = bounds.height / currentUiScale;
     }
     tracker.follow(); // an attached quest log keeps to the panel (compact, UI scale, the achievements drawer)
+    edgetab.sync();
   });
   // The panel moved (sliding to its dock, a new dock, dragged while undocked, onto another screen): an attached quest
   // log goes with it.
-  mainWindow.on('move', () => tracker.follow());
+  mainWindow.on('move', () => { tracker.follow(); edgetab.sync(); });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return {
@@ -633,6 +638,8 @@ app.whenReady().then(() => {
     // Attached quest log: which side of the panel it goes on, and its height limit in the compact view.
     getDock: () => currentDockPosition,
     isCompact: () => compactMode,
+    // With the panel away: the spine the attached log (or its bookmark) sticks out of.
+    getSpineAnchor: () => spine.anchor(),
     // A new tracker opens on the game's screen: the one the last screenshot came from.
     getDisplay: () => lastCaptureDisplay,
     // Processor share while it's open, next to the markers' (startPerfLog).
@@ -641,7 +648,8 @@ app.whenReady().then(() => {
     onAppear: onLogAppear,
     onTipDismiss: () => tellApp({ type: 'mouse-tip', what: 'dismiss' }),
     // The tick / cycle shortcuts are registered while the quest log is on screen, and only then.
-    onLogVisible: (visible) => syncTrackerKeys(visible),
+    // The cycle key also brings back a log that's put away (its bookmark or ribbon), so it's registered while one exists.
+    onLogVisible: (visible, available) => syncTrackerKeys(visible, available),
   });
   tracker.setMouseTip(tipMode());
   tracker.setVisibleInRecordings(markersInRecordings);
@@ -656,10 +664,21 @@ app.whenReady().then(() => {
     const next = {
       accent: /^#[0-9a-fA-F]{3,8}$/.test(String(l.accent || '')) ? String(l.accent) : undefined,
       label: typeof l.label === 'string' && l.label.trim() ? l.label.trim().slice(0, 80) : undefined,
+      tuckLabel: typeof l.tuckLabel === 'string' && l.tuckLabel.trim() ? l.tuckLabel.trim().slice(0, 80) : undefined,
     };
     if (JSON.stringify(next) === JSON.stringify(appLook)) return;
     appLook = next;
     spine.refresh();
+    edgetab.hide(); edgetab.sync(); // drawn again in the new look
+  });
+  // The tuck-away tab outside the open docked panel's frame (electron/edgetab.cjs).
+  edgetab.init({
+    ipcMain, screen,
+    getPanelRect: () => panelRect(),
+    getDock: () => currentDockPosition,
+    getTrackerBounds: () => tracker.getEdgeBounds(),
+    onTuck: () => { if (isAppVisible) slideOut(); },
+    getLook: () => ({ accent: (appLook && appLook.accent) || tracker.getLook().accent, label: (appLook && appLook.tuckLabel) || 'Tuck the panel away' }),
   });
   spine.init({
     ipcMain, screen,
@@ -667,10 +686,11 @@ app.whenReady().then(() => {
     getDock: () => {
       const wa = screen.getPrimaryDisplay().workArea;
       const b = mainWindow && !mainWindow.isDestroyed() ? mainWindow.getBounds() : null;
-      return { position: currentDockPosition, panelHeight: b ? b.height : wa.height, workArea: wa };
+      return { position: currentDockPosition, panelHeight: b ? b.height : wa.height, workArea: wa, panelRect: b };
     },
     getTrackerBounds: () => tracker.getBounds(),
     raiseTracker: () => tracker.raise(),
+    onShown: () => tracker.anchorChanged(),
     getLook: () => {
       const t = tracker.getLook();
       return { accent: (appLook && appLook.accent) || t.accent, label: (appLook && appLook.label) || t.label };
@@ -821,11 +841,12 @@ let trackerKeys = { tick: 'CommandOrControl+Shift+Enter', next: 'CommandOrContro
 let trackerKeysOn = [];
 let appKeys = [];
 const sameKeys = (a, b) => String(a || '').replace(/CmdOrCtrl|CommandOrControl/gi, 'Ctrl').toLowerCase() === String(b || '').replace(/CmdOrCtrl|CommandOrControl/gi, 'Ctrl').toLowerCase();
-function syncTrackerKeys(visible) {
+function syncTrackerKeys(visible, available = visible) {
   for (const k of trackerKeysOn) { try { globalShortcut.unregister(k); } catch (_) {} }
   trackerKeysOn = [];
-  if (!visible) return;
+  if (!visible && !available) return;
   for (const [action, keys] of Object.entries(trackerKeys)) {
+    if (!visible && action !== 'next') continue; // put away: only "next" (it brings the log back)
     if (!keys || appKeys.some((k) => sameKeys(k, keys)) || trackerKeysOn.some((k) => sameKeys(k, keys))) continue;
     try {
       if (globalShortcut.register(keys, () => tracker.key(action))) trackerKeysOn.push(keys);
@@ -1160,10 +1181,11 @@ ipcMain.on('set-dock-position', (event, pos) => {
       // allow dragging
       mainWindow.setIgnoreMouseEvents(false);
       spine.hide();
+      edgetab.hide();
       tracker.follow(); // an attached quest log picks the side with more room
     } else {
       const coords = getDockCoords(!isAppVisible);
-      animateWindow(coords.x, coords.y, 150).then(() => { if (isAppVisible) tracker.panelShown(); });
+      animateWindow(coords.x, coords.y, 150).then(() => { if (isAppVisible) { tracker.panelShown(); edgetab.sync(); } });
       if (!isAppVisible) spine.show(); // the spine moves to the new dock edge
     }
   }
@@ -1215,6 +1237,7 @@ async function captureScreenImage() {
   // Never capture our own on-screen pointers in the next screenshot.
   closeScreenPointers();
   // ...or the objectives tracker (hidden for the capture, then back; a moment for the screen to redraw without it).
+  edgetab.setCaptureHidden(true);
   if (tracker.hideForCapture()) await new Promise((resolve) => setTimeout(resolve, 80));
   let base64Image = null;
   try {
@@ -1270,6 +1293,7 @@ async function captureScreenImage() {
     }
   } finally {
     tracker.showAfterCapture();
+    edgetab.setCaptureHidden(false);
   }
   lastCaptureImage = base64Image || lastCaptureImage;
   return base64Image;

@@ -1414,7 +1414,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // The hidden panel's spine follows the theme and the language (electron/spine.cjs).
   useEffect(() => {
     const t = THEME_STYLES[settings.theme] || THEME_STYLES.purple;
-    (window as any).electronAPI?.setLook?.({ accent: t.color, label: tr('tracker.spine') });
+    (window as any).electronAPI?.setLook?.({ accent: t.color, label: tr('tracker.spine'), tuckLabel: tr('header.tuckHandle') });
   }, [settings.theme, settings.language]);
 
   // Apply Theme CSS Variables
@@ -2377,23 +2377,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           boxShadow: '0 0 35px var(--accent-glow)'
         }}
       >
-        {/* A slim pull-tab on the dock-side edge: tucks the panel away (like the shortcut). */}
-        {isDesktop && settings.dockPosition !== 'undocked' && (
-          <button
-            type="button"
-            onClick={tuckAway}
-            title={tr('header.tuckHandle')}
-            aria-label={tr('header.tuckHandle')}
-            className={`qc-tuck-handle group absolute top-1/2 -translate-y-1/2 z-[60] w-3 h-16 flex items-center justify-center cursor-pointer border-y border-[var(--accent-border)] bg-[var(--accent-dim)] text-[var(--accent-color)] hover:w-4 hover:bg-[var(--accent-color)] hover:text-black transition-[width,background-color] duration-150 ${
-              tuckSide === 'left' ? 'left-0 border-r rounded-r-md' : 'right-0 border-l rounded-l-md'
-            }`}
-            style={{ WebkitAppRegion: 'no-drag' } as any}
-          >
-            <svg viewBox="0 0 6 10" width="6" height="10" shape-rendering="crispEdges" aria-hidden="true" className={tuckSide === 'left' ? 'scale-x-[-1]' : ''}>
-              <path fill="currentColor" d="M0 0h2v2h2v2h2v2H4v2H2v2H0V8h2V6h2V4H2V2H0z" />
-            </svg>
-          </button>
-        )}
+        {/* The tuck-away tab sticks out of the panel's inner edge, outside this window (electron/edgetab.cjs). */}
         {/* "Mouse unlocked": the panel opened with the show/hide shortcut (the first 10 times) */}
         {mouseToast && (
           <div role="status" aria-live="polite" className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 z-[80] max-w-[90%] animate-in fade-in slide-in-from-top-2 duration-200">

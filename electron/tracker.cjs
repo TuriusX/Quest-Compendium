@@ -7,10 +7,12 @@
  *
  * Two modes, per game (the 📌 / ⇱ button in its header):
  * - Attached (new players' default, from 0.6.0): it sticks out of the panel's inner side (left of a panel docked right,
- *   right of one docked left; undocked, the side with more room), top-aligned with it, and moves, docks, goes compact
- *   and hides with the panel (follow()). It's never dragged or sent to the edge. Hidden the same way as for a
- *   screenshot (fully transparent, click-through), not with hide/show. Existing players keep popped-out, with a
- *   one-time offer in the log to attach it (store._meta).
+ *   right of one docked left; undocked, the side with more room), top-aligned with it, and moves, docks and goes compact
+ *   with the panel (follow()). Tucked in (its header's bookmark button, the ⋯ menu), only a small bookmark sticks out
+ *   of the panel's edge near its top; a click slides the log out again. With the panel away it does the same from the
+ *   book spine (spine.anchor()). It's never dragged. Without anything to stick to (the panel sliding away, before the
+ *   spine shows) it's invisible like for a screenshot (transparent, click-through), not hidden and shown. Existing
+ *   players keep popped-out, with a one-time offer in the log to attach it (store._meta).
  * - Popped out (below): its own window over the game.
  *
  * Popped out, it's independent of the panel: showing or hiding the panel (the shortcut, the spine, the tray, the controller) never
@@ -72,10 +74,10 @@ const MAX_HIDDEN = 600;
 const MAX_HEIGHT_SHARE = 0.7;
 /** Popped out: 70% of its screen. Attached: the panel's height (in the compact view, 70% of the panel's screen). */
 function maxHeight() {
-  const p = isAttached() && deps.getPanelRect ? deps.getPanelRect() : null;
-  if (!p) return Math.round(display().workArea.height * MAX_HEIGHT_SHARE);
-  if (deps.isCompact && deps.isCompact()) return Math.round(deps.screen.getDisplayMatching(p).workArea.height * MAX_HEIGHT_SHARE);
-  return Math.round(p.height);
+  const a = isAttached() ? anchor() : null;
+  if (!a) return Math.round(display().workArea.height * MAX_HEIGHT_SHARE);
+  if (a.kind === 'spine' || (deps.isCompact && deps.isCompact())) return Math.round(deps.screen.getDisplayMatching(a.rect).workArea.height * MAX_HEIGHT_SHARE);
+  return Math.round(a.rect.height);
 }
 
 function loadStore() {
@@ -125,7 +127,27 @@ function patchSettings(gameKey, patch) {
 
 const alive = () => win && !win.isDestroyed();
 const isAttached = () => !!current && settingsFor(current.gameKey).attach;
-const panelOpen = () => !!(deps && deps.getPanelRect && deps.getPanelRect());
+/**
+ * What the attached log sticks out of, and on which side: the open panel (docked right: its left side; docked left:
+ * its right; undocked: the side with more room), else the book spine with the panel away (its inner side), else null.
+ */
+function anchor() {
+  const p = deps && deps.getPanelRect ? deps.getPanelRect() : null;
+  if (p) {
+    const dock = String(deps.getDock ? deps.getDock() : '');
+    let s;
+    if (dock.endsWith('right')) s = 'left';
+    else if (dock.endsWith('left')) s = 'right';
+    else {
+      const wa = deps.screen.getDisplayMatching(p).workArea;
+      s = p.x - wa.x >= wa.x + wa.width - (p.x + p.width) ? 'left' : 'right';
+    }
+    return { rect: p, kind: 'panel', side: s };
+  }
+  const sp = deps && deps.getSpineAnchor ? deps.getSpineAnchor() : null;
+  if (sp && sp.rect) return { rect: sp.rect, kind: 'spine', side: sp.right ? 'left' : 'right' };
+  return null;
+}
 /** Invisible for a screenshot, or attached while the panel is away (or the log is put away). */
 function applyOpacity() {
   if (alive()) win.setOpacity(captureHidden || attachHidden ? 0 : 1);
@@ -301,7 +323,9 @@ function attachSettings() {
   const on = isAttached();
   return { attached: on, side, attachOffer: !on && !!meta().offer };
 }
-const shouldHideAttached = () => isAttached() && (!panelOpen() || settingsFor(current.gameKey).view === 'away');
+const shouldHideAttached = () => isAttached() && !anchor();
+/** Tucked in, its bookmark sits this far below the panel's top edge (the tuck-away tab stays clear of it). */
+const BOOKMARK_TOP = 8;
 
 /**
  * Attached: put the log against the panel's inner side, top-aligned (kept on the panel's screen), and keep its height
@@ -310,24 +334,24 @@ const shouldHideAttached = () => isAttached() && (!panelOpen() || settingsFor(cu
  */
 function follow() {
   if (!alive() || !isAttached()) return;
-  const p = deps.getPanelRect ? deps.getPanelRect() : null;
-  if (!p) return;
+  const a = anchor();
+  if (!a) return;
+  const p = a.rect, s = a.side;
   const wa = deps.screen.getDisplayMatching(p).workArea;
   const b = win.getBounds();
   const w = lastSize ? lastSize.w : b.width, h = lastSize ? lastSize.h : b.height;
-  const dock = String(deps.getDock ? deps.getDock() : '');
-  let s;
-  if (dock.endsWith('right')) s = 'left';
-  else if (dock.endsWith('left')) s = 'right';
-  else s = p.x - wa.x >= wa.x + wa.width - (p.x + p.width) ? 'left' : 'right'; // undocked: the side with more room
+  const tucked = settingsFor(current.gameKey).view === 'away';
   let x = s === 'left' ? p.x - w : p.x + p.width;
   x = Math.max(wa.x, Math.min(x, wa.x + wa.width - w));
-  const y = Math.max(wa.y, Math.min(p.y, wa.y + wa.height - h));
+  // Out: top-aligned with what it sticks out of. Tucked in: the bookmark near the panel's top (level with the spine).
+  const top = tucked && a.kind === 'panel' ? p.y + BOOKMARK_TOP : p.y;
+  const y = Math.max(wa.y, Math.min(top, wa.y + wa.height - h));
   if (b.x !== x || b.y !== y || b.width !== w || b.height !== h) win.setBounds({ x: Math.round(x), y: Math.round(y), width: w, height: h });
   const max = maxHeight();
   if (s !== side || max !== lastMax) {
     side = s; lastMax = max;
-    js(`window.qcTrackerSettings(${JSON.stringify({ side, maxHeight: max })})`);
+    // The bookmark is anchored to the side it sticks out of (the log's side facing the panel or spine).
+    js(`window.qcTrackerSettings(${JSON.stringify({ side, maxHeight: max, edge: side === 'left' ? 'right' : 'left' })})`);
   }
 }
 
@@ -412,7 +436,7 @@ const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
   'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt', 'look', 'shownOf', 'hintOpen', 'hintOpenNoKeys',
-  'attach', 'popOut', 'attachOffer', 'attachYes', 'padHint'];
+  'attach', 'popOut', 'attachOffer', 'attachYes', 'padHint', 'tuckIn', 'slideOut'];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -459,12 +483,12 @@ function hide() {
 }
 
 /** Visible as the full or folded log (not away as the ribbon, not closed). */
-const logVisible = () => !!current && alive() && settingsFor(current.gameKey).shown && settingsFor(current.gameKey).view !== 'away' && !(isAttached() && !panelOpen());
+const logVisible = () => !!current && alive() && settingsFor(current.gameKey).shown && settingsFor(current.gameKey).view !== 'away' && !(isAttached() && !anchor());
 /** The panel header's toggle shows whether the quest log is out. */
 function sendVisibility() {
   tell({ type: 'visibility', visible: logVisible(), hasData: !!current, attached: isAttached() });
   // The tick / cycle shortcuts are registered only while the log is on screen (main.cjs).
-  if (deps && deps.onLogVisible) deps.onLogVisible(logVisible());
+  if (deps && deps.onLogVisible) deps.onLogVisible(logVisible(), !!current);
 }
 
 /**
@@ -476,6 +500,11 @@ function key(action) {
   // tick / next / prev; focus and blur: the controller is in the log (RB from the conversation, attached).
   if (!['tick', 'next', 'prev', 'focus', 'blur'].includes(action) || !alive()) return false;
   if (action === 'blur') { js(`window.qcTrackerKey('blur')`); return true; }
+  // The cycle key with the log put away (tucked in as a bookmark, or the ribbon): it comes back out.
+  if (action === 'next' && current && !logVisible() && !captureHidden && !(isAttached() && !anchor())) {
+    toggle(null).catch(() => {});
+    return true;
+  }
   if (!logVisible() || captureHidden) return false;
   js(`window.qcTrackerKey(${JSON.stringify(action)})`);
   return true;
@@ -616,7 +645,13 @@ function getLook() {
 
 /** Where the tracker is on screen, or null when it's closed or hidden (for the sticky markers' exclude list). */
 function getBounds() {
-  return alive() && !captureHidden && !attachHidden && win.isVisible() ? win.getBounds() : null;
+  // Attached, the spine sticks to it (anchor), so it doesn't step around it.
+  return alive() && !captureHidden && !attachHidden && !isAttached() && win.isVisible() ? win.getBounds() : null;
+}
+/** The attached log or its bookmark on the panel's edge, for the tuck-away tab to keep clear of (null otherwise). */
+function getEdgeBounds() {
+  const a = isAttached() ? anchor() : null;
+  return a && a.kind === 'panel' && alive() && !captureHidden && !attachHidden && win.isVisible() ? win.getBounds() : null;
 }
 
 /** The markers' "show in recordings" setting: off hides the tracker from all screen capture. */
@@ -796,7 +831,7 @@ function onMessage(event, msg) {
         displaced = false;
         avoidPanel();
       }
-      js(`window.qcTrackerSettings(${JSON.stringify({ ...attachSettings(), maxHeight: maxHeight() })})`);
+      js(`window.qcTrackerSettings(${JSON.stringify({ ...attachSettings(), maxHeight: maxHeight(), ...(on ? {} : { edge: settingsFor(gameKey).edge }) })})`);
       sendVisibility();
       break;
     }
@@ -848,7 +883,9 @@ function init(d) {
 }
 
 module.exports = {
-  init, show, update, hide, toggle, showLog, panelShown, panelHidden, follow, setKeys, setMouseTip, getTipLabels, hideForCapture, showAfterCapture, getBounds,
+  init, show, update, hide, toggle, showLog, panelShown, panelHidden, follow, getEdgeBounds,
+  /** The spine appeared or went: an attached log moves to (or from) it. */
+  anchorChanged: () => syncAttach(), setKeys, setMouseTip, getTipLabels, hideForCapture, showAfterCapture, getBounds,
   setVisibleInRecordings, setScale, openPanel, raise, getLook, key,
   /** The log is on screen (full or folded): the tick / cycle shortcuts are registered only then. */
   isLogVisible: () => logVisible(),

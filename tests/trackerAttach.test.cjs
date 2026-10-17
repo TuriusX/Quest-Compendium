@@ -48,7 +48,7 @@ async function setup({ existing }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qc-trk-'));
   if (existing) fs.writeFileSync(path.join(dir, 'tracker.json'), JSON.stringify({ old: { x: 100, y: 100, shown: true } }));
   const handlers = {};
-  const env = { panel: null, dock: 'top-right', compact: false, told: [] };
+  const env = { panel: null, dock: 'top-right', compact: false, told: [], spine: null, keys: null };
   tracker.init({
     app: { getPath: () => dir, on: () => {} },
     ipcMain: { on: (n, f) => { handlers[n] = f; }, handle: (n, f) => { handlers[n] = f; } },
@@ -57,6 +57,8 @@ async function setup({ existing }) {
     getPanelRect: () => env.panel,
     getDock: () => env.dock,
     isCompact: () => env.compact,
+    getSpineAnchor: () => env.spine,
+    onLogVisible: (visible, available) => { env.keys = { visible, available }; },
   });
   const data = { id: 'a', quest: 'Find the seed', sections: [{ id: 'answer', title: 'x', items: [{ id: 's:1:0', label: 'Go north', tick: true }] }] };
   await tracker.show(data, 'g1');
@@ -123,16 +125,39 @@ async function test(name, fn) {
     tracker.hide();
   });
 
-  await test('put away while attached: invisible; dragging does nothing', async () => {
+  await test('tucked in: a bookmark on the panel edge near its top; dragging does nothing; the cycle key brings it out', async () => {
     const { tracker, win, env, handlers } = await setup({ existing: false });
     env.panel = { x: 1370, y: 0, width: 550, height: 800 };
     tracker.panelShown();
     handlers['tracker-msg']({ sender: win.webContents }, { type: 'drag', dx: 50, dy: 50 });
     assert.equal(win.getBounds().x, 1070);
     assert.equal(await tracker.toggle(null), 'away');
-    assert.equal(win.opacity, 0);
-    assert.equal(await tracker.toggle(null), 'shown');
+    // The page reports the bookmark's size.
+    handlers['tracker-msg']({ sender: win.webContents }, { type: 'size', width: 72, height: 40, view: 'away', hasData: true });
+    assert.deepEqual(win.getBounds(), { x: 1298, y: 8, width: 72, height: 40 }, 'flush with the panel, 8 px down');
+    assert.equal(win.opacity, 1, 'the bookmark shows');
+    assert.ok(win.js.some((c) => c.includes('"edge":"right"')), 'anchored on the side facing the panel');
+    assert.deepEqual(env.keys, { visible: false, available: true }, 'the cycle key stays registered');
+    assert.deepEqual(tracker.getEdgeBounds(), win.getBounds(), 'the tuck tab keeps clear of it');
+    assert.equal(tracker.getBounds(), null, 'the spine does not step around an attached log');
+    assert.equal(await handlers['tracker-key'](null, 'next'), true);
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(tracker.isLogVisible(), true, 'out again');
+    tracker.hide();
+  });
+
+  await test('the panel tucked away: the log (or its bookmark) moves to the book spine', async () => {
+    const { tracker, win, env } = await setup({ existing: false });
+    env.panel = { x: 1370, y: 0, width: 550, height: 800 };
+    tracker.panelShown();
+    env.panel = null; tracker.panelHidden();
+    assert.equal(win.opacity, 0, 'nothing to stick to while the panel slides away');
+    env.spine = { rect: { x: 1894, y: 344, width: 26, height: 112 }, right: true };
+    tracker.anchorChanged();
     assert.equal(win.opacity, 1);
+    assert.deepEqual([win.getBounds().x, win.getBounds().y], [1594, 344], 'on the inner side of the spine, level with its top');
+    assert.equal(tracker.isLogVisible(), true);
+    assert.ok(win.js.some((c) => c.includes('"maxHeight":728')), '70% of the screen beside the spine');
     tracker.hide();
   });
 

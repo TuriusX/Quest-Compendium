@@ -283,7 +283,11 @@
     text-shadow: 0 1px 2px rgba(0,0,0,.8); min-width: 16em; }
   body.attached.side-left #tracker { border-right: 0; border-radius: .5em 0 0 .5em; }
   body.attached.side-right #tracker { border-left: 0; border-radius: 0 .5em .5em 0; }
-  body.attached #bAway, body.attached .hint, body.attached #bdRow { display: none; }
+  body.attached .hint, body.attached #bdRow { display: none; }
+  /* Attached, ⇥ becomes "tuck into the panel": a bookmark icon; tucked in, the ribbon is the bookmark on the panel's edge. */
+  #bAway .bm { display: none; }
+  body.attached #bAway .bm { display: inline; }
+  body.attached #bAway .to { display: none; }
   body.attached .head { cursor: default; }
   /* The attach / pop-out button's two faces. */
   #bAttach .pop { display: none; }
@@ -314,7 +318,7 @@
     <span class="hbs">
       <span class="book aa" id="bLook" title="Text size and look">Aa</span>
       <span class="book" id="bAttach" title="Attach to the panel"><svg class="pin" viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="currentColor" d="M3 0h6v1H8v4h2v2H7v5H5V7H2V5h2V1H3z"/></svg><svg class="pop" viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="currentColor" d="M6 0h6v6h-2V3.4L5.7 7.7 4.3 6.3 8.6 2H6zM0 2h4v2H2v6h6V8h2v4H0z"/></svg></span>
-      <span class="book hb" id="bAway" title="Send to the edge"><svg viewBox="0 0 16 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 5h8V3h1v1h1v1h1v1h1v1h-1v1h-1v1h-1v1H9V7H1zM14 0h2v12h-2z"/></svg></span>
+      <span class="book hb" id="bAway" title="Send to the edge"><svg class="bm" viewBox="0 0 10 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 0h8v12L5 9l-4 3z"/></svg><svg class="to" viewBox="0 0 16 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 5h8V3h1v1h1v1h1v1h1v1h-1v1h-1v1h-1v1H9V7H1zM14 0h2v12h-2z"/></svg></span>
     </span>
   </div>
   <div class="look off" id="look">
@@ -406,6 +410,7 @@
     look: 'Text size and look', shownOf: '{n} of {total}',
     attach: 'Attach to the panel', popOut: 'Pop out: its own window over the game', attachOffer: 'Attach the quest log to the panel?', attachYes: 'Attach',
     padHint: '↑↓ move · A tick · B back',
+    tuckIn: 'Tuck into the panel (a bookmark brings it back)', slideOut: 'Slide the quest log out',
     mouseHint: '{keys} to use your mouse here', mouseHintClose: 'Hide this tip',
     headFold: 'Click: fold the log to this line or open it. Drag: move.', openBook: 'Open the Compendium',
     foldHint: 'Click to fold or open', detWhere: 'Where', detHow: 'How', detMissable: 'Missable', detNotes: 'Notes',
@@ -436,11 +441,11 @@
     $('prevArea').title = L('prevArea');
     $('nextArea').title = L('nextArea');
     $('placeName').title = state.data && state.data.areas ? L('areaList') : '';
-    $('bAway').title = L('awayEdge');
+    $('bAway').title = state.attached ? L('tuckIn') : L('awayEdge');
+    tab.title = state.attached ? L('slideOut') : L('tabHint');
     $('bSize').title = L('size');
     $('alphaWrap').title = L('alpha');
     $('bdWrap').title = L('backdrop');
-    tab.title = L('tabHint');
     // The mouse tip (state.tip, while there's a shortcut): "Ctrl+\ to use your mouse here", with its ×.
     hint.classList.toggle('tip', tipOn());
     hint.classList.toggle('strong', tipOn() && state.tip === 'strong');
@@ -612,6 +617,8 @@
     document.body.classList.toggle('side-left', state.side !== 'right');
     document.body.classList.toggle('side-right', state.side === 'right');
     $('bAttach').title = state.attached ? L('popOut') : L('attach');
+    $('bAway').title = state.attached ? L('tuckIn') : L('awayEdge');
+    tab.title = state.attached ? L('slideOut') : L('tabHint');
     $('attachOffer').classList.toggle('off', !(state.attachOffer && !state.attached));
     tracker.classList.toggle('padfocus', !!state.padFocus);
     $('padHint').classList.toggle('off', !state.padFocus);
@@ -949,6 +956,7 @@
     // ?attached=1 (screenshots): the attached look, against a panel on the right; &offer=1: the one-time offer.
     if (/[?&]attached=1/.test(location.search)) { tracker.style.left = '0'; tracker.style.top = '0'; window.qcTrackerSettings({ attached: true, side: 'left' }); }
     if (/[?&]offer=1/.test(location.search)) window.qcTrackerSettings({ attachOffer: true });
+    if (/[?&]away=1/.test(location.search)) window.qcTrackerSettings({ view: 'away', edge: 'right' }); // tucked in: the bookmark
     document.addEventListener('keydown', (e) => {
       if (e.key === '1') setView('full'); if (e.key === '2') setView('collapsed'); if (e.key === '3') setView('away');
       if (e.key.toLowerCase() === 'g') peek();

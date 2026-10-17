@@ -3,6 +3,10 @@
  * from the screen edge on the dock side, vertically centred on where the docked panel sits. A click opens the panel. It replaces the strip of the panel window that used
  * to stay on screen: while the spine shows, the panel window itself is hidden.
  *
+ * Undocked, tucking the panel away leaves the spine where the panel was: on its edge nearer the screen's side, centred
+ * on its height. The attached quest log (and its bookmark) sticks out of the spine's inner side while it shows
+ * (anchor()).
+ *
  * Like the objectives tracker it never takes focus (the game keeps it) and a fresh window opens each time it's shown.
  * It keeps clear of the tracker: if they'd overlap it moves just below (or above) the tracker, and if there's no room
  * the tracker stays on top.
@@ -31,12 +35,24 @@ const overlaps = (a, b) => !!a && !!b && a.x < b.x + b.width && b.x < a.x + a.wi
  * tracker when they'd overlap (and it fits there).
  */
 function spot() {
-  const { position, panelHeight, workArea: wa } = deps.getDock();
-  const right = !String(position).endsWith('left');
-  const x = right ? wa.x + wa.width - W : wa.x;
-  const h = Math.min(panelHeight || wa.height, wa.height);
-  const centre = String(position).startsWith('bottom') ? wa.y + wa.height - h / 2 : wa.y + h / 2;
-  let y = Math.round(centre - h / 2);
+  const dock = deps.getDock();
+  const { position, panelHeight } = dock;
+  let wa = dock.workArea;
+  let right, x, y;
+  const p = position === 'undocked' ? dock.panelRect : null;
+  if (p) {
+    // Where the undocked panel was: its edge nearer the side of its screen, centred on it.
+    wa = deps.screen.getDisplayMatching(p).workArea;
+    right = p.x + p.width / 2 >= wa.x + wa.width / 2;
+    x = right ? p.x + p.width - W : p.x;
+    y = Math.round(p.y + p.height / 2 - h / 2);
+  } else {
+    right = !String(position).endsWith('left');
+    x = right ? wa.x + wa.width - W : wa.x;
+    const ph = Math.min(panelHeight || wa.height, wa.height);
+    const centre = String(position).startsWith('bottom') ? wa.y + wa.height - ph / 2 : wa.y + ph / 2;
+    y = Math.round(centre - h / 2);
+  }
   const t = deps.getTrackerBounds && deps.getTrackerBounds();
   let clash = false;
   if (overlaps({ x, y, width: W, height: h }, t)) {
@@ -88,6 +104,7 @@ function show() {
     w.showInactive();
     place();
     if (deps.raiseTracker) deps.raiseTracker(); // never above the quest log
+    if (deps.onShown) deps.onShown(); // an attached quest log moves to the spine
   });
   // The tracker can be moved or resized while the spine shows: keep clear of it.
   watch = setInterval(place, 800);
@@ -112,4 +129,14 @@ function init(d) {
   });
 }
 
-module.exports = { init, show, hide, refresh, isShowing: () => shown && alive(), bounds: () => (alive() ? win.getBounds() : null) };
+/**
+ * What an attached quest log sticks out of while the panel is away: the spine's window and which screen edge it's
+ * flush with (right: the log goes on its left). null while no spine shows.
+ */
+function anchor() {
+  if (!shown || !alive() || !win.isVisible()) return null;
+  const b = win.getBounds();
+  return { rect: { x: b.x, y: b.y, width: b.width, height: b.height }, right: !/[?&]edge=left/.test(win.webContents.getURL()) };
+}
+
+module.exports = { init, show, hide, refresh, anchor, isShowing: () => shown && alive(), bounds: () => (alive() ? win.getBounds() : null) };
