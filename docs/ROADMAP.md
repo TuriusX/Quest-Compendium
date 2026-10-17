@@ -41,14 +41,15 @@ Owner: Noah. Source: the project mind map (Oct 13, 2026). Keep this file in the 
 |---|------|-----------|--------|
 | 11 | **Phone companion** *(propose first)* | A mode of the web app for phones: the live quest log, objectives and the latest answer, synced with the desktop app through the player's account. Ticking on the phone updates the overlay. | Idea |
 
-## Cleanup and redesign (0.5.9)
+## Cleanup and redesign (0.6.0)
 
-Noah's approved plan (Oct 16, 2026): one header row with a game switcher and the questions pill, a tidier answer view, no "Known here", a tidier quest log, a compact-view pill, starter chips that fit where the player is (hint mode in Settings). Player-confirmed facts stay out of the public site; they only help answers.
+Noah's approved plan (Oct 16, 2026; first planned as 0.5.9, renamed 0.6.0): one header row with a game switcher and the questions pill, a tidier answer view, no "Known here", a tidier quest log, the quest log attached to the panel, a compact-view pill, starter chips that fit where the player is (hint mode in Settings). Player-confirmed facts stay out of the public site; they only help answers. The Steam Deck plugin's matching changes release after the desktop app.
 
 | # | Item | What it is | Status |
 |---|------|-----------|--------|
-| 19 | **0.5.9 cleanup** | Steps 1–4, 6 and 7 of the plan (header, answer view, Known here removed, quest log tidy-up, compact pill and Deck matching, starter chips). | Built, waiting on Noah's dev-build test |
-| 20 | **Attached quest log** *(propose first: done)* | Step 5: the quest log attached to the panel's inner side, moving and hiding with it; popped out stays as today; existing players keep popped-out with a one-time offer; controller RB focus into the log. Moved out of 0.5.9: it needs testing on two monitors and at 150% scaling, and the panel docks on the primary screen while the log follows its own. | 0.5.10 |
+| 19 | **0.6.0 cleanup** | Header, answer view, Known here removed, quest log tidy-up, compact pill, starter chips (steps 1–4, 6, 7). | Built, waiting on Noah's dev-build test |
+| 20 | **Attached quest log** | Step 5: attached to the panel's inner side, moving and hiding with it; 📌 / ⇱ per game; new installs attached, existing players popped out with a one-time offer; controller RB into the log. Noah tests on two monitors and at 150%. | Built, waiting on Noah's dev-build test |
+| 21 | **Steam Deck plugin 0.15.x** | The questions line ticking every second, the same starter chips, Hint mode in its Settings. Committed in Quest-Compendium-Decky. | Held until after desktop 0.6.0 |
 
 ## Growth
 
