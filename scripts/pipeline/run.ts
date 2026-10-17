@@ -74,6 +74,7 @@ import { steamCandidates } from './steam';
 import { promote } from '../guides/promote';
 import { SEARCH_DOLLARS } from '../../usage';
 import { spotWeekLine } from '../../spot';
+import { imagesWeekLine } from '../../guideImages';
 import { isCorePage } from '../guides/core';
 import { playerWeekLines } from './playerWeek';
 import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
@@ -881,6 +882,15 @@ async function main() {
       await ref.set({ uncheckedPages: { count: unchecked, live, at: Date.now() } }, { merge: true });
     } catch (e: any) {
       console.warn(`Unchecked-pages line skipped: ${e?.message}`);
+    }
+  }
+  // Mondays: pictures on the most-searched pages (roadmap 14: the owner's captures and official pictures, approved on
+  // /admin/images), so the number can be watched growing.
+  if (MONDAY) {
+    try {
+      report.push(await imagesWeekLine());
+    } catch (e: any) {
+      console.warn(`Pictures line skipped: ${e?.message}`);
     }
   }
   // Core guides (scripts/guides/core.ts): completeness per guide, this month's shared budget, and what's left.

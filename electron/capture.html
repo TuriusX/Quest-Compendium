@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src https: http://localhost:*">
+<title>Save to the guide</title>
+<style>
+  /* The owner's capture (Ctrl+Shift+P): the full-resolution screenshot under a dim veil, a crop box to drag, and a
+     panel to say which guide entry it shows. Saving sends it to the review queue (/admin/images), never to the site. */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font: 13px/1.4 'Segoe UI', system-ui, sans-serif; color: #e4e4e7; user-select: none; }
+  #shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  #veil { position: absolute; inset: 0; cursor: crosshair; }
+  #box { position: absolute; outline: 2px solid #fff; box-shadow: 0 0 0 1px #000, 0 0 0 9999px rgba(0,0,0,.55); cursor: move; display: none; }
+  #box .h { position: absolute; width: 12px; height: 12px; background: #fff; border: 1px solid #000; }
+  #size { position: absolute; left: 0; top: calc(100% + 4px); font: 600 11px 'Segoe UI', sans-serif; color: #fff; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+  #panel { position: absolute; right: 18px; top: 18px; width: 320px; max-height: calc(100% - 36px); overflow: auto; padding: 14px; border-radius: 12px; background: #0c0d14; border: 1px solid rgba(168,127,251,.45); box-shadow: 0 10px 40px rgba(0,0,0,.6); cursor: default; }
+  h1 { font-size: 15px; margin: 0 0 2px; color: #fff; }
+  .lbl { font: 700 11px 'Segoe UI', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #c4b0ff; margin: 12px 0 6px; }
+  .opt { display: flex; gap: 8px; align-items: flex-start; padding: 7px 8px; border-radius: 8px; margin-bottom: 4px; border: 1px solid rgba(255,255,255,.08); cursor: pointer; }
+  .opt.on { background: rgba(168,127,251,.18); border-color: rgba(168,127,251,.55); }
+  .opt .dot { margin-top: 3px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #52525b; flex-shrink: 0; }
+  .opt.on .dot { border-color: #a87ffb; background: #a87ffb; }
+  .opt b { color: #fff; font-weight: 600; } .opt .s { display: block; font-size: 11.5px; color: #a1a1aa; }
+  input { width: 100%; box-sizing: border-box; font: inherit; color: #e4e4e7; background: #16161f; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 6px 9px; }
+  .btn { font: 600 12.5px 'Segoe UI', sans-serif; color: #e4e4e7; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; height: 30px; padding: 0 12px; cursor: pointer; }
+  .btn.on { background: #a87ffb; border-color: #a87ffb; color: #16101f; }
+  .btn.save { background: #34d399; border-color: #34d399; color: #06140d; flex: 1; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 6px; }
+  .dim { color: #71717a; font-size: 11.5px; } .warn { color: #fbbf24; } .err { color: #f87171; }
+  #wanted a { color: #c4b0ff; cursor: pointer; text-decoration: underline dotted; }
+</style>
+</head>
+<body>
+<img id="shot" alt="">
+<div id="veil"></div>
+<div id="box"><span id="size"></span></div>
+<div id="panel">
+  <h1>Save to the guide</h1>
+  <div class="dim" id="game"></div>
+  <div class="lbl">Belongs to</div>
+  <div id="opts"><div class="dim">Loading…</div></div>
+  <input id="q" placeholder="Search another entry…" autocomplete="off">
+  <div id="results"></div>
+  <div id="wanted" class="dim" style="margin-top:8px"></div>
+  <div class="lbl">Crop</div>
+  <div class="row"><button class="btn" data-ar="16:9">16:9</button><button class="btn on" data-ar="4:3">4:3</button><button class="btn" data-ar="1:1">1:1</button><button class="btn" data-ar="free">Free</button></div>
+  <div class="row" style="margin-top:12px"><button class="btn save" id="save" disabled>Save · Enter</button><button class="btn" id="cancel">Esc</button></div>
+  <div id="msg" class="dim" style="margin-top:8px">Drag on the picture to crop. It goes to the review queue; nothing shows on the site until you approve it there.</div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  let ctx = null, chosen = null, ar = 4 / 3, crop = null, saving = false;
+  let opts = [];
+
+  // ---- The crop box, in the picture's own pixels (shown scaled to the screen) ----
+  const img = $('shot');
+  const scale = () => { const r = img.getBoundingClientRect(); const s = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight); return { s, ox: (r.width - img.naturalWidth * s) / 2 + r.left, oy: (r.height - img.naturalHeight * s) / 2 + r.top }; };
+  const clampCrop = (c) => {
+    const W = img.naturalWidth, H = img.naturalHeight;
+    c.w = Math.max(32, Math.min(W, c.w)); c.h = Math.max(32, Math.min(H, c.h));
+    c.x = Math.max(0, Math.min(W - c.w, c.x)); c.y = Math.max(0, Math.min(H - c.h, c.y));
+    return c;
+  };
+  function drawBox() {
+    const b = $('box');
+    if (!crop) { b.style.display = 'none'; return; }
+    const { s, ox, oy } = scale();
+    Object.assign(b.style, { display: 'block', left: ox + crop.x * s + 'px', top: oy + crop.y * s + 'px', width: crop.w * s + 'px', height: crop.h * s + 'px' });
+    $('size').textContent = (ar ? $('panel').querySelector('[data-ar].on').dataset.ar + ' · ' : '') + Math.round(crop.w) + '×' + Math.round(crop.h) + ' px';
+  }
+  function defaultCrop() {
+    const W = img.naturalWidth, H = img.naturalHeight;
+    let w = W * 0.6, h = ar ? w / ar : H * 0.6;
+    if (h > H * 0.9) { h = H * 0.9; w = ar ? h * ar : w; }
+    crop = clampCrop({ x: (W - w) / 2, y: (H - h) / 2, w, h });
+    drawBox();
+  }
+  let drag = null;
+  const toImg = (e) => { const { s, ox, oy } = scale(); return { x: (e.clientX - ox) / s, y: (e.clientY - oy) / s }; };
+  $('veil').addEventListener('mousedown', (e) => { const p = toImg(e); drag = { mode: 'new', x0: p.x, y0: p.y }; });
+  $('box').addEventListener('mousedown', (e) => { e.stopPropagation(); const p = toImg(e); drag = { mode: 'move', dx: p.x - crop.x, dy: p.y - crop.y }; });
+  window.addEventListener('mousemove', (e) => {
+    if (!drag) return;
+    const p = toImg(e);
+    if (drag.mode === 'move') { crop = clampCrop({ ...crop, x: p.x - drag.dx, y: p.y - drag.dy }); }
+    else {
+      let w = Math.abs(p.x - drag.x0), h = Math.abs(p.y - drag.y0);
+      if (ar) { if (w / h > ar) h = w / ar; else w = h * ar; }
+      crop = clampCrop({ x: p.x < drag.x0 ? drag.x0 - w : drag.x0, y: p.y < drag.y0 ? drag.y0 - h : drag.y0, w, h });
+    }
+    drawBox();
+  });
+  window.addEventListener('mouseup', () => { drag = null; });
+  window.addEventListener('resize', drawBox);
+  $('panel').querySelectorAll('[data-ar]').forEach((b) => b.addEventListener('click', () => {
+    $('panel').querySelectorAll('[data-ar]').forEach((x) => x.classList.toggle('on', x === b));
+    const [w, h] = b.dataset.ar.split(':').map(Number);
+    ar = b.dataset.ar === 'free' ? 0 : w / h;
+    if (crop && ar) { const cx = crop.x + crop.w / 2, cy = crop.y + crop.h / 2; let nw = crop.w, nh = nw / ar; if (nh > img.naturalHeight) { nh = img.naturalHeight; nw = nh * ar; } crop = clampCrop({ x: cx - nw / 2, y: cy - nh / 2, w: nw, h: nh }); }
+    drawBox();
+  }));
+
+  // ---- What it belongs to ----
+  async function api(path, body) {
+    const r = await fetch(ctx.apiBase + path, { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + ctx.token, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    return j;
+  }
+  const line = (t) => '<b>' + esc(t.name) + '</b><span class="s">' + esc([t.label, t.area, t.why].filter(Boolean).join(' · ')) + '</span>';
+  function renderOpts() {
+    $('opts').innerHTML = opts.length
+      ? opts.map((t, i) => '<div class="opt' + (chosen === t ? ' on' : '') + '" data-i="' + i + '"><span class="dot"></span><span>' + line(t) + '</span></div>').join('')
+      : '<div class="dim">Nothing to suggest here: search for the entry.</div>';
+    $('save').disabled = !chosen || saving;
+  }
+  $('opts').addEventListener('click', (e) => { const d = e.target.closest('[data-i]'); if (d) { chosen = opts[Number(d.dataset.i)]; renderOpts(); } });
+  let qTimer;
+  $('q').addEventListener('input', () => {
+    clearTimeout(qTimer);
+    qTimer = setTimeout(async () => {
+      const q = $('q').value.trim();
+      if (!q) { $('results').innerHTML = ''; return; }
+      try {
+        const j = await api('/api/admin/images/targets?game=' + encodeURIComponent(ctx.game) + '&q=' + encodeURIComponent(q));
+        $('results').innerHTML = j.targets.slice(0, 8).map((t, i) => '<div class="opt" data-r="' + i + '"><span class="dot"></span><span>' + line(t) + '</span></div>').join('') || '<div class="dim">Nothing matches.</div>';
+        $('results').onclick = (e) => { const d = e.target.closest('[data-r]'); if (!d) return; const t = { ...j.targets[Number(d.dataset.r)], why: 'Picked by hand' }; opts = [t, ...opts.filter((o) => !(o.slug === t.slug && o.id === t.id && o.kind === t.kind))]; chosen = t; $('results').innerHTML = ''; $('q').value = ''; renderOpts(); };
+      } catch (err) { $('results').innerHTML = '<div class="err">' + esc(err.message) + '</div>'; }
+    }, 220);
+  });
+
+  async function save() {
+    if (!chosen || saving) return;
+    saving = true; renderOpts();
+    $('msg').className = 'dim'; $('msg').textContent = 'Saving…';
+    try {
+      await api('/api/admin/images', {
+        game: ctx.game, source: 'mine', imageBase64: ctx.image,
+        target: { kind: chosen.kind, slug: chosen.slug, id: chosen.id },
+        crop: crop ? { x: crop.x, y: crop.y, w: crop.w, h: crop.h } : null,
+        why: chosen.why || '',
+      });
+      window.qcCapture.done(true);
+    } catch (err) {
+      saving = false; renderOpts();
+      $('msg').className = 'err'; $('msg').textContent = err.message;
+    }
+  }
+  $('save').addEventListener('click', save);
+  $('cancel').addEventListener('click', () => window.qcCapture.done(false));
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); window.qcCapture.done(false); }
+    else if (e.key === 'Enter' && document.activeElement !== $('q')) { e.preventDefault(); save(); }
+  });
+
+  window.qcCapture.onInit(async (data) => {
+    ctx = data;
+    img.onload = () => { defaultCrop(); };
+    img.src = data.image;
+    $('game').textContent = data.gameName || data.game || '';
+    if (!data.game) { $('opts').innerHTML = '<div class="warn">No guide for this game yet, so there is nothing to match it to.</div>'; return; }
+    try {
+      opts = (await api('/api/admin/images/suggest', { game: data.game, suggestions: data.suggestions || [] })).suggestions;
+      chosen = opts[0] || null;
+      renderOpts();
+    } catch (err) { $('opts').innerHTML = '<div class="err">' + esc(err.message) + '</div>'; }
+    // The most-searched pages here without a picture: one click picks one.
+    try {
+      const w = await api('/api/admin/images/wanted?game=' + encodeURIComponent(data.game));
+      const list = w.wanted.filter((p) => p.target).slice(0, 4);
+      $('wanted').innerHTML = list.length ? 'Wanted here: ' + list.map((p, i) => '<a data-w="' + i + '">' + esc(p.target.name) + '</a> <span>#' + esc(p.rank) + '</span>').join(' · ') : '';
+      $('wanted').onclick = (e) => { const a = e.target.closest('[data-w]'); if (!a) return; const t = { ...list[Number(a.dataset.w)].target, why: 'Wanted: #' + list[Number(a.dataset.w)].rank + ' on the site' }; opts = [t, ...opts]; chosen = t; renderOpts(); };
+    } catch { /* the hint is optional */ }
+  });
+</script>
+</body>
+</html>

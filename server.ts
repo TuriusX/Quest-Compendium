@@ -33,6 +33,7 @@ import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
 import { questionType } from './src/utils/questionType';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
+import { registerGuideImages } from './guideImages';
 import { registerContributions } from './contributions';
 import { registerAnswerReports } from './answerReports';
 import { registerAnswerFeedback, recordMarkerCheck } from './answerFeedback';
@@ -419,6 +420,16 @@ async function startServer() {
       appId: '1:890629309063:web:87293cf13f922fd3edee22',
     },
   });
+  // Guide images (roadmap 14): one review queue for every picture, on /admin/images (ADMIN_EMAILS).
+  registerGuideImages(app, {
+    requireAuth,
+    firebaseWebConfig: {
+      apiKey: process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY',
+      authDomain: 'quest-compendium-1bccf.firebaseapp.com',
+      projectId: 'quest-compendium-1bccf',
+      appId: '1:890629309063:web:87293cf13f922fd3edee22',
+    },
+  });
 
   // "Known here": what the game knowledge base already knows about the player's confirmed place. Straight from the
   // database, no AI call, so it never costs a question.
@@ -646,6 +657,8 @@ async function startServer() {
         premiumSource: premium.source,
         ...(premium.source === 'stripe' && userData.premiumPeriodEnd ? { premiumPeriodEnd: userData.premiumPeriodEnd, premiumCancelAtPeriodEnd: userData.premiumCancelAtPeriodEnd === true } : {}),
         ...(premium.source === 'stripe' && userData.premiumInterval ? { premiumInterval: userData.premiumInterval } : {}),
+        // The owner's tools in the desktop app (the image capture hotkey) switch on only for admins.
+        ...(isAdmin((req as any).user) ? { isAdmin: true } : {}),
       });
     } catch (err) {
       console.error('Status fetch error:', err);

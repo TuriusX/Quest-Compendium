@@ -770,6 +770,14 @@ app.whenReady().then(() => {
     } catch (err) {
       console.error('Failed to register questLogShortcut', err);
     }
+    // The owner's picture capture (Ctrl+Shift+P): sent only when the signed-in account is an admin.
+    if (shortcuts.ownerCaptureShortcut) {
+      try {
+        if (!globalShortcut.register(shortcuts.ownerCaptureShortcut, () => { startOwnerCapture().catch((e) => console.warn('[capture] failed:', e && e.message)); })) console.warn(`[capture] ${shortcuts.ownerCaptureShortcut} is taken`);
+      } catch (err) {
+        console.error('Failed to register ownerCaptureShortcut', err);
+      }
+    }
     // The quest log's tick / cycle shortcuts, if it's on screen now.
     syncTrackerKeys(tracker.isLogVisible());
   });
@@ -1622,6 +1630,67 @@ async function hidePanelForCapture() {
 
 // "Next turn" and "Locate me": always a fresh capture of the game as it is now, never the snapshot from when the panel opened. An open
 // panel slides away for the capture and comes back; the tracker and markers stay out of it (captureScreenImage).
+// ---- The owner's picture capture (roadmap 14) -------------------------------------------------------------------------
+// Ctrl+Shift+P (admins only; the app sends the shortcut only then): a full-resolution PNG of the screen under the cursor,
+// taken without our own windows on it, then a window over that screen to crop it and say which guide entry it shows
+// (electron/capture.html). Saving sends it to the review queue on /admin/images; nothing reaches the site from here.
+let captureWindow = null;
+async function startOwnerCapture() {
+  if (captureWindow && !captureWindow.isDestroyed()) { captureWindow.focus(); return; }
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  closeScreenPointers();
+  const trackerHidden = tracker.hideForCapture();
+  const panelShown = mainWindow.isVisible();
+  const opacity = mainWindow.getOpacity();
+  if (panelShown) mainWindow.setOpacity(0);
+  await new Promise((resolve) => setTimeout(resolve, trackerHidden || panelShown ? 140 : 20));
+  let image = null;
+  try {
+    const size = { width: Math.round(display.size.width * display.scaleFactor), height: Math.round(display.size.height * display.scaleFactor) };
+    const sources = await Promise.race([
+      desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('desktopCapturer timeout')), 5000)),
+    ]);
+    const src = sources.find((s) => s.display_id === String(display.id)) || sources[0];
+    if (src && src.thumbnail && !src.thumbnail.isEmpty()) image = 'data:image/png;base64,' + src.thumbnail.toPNG().toString('base64');
+  } finally {
+    if (panelShown && !mainWindow.isDestroyed()) mainWindow.setOpacity(opacity || 1);
+    tracker.showAfterCapture();
+  }
+  if (!image) return;
+  // What the app thinks the picture shows (what was just asked about, the current objective, where the player is), and
+  // the sign-in it uploads with.
+  const ctx = await new Promise((resolve) => {
+    const t = setTimeout(() => { ipcMain.removeAllListeners('owner-capture-context'); resolve(null); }, 3000);
+    ipcMain.once('owner-capture-context', (_e, c) => { clearTimeout(t); resolve(c); });
+    mainWindow.webContents.send('owner-capture-context-request');
+  });
+  if (!ctx || !ctx.token) return;
+  const b = display.bounds;
+  const win = new BrowserWindow({
+    x: b.x, y: b.y, width: b.width, height: b.height,
+    frame: false, resizable: false, movable: false, fullscreenable: false, skipTaskbar: true, hasShadow: false,
+    alwaysOnTop: true, show: false, backgroundColor: '#000000',
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'capturePreload.cjs') },
+  });
+  captureWindow = win;
+  win.setAlwaysOnTop(true, 'screen-saver');
+  win.on('closed', () => { if (captureWindow === win) captureWindow = null; });
+  win.webContents.once('did-finish-load', () => {
+    if (win.isDestroyed()) return;
+    win.webContents.send('capture-init', { ...ctx, image });
+    win.show();
+    win.focus();
+  });
+  win.loadFile(path.join(__dirname, 'capture.html'));
+}
+ipcMain.on('capture-done', (event, saved) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && win === captureWindow && !win.isDestroyed()) win.close();
+  if (saved && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('owner-capture-saved');
+});
+
 ipcMain.handle('capture-fresh', async () => {
   const wasVisible = isAppVisible;
   if (wasVisible) await hidePanelForCapture();

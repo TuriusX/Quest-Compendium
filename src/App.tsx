@@ -545,6 +545,8 @@ export default function App() {
         trackerTickShortcut: settings.trackerTickShortcut || 'CmdOrCtrl+Shift+Enter',
         trackerNextShortcut: settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down',
         questLogShortcut: settings.questLogShortcut || 'CmdOrCtrl+Shift+L',
+        // The owner's picture capture for the guides (admins only).
+        ownerCaptureShortcut: userData?.isAdmin ? 'CmdOrCtrl+Shift+P' : '',
       });
     }
   }, [
@@ -554,6 +556,7 @@ export default function App() {
     settings.trackerTickShortcut,
     settings.trackerNextShortcut,
     settings.questLogShortcut,
+    userData?.isAdmin,
   ]);
 
   // Controller: tell the desktop app which chord shows / hides the overlay.
@@ -882,6 +885,30 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   })();
   const trackerGuideKeyRef = useRef(trackerGame.guideKey);
   trackerGuideKeyRef.current = trackerGame.guideKey;
+  // The owner's picture capture (Ctrl+Shift+P, admins only): what the picture most likely shows, best guess first. What
+  // was asked about in the last quarter hour (the answer's guide entries), the next step of the guide steps on the quest
+  // log, then the area the player is in. The capture window shows these by their guide names and saves to the queue.
+  const ownerCaptureContext = useRef<() => Promise<any>>(async () => null);
+  ownerCaptureContext.current = async () => {
+    const key = trackerGame.guideKey || '';
+    const token = user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken() : null;
+    const suggestions: { kind?: string; slug: string; id?: string; why: string }[] = [];
+    const last = [...(activeTab?.messages || [])].reverse().find((m) => m.role === 'assistant');
+    if (last && Date.now() - (last.timestamp || 0) < 15 * 60_000) {
+      for (const r of last.guideRefs || []) if (r.key === key) suggestions.push({ slug: r.slug, id: r.entry, why: 'You asked about this' });
+    }
+    const next = builtTrackerPayload?.data.sections.find((x) => x.id === 'guide')?.items.find((it) => !it.done);
+    const [kind, slug, ...rest] = String(next?.id || '').split(':');
+    if (kind === 'w' && slug) suggestions.push({ kind: 'step', slug, id: rest.join(':'), why: 'Next on your quest log' });
+    else if (kind === 'q' && slug) suggestions.push({ kind: 'entity', slug, why: 'The quest on your quest log' });
+    if (trackerGame.guideArea?.slug) suggestions.push({ kind: 'area', slug: trackerGame.guideArea.slug, why: "You're here" });
+    return { apiBase: getApiBaseUrl(), token, game: key, gameName: activeTab?.activeSteamGame?.name || activeTab?.name || '', suggestions };
+  };
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    api?.onOwnerCaptureContextRequest?.(() => ownerCaptureContext.current());
+    api?.onOwnerCaptureSaved?.(() => showLocateNote('Saved to the review queue (/admin/images).'));
+  }, []);
   // Playthrough memory: an item ticked in the guide of the area the player is in (in the Guide, on the quest log, or with
   // its marker) goes on "Found" in Your playthrough.
   const guideTickPrev = useRef<{ id: string; set: Set<string> } | null>(null);

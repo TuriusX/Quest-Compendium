@@ -43,6 +43,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTriggerVoiceInputStop: (callback) => { ipcRenderer.removeAllListeners('trigger-voice-input-stop'); ipcRenderer.on('trigger-voice-input-stop', () => callback()); },
   onTriggerVoiceInput: (callback) => { ipcRenderer.removeAllListeners('trigger-voice-input'); ipcRenderer.on('trigger-voice-input', () => callback()); },
   onTriggerAutoScreenshot: (callback) => { ipcRenderer.removeAllListeners('trigger-auto-screenshot'); ipcRenderer.on('trigger-auto-screenshot', () => callback()); },
+  // The owner's picture capture (Ctrl+Shift+P, admins only): the app says what the picture likely shows, and hears when
+  // it was saved to the review queue.
+  onOwnerCaptureContextRequest: (callback) => {
+    ipcRenderer.removeAllListeners('owner-capture-context-request');
+    ipcRenderer.on('owner-capture-context-request', async () => {
+      let ctx = null;
+      try { ctx = await callback(); } catch (_) { ctx = null; }
+      ipcRenderer.send('owner-capture-context', ctx);
+    });
+  },
+  onOwnerCaptureSaved: (callback) => { ipcRenderer.removeAllListeners('owner-capture-saved'); ipcRenderer.on('owner-capture-saved', () => callback()); },
   // Controller support (see electron/controller.cjs)
   setOverlayOptions: (opts) => ipcRenderer.send('set-overlay-options', opts),
   // On-screen pointers (markers drawn over the game)
