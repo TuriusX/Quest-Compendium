@@ -363,6 +363,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   }, [mode]);
   // Pro / Fast next to the send button: the player's remembered choice when it has questions left, else the other one.
   const bal = balancesOf(quota);
+  // The answer whose ⋯ menu (save, copy, report) is open.
+  const [actionMenu, setActionMenu] = useState<string | null>(null);
   const [answerModel, setAnswerModel] = useState<AnswerModel>(() => startingModel(readAnswerModel(), bal));
   const [modelNote, setModelNote] = useState('');
   const preferredModel: 'pro' | 'flash' = answerModel === 'fast' ? 'flash' : 'pro';
@@ -1667,18 +1669,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       )}
                     </>
                   ) : (
-                    <>
-                      <div className="w-5 h-5 rounded-md bg-[var(--accent-dim)] border border-[var(--accent-border)] flex items-center justify-center">
-                        <QuestLogo size={16} compact />
-                      </div>
-                      <span className="font-fantasy font-bold text-zinc-200">{t('chat.compendium')}</span>
-                      {!['Offline Fallback', 'Limit Reached', 'Session Expired'].includes(msg.modelUsed || '') && (
-                        <span className="px-1.5 py-0.2 rounded bg-white/10 text-[9.5px] text-zinc-400">
-                          {msg.modelUsed || 'GEMINI'}
-                        </span>
-                      )}
-                      <span className="text-zinc-500">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </>
+                    // One small grey line: "Fast · 10:38" (there's only one speaker)
+                    <span className="text-zinc-500 font-sans">
+                      {[
+                        !['Offline Fallback', 'Limit Reached', 'Session Expired'].includes(msg.modelUsed || '') ? msg.modelUsed : '',
+                        new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                      ].filter(Boolean).join(' · ')}
+                    </span>
                   )}
                 </div>
 
@@ -1829,7 +1826,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       what was wrong after a 👎. It takes no room in the answer. */}
                   {!isUser && (
                     <div className={`absolute -bottom-4 right-3 z-10 text-xs text-zinc-400 transition-opacity duration-150 focus-within:opacity-100 ${
-                      isAudioPlaying || isNoteSaved || copiedMessageId === msg.id || voteAsk === msg.id ? '' : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/msg:opacity-100'
+                      isAudioPlaying || isNoteSaved || copiedMessageId === msg.id || voteAsk === msg.id || actionMenu === msg.id ? '' : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/msg:opacity-100'
                     }`}>
                       <div className="flex items-center gap-0.5 p-0.5 rounded-xl bg-[#171822] border border-white/[0.12] shadow-[0_4px_14px_rgba(0,0,0,0.55)]">
                         {/* Audio TTS button with animated wave indicator / stop control */}
@@ -1862,37 +1859,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             )
                           ) : (
                             <>
-                              <Volume2 className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline text-[11px]">{t('chat.listen')}</span>
+                              <Volume2 className="w-3.5 h-3.5" aria-label={t('chat.listen')} />
                             </>
-                          )}
-                        </button>
-
-                        {/* Save to Notes Button */}
-                        <button
-                          onClick={() => handleSaveToNotes(msg.id, msg.text)}
-                          title={t('chat.saveTitle')}
-                          className="px-2 py-1 rounded-lg text-zinc-400 hover:text-purple-300 hover:bg-white/10 transition-colors cursor-pointer flex items-center gap-1"
-                        >
-                          {isNoteSaved ? (
-                            <Check className="w-3.5 h-3.5 text-green-400" />
-                          ) : (
-                            <BookmarkPlus className="w-3.5 h-3.5" />
-                          )}
-                          <span className="hidden sm:inline text-[11px]">{isNoteSaved ? t('chat.saved') : t('chat.save')}</span>
-                        </button>
-
-                        {/* Copy button */}
-                        <button
-                          onClick={() => handleCopyMessage(msg.id, msg.text)}
-                          title={t('chat.copy')}
-                          aria-label={t('chat.copy')}
-                          className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                        >
-                          {copiedMessageId === msg.id ? (
-                            <Check className="w-3.5 h-3.5 text-green-400" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
                           )}
                         </button>
 
@@ -1921,25 +1889,72 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           );
                         })}
 
-                        {/* Report this answer (offensive, wrong, other) */}
-                        <button
-                          onClick={() => {
-                            const idx = activeTab.messages.findIndex((m) => m.id === msg.id);
-                            let question = '';
-                            for (let j = idx - 1; j >= 0; j--) if (activeTab.messages[j].role === 'user') { question = activeTab.messages[j].text; break; }
-                            setReportTarget({
-                              messageId: msg.id, answer: msg.text, question,
-                              game: activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name,
-                              place: msg.placeChosen || msg.place?.name || activeTab.place?.name,
-                              model: msg.modelUsed,
-                            });
-                          }}
-                          title={msg.reported ? t('report.reported') : t('report.tooltip')}
-                          aria-label={t('report.tooltip')}
-                          className={`p-1.5 rounded-lg transition-colors cursor-pointer hover:bg-white/10 ${msg.reported ? 'text-rose-300' : 'text-zinc-400 hover:text-rose-300'}`}
-                        >
-                          <Flag className="w-3.5 h-3.5" fill={msg.reported ? 'currentColor' : 'none'} />
-                        </button>
+                        {/* ⋯: save to notes, copy, report */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setActionMenu(actionMenu === msg.id ? null : msg.id)}
+                            aria-haspopup="menu"
+                            aria-expanded={actionMenu === msg.id}
+                            title={t('header.menu')}
+                            aria-label={t('header.menu')}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer hover:bg-white/10 ${actionMenu === msg.id ? 'text-white bg-white/10' : 'text-zinc-400 hover:text-white'}`}
+                          >
+                            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="3" cy="8" r="1.5" fill="currentColor" /><circle cx="8" cy="8" r="1.5" fill="currentColor" /><circle cx="13" cy="8" r="1.5" fill="currentColor" /></svg>
+                          </button>
+                          {actionMenu === msg.id && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setActionMenu(null)} aria-hidden="true" />
+                              <div
+                                role="menu"
+                                onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setActionMenu(null); } }}
+                                className="absolute right-0 bottom-9 z-50 w-52 py-1 rounded-xl bg-[#161620] border border-white/15 shadow-2xl"
+                              >
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  autoFocus
+                                  onClick={() => { handleSaveToNotes(msg.id, msg.text); setActionMenu(null); }}
+                                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-[12.5px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer"
+                                >
+                                  <BookmarkPlus className="w-3.5 h-3.5 text-purple-300" />
+                                  {t('chat.saveTitle')}
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => { handleCopyMessage(msg.id, msg.text); setActionMenu(null); }}
+                                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-[12.5px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer"
+                                >
+                                  <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                                  {t('chat.copy')}
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => {
+                                    setActionMenu(null);
+                                    const idx = activeTab.messages.findIndex((m) => m.id === msg.id);
+                                    let question = '';
+                                    for (let j = idx - 1; j >= 0; j--) if (activeTab.messages[j].role === 'user') { question = activeTab.messages[j].text; break; }
+                                    setReportTarget({
+                                      messageId: msg.id, answer: msg.text, question,
+                                      game: activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name,
+                                      place: msg.placeChosen || msg.place?.name || activeTab.place?.name,
+                                      model: msg.modelUsed,
+                                    });
+                                  }}
+                                  className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-[12.5px] hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer ${msg.reported ? 'text-rose-300' : 'text-zinc-200'}`}
+                                >
+                                  <Flag className="w-3.5 h-3.5 text-rose-300" fill={msg.reported ? 'currentColor' : 'none'} />
+                                  {msg.reported ? t('report.reported') : t('report.tooltip')}
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        {/* Saved or copied: a tick for a moment */}
+                        {(isNoteSaved || copiedMessageId === msg.id) && <Check className="w-3.5 h-3.5 mx-1 text-green-400" aria-label={isNoteSaved ? t('chat.saved') : t('chat.copy')} />}
                       </div>
                     </div>
                   )}

@@ -143,91 +143,30 @@ export function AnnotatedShot({
   // Compact: only markers the text doesn't mention get a line here; the screenshot is behind a toggle.
   const listed = compact ? points.map((_, i) => i).filter((i) => !referenced?.has(i)) : points.map((_, i) => i);
   const [showShot, setShowShot] = useState(false);
+  const [menu, setMenu] = useState(false);
   const shotVisible = !!imageUrl && (!compact || showShot);
 
-  return (
-    <div className={compact ? 'qc-marker-card mt-3 pt-2.5 border-t border-white/[0.08] space-y-2' : 'qc-marker-card mb-3 p-3 rounded-xl bg-black/25 border border-[var(--accent-border)] space-y-2.5'}>
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-baseline gap-2">
-          <span className={`font-fantasy font-bold ${compact ? 'text-xs text-zinc-300' : 'text-sm text-white'}`}>{t('chat.markersTitle')}</span>
-          <span className="text-[10px] font-mono uppercase text-zinc-400">
-            {t('chat.collected', { done: done.filter((i) => i < points.length).length, total: points.length })}
-            {active && <span className="ml-2 text-emerald-400">● {t('chat.onScreen')}</span>}
+  const shot = shotVisible && (
+    <button
+      type="button"
+      onClick={() => setLarge((v) => !v)}
+      aria-label={t('chat.pointsZoom')}
+      title={t('chat.pointsZoom')}
+      className={`relative block w-full overflow-hidden rounded-lg border border-white/10 cursor-zoom-in ${large ? '' : 'max-h-44'}`}
+    >
+      <img src={imageUrl} alt={t('chat.shotAlt')} className="w-full h-auto block" />
+      {points.map((p, i) =>
+        p.fromArea || doneSet.has(i) ? null : (
+          <span key={i} className={`qc-pt absolute ${hover === i ? 'qc-pt-hl' : ''}`} style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }} aria-hidden="true">
+            <span className="qc-pt-ring" />
+            <span className="qc-pt-dot">{i + 1}</span>
           </span>
-        </div>
-        {isDesktop && (
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onShowAll}
-              className="px-2.5 py-1 rounded-lg bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[11px] font-semibold text-white hover:bg-[var(--accent-border)] transition-colors cursor-pointer"
-            >
-              {t('chat.showAll')}
-            </button>
-            <button
-              type="button"
-              onClick={onHideAll}
-              className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] font-semibold text-zinc-300 hover:text-white hover:border-white/25 transition-colors cursor-pointer"
-            >
-              {t('chat.hideAll')}
-            </button>
-            {onTrack && (
-              <button
-                type="button"
-                onClick={onTrack}
-                title={t('chat.trackHint')}
-                className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] font-semibold text-zinc-300 hover:text-white hover:border-[var(--accent-border)] transition-colors cursor-pointer"
-              >
-                {t('chat.track')}
-              </button>
-            )}
-            {onChangeLifetime && (
-              <label className="flex items-center gap-1 text-[11px] text-zinc-400">
-                <span>{t('chat.keep')}</span>
-                <select
-                  value={String(lifetime ?? 120)}
-                  onChange={(e) => onChangeLifetime(Number(e.target.value))}
-                  aria-label={t('chat.keepLabel')}
-                  title={t('chat.keepLabel')}
-                  className="bg-black/40 border border-white/15 rounded-lg px-1.5 py-1 text-[11px] text-zinc-200 outline-none cursor-pointer"
-                >
-                  <option value="30">30 s</option>
-                  <option value="60">1 min</option>
-                  <option value="120">2 min</option>
-                  <option value="300">5 min</option>
-                  <option value="0">{t('chat.keepAlways')}</option>
-                </select>
-              </label>
-            )}
-          </div>
-        )}
-      </div>
-
-      {compact && imageUrl && (
-        <button type="button" onClick={() => setShowShot((v) => !v)} className="text-[11px] text-zinc-500 hover:text-zinc-300 cursor-pointer">
-          {showShot ? t('chat.shotHide') : t('chat.shotShow')}
-        </button>
+        ),
       )}
-      {shotVisible && (
-        <button
-          type="button"
-          onClick={() => setLarge((v) => !v)}
-          aria-label={t('chat.pointsZoom')}
-          title={t('chat.pointsZoom')}
-          className={`relative block w-full overflow-hidden rounded-lg border border-white/10 cursor-zoom-in ${large ? '' : 'max-h-44'}`}
-        >
-          <img src={imageUrl} alt={t('chat.shotAlt')} className="w-full h-auto block" />
-          {points.map((p, i) =>
-            p.fromArea || doneSet.has(i) ? null : (
-              <span key={i} className={`qc-pt absolute ${hover === i ? 'qc-pt-hl' : ''}`} style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }} aria-hidden="true">
-                <span className="qc-pt-ring" />
-                <span className="qc-pt-dot">{i + 1}</span>
-              </span>
-            ),
-          )}
-        </button>
-      )}
-
+    </button>
+  );
+  const list = (
+    <>
       {/* The checklist: checked = collected (its marker leaves the screen). Each line shows what the item is and why it
           matters; pointing at a line makes its marker stand out, and the arrow opens a little more detail. */}
       {listed.length > 0 && <ul className="space-y-1.5" aria-label={t('chat.markersTitle')} onMouseLeave={() => pointAt(null)}>
@@ -283,6 +222,10 @@ export function AnnotatedShot({
         })}
       </ul>}
 
+    </>
+  );
+  const extra = (
+    <>
       {removed && removed.length > 0 && (
         <p className="mt-2 text-[11px] leading-snug text-zinc-500">{unmarkedLine(t, removed)}</p>
       )}
@@ -296,6 +239,132 @@ export function AnnotatedShot({
           <span className="font-semibold text-zinc-400">{t('chat.elsewhere')}</span> {describe(elsewhere)}
         </p>
       )}
+    </>
+  );
+
+  // Desktop: one chip after the answer, "◉ 2 markers on screen · Hide"; its ▾ opens Track on screen, the screenshot,
+  // the markers the text doesn't mention, and what's also on this map or elsewhere.
+  if (compact) {
+    const left = points.filter((_, i) => !doneSet.has(i)).length;
+    const hasMore = !!onTrack || !!imageUrl || listed.length > 0 || !!removed?.length || watching.length > 0 || elsewhere.length > 0;
+    return (
+      <div className="qc-marker-card mt-3 space-y-2">
+        <div className="inline-flex items-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-dim)] text-[11.5px] font-semibold text-zinc-100 overflow-hidden">
+          <span className="pl-2.5 pr-1.5 py-1 flex items-center gap-1.5">
+            <span className={active ? 'text-emerald-400' : 'text-zinc-400'} aria-hidden="true">{active ? '◉' : '◎'}</span>
+            {left === 0
+              ? t('chat.markersDone', { n: points.length })
+              : t(active ? (left === 1 ? 'chat.markersOn1' : 'chat.markersOnN') : left === 1 ? 'chat.markers1' : 'chat.markersN', { n: left })}
+          </span>
+          {left > 0 && (
+            <button
+              type="button"
+              onClick={active ? onHideAll : onShowAll}
+              className="px-2 py-1 border-l border-white/10 text-[var(--accent-color)] hover:bg-white/10 cursor-pointer"
+            >
+              {active ? t('chat.hide') : t('chat.show')}
+            </button>
+          )}
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => setMenu((v) => !v)}
+              aria-expanded={menu}
+              aria-label={t('chat.markersMore')}
+              title={t('chat.markersMore')}
+              className="px-2 py-1 border-l border-white/10 text-zinc-300 hover:bg-white/10 cursor-pointer"
+            >
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${menu ? 'rotate-180' : ''}`} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        {menu && (
+          <div className="p-2.5 rounded-xl bg-black/30 border border-white/[0.08] space-y-2 animate-in fade-in duration-100">
+            {(onTrack || imageUrl) && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {onTrack && (
+                  <button type="button" onClick={onTrack} title={t('chat.trackHint')} className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] font-semibold text-zinc-200 hover:border-[var(--accent-border)] cursor-pointer">
+                    {t('chat.track')}
+                  </button>
+                )}
+                {imageUrl && (
+                  <button type="button" onClick={() => setShowShot((v) => !v)} className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] font-semibold text-zinc-200 hover:border-[var(--accent-border)] cursor-pointer">
+                    {showShot ? t('chat.shotHide') : t('chat.shotShow')}
+                  </button>
+                )}
+              </div>
+            )}
+            {shot}
+            {list}
+            {extra}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="qc-marker-card mb-3 p-3 rounded-xl bg-black/25 border border-[var(--accent-border)] space-y-2.5">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-baseline gap-2">
+          <span className="font-fantasy font-bold text-sm text-white">{t('chat.markersTitle')}</span>
+          <span className="text-[10px] font-mono uppercase text-zinc-400">
+            {t('chat.collected', { done: done.filter((i) => i < points.length).length, total: points.length })}
+            {active && <span className="ml-2 text-emerald-400">● {t('chat.onScreen')}</span>}
+          </span>
+        </div>
+        {isDesktop && (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onShowAll}
+              className="px-2.5 py-1 rounded-lg bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[11px] font-semibold text-white hover:bg-[var(--accent-border)] transition-colors cursor-pointer"
+            >
+              {t('chat.showAll')}
+            </button>
+            <button
+              type="button"
+              onClick={onHideAll}
+              className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] font-semibold text-zinc-300 hover:text-white hover:border-white/25 transition-colors cursor-pointer"
+            >
+              {t('chat.hideAll')}
+            </button>
+            {onTrack && (
+              <button
+                type="button"
+                onClick={onTrack}
+                title={t('chat.trackHint')}
+                className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] font-semibold text-zinc-300 hover:text-white hover:border-[var(--accent-border)] transition-colors cursor-pointer"
+              >
+                {t('chat.track')}
+              </button>
+            )}
+            {onChangeLifetime && (
+              <label className="flex items-center gap-1 text-[11px] text-zinc-400">
+                <span>{t('chat.keep')}</span>
+                <select
+                  value={String(lifetime ?? 120)}
+                  onChange={(e) => onChangeLifetime(Number(e.target.value))}
+                  aria-label={t('chat.keepLabel')}
+                  title={t('chat.keepLabel')}
+                  className="bg-black/40 border border-white/15 rounded-lg px-1.5 py-1 text-[11px] text-zinc-200 outline-none cursor-pointer"
+                >
+                  <option value="30">30 s</option>
+                  <option value="60">1 min</option>
+                  <option value="120">2 min</option>
+                  <option value="300">5 min</option>
+                  <option value="0">{t('chat.keepAlways')}</option>
+                </select>
+              </label>
+            )}
+          </div>
+        )}
+      </div>
+
+      {shot}
+
+      {list}
+      {extra}
     </div>
   );
 }

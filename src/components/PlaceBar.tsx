@@ -6,8 +6,9 @@ import { storyPhrase } from '../utils/placeName';
 
 /**
  * "Where are you?" and "When in the story?" under an answer, made for controllers: no typing needed.
- * - The AI was sure: a small "📍 Place · story" line with a "Not right?" button that opens the choices.
- * - It wasn't sure: its best guess and up to three other likely options as buttons, plus "Say it" (voice).
+ * - Usually one line: "📍 Place · story [✓ Right] [Change]". Change opens the choices.
+ * - The AI couldn't tell the place: its best guess and up to three other likely options as buttons, plus "Say it"
+ *   (voice). An unsure story point alone stays on the one line (Right confirms it; Change offers the options).
  * Picks are remembered for this game (sent with every later question). If a pick differs from what the answer was
  * based on, a button offers to answer again with the right place and story point.
  * "Locate me" (desktop, games with a guide) looks at a screenshot and sets the place from the guide's areas.
@@ -46,9 +47,9 @@ export function PlaceBar({
   const same = (a?: string, b?: string) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
   const placeNow = msg.placeChosen || (same(confirmedPlace, place.name) ? confirmedPlace : undefined);
   const storyNow = msg.storyChosen || (same(confirmedStory, place.story) ? confirmedStory : undefined);
-  // "Not right?" opens the choices even for something already confirmed.
+  // Change opens the choices even for something already confirmed; on its own, only an unsure place asks.
   const askPlace = open || (!placeNow && !place.sure);
-  const askStory = !!place.story && (open || (!storyNow && !place.storySure));
+  const askStory = !!place.story && open;
 
   const btn =
     'h-8 px-3 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 max-w-full';
@@ -109,37 +110,34 @@ export function PlaceBar({
     ) : null;
 
   if (!askPlace && !askStory) {
+    const unconfirmed = !placeNow || (place.story && !storyNow);
+    const small = 'h-6 px-2 rounded-md text-[11.5px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1';
     return (
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="inline-flex items-center gap-2 min-w-0 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-[12px]">
+      <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px] min-w-0">
+        <span className="inline-flex items-center gap-1.5 min-w-0">
           <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-color)]" aria-hidden="true" />
           <span className="text-zinc-200 font-medium">{placeNow || place.name}</span>
           {(storyNow || place.story) && <span className="text-zinc-400">· {storyPhrase(storyNow || place.story)}</span>}
-        </div>
+        </span>
         {reask}
-        {!reask && (!placeNow || (place.story && !storyNow)) && (
+        {!reask && unconfirmed && (
           <button
             type="button"
             onClick={() => {
               if (!placeNow) onChoosePlace(place.name);
               if (place.story && !storyNow) onChooseStory(place.story);
             }}
-            className="h-7 px-2.5 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-dim)] text-[12px] font-semibold text-zinc-100 hover:brightness-125 transition cursor-pointer inline-flex items-center gap-1"
+            className={`${small} border border-[var(--accent-border)] bg-[var(--accent-dim)] text-zinc-100 hover:brightness-125`}
           >
             <Check className="w-3.5 h-3.5" aria-hidden="true" />
-            {t('place.right')}
+            {t('place.rightShort')}
           </button>
         )}
         {!reask && (
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="h-7 px-2.5 rounded-lg border border-[var(--accent-border)] text-[12px] font-semibold text-[var(--accent-color)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer"
-          >
-            {t('place.notRight')}
+          <button type="button" onClick={() => setOpen(true)} className={`${small} text-[var(--accent-color)] hover:bg-[var(--accent-dim)]`}>
+            {t('place.change')}
           </button>
         )}
-        {locate}
         {note}
       </div>
     );
@@ -173,7 +171,14 @@ export function PlaceBar({
           </div>
         </div>
       )}
-      <div className="text-[11px] text-zinc-400">{t('place.hint')}</div>
+      <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+        <span className="flex-1">{t('place.hint')}</span>
+        {open && (
+          <button type="button" onClick={() => setOpen(false)} className="text-zinc-400 hover:text-white cursor-pointer">
+            {t('common.cancel')}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

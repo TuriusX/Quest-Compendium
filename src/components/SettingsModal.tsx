@@ -828,6 +828,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
+                {/* How long markers stay on screen (desktop only; it used to sit under each answer) */}
+                {typeof window !== 'undefined' && (window as any).electronAPI && settings.showPointersOnScreen !== false && (
+                  <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
+                    <div className="text-xs font-semibold text-white">{tr('chat.keepLabel')}</div>
+                    <select
+                      value={String(settings.markerLifetime ?? 120)}
+                      onChange={(e) => onUpdateSettings({ markerLifetime: Number(e.target.value) })}
+                      aria-label={tr('chat.keepLabel')}
+                      className="bg-black/40 border border-white/15 rounded-lg px-2 py-1 text-xs text-zinc-200 outline-none cursor-pointer"
+                    >
+                      <option value="30">30 s</option>
+                      <option value="60">1 min</option>
+                      <option value="120">2 min</option>
+                      <option value="300">5 min</option>
+                      <option value="0">{tr('chat.keepAlways')}</option>
+                    </select>
+                  </div>
+                )}
+
                 {/* Markers in screen recordings (desktop only) */}
                 {typeof window !== 'undefined' && (window as any).electronAPI && settings.showPointersOnScreen !== false && (
                   <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
