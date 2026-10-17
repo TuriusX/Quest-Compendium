@@ -41,6 +41,15 @@ Owner: Noah. Source: the project mind map (Oct 13, 2026). Keep this file in the 
 |---|------|-----------|--------|
 | 11 | **Phone companion** *(propose first)* | A mode of the web app for phones: the live quest log, objectives and the latest answer, synced with the desktop app through the player's account. Ticking on the phone updates the overlay. | Idea |
 
+## Cleanup and redesign (0.5.9)
+
+Noah's approved plan (Oct 16, 2026): one header row with a game switcher and the questions pill, a tidier answer view, no "Known here", a tidier quest log, a compact-view pill, starter chips that fit where the player is (hint mode in Settings). Player-confirmed facts stay out of the public site; they only help answers.
+
+| # | Item | What it is | Status |
+|---|------|-----------|--------|
+| 19 | **0.5.9 cleanup** | Steps 1–4, 6 and 7 of the plan (header, answer view, Known here removed, quest log tidy-up, compact pill and Deck matching, starter chips). | Built, waiting on Noah's dev-build test |
+| 20 | **Attached quest log** *(propose first: done)* | Step 5: the quest log attached to the panel's inner side, moving and hiding with it; popped out stays as today; existing players keep popped-out with a one-time offer; controller RB focus into the log. Moved out of 0.5.9: it needs testing on two monitors and at 150% scaling, and the panel docks on the primary screen while the log follows its own. | 0.5.10 |
+
 ## Growth
 
 | # | Item | What it is | Status |
