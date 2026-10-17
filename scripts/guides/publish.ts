@@ -1524,6 +1524,19 @@ function refBlocks(r: any, self: string): string {
   return secs + items;
 }
 
+/** A mission's step in its chapter walkthrough: the linked step, else the step named after it, else the one step whose text names it. */
+function missionStep(e: any, byslug: Map<string, GuideArea>): { w: any; ch: GuideArea; step: any } | null {
+  const w = e.quest?.walkthrough;
+  const ch = w?.slug ? byslug.get(w.slug) : undefined;
+  const steps = (ch?.walkthrough || []) as any[];
+  if (!ch || !steps.length) return null;
+  const nm = String(e.name).toLowerCase();
+  let at = w.anchor ? steps.findIndex((st) => st.id === w.anchor) : -1;
+  if (at < 0) at = steps.findIndex((st) => String(st.title || '').toLowerCase() === nm);
+  if (at < 0) { const hits = steps.map((st, i) => (String(st.text || '').toLowerCase().includes(nm) ? i : -1)).filter((i) => i >= 0); if (hits.length === 1) at = hits[0]; }
+  return at < 0 ? null : { w, ch, step: steps[at] };
+}
+
 /**
  * A gameplay section's heading. The headings are shared by every kind of page, so on a person's page "How to reach it"
  * (written for places) says what it is: their grave, or where to find them.
@@ -1597,18 +1610,16 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
       ${(() => {
         // A mission's own part of the chapter walkthrough (the step its page links to), shown here so the page answers
         // "how does this mission go" without new text: the same verified step, credited to its chapter page.
-        const w = e.quest?.walkthrough;
-        const ch = w?.slug ? byslug.get(w.slug) : undefined;
-        const steps = (ch?.walkthrough || []) as any[];
-        const at = w?.anchor ? steps.findIndex((st) => st.id === w.anchor) : -1;
-        if (!ch || at < 0) return '';
-        const st = steps[at];
+        const found = missionStep(e, byslug);
+        if (!found) return '';
+        const { w, ch } = found;
+        const st = found.step;
         return `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">Walkthrough</h2>
           <h3 class="mt-3 text-base font-semibold text-white">${esc(st.title || e.name)}</h3>
           ${st.text ? `<p class="mt-1 text-zinc-300 leading-relaxed">${rich(st.text, '../', e.slug)}</p>` : ''}
           ${st.tip ? `<p class="mt-2 text-sm text-zinc-300"><span class="font-semibold text-[#c4b0ff]">Tip:</span> ${rich(st.tip, '../', e.slug)}</p>` : ''}
           ${st.warn ? `<p class="mt-2 text-sm text-amber-200"><span class="font-semibold">Watch out:</span> ${rich(st.warn, '../', e.slug)}</p>` : ''}
-          <p class="mt-3 text-sm"><a class="text-[#a87ffb] hover:text-white" href="../${esc(w.slug)}/#${esc(w.anchor)}">From the ${esc(ch.name)} walkthrough &rarr;</a></p></section>`;
+          <p class="mt-3 text-sm"><a class="text-[#a87ffb] hover:text-white" href="../${esc(w.slug)}/#${esc(st.id || w.anchor || '')}">From the ${esc(ch.name)} walkthrough &rarr;</a></p></section>`;
       })()}
       ${e.ref ? refBlocks(e.ref, e.slug) : ''}
       ${(sm.notes || []).length ? `<ul class="mt-4 space-y-1.5 text-sm text-zinc-300">${sm.notes.map((x: string) => `<li class="flex gap-2"><span class="text-[#c4b0ff]">&bull;</span><span>${rich(x, '../', e.slug)}</span></li>`).join('')}</ul>` : ''}
@@ -1617,7 +1628,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     const url = `${SITE}/guides/${key}/${e.slug}/`;
     const ld: object[] = [breadcrumb([{ name: ui('navGuides'), url: `${SITE}/guides/` }, { name: shortGame(gameName), url: `${SITE}/guides/${key}/` }, { name: e.name, url }])];
     // The title and description say what the page answers, with the full name people search (siteText.entitySeo).
-    const seo = entitySeo(e, shortGame(gameName), person);
+    const seo = entitySeo(e.quest ? { ...e, quest: { ...e.quest, stepShown: !!missionStep(e, byslug) } } : e, shortGame(gameName), person);
     ld.push(guideArticle({ headline: seo.title, description: seo.description, url, game: gameName, modified: Number((e as any).builtAt) || undefined }));
     const title = seo.title.length + 19 <= 60 ? `${seo.title} | Quest Compendium` : seo.title;
     fs.writeFileSync(path.join(dir, 'index.html'), page({ title, description: seo.description, depth: 3, canonical: url, ld, body: body + entPreview(), draft: !!PREVIEW, guide: key }));
