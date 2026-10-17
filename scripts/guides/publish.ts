@@ -17,7 +17,7 @@ import { landscapeOf, wideSet, coverSet, ogImageOf, platformList, ttbShown, TTB_
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
-import { entityKind, shortGame, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterPage, coveringPage, singularLabel, type AchFlag } from './siteText';
+import { entityKind, shortGame, areaSeo, entitySeo, searchName, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterPage, coveringPage, singularLabel, type AchFlag } from './siteText';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 import { GENERATED as GUIDE_UI_GEN } from './guide-ui.generated';
@@ -223,6 +223,10 @@ const SITE = 'https://questcompendium.com';
 /** Old page -> the page that replaced it, per guide (pages merged or replaced by rebuilds): 301s in _redirects. */
 const SITE_REDIRECTS: Record<string, Record<string, string>> = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), 'site-redirects.json'), 'utf8'));
 /** --preview <dir>: a local preview of one game (--only key) with its flagship prototypes, outside the website files. */
+/** Languages with their own guides index (/xx/guides/): the others' "Guides" links go to the English one. */
+const GUIDE_LANGS = new Set<string>(['en']);
+/** Each sitemap URL's last update (from the page's updatedAt), for <lastmod>. */
+const LASTMOD = new Map<string, number>();
 const PREVIEW = arg('preview') && arg('preview') !== 'true' ? String(arg('preview')) : '';
 const ONLY = arg('only') && arg('only') !== 'true' ? String(arg('only')) : '';
 const OUT = path.resolve(PREVIEW || 'Marketing_Website_Files');
@@ -530,6 +534,11 @@ function page(opts: { title: string; description: string; depth: number; canonic
       <select id="qc-report-entry" class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"><option value="">${esc(ui('reportEntryNone'))}</option>${opts.entries.map((e) => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join('')}</select>`
     : '';
   const up = '../'.repeat(opts.depth);
+  // Search results cut titles at about 60 characters: a longer title drops the site name (search shows it anyway).
+  if (opts.title.length > 60) opts = { ...opts, title: opts.title.replace(/ \| Quest Compendium$/, '') };
+  // Articles carry the page's image and who wrote it (the share image; the site as author).
+  const ogImage = ogImageFor(opts.guide, opts.guide ? GUIDE_APP.get(opts.guide) : undefined);
+  opts = { ...opts, ld: (opts.ld || []).map((x: any) => (x['@type'] === 'Article' ? { ...x, image: x.image || ogImage, author: x.author || { '@type': 'Organization', name: 'Quest Compendium', url: SITE } } : x)) };
   // Other languages of this same page: a menu in the top bar and hreflang tags for search engines.
   const langs = opts.langs && opts.langs.length > 1 && opts.path !== undefined ? opts.langs : [];
   // Every language version (this one included), and x-default: the English page.
@@ -551,7 +560,8 @@ function page(opts: { title: string; description: string; depth: number; canonic
   ${opts.draft ? '<meta name="robots" content="noindex, follow">' : ''}
   <meta property="og:title" content="${esc(opts.title)}">
   <meta property="og:description" content="${esc(opts.description)}">
-  <meta property="og:image" content="${esc(ogImageFor(opts.guide, opts.guide ? GUIDE_APP.get(opts.guide) : undefined))}">
+  <meta property="og:image" content="${esc(ogImage)}">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="192x192" href="${up}favicon-192.png">
   <link rel="icon" type="image/png" sizes="96x96" href="${up}favicon-96.png">
   <link rel="icon" href="${up}favicon.ico" sizes="16x16 32x32 48x48">
@@ -559,6 +569,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
   ${(opts.ld || []).map((x) => `<script type="application/ld+json">${JSON.stringify(x).replace(/</g, '\\u003c')}</script>`).join('\n  ')}
   <link rel="stylesheet" href="${CSS_HREF}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     body { font-family: Inter, system-ui, sans-serif; background: #07070a; color: #e4e4e7; }
@@ -587,7 +598,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
     <div class="max-w-6xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-between">
       <a href="${up}${LP}index.html" class="flex shrink-0 items-center gap-2 font-bold text-white whitespace-nowrap text-sm sm:text-base"><img src="${up}icon.svg" alt="" class="w-7 h-7 qc-pixel"><span class="max-[419px]:sr-only">Quest Compendium</span></a>
       <div class="flex items-center gap-3 sm:gap-5 text-sm text-zinc-400 whitespace-nowrap">
-        <a href="${up}${LP}guides/index.html" class="hover:text-white">${esc(ui('navGuides'))}</a>
+        <a href="${up}${GUIDE_LANGS.has(LANG) ? LP : ''}guides/index.html" class="hover:text-white">${esc(ui('navGuides'))}</a>
         <a href="${up}${LP}index.html?from=guide#download" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('navGetApp'))}</a>
         ${menu}
       </div>
@@ -661,6 +672,9 @@ function fold(title: string, icon: string, body: string, opts: { ids?: string[];
     <div class="mt-2">${body}</div>
   </details>`;
 }
+
+/** "Sources checked": the sites the research used, without our own site and code or mod hosts (not sources of game facts). */
+const publicSources = (xs: string[]) => (xs || []).filter((d) => !/(^|\.)(questcompendium\.com|github\.com|nexusmods\.com)$/i.test(String(d).trim()));
 
 /** The area list: the sidebar on area pages and the main list on a game's page. */
 function areaList(gameKey: string, areas: AreaLink[], current: string | null, base: string) {
@@ -826,7 +840,9 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       ].filter(Boolean).join('')}</dl>`
     : '';
   // What this page doesn't list, said plainly (a section that's simply missing reads as an oversight).
-  const empty = [!a.items.length && ui('items'), !a.secrets.length && ui('secrets'), !a.enemies.length && ui('enemies'), !a.shops.length && ui('shops')].filter(Boolean) as string[];
+  // Shops and people listed under "Services and people" count as listed.
+  const hasPeople = !!((a as any).people?.groups?.length || COMP?.people?.[a.slug]);
+  const empty = [!a.items.length && ui('items'), !a.secrets.length && ui('secrets'), !a.enemies.length && ui('enemies'), !a.shops.length && !hasPeople && ui('shops')].filter(Boolean) as string[];
   const notListed = empty.length && a.items.length + a.secrets.length + a.enemies.length + a.shops.length > 0
     ? `<p class="mt-4 text-xs text-zinc-500">${esc(ui('notListed', { list: empty.map((x) => x.toLowerCase()).join(', ') }))}</p>`
     : '';
@@ -955,7 +971,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       ${a.sourceLinks?.pages?.length
         ? // A flagship page written from a source pack: the wiki's articles, linked, and its licence.
           `<p class="mt-6 text-xs text-zinc-500">${ui('sourcesFrom', { wiki: esc(a.sourceLinks.wiki), pages: a.sourceLinks.pages.map((x) => (x.url ? `<a class="text-zinc-400 underline hover:text-white" href="${esc(x.url)}" rel="nofollow noopener" target="_blank">${esc(x.title)}</a>` : esc(x.title))).join(', ') })}${a.sourceLinks.license ? ` ${ui('sourcesLicence', { licence: a.sourceLinks.licenseUrl ? `<a class="text-zinc-400 underline hover:text-white" href="${esc(a.sourceLinks.licenseUrl)}" rel="nofollow noopener" target="_blank">${esc(a.sourceLinks.license)}</a>` : esc(a.sourceLinks.license) })}` : ''}</p>`
-        : a.sources.length ? `<p class="mt-6 text-xs text-zinc-500">${esc(ui('sourcesChecked', { list: a.sources.join(', ') }))}</p>` : ''}
+        : publicSources(a.sources).length ? `<p class="mt-6 text-xs text-zinc-500">${esc(ui('sourcesChecked', { list: publicSources(a.sources).join(', ') }))}</p>` : ''}
     </article>
   </div>`;
 }
@@ -1028,7 +1044,8 @@ function updateVersion() {
 
 /** The app's releases for "Recent updates" (system/changelog, kept by scripts/pipeline/changelog.ts), newest first. */
 let CHANGELOG: { v: string; date: string; text: string; tr?: Record<string, string> }[] = [];
-const releaseText = (e: (typeof CHANGELOG)[number], code: string) => (code !== 'en' && e.tr?.[code]) || e.text;
+// Some stored translations carry HTML entities ("&quot;"); they're decoded here, since esc() escapes the text again.
+const releaseText = (e: (typeof CHANGELOG)[number], code: string) => String((code !== 'en' && e.tr?.[code]) || e.text).replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&amp;/g, '&');
 
 /** The /updates/ page, in each language, with the site's header: every release, newest first. */
 function renderUpdates(sitemap: string[]) {
@@ -1129,10 +1146,37 @@ function updateHomepage(games: { key: string; game: string; published: number; l
           end,
         ].join(nl)
       : `${start}${nl}${end}`;
-    fs.writeFileSync(pg.file, html.slice(0, a) + block + html.slice(b + end.length));
+    let out = html.slice(0, a) + block + html.slice(b + end.length);
+    // A language with its own guides index: the page's other "Guides" links (the top bar) go there, not to English.
+    if (pg.code !== 'en' && games.some((g) => g.langs?.includes(pg.code))) out = out.split('href="../guides/"').join('href="guides/"');
+    fs.writeFileSync(pg.file, out);
     done++;
   }
   console.log(`Homepage guides section updated on ${done} page(s): ${Math.min(games.length, 8)} game(s) shown.`);
+}
+
+/**
+ * The homepages' icons as inline SVG (scripts/guides/home-icons.json, from lucide), so the page doesn't load the whole
+ * icon library (about 450 KB, render-blocking) to draw two dozen icons. An icon missing from the file keeps the
+ * library script, so nothing goes blank.
+ */
+function inlineHomeIcons() {
+  const ICONS: Record<string, [string, Record<string, string>][]> = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), 'home-icons.json'), 'utf8'));
+  const files = [path.join(OUT, 'index.html'), ...Object.keys(HOME_GUIDES).filter((c) => c !== 'en').map((c) => path.join(OUT, c, 'index.html'))].filter((f) => fs.existsSync(f));
+  for (const f of files) {
+    let h = fs.readFileSync(f, 'utf8');
+    const missing = new Set<string>();
+    h = h.replace(/<i data-lucide="([a-z0-9-]+)"([^>]*)><\/i>/g, (m, name: string, rest: string) => {
+      const node = ICONS[name];
+      if (!node) { missing.add(name); return m; }
+      const cls = (rest.match(/class="([^"]*)"/) || [])[1] || '';
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-${name}${cls ? ` ${cls}` : ''}" aria-hidden="true">${node.map(([tag, a]) => `<${tag} ${Object.entries(a).map(([k, v]) => `${k}="${v}"`).join(' ')}/>`).join('')}</svg>`;
+    });
+    if (!missing.size) {
+      h = h.replace(/\s*<script src="https:\/\/unpkg\.com\/lucide@[^"]*"><\/script>/, '').replace(/\n\s*lucide\.createIcons\(\);/, '');
+    } else console.warn(`Homepage icons not in home-icons.json (${[...missing].join(', ')}): ${path.relative(OUT, f)} keeps the icon script.`);
+    fs.writeFileSync(f, h);
+  }
 }
 
 /** One game's pages (area pages and the game page) in the current language (setLang). */
@@ -1161,18 +1205,15 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
     let title: string, description: string;
     const sg = shortGame(gameName);
     if (LANG === 'en') {
-      // Place first, then what the page has (search results cut titles at about 60 characters).
-      const missN = a.items.filter((e) => e.missable).length + (a.sections || []).filter((x) => x.check && /miss/i.test(x.title)).reduce((n, x) => n + x.entries.length, 0);
-      const has = [a.items.length && 'Items', a.secrets.length && 'Secrets', missN ? 'Missables' : (a.fights || []).length ? 'Key Fights' : a.enemies.length ? 'Enemies' : ''].filter(Boolean) as string[];
-      const base = `${a.name} – ${sg}${has.length ? `: ${joinAnd(has)}` : ' Guide'}`;
-      title = a.seoTitle ? `${a.seoTitle} | Quest Compendium` : base.length + 19 <= 70 ? `${base} | Quest Compendium` : base;
-      const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
-      const counts = [a.items.length && plural(a.items.length, 'item'), missN && plural(missN, 'missable'), a.secrets.length && plural(a.secrets.length, 'secret'), (a.fights || []).length && `key fights (${(a.fights || []).slice(0, 2).map((f) => f.name).join(', ')})`].filter(Boolean).join(', ');
-      const lead = String(a.overview || '').split(/(?<=[.!?])\s+/)[0] || '';
-      description = snippet(a.seoDescription || `Where to find everything in ${a.name} (${sg})${counts ? `: ${counts}` : ''}. ${lead}`.trim(), 158);
+      // Place first, then what the page answers (siteText.areaSeo): search results cut titles at about 60 characters.
+      const seo = areaSeo(a, sg);
+      title = a.seoTitle ? `${a.seoTitle} | Quest Compendium` : seo.title.length + 19 <= 60 ? `${seo.title} | Quest Compendium` : seo.title;
+      description = snippet(a.seoDescription || seo.description, 158);
     } else {
       title = ui('areaTitle', { area: a.name, game: sg });
-      description = ui('areaDesc', { area: a.name, game: sg }).slice(0, 158);
+      // The page's own translated summary, not one template for every page (the template is the fallback).
+      const lead = t?.areas?.[o.slug] ? String(a.overview || '').split(/(?<=[.!?。！？])\s*/)[0] || '' : '';
+      description = lead.length >= 40 ? snippet(`${a.name} (${sg}): ${lead}`, 158) : ui('areaDesc', { area: a.name, game: sg }).slice(0, 158);
     }
     const url = `${SITE}/${LP}guides/${key}/${o.slug}/`;
     // A page not translated yet shows the English text in this language's folder: it names the English page as
@@ -1204,7 +1245,10 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
         path: `guides/${key}/${o.slug}/`,
       }),
     );
-    if (!draft && !untranslated) sitemap.push(`${SITE}/${LP}guides/${key}/${o.slug}/`);
+    if (!draft && !untranslated) {
+      sitemap.push(`${SITE}/${LP}guides/${key}/${o.slug}/`);
+      if (Number((a as any).updatedAt)) LASTMOD.set(`${SITE}/${LP}guides/${key}/${o.slug}/`, Number((a as any).updatedAt));
+    }
   });
   // Checked against sources: walkthrough pages that passed their check, and compendium pages whose review passed (one
   // held back by a later rebuild, or whose rewrite failed, doesn't count). "All" only when every one passed.
@@ -1337,18 +1381,28 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
     if (n.length < 3) return '';
     const page = pages.find((p) => norm(p.name) === n) || pages.find((p) => entitySegments(p.name, [{ name, slug: 'x' }]).some((sg) => sg.slug));
     if (page) return `/guides/${COMP_KEY}/${page.slug}/`;
+    // A compendium page of another type (a hideout listed under places, an NPC under quests).
+    const ent = COMP!.entities.find((e) => norm(e.name) === n || norm(e.displayName || '') === n);
+    if (ent) return entHref(ent.slug);
     const st = steps.find((x) => norm(x.title) === n) || steps.find((x) => entitySegments(x.title, [{ name, slug: 'x' }]).some((sg) => sg.slug));
     return st ? `/guides/${COMP_KEY}/${st.slug}/#${st.id}` : '';
   };
   const named = (e: { name: string; displayName?: string }) => e.displayName || e.name;
   type Sec = { html: string; live: number };
   const out: Sec[] = [];
+  // Each page once: a built page shows in its own type's section, so another section's example that only links to it
+  // is left out (Beaver Hollow under places, not again under gang hideouts).
+  const builtHrefs = new Set(COMP.entities.map((e) => entHref(e.slug)));
+  // "Coming soon" names fold away behind a count, so the index shows what's there.
+  const soonFold = (names: string[]) => (names.length ? `<details class="qc-soonfold mt-1.5"><summary class="cursor-pointer list-none text-[11px] text-zinc-500 hover:text-zinc-300">${esc(ui('comingSoonMore', { n: names.length }))}</summary><div class="mt-1.5 flex flex-wrap gap-1.5">${names.map(soon).join('')}</div></details>` : '');
   for (const t of COMP.taxonomy || []) {
+    // Quest types (Stranger missions) are drawn once, below, grouped by chapter.
+    if (QUEST_TYPES[t.id] && questGroups(t.id, pages).length) continue;
     const built = COMP.entities.filter((e) => e.type === t.id);
-    const more = ((t.examples || []) as string[]).filter((x) => !built.some((e) => e.name.toLowerCase() === x.toLowerCase())).slice(0, 6).map((x) => ({ x, href: covering(x) }));
+    const more = ((t.examples || []) as string[]).filter((x) => !built.some((e) => e.name.toLowerCase() === x.toLowerCase())).slice(0, 6).map((x) => ({ x, href: covering(x) })).filter((m) => !(m.href && builtHrefs.has(m.href)));
     const live = built.length + more.filter((m) => m.href).length;
     out.push({ live, html: `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(t.label)}</div>
-      <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => chip(entHref(e.slug), named(e), e.displayName ? e.name : '')).join('')}${more.filter((m) => m.href).map((m) => chip(m.href, m.x)).join('')}${more.filter((m) => !m.href).map((m) => soon(m.x)).join('')}</div></div>` });
+      <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => chip(entHref(e.slug), named(e), e.displayName ? e.name : '')).join('')}${more.filter((m) => m.href).map((m) => chip(m.href, m.x)).join('')}</div>${live ? soonFold(more.filter((m) => !m.href).map((m) => m.x)) : `<div class="mt-2 flex flex-wrap gap-1.5">${more.filter((m) => !m.href).map((m) => soon(m.x)).join('')}</div>`}</div>` });
   }
   // Quest pages (story missions, Stranger strands): grouped by chapter in play order; a planned mission without its
   // page links to the walkthrough step that covers it, else it's "coming soon" (failed ones are left out).
@@ -1359,7 +1413,7 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
     const live = items.reduce((n, g) => n + g.items.filter((x) => x.href).length, 0);
     out.push({ live, html: `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:col-span-2"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(QUEST_TYPES[ty].label)}</div>
       ${items.map(({ g, items: xs }) => `<div class="mt-2.5">${g.slug ? `<a href="${esc(`/guides/${COMP_KEY}/${g.slug}/`)}" class="text-[11px] font-semibold text-zinc-400 hover:text-white">${esc(g.name)}</a>` : `<span class="text-[11px] font-semibold text-zinc-400">${esc(g.name)}</span>`}
-      <div class="mt-1 flex flex-wrap gap-1.5">${xs.filter((x) => x.href).map((x) => chip(x.href, x.name)).join('')}${xs.filter((x) => !x.href).map((x) => soon(x.name)).join('')}</div></div>`).join('')}</div>` });
+      <div class="mt-1 flex flex-wrap gap-1.5">${xs.filter((x) => x.href).map((x) => chip(x.href, x.name)).join('')}</div>${soonFold(xs.filter((x) => !x.href).map((x) => x.name))}</div>`).join('')}</div>` });
   }
   // Built pages of other types outside the taxonomy: built ones only, never "coming soon".
   for (const ty of [...new Set(COMP.entities.map((e) => e.type))].filter((ty) => !QUEST_TYPES[ty] && !(COMP!.taxonomy || []).some((t: any) => t.id === ty))) {
@@ -1368,7 +1422,11 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
       <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => chip(entHref(e.slug), named(e), e.displayName ? e.name : '')).join('')}</div></div>` });
   }
   // Sections with live entries first (most first), sections with only "coming soon" after; the order otherwise kept.
-  const types = out.map((x, i) => ({ ...x, i })).sort((a, b) => Number(b.live > 0) - Number(a.live > 0) || (b.live > 0 ? b.live - a.live : 0) || a.i - b.i).map((x) => x.html).join('');
+  const sorted = out.map((x, i) => ({ ...x, i })).sort((a, b) => b.live - a.live || a.i - b.i);
+  const liveHtml = sorted.filter((x) => x.live > 0).map((x) => x.html).join('');
+  const soonOnly = sorted.filter((x) => x.live === 0);
+  // Sections with nothing written yet fold into one line at the end.
+  const types = liveHtml + (soonOnly.length ? `<details class="qc-soonfold sm:col-span-2 rounded-xl border border-dashed border-white/10 p-3"><summary class="cursor-pointer list-none text-xs font-semibold text-zinc-500 hover:text-zinc-300">${esc(ui('comingSoonSections', { n: soonOnly.length }))}</summary><div class="mt-3 grid gap-3 sm:grid-cols-2">${soonOnly.map((x) => x.html).join('')}</div></details>` : '');
   return `<section id="compendium" class="mt-14 scroll-mt-20">${sectionHead(ui('compendium'), ui('compendiumSub'), ui('pagesCount', { n: COMP.entities.length }))}
   ${types.includes('qc-soon') ? `<p class="mt-3 text-xs text-zinc-500">${esc(ui('comingSoonNote'))}</p>` : ''}
   <div class="mt-4 grid gap-3 sm:grid-cols-2">${types}</div></section>
@@ -1419,6 +1477,15 @@ function refBlocks(r: any, self: string): string {
   return secs + items;
 }
 
+/**
+ * A gameplay section's heading. The headings are shared by every kind of page, so on a person's page "How to reach it"
+ * (written for places) says what it is: their grave, or where to find them.
+ */
+function gameplayHeading(x: { heading: string; text: string }, person: boolean): string {
+  if (!person || !/^how to (reach|get to) (it|there)$/i.test(String(x.heading).trim())) return x.heading;
+  return /grave|tomb|buried|burial/i.test(x.text) ? 'Grave location' : 'Where to find them';
+}
+
 function renderEntities(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, sitemap: string[]) {
   const pageText = (a: GuideArea) => [a.overview, ...(a.walkthrough || []).flatMap((s) => [s.title, s.text, s.tip, s.warn]), ...(a.items || []).map((e) => `${e.name} ${e.where || ''}`), ...(a.tips || [])].filter(Boolean).join(' ');
   // Mission links: a mission whose name is a walkthrough step's title links to that step (exact title matches only;
@@ -1426,6 +1493,8 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
   const stepTitles = visible.flatMap((o) => (byslug.get(o.slug)!.walkthrough || []).filter((st: any) => st.id && st.title).map((st: any) => ({ slug: o.slug, id: String(st.id), title: String(st.title) })));
   const missionLink = (name: string) => stepTitles.find((st) => entitySegments(st.title, [{ name, slug: 'x' }]).some((sg) => sg.slug));
   for (const e of COMP!.entities) {
+    // A guide page already at this address wins: a compendium page never replaces it.
+    if (visible.some((o) => o.slug === e.slug)) { console.warn(`  compendium page ${e.slug} skipped: a guide page has that address`); continue; }
     const label = singularLabel(e.typeLabel);
     // Backlinks: the guide pages that mention it (found by the same linker), plus the chapters the page names.
     const named = new Set(((e.summary || {}).chapters || []).map((c: string) => c.toLowerCase()));
@@ -1438,7 +1507,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     fs.mkdirSync(dir, { recursive: true });
     const body = `<article class="max-w-3xl">
       <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a> / <span>${esc(label)}</span></p>
-      <h1 class="text-3xl font-bold text-white leading-tight">${esc(e.displayName || e.name)}</h1>
+      <h1 class="text-3xl font-bold text-white leading-tight">${esc(searchName(e))}</h1>
       <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400"><span class="rounded-md bg-[#a87ffb]/15 px-2 py-0.5 text-[#c4b0ff]">${esc(label)}</span><span>${esc(gameName)}</span>
         ${e.review ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))} · ${e.review.supported}/${e.review.total}</span>` : ''}
         ${PREVIEW ? '<span class="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-semibold text-amber-200">Preview</span>' : ''}</div>
@@ -1448,8 +1517,16 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
         const lead = e.displayName && !ov.toLowerCase().includes(e.name.toLowerCase()) ? `<strong class="text-white">${esc(e.name)}</strong>${ov ? '. ' : ''}` : '';
         return ov || lead ? `<p class="mt-5 text-zinc-300 leading-relaxed">${lead}${rich(ov, '../', e.slug)}</p>` : '';
       })()}
+      ${(() => {
+        // A place that is also a chapter of the walkthrough ("Colter" / "Chapter 1: Colter"): players searching the place
+        // usually want that chapter, so it's linked straight under the opening line.
+        if (person || e.quest) return '';
+        const n = String(e.name).toLowerCase();
+        const ch = visible.find((o) => { const nm = String(byslug.get(o.slug)?.name || o.name).toLowerCase(); return nm !== n && (nm.endsWith(`: ${n}`) || nm.endsWith(` – ${n}`) || nm.endsWith(` - ${n}`)); });
+        return ch ? `<p class="mt-4 rounded-xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 px-4 py-3 text-sm text-zinc-200">Playing through the story here? <a class="font-semibold text-[#a87ffb] hover:text-white" href="../${esc(ch.slug)}/">${esc(byslug.get(ch.slug)?.name || ch.name)}: walkthrough, missions and missables &rarr;</a></p>` : '';
+      })()}
       ${(e.story || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entStory'))}</h2>${e.story!.map((x: any, i: number) => `<h3 id="story-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.heading)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : ''}
-      ${(e.gameplay || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entGameplay'))}</h2>${e.gameplay!.map((x: any, i: number) => `<h3 id="play-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.heading)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : ''}
+      ${(e.gameplay || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entGameplay'))}</h2>${e.gameplay!.map((x: any, i: number) => `<h3 id="play-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(gameplayHeading(x, person))}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : ''}
       ${(() => {
         // Answers to players' questions are worked into the sections above (qaArrange.ts); only those that fit none
         // show here. A page from before that step still shows its questions.
@@ -1472,16 +1549,19 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
       </dl>
       ${e.ref ? refBlocks(e.ref, e.slug) : ''}
       ${(sm.notes || []).length ? `<ul class="mt-4 space-y-1.5 text-sm text-zinc-300">${sm.notes.map((x: string) => `<li class="flex gap-2"><span class="text-[#c4b0ff]">&bull;</span><span>${rich(x, '../', e.slug)}</span></li>`).join('')}</ul>` : ''}
-      ${(e.sources || []).length ? `<p class="mt-6 text-xs text-zinc-500">Sources: ${e.sources.map(esc).join(', ')}</p>` : ''}
+      ${publicSources(e.sources || []).length ? `<p class="mt-6 text-xs text-zinc-500">Sources: ${publicSources(e.sources).map(esc).join(', ')}</p>` : ''}
     </article>`;
     const url = `${SITE}/guides/${key}/${e.slug}/`;
-    const ld = [breadcrumb([{ name: ui('navGuides'), url: `${SITE}/guides/` }, { name: shortGame(gameName), url: `${SITE}/guides/${key}/` }, { name: e.name, url }])];
-    // A character's title never names location fields (collectibles, what's there): it says what the page has.
-    const title = person && (!e.title || /collectible|what's there|location/i.test(e.title))
-      ? `${e.displayName || e.name} – ${gameName}${(() => { const parts = [(e.story || []).length ? 'story' : '', (sm.whereToFind || []).length ? 'where to find' : '', (sm.quests || []).length ? 'missions' : ''].filter(Boolean); return parts.length ? `: ${parts.join(', ')}` : ''; })()}`
-      : e.displayName && e.title ? e.title.replace(e.name, e.displayName) : e.title || `${e.displayName || e.name} – ${gameName}`;
-    fs.writeFileSync(path.join(dir, 'index.html'), page({ title, description: e.description || '', depth: 3, canonical: url, ld, body: body + entPreview(), draft: !!PREVIEW, guide: key }));
-    if (!PREVIEW) sitemap.push(url);
+    const ld: object[] = [breadcrumb([{ name: ui('navGuides'), url: `${SITE}/guides/` }, { name: shortGame(gameName), url: `${SITE}/guides/${key}/` }, { name: e.name, url }])];
+    // The title and description say what the page answers, with the full name people search (siteText.entitySeo).
+    const seo = entitySeo(e, shortGame(gameName), person);
+    ld.push(guideArticle({ headline: seo.title, description: seo.description, url, game: gameName, modified: Number((e as any).builtAt) || undefined }));
+    const title = seo.title.length + 19 <= 60 ? `${seo.title} | Quest Compendium` : seo.title;
+    fs.writeFileSync(path.join(dir, 'index.html'), page({ title, description: seo.description, depth: 3, canonical: url, ld, body: body + entPreview(), draft: !!PREVIEW, guide: key }));
+    if (!PREVIEW) {
+      sitemap.push(url);
+      if (Number((e as any).builtAt)) LASTMOD.set(url, Number((e as any).builtAt));
+    }
   }
   console.log(`Compendium: ${COMP!.entities.length} entity page(s) for ${gameName}.`);
 }
@@ -1774,6 +1854,7 @@ async function main() {
       guideIndex.push({ key: g.id, game: String(info.game || g.id), areas: live.length, ...(art ? { art } : {}), checked: live.filter((o) => byslug.get(o.slug)!.verified === true).length, players: playersBy.get(g.id) || 0, langs });
     }
     for (const code of langs) {
+      GUIDE_LANGS.add(code);
       setLang(code);
       const t = trs[code];
       // Drafts are English-only previews; an unpublished guide's pages keep their translated addresses too (noindex).
@@ -1793,6 +1874,7 @@ async function main() {
     fs.mkdirSync(base, { recursive: true });
     const depth = code === 'en' ? 1 : 2;
     const langsWithGuides = Object.keys(LANG_TAG).filter((c) => games.some((g) => g.langs.includes(c)));
+    for (const c of langsWithGuides) GUIDE_LANGS.add(c);
     fs.writeFileSync(
       path.join(base, 'index.html'),
       page({
@@ -1811,7 +1893,7 @@ async function main() {
   renderUpdates(sitemap);
   fs.writeFileSync(
     path.join(OUT, 'sitemap.xml'),
-    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemap.map((u) => `  <url><loc>${u}</loc></url>`).join('\n')}\n</urlset>\n`,
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${[...new Set(sitemap)].map((u) => `  <url><loc>${u}</loc>${LASTMOD.get(u) ? `<lastmod>${new Date(LASTMOD.get(u)!).toISOString().slice(0, 10)}</lastmod>` : ''}</url>`).join('\n')}\n</urlset>\n`,
   );
   fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`);
   if (PREVIEW) {
@@ -1824,6 +1906,7 @@ async function main() {
   updateHomepage(games.filter((g) => g.published > 0));
   updateHomepageUpdates();
   updateVersion();
+  inlineHomeIcons();
   writeRedirects(moved, new Set(sitemap));
   writeGuideIndex(guideIndex);
   write404();

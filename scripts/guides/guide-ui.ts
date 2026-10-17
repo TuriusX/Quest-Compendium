@@ -149,6 +149,8 @@ export const GUIDE_UI_EN: Record<string, string> = {
   compendium: 'Compendium',
   comingSoon: 'Coming soon',
   comingSoonNote: 'Greyed-out entries are coming soon.',
+  comingSoonMore: '+{n} coming soon',
+  comingSoonSections: 'Coming soon: {n} more sections',
   walkthroughSub: 'Every chapter and area in play order, with checklists of items, secrets and missables.',
   compendiumSub: 'Characters, places, missions and more, each with its own page.',
   pagesCount: '{n} pages',

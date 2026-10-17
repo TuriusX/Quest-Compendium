@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/siteText.test.ts)
 import assert from "node:assert/strict";
-import { shortGame, relatedQuests, achFlags, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterKey, chapterPage, coveringPage, lintEntity, singularLabel } from "../scripts/guides/siteText";
+import { shortGame, areaSeo, fitTitle, tidyDescription, relatedQuests, achFlags, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterKey, chapterPage, coveringPage, lintEntity, singularLabel } from "../scripts/guides/siteText";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -11,12 +11,16 @@ function test(name: string, fn: () => void) {
 test("game names for titles: no trademark signs or edition suffix", () => {
   assert.equal(shortGame("The Witcher 3: Wild Hunt - Complete Edition"), "The Witcher 3: Wild Hunt");
   assert.equal(shortGame("The Elder Scrolls V: Skyrim Special Edition"), "The Elder Scrolls V: Skyrim");
-  assert.equal(shortGame("DRAGON QUEST® XI S: Echoes of an Elusive Age™ - Definitive Edition"), "DRAGON QUEST XI S: Echoes of an Elusive Age");
+  assert.equal(shortGame("DRAGON QUEST® XI S: Echoes of an Elusive Age™ - Definitive Edition"), "Dragon Quest XI S: Echoes of an Elusive Age");
   assert.equal(shortGame("Sekiro: Shadows Die Twice - GOTY Edition"), "Sekiro: Shadows Die Twice");
   assert.equal(shortGame("Mass Effect 3 (Legendary Edition)"), "Mass Effect 3");
-  assert.equal(shortGame("CHRONO TRIGGER®"), "CHRONO TRIGGER");
+  assert.equal(shortGame("CHRONO TRIGGER®"), "Chrono Trigger");
   assert.equal(shortGame("Baldur's Gate 3"), "Baldur's Gate 3");
-  assert.equal(shortGame("ELDEN RING"), "ELDEN RING");
+  assert.equal(shortGame("ELDEN RING"), "Elden Ring");
+  assert.equal(shortGame("Fallout 3: Game of the Year Edition"), "Fallout 3");
+  assert.equal(shortGame("FINAL FANTASY XV WINDOWS EDITION"), "Final Fantasy XV");
+  assert.equal(shortGame("DARK SOULS™: REMASTERED"), "Dark Souls Remastered");
+  assert.equal(shortGame("FINAL FANTASY X/X-2 HD Remaster"), "Final Fantasy X/X-2 HD Remaster");
 });
 
 test("related quests: quoted names next to a quest word, once each", () => {
@@ -139,6 +143,27 @@ test("redirect targets: a held page's chapter note finds the live chapter page",
   assert.equal(chapterPage("H'aanit Chapter 3", octo), "haanit-chapter-3");
   assert.equal(chapterPage("Tressa Chapter 3", octo), undefined);
   assert.equal(chapterPage("Partitio's Chapter 2", [{ slug: "partitio-chapter-2", name: "Partitio Chapter 2" }]), "partitio-chapter-2");
+});
+
+test("area titles: what the page answers, within 60 characters, compact game name when needed", () => {
+  const a: any = { name: "Fyke Isle", overview: "Geralt travels across the lake to Fyke Isle. More.", items: [{ id: "i1", name: "Bones", missable: true }, { id: "i2", name: "Notes", missable: true }], secrets: [{ id: "s1", text: "x" }], enemies: [], shops: [], tips: [], walkthrough: [{ title: "a" }, { title: "b" }], choices: [{}], info: { region: "Velen", quests: ["A Towerful of Mice", "For the Advancement of Learning"] } };
+  const s = areaSeo(a, "The Witcher 3: Wild Hunt");
+  assert.equal(s.title, "Fyke Isle – Witcher 3: Walkthrough, Missables & Loot");
+  assert.ok(s.description.startsWith("Fyke Isle in The Witcher 3: Wild Hunt: location, quests (A Towerful of Mice, For the Advancement of Learning), step-by-step walkthrough"), s.description);
+  assert.ok(!/\b1 item/.test(s.description));
+  assert.ok(s.description.length <= 158);
+  const thin: any = { name: "Mulbrydale", overview: "A village.", items: [], secrets: [], enemies: [{ name: "Drowner" }], shops: [], tips: [] };
+  assert.equal(areaSeo(thin, "Elden Ring").title, "Mulbrydale – Elden Ring: Enemies");
+});
+
+test("fitTitle drops parts from the end, then shortens the game", () => {
+  assert.equal(fitTitle("Land of a Thousand Fables", "The Witcher 3: Wild Hunt", ["Walkthrough", "Missables", "Loot"]), "Land of a Thousand Fables – Witcher 3: Walkthrough");
+});
+
+test("entity descriptions tidied", () => {
+  assert.equal(tidyDescription("Dutch in RDR2: 8 mission(s), collectibles."), "Dutch in RDR2: 8 missions, collectibles.");
+  assert.equal(tidyDescription("Mary-Beth in RDR2: 1 mission(s). She is"), "Mary-Beth in RDR2: 1 mission. She is");
+  assert.equal(tidyDescription("Karen Jones in Red Dead Redemption 2: . Karen is"), "Karen Jones in Red Dead Redemption 2. Karen is");
 });
 
 console.log(`\n${passed} tests passed`);

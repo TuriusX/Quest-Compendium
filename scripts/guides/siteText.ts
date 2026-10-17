@@ -11,8 +11,32 @@ export function shortGame(game: string): string {
   g = g.replace(new RegExp(`\\s*\\((?:[^)]*edition|remastered)\\)$`, 'i'), '');
   g = g.replace(new RegExp(`\\s+[-–—]\\s+${EDITION}$`, 'i'), '');
   g = g.replace(new RegExp(`\\s+${EDITION.replace('(?:\\s+edition)?', '\\s+edition')}$`, 'i'), '');
+  g = g.replace(/\s+windows edition$/i, '');
+  // "Fallout 3: Game of the Year Edition" leaves "Fallout 3:".
+  g = g.replace(/[\s:–—-]+$/, '');
+  g = SEARCH_NAMES[g.toUpperCase()] || g;
+  // Store names in capitals ("ELDEN RING", "FINAL FANTASY VII REBIRTH") read as shouting in search results: words in
+  // capitals become title case; roman numerals and short abbreviations (HD, II, XI) stay.
+  if (/[A-Z]{4,}/.test(g)) {
+    const small = new Set(['of', 'the', 'and', 'on', 'in', 'a', 'to', 'for']);
+    g = g.split(' ').map((w, i) => {
+      if (!/^[A-Z][A-Z'’:&!.-]{2,}$/.test(w) || /^[IVXLC]+:?$/.test(w) || /^[A-Z]{2}$/.test(w)) return w;
+      const lower = w.toLowerCase();
+      return i > 0 && small.has(lower) ? lower : w[0] + lower.slice(1);
+    }).join(' ');
+  }
   return g.trim() || String(game || '');
 }
+/** The name people search for, where the store's differs (keyed by the short name in capitals). */
+const SEARCH_NAMES: Record<string, string> = {
+  'DARK SOULS: REMASTERED': 'Dark Souls Remastered',
+  'CHRONO CROSS: THE RADICAL DREAMERS EDITION': 'Chrono Cross',
+  'STAR WARS KNIGHTS OF THE OLD REPUBLIC': 'Star Wars: Knights of the Old Republic',
+  'NI NO KUNI WRATH OF THE WHITE WITCH REMASTERED': 'Ni no Kuni: Wrath of the White Witch',
+  'DEATH STRANDING 2: ON THE BEACH': 'Death Stranding 2: On the Beach',
+  'FINAL FANTASY XII THE ZODIAC AGE': 'Final Fantasy XII: The Zodiac Age',
+  'FINAL FANTASY X/X-2 HD REMASTER': 'Final Fantasy X/X-2 HD Remaster',
+};
 /**
  * Quest names an area page's entries mention ("the secondary quest "Man's Best Friend"", ""Lilac and Gooseberries"
  * quest"), for its related-quests line. Only quoted names next to a quest word.
@@ -288,4 +312,115 @@ export function entityKind(type: string): 'person' | 'boss' | 'thing' | 'place' 
   if (/boss|enem|monster|creature|foe|dragon|demigod/.test(t)) return 'boss';
   if (/power|spell|abilit|item|weapon|armou?r|class|feat|skill|perk|talent|trinket|talisman|relic|specimen|parasite|rune|ash of war|gear|equipment|lure|recipe/.test(t)) return 'thing';
   return 'place';
+}
+
+/** A shorter form of a game's name for titles that would be cut off ("The Witcher 3: Wild Hunt" → "Witcher 3"). */
+export function compactGame(short: string): string {
+  const COMPACT: Record<string, string> = {
+    'The Witcher 3: Wild Hunt': 'Witcher 3', 'The Witcher 2: Assassins of Kings': 'Witcher 2',
+    'The Elder Scrolls V: Skyrim': 'Skyrim', 'The Elder Scrolls III: Morrowind': 'Morrowind',
+    'Dragon Quest XI S: Echoes of an Elusive Age': 'Dragon Quest XI S', 'Ni no Kuni: Wrath of the White Witch': 'Ni no Kuni',
+    'Star Wars: Knights of the Old Republic': 'KOTOR', 'Kingdom Come: Deliverance II': 'Kingdom Come Deliverance 2',
+    'Divinity: Original Sin 2': 'Divinity Original Sin 2', 'Indiana Jones and the Great Circle': 'Indiana Jones Great Circle',
+    'Final Fantasy VII Remake Intergrade': 'FF7 Remake', 'Final Fantasy XII: The Zodiac Age': 'FF12 Zodiac Age',
+  };
+  return COMPACT[short] || short.replace(/^The Legend of Zelda: /, 'Zelda: ');
+}
+
+/** "Title – Game: tail" kept within max characters: the tail's parts are dropped from the end, then the compact name. */
+export function fitTitle(head: string, game: string, tail: string[], max = 60): string {
+  for (let n = tail.length; n >= 0; n--) {
+    for (const g of [game, compactGame(game)]) {
+      const t = `${head} – ${g}${n ? `: ${joinList(tail.slice(0, n))}` : ''}`;
+      if (t.length <= max) return t;
+    }
+  }
+  return `${head} – ${compactGame(game)}`;
+}
+const joinList = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} & ${xs[xs.length - 1]}`);
+
+/**
+ * An area page's search title and description: what the page actually answers (where it is, the walkthrough, the
+ * choices, the quests, the loot), never thin-sounding counts like "1 item, 1 secret".
+ */
+export function areaSeo(a: GuideArea, game: string): { title: string; description: string } {
+  const walk = (a.walkthrough || []).length >= 2;
+  const located = !!(a.info?.region || a.info?.directions);
+  const missN = a.items.filter((e) => e.missable).length + (a.sections || []).filter((x) => x.check && /miss/i.test(x.title)).reduce((n, x) => n + x.entries.length, 0);
+  const tail = [
+    walk ? 'Walkthrough' : '',
+    located && !walk ? 'Location' : '',
+    (a.choices || []).length && !walk ? 'Choices' : '',
+    missN >= 2 ? 'Missables' : '',
+    a.items.length ? 'Loot' : '',
+    a.secrets.length ? 'Secrets' : '',
+    (a.fights || []).length ? 'Boss Fights' : '',
+    !a.items.length && !a.secrets.length && a.enemies.length ? 'Enemies' : '',
+  ].filter(Boolean).slice(0, 3);
+  const title = fitTitle(a.name, game, tail);
+  const quests = [...new Set([...(a.info?.quests || []), ...relatedQuests(a)])].slice(0, 3);
+  const covers = [
+    located ? 'location' : '',
+    quests.length ? `quests (${quests.join(', ')})` : '',
+    walk ? 'step-by-step walkthrough' : '',
+    (a.choices || []).length ? 'choices and outcomes' : '',
+    missN ? 'missables' : '',
+    a.items.length || a.secrets.length ? 'every item and secret' : '',
+    (a.fights || []).length ? 'key fights' : '',
+  ].filter(Boolean);
+  const lead = String(a.overview || '').split(/(?<=[.!?])\s+/)[0] || '';
+  const raw = `${a.name} in ${game}: ${covers.length ? `${joinList(covers).replace(/ & ([^&]*)$/, ' and $1')}.` : ''} ${lead}`.replace(/\s+/g, ' ').trim();
+  return { title, description: raw.length <= 158 ? raw : `${raw.slice(0, 157).replace(/\s+\S*$/, '')}…` };
+}
+
+/** An entity page's stored description, tidied: "8 mission(s)" → "8 missions", no empty ": ." left by a missing field. */
+export function tidyDescription(d: string): string {
+  return String(d || '')
+    .replace(/\b1 (\w+)\(s\)/g, '1 $1').replace(/(\w+)\(s\)/g, '$1s')
+    .replace(/:\s*\./g, '.').replace(/:\s*$/, '.').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * A compendium page's search title and description, from what it has: the full name people search ("Dutch van der
+ * Linde", not "Dutch"), and what it answers (a mission's giver, rewards and gold medal; a character's whereabouts,
+ * story and fate; a place's location, missions and shops).
+ */
+export function entitySeo(e: any, game: string, person: boolean): { title: string; description: string } {
+  const sm = e.summary || {};
+  const q = e.quest;
+  const story = (e.story || []) as { heading: string }[];
+  const fate = story.some((x) => /fate|ending|death/i.test(x.heading));
+  const quests = ((sm.quests || []) as { name: string }[]).map((x) => x.name);
+  let tail: string[];
+  let covers: string[];
+  if (q) {
+    tail = [(q.walkthrough || (q.parts || []).some((p: any) => (p.steps || []).length)) ? 'Walkthrough' : '', (q.goldMedal || []).length ? 'Gold Medal' : '', (q.rewards || []).length ? 'Rewards' : '', (q.choices || []).length ? 'Choices' : ''].filter(Boolean);
+    covers = [q.giver ? `who gives it (${q.giver})` : '', q.chapter ? `when it's available (${q.chapter})` : '', (q.rewards || []).length ? 'rewards' : '', (q.choices || []).length ? 'choices and outcomes' : '', (q.goldMedal || []).length ? 'gold medal requirements' : '', (q.missables || []).length ? 'what you can miss' : ''].filter(Boolean);
+  } else if (person) {
+    tail = [(sm.whereToFind || []).length ? 'Where to Find' : '', story.length ? 'Story' : '', fate ? 'Fate' : '', quests.length ? 'Missions' : ''].filter(Boolean);
+    covers = [story.length ? 'who they are' : '', (sm.whereToFind || []).length ? 'where to find them in each chapter' : '', quests.length ? `their missions (${quests.slice(0, 2).join(', ')})` : '', fate ? 'every possible fate' : ''].filter(Boolean);
+  } else {
+    tail = [sm.where || sm.region ? 'Location' : '', quests.length ? 'Missions' : '', (sm.shops || []).length ? 'Shops' : '', (sm.collectibles || []).length ? 'Collectibles' : ''].filter(Boolean);
+    covers = [sm.where || sm.region ? 'where it is' : '', sm.gettingThere ? 'how to get there' : '', quests.length ? `missions (${quests.slice(0, 2).join(', ')})` : '', (sm.shops || []).length ? 'shops and services' : '', (sm.collectibles || []).length ? 'collectibles' : ''].filter(Boolean);
+  }
+  const name = searchName(e);
+  const title = fitTitle(name, game, tail.slice(0, 3));
+  const lead = String(e.overview || '').split(/(?<=[.!?])\s+/)[0] || '';
+  const raw = `${name} in ${game}: ${covers.length ? `${joinList(covers).replace(/ & ([^&]*)$/, ' and $1')}.` : ''} ${lead}`.replace(/\s+/g, ' ').replace(/: \./, '.').trim();
+  return { title, description: raw.length <= 158 ? raw : `${raw.slice(0, 157).replace(/\s+\S*$/, '')}…` };
+}
+
+/**
+ * The name a compendium page goes by in its title and heading: the full name when it contains the common one as a word
+ * ("Dutch" → "Dutch van der Linde", "Roche" → "Vernon Roche"), the common one when the full name is something else
+ * or long ("Ciri", not "Cirilla Fiona Elen Riannon").
+ */
+export function searchName(e: { name?: string; displayName?: string }): string {
+  const full = String(e.name || e.displayName || '').trim();
+  const common = String(e.displayName || '').trim();
+  if (!common || common === full) return full;
+  const words = (s: string) => s.toLowerCase().split(/[\s'’]+/).filter(Boolean);
+  const f = words(full), c = words(common);
+  const contains = f.some((_, i) => c.every((w, j) => f[i + j] === w));
+  return full.length <= 30 && contains ? full : common;
 }
