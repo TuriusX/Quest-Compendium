@@ -390,6 +390,7 @@ function syncAttach() {
 
 /** What the page gets: only known fields, trimmed to length. */
 const SECTION_IDS = ['guide', 'answer', 'missable', 'noreturn', 'collect', 'ach'];
+const ENTRY_KINDS = ['chest', 'item', 'secret', 'boss', 'enemy', 'shop', 'travel'];
 /**
  * Text for the page, cut without breaking a word: at the last space before the limit, with "…" (the page wraps text,
  * so the limits are generous and only stop runaway text). Ids are cut plainly (str).
@@ -424,6 +425,8 @@ function cleanData(data) {
         id: str(o && o.id, 200), label: clip(o && o.label, 320), where: clip(o && o.where, 320),
         done: !!(o && o.done), missable: !!(o && o.missable), tick: !!(o && o.tick),
         badge: Number.isInteger(o && o.badge) ? o.badge : 0,
+        // The entry's kind icon (src/utils/entryKind.ts); only the known kinds pass, since tracker.html draws them.
+        icon: ENTRY_KINDS.includes(o && o.icon) ? o.icon : '',
         // Everything the guide has on the entry, untrimmed, for its expanded details on the tracker.
         detail: cleanDetail(o && o.detail),
       })).filter((o) => o.label && o.id),
@@ -471,7 +474,7 @@ function onScreen(s, wa) {
 /**
  * Show (or replace) the tracker.
  * data: { id, quest, place?: {name, story, sure}, sections: [{id, title, tone?, icon?, items: [{id, label, where?, done?,
- *         missable?, badge?, tick?}]}], next?: {name}, warning?, accent, labels }
+ *         missable?, badge?, tick?, icon?}]}], next?: {name}, warning?, accent, labels }
  */
 const hasContent = (d) => !!d && (d.sections.length || !!d.quest || !!d.place);
 

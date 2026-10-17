@@ -75,6 +75,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   stepTip: 'Tip',
   stepWarn: 'Watch out',
   keyFight: 'Key fight',
+  route: 'Route',
   newEntry: 'New',
   checklists: 'Checklists',
   sourcesFrom: 'Facts from {wiki} ({pages}), written in our own words.',

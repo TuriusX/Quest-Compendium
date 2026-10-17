@@ -2128,7 +2128,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         ...(typeof data.factsSaved === 'number' && data.factsSaved > 0 ? { factsSaved: data.factsSaved } : {}),
         ...(typeof data.qtype === 'string' ? { qtype: data.qtype } : {}),
         ...(Array.isArray(data.guideRefs) && data.guideRefs.length
-          ? { guideRefs: data.guideRefs.filter((r: any) => r && typeof r.slug === 'string' && typeof r.name === 'string').slice(0, 4).map((r: any) => ({ key: String(r.key || ''), slug: r.slug, area: String(r.area || ''), ...(typeof r.entry === 'string' ? { entry: r.entry } : {}), name: r.name })) }
+          ? { guideRefs: data.guideRefs.filter((r: any) => r && typeof r.slug === 'string' && typeof r.name === 'string').slice(0, 4).map((r: any) => ({ key: String(r.key || ''), slug: r.slug, area: String(r.area || ''), ...(typeof r.entry === 'string' ? { entry: r.entry } : {}), name: r.name, ...(typeof r.kind === 'string' ? { kind: r.kind } : {}) })) }
           : {}),
         ...(Array.isArray(data.correctionIds) && data.correctionIds.length ? { correctionIds: data.correctionIds.filter((x: unknown) => typeof x === 'string').slice(0, 5) } : {}),
         ...(data.place && typeof data.place.name === 'string'

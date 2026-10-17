@@ -1,4 +1,5 @@
 import type { DoneItem } from './utils/progressMemory';
+import type { EntryKind } from './utils/entryKind';
 
 export type AiMode = 'standard' | 'roleplay' | 'minmax';
 
@@ -134,7 +135,7 @@ export interface ChatMessage {
   vote?: 'up' | 'down';
   voteReason?: 'place' | 'info' | 'marker' | 'unhelpful';
   /** Guide entries the answer used (a checked or flagship page): the "From the guide" badge links to them. */
-  guideRefs?: { key: string; slug: string; area: string; entry?: string; name: string }[];
+  guideRefs?: { key: string; slug: string; area: string; entry?: string; name: string; kind?: EntryKind | 'step' | 'area' }[];
   /** Hidden after an "offensive or harmful" report, until the player taps "Show anyway". */
   collapsed?: boolean;
 }

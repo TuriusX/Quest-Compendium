@@ -13,6 +13,7 @@ import type { Express } from 'express';
 import { singularLabel, entityKind } from './scripts/guides/siteText';
 import { getFirestore } from 'firebase-admin/firestore';
 import { placeKey } from './src/utils/placeName';
+import { entryKind, type EntryKind } from './src/utils/entryKind';
 import { landscapeOf, wideSet, coverSet } from './scripts/guides/igdbArt';
 
 const TTL = 10 * 60_000;
@@ -622,8 +623,11 @@ export function guideNotesForPrompt(pg: GuidePageForPlace): string {
         '(weaknesses, stats, prices) before stating them, and trust what is actually on screen over these notes]\n' + body;
 }
 
-/** A guide entry an answer used: what the "From the guide" badge links to (the area page, and the entry on it). */
-export type GuideRef = { key: string; slug: string; area: string; entry?: string; name: string };
+/**
+ * A guide entry an answer used: what the "From the guide" badge links to (the area page, and the entry on it). kind:
+ * what the entry is (src/utils/entryKind.ts), for the chip's icon; 'step' a walkthrough step, 'area' the page itself.
+ */
+export type GuideRef = { key: string; slug: string; area: string; entry?: string; name: string; kind?: EntryKind | 'step' | 'area' };
 
 /**
  * Grounding in a checked or flagship page: its verified entries first, each with a short tag, and the model told to
@@ -634,18 +638,18 @@ export function guideGroundingForPrompt(pg: GuidePageForPlace): { text: string; 
   const refs: Record<string, GuideRef> = {};
   const lines: string[] = [];
   let n = 0;
-  const tag = (name: string, entry?: string) => {
+  const tag = (name: string, entry?: string, kind?: GuideRef['kind'] | null) => {
     const t = `g${++n}`;
-    refs[t] = { key: pg.key, slug: pg.slug, area: pg.name, ...(entry ? { entry } : {}), name: String(name || pg.name).slice(0, 80) };
+    refs[t] = { key: pg.key, slug: pg.slug, area: pg.name, ...(entry ? { entry } : {}), name: String(name || pg.name).slice(0, 80), ...(kind ? { kind } : {}) };
     return `[${t}]`;
   };
   for (const e of pg.items.slice(0, 15))
-    lines.push(`${tag(e.name, e.id)} Item: ${e.name}${!blankish(e.where) ? `; where: ${e.where}` : ''}${!blankish(e.how) ? `; how: ${e.how}` : ''}${e.missable ? ` [missable${!blankish(e.lockout) ? `: ${e.lockout}` : ''}]` : ''}`);
-  for (const f of (pg.fights || []).slice(0, 4)) lines.push(`${tag(f.name, f.id)} Key fight: ${fightLine(f)}`);
-  for (const x of pg.sections) for (const e of x.entries.slice(0, 6)) lines.push(`${tag(e.text.split(/[.:;]/)[0], e.id)} ${x.title}: ${e.text}`);
-  for (const e of pg.secrets.slice(0, 8)) lines.push(`${tag(String(e.text || e.name || '').split(/[.:;]/)[0], e.id)} Secret: ${e.text || e.name}`);
-  for (const s of (pg.walkthrough || []).slice(0, 8)) lines.push(`${tag(s.title || pg.name, s.id)} Walkthrough: ${[s.title, s.text].filter(Boolean).join(': ').slice(0, 300)}`);
-  if (pg.info?.directions) lines.push(`${tag(pg.name)} Getting there: ${pg.info.directions}${pg.info.coords ? ` (map ${pg.info.coords})` : ''}`);
+    lines.push(`${tag(e.name, e.id, entryKind({ section: 'items', name: e.name, where: e.where }))} Item: ${e.name}${!blankish(e.where) ? `; where: ${e.where}` : ''}${!blankish(e.how) ? `; how: ${e.how}` : ''}${e.missable ? ` [missable${!blankish(e.lockout) ? `: ${e.lockout}` : ''}]` : ''}`);
+  for (const f of (pg.fights || []).slice(0, 4)) lines.push(`${tag(f.name, f.id, 'boss')} Key fight: ${fightLine(f)}`);
+  for (const x of pg.sections) for (const e of x.entries.slice(0, 6)) lines.push(`${tag(e.text.split(/[.:;]/)[0], e.id, entryKind({ section: 'sections', text: e.text }))} ${x.title}: ${e.text}`);
+  for (const e of pg.secrets.slice(0, 8)) lines.push(`${tag(String(e.text || e.name || '').split(/[.:;]/)[0], e.id, entryKind({ section: 'secrets', name: e.name, text: e.text }))} Secret: ${e.text || e.name}`);
+  for (const s of (pg.walkthrough || []).slice(0, 8)) lines.push(`${tag(s.title || pg.name, s.id, 'step')} Walkthrough: ${[s.title, s.text].filter(Boolean).join(': ').slice(0, 300)}`);
+  if (pg.info?.directions) lines.push(`${tag(pg.name, undefined, 'area')} Getting there: ${pg.info.directions}${pg.info.coords ? ` (map ${pg.info.coords})` : ''}`);
   if (pg.info?.connected?.length) lines.push(`Connects to: ${pg.info.connected.join(', ')}`);
   for (const e of pg.enemies.slice(0, 8))
     lines.push(`Enemy: ${e.name}${!blankish(e.weakness) ? `, weak to ${e.weakness}` : ''}${!blankish(e.steal) ? `, steal/drop ${e.steal}` : ''}`);
