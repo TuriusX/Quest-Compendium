@@ -23,6 +23,13 @@ import { supportedSegments, trusted, evidenceText, claimCheck, claimReview, clai
 import { entitySlug } from './compendium';
 import { entitySegments, lintEntity, chapterPage } from './siteText';
 
+/**
+ * Story missions with their own step-by-step (--steps, or QUEST_STORY_STEPS=on): a second research ask for the
+ * mission's steps, gold medal requirements and rewards, and the steps written like a Stranger strand's (one part,
+ * checked claim by claim). About $0.10 a mission instead of $0.057 (owner-approved test first).
+ */
+const STORY_STEPS = () => process.env.QUEST_STORY_STEPS === 'on' || process.argv.includes('--steps');
+
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const objOf = (text: string): any => {
   const t = String(text || '').replace(/```json|```/g, '');
@@ -42,18 +49,23 @@ async function questEvidence(key: string, game: string, name: string, kind: Ques
   const slug = entitySlug(name);
   const pref = db().collection('evidencePacks').doc(`${key}__quest__${slug}`);
   const have = (await pref.get()).data() as EvidencePack | undefined;
-  if (have?.evidence?.length) return trusted(have);
+  const stepsAsk = { topic: 'steps', text: `In the video game "${game}", the story mission "${name}": what the player does in it, step by step from start to finish; every gold medal requirement; and its rewards.` };
+  const wantSteps = kind === 'story' && STORY_STEPS();
+  if (have?.evidence?.length && (!wantSteps || have.evidence.some((e) => e.topic === 'steps'))) return trusted(have);
   const asks = kind === 'story'
-    ? [
-        { topic: 'what', text: `In the video game "${game}", the story mission "${name}": who gives it (the quest giver), which chapter it is in, where it starts, its rewards (money, items, unlocks), anything missable in it, any choices and their outcomes, and the gold medal requirements.` },
-      ]
+    ? have?.evidence?.length
+      ? [stepsAsk]
+      : [
+          { topic: 'what', text: `In the video game "${game}", the story mission "${name}": who gives it (the quest giver), which chapter it is in, where it starts, its rewards (money, items, unlocks), anything missable in it, any choices and their outcomes, and the gold medal requirements.` },
+          ...(wantSteps ? [stepsAsk] : []),
+        ]
     : [
         { topic: 'what', text: `In the video game "${game}", the Stranger mission strand "${name}": who gives it, how it unlocks, every part of it (each part's name, chapter and where it starts), and the rewards.` },
         { topic: 'steps', text: `In the video game "${game}", "${name}": what the player does in each part, step by step, anything missable, and any choices with their outcomes.` },
       ];
-  const evidence: Evidence[] = [];
-  const sites = new Set<string>();
-  let searches = 0;
+  const evidence: Evidence[] = have?.evidence?.length ? [...have.evidence] : [];
+  const sites = new Set<string>(have?.sites || []);
+  let searches = have?.searches || 0;
   for (const a of asks) {
     const res: any = await gemini().models.generateContent({
       model: MODEL,
@@ -86,10 +98,12 @@ const WRITER = (game: string, name: string, kind: QuestKind, ev: EvidencePack, c
   '{"overview": "1-2 sentences: what the mission is about and how it ends", "giver": "who gives it", "chapter": "...", "where": "where it starts",',
   ' "rewards": ["each reward"], "missables": ["anything missable, only if the evidence says so"], "choices": [{"choice": "...", "outcome": "..."}],',
   kind === 'story'
-    ? ' "goldMedal": ["each gold medal requirement"]}'
+    ? STORY_STEPS()
+      ? ' "goldMedal": ["each gold medal requirement"], "parts": [{"name": "' + name.replace(/"/g, '') + '", "steps": ["one action the player takes, one step each, in order"]}]}'
+      : ' "goldMedal": ["each gold medal requirement"]}'
     : ' "parts": [{"name": "part name (e.g. Mission – I)", "chapter": "...", "where": "where it starts", "steps": ["one action the player takes, one step each"]}]}',
-  kind === 'story' ? 'No step-by-step: the guide\'s walkthrough has it.' : 'List every part of the strand the evidence names, in order.',
-  kind === 'story' ? '' : STEP_RULE,
+  kind === 'story' ? (STORY_STEPS() ? 'The steps: the mission from start to finish, only what the evidence says.' : 'No step-by-step: the guide\'s walkthrough has it.') : 'List every part of the strand the evidence names, in order.',
+  kind === 'story' && !STORY_STEPS() ? '' : STEP_RULE,
   '',
   'EVIDENCE:',
   evidenceText(ev),
@@ -160,7 +174,7 @@ export async function buildQuest(key: string, name: string, kind: QuestKind) {
       giver: cut(j.giver, 80), chapter: cut(j.chapter, 60), where: cut(j.where, 200),
       rewards: list(j.rewards), missables: list(j.missables), goldMedal: list(j.goldMedal),
       choices: (Array.isArray(j.choices) ? j.choices : []).map((c: any) => ({ choice: cut(c?.choice, 160), outcome: cut(c?.outcome, 240) })).filter((c: any) => c.choice && c.outcome),
-      parts: kind === 'stranger' ? (Array.isArray(j.parts) ? j.parts : []).map((p: any, i: number) => ({
+      parts: kind === 'stranger' || STORY_STEPS() ? (Array.isArray(j.parts) ? j.parts : []).map((p: any, i: number) => ({
         id: `${slug}-p${i + 1}`, name: cut(p?.name, 80), chapter: cut(p?.chapter, 60), where: cut(p?.where, 200),
         steps: list(p?.steps, 300).map((t, s) => ({ id: `${slug}-p${i + 1}-s${s + 1}`, text: t })),
       })).filter((p: any) => p.name) : [],
@@ -190,7 +204,18 @@ export async function buildQuest(key: string, name: string, kind: QuestKind) {
     review: { score: out.review.score, status: out.review.status, supported: out.review.supported, total: out.review.total, ...(out.review.reason ? { reason: out.review.reason } : {}) },
     removed: out.removed, cost: { dollars: Math.round(scope.dollars * 10000) / 10000, searches: scope.searches }, builtAt: Date.now(),
   };
-  await db().collection('guideCompendium').doc(key).collection('entities').doc(out.slug).set(JSON.parse(JSON.stringify(doc)));
+  // Do no harm: a rebuild that doesn't pass never replaces a live page (it stays as it was), and a passing one saves the
+  // live version first (entityHistory/{key}__{slug}/versions/{at}) so it can be rolled back.
+  const eref = db().collection('guideCompendium').doc(key).collection('entities').doc(out.slug);
+  const live: any = (await eref.get()).data();
+  if (live?.status === 'published') {
+    if (!passed) {
+      console.log(`${name}: the rebuild didn't pass (${out.review.status} ${out.review.score}); the live page is kept as it was, $${scope.dollars.toFixed(3)}.`);
+      return { name, status: 'kept', score: out.review.score, dollars: scope.dollars, searches: scope.searches };
+    }
+    await db().collection('entityHistory').doc(`${key}__${out.slug}`).collection('versions').doc(String(Date.now())).set(JSON.parse(JSON.stringify(live)));
+  }
+  await eref.set(JSON.parse(JSON.stringify(doc)));
   console.log(`${name} [${typeLabel}]: review ${out.review.status} ${out.review.score} (${out.review.supported}/${out.review.total}), ${out.removed.length} claim(s) removed, $${scope.dollars.toFixed(3)} (${scope.searches} searches); parts ${out.q.parts.length}, rewards ${out.q.rewards.length}, missables ${out.q.missables.length}, choices ${out.q.choices.length}; walkthrough ${out.q.walkthrough ? `${out.q.walkthrough.slug}${out.q.walkthrough.anchor ? `#${out.q.walkthrough.anchor}` : ''}` : '-'}`);
   return { name, status: doc.status, score: out.review.score, dollars: scope.dollars, searches: scope.searches };
 }

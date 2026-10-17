@@ -100,7 +100,7 @@ export async function buildGameEvidence(key: string, game: string, areas: string
     for (const t of GAME_TOPICS) {
       const res: any = await gemini().models.generateContent({
         model: MODEL,
-        contents: [{ role: 'user', parts: [{ text: `${t.ask(game, group.join('; '))}\nRun several searches (the game's wikis and guides). One fact per line, only what the sources say, and START EVERY LINE with the area's name in square brackets, exactly as written above, e.g. "[${group[0]}] ...". Leave out anything that is in none of these areas.` }] }],
+        contents: [{ role: 'user', parts: [{ text: `${t.ask(game, group.join('; '))}\nRun several searches (the game's wikis and guides).${gameNote(game)} One fact per line, only what the sources say, and START EVERY LINE with the area's name in square brackets, exactly as written above, e.g. "[${group[0]}] ...". Leave out anything that is in none of these areas.` }] }],
         config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 6000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
       });
       have.searches += searchesIn(res);
@@ -129,6 +129,16 @@ export function gameLinesFor(g: GameEvidence, area: string, entries: string[]): 
     .map((e) => ({ id: e.id, text: e.area && normArea(e.area) !== a ? `(in ${e.area}) ${e.text}` : e.text, sources: e.sources, topic: e.topic }));
 }
 
+/**
+ * Games whose research keeps pulling in another game's facts (the site audit found Old School RuneScape items, enemies
+ * and weaknesses on RuneScape: Dragonwilds pages): every research prompt for them says which game it is not.
+ */
+const NOT_THIS_GAME: Record<string, string> = {
+  'runescape: dragonwilds': 'This is RuneScape: Dragonwilds (the 2025 survival game set in Ashenfall). Never use Old School RuneScape or RuneScape 3 facts: their items, enemies, bosses, drops and weaknesses are different games.',
+};
+export const gameNote = (game: string) => (NOT_THIS_GAME[String(game).toLowerCase().trim()] ? `
+${NOT_THIS_GAME[String(game).toLowerCase().trim()]}` : '');
+
 /** The area's evidence: only sentences a source supports (cached; rebuild with opts.rebuild). */
 export async function buildEvidencePack(key: string, slug: string, game: string, area: string, neighbours: string[], opts: { rebuild?: boolean; entries?: string[]; gameEvidence?: GameEvidence } = {}): Promise<EvidencePack> {
   const ref = db().collection('evidencePacks').doc(`${key}__${slug}`);
@@ -151,7 +161,7 @@ export async function buildEvidencePack(key: string, slug: string, game: string,
   for (const t of topics) {
     const res: any = await gemini().models.generateContent({
       model: MODEL,
-      contents: [{ role: 'user', parts: [{ text: `${t.ask(game, area, neighbours.join(', ') || 'unknown')}\nRun several searches (the game's wikis and guides). Answer in short factual sentences, one fact per line, only what the sources say; name the place each thing is in.` }] }],
+      contents: [{ role: 'user', parts: [{ text: `${t.ask(game, area, neighbours.join(', ') || 'unknown')}\nRun several searches (the game's wikis and guides).${gameNote(game)} Answer in short factual sentences, one fact per line, only what the sources say; name the place each thing is in.` }] }],
       config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     searches += searchesIn(res);
