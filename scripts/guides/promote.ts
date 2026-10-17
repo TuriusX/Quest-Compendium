@@ -15,7 +15,8 @@
  * new outline has a page with its name.
  */
 import { db, arg, stageKey, liveKey, translatableText } from './common';
-import { rebuildVerdict, keepOnRestructure, historyRef, notifyOwner } from './rebuildGuard';
+import { rebuildVerdict, keepOnRestructure, historyRef } from './rebuildGuard';
+import { notifyOwner } from '../pipeline/summary';
 import { loadPageStats, statOf } from './pageStats';
 
 export const REPLACED = 'replaced by a reviewed rebuild';

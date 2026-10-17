@@ -22,6 +22,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { db, liveKey, isStageKey, arg } from './common';
 import { trustedSites } from './claimCheck';
 import { pageImpressions } from './pageStats';
+import { notifyOwner } from '../pipeline/summary';
 
 export type Lost = { kind: 'item' | 'secret' | 'shop' | 'fight' | 'choice' | 'walkthrough'; name: string; sourced: boolean };
 export type RebuildVerdict = { hold: boolean; reasons: string[]; lost: Lost[] };
@@ -134,13 +135,6 @@ export async function saveHistory(key: string, slug: string, page: any, role: 'r
 
 const hasContent = (p: any) => ['items', 'secrets', 'shops', 'fights', 'choices', 'walkthrough'].some((k) => Array.isArray(p?.[k]) && p[k].length);
 
-/** Warn the owner: the job log always, Discord when the pipeline has a webhook. */
-export async function notifyOwner(text: string): Promise<void> {
-  console.warn(text);
-  if (!process.env.DISCORD_WEBHOOK_URL) return;
-  const { postDiscord } = await import('../pipeline/summary');
-  await postDiscord(process.env.DISCORD_WEBHOOK_URL, text).catch(() => false);
-}
 
 /**
  * Before a rebuild's fields are merged onto a live page: true to go ahead (the live version saved to the history
