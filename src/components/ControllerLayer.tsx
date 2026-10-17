@@ -509,7 +509,7 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false }:
             <Hint b="y" label={t('pad.questions')} />
             {talkButton !== 'off' && <Hint b={talkButton} label={talking ? t('pad.listening') : t('pad.talk')} />}
             <Hint b="menu" label={t('pad.keyboard')} />
-            <Hint b="lb" label={t('pad.games')} />
+            <Hint b="lb" label={t('pad.askGuide')} />
             <Hint b="rt" label={t('pad.page')} />
           </>
         )}

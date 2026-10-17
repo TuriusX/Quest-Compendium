@@ -769,6 +769,7 @@ const en: Dict = {
   "quick.canMiss": "Anything I can miss here?",
   "quick.beat": "How do I beat this?",
   "quick.gear": "Best gear for where I am",
+  "pad.askGuide": "/ RB Ask · Guide · games",
   "set.hintMode": "Hint mode",
   "set.hintModeDesc": "Adds “Just a hint” to the quick questions: a nudge in the right direction, no spoilers.",
   "tracker.shownOf": "{n} of {total}",
