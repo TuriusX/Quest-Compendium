@@ -45,7 +45,7 @@ export function clock(ms: number): string {
  * ⏱ 5:26:41", ticking every second, amber when both are used up. Click it for each model's count, a large countdown,
  * what the next top-up brings, and Premium.
  */
-export function QuestionsPill({ userData, onOpenPaywall, small }: { userData?: any; onOpenPaywall?: () => void; small?: boolean }) {
+export function QuestionsPill({ userData, onOpenPaywall, small, onPress }: { userData?: any; onOpenPaywall?: () => void; small?: boolean; /** Instead of the popover (the compact view: no room for it, so it opens the full view). */ onPress?: () => void }) {
   const t = useT();
   const now = useSecond();
   const [open, setOpen] = useState(false);
@@ -88,9 +88,9 @@ export function QuestionsPill({ userData, onOpenPaywall, small }: { userData?: a
       <button
         ref={btnRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
+        onClick={() => (onPress ? onPress() : setOpen((v) => !v))}
+        aria-haspopup={onPress ? undefined : 'dialog'}
+        aria-expanded={onPress ? undefined : open}
         title={title}
         className={`qc-pill flex items-center gap-1.5 rounded-full border whitespace-nowrap font-semibold tabular-nums cursor-pointer transition-colors ${
           small ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-[11.5px]'

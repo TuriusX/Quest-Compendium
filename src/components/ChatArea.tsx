@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { ModelToggle } from './ModelToggle';
+import { QuestionsPill } from './QuestionsPill';
 import { balancesOf, readAnswerModel, saveAnswerModel, startingModel, type AnswerModel } from '../utils/answerModel';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1436,6 +1437,27 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
     return (
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-[#0d0e14] to-[#07070b] relative">
+        {/* Where you are, the questions pill (its live countdown) and ⤢ for the full view */}
+        <div className="flex items-center gap-2 min-w-0 px-3.5 pt-2.5 text-[11px] text-zinc-400" style={{ WebkitAppRegion: 'no-drag' } as any}>
+          <MapPin className="w-3.5 h-3.5 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />
+          <span className={`truncate ${placeNow ? 'text-zinc-200 font-semibold' : ''}`}>{placeNow || t('strip.noPlace')}</span>
+          {gameLabel && <span className="truncate text-zinc-500">· {gameLabel}</span>}
+          <span className="ml-auto flex-shrink-0 flex items-center gap-1">
+            <QuestionsPill userData={quota} small onPress={() => { playBlipSound(soundEnabled); onExpand?.(); }} />
+            <button
+              type="button"
+              onClick={() => {
+                playBlipSound(soundEnabled);
+                onExpand?.();
+              }}
+              title={`${t('compact.expand')} (Ctrl+Shift+F)`}
+              aria-label={t('compact.expand')}
+              className="w-6 h-6 rounded-md flex items-center justify-center text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/[0.06] cursor-pointer"
+            >
+              <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          </span>
+        </div>
         <button
           type="button"
           onClick={() => {
@@ -1443,18 +1465,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             onExpand?.();
           }}
           title={`${t('compact.expand')} (Ctrl+Shift+F)`}
-          className="group flex-1 min-h-0 text-left px-3.5 pt-3 pb-1 flex flex-col gap-1 min-w-0 cursor-pointer hover:bg-white/[0.03] focus-visible:bg-white/[0.05] outline-none"
+          className="group flex-1 min-h-0 text-left px-3.5 pt-1 pb-1 flex flex-col gap-1 min-w-0 cursor-pointer hover:bg-white/[0.03] focus-visible:bg-white/[0.05] outline-none"
           style={{ WebkitAppRegion: 'no-drag' } as any}
         >
-          <span className="flex items-center gap-2 min-w-0 text-[11px] text-zinc-400">
-            <MapPin className="w-3.5 h-3.5 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />
-            <span className={`truncate ${placeNow ? 'text-zinc-200 font-semibold' : ''}`}>{placeNow || t('strip.noPlace')}</span>
-            {gameLabel && <span className="truncate text-zinc-500">· {gameLabel}</span>}
-            <span className="ml-auto flex-shrink-0 flex items-center gap-1 text-[10.5px] text-zinc-500 group-hover:text-[var(--accent-color)] group-focus-visible:text-[var(--accent-color)]">
-              <Maximize2 className="w-3 h-3" aria-hidden="true" />
-              {t('compact.expand')}
-            </span>
-          </span>
           {objective ? (
             <span className="min-w-0">
               {objective.title && <span className="block font-fantasy font-bold text-[14px] text-white truncate">{objective.title}</span>}
