@@ -172,13 +172,17 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
     if (!c.length && elN.length >= 12) c = leaves.filter((l) => l.n.includes(elN));
     const ids = anchorsOf(el);
     const score = (l: Leaf) => (ids.some((id) => l.path.includes('#' + id + '/') || l.path.endsWith('#' + id)) ? 1e6 : 0) + l.n.length;
+    // A row with its own entry id: that entry's fields only (a short field elsewhere can share its words).
+    const own = c.filter((l) => ids.some((id) => l.path.includes('#' + id + '/') || l.path.endsWith('#' + id)));
+    if (own.length) c = own;
     const seen = new Set<string>();
     return c.sort((a, b) => score(b) - score(a)).filter((l) => !seen.has(l.path) && seen.add(l.path)).slice(0, 4);
   }
 
   // ---- Clicks in edit mode ------------------------------------------------------------------------------------------
+  let READY = false;
   function onClick(e: any) {
-    if (!ON || e.target.closest('.qe-ui')) return;
+    if (!READY || !ON || e.target.closest('.qe-ui')) return;
     const art = e.target.closest('article');
     if (!art) { if (panel && !e.target.closest('.qe-ui')) close(); return; }
     const img = e.target.closest('img');
@@ -483,9 +487,11 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
     } catch { /* */ }
   }
   (async () => {
+    drawBar();
     try { me = await api('/api/editor/me'); } catch { return; }
     if (TEXT_OK) DATA = await fetch('page.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     document.body.classList.toggle('qe-on', ON);
+    READY = true;
     drawBar();
     markEdits();
     addEventListener('resize', () => drawBar());
