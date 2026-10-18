@@ -55,7 +55,7 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
   body.qe-on .qe-edited { text-decoration: underline dotted #f5b942; text-decoration-thickness: 2px; text-underline-offset: 4px; }
   .qe-panel { position: absolute; z-index: 2147483001; width: 420px; max-width: calc(100vw - 16px); background: #17130b; border: 1px solid #f5b942; border-radius: 12px; padding: 14px; color: #eadfc8; font-size: 14px; line-height: 1.45; box-shadow: 0 12px 40px #000c; text-align: left; }
   .qe-panel.qe-sheet { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; max-width: none; max-height: 78vh; overflow: auto; border-radius: 16px 16px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
-  .qe-panel.qe-wide { width: 640px; }
+  .qe-panel.qe-wide:not(.qe-sheet) { width: 640px; }
   .qe-grip { width: 40px; height: 4px; border-radius: 2px; background: #5a4a28; margin: 0 auto 10px; }
   .qe-panel h4 { margin: 0 0 6px; font-size: 14px; font-weight: 700; color: #f5b942; }
   .qe-dim { color: #a99d86; font-size: 12.5px; } .qe-warn { color: #fbbf24; font-size: 12.5px; } .qe-ok { color: #86efac; font-size: 12.5px; }
@@ -128,14 +128,17 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
       const pw = panel.offsetWidth, ph = panel.offsetHeight;
       let top = r.bottom + 10;
       if (top + ph > innerHeight - 70 && r.top - ph - 10 > 10) top = r.top - ph - 10;
-      panel.style.left = Math.max(8, Math.min(r.left, innerWidth - pw - 12)) + scrollX + 'px';
+      panel.style.left = Math.max(8, Math.min(r.left, document.documentElement.clientWidth - pw - 12)) + scrollX + 'px';
       panel.style.top = Math.max(8, top) + scrollY + 'px';
-      // A tall panel (Fix now with a long field) scrolls into view, buttons included.
-      setTimeout(() => { if (panel) panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 0);
+      // A tall panel (Fix now with a long field) scrolls into view, buttons included; and again whenever it grows.
+      reveal();
+      if ((window as any).ResizeObserver) new (window as any).ResizeObserver(() => reveal()).observe(panel);
     }
     panel.addEventListener('click', (e: any) => { if (e.target.closest('[data-x]')) close(); });
     return panel;
   }
+  let revealT: any = 0;
+  function reveal() { clearTimeout(revealT); revealT = setTimeout(() => { if (panel && !narrow() && panel.style.position !== 'fixed') panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 60); }
   const note = (p: any, text: string, cls = 'qe-dim') => { const n = p.querySelector('[data-note]'); if (n) { n.className = cls; n.textContent = text; } };
 
   // ---- The page's data (page.json): its text fields, by path ----------------------------------------------------------
@@ -445,7 +448,7 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
         } else if (t === 'queue') {
           const j = await api('/api/editor/queue');
           const st = (c: any) => c.status === 'pending' ? 'Checking in the next daily run' : c.status === 'checked' ? `Held for you: ${esc((c.check && c.check.reason) || 'not confirmed')}` : c.status === 'approved' ? (c.decided && /sources agree/.test(c.decided.by || '') ? 'Confirmed by sources · on the page' : 'Applied by you · on the page') : 'Dropped';
-          list.innerHTML = j.items.length ? `<table class="qe-list">${j.items.map((c: any) => `<tr><td>${pageLink(c.key, c.slug, c.lang)}<div class="qe-dim">${c.kind === 'missing' ? 'Missing item' : 'Correction'}</div></td><td>${esc(String(c.text).slice(0, 220))}${c.check && c.check.proposal && c.status === 'checked' ? `<div class="qe-dim">Would say: ${esc(String(c.check.proposal).slice(0, 220))}</div>` : ''}</td><td>${st(c)}</td><td>${c.status === 'checked' ? `<button class="qe-btn p" data-q="${c.id}" data-do="apply">Apply anyway</button> <button class="qe-btn" data-q="${c.id}" data-do="drop">Drop</button>` : ''}</td></tr>`).join('')}</table>` : '<p class="qe-dim">Nothing sent to the pipeline yet.</p>';
+          list.innerHTML = j.items.length ? `<table class="qe-list">${j.items.map((c: any) => `<tr><td>${pageLink(c.key, c.slug, c.lang)}<div class="qe-dim">${c.kind === 'missing' ? 'Missing item' : 'Correction'}</div></td><td>${esc(String(c.text).slice(0, 220))}${c.check && c.check.proposal && c.status === 'checked' ? `<div class="qe-dim">Would say: ${esc(String(c.check.proposal).slice(0, 220))}</div>` : ''}</td><td>${st(c)}</td><td>${c.status === 'checked' ? `<button class="qe-btn p" data-q="${c.id}" data-do="apply">Apply anyway</button> <button class="qe-btn" data-q="${c.id}" data-do="drop">Drop</button>` : c.status === 'pending' ? `<button class="qe-btn" data-q="${c.id}" data-do="drop">Cancel</button>` : ''}</td></tr>`).join('')}</table>` : '<p class="qe-dim">Nothing sent to the pipeline yet.</p>';
         } else {
           list.innerHTML = `<p>Signed in as ${esc(me && me.email)}; ${me ? me.devices : '?'} device(s) connected.</p><div class="qe-row"><button class="qe-btn bad" data-off="this">Turn off editing on this device</button><button class="qe-btn bad" data-off="all">Disconnect every device</button></div>`;
         }
