@@ -428,10 +428,12 @@ export function registerGuideImages(app: Express, deps: Deps) {
   app.get('/api/admin/images/wanted', deps.requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
       const game = gameOk(req.query.game) ? String(req.query.game) : '';
-      const [pages, have] = await Promise.all([pageImpressionList(), pagesWithPictures()]);
+      const [pages, have, live] = await Promise.all([pageImpressionList(), pagesWithPictures(), col().where('status', 'in', ['waiting', 'suggested']).get()]);
+      // Wanted: no picture at all yet (one waiting or suggested is already on its way to the owner).
+      const pending = new Set(live.docs.map((d) => { const x: any = d.data(); return x.target?.kind === 'area' || x.target?.kind === 'entity' ? `${x.game}/${x.target.slug}` : ''; }));
       const rankOf = new Map(pages.map((p, i) => [`${p.key}/${p.slug}`, i + 1]));
       const top100 = pages.slice(0, 100);
-      const list = (game ? pages.filter((p) => p.key === game) : top100).filter((p) => !have.has(`${p.key}/${p.slug}`)).slice(0, 20);
+      const list = (game ? pages.filter((p) => p.key === game) : top100).filter((p) => !have.has(`${p.key}/${p.slug}`) && !pending.has(`${p.key}/${p.slug}`)).slice(0, 20);
       const names = game ? new Map((await targetsFor(game)).filter((t) => t.kind === 'area' || t.kind === 'entity').map((t) => [t.slug, t])) : new Map();
       res.json({
         top100: { with: top100.filter((p) => have.has(`${p.key}/${p.slug}`)).length, of: top100.length },
