@@ -104,7 +104,7 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
   function drawBar() {
     const waiting = me ? me.edits.waiting : 0, q = me ? me.queue.waiting + me.queue.held : 0;
     bar.innerHTML = `<button class="qe-tog ${ON ? 'on' : ''}" data-qe="toggle"><i></i><b>Owner</b>${narrow() ? '' : ' editing'}</button>`
-      + (narrow() ? '' : `<span class="qe-sep">·</span><span>${waiting ? `${waiting} waiting for the next publish` : 'Tap anything to change it'}</span>`)
+      + (narrow() ? '' : `<span class="qe-sep">·</span><span>${waiting ? `${waiting} waiting for the next publish` : TEXT_OK ? 'Tap anything to change it' : 'Open a page of this guide to edit it'}</span>`)
       + `<span class="qe-sep">·</span><button data-qe="mine">Your edits${me && me.edits.stale ? ` (${me.edits.stale} ⚠)` : ''}</button>`
       + `<span class="qe-sep">·</span><button data-qe="queue">Pipeline${q ? ` (${q})` : ''}</button>`
       + (TEXT_OK && DATA && DATA.kind === 'area' ? `<span class="qe-sep">·</span><button data-qe="add">＋ Missing item</button>` : '');
@@ -154,7 +154,8 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
   const note = (p: any, text: string, cls = 'qe-dim') => { const n = p.querySelector('[data-note]'); if (n) { n.className = cls; n.textContent = text; } };
 
   // ---- The page's data (page.json): its text fields, by path ----------------------------------------------------------
-  let DATA: any = null;
+  let DATA: any = null, EN: any = null;
+  const getAt = (o: any, path: string) => { for (const seg of path.split('/')) { if (o == null) return undefined; o = seg.startsWith('#') ? (Array.isArray(o) ? o.find((x: any) => x && String(x.id) === seg.slice(1)) : undefined) : /^\d+$/.test(seg) ? (Array.isArray(o) ? o[Number(seg)] : undefined) : o[seg]; } return typeof o === 'string' ? o : undefined; };
   type Leaf = { path: string; value: string; n: string; key: string };
   const SKIP = new Set(['v', 'kind', 'key', 'slug', 'picture', 'route', 'groups', 'verified', 'incomplete', 'type', 'fullName', 'id', 'missable', 'lang', 'game', 'href', 'thumb', 'w300', 'w600', 'big', 'focus', 'w', 'h']);
   const ID_OK = /^[A-Za-z0-9_.:-]{1,80}$/;
@@ -231,12 +232,14 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
   }
 
   function openFix(block: any, l: Leaf, sel: string) {
+    // On a translated page, a line the translation doesn't have yet (shown in English) is fixed in English.
+    const lang = LANG !== 'en' && EN && getAt(EN, l.path) === l.value ? 'en' : LANG;
     // The part to change: a selected sentence, or one picked here, or the whole field.
     const parts = sentences(l.value);
     let part = sel && l.value.includes(sel) ? sel : sel ? (parts.find((x) => norm(x).includes(norm(sel))) || l.value) : (parts.length > 1 ? '' : l.value);
     const pick = parts.length > 1 ? `<div class="qe-dim">Which part?</div>${parts.map((x, i) => `<button class="qe-sent ${x === part ? 'on' : ''}" data-s="${i}">${esc(x)}</button>`).join('')}<button class="qe-sent ${part === l.value ? 'on' : ''}" data-s="all"><i>The whole ${esc((LABEL[l.key] || 'field').toLowerCase())}</i></button>` : '';
     const p = open(`<h4>✎ Fix now · ${esc(pretty(l))}</h4>${pick}<textarea rows="${narrow() ? 4 : 3}" data-t ${part ? '' : 'disabled'}>${esc(part)}</textarea>`
-      + `<div class="qe-dim">Goes live with the next daily publish. Marked as yours: rebuilds keep it.${LANG === 'en' ? ' Translated pages get it translated.' : ' This changes this language only.'}</div>`
+      + `<div class="qe-dim">Goes live with the next daily publish. Marked as yours: rebuilds keep it.${lang === 'en' ? (LANG === 'en' ? ' Translated pages get it translated.' : ' This line is still in English here, so the fix goes into the English page and every language.') : ' This changes this language only.'}</div>`
       + `<div class="qe-row"><button class="qe-btn p" data-save ${part ? '' : 'disabled'}>Save</button><button class="qe-btn" data-x>Cancel</button></div><div data-note></div>`, block, true);
     const ta = p.querySelector('[data-t]'), save = p.querySelector('[data-save]');
     if (part) setTimeout(() => ta.focus(), 30);
@@ -253,7 +256,7 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
       if (!part || after === part.trim()) { note(p, 'Nothing changed.', 'qe-warn'); return; }
       save.setAttribute('disabled', '');
       try {
-        await api('/api/editor/edits', { key: GAME, slug: SLUG, page: DATA.kind, lang: LANG, path: l.path, before: part, after, label: norm(block.textContent).slice(0, 160) });
+        await api('/api/editor/edits', { key: GAME, slug: SLUG, page: DATA.kind, lang, path: l.path, before: part, after, label: norm(block.textContent).slice(0, 160) });
         showEdited(block, part, after);
         close();
         refresh();
@@ -502,6 +505,8 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
     drawBar();
     try { me = await api('/api/editor/me'); } catch { return; }
     if (TEXT_OK) DATA = await fetch('page.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    // A translated page: the English page too, to tell a line still shown in English (fixed in English, for every language).
+    if (TEXT_OK && LANG !== 'en') EN = await fetch(`/guides/${GAME}/${SLUG}/page.json`, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     document.body.classList.toggle('qe-on', ON);
     READY = true;
     drawBar();
