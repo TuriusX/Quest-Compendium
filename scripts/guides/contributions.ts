@@ -8,6 +8,10 @@
  *   approved  once the page has been rebuilt since the approval, does it state the suggestion itself? Then it's
  *             "absorbed" and the site stops showing it as a separate note.
  *
+ * The owner's own items (the editor on the site: "Send to pipeline" and "Add a missing item", owner: true) are checked
+ * first. Backed by sources, they're approved at once (he asked for them); otherwise they wait for him in the editor's
+ * "Your edits", with what the sources said.
+ *
  *   npx tsx scripts/guides/contributions.ts [--max 30]
  */
 import { ThinkingLevel } from '@google/genai';
@@ -57,7 +61,7 @@ async function check(id: string, c: any): Promise<string> {
     const res: any = await gemini().models.generateContent({
       model: MODEL,
       contents: [{ role: 'user', parts: [{ text: [
-        `A player suggested this for the guide section "${where}" of "${game}" (${c.kind === 'correction' ? 'a correction' : 'an extra detail'}):`, c.text, '',
+        `${c.owner ? "The guide's owner sent" : 'A player suggested'} this for the guide section "${where}" of "${game}" (${c.kind === 'correction' ? 'a correction' : c.kind === 'missing' ? 'something missing from the page' : 'an extra detail'}):`, c.text, '',
         verdict === 'unverifiable' && !backed.length ? 'Nothing could be checked against sources. Rewrite it as a short guide note in plain, neutral words (no "I", no opinions), keeping its facts.' : `Sources back these parts: ${backed.join(' ') || '(none)'}${contra.length ? `\nSources contradict these parts: ${contra.join(' ')}` : ''}\nEVIDENCE:\n${ev.evidence.map((e) => `- ${e.text}`).join('\n')}\n\nWrite a short guide note (1-3 sentences, plain, no "I") stating what the evidence backs; for a contradicted part, state what the evidence says instead.`,
         'Reply with the note only: plain sentences, no heading, no markdown.',
       ].join('\n') }] }],
@@ -76,11 +80,23 @@ async function check(id: string, c: any): Promise<string> {
 async function main() {
   const max = Number(arg('max')) || 30;
   let checked = 0, absorbed = 0, dollars = 0;
-  const pending = (await db().collection('contributions').where('status', '==', 'pending').limit(max).get()).docs;
-  for (const d of pending) {
+  // The owner's items first (at most 20 a night), then players' suggestions.
+  const mine = (await db().collection('contributions').where('status', '==', 'pending').where('owner', '==', true).limit(20).get()).docs;
+  const theirs = (await db().collection('contributions').where('status', '==', 'pending').limit(max + mine.length).get()).docs.filter((d) => !d.data().owner).slice(0, max);
+  let applied = 0, held = 0;
+  for (const d of [...mine, ...theirs]) {
     if (pipelineRoom(await apiLimits(), await searchesToday(true)) < 10) { console.log("Today's searches are used up; the rest wait for tomorrow."); break; }
-    try { console.log(`  ${await check(d.id, d.data())}`); checked++; dollars += Number((await d.ref.get()).data()?.check?.dollars || 0); }
-    catch (e: any) { console.log(`  ${d.id}: not checked (${cut(e?.message || e, 120)})`); }
+    try {
+      console.log(`  ${await check(d.id, d.data())}`);
+      checked++;
+      const c: any = (await d.ref.get()).data();
+      dollars += Number(c?.check?.dollars || 0);
+      if (c?.owner) {
+        // The owner asked for it: backed by sources, it goes on the page now; else it waits for him.
+        if (c.check?.verdict === 'supported') { await d.ref.set({ status: 'approved', decided: { by: 'owner (sources agree)', at: Date.now(), text: String(c.check.proposal || c.text) } }, { merge: true }); applied++; }
+        else held++;
+      }
+    } catch (e: any) { console.log(`  ${d.id}: not checked (${cut(e?.message || e, 120)})`); }
   }
   // Approved ones the page now states itself.
   for (const d of (await db().collection('contributions').where('status', '==', 'approved').get()).docs) {
@@ -99,7 +115,7 @@ async function main() {
   }
   if (deleted) console.log(`  ${deleted} declined suggestion(s) older than 90 days deleted`);
   const waiting = (await db().collection('contributions').where('status', '==', 'checked').count().get()).data().count;
-  console.log(`suggestions: ${checked} checked, ${waiting} waiting for approval, ${absorbed} now part of their page; $${dollars.toFixed(2)}`);
+  console.log(`suggestions: ${checked} checked, ${waiting} waiting for approval, ${absorbed} now part of their page; $${dollars.toFixed(2)}${applied || held ? `; yours: ${applied} applied, ${held} held for you (sources didn't confirm)` : ''}`);
   setTimeout(() => process.exit(0), 300);
 }
 main().catch((e) => { console.error('suggestions failed:', e?.message || e); process.exit(1); });

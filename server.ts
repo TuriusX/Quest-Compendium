@@ -34,6 +34,7 @@ import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeT
 import { questionType } from './src/utils/questionType';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerGuideImages } from './guideImages';
+import { registerOwnerEditor, editorOrAuth } from './ownerEditor';
 import { registerContributions } from './contributions';
 import { registerAnswerReports } from './answerReports';
 import { registerAnswerFeedback, recordMarkerCheck } from './answerFeedback';
@@ -420,8 +421,20 @@ async function startServer() {
       appId: '1:890629309063:web:87293cf13f922fd3edee22',
     },
   });
-  // Guide images (roadmap 14): one review queue for every picture, on /admin/images (ADMIN_EMAILS).
+  // Guide images (roadmap 14): one review queue for every picture, on /admin/images (ADMIN_EMAILS); the owner's editor
+  // on the site calls the same routes with its device key.
   registerGuideImages(app, {
+    requireAuth: editorOrAuth(requireAuth),
+    firebaseWebConfig: {
+      apiKey: process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY',
+      authDomain: 'quest-compendium-1bccf.firebaseapp.com',
+      projectId: 'quest-compendium-1bccf',
+      appId: '1:890629309063:web:87293cf13f922fd3edee22',
+    },
+  });
+
+  // The owner's editor on questcompendium.com's guide pages (ownerEditor.ts): Fix now, pipeline items, picture tools.
+  registerOwnerEditor(app, {
     requireAuth,
     firebaseWebConfig: {
       apiKey: process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY',

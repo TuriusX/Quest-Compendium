@@ -15,6 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import { landscapeOf, wideSet, coverSet, ogImageOf, platformList, ttbShown, TTB_MIN_DEFAULT, type IgdbInfo } from './igdbArt';
 import { loadSitePictures, pagePicture, stepPicture, shareImage, heroHtml, stepHtml, entryHtml, picturesOf, pictureJson } from './sitePictures';
+import { loadOwnerEdits, applyOwnerEdits, translateOwnerEdits, saveOwnerEditStates } from './ownerEditsPublish';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
@@ -531,6 +532,15 @@ function suggestScript(key: string, slug: string, page: 'area' | 'entity'): stri
 })();</script>`;
 }
 
+/**
+ * The owner's editor (ownerEditor.ts), guide pages only: a device connected to it holds an editor key (set once from
+ * the server's /editor/connect, which arrives as #qc-editor=…); only then is the editor loaded, from the server. For
+ * everyone else, and for search engines, this line does nothing and the page is unchanged.
+ */
+function editorLoader(): string {
+  return `<script>try{var m=location.hash.match(/^#qc-editor=([A-Za-z0-9_-]{40,})$/);if(m){localStorage.setItem('qc_editor',m[1]);history.replaceState(null,'',location.pathname+location.search)}if(localStorage.getItem('qc_editor')){var s=document.createElement('script');s.src='${SERVER_URL}/editor/qc-editor.js';s.defer=true;document.head.appendChild(s)}}catch(e){}</script>`;
+}
+
 /** Netlify's _redirects: the moved pages' old URLs, 301 to the pages that replaced them. */
 function writeRedirects(moved: { key: string; from: string; to: string }[], live: Set<string>) {
   const lines = redirectLines(moved, live, Object.keys(LANG_TAG), SITE);
@@ -618,7 +628,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
     .qc-hit { animation: qc-hit 2.4s ease-out; border-radius: .5rem; }
     @keyframes qc-hit { from { background-color: rgba(168, 127, 251, .2); box-shadow: 0 0 0 1px rgba(168, 127, 251, .55); } to { background-color: transparent; box-shadow: 0 0 0 1px transparent; } }
     ::target-text { background-color: rgba(168, 127, 251, .35); color: inherit; }
-  </style>
+  </style>${opts.guide ? editorLoader() : ''}
 </head>
 <body class="min-h-screen"${opts.guide ? ` data-guide="${esc(opts.guide)}"` : ''}${opts.area ? ` data-area="${esc(opts.area)}"` : ''}>
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5" aria-label="Main">
@@ -2009,6 +2019,8 @@ async function main() {
     const c: any = cd.data();
     const entities = (await cd.ref.collection('entities').get()).docs.map((d) => d.data() as any).filter((e) => PREVIEW || e.status === 'published') as CompEntity[];
     const people = PREVIEW ? Object.fromEntries((await cd.ref.collection('people').get()).docs.map((d) => [d.id, d.data() as any])) : {};
+    // The owner's edits (Fix now) on compendium pages, over the page's data.
+    for (const e of entities as any[]) applyOwnerEdits(cd.id, String(e.slug), e);
     if (entities.length || Object.keys(people).length) COMPS.set(cd.id, { taxonomy: c?.taxonomy || [], entities, people });
   }
   if (COMPS.size) console.log(`Compendium: ${[...COMPS].map(([k, v]) => `${k} ${v.entities.length}`).join(', ')} entity page(s).`);
@@ -2020,6 +2032,7 @@ async function main() {
   }
   // Owner-approved pictures (roadmap 14, /admin/images): on their pages from this publish on.
   console.log(`Pictures: ${await loadSitePictures(OUT, ONLY)} on the site.`);
+  const ownerEdits = await loadOwnerEdits(ONLY);
   // Start clean, so pages from an earlier preview (drafts) never get uploaded by accident.
   fs.rmSync(path.join(OUT, 'guides'), { recursive: true, force: true });
   const sitemap: string[] = [`${SITE}/`, `${SITE}/guides/`];
@@ -2051,6 +2064,8 @@ async function main() {
       const a = d.data() as GuideArea;
       return [d.id, sourcedOnly(pr ? { ...a, walkthrough: pr.walkthrough, choices: pr.choices, advice: pr.advice, items: pr.items, secrets: pr.secrets, fights: pr.fights, ...(pr.info ? { info: pr.info } : {}), sources: pr.sources || a.sources } : a)];
     }));
+    // The owner's edits (Fix now): laid over the page as loaded, so a rebuild never overwrites them.
+    for (const [slug, a] of byslug) applyOwnerEdits(g.id, slug, a);
     // An unpublished guide (taken down after a failing review: info.unpublished) keeps its addresses: its held pages are
     // published as noindex, follow pages (drafts), out of the sitemap, the guide list, the homepage and the apps' index,
     // so its URLs don't return 404 while it waits for a rebuild.
@@ -2074,6 +2089,13 @@ async function main() {
       if (!LANG_TAG[code] || code === 'en') continue;
       const t = (await g.ref.collection('i18n').doc(code).get()).data();
       if (t?.areas && Object.keys(t.areas).length) trs[code] = t;
+    }
+    // On the translated pages: edits made there, and the English edits' fields in that language.
+    for (const [code, t] of Object.entries(trs)) {
+      for (const [slug, ta] of Object.entries(t.areas || {})) {
+        applyOwnerEdits(g.id, slug, ta, code);
+        await translateOwnerEdits(g.id, slug, byslug.get(slug), ta, code);
+      }
     }
     const langs = ['en', ...Object.keys(trs)];
     const ach = info.hasAchievements && !restored ? (await g.ref.collection('achievements').doc('main').get()).data() || null : null;
@@ -2143,6 +2165,10 @@ async function main() {
     writeAppFragments(OUT);
     console.log(`Preview: ${OUT}${protos.size ? ` (${protos.size} flagship prototype(s))` : ''}. Nothing published.`);
     process.exit(0);
+  }
+  if (ownerEdits) {
+    const st = await saveOwnerEditStates();
+    console.log(`Owner edits: ${st.applied} applied, ${st.kept} already in the page${st.stale ? `, ${st.stale} no longer fit their page (see Your edits)` : ''}.`);
   }
   updateHomepage(games.filter((g) => g.published > 0));
   updateHomepageUpdates();

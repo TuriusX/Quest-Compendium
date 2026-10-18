@@ -36,6 +36,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { isAdmin } from './reviewQueue';
 import { asFocus } from './src/utils/focus';
+import { markSiteDirty } from './ownerEditor';
 
 type Mw = (req: Request, res: Response, next: NextFunction) => any;
 type Deps = { requireAuth: Mw; firebaseWebConfig: Record<string, string> };
@@ -388,7 +389,8 @@ export function registerGuideImages(app: Express, deps: Deps) {
       const x: any = (await ref.get()).data();
       if (!x) return res.status(404).json({ error: 'No such image.' });
       const by = String((req as any).user?.email || '');
-      await ref.set({ status: 'deleted', notThis: true, deletedBy: by, deletedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+      // keep: the editor's "Find a new one" keeps this picture until the owner picks the new one.
+      if (req.body?.keep !== true) await ref.set({ status: 'deleted', notThis: true, deletedBy: by, deletedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
       const { findAnother } = await import('./scripts/guides/suggestImages');
       const r = await findAnother(String(x.game), x.target);
       res.json({ found: !!r.id, id: r.id, tried: r.tried, spent: r.spent, message: r.message });
@@ -438,6 +440,8 @@ export function registerGuideImages(app: Express, deps: Deps) {
       // Credits and terms belong to official sources only.
       if (x.source !== 'mine') for (const k of ['credit', 'terms'] as const) if (typeof b[k] === 'string') patch[k] = clean(b[k], k === 'terms' ? 600 : 160) || null;
       await ref.set(patch, { merge: true });
+      // The site shows approved pictures: a change to one (or a new approval) goes out with the next daily publish.
+      if (x.status === 'approved' || patch.status === 'approved') await markSiteDirty();
       res.json({ ok: true, image: { id: ref.id, ...x, ...patch } });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || 'Could not save.' });

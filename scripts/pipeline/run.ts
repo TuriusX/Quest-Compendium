@@ -484,6 +484,8 @@ async function main() {
     const sg = runScript(['scripts/guides/contributions.ts', '--max', '30']);
     await charge(sg, 'suggestions');
     if (sg.summary && !/^suggestions: 0 checked, 0 waiting for approval, 0 now/.test(sg.summary)) report.push(`${sg.ok ? '✍️' : '⚠️'} ${sg.summary || 'suggestions check failed (see the job log)'}`);
+    // The owner's pipeline items that sources confirmed go on their pages now.
+    if (/yours: [1-9]\d* applied/.test(sg.summary || '')) changed = true;
   }
   let queueRoom = Math.min(QUEUE_DAILY, shareRoom) - correctionSearches;
   const waiting: QueueItem[] = [];
@@ -744,6 +746,11 @@ async function main() {
     if (synced) report.push(`🌍 translations kept in sync: ${synced} guide(s), ${pages} page translation(s), ≈ $${cost.toFixed(2)}.`);
   }
 
+  // The owner's changes on the site (the editor's Fix now and picture tools, /admin/images): published tonight.
+  const editorState: any = (await db().collection('system').doc('editor').get()).data() || {};
+  const editorDirtyAt = Number(editorState.dirtyAt || 0);
+  if (editorDirtyAt > Number(editorState.publishedAt || 0)) changed = true;
+
   // ---- 4. publish and deploy ----
   // One publish and deploy at a time (the flagship job publishes too): waits up to 15 minutes for the site lock.
   const siteLock = changed && !DRY ? await waitForGuideLock(SITE_LOCK, 'publish and deploy', 15 * 60_000) : null;
@@ -753,6 +760,11 @@ async function main() {
     runScript(['scripts/guides/steam-ids.ts']); // new guides get their Steam id (for game art); no AI, no cost
     const p = runScript(['scripts/guides/publish.ts']);
     report.push(p.ok ? '🌐 Website rebuilt.' : '⚠️ Rebuilding the website failed (see the job log).');
+    if (p.ok) {
+      const oe = (p.out.match(/Owner edits: [^\n]+/) || [])[0];
+      if (oe) report.push(`✏️ ${oe}`);
+      if (editorDirtyAt) await db().collection('system').doc('editor').set({ publishedAt: editorDirtyAt }, { merge: true });
+    }
     if (p.ok && process.env.NETLIFY_AUTH_TOKEN && process.env.NETLIFY_SITE_ID) {
       try {
         const n = await deployToNetlify('Marketing_Website_Files', process.env.NETLIFY_SITE_ID, process.env.NETLIFY_AUTH_TOKEN);
