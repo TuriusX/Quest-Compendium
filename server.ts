@@ -446,7 +446,7 @@ async function startServer() {
         .map((f) => ({ subject: f.subject, fact: f.fact, kind: f.kind, story: f.story || '', confirmations: f.confirmations || 1, disputed: !!f.disputed }));
       // Plus the guide page for this place, if there is one, as a separate "From the guide" list (lines already covered
       // by a verified fact are left out).
-      const pg = await guidePageFor(game, placeName);
+      const pg = await guidePageFor(game, placeName, Number(req.body?.appId) || 0, typeof req.body?.guideKey === 'string' ? req.body.guideKey : null);
       const have = new Set(facts.map((f) => f.subject.toLowerCase()));
       const guide = pg ? guideLinesForPanel(pg).filter((l) => !have.has(l.subject.toLowerCase())).slice(0, 20) : [];
       res.json({ facts, ...(guide.length ? { guide, guideName: pg!.name } : {}) });
@@ -1141,6 +1141,12 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       // Check if a game is detected either by local process detection, tab selection, or inquiry text
       const effectiveGame = activeGame || null;
       const isGameContextAvailable = !!effectiveGame;
+      // Which guide this game is: the app's own pick (the guide it found), else the Steam app id, else the name, editions
+      // aside (guidesApi.ts guideKeyFor). Every guide lookup below uses it, so "The Witcher 3: Wild Hunt — Remastered"
+      // gets the Complete Edition's guide.
+      const gameAppId = Number(effectiveGame?.appId) || 0;
+      const guideHint = typeof req.body?.guideKey === 'string' ? req.body.guideKey.slice(0, 120) : null;
+      const guideKey = effectiveGame ? await guideKeyFor(effectiveGame.name, gameAppId, req.body?.tabName, guideHint).catch(() => null) : null;
 
       if (aiMode === 'roleplay') {
         const gameNameForRoleplay = effectiveGame ? effectiveGame.name : 'the gaming universe you are discussing';
@@ -1286,13 +1292,13 @@ You must respond entirely in ${language}. Do not use English unless the user's l
         : null;
       // A game with a guide has official area names: the AI uses them, so places line up with guide pages and facts.
       // Only pages that passed review (guidesApi.ts pagePassed): a failed guide's page names aren't offered either.
-      const guideAreas = await passedAreaNames(effectiveGame?.name);
+      const guideAreas = await passedAreaNames(effectiveGame?.name, gameAppId, guideKey);
       // A place is always one guide area ("Emerald Grove, Ravaged Beach" was two joined).
       if (place && guideAreas.length) place = { ...place, name: singleArea(place.name, guideAreas) };
       // On-screen place wins: with a screenshot, a place name read on screen (a minimap label, an area title) that names
       // a guide area or one of its sub-locations replaces the stored place, confirmed, before the answer is built (the
       // guide notes, the guide order and the quest log follow it). Locate me's check, without its daily allowance.
-      const guideFull = imageBase64 && guideAreas.length ? await guideAreasWithPages(String(effectiveGame?.name || '')).catch(() => null) : null;
+      const guideFull = imageBase64 && guideAreas.length ? await guideAreasWithPages(guideKey || String(effectiveGame?.name || ''), gameAppId).catch(() => null) : null;
       let placeRead: { area: string; seenText: string; story: string } | null = guideFull?.areas?.length
         ? await readPlaceOnScreen(getGeminiClient(), imageBase64, String(effectiveGame?.name || ''), guideFull, place?.name || '')
         : null;
@@ -1415,7 +1421,7 @@ percentages:
       });
       if (knownFacts) systemInstruction += `\n\n${knownFacts}`;
       // The guide page for where the player is: background notes for this answer only (never saved as facts).
-      const guidePage = await guidePageFor(effectiveGame?.name, place?.name);
+      const guidePage = await guidePageFor(effectiveGame?.name, place?.name, gameAppId, guideKey);
       // A checked page (its entries verified; search-pack pages awaiting re-verification are not): its entries come first, preferred over the model's own knowledge, and the answer
       // says which it used (the "From the guide" badge links to them).
       let guideTags: Record<string, GuideRef> = {};
@@ -1885,7 +1891,7 @@ percentages:
       recordGameDemand(effectiveGame?.name, userId, language); // which games and languages players use (for the guide pipeline)
       // The guide didn't ground this answer (anonymous: game, page, question type, why), for the monthly blueprint report.
       void (async () => {
-        const gk = await guideKeyFor(effectiveGame?.name).catch(() => null);
+        const gk = guideKey;
         if (!gk) return;
         const reason = !guidePage ? 'no-page' : !guidePage.verified ? 'unchecked' : !guideParsed.used.length ? 'not-used' : null;
         if (reason) recordGroundingMiss({ uid: userId, key: gk, page: guidePage?.slug, qtype, reason });

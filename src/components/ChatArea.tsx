@@ -1572,6 +1572,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <div className={mode === 'guide' ? 'flex-1 flex flex-col min-h-0' : 'hidden'}>
           <QcGuidesView
             gameName={activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name}
+            gameAppId={Number(activeTab.activeSteamGame?.appId || activeGame?.appId) || 0}
+            altName={activeTab.name}
             place={activeTab.place?.name || undefined}
             openRequest={guideOpenReq}
             achievements={activeGame?.achievements}

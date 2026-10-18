@@ -34,11 +34,72 @@ async function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
   return data;
 }
 
-/** The guide key for a game, when it has a guide (for the grounding-miss log). */
-export async function guideKeyFor(game: string | undefined): Promise<string | null> {
-  if (!game) return null;
-  const key = gameKey(game);
-  return key && (await gameAreas(key)) ? key : null;
+// Editions and remasters of one game share its guide: these words at the end of a name don't make it another game.
+// ("Remake" and "Royal" do: Final Fantasy VII Remake and Persona 5 Royal are guides of their own.)
+const EDITION = /(?:\s*[-:–—(]\s*|\s+)(?:(?:the\s+)?(?:complete|definitive|enhanced|special|anniversary|deluxe|ultimate|legendary|gold|premium|game of the year|goty)(?:\s+edition)?|remastered|remaster|hd|director'?s cut|edition)\s*\)?\s*$/i;
+
+/**
+ * A game's name without what changes between its editions: ™ ® ©, the kind of dash, and edition words at the end
+ * ("The Witcher 3: Wild Hunt — Remastered" and "The Witcher 3: Wild Hunt - Complete Edition" are both
+ * "the-witcher-3-wild-hunt"). Repeated, for names like "… Remastered - GOTY Edition".
+ */
+export function baseGameKey(name: string): string {
+  let n = String(name || '').replace(/[™®©]/g, '').replace(/\s+/g, ' ').trim();
+  for (let i = 0; i < 4; i++) {
+    // A bracket that names an edition, a remaster or a version, whatever else it says ("(Nintendo Switch 2 Edition)").
+    const next = n.replace(/\s*[([][^()[\]]*\b(?:edition|remaster(?:ed)?|version)\b[^()[\]]*[)\]]\s*$/i, '').replace(EDITION, '').trim();
+    if (next === n || !next) break;
+    n = next;
+  }
+  return gameKey(n);
+}
+
+type GuideIndexRow = { key: string; appId: number; base: string };
+/** Every published guide with its Steam app id and its name without editions (cached for ten minutes). */
+function guideIndex(): Promise<GuideIndexRow[]> {
+  return cached('guideIndex', async () => {
+    const live = new Set((await guideList()).map((g) => g.key));
+    const docs = await getFirestore().collection('guides').select('game', 'appId').get();
+    return docs.docs
+      .filter((d) => live.has(d.id))
+      .map((d) => ({ key: d.id, appId: Number(d.get('appId')) || 0, base: baseGameKey(String(d.get('game') || d.id)) }));
+  });
+}
+
+/**
+ * Which guide a game is, from what the app knows about it: a guide key it already found, its Steam app id, and its
+ * names (the Steam name, the compendium's own name). The app id comes first, since Steam names change ("The Witcher 3:
+ * Wild Hunt" became "… — Remastered"); when one Steam app holds several games with guides (Mass Effect Legendary
+ * Edition, the Kingdom Hearts HD collection), a name has to say which one, and none is picked otherwise. Then the exact
+ * name, then the name without edition words, when exactly one guide has it.
+ */
+export function pickGuideKey(index: GuideIndexRow[], names: (string | undefined | null)[], appId?: number, hint?: string | null): string | null {
+  if (hint && index.some((g) => g.key === hint)) return hint;
+  const list = names.map((n) => String(n || '').trim()).filter(Boolean);
+  const byName = (pool: GuideIndexRow[]) => {
+    for (const n of list) {
+      const exact = pool.find((g) => g.key === gameKey(n));
+      if (exact) return exact.key;
+    }
+    for (const n of list) {
+      const b = baseGameKey(n);
+      const hits = b ? pool.filter((g) => g.base === b) : [];
+      if (hits.length === 1) return hits[0].key;
+    }
+    return null;
+  };
+  if (appId) {
+    const same = index.filter((g) => g.appId === appId);
+    if (same.length === 1) return same[0].key;
+    if (same.length > 1) return byName(same);
+  }
+  return byName(index);
+}
+
+/** The guide key for a game, when it has a guide (see pickGuideKey). */
+export async function guideKeyFor(game: string | undefined, appId?: number, alt?: string, hint?: string | null): Promise<string | null> {
+  if (!game && !appId && !hint && !alt) return null;
+  return pickGuideKey(await guideIndex(), [game, alt], appId, hint);
 }
 
 async function gameAreas(key: string) {
@@ -233,7 +294,9 @@ export function registerGuidesApi(app: Express): void {
   app.get('/api/guides/find', async (req, res) => {
     try {
       const name = String(req.query.game ?? '').trim().slice(0, 160);
-      const g = name ? await gameAreas(gameKey(name)) : null;
+      const alt = String(req.query.alt ?? '').trim().slice(0, 160);
+      const key = await guideKeyFor(name, Number(req.query.appId) || 0, alt);
+      const g = key ? await gameAreas(key) : null;
       send(res, g ? localizeAreas(g, await translation(g.key, langOf(req.query.lang))) : { key: null });
     } catch (e) {
       fail(res, e);
@@ -247,11 +310,6 @@ export function registerGuidesApi(app: Express): void {
     cached(`ach:${key}`, async () => {
       const d = await getFirestore().collection('guides').doc(key).collection('achievements').doc('main').get();
       return d.exists ? d.data() : null;
-    });
-  const keyForAppId = (appId: number) =>
-    cached(`appid:${appId}`, async () => {
-      const q = await getFirestore().collection('guides').where('appId', '==', appId).limit(1).get();
-      return q.empty ? null : q.docs[0].id;
     });
   /** The achievement guide in a language: official names and descriptions from Steam, tips and roadmap translated. */
   const localizeAch = (data: any, t: any) => {
@@ -277,8 +335,8 @@ export function registerGuidesApi(app: Express): void {
     try {
       const appId = Number(req.query.appid) || 0;
       const name = String(req.query.game ?? '').trim().slice(0, 160);
-      let key = appId ? await keyForAppId(appId) : null;
-      if (!key && name && (await achievementsFor(gameKey(name)))) key = gameKey(name);
+      // The same guide the quest log and answers use (by app id, then name, editions aside: guideKeyFor).
+      const key = await guideKeyFor(name, appId, String(req.query.alt ?? '').slice(0, 160));
       await sendAch(res, key, langOf(req.query.lang), false);
     } catch (e) {
       fail(res, e);
@@ -404,8 +462,8 @@ const loose = (x: string) =>
  * A guide's published areas in order, with the parts of each page that name sub-locations (entries' "where", shops,
  * section headings): for checking that a place name read off the screen belongs to an area (POST /api/locate-me).
  */
-export async function guideAreasWithPages(game: string): Promise<{ areas: { slug: string; name: string; story: string }[]; pages: Record<string, any> } | null> {
-  const key = gameKey(game);
+export async function guideAreasWithPages(game: string, appId?: number): Promise<{ areas: { slug: string; name: string; story: string }[]; pages: Record<string, any> } | null> {
+  const key = (await guideKeyFor(game, appId)) || gameKey(game);
   if (!key) return null;
   return cached(`pages:${key}`, async () => {
     const ref = getFirestore().collection('guides').doc(key);
@@ -494,10 +552,11 @@ async function guideStanding(key: string): Promise<GuideStanding> {
 }
 
 /** The names of a game's guide pages that answers may use (for the AI's list of guide areas). */
-export async function passedAreaNames(game: string | undefined): Promise<string[]> {
-  if (!game) return [];
+export async function passedAreaNames(game: string | undefined, appId?: number, hint?: string | null): Promise<string[]> {
+  if (!game && !hint) return [];
   try {
-    const key = gameKey(game);
+    const key = await guideKeyFor(game, appId, undefined, hint);
+    if (!key) return [];
     const [minScore, standing] = await Promise.all([groundingMinScore(), guideStanding(key)]);
     return await cached(`passedNames:${key}:${minScore}`, async () => {
       const ref = getFirestore().collection('guides').doc(key);
@@ -556,10 +615,11 @@ the kind of place it might be in), you may point at it with a normal marker and 
 At most ${GUIDE_MARKER_LIMIT} such markers, and only when you're sure it's that exact thing. Don't mention this list in your answer.`;
 }
 
-export async function guidePageFor(game: string | undefined, place: string | undefined): Promise<GuidePageForPlace | null> {
-  if (!game || !place) return null;
+export async function guidePageFor(game: string | undefined, place: string | undefined, appId?: number, hint?: string | null): Promise<GuidePageForPlace | null> {
+  if ((!game && !hint) || !place) return null;
   try {
-    const key = gameKey(game);
+    const key = await guideKeyFor(game, appId, undefined, hint);
+    if (!key) return null;
     const g = await gameAreas(key);
     if (!g) return null;
     const p = norm(place);

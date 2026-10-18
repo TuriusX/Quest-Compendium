@@ -627,7 +627,7 @@ export default function App() {
   const trackerPlace = activeTab
     ? activeTab.place || settings.gameProgress?.[(activeTab.activeSteamGame?.name || activeTab.name || '').trim().toLowerCase()]
     : undefined;
-  const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, trackerPlace?.name, trackerPlace?.story, useLocale());
+  const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, trackerPlace?.name, trackerPlace?.story, useLocale(), Number(activeTab?.activeSteamGame?.appId || activeGame?.appId) || 0, activeTab?.name);
   const trackerGameRef = useRef(trackerGame);
   trackerGameRef.current = trackerGame;
   // A place is always one guide area: a saved place with two joined ("Emerald Grove, Ravaged Beach") becomes the first
@@ -1993,6 +1993,10 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           // A quick question's id (src/utils/quickQuestions.ts): the server adds what it asks for.
           ...(quick ? { quick } : {}),
           isGameRunningLocally: runningOpen,
+          // The guide the app found for this game (the server checks it), and the compendium's name, so answers use the
+          // same guide as the quest log whatever Steam calls the game.
+          guideKey: trackerGameRef.current.guideKey || undefined,
+          tabName: activeTab?.name,
           activeGame: activeGame ? {
             name: activeGame.name,
             appId: activeGame.appId,
