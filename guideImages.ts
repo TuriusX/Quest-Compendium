@@ -11,6 +11,8 @@
  *   GET  /api/admin/images/:id/file/:size   one of its stored sizes (the admin page shows them; it can't use a URL)
  *   GET  /api/admin/images/targets?game=&q= what a picture can belong to: areas, characters and other compendium
  *                                           pages, an area's items, secrets, fights and checklist lines, its steps
+ *   POST /api/admin/images/:id/find-another a suggestion turned down ("Not this") and the next best picture for the same
+ *                                           page looked for at once (scripts/guides/suggestImages.ts findAnother)
  *   POST /api/admin/images/suggest          the capture window's suggestions (from the app), as the guide names them
  *   GET  /api/admin/images/wanted?game=     the game's most-searched pages that have no approved picture yet
  *   GET  /api/admin/images/needs-capture    top pages no source has a picture for: only the owner's captures can fill them
@@ -376,6 +378,24 @@ export function registerGuideImages(app: Express, deps: Deps) {
     }
   });
 
+  // Find another: this picture is wrong for this page ("Not this", never suggested again), and the next best one is
+  // looked for now, within the pictures' night and month budget. None: the page goes on "Needs your capture".
+  app.post('/api/admin/images/:id/find-another', deps.requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    const ref = col().doc(String(req.params.id));
+    try {
+      const x: any = (await ref.get()).data();
+      if (!x) return res.status(404).json({ error: 'No such image.' });
+      const by = String((req as any).user?.email || '');
+      await ref.set({ status: 'deleted', notThis: true, deletedBy: by, deletedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+      const { findAnother } = await import('./scripts/guides/suggestImages');
+      const r = await findAnother(String(x.game), x.target);
+      res.json({ found: !!r.id, id: r.id, tried: r.tried, spent: r.spent, message: r.message });
+    } catch (e: any) {
+      console.error('[images] find another failed:', e?.message);
+      res.status(500).json({ error: e?.message || 'Could not look for another picture.' });
+    }
+  });
+
   app.post('/api/admin/images/:id', deps.requireAuth, requireAdmin, async (req: Request, res: Response) => {
     const b = req.body || {};
     const ref = col().doc(String(req.params.id));
@@ -632,7 +652,8 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
       + '<div class="field">Alt text<input data-f="alt" data-id="' + x.id + '" value="' + esc(x.alt) + '"></div>'
       + (official ? '<div class="field">Credit line (only if the terms ask for one)<input data-f="credit" data-id="' + x.id + '" value="' + esc(x.credit || '') + '"></div><div class="field">Terms<input data-f="terms" data-id="' + x.id + '" value="' + esc(x.terms || '') + '"></div>' + (x.sourceUrl ? '<div class="small dim">Source: <a href="' + esc(x.sourceUrl) + '" target="_blank" rel="noopener">' + esc(x.sourceUrl.slice(0, 70)) + '</a></div>' : '') : '')
       + '<div class="acts">' + (status === 'waiting' || status === 'suggested' ? '<button class="ok" data-act="approve" data-id="' + x.id + '">Approve</button>' : '') + '<button data-act="rematch" data-id="' + x.id + '">Re-match</button>'
-      + (status === 'deleted' ? '<button data-act="restore" data-id="' + x.id + '">Restore</button>' : status === 'suggested' ? '<button class="bad" data-act="notthis" data-id="' + x.id + '">Not this</button>' : '<button class="bad" data-act="delete" data-id="' + x.id + '">Delete</button>') + '</div>'
+      + (status === 'deleted' ? '<button data-act="restore" data-id="' + x.id + '">Restore</button>' : status === 'suggested' ? '<button data-act="another" data-id="' + x.id + '" title="Turn this one down and look for the next best picture for this page">Find another</button><button class="bad" data-act="notthis" data-id="' + x.id + '">Not this</button>' : '<button class="bad" data-act="delete" data-id="' + x.id + '">Delete</button>') + '</div>'
+      + '<div class="small" data-note="' + x.id + '" style="margin-top:6px"></div>'
       + '<div data-rm="' + x.id + '" hidden><input placeholder="Search the guide…" data-rq="' + x.id + '" style="width:100%;margin-top:8px"><div class="results" data-rr="' + x.id + '"></div></div>'
       + '</div></div>';
   }
@@ -687,6 +708,26 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
     if (!b) return;
     const id = b.dataset.id;
     if (b.dataset.act === 'rematch') { const box = document.querySelector('[data-rm="' + id + '"]'); box.hidden = !box.hidden; box.querySelector('input').focus(); return; }
+    if (b.dataset.act === 'another') {
+      // Can take a little while: it downloads and checks pictures one by one, up to $0.10 a click.
+      const note = document.querySelector('[data-note="' + id + '"]');
+      const card = $('c-' + id);
+      card.querySelectorAll('button').forEach((x) => (x.disabled = true));
+      note.className = 'small dim';
+      note.textContent = 'Looking for another picture for this page…';
+      try {
+        const r = await api('/api/admin/images/' + encodeURIComponent(id) + '/find-another', {});
+        note.className = 'small ' + (r.found ? 'dim' : 'warn');
+        note.textContent = r.message;
+        $('msg').textContent = r.message;
+        setTimeout(() => load(), r.found ? 1200 : 2500);
+      } catch (err) {
+        note.className = 'small warn';
+        note.textContent = err.message;
+        card.querySelectorAll('button').forEach((x) => (x.disabled = false));
+      }
+      return;
+    }
     b.disabled = true;
     try { await api('/api/admin/images/' + encodeURIComponent(id), { action: b.dataset.act }); await load(); } catch (err) { alert(err.message); b.disabled = false; }
   });

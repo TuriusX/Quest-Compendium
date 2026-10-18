@@ -24,7 +24,7 @@ import crypto from 'crypto';
 import sharp from 'sharp';
 import { ThinkingLevel } from '@google/genai';
 import { getFirestore } from 'firebase-admin/firestore';
-import { db, gemini, MODEL, arg, searchesIn, ledgerDollars } from './common';
+import { db, gemini, MODEL, arg, searchesIn, ledgerDollars, usageScope } from './common';
 import { addImage, targetsFor, pageImpressionList, type ImageTarget } from '../../guideImages';
 
 const LITE = process.env.GUIDE_LITE_MODEL || 'gemini-3.1-flash-lite';
@@ -54,19 +54,21 @@ const parseObj = (text: string): any => {
 
 // ---- Targets ------------------------------------------------------------------------------------------------------
 
+/** One line from our guide that says what a page shows (an area's region and first sentence, a compendium page's). */
+async function descOf(key: string, t: ImageTarget): Promise<string> {
+  if (t.kind === 'area' || t.kind === 'step' || t.kind === 'entry') {
+    const a: any = (await db().collection('guides').doc(key).collection('areas').doc(t.slug).get()).data() || {};
+    return tidy([a.info?.region, firstSentence(a.overview)].filter(Boolean).join('. '));
+  }
+  const e: any = (await db().collection('guideCompendium').doc(key).collection('entities').doc(t.slug).get()).data() || {};
+  return tidy(firstSentence(typeof e.description === 'string' ? e.description : e.summary || ''));
+}
+
 /** The game's top-100 pages (in impressions order) and, for official pictures, its characters, each with a guide line. */
 async function targetsOf(key: string): Promise<{ top: Target[]; all: Target[] }> {
   const pages = (await pageImpressionList()).slice(0, 100).filter((p) => p.key === key);
   const list = await targetsFor(key);
-  const ref = db().collection('guides').doc(key);
-  const desc = async (t: ImageTarget): Promise<string> => {
-    if (t.kind === 'area') {
-      const a: any = (await ref.collection('areas').doc(t.slug).get()).data() || {};
-      return tidy([a.info?.region, firstSentence(a.overview)].filter(Boolean).join('. '));
-    }
-    const e: any = (await db().collection('guideCompendium').doc(key).collection('entities').doc(t.slug).get()).data() || {};
-    return tidy(firstSentence(typeof e.description === 'string' ? e.description : e.summary || ''));
-  };
+  const desc = (t: ImageTarget) => descOf(key, t);
   const top: Target[] = [];
   for (const p of pages) {
     const t = list.find((x) => (x.kind === 'area' || x.kind === 'entity') && x.slug === p.slug);
@@ -127,8 +129,9 @@ async function look(game: string, jpeg: string, targets: Target[]): Promise<{ t:
   const prompt =
     `This is an official picture from the video game "${game}". Which ONE of these guide pages does it clearly show?\n${lines}\n\n` +
     'Rules: answer null unless something visible identifies it (a landmark\'s distinctive look, a character\'s face and outfit, ' +
-    'a place\'s known layout). A close-up of a person is never a place. A wide view is a character only when that character ' +
-    'clearly fills it. Never guess from mood or colours alone.\n' +
+    'a place\'s known layout). A close-up of a person is never a place. A character only when they are alone and fill most ' +
+    'of the picture (a portrait or a clear close-up), never an action or group scene. Never a screenshot with the game\'s ' +
+    'interface on it (quest text, a minimap, health bars). Never guess from mood or colours alone.\n' +
     'Reply with JSON only: {"n": number or null, "confidence": "high" | "medium" | "low", "seen": "what in the picture shows it, one sentence", "alt": number or null}';
   const res: any = await gemini().models.generateContent({
     model: MODEL,
@@ -157,7 +160,10 @@ async function check(game: string, jpeg: string, t: Target, wikiTitle: string): 
     config: { temperature: 0, maxOutputTokens: 120, responseMimeType: 'application/json' },
   });
   const j: any = parseObj(res.text || '');
-  return { ok: j?.ok === true, what: tidy(j?.what, 160) };
+  const what = tidy(j?.what, 160);
+  // Its own words win over its yes: a description that says concept art, a sketch, a map or a logo is a no.
+  const notInGame = /\b(concept art|concept|sketch|drawing|painting|illustration|map|logo|icon|collage|cover art|box art)\b/i.test(what);
+  return { ok: j?.ok === true && !notInGame, what };
 }
 
 // ---- Sources ------------------------------------------------------------------------------------------------------
@@ -176,6 +182,18 @@ async function wikiImage(domain: string, title: string): Promise<{ url: string; 
   const hit = s?.query?.search?.[0]?.title;
   const same = (a: string, b: string) => a.toLowerCase().replace(/[^a-z0-9]+/g, '') === b.toLowerCase().replace(/[^a-z0-9]+/g, '');
   return hit && same(hit, title) ? pick(await api(`action=query&prop=pageimages&piprop=original&titles=${encodeURIComponent(hit)}`)) : null;
+}
+
+/** Every picture on a wiki page, biggest first: the page's other pictures when its main one was turned down. */
+async function wikiPageImages(domain: string, title: string): Promise<{ url: string; name: string }[]> {
+  const q = `action=query&format=json&formatversion=2&redirects=1&generator=images&gimlimit=50&prop=imageinfo&iiprop=url|size|mime&titles=${encodeURIComponent(title)}`;
+  const j: any = await fetch(`https://${domain}/api.php?${q}`, { headers: { 'User-Agent': UA } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const skip = /(logo|icon|map|sigil|emblem|signature|symbol|portrait_icon|button|banner|flag|\.svg)/i;
+  return (j?.query?.pages || [])
+    .map((p: any) => ({ name: String(p.title || ''), i: p.imageinfo?.[0] }))
+    .filter((x: any) => x.i?.url && /image\/(jpeg|png|webp)/.test(String(x.i.mime)) && x.i.width >= 640 && x.i.height >= 360 && !skip.test(x.name))
+    .sort((a: any, b: any) => b.i.width * b.i.height - a.i.width * a.i.height)
+    .map((x: any) => ({ url: String(x.i.url), name: x.name }));
 }
 
 let igdbTok = '';
@@ -360,6 +378,95 @@ export async function suggestGames(keys: string[], cap: number, maxSuggest = 1e9
   return r;
 }
 
+// ---- The picture budget (owner-approved): $0.50 a night and $5 a month, shared by the nightly run and Find another ----
+
+const money = (d: number) => (d < 0.01 ? 'under $0.01' : `$${d.toFixed(2)}`);
+const nightId = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+async function budget(): Promise<{ nightLeft: number; monthLeft: number; add: (d: number) => Promise<void> }> {
+  const st: any = (await STATE().get()).data() || {};
+  const month = new Date().toISOString().slice(0, 7), night = nightId();
+  const monthUsed = st.month?.id === month ? Number(st.month.dollars) || 0 : 0;
+  const nightUsed = st.night?.id === night ? Number(st.night.dollars) || 0 : 0;
+  return {
+    nightLeft: Math.max(0, 0.5 - nightUsed),
+    monthLeft: Math.max(0, 5 - monthUsed),
+    add: async (d: number) => { await STATE().set({ month: { id: month, dollars: monthUsed + d }, night: { id: night, dollars: nightUsed + d } }, { merge: true }); },
+  };
+}
+
+/**
+ * Find another (/admin/images): the next best picture for one page after the owner turned one down. Its wiki page's
+ * other pictures (Flash-Lite checks each against the guide), then the press kit's (Flash looks at each for this page
+ * only). At most $0.10 a click, counted in the night's $0.50 and the month's $5. Nothing found: the page goes on
+ * "Needs your capture". IGDB isn't looked at again: every IGDB picture of the game was already looked at for every page.
+ */
+export async function findAnother(key: string, target: ImageTarget): Promise<{ id: string | null; tried: number; spent: number; message: string }> {
+  const b = await budget();
+  const cap = Math.min(0.1, b.nightLeft, b.monthLeft);
+  if (cap < 0.005) return { id: null, tried: 0, spent: 0, message: b.monthLeft < 0.005 ? "This month's $5 for pictures is used up." : "Tonight's $0.50 for pictures is used up. Try again tomorrow." };
+  const scope = { dollars: 0, searches: 0 };
+  let tried = 0;
+  const id = await usageScope.run(scope, async () => {
+    const info: any = (await db().collection('guides').doc(key).get()).data() || {};
+    const game = String(info.game || key);
+    const src: any = (await SOURCES().doc(key).get()).data() || {};
+    const have = await existing(key);
+    const t: Target = { ...target, desc: await descOf(key, target), top: true };
+    const stored: ImageTarget = { kind: target.kind, slug: target.slug, name: target.name, label: target.label, ...(target.id ? { id: target.id } : {}), ...(target.area ? { area: target.area } : {}) };
+    const fits = (cost: number) => scope.dollars + cost <= cap;
+    // The wiki page's other pictures, checked like its main one.
+    const wiki = src.wiki?.domain ? String(src.wiki.domain) : '';
+    if (wiki) {
+      for (const w of (await wikiPageImages(wiki, target.name)).filter((x) => !have.refs.has(x.url)).slice(0, 8)) {
+        if (!fits(COST.check)) return null;
+        const buf = await download(w.url);
+        const img = buf && (await forLook(buf));
+        have.refs.add(w.url);
+        if (!buf || !img) continue;
+        tried++;
+        const c = await check(game, img.jpeg, t, target.name);
+        if (!c.ok) continue;
+        return addImage({
+          game: key, target: stored, buf, ext: (w.url.match(/\.(png|jpe?g|webp)/i)?.[1] || 'jpg').replace('jpeg', 'jpg'), by: 'suggester', status: 'suggested',
+          source: 'wiki', sourceUrl: w.url, sourceRef: w.url, sourceName: `Wiki (${wiki})`, confidence: 'high',
+          why: `Another picture from the wiki page "${target.name}". ${c.what}`,
+          credit: `Image: ${src.wiki?.name || wiki}, CC BY-SA`, terms: 'Fandom wikis: CC BY-SA, credit the wiki',
+        } as any);
+      }
+    }
+    // The press kit's pictures, looked at for this page alone.
+    for (const k of Array.isArray(src.press) ? src.press : []) {
+      for (const u of (await pressImages(String(k.url))).filter((x) => !have.refs.has(x)).slice(0, 12)) {
+        if (!fits(COST.look)) return null;
+        const buf = await download(u);
+        const img = buf && (await forLook(buf));
+        have.refs.add(u);
+        if (!buf || !img) continue;
+        tried++;
+        const m = await look(game, img.jpeg, [t]);
+        if (!m) continue;
+        return addImage({
+          game: key, target: stored, buf, ext: 'jpg', by: 'suggester', status: 'suggested', source: 'press', sourceUrl: u, sourceRef: u,
+          sourceName: `Press kit (${new URL(String(k.url)).hostname})`, confidence: m.confidence, why: m.seen, credit: tidy(k.credit, 160) || null, terms: tidy(k.terms, 600) || 'Press kit: editorial use',
+        } as any);
+      }
+    }
+    return null;
+  });
+  await b.add(scope.dollars);
+  if (id) return { id, tried, spent: scope.dollars, message: `Found another picture (${tried} looked at, ${money(scope.dollars)}).` };
+  const ranOut = !(scope.dollars + COST.check <= cap) && tried > 0;
+  if (!ranOut && (target.kind === 'area' || target.kind === 'entity')) {
+    const st: any = (await STATE().get()).data() || {};
+    const k = `${key}/${target.slug}`;
+    await STATE().set({ pages: { ...(st.pages || {}), [k]: { ...(st.pages?.[k] || {}), at: Date.now(), all: true, findAnother: 'none' } } }, { merge: true });
+  }
+  return {
+    id: null, tried, spent: scope.dollars,
+    message: ranOut ? `Nothing yet after ${tried} pictures (${money(scope.dollars)}, this click's limit). Try Find another again.` : 'No other picture found — needs your capture.',
+  };
+}
+
 /**
  * The nightly run (owner-approved limits): at most 15 suggestions or $0.50 a night, $5 a month, and none while 30 or
  * more suggestions wait. Games in the order of their top-100 impressions; a game is done once every source was checked.
@@ -367,19 +474,19 @@ export async function suggestGames(keys: string[], cap: number, maxSuggest = 1e9
 export async function suggestNightly(): Promise<string | null> {
   const st: any = (await STATE().get()).data() || {};
   if (!st.nightly) return null;
-  const month = new Date().toISOString().slice(0, 7);
-  const used = st.month?.id === month ? Number(st.month.dollars) || 0 : 0;
+  const b = await budget();
   const waiting = (await db().collection('guideImages').where('status', '==', 'suggested').count().get()).data().count;
   if (waiting >= 30) return `🖼️ Suggested pictures: paused, ${waiting} wait for review.`;
-  const cap = Math.min(0.5, 5 - used);
-  if (cap <= 0.01) return `🖼️ Suggested pictures: this month's $5 is used.`;
+  const cap = Math.min(b.nightLeft, b.monthLeft);
+  if (cap <= 0.01) return `🖼️ Suggested pictures: ${b.monthLeft <= 0.01 ? "this month's $5 is used" : "tonight's $0.50 is used (Find another)"}.`;
   const pages = (await pageImpressionList()).slice(0, 100);
   const done = st.pages || {};
   const order: string[] = [];
   for (const p of pages) if (!done[`${p.key}/${p.slug}`]?.all && !order.includes(p.key)) order.push(p.key);
   if (!order.length) return null;
   const r = await suggestGames(order, cap, Math.min(15, 30 - waiting));
-  await STATE().set({ month: { id: month, dollars: used + spent(r) }, last: { at: Date.now(), suggested: r.suggested, checked: r.checked, dollars: spent(r) } }, { merge: true });
+  await b.add(spent(r));
+  await STATE().set({ last: { at: Date.now(), suggested: r.suggested, checked: r.checked, dollars: spent(r) } }, { merge: true });
   return `🖼️ Suggested pictures: ${r.suggested} from ${r.checked} checked ($${spent(r).toFixed(2)}${r.stopped ? `, stopped at ${r.stopped}` : ''}).`;
 }
 
