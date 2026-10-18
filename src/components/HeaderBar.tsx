@@ -27,6 +27,8 @@ interface HeaderBarProps {
   isGameRunningLocally: boolean;
   /** The running game: the switcher's dot is green only when the open compendium is it. */
   detection?: Detection;
+  /** The game picked for a collection app, with a way to change it (GameSwitcher). */
+  chosenGame?: { game: string; onChange: () => void };
   onSelectTab: (tabId: string) => void;
   onStartCreateTab: () => void;
   onStartRenameTab: (tabId: string, currentName: string) => void;
@@ -72,6 +74,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   activeGame,
   isGameRunningLocally,
   detection,
+  chosenGame,
   onSelectTab,
   onStartCreateTab,
   onStartRenameTab,
@@ -155,6 +158,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           activeGame={activeGame}
           isGameRunningLocally={isGameRunningLocally}
           detection={detection}
+          chosenGame={chosenGame}
           soundEnabled={soundEnabled}
           onSelectTab={onSelectTab}
           onStartCreateTab={onStartCreateTab}

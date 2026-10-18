@@ -13,6 +13,8 @@ export interface Detection {
   onSwitch: () => void;
   /** Detection is possible here (the desktop app); the web app shows nothing. */
   available: boolean;
+  /** The running Steam app holds several games with guides and this compendium hasn't said which: "Which game?". */
+  choose?: { games: { key: string; game: string }[]; onPick: (key: string) => void };
 }
 
 /**
@@ -31,7 +33,27 @@ export function DetectionLine({ d, soundEnabled = true }: { d: Detection; soundE
       {d.running ? (
         <>
           <span className="text-emerald-400 text-[10px]" aria-hidden="true">▶</span>
-          <span className="truncate min-w-0">{d.open ? t('detect.playingHere', { game: name }) : t('detect.playing', { game: name })}</span>
+          <span className="truncate min-w-0">{d.open && !d.choose ? t('detect.playingHere', { game: name }) : t('detect.playing', { game: name })}</span>
+          {d.open && d.choose && (
+            // A collection (one Steam app, several games): asked once; the compendium remembers the answer, and the game
+            // switcher can change it.
+            <span className="ml-auto flex-shrink-0 flex items-center gap-1.5">
+              <span className="text-emerald-200/90">{t('detect.whichGame')}</span>
+              {d.choose.games.map((g) => (
+                <button
+                  key={g.key}
+                  type="button"
+                  onClick={() => {
+                    playBlipSound(soundEnabled);
+                    d.choose!.onPick(g.key);
+                  }}
+                  className="h-5 px-2 rounded-md bg-emerald-400 text-[#06140d] font-bold text-[11px] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white cursor-pointer whitespace-nowrap"
+                >
+                  {g.game}
+                </button>
+              ))}
+            </span>
+          )}
           {!d.open && (
             <button
               type="button"

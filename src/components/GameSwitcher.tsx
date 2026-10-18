@@ -28,6 +28,7 @@ export function GameSwitcher({
   activeGame,
   isGameRunningLocally,
   detection,
+  chosenGame,
   soundEnabled,
   onSelectTab,
   onStartCreateTab,
@@ -43,6 +44,8 @@ export function GameSwitcher({
   isGameRunningLocally: boolean;
   /** Set: the dot is green only when the open compendium is the running game. */
   detection?: Detection;
+  /** The game picked for a collection app ("Which game?"), and changing it (the detection line asks again). */
+  chosenGame?: { game: string; onChange: () => void };
   soundEnabled: boolean;
   onSelectTab: (id: string) => void;
   onStartCreateTab: () => void;
@@ -222,6 +225,13 @@ export function GameSwitcher({
                   <Target className="w-4 h-4 text-amber-400" />
                   <span className="truncate">{t('side.menuQuests')}</span>
                 </button>
+                {chosenGame && (
+                  <button type="button" role="menuitem" onClick={pick(chosenGame.onChange)} className={item}>
+                    <Edit3 className="w-4 h-4 text-emerald-400" />
+                    <span className="truncate">{t('switch.chosenGame', { game: chosenGame.game })}</span>
+                    <span className="ml-auto flex-shrink-0 text-[11.5px] text-zinc-500">{t('switch.changeGame')}</span>
+                  </button>
+                )}
               </>
             )}
           </div>

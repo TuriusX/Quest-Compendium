@@ -468,6 +468,22 @@ export default function App() {
       else handleCreateTab(globalActiveGame.name, { ...globalActiveGame, isAutoDetected: false });
     },
   };
+  // A Steam app that holds several games with guides (Mass Effect Legendary Edition, the Kingdom Hearts collections):
+  // its games, so the detection line can ask once which one this compendium is (guidesApi.ts guideCollection).
+  const [collection, setCollection] = useState<{ appId: number; games: { key: string; game: string }[] } | null>(null);
+  const runningAppId = Number(globalActiveGame?.appId) || 0;
+  useEffect(() => {
+    if (!runningAppId) { setCollection(null); return; }
+    let alive = true;
+    fetch(`${getApiBaseUrl()}/api/guides/collection?appId=${runningAppId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => alive && setCollection({ appId: runningAppId, games: Array.isArray(j?.games) ? j.games : [] }))
+      .catch(() => alive && setCollection(null));
+    return () => { alive = false; };
+  }, [runningAppId]);
+  /** This compendium is that game of the collection (or none: asked again). Bumps lastActive, so the choice syncs. */
+  const chooseCollectionGame = (tabId: string, key: string | undefined) =>
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, guideKey: key, lastActive: Date.now() } : t)));
   // Ctrl+Shift+S photographs the running game, so it asks in that game's compendium (opened or started first).
   const toRunningForShot = useRef<() => boolean>(() => false);
   toRunningForShot.current = () => {
@@ -627,9 +643,13 @@ export default function App() {
   const trackerPlace = activeTab
     ? activeTab.place || settings.gameProgress?.[(activeTab.activeSteamGame?.name || activeTab.name || '').trim().toLowerCase()]
     : undefined;
-  const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, trackerPlace?.name, trackerPlace?.story, useLocale(), Number(activeTab?.activeSteamGame?.appId || activeGame?.appId) || 0, activeTab?.name);
+  const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, trackerPlace?.name, trackerPlace?.story, useLocale(), Number(activeTab?.activeSteamGame?.appId || activeGame?.appId) || 0, activeTab?.name, activeTab?.guideKey);
   const trackerGameRef = useRef(trackerGame);
   trackerGameRef.current = trackerGame;
+  // "Which game?": only while this compendium is the running collection's, and neither its pick nor its name says which.
+  if (runningOpen && activeTab && collection?.appId === runningAppId && collection.games.length > 1 && !activeTab.guideKey && !trackerGame.guideKey) {
+    detection.choose = { games: collection.games, onPick: (key) => chooseCollectionGame(activeTab.id, key) };
+  }
   // A place is always one guide area: a saved place with two joined ("Emerald Grove, Ravaged Beach") becomes the first
   // area in it, in the tab and the game's saved progress, once the guide's areas are known.
   const guideAreaNames = (trackerGame.guideArea?.areas || []).map((a) => a.name).join('\u0001');
@@ -2542,6 +2562,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           activeGame={activeGame}
           isGameRunningLocally={globalActiveGame !== null}
           detection={detection}
+          chosenGame={activeTab?.guideKey ? { game: collection?.games.find((g) => g.key === activeTab.guideKey)?.game || activeTab.guideKey, onChange: () => chooseCollectionGame(activeTab.id, undefined) } : undefined}
           onSelectTab={handleSelectTab}
           onStartCreateTab={handleStartCreateTab}
           onStartRenameTab={handleStartRenameTab}

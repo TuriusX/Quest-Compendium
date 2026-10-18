@@ -173,6 +173,8 @@ export interface GameTab {
    * answer's objectives, until a newer answer (answerId: the answer they were loaded with) or the player unloads them.
    */
   guideSteps?: { kind: 'quest' | 'walk'; key: string; slug: string; name: string; from?: string; answerId?: string };
+  /** The guide the player picked for a Steam app that holds several games (Mass Effect Legendary Edition: ME1 or ME2). */
+  guideKey?: string;
   createdAt: number;
   lastActive: number;
 }

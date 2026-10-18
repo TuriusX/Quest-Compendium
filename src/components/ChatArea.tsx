@@ -1574,6 +1574,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             gameName={activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name}
             gameAppId={Number(activeTab.activeSteamGame?.appId || activeGame?.appId) || 0}
             altName={activeTab.name}
+            chosenKey={activeTab.guideKey}
             place={activeTab.place?.name || undefined}
             openRequest={guideOpenReq}
             achievements={activeGame?.achievements}

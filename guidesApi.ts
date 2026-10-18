@@ -4,6 +4,7 @@
  *
  *   GET /api/guides                    games with published guides: [{ key, game, areas }]
  *   GET /api/guides/find?game=NAME     the guide for a game, matched by name (e.g. the running Steam game)
+ *   GET /api/guides/collection?appId=N the games with a guide one Steam app holds (Mass Effect Legendary Edition)
  *   GET /api/guides/:key               one game's areas in story order: { key, game, areas: [{ slug, name, story }] }
  *   GET /api/guides/:key/:slug         one area page: overview, items, secrets, enemies, shops, tips
  *   GET /api/guides/:key/achievements  the achievement guide (or /api/achievements?game=NAME)
@@ -94,6 +95,29 @@ export function pickGuideKey(index: GuideIndexRow[], names: (string | undefined 
     if (same.length > 1) return byName(same);
   }
   return byName(index);
+}
+
+/** A game's name as players know it, without the edition ("Mass Effect 1 (Legendary Edition)" → "Mass Effect 1"). */
+export function shortGameName(name: string): string {
+  let n = String(name || '').replace(/[™®©]/g, '').replace(/\s+/g, ' ').trim();
+  for (let i = 0; i < 4; i++) {
+    const next = n.replace(/\s*[([][^()[\]]*\b(?:edition|remaster(?:ed)?|version)\b[^()[\]]*[)\]]\s*$/i, '').replace(EDITION, '').trim();
+    if (next === n || !next) break;
+    n = next;
+  }
+  return n;
+}
+
+/**
+ * The games with a guide that one Steam app holds (Mass Effect Legendary Edition: ME1, ME2), for the app's "Which
+ * game?"; empty when the app is one game.
+ */
+export async function guideCollection(appId: number): Promise<{ key: string; game: string }[]> {
+  if (!appId) return [];
+  const same = (await guideIndex()).filter((g) => g.appId === appId);
+  if (same.length < 2) return [];
+  const names = new Map((await guideList()).map((g) => [g.key, g.game]));
+  return same.map((g) => ({ key: g.key, game: shortGameName(names.get(g.key) || g.key) })).sort((a, b) => a.game.localeCompare(b.game, 'en', { numeric: true }));
 }
 
 /** The guide key for a game, when it has a guide (see pickGuideKey). */
@@ -291,11 +315,21 @@ export function registerGuidesApi(app: Express): void {
     }
   });
 
+  // The games with a guide in one Steam app (a collection), for the app's one-time "Which game?".
+  app.get('/api/guides/collection', async (req, res) => {
+    try {
+      send(res, { games: await guideCollection(Number(req.query.appId) || 0) });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
   app.get('/api/guides/find', async (req, res) => {
     try {
       const name = String(req.query.game ?? '').trim().slice(0, 160);
       const alt = String(req.query.alt ?? '').trim().slice(0, 160);
-      const key = await guideKeyFor(name, Number(req.query.appId) || 0, alt);
+      // ?key=: the guide the player picked for a collection app (the compendium remembers it).
+      const key = await guideKeyFor(name, Number(req.query.appId) || 0, alt, String(req.query.key ?? '').slice(0, 120) || null);
       const g = key ? await gameAreas(key) : null;
       send(res, g ? localizeAreas(g, await translation(g.key, langOf(req.query.lang))) : { key: null });
     } catch (e) {

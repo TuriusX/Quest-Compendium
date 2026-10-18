@@ -12,7 +12,7 @@ import type { TrackerGuideArea } from './trackerPayload';
  * what's ticked there, the next area in the guide's order, and the achievement guide. Re-reads the ticks whenever
  * anything is ticked (on the tracker or a guide page). guideArea is null when the game has no guide or no area fits.
  */
-export function useTrackerGuide(gameName: string | undefined, placeName: string | undefined, story: string | undefined, lang: string, appId?: number, altName?: string): {
+export function useTrackerGuide(gameName: string | undefined, placeName: string | undefined, story: string | undefined, lang: string, appId?: number, altName?: string, chosenKey?: string): {
   guideKey: string | null;
   guideArea: TrackerGuideArea | null;
   achievementGuide: AchievementGuide | null;
@@ -29,13 +29,13 @@ export function useTrackerGuide(gameName: string | undefined, placeName: string 
     let alive = true;
     // The Steam app id finds the guide whatever Steam calls the game now; the compendium's own name says which game of
     // a collection it is (server: guidesApi.ts guideKeyFor).
-    guideApi(`/api/guides/find?game=${encodeURIComponent(gameName)}${appId ? `&appId=${appId}` : ''}${altName && altName !== gameName ? `&alt=${encodeURIComponent(altName)}` : ''}`, lang)
+    guideApi(`/api/guides/find?game=${encodeURIComponent(gameName)}${appId ? `&appId=${appId}` : ''}${altName && altName !== gameName ? `&alt=${encodeURIComponent(altName)}` : ''}${chosenKey ? `&key=${encodeURIComponent(chosenKey)}` : ''}`, lang)
       .then((g) => alive && setGuide(g?.key && Array.isArray(g.areas) ? { key: g.key, areas: g.areas } : null))
       .catch(() => alive && setGuide(null));
     return () => {
       alive = false;
     };
-  }, [gameName, lang, appId, altName]);
+  }, [gameName, lang, appId, altName, chosenKey]);
 
   const byName = !!guide && !!placeName && guide.areas.some((a) => samePlace(a.name, placeName));
   const needPages = !!guide && !!placeName && !byName;

@@ -82,6 +82,7 @@ export function QcGuidesView({
   gameName,
   gameAppId,
   altName,
+  chosenKey,
   place,
   onAsk,
   openRequest,
@@ -91,6 +92,8 @@ export function QcGuidesView({
   /** The Steam app id and the compendium's own name: they find the guide when Steam's name doesn't (guidesApi.ts). */
   gameAppId?: number;
   altName?: string;
+  /** The guide picked for a collection app ("Which game?"). */
+  chosenKey?: string;
   place?: string;
   onAsk?: (question: string) => void;
   /** Open this area (the achievements drawer's "In the guide"), and show one entry in it (a tracker entry's "Open in guide"). */
@@ -112,7 +115,7 @@ export function QcGuidesView({
   useEffect(() => {
     if (!gameName) return;
     let alive = true;
-    api(`/api/guides/find?game=${encodeURIComponent(gameName)}${gameAppId ? `&appId=${gameAppId}` : ''}${altName && altName !== gameName ? `&alt=${encodeURIComponent(altName)}` : ''}`)
+    api(`/api/guides/find?game=${encodeURIComponent(gameName)}${gameAppId ? `&appId=${gameAppId}` : ''}${altName && altName !== gameName ? `&alt=${encodeURIComponent(altName)}` : ''}${chosenKey ? `&key=${encodeURIComponent(chosenKey)}` : ''}`)
       .then((g) => {
         if (!alive || !g?.key) return;
         setGuide(g);
@@ -126,7 +129,7 @@ export function QcGuidesView({
     return () => {
       alive = false;
     };
-  }, [gameName, guideLang, gameAppId, altName]);
+  }, [gameName, guideLang, gameAppId, altName, chosenKey]);
 
   const [focus, setFocus] = useState<{ slug: string; id: string; n: number } | null>(null);
   // A search result: its page (or entity page), at the exact entry (highlighted, its section opened).
