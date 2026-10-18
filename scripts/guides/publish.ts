@@ -14,6 +14,7 @@
 import fs from 'fs';
 import path from 'path';
 import { landscapeOf, wideSet, coverSet, ogImageOf, platformList, ttbShown, TTB_MIN_DEFAULT, type IgdbInfo } from './igdbArt';
+import { loadSitePictures, pagePicture, stepPicture, shareImage, heroHtml, stepHtml, entryHtml } from './sitePictures';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
@@ -558,7 +559,9 @@ function page(opts: { title: string; description: string; depth: number; canonic
   // Search results cut titles at about 60 characters: a longer title drops the site name (search shows it anyway).
   if (opts.title.length > 60) opts = { ...opts, title: opts.title.replace(/ \| Quest Compendium$/, '') };
   // Articles carry the page's image and who wrote it (the share image; the site as author).
-  const ogImage = ogImageFor(opts.guide, opts.guide ? GUIDE_APP.get(opts.guide) : undefined);
+  // The page's own picture (approved in /admin/images) is its share image; else the game's art.
+  const ownPic = at[1] && at[2] ? pagePicture(at[1], at[2]) : null;
+  const ogImage = ownPic ? shareImage(SITE, ownPic) : ogImageFor(opts.guide, opts.guide ? GUIDE_APP.get(opts.guide) : undefined);
   opts = { ...opts, ld: (opts.ld || []).map((x: any) => (x['@type'] === 'Article' ? { ...x, image: x.image || ogImage, author: x.author || { '@type': 'Organization', name: 'Quest Compendium', url: SITE } } : x)) };
   // Other languages of this same page: a menu in the top bar and hreflang tags for search engines.
   const langs = opts.langs && opts.langs.length > 1 && opts.path !== undefined ? opts.langs : [];
@@ -581,7 +584,10 @@ function page(opts: { title: string; description: string; depth: number; canonic
   ${opts.draft ? '<meta name="robots" content="noindex, follow">' : ''}
   <meta property="og:title" content="${esc(opts.title)}">
   <meta property="og:description" content="${esc(opts.description)}">
-  <meta property="og:image" content="${esc(ogImage)}">
+  <meta property="og:image" content="${esc(ogImage)}">${ownPic ? `
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="${esc(ownPic.alt)}">` : ''}
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="192x192" href="${up}favicon-192.png">
   <link rel="icon" type="image/png" sizes="96x96" href="${up}favicon-96.png">
@@ -836,7 +842,9 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const extra = (how?: string, lockout?: string) =>
     `${how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(how)}</span>` : ''}` +
     `${lockout ? `<span class="block text-xs text-amber-300/90 mt-0.5"><span class="text-amber-200/70">${esc(ui('itemLockout'))}:</span> ${esc(lockout)}</span>` : ''}`;
-  const itemHtml = (e: GuideEntry) => `<strong class="text-white">${esc(e.name)}</strong>${e.where ? `<span class="text-zinc-400">: ${esc(e.where)}</span>` : ''}${extra(e.how, e.lockout)}`;
+  // An entry's picture (owner-approved, "Quest log / step" on): a small one under its text.
+  const entryPic = (id: string) => { const pic = stepPicture(gameKey, a.slug, id, 'entry'); return pic ? entryHtml(pic) : ''; };
+  const itemHtml = (e: GuideEntry) => `<strong class="text-white">${esc(e.name)}</strong>${e.where ? `<span class="text-zinc-400">: ${esc(e.where)}</span>` : ''}${extra(e.how, e.lockout)}${entryPic(e.id)}`;
   // Each row's kind icon. A same-spot line is named after its container ("Ornate Chest under the Scuffed Rock: ..."),
   // so it's read as an item line by its label.
   const itemIcon = (e: GuideEntry) => kindIcon(entryKind({ section: 'items', name: e.name, where: e.where }));
@@ -932,7 +940,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     const miss = (m?: boolean) => (m ? ` <span class="text-[10px] font-bold uppercase text-amber-300">${esc(ui('dontMiss'))}</span>` : '');
     if (it) return checkRow(it.id, itemHtml(it) + miss(it.missable) + isNew, false, itemIcon(it));
     const se = a.secrets.find((e) => e.id === id);
-    if (se) return checkRow(se.id, `<span class="text-zinc-300">${esc(se.text)}</span>${isNew}`, false, secretIcon(se));
+    if (se) return checkRow(se.id, `<span class="text-zinc-300">${esc(se.text)}</span>${isNew}${entryPic(se.id)}`, false, secretIcon(se));
     const ce = (a.sections || []).flatMap((x) => x.entries).find((e) => e.id === id);
     return ce ? checkRow(ce.id, esc(ce.text), false, kindIcon(sectionKind(ce))) : '';
   };
@@ -956,6 +964,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
             <span class="absolute left-0 top-0 flex h-7 w-7 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-sm font-bold text-[#c4b0ff]">${i + 1}</span>
             <h3 class="font-semibold text-white leading-7">${esc(st.title)}</h3>
             <p class="mt-1 text-[15px] leading-relaxed text-zinc-300">${rich(st.text)}</p>
+            ${(() => { const pic = stepPicture(gameKey, a.slug, st.id, 'step'); return pic ? stepHtml(pic) : ''; })()}
             ${(st.fights || []).map((fid) => fightById.get(fid)).filter(Boolean).map((f) => `<a href="#${esc(f!.id)}" class="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs text-rose-200 hover:border-rose-400/60">${ICON.enemies}<span class="text-rose-300/80">${esc(ui('keyFight'))}:</span> ${esc(f!.name)}</a>`).join(' ')}
             ${(st.entries || []).length ? `<div class="mt-2 rounded-xl border border-white/5 bg-white/[0.02] py-1">${(st.entries || []).map(entryRow).join('')}</div>` : ''}
             ${st.tip ? `<p class="mt-2 text-sm text-emerald-200/90"><span class="font-semibold text-emerald-300">${esc(ui('stepTip'))}:</span> ${rich(st.tip)}</p>` : ''}
@@ -1001,7 +1010,12 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         ${a.verified === true ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))}</span>` : ''}
       </div>
       <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
-      ${a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${rich(a.overview)}</p>` : ''}
+      ${(() => {
+        // The page's picture (owner-approved, "Guide page" on) beside the opening text; what follows starts below it.
+        const pic = pagePicture(gameKey, a.slug);
+        const ov = a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${rich(a.overview)}</p>` : '';
+        return pic ? `<div class="mt-5">${heroHtml(pic)}${ov.replace('class="mt-5 ', 'class="')}</div><div class="clear-both"></div>` : ov;
+      })()}
       ${missionsHere(a.slug, areas)}
       ${infoBox}
       ${peopleCards(a.slug, (a as any).people)}
@@ -1024,7 +1038,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         .join('')}
       ${achs.length ? fold(ui('achHere'), ICON.list, achs.slice().sort((x, y) => Number(!!y.missable) - Number(!!x.missable)).map((x) => `<div class="px-3 py-2 text-sm text-zinc-300"><strong class="text-white">${esc(x.name)}</strong>${x.missable ? ` <span class="text-amber-400 text-[11px] font-bold uppercase">${esc(ui('achMissable'))}</span>` : ''}${x.how ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.how)}</span>` : ''}</div>`).join('') + `<p class="px-3 pt-1 text-xs"><a class="text-[#a87ffb] hover:text-white" href="../achievements/index.html">${esc(ui('achLink'))} &rarr;</a></p>`, { open: achs.some((x) => x.missable), id: 'achievements' }) : ''}
       ${fold(ui('items'), ICON.items, restGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g), true, groupIcon(g))).join('') + rest.map((e) => checkRow(e.id, itemHtml(e), true, itemIcon(e))).join(''), { ids: [...restGroups.flatMap((g) => g.ids), ...rest.map((e) => e.id)], open: true, id: 'items', incomplete: (a.incomplete || []).includes('items') })}
-      ${fold(ui('secrets'), ICON.secrets, secretsLeft.map((e) => checkRow(e.id, esc(e.text), true, secretIcon(e))).join(''), { ids: secretsLeft.map((e) => e.id), open: true, id: 'secrets', incomplete: (a.incomplete || []).includes('secrets') })}
+      ${fold(ui('secrets'), ICON.secrets, secretsLeft.map((e) => checkRow(e.id, esc(e.text) + entryPic(e.id), true, secretIcon(e))).join(''), { ids: secretsLeft.map((e) => e.id), open: true, id: 'secrets', incomplete: (a.incomplete || []).includes('secrets') })}
       ${fold(ui('fights'), ICON.enemies, fights, { open: true, id: 'fights', incomplete: (a.incomplete || []).includes('fights') })}
       ${fold(ui('enemies'), ICON.enemies, enemies, { id: 'enemies' })}
       ${fold(ui('shops'), ICON.shops, shops, { id: 'shops' })}
@@ -1642,7 +1656,9 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
         // The opening line carries the full name when the heading shows the common one ("Ciri" / Cirilla Fiona Elen Riannon).
         const ov = String(e.overview || '');
         const lead = e.displayName && !ov.toLowerCase().includes(e.name.toLowerCase()) ? `<strong class="text-white">${esc(e.name)}</strong>${ov ? '. ' : ''}` : '';
-        return ov || lead ? `<p class="mt-5 text-zinc-300 leading-relaxed">${lead}${rich(ov, '../', e.slug)}</p>` : '';
+        const pic = pagePicture(key, e.slug);
+        const p = ov || lead ? `<p class="${pic ? '' : 'mt-5 '}text-zinc-300 leading-relaxed">${lead}${rich(ov, '../', e.slug)}</p>` : '';
+        return pic ? `<div class="mt-5">${heroHtml(pic)}${p}</div><div class="clear-both"></div>` : p;
       })()}
       ${(() => {
         // A place that is also a chapter of the walkthrough ("Colter" / "Chapter 1: Colter"): players searching the place
@@ -1927,6 +1943,8 @@ async function main() {
     for (const d of drafts.docs) await d.ref.update({ status: 'published', updatedAt: Date.now() });
     console.log(`Published ${drafts.size} draft page(s) for ${approve}.`);
   }
+  // Owner-approved pictures (roadmap 14, /admin/images): on their pages from this publish on.
+  console.log(`Pictures: ${await loadSitePictures(OUT, ONLY)} on the site.`);
   // Start clean, so pages from an earlier preview (drafts) never get uploaded by accident.
   fs.rmSync(path.join(OUT, 'guides'), { recursive: true, force: true });
   const sitemap: string[] = [`${SITE}/`, `${SITE}/guides/`];
