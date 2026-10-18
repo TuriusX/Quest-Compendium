@@ -713,7 +713,7 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
         $('deniedMsg').textContent = (u.email || 'This account') + ' is not an admin, so the image queue is closed to it. Sign in with the admin account.';
         $('denied').hidden = false;
       } else {
-        $('msg').textContent = 'Could not load the image queue: ' + String(e.message).replace(/.$/, '') + '. Reload to try again.';
+        $('msg').textContent = 'Could not load the image queue: ' + String(e.message).replace(/[.]$/, '') + '. Reload to try again.';
       }
     }
   });
