@@ -57,7 +57,7 @@ Noah's approved plan (Oct 16, 2026; first planned as 0.5.9, renamed 0.6.0): one 
 |---|------|-----------|--------|
 | 12 | **Shareable answer cards** | Turn an answer or a finished checklist into an image with the Quest Compendium link, for Discord and social posts. | Idea |
 | 13 | **Streamer outreach** | Noah's task, not code: free Premium codes for small RPG streamers. Code side: a simple way to generate and redeem codes, if it doesn't exist. | Idea |
-| 14 | **Visual aid (toward 1.0)** *(propose first)* | Expanded Oct 17: one approved image per guide entry (Noah's captures first, then official sources with recorded terms; never wikis, Steam store art or AI images), one review queue, shown the same way on guide pages, app answers, the compact view, the quest log and the Deck; icons and numbered routes without photos; a Spot it reference-picture test. Proposal and mockups: Desktop\QC-visual-aid\PLAN.md. | Phases 1–2 done (0.6.3: icons, routes, /admin/images, Ctrl+Shift+P); phase 3 (site pictures) next |
+| 14 | **Visual aid (toward 1.0)** *(propose first)* | Expanded Oct 17: one approved image per guide entry (Noah's captures first, then official sources with recorded terms; never wikis, Steam store art or AI images), one review queue, shown the same way on guide pages, app answers, the compact view, the quest log and the Deck; icons and numbered routes without photos; a Spot it reference-picture test. Proposal and mockups: Desktop\QC-visual-aid\PLAN.md. | Phases 1–3 done (0.6.3: icons, routes, /admin/images, Ctrl+Shift+P; Oct 18: approved pictures on guide pages and as share images, nightly suggestions on); phase 4 (app pictures) next |
 | — | Suggest an edit | Built, switched off. Don't turn on. | Paused |
 
 ## Running the business
