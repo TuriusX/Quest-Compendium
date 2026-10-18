@@ -75,6 +75,7 @@ import { promote } from '../guides/promote';
 import { SEARCH_DOLLARS } from '../../usage';
 import { spotWeekLine } from '../../spot';
 import { imagesWeekLine } from '../../guideImages';
+import { suggestNightly } from '../guides/suggestImages';
 import { isCorePage } from '../guides/core';
 import { playerWeekLines } from './playerWeek';
 import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
@@ -892,6 +893,15 @@ async function main() {
     } catch (e: any) {
       console.warn(`Pictures line skipped: ${e?.message}`);
     }
+  }
+  // Suggested pictures (roadmap 14): wiki, IGDB and press kit pictures for the top pages, into /admin/images for the
+  // owner to approve. Its own limits: 15 or $0.50 a night, $5 a month, none while 30 wait; on once
+  // system/imageSuggest.nightly is set (after the owner reviewed the pilot).
+  try {
+    const line = await suggestNightly();
+    if (line) report.push(line);
+  } catch (e: any) {
+    console.warn(`Suggested pictures skipped: ${e?.message}`);
   }
   // Core guides (scripts/guides/core.ts): completeness per guide, this month's shared budget, and what's left.
   try {

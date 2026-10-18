@@ -13,6 +13,7 @@
  *                                           pages, an area's items, secrets, fights and checklist lines, its steps
  *   POST /api/admin/images/suggest          the capture window's suggestions (from the app), as the guide names them
  *   GET  /api/admin/images/wanted?game=     the game's most-searched pages that have no approved picture yet
+ *   GET  /api/admin/images/needs-capture    top pages no source has a picture for: only the owner's captures can fill them
  *   GET  /api/admin/images/games            the guides, for the page's game list
  *   GET  /api/admin/images/igdb?game=       the game's IGDB screenshots and artworks, to pick from
  *
@@ -175,8 +176,31 @@ export async function pageImpressionList(): Promise<{ key: string; slug: string;
       .filter((p) => p.key && p.slug)
       .sort((a, b) => b.impressions - a.impressions);
   }
+  // Until the weekly pull has stored every page: the top 100 list the suggester was given (system/imageSuggest.topPages).
+  const sug: any = (await fs.collection('system').doc('imageSuggest').get()).data();
+  if (Array.isArray(sug?.topPages) && sug.topPages.length) return sug.topPages.map((p: any) => ({ key: String(p.key), slug: String(p.slug), impressions: Number(p.impressions) || 0 }));
   const sum: any = (await fs.collection('system').doc('searchConsole').get()).data();
   return (sum?.topPages || []).filter((p: any) => p?.key && p?.slug).map((p: any) => ({ key: String(p.key), slug: String(p.slug), impressions: Number(p.impressions) || 0 }));
+}
+
+/**
+ * "Needs your capture": the most-searched pages the suggester has looked for in every source (the game's wiki, IGDB and
+ * its press kit) without finding anything, and that have no picture waiting, suggested or approved. Only the owner's own
+ * captures can fill these. Kept up to date by the suggester (system/imageSuggest.pages) and by what's in the queue.
+ */
+export async function needsCapture(game?: string): Promise<{ key: string; slug: string; impressions: number; rank: number; checkedAt: number }[]> {
+  const fs = getFirestore();
+  const [pages, sug, live] = await Promise.all([
+    pageImpressionList(),
+    fs.collection('system').doc('imageSuggest').get().then((d) => (d.data() as any) || {}),
+    col().where('status', 'in', ['waiting', 'suggested', 'approved']).get(),
+  ]);
+  const has = new Set(live.docs.map((d) => { const x: any = d.data(); return x.target?.kind === 'area' || x.target?.kind === 'entity' ? `${x.game}/${x.target.slug}` : ''; }));
+  const checked = sug.pages || {};
+  return pages.slice(0, 100)
+    .map((p, i) => ({ ...p, rank: i + 1, checkedAt: Number(checked[`${p.key}/${p.slug}`]?.at) || 0, done: !!checked[`${p.key}/${p.slug}`]?.all }))
+    .filter((p) => p.done && !has.has(`${p.key}/${p.slug}`) && (!game || p.key === game))
+    .map(({ done, ...p }) => p);
 }
 
 /** Pages (area or compendium page) with an approved picture switched on for the page. */
@@ -224,6 +248,8 @@ async function fetchImage(url: string): Promise<{ buf: Buffer; ext: string }> {
 export async function addImage(input: {
   game: string; target: ImageTarget; source: ImageSource; buf: Buffer; ext: string; crop?: any; by: string;
   caption?: string; alt?: string; credit?: string; terms?: string; sourceUrl?: string; sourceRef?: string; why?: string; lowMatch?: boolean;
+  /** 'suggested': found by the nightly suggester (scripts/guides/suggestImages.ts), with its confidence and second guess. */
+  status?: 'waiting' | 'suggested'; confidence?: string; altGuess?: string; sourceName?: string;
 }): Promise<string> {
   const meta = await sharp(input.buf).metadata();
   if (!meta.width || !meta.height) throw new Error('That file is not a picture we can read.');
@@ -238,7 +264,7 @@ export async function addImage(input: {
   await ref.set({
     game: input.game,
     target: input.target,
-    status: 'waiting',
+    status: input.status || 'waiting',
     source: input.source,
     rank: SOURCE_RANK[input.source],
     sourceUrl: clean(input.sourceUrl, 500) || null,
@@ -255,6 +281,9 @@ export async function addImage(input: {
     sizes: Object.keys(files),
     why: clean(input.why, 160) || null,
     lowMatch: !!input.lowMatch,
+    ...(input.confidence ? { confidence: clean(input.confidence, 20) } : {}),
+    ...(input.altGuess ? { altGuess: clean(input.altGuess, 120) } : {}),
+    ...(input.sourceName ? { sourceName: clean(input.sourceName, 80) } : {}),
     createdBy: input.by,
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -270,13 +299,13 @@ export function registerGuideImages(app: Express, deps: Deps) {
 
   app.get('/api/admin/images', deps.requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const status = ['waiting', 'approved', 'deleted'].includes(String(req.query.status)) ? String(req.query.status) : 'waiting';
+      const status = ['waiting', 'suggested', 'approved', 'deleted'].includes(String(req.query.status)) ? String(req.query.status) : 'waiting';
       let q: FirebaseFirestore.Query = col().where('status', '==', status);
       if (gameOk(req.query.game)) q = q.where('game', '==', String(req.query.game));
       const snap = await q.get();
       const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 300);
       const counts: Record<string, number> = {};
-      for (const s of ['waiting', 'approved', 'deleted']) counts[s] = (await col().where('status', '==', s).count().get()).data().count;
+      for (const s of ['waiting', 'suggested', 'approved', 'deleted']) counts[s] = (await col().where('status', '==', s).count().get()).data().count;
       res.json({ items, counts });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || 'Could not load the images.' });
@@ -357,7 +386,9 @@ export function registerGuideImages(app: Express, deps: Deps) {
       const patch: Record<string, any> = { updatedAt: Date.now() };
       if (b.action === 'approve') Object.assign(patch, { status: 'approved', approvedBy: by, approvedAt: Date.now(), lowMatch: false });
       else if (b.action === 'delete') Object.assign(patch, { status: 'deleted', deletedBy: by, deletedAt: Date.now() });
-      else if (b.action === 'restore') Object.assign(patch, { status: 'waiting' });
+      else if (b.action === 'restore') Object.assign(patch, { status: x.suggestedAt || x.confidence ? 'suggested' : 'waiting', notThis: false });
+      // Not this: a suggestion that's wrong. Gone, and never suggested again (the suggester skips every picture it has met).
+      else if (b.action === 'notthis') Object.assign(patch, { status: 'deleted', notThis: true, deletedBy: by, deletedAt: Date.now() });
       else if (b.action !== 'update') return res.status(400).json({ error: 'Unknown action.' });
       if (b.target) {
         const t = await resolveTarget(x.game, b.target);
@@ -408,6 +439,18 @@ export function registerGuideImages(app: Express, deps: Deps) {
       });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || 'Could not load the wanted list.' });
+    }
+  });
+
+  app.get('/api/admin/images/needs-capture', deps.requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const game = gameOk(req.query.game) ? String(req.query.game) : undefined;
+      const list = await needsCapture(game);
+      const names = new Map<string, string>();
+      for (const k of [...new Set(list.map((p) => p.key))]) for (const t of await targetsFor(k)) if (t.kind === 'area' || t.kind === 'entity') names.set(`${k}/${t.slug}`, t.name);
+      res.json({ pages: list.map((p) => ({ ...p, name: names.get(`${p.key}/${p.slug}`) || p.slug })) });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || 'Could not load the list.' });
     }
   });
 
@@ -471,6 +514,9 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
   .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .chip { font-size: 11px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--dim); }
   .chip.mine { color: var(--ok); border-color: #34d39966; }
+  .chip.sug { color: #c4b0ff; border-color: #a87ffb66; }
+  .why { margin-top: 7px; padding: 7px 9px; border-left: 3px solid var(--accent); background: #a87ffb10; border-radius: 0 8px 8px 0; font-size: 12.5px; }
+  .hi { color: var(--ok); font-weight: 700; } .mid { color: var(--warn); font-weight: 700; }
   .dim { color: var(--dim); } .small { font-size: 12px; } .warn { color: var(--warn); }
   .name { font-weight: 700; color: #fff; }
   label.sw { display: inline-flex; gap: 5px; align-items: center; font-size: 12.5px; color: var(--text); margin-right: 10px; cursor: pointer; }
@@ -494,7 +540,7 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
 <body>
 <header>
   <h1>Guide images</h1>
-  <button id="tWaiting" class="on">Waiting</button><button id="tApproved">Approved</button><button id="tDeleted">Deleted</button>
+  <button id="tWaiting" class="on">Waiting</button><button id="tSuggested">Suggested</button><button id="tApproved">Approved</button><button id="tDeleted">Deleted</button>
   <select id="game"><option value="">All games</option></select>
   <span id="top100" class="dim small"></span>
   <span style="flex:1"></span>
@@ -505,6 +551,7 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
   <div id="gate" class="panel"><b>Admin sign-in</b><p class="dim">This page is for Quest Compendium admins. Sign in with the Google account listed as an admin (ADMIN_EMAILS).</p><button id="signin" class="primary">Sign in with Google</button> <button id="signinRedirect">Sign in (if the popup is blocked)</button><p id="gateMsg" class="dim">Not signed in.</p><noscript><p style="color:var(--bad)">This page needs JavaScript to sign in. Turn JavaScript on for this site and reload.</p></noscript></div>
   <div id="denied" class="panel" hidden><b>Not allowed</b><p id="deniedMsg" class="dim"></p><button id="switchAcct" class="primary">Sign in with another account</button></div>
   <div id="wanted" class="panel" hidden></div>
+  <div id="needs" class="panel" hidden></div>
   <div id="add" class="panel" hidden>
     <b>Add a picture</b> <span class="dim small">from a press kit, wiki, Steam or IGDB. Never AI-generated pictures. Your own captures come from the desktop app (Ctrl+Shift+P).</span>
     <div class="row" style="margin-top:8px">
@@ -572,16 +619,18 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
     const sw = (k, label, na) => '<label class="sw' + (na ? ' na' : '') + '"><input type="checkbox" data-pl="' + k + '" data-id="' + x.id + '"' + (p[k] ? ' checked' : '') + (na ? ' disabled' : '') + '>' + label + '</label>';
     const official = x.source !== 'mine';
     return '<div class="card" id="c-' + x.id + '"><img data-img="' + x.id + '" alt="' + esc(x.alt) + '">'
-      + '<div class="body"><div class="row"><span class="name">' + targetLine(x.target) + '</span><span class="chip ' + (x.source === 'mine' ? 'mine' : '') + '">' + esc(SOURCE[x.source] || x.source) + '</span></div>'
+      + '<div class="body"><div class="row"><span class="name">' + targetLine(x.target) + '</span><span class="chip ' + (x.source === 'mine' ? 'mine' : x.status === 'suggested' ? 'sug' : '') + '">' + esc(x.sourceName || SOURCE[x.source] || x.source) + (x.status === 'suggested' ? ' · suggested' : '') + '</span></div>'
       + '<div class="small dim">' + esc(gameName(x.game)) + ' · ' + pageLink(x) + ' · ' + new Date(x.createdAt).toLocaleString() + ' · ' + esc(x.width) + '×' + esc(x.height) + (x.original ? ' (from ' + esc(x.original.width) + '×' + esc(x.original.height) + ')' : '') + '</div>'
-      + (x.lowMatch ? '<div class="small warn">Not sure about this match: check it before approving.</div>' : x.why ? '<div class="small dim">Matched: ' + esc(x.why) + '</div>' : '')
+      + (x.status === 'suggested' || x.confidence
+        ? '<div class="why"><b>Why:</b> ' + esc(x.why || '') + (x.confidence ? '<br><span class="dim">Confidence:</span> <span class="' + (x.confidence === 'high' ? 'hi' : 'mid') + '">' + esc(x.confidence) + '</span>' : '') + (x.altGuess ? ' · <span class="dim">Also possible:</span> ' + esc(x.altGuess) : '') + '</div>'
+        : x.lowMatch ? '<div class="small warn">Not sure about this match: check it before approving.</div>' : x.why ? '<div class="small dim">Matched: ' + esc(x.why) + '</div>' : '')
       + '<div style="margin-top:8px">' + sw('page', 'Guide page', pageNa) + sw('answer', 'App answer', false) + sw('step', 'Quest log / step', false) + '</div>'
       + '<div class="small dim">Quest log / step: only when the picture shows what the objective needs (the lever, the lamp, the door).</div>'
       + '<div class="field">Caption<input data-f="caption" data-id="' + x.id + '" value="' + esc(x.caption) + '"></div>'
       + '<div class="field">Alt text<input data-f="alt" data-id="' + x.id + '" value="' + esc(x.alt) + '"></div>'
       + (official ? '<div class="field">Credit line (only if the terms ask for one)<input data-f="credit" data-id="' + x.id + '" value="' + esc(x.credit || '') + '"></div><div class="field">Terms<input data-f="terms" data-id="' + x.id + '" value="' + esc(x.terms || '') + '"></div>' + (x.sourceUrl ? '<div class="small dim">Source: <a href="' + esc(x.sourceUrl) + '" target="_blank" rel="noopener">' + esc(x.sourceUrl.slice(0, 70)) + '</a></div>' : '') : '')
-      + '<div class="acts">' + (status === 'waiting' ? '<button class="ok" data-act="approve" data-id="' + x.id + '">Approve</button>' : '') + '<button data-act="rematch" data-id="' + x.id + '">Re-match</button>'
-      + (status === 'deleted' ? '<button data-act="restore" data-id="' + x.id + '">Restore</button>' : '<button class="bad" data-act="delete" data-id="' + x.id + '">Delete</button>') + '</div>'
+      + '<div class="acts">' + (status === 'waiting' || status === 'suggested' ? '<button class="ok" data-act="approve" data-id="' + x.id + '">Approve</button>' : '') + '<button data-act="rematch" data-id="' + x.id + '">Re-match</button>'
+      + (status === 'deleted' ? '<button data-act="restore" data-id="' + x.id + '">Restore</button>' : status === 'suggested' ? '<button class="bad" data-act="notthis" data-id="' + x.id + '">Not this</button>' : '<button class="bad" data-act="delete" data-id="' + x.id + '">Delete</button>') + '</div>'
       + '<div data-rm="' + x.id + '" hidden><input placeholder="Search the guide…" data-rq="' + x.id + '" style="width:100%;margin-top:8px"><div class="results" data-rr="' + x.id + '"></div></div>'
       + '</div></div>';
   }
@@ -592,12 +641,14 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
     const j = await api('/api/admin/images?status=' + status + (g ? '&game=' + encodeURIComponent(g) : ''));
     items = j.items;
     $('tWaiting').textContent = 'Waiting · ' + (j.counts.waiting || 0);
+    $('tSuggested').textContent = 'Suggested · ' + (j.counts.suggested || 0);
     $('tApproved').textContent = 'Approved · ' + (j.counts.approved || 0);
     $('tDeleted').textContent = 'Deleted · ' + (j.counts.deleted || 0);
-    $('msg').textContent = items.length ? '' : status === 'waiting' ? 'Nothing waiting. Capture with Ctrl+Shift+P in the desktop app, or add a picture.' : 'Nothing here.';
+    $('msg').textContent = items.length ? '' : status === 'waiting' ? 'Nothing waiting. Capture with Ctrl+Shift+P in the desktop app, or add a picture.' : status === 'suggested' ? 'No suggestions waiting. The nightly suggester adds pictures from wikis, IGDB and press kits here.' : 'Nothing here.';
     $('list').innerHTML = items.map(card).join('');
     for (const x of items) fileUrl(x.id, 'w600.webp').then((u) => { const im = document.querySelector('img[data-img="' + x.id + '"]'); if (im) im.src = u; });
     loadWanted();
+    loadNeeds();
   }
   async function loadWanted() {
     const g = $('game').value;
@@ -607,6 +658,15 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
     $('wanted').hidden = !w.wanted.length;
     $('wanted').innerHTML = '<b>Wanted' + (g ? ' in ' + esc(gameName(g)) : ' (top 100 pages)') + '</b> <span class="dim small">most-searched pages without a picture</span><div class="small" style="margin-top:6px">'
       + w.wanted.map((p) => '#' + esc(p.rank || '–') + ' <a href="' + SITE + esc(p.key) + '/' + esc(p.slug) + '/" target="_blank" rel="noopener">' + esc(p.target ? p.target.name : (g ? '' : gameName(p.key) + ' / ') + p.slug) + '</a> <span class="dim">' + esc(p.impressions) + '</span>').join(' · ') + '</div>';
+  }
+  // Needs your capture: top pages every source was checked for, with nothing found. Only your captures can fill them.
+  async function loadNeeds() {
+    const g = $('game').value;
+    const n = await api('/api/admin/images/needs-capture' + (g ? '?game=' + encodeURIComponent(g) : '')).catch(() => null);
+    $('needs').hidden = !n || !n.pages.length;
+    if (!n || !n.pages.length) return;
+    $('needs').innerHTML = '<b>Needs your capture</b> <span class="dim small">the wiki, IGDB and press kits had nothing for these, so only Ctrl+Shift+P can fill them</span><div class="small" style="margin-top:6px">'
+      + n.pages.map((p) => '#' + esc(p.rank) + ' <a href="' + SITE + esc(p.key) + '/' + esc(p.slug) + '/" target="_blank" rel="noopener">' + esc((g ? '' : gameName(p.key) + ' / ') + p.name) + '</a> <span class="dim">' + esc(p.impressions) + '</span>').join(' · ') + '</div>';
   }
   async function search(game, q, box, onPick) {
     if (!game) { box.innerHTML = '<div class="dim">Pick a game first.</div>'; box.hidden = false; return; }
@@ -670,8 +730,9 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
     $('addSave').disabled = false;
   });
 
-  function showTab(s) { status = s; for (const [id, v] of [['tWaiting', 'waiting'], ['tApproved', 'approved'], ['tDeleted', 'deleted']]) $(id).classList.toggle('on', v === s); load().catch((e) => ($('msg').textContent = e.message)); }
+  function showTab(s) { status = s; for (const [id, v] of [['tWaiting', 'waiting'], ['tSuggested', 'suggested'], ['tApproved', 'approved'], ['tDeleted', 'deleted']]) $(id).classList.toggle('on', v === s); load().catch((e) => ($('msg').textContent = e.message)); }
   $('tWaiting').addEventListener('click', () => showTab('waiting'));
+  $('tSuggested').addEventListener('click', () => showTab('suggested'));
   $('tApproved').addEventListener('click', () => showTab('approved'));
   $('tDeleted').addEventListener('click', () => showTab('deleted'));
   $('game').addEventListener('change', () => { picked = null; $('addPicked').textContent = ''; $('addSave').disabled = true; showIgdb(); load(); });
@@ -689,13 +750,14 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
   $('switchAcct').addEventListener('click', popup);
   $('signinRedirect').addEventListener('click', () => signInWithRedirect(auth, provider()));
   // The page's own parts (tabs, game list, Add) only once an admin is signed in.
-  const showTools = (on) => { for (const id of ['tWaiting', 'tApproved', 'tDeleted', 'game', 'addBtn', 'top100']) $(id).hidden = !on; };
+  const showTools = (on) => { for (const id of ['tWaiting', 'tSuggested', 'tApproved', 'tDeleted', 'game', 'addBtn', 'top100']) $(id).hidden = !on; };
   showTools(false);
   onAuthStateChanged(auth, async (u) => {
     $('gate').hidden = !!u;
     $('denied').hidden = true;
     $('list').innerHTML = '';
     $('wanted').hidden = true;
+    $('needs').hidden = true;
     $('add').hidden = true;
     if (!u) { showTools(false); gateMsg('Not signed in.'); $('msg').textContent = ''; return; }
     $('msg').textContent = 'Signed in as ' + (u.email || '') + '. Loading…';
