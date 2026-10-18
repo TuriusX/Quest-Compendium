@@ -7,7 +7,8 @@
  *   POST /api/admin/images                  add one: a capture from the desktop app (imageBase64 + crop), a picture
  *                                           from a URL (press kit, wiki, Steam), or an IGDB screenshot or artwork
  *   POST /api/admin/images/:id              { action: approve | delete | restore | update, target?, placement?,
- *                                           caption?, alt?, credit?, terms? }
+ *                                           caption?, alt?, credit?, terms?, focus? }  (focus: {x, y} 0..1, the point
+ *                                           every cut keeps in frame (src/utils/focus.ts); null: back to automatic)
  *   GET  /api/admin/images/:id/file/:size   one of its stored sizes (the admin page shows them; it can't use a URL)
  *   GET  /api/admin/images/targets?game=&q= what a picture can belong to: areas, characters and other compendium
  *                                           pages, an area's items, secrets, fights and checklist lines, its steps
@@ -34,6 +35,7 @@ import sharp from 'sharp';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { isAdmin } from './reviewQueue';
+import { asFocus } from './src/utils/focus';
 
 type Mw = (req: Request, res: Response, next: NextFunction) => any;
 type Deps = { requireAuth: Mw; firebaseWebConfig: Record<string, string> };
@@ -427,6 +429,12 @@ export function registerGuideImages(app: Express, deps: Deps) {
         };
       }
       for (const k of ['caption', 'alt'] as const) if (typeof b[k] === 'string') patch[k] = clean(b[k], k === 'alt' ? 300 : 160);
+      // The owner's focal point (Crop): every cut is centred there from the next publish. null: the automatic one again.
+      if ('focus' in b) {
+        const f = b.focus === null ? null : asFocus(b.focus);
+        if (b.focus !== null && !f) return res.status(400).json({ error: 'That focal point is off the picture.' });
+        patch.focus = f && { x: Math.round(f.x * 1000) / 1000, y: Math.round(f.y * 1000) / 1000, ...(x.autoFocus?.face ? { face: true } : {}) };
+      }
       // Credits and terms belong to official sources only.
       if (x.source !== 'mine') for (const k of ['credit', 'terms'] as const) if (typeof b[k] === 'string') patch[k] = clean(b[k], k === 'terms' ? 600 : 160) || null;
       await ref.set(patch, { merge: true });
@@ -532,6 +540,13 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
   .card img { display: block; width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #0c0c12; cursor: zoom-in; }
+  .crop { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+  .crop .whole { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+  .crop .whole img { width: auto; max-width: 100%; max-height: 320px; aspect-ratio: auto; object-fit: contain; cursor: crosshair; }
+  .crop .dot { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 2px #000a; pointer-events: none; }
+  .crop .prev { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; flex-wrap: wrap; }
+  .crop .prev img { aspect-ratio: auto; object-fit: cover; border-radius: 6px; cursor: default; }
+  .crop .prev span { display: block; font-size: 11px; opacity: .7; margin-top: 2px; line-height: 1.2; }
   .body { padding: 10px 12px 12px; }
   .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .chip { font-size: 11px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--dim); }
@@ -610,6 +625,15 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
   getRedirectResult(auth).catch((e) => gateMsg('Sign-in failed: ' + (e.code || e.message), true));
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  // Where a cut keeps the focal point (the same sums as src/utils/focus.ts coverPosition).
+  const coverPos = (w, h, f, bw, bh) => {
+    if (!w || !h || !f) return '50% 50%';
+    const s = Math.max(bw / w, bh / h);
+    const ax = (len, box, c, at) => { const over = len * s - box; return over <= 0.5 ? 0.5 : Math.min(1, Math.max(0, (c * len * s - box * at) / over)); };
+    const p = (n) => Math.round(n * 1000) / 10 + '%';
+    return p(ax(w, bw, f.x, 0.5)) + ' ' + p(ax(h, bh, f.y, f.face ? 0.4 : 0.5));
+  };
+  const focusOf = (x) => x.focus || x.autoFocus || null;
   const SOURCE = { mine: 'My capture', press: 'Press kit', igdb: 'IGDB', wiki: 'Wiki', steam: 'Steam', other: 'Other' };
   const SITE = 'https://questcompendium.com/guides/';
   let status = 'waiting', items = [], games = [], picked = null, igdbPick = null;
@@ -652,9 +676,10 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
       + '<div class="field">Caption<input data-f="caption" data-id="' + x.id + '" value="' + esc(x.caption) + '"></div>'
       + '<div class="field">Alt text<input data-f="alt" data-id="' + x.id + '" value="' + esc(x.alt) + '"></div>'
       + (official ? '<div class="field">Credit line (only if the terms ask for one)<input data-f="credit" data-id="' + x.id + '" value="' + esc(x.credit || '') + '"></div><div class="field">Terms<input data-f="terms" data-id="' + x.id + '" value="' + esc(x.terms || '') + '"></div>' + (x.sourceUrl ? '<div class="small dim">Source: <a href="' + esc(x.sourceUrl) + '" target="_blank" rel="noopener">' + esc(x.sourceUrl.slice(0, 70)) + '</a></div>' : '') : '')
-      + '<div class="acts">' + (status === 'waiting' || status === 'suggested' ? '<button class="ok" data-act="approve" data-id="' + x.id + '">Approve</button>' : '') + '<button data-act="rematch" data-id="' + x.id + '">Re-match</button>'
+      + '<div class="acts">' + (status === 'waiting' || status === 'suggested' ? '<button class="ok" data-act="approve" data-id="' + x.id + '">Approve</button>' : '') + '<button data-act="rematch" data-id="' + x.id + '">Re-match</button><button data-act="crop" data-id="' + x.id + '" title="Where every cut of this picture keeps in frame">Crop</button>'
       + (status === 'deleted' ? '<button data-act="restore" data-id="' + x.id + '">Restore</button>' : status === 'suggested' ? '<button data-act="another" data-id="' + x.id + '" title="Turn this one down and look for the next best picture for this page">Find another</button><button class="bad" data-act="notthis" data-id="' + x.id + '">Not this</button>' : '<button class="bad" data-act="delete" data-id="' + x.id + '">Delete</button>') + '</div>'
       + '<div class="small" data-note="' + x.id + '" style="margin-top:6px"></div>'
+      + '<div class="crop" data-crop="' + x.id + '" hidden></div>'
       + '<div data-rm="' + x.id + '" hidden><input placeholder="Search the guide…" data-rq="' + x.id + '" style="width:100%;margin-top:8px"><div class="results" data-rr="' + x.id + '"></div></div>'
       + '</div></div>';
   }
@@ -670,7 +695,13 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
     $('tDeleted').textContent = 'Deleted · ' + (j.counts.deleted || 0);
     $('msg').textContent = items.length ? '' : status === 'waiting' ? 'Nothing waiting. Capture with Ctrl+Shift+P in the desktop app, or add a picture.' : status === 'suggested' ? 'No suggestions waiting. The nightly suggester adds pictures from wikis, IGDB and press kits here.' : 'Nothing here.';
     $('list').innerHTML = items.map(card).join('');
-    for (const x of items) fileUrl(x.id, 'w600.webp').then((u) => { const im = document.querySelector('img[data-img="' + x.id + '"]'); if (im) im.src = u; });
+    for (const x of items) fileUrl(x.id, 'w600.webp').then((u) => {
+      const im = document.querySelector('img[data-img="' + x.id + '"]');
+      if (!im) return;
+      // The card's 16:9 is cut around the focal point too, as the site cuts it.
+      im.onload = () => { im.style.objectPosition = coverPos(im.naturalWidth, im.naturalHeight, focusOf(x), 160, 90); };
+      im.src = u;
+    });
     loadWanted();
     loadNeeds();
   }
@@ -708,6 +739,25 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
     const b = e.target.closest('button[data-act]');
     if (!b) return;
     const id = b.dataset.id;
+    if (b.dataset.act === 'crop') { openCrop(id); return; }
+    if (b.dataset.act === 'cropsave' || b.dataset.act === 'cropauto') {
+      const x = items.find((i) => i.id === id), box = document.querySelector('[data-crop="' + id + '"]');
+      const focus = b.dataset.act === 'cropauto' ? null : box._focus;
+      if (focus === undefined) return;
+      b.disabled = true;
+      try {
+        const r = await api('/api/admin/images/' + encodeURIComponent(id), { action: 'update', focus });
+        x.focus = r.image.focus || null;
+        box.hidden = true;
+        const im = document.querySelector('img[data-img="' + id + '"]');
+        if (im) im.style.objectPosition = coverPos(im.naturalWidth, im.naturalHeight, focusOf(x), 160, 90);
+        const note = document.querySelector('[data-note="' + id + '"]');
+        note.className = 'small dim';
+        note.textContent = focus ? 'Crop saved: live with the next publish.' : 'Back to the automatic crop: live with the next publish.';
+      } catch (err) { alert(err.message); b.disabled = false; }
+      return;
+    }
+    if (b.dataset.act === 'cropcancel') { document.querySelector('[data-crop="' + id + '"]').hidden = true; return; }
     if (b.dataset.act === 'rematch') { const box = document.querySelector('[data-rm="' + id + '"]'); box.hidden = !box.hidden; box.querySelector('input').focus(); return; }
     if (b.dataset.act === 'another') {
       // Can take a little while: it downloads and checks pictures one by one, up to $0.10 a click.
@@ -747,6 +797,35 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
     if (f) { try { await api('/api/admin/images/' + encodeURIComponent(f.dataset.id), { action: 'update', [f.dataset.f]: f.value }); f.style.borderColor = 'var(--ok)'; } catch (err) { alert(err.message); } }
   });
   $('zoom').addEventListener('click', () => { $('zoom').hidden = true; });
+
+  // Crop: the whole picture; tap where it must stay in frame (a face, the tower). The site's cuts preview as you go.
+  const CUTS = [[150, 150, 'Phone'], [200, 150, 'Guide page'], [160, 90, 'Thumbnail'], [240, 126, 'Share image']];
+  async function openCrop(id) {
+    const x = items.find((i) => i.id === id), box = document.querySelector('[data-crop="' + id + '"]');
+    if (!box.hidden) { box.hidden = true; return; }
+    const u = await fileUrl(id, 'w1280.webp');
+    box._focus = focusOf(x) ? { ...focusOf(x) } : undefined;
+    box.innerHTML = '<div class="small dim" style="margin-bottom:6px">Tap where this picture must stay in frame (a face, the tower). ' + (x.focus ? 'Now: set by you.' : x.autoFocus ? 'Now: found automatically.' : 'Now: the middle.') + '</div>'
+      + '<div class="whole"><img src="' + u + '" alt=""><span class="dot" hidden></span></div>'
+      + '<div class="prev">' + CUTS.map((c) => '<div><img src="' + u + '" style="width:' + c[0] + 'px;height:' + c[1] + 'px" alt=""><span>' + c[2] + '</span></div>').join('') + '</div>'
+      + '<div class="acts"><button class="ok" data-act="cropsave" data-id="' + id + '">Save crop</button>' + (x.focus ? '<button data-act="cropauto" data-id="' + id + '">Use automatic</button>' : '') + '<button data-act="cropcancel" data-id="' + id + '">Cancel</button></div>';
+    box.hidden = false;
+    const whole = box.querySelector('.whole img'), dot = box.querySelector('.dot');
+    const draw = () => {
+      const f = box._focus, w = whole.naturalWidth, h = whole.naturalHeight;
+      dot.hidden = !f;
+      if (f) { dot.style.left = f.x * whole.clientWidth + 'px'; dot.style.top = f.y * whole.clientHeight + 'px'; }
+      box.querySelectorAll('.prev img').forEach((im, i) => { im.style.objectPosition = coverPos(w, h, f, CUTS[i][0], CUTS[i][1]); });
+    };
+    whole.onload = draw;
+    if (whole.complete) draw();
+    whole.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const r = whole.getBoundingClientRect();
+      box._focus = { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)), ...(x.autoFocus && x.autoFocus.face ? { face: true } : {}) };
+      draw();
+    });
+  }
 
   // Adding a picture by hand: a file or an address, or one of the game's IGDB pictures, matched to an entry.
   $('addBtn').addEventListener('click', () => { $('add').hidden = !$('add').hidden; showIgdb(); });

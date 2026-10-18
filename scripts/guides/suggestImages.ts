@@ -26,6 +26,7 @@ import { ThinkingLevel } from '@google/genai';
 import { getFirestore } from 'firebase-admin/firestore';
 import { db, gemini, MODEL, arg, searchesIn, ledgerDollars, usageScope } from './common';
 import { addImage, targetsFor, pageImpressionList, type ImageTarget } from '../../guideImages';
+import { pictureBudget } from './pictureFocus';
 
 const LITE = process.env.GUIDE_LITE_MODEL || 'gemini-3.1-flash-lite';
 const UA = 'QuestCompendium-ImageSuggester/1.0 (+https://questcompendium.com)';
@@ -381,18 +382,7 @@ export async function suggestGames(keys: string[], cap: number, maxSuggest = 1e9
 // ---- The picture budget (owner-approved): $0.50 a night and $5 a month, shared by the nightly run and Find another ----
 
 const money = (d: number) => (d < 0.01 ? 'under $0.01' : `$${d.toFixed(2)}`);
-const nightId = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
-async function budget(): Promise<{ nightLeft: number; monthLeft: number; add: (d: number) => Promise<void> }> {
-  const st: any = (await STATE().get()).data() || {};
-  const month = new Date().toISOString().slice(0, 7), night = nightId();
-  const monthUsed = st.month?.id === month ? Number(st.month.dollars) || 0 : 0;
-  const nightUsed = st.night?.id === night ? Number(st.night.dollars) || 0 : 0;
-  return {
-    nightLeft: Math.max(0, 0.5 - nightUsed),
-    monthLeft: Math.max(0, 5 - monthUsed),
-    add: async (d: number) => { await STATE().set({ month: { id: month, dollars: monthUsed + d }, night: { id: night, dollars: nightUsed + d } }, { merge: true }); },
-  };
-}
+const budget = pictureBudget;
 
 /**
  * Find another (/admin/images): the next best picture for one page after the owner turned one down. Its wiki page's

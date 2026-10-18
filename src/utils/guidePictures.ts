@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SITE } from './guideSite';
 import type { TrackerPayload } from './trackerPayload';
+import { coverPosition, type Focus } from './focus';
 
 /**
  * The owner-approved pictures of a game's guide, as the nightly publish lists them (guides/{key}/pictures.json, from
@@ -22,7 +23,14 @@ export type GuidePicture = {
   alt: string;
   caption: string;
   credit?: string;
+  /** Its size and focal point (src/utils/focus.ts): every cut is centred there, so portraits keep their heads. */
+  w?: number;
+  h?: number;
+  focus?: Focus;
 };
+
+/** Where to cut a picture for a box of this shape (CSS object-position). */
+export const picPosition = (p: GuidePicture, boxW: number, boxH: number) => coverPosition(p.w || 0, p.h || 0, p.focus || null, boxW, boxH);
 
 const cache = new Map<string, Promise<GuidePicture[]>>();
 export function loadGuidePictures(key: string): Promise<GuidePicture[]> {
@@ -73,7 +81,8 @@ export function withPictures(payload: TrackerPayload | null, pics: GuidePicture[
       const [kind, slug, ...rest] = String(o.id).split(':');
       const id = rest.join(':').split('+')[0];
       const pic = kind === 'g' ? stepPicture(pics, slug, id, 'entry') : kind === 'w' ? stepPicture(pics, slug, id, 'step') : null;
-      return pic ? { ...o, pic: pic.thumb, picAlt: pic.alt } : o;
+      // The row's 40×28 and the details' 240×135, each cut around the focal point.
+      return pic ? { ...o, pic: pic.thumb, picAlt: pic.alt, picPos: picPosition(pic, 40, 28), picPos2: picPosition(pic, 240, 135) } : o;
     }),
   }));
   return { ...payload, data: { ...payload.data, sections } };

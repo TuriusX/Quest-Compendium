@@ -508,14 +508,14 @@
     const mw = warnTip ? `<span class="mw">⚠</span>` : '';
     const sub = o.where ? `<span class="sub" title="${esc(o.where)}">${esc(o.where)}</span>` : '';
     const wsub = warnTip ? `<span class="wsub">⚠ ${esc(warnTip)}</span>` : '';
-    return `<li class="${cls}" data-item="${esc(o.id)}"><span class="mk">${cur ? '▸' : ''}</span>${mark}${pics ? (o.pic ? `<img class="pic" src="${esc(o.pic)}" alt="${esc(o.picAlt || '')}">` : '<span class="pic"></span>') : ''}<span class="obj" title="${esc(L('expandHint'))}">${icons ? kindIcon(o.icon) : ''}<span class="lb">${esc(o.label)}</span>${mw}<span class="ex">${open ? '▾' : '▸'}</span>${sub}${wsub}</span><span class="x" title="${esc(L('hideEntry'))}">×</span>${open ? detailHtml(o) : ''}</li>`;
+    return `<li class="${cls}" data-item="${esc(o.id)}"><span class="mk">${cur ? '▸' : ''}</span>${mark}${pics ? (o.pic ? `<img class="pic" src="${esc(o.pic)}" alt="${esc(o.picAlt || '')}"${o.picPos ? ` style="object-position:${esc(o.picPos)}"` : ''}>` : '<span class="pic"></span>') : ''}<span class="obj" title="${esc(L('expandHint'))}">${icons ? kindIcon(o.icon) : ''}<span class="lb">${esc(o.label)}</span>${mw}<span class="ex">${open ? '▾' : '▸'}</span>${sub}${wsub}</span><span class="x" title="${esc(L('hideEntry'))}">×</span>${open ? detailHtml(o) : ''}</li>`;
   }
 
   /** An entry's details: its full text and everything the guide has (where, how, why it's missable, notes). */
   function detailHtml(o) {
     const d = o.detail || {};
     const row = (k, v, amber) => (v ? `<div class="dl"><span class="dk${amber ? ' amber' : ''}">${esc(L(k))}</span>${esc(v)}</div>` : '');
-    const full = (o.pic ? `<img class="dpic" src="${esc(o.pic.replace(/thumb\.webp$/, 'w300.webp'))}" alt="${esc(o.picAlt || '')}">` : '') + (d.full && d.full !== o.label ? `<div class="dl">${esc(d.full)}</div>` : '');
+    const full = (o.pic ? `<img class="dpic" src="${esc(o.pic.replace(/thumb\.webp$/, 'w300.webp'))}" alt="${esc(o.picAlt || '')}"${o.picPos2 ? ` style="object-position:${esc(o.picPos2)}"` : ''}>` : '') + (d.full && d.full !== o.label ? `<div class="dl">${esc(d.full)}</div>` : '');
     const where = d.where || o.where || '';
     // A missable entry says why when the guide does; otherwise the tag alone.
     const miss = o.missable || d.missable ? `<div class="dl"><span class="dk amber">${esc(L('detMissable'))}</span>${esc(d.missable || '')}</div>` : '';

@@ -2,7 +2,7 @@ import React from 'react';
 import { BookOpen } from './icons';
 import { useT } from '../i18n';
 import { ENTRY_ICON_PATHS, ENTRY_COLORS, type EntryKind } from '../utils/entryKind';
-import { answerPicture, useGuidePictures } from '../utils/guidePictures';
+import { answerPicture, picPosition, useGuidePictures } from '../utils/guidePictures';
 
 type Ref = { key: string; slug: string; area: string; entry?: string; name: string; kind?: string };
 
@@ -31,7 +31,7 @@ export function GuideRefs({ refs }: { refs: Ref[] }) {
           title={t('guideBadge.open', { name: r.name, area: r.area })}
           className="mt-2 w-full max-w-[360px] flex items-center gap-2.5 p-1.5 pr-2.5 rounded-[10px] border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-[var(--accent-border)] text-left cursor-pointer"
         >
-          <img src={pic!.w300} alt={pic!.alt} width={72} height={48} loading="lazy" decoding="async" className="w-[72px] h-12 object-cover rounded-md flex-shrink-0 bg-black/30" />
+          <img src={pic!.w300} alt={pic!.alt} width={72} height={48} loading="lazy" decoding="async" style={{ objectPosition: picPosition(pic!, 72, 48) }} className="w-[72px] h-12 object-cover rounded-md flex-shrink-0 bg-black/30" />
           <span className="min-w-0 flex-1 flex flex-col leading-tight">
             <span className="text-[12.5px] font-semibold text-white truncate">{r.name}</span>
             {r.area && r.area !== r.name && <span className="text-[11.5px] text-zinc-400 truncate">{r.area}</span>}

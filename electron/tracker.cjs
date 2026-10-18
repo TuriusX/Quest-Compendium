@@ -430,6 +430,9 @@ function cleanData(data) {
         // Its picture (owner-approved, from the site's pictures.json): only the site's own image files pass.
         pic: typeof (o && o.pic) === 'string' && /^https:\/\/questcompendium\.com\/img\/g\/[A-Za-z0-9]+\/thumb\.webp$/.test(o.pic) ? o.pic : '',
         picAlt: clip(o && o.picAlt, 200),
+        // Where to cut it: "x% y%" only.
+        picPos: /^\d{1,3}(\.\d)?% \d{1,3}(\.\d)?%$/.test(String(o && o.picPos)) ? o.picPos : '',
+        picPos2: /^\d{1,3}(\.\d)?% \d{1,3}(\.\d)?%$/.test(String(o && o.picPos2)) ? o.picPos2 : '',
         // Everything the guide has on the entry, untrimmed, for its expanded details on the tracker.
         detail: cleanDetail(o && o.detail),
       })).filter((o) => o.label && o.id),

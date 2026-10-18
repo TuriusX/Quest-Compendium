@@ -36,6 +36,9 @@ export type TrackerItem = {
   /** Its picture (owner-approved, "Quest log / step" on: utils/guidePictures withPictures): a 40×28 thumbnail. */
   pic?: string;
   picAlt?: string;
+  /** Where to cut it (CSS object-position) in the row and in the details. */
+  picPos?: string;
+  picPos2?: string;
   /** Can be ticked on the tracker. */
   tick?: boolean;
   /**
