@@ -41,6 +41,7 @@ import { ControllerLayer } from './components/ControllerLayer';
 import { markersActiveFor, activeMarkersId, rememberAreaFind, setPointersActive } from './components/pointerStore';
 import { buildTrackerPayload, trackedMessage, trackerGameKey, trackerLabels, type TrackerData } from './utils/trackerPayload';
 import { useTrackerGuide } from './utils/trackerGuide';
+import { useGuidePictures, withPictures } from './utils/guidePictures';
 import { useGuideSteps } from './utils/guideSteps';
 import { AppUpdates } from './components/AppUpdates';
 import { showFirstRunHints } from './utils/sessions';
@@ -860,7 +861,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const stepsOffer = guideSteps.offer && `${guideSteps.offer.kind}:${guideSteps.offer.slug}` !== offerDismissed ? guideSteps.offer : null;
   const stepsOfferRef = useRef(stepsOffer);
   stepsOfferRef.current = stepsOffer;
-  const builtTrackerPayload = activeTab
+  // The guide's approved pictures (the site's pictures.json): quest log thumbnails where "Quest log / step" is on.
+  const guidePics = useGuidePictures(trackerGame.guideKey);
+  const builtTrackerPayload = withPictures(activeTab
     ? buildTrackerPayload({ ...activeTab, place: trackerPlace }, trackerMsg, trackerGame.guideArea, trackerGame.achievementGuide, trackerWords, {
         accent: trackerAccent,
         gameKey: trackerKeyOfGame,
@@ -871,7 +874,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         guideSteps: guideSteps.section,
         offer: stepsOffer ? { name: stepsOffer.name, count: stepsOffer.count } : null,
       })
-    : null;
+    : null, guidePics);
   // While "Locate me" runs, the tracker keeps showing what it showed (its place line says "Locating…"). With a result,
   // it waits for the new place's guide area and page before showing anything new.
   const hold = locateHold.current;

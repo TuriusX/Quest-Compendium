@@ -427,6 +427,9 @@ function cleanData(data) {
         badge: Number.isInteger(o && o.badge) ? o.badge : 0,
         // The entry's kind icon (src/utils/entryKind.ts); only the known kinds pass, since tracker.html draws them.
         icon: ENTRY_KINDS.includes(o && o.icon) ? o.icon : '',
+        // Its picture (owner-approved, from the site's pictures.json): only the site's own image files pass.
+        pic: typeof (o && o.pic) === 'string' && /^https:\/\/questcompendium\.com\/img\/g\/[A-Za-z0-9]+\/thumb\.webp$/.test(o.pic) ? o.pic : '',
+        picAlt: clip(o && o.picAlt, 200),
         // Everything the guide has on the entry, untrimmed, for its expanded details on the tracker.
         detail: cleanDetail(o && o.detail),
       })).filter((o) => o.label && o.id),

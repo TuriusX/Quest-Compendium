@@ -14,7 +14,7 @@
 import fs from 'fs';
 import path from 'path';
 import { landscapeOf, wideSet, coverSet, ogImageOf, platformList, ttbShown, TTB_MIN_DEFAULT, type IgdbInfo } from './igdbArt';
-import { loadSitePictures, pagePicture, stepPicture, shareImage, heroHtml, stepHtml, entryHtml } from './sitePictures';
+import { loadSitePictures, pagePicture, stepPicture, shareImage, heroHtml, stepHtml, entryHtml, picturesOf, pictureJson } from './sitePictures';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
@@ -407,7 +407,7 @@ function write404() {
 function writeGuideIndex(games: { key: string; game: string; areas: number; art?: string; checked: number; players: number; langs: string[] }[]) {
   const list = games.slice().sort((a, b) => a.game.localeCompare(b.game));
   fs.writeFileSync(path.join(OUT, 'guides', 'index.json'), JSON.stringify({ v: 1, updated: Date.now(), games: list }));
-  fs.writeFileSync(path.join(OUT, '_headers'), '# Made by scripts/guides/publish.ts\n/guides/index.json\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n/guides/*/search.json\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n/:lang/guides/*/search.json\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n');
+  fs.writeFileSync(path.join(OUT, '_headers'), '# Made by scripts/guides/publish.ts\n/guides/index.json\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n/guides/*/search.json\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n/:lang/guides/*/search.json\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=300\n/guides/*\n  Access-Control-Allow-Origin: *\n/:lang/guides/*\n  Access-Control-Allow-Origin: *\n/assets/site.css\n  Access-Control-Allow-Origin: *\n');
   console.log(`Guide index: ${list.length} game(s) in guides/index.json.`);
 }
 
@@ -663,7 +663,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
 }
 
 const cta = (up: string, game: string) => `
-  <div class="mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
+  <div class="qc-site-only mt-10 rounded-2xl border border-[#a87ffb]/30 bg-gradient-to-br from-[#a87ffb]/15 to-transparent p-6">
     <h2 class="text-lg font-bold text-white mb-1">${esc(ui('ctaTitle', { game }))}</h2>
     <p class="text-zinc-300 text-sm mb-4">${esc(ui('ctaBody'))}</p>
     <a href="${up}${LP}index.html?from=guide#download" class="inline-block bg-[#a87ffb] text-black font-bold px-5 py-2 rounded-full hover:bg-white">${esc(ui('ctaButton'))}</a>
@@ -908,7 +908,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const dontMiss = missIds.length
     ? `<section id="dont-miss" class="mt-6 scroll-mt-20 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
         <h2 class="flex items-center gap-2 px-1 pb-1 text-base font-bold text-amber-200">${ICON.warn} ${esc(ui('dontMiss'))} <span class="text-xs font-normal text-amber-200/70" data-count="${esc(missIds.join(','))}">0/${missIds.length}</span></h2>
-        <div class="px-1"><p class="mt-1.5 text-xs text-zinc-500">${esc(ui('appMissables'))} <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white">${esc(ui('appLink'))} &rarr;</a></p></div>
+        <div class="qc-site-only px-1"><p class="mt-1.5 text-xs text-zinc-500">${esc(ui('appMissables'))} <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white">${esc(ui('appLink'))} &rarr;</a></p></div>
         ${missGroups.map((g) => checkRow(g.ids.join('+'), groupHtml(g), true, groupIcon(g))).join('')}${miss.map((e) => checkRow(e.id, itemHtml(e), true, itemIcon(e))).join('')}${missSec.flatMap((x) => x.entries.map((e) => checkRow(e.id, esc(e.text), true, kindIcon(sectionKind(e))))).join('')}
       </section>`
     : '';
@@ -949,7 +949,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   // step. Only worth it with 3 or more steps; long titles are cut by CSS, the full title is in the tooltip.
   const steps = a.walkthrough || [];
   const route = steps.length >= 3
-    ? `<nav aria-label="${esc(ui('route'))}" class="mt-3 hidden sm:block"><ol class="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">${steps
+    ? `<nav aria-label="${esc(ui('route'))}" class="qc-route mt-3 hidden sm:block"><ol class="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">${steps
         .map((st, i) => `<li class="flex min-w-0 items-center gap-2"><a href="#${esc(st.id)}" title="${esc(st.title)}" class="flex min-w-0 items-center gap-1.5 text-zinc-300 hover:text-white"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-xs font-bold text-[#c4b0ff]">${i + 1}</span><span class="max-w-[16rem] truncate">${esc(st.title)}</span></a>${i < steps.length - 1 ? '<span class="text-zinc-600" aria-hidden="true">&rarr;</span>' : ''}</li>`)
         .join('')}</ol></nav>`
     : '';
@@ -957,7 +957,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     ? `<section id="walkthrough" class="mt-8 scroll-mt-20">
         <h2 class="text-xl font-bold text-white">${esc(ui('walkthrough'))}${(a.incomplete || []).includes('walkthrough') ? incompleteTag() : ''}</h2>
         <p class="mt-1 text-sm text-zinc-500">${esc(ui('walkthroughIntro'))}</p>
-        <p class="mt-1.5 text-xs text-zinc-500">${esc(ui('appSteps'))} <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white">${esc(ui('appLink'))} &rarr;</a></p>
+        <p class="qc-site-only mt-1.5 text-xs text-zinc-500">${esc(ui('appSteps'))} <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white">${esc(ui('appLink'))} &rarr;</a></p>
         ${route}
         <ol class="mt-4 space-y-5">${(a.walkthrough || [])
           .map((st, i) => `<li id="${esc(st.id)}" class="relative pl-10 scroll-mt-20">
@@ -1003,13 +1003,13 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   <div class="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_15rem] lg:gap-8">
     <aside class="hidden lg:block"><div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto qc-scroll pr-1">${sidebar('qc-areas-side')}</div></aside>
     <article class="min-w-0 w-full max-w-3xl mx-auto">
-      <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="${up}${LP}guides/index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(game)}</a></p>
+      <p class="qc-site-only text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="${up}${LP}guides/index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(game)}</a></p>
       <h1 class="text-3xl font-bold text-white leading-tight">${esc(a.name)}</h1>
       <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
         <span>${esc(ui('guideOf', { game }))}${a.story ? ` · ${esc(a.story)}` : ''}</span>
         ${a.verified === true ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))}</span>` : ''}
       </div>
-      <a href="../index.html" class="lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
+      <a href="../index.html" class="qc-site-only lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
       ${(() => {
         // The page's picture (owner-approved, "Guide page" on) beside the opening text; what follows starts below it.
         const pic = pagePicture(gameKey, a.slug);
@@ -1346,6 +1346,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
       breadcrumb([{ name: ui('navGuides'), url: `${SITE}/${LP}guides/` }, { name: sg, url: `${SITE}/${LP}guides/${key}/` }, { name: a.name, url }]),
       guideArticle({ headline: title.replace(/ \| Quest Compendium$/, ''), description, url, game: gameName, modified: Number((a as any).updatedAt) || undefined }),
     ];
+    fs.writeFileSync(path.join(adir, 'page.json'), JSON.stringify(areaJson(key, a)));
     fs.writeFileSync(
       path.join(adir, 'index.html'),
       page({
@@ -1410,8 +1411,8 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
       guide: key,
       langs,
       path: `guides/${key}/`,
-      body: `<div class="max-w-3xl mx-auto">
-          <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">${esc(ui('navGuides'))}</a></p>
+      body: `<article class="max-w-3xl mx-auto">
+          <p class="qc-site-only text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">${esc(ui('navGuides'))}</a></p>
           ${artBox(gameName, appId, 'rounded-2xl border border-white/10 mb-5', key, true)}
           <h1 class="text-3xl font-bold text-white">${esc(ui('gameH1', { game: gameName }))}</h1>
           ${igdbFacts(key, gameName)}
@@ -1425,16 +1426,25 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           <div id="qc-area-list">
           <section id="walkthrough" class="mt-10 scroll-mt-20">${sectionHead(ui('walkthrough'), ui('walkthroughSub'), `${links.length} ${one(links.length, 'statAreas')}`)}
           <div id="qc-area-rows" class="mt-2">${rows}</div></section>
-          ${compSearch(key, visible, byslug)}
+          ${(COMP_MODEL = null, compSearch(key, visible, byslug))}
           </div>
           ${cta('../'.repeat(2 + extra), gameName)}
-        </div>`,
+        </article>`,
       draft: visible.some((o) => byslug.get(o.slug)!.status !== 'published'),
     }),
   );
   if (visible.some((o) => byslug.get(o.slug)!.status === 'published')) sitemap.push(`${SITE}/${LP}guides/${key}/`);
   // The guide's search index, read by every guide page's search box and the apps.
   fs.writeFileSync(path.join(dir, 'search.json'), JSON.stringify(guideSearchIndex(key, visible, byslug)));
+  if (LANG === 'en') fs.writeFileSync(path.join(dir, 'pictures.json'), JSON.stringify({ v: 1, pictures: picturesOf(key) }));
+  // guide.json: the front page as data (the Deck's guide screens read it): its areas in order, the compendium's sections
+  // as compSearch made them (display names, links, what's coming soon), and whether it has an achievement guide.
+  fs.writeFileSync(path.join(dir, 'guide.json'), JSON.stringify({
+    v: 1, key, game: gameName, lang: LANG,
+    areas: links.map((l) => ({ slug: l.slug, name: l.name, ...(l.story ? { story: l.story } : {}), ...(l.group ? { group: l.group } : {}) })),
+    compendium: COMP?.entities.length ? COMP_MODEL : null,
+    achievements: !!achHere?.list?.length,
+  }));
   if (achHere?.list?.length) renderAchievements(key, gameName, achHere, links, sitemap, achLangs);
   if (COMP?.entities.length && LANG === 'en') renderEntities(key, gameName, visible, byslug, sitemap);
 }
@@ -1476,8 +1486,58 @@ function guideSearchIndex(key: string, visible: { slug: string; name: string }[]
  * (fuzzyScore: apostrophes, plurals, small typos; exact names first) and lists "Name · Type · Chapter", each a link to
  * the exact spot. While there's a query, the list under it (the chapter list) is hidden; empty, it's back.
  */
+/**
+ * An area page as data (page.json, for the Deck's guide screens): what the page shows, as the page shows it: the
+ * entries' kinds (the icons), same-spot groups, the walkthrough and its route, and the owner-approved pictures where
+ * his switches put them. Unchecked pages are as published (sourcedOnly already applied).
+ */
+function areaJson(key: string, a: GuideArea): any {
+  const pic = (x: any) => (x ? pictureJson(x) : undefined);
+  const kindOf = (section: any, e: any) => entryKind({ section, name: e.name, where: e.where, text: e.text }) || undefined;
+  const entry = (section: string) => (e: any) => ({ ...cleanEntry(e), kind: kindOf(section, e), picture: pic(stepPicture(key, a.slug, e.id, 'entry')) });
+  const steps = (a.walkthrough || []).map((st: any) => ({ id: st.id, title: st.title, text: st.text, ...(st.tip ? { tip: st.tip } : {}), ...(st.warn ? { warn: st.warn } : {}), ...(st.entries?.length ? { entries: st.entries } : {}), ...(st.fights?.length ? { fights: st.fights } : {}), picture: pic(stepPicture(key, a.slug, st.id, 'step')) }));
+  return {
+    v: 1, kind: 'area', key, slug: a.slug, name: a.name, story: a.story || '', overview: a.overview || '', verified: a.verified === true,
+    picture: pic(pagePicture(key, a.slug)), info: a.info || null, incomplete: a.incomplete || [],
+    route: steps.length >= 3 ? steps.map((st: any) => ({ id: st.id, title: st.title })) : [],
+    walkthrough: steps, choices: a.choices || [], advice: a.advice || null,
+    groups: mergeSameSpot({ items: a.items.map(cleanEntry), secrets: a.secrets }),
+    items: a.items.map(entry('items')), secrets: a.secrets.map(entry('secrets')),
+    sections: (a.sections || []).map((x: any) => ({ ...x, entries: x.entries.map((e: any) => ({ ...e, kind: kindOf('sections', e) })) })),
+    fights: a.fights || [], enemies: a.enemies.map(cleanEntry).map((e: any) => ({ ...e, kind: 'enemy' })), shops: a.shops.map(cleanEntry), tips: a.tips,
+  };
+}
+
+/**
+ * One guide everywhere: next to every guide page (a game's front page, area and compendium pages, every language) an
+ * app.html with the page's article exactly as the site shows it. The app's Guide tab (and the Deck) show these, so the
+ * sections, what's available, names, icons, routes and pictures are the site's, and a change to the site reaches the
+ * apps with the next publish. Site-only parts carry qc-site-only (the apps hide them). Returns how many were written.
+ */
+function writeAppFragments(root: string): number {
+  let n = 0;
+  const walk = (dir: string) => {
+    if (!fs.existsSync(dir)) return;
+    for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, f.name);
+      if (f.isDirectory()) walk(p);
+      else if (f.name === 'index.html') {
+        const html = fs.readFileSync(p, 'utf8');
+        const a = html.indexOf('<article'), b = html.lastIndexOf('</article>');
+        if (a < 0 || b < a) continue;
+        const title = (html.match(/<title>([^<]*)<\/title>/) || [])[1] || '';
+        fs.writeFileSync(path.join(dir, 'app.html'), `<!-- Quest Compendium guide page for the apps (scripts/guides/publish.ts). ${title.replace(/--/g, '')} -->\n${html.slice(a, b + '</article>'.length)}\n`);
+        n++;
+      }
+    }
+  };
+  walk(path.join(root, 'guides'));
+  for (const code of Object.keys(LANG_TAG)) if (code !== 'en') walk(path.join(root, code, 'guides'));
+  return n;
+}
+
 function guideSearchBox(key: string, listSel: string, cls = 'mt-6'): string {
-  return `<div class="${cls}">
+  return `<div class="qc-site-only ${cls}">
     <input type="search" id="qc-gsearch" autocomplete="off" placeholder="${esc(ui('searchAll'))}" class="w-full px-3.5 py-2 rounded-xl bg-white/[0.04] border border-[#a87ffb]/40 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]">
     <ul id="qc-gresults" class="mt-2 space-y-1"></ul>
   </div>
@@ -1491,6 +1551,8 @@ function guideSearchBox(key: string, listSel: string, cls = 'mt-6'): string {
   q.addEventListener('focus',load);q.addEventListener('input',run);})();</script>`;
 }
 
+/** The compendium as compSearch drew it last (guide.json): live sections first, then the ones only coming soon. */
+let COMP_MODEL: any = null;
 function compSearch(key: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>): string {
   if (!COMP?.entities.length) return '';
   const chip = (href: string, text: string, title = '') => `<a href="${esc(href)}"${title ? ` title="${esc(title)}"` : ''} class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(text)}</a>`;
@@ -1512,7 +1574,10 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
     return st ? `/guides/${COMP_KEY}/${st.slug}/#${st.id}` : '';
   };
   const named = (e: { name: string; displayName?: string }) => e.displayName || e.name;
-  type Sec = { html: string; live: number };
+  // The same sections as data (guide.json): each entry's name as shown, its full name, where it links, or "soon".
+  type Item = { name: string; full?: string; href?: string };
+  type Model = { title: string; items?: Item[]; soon?: string[]; groups?: { name: string; href?: string; items: Item[]; soon: string[] }[] };
+  type Sec = { html: string; live: number; model: Model };
   const out: Sec[] = [];
   // Each page once: a built page shows in its own type's section, so another section's example that only links to it
   // is left out (Beaver Hollow under places, not again under gang hideouts).
@@ -1525,7 +1590,8 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
     const built = COMP.entities.filter((e) => e.type === t.id);
     const more = ((t.examples || []) as string[]).filter((x) => !built.some((e) => e.name.toLowerCase() === x.toLowerCase())).slice(0, 6).map((x) => ({ x, href: covering(x) })).filter((m) => !(m.href && builtHrefs.has(m.href)));
     const live = built.length + more.filter((m) => m.href).length;
-    out.push({ live, html: `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(t.label)}</div>
+    const model: Model = { title: String(t.label), items: [...built.map((e) => ({ name: named(e), ...(e.displayName ? { full: e.name } : {}), href: entHref(e.slug) })), ...more.filter((m) => m.href).map((m) => ({ name: m.x, href: m.href }))], soon: more.filter((m) => !m.href).map((m) => m.x) };
+    out.push({ live, model, html: `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(t.label)}</div>
       <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => chip(entHref(e.slug), named(e), e.displayName ? e.name : '')).join('')}${more.filter((m) => m.href).map((m) => chip(m.href, m.x)).join('')}</div>${live ? soonFold(more.filter((m) => !m.href).map((m) => m.x)) : `<div class="mt-2 flex flex-wrap gap-1.5">${more.filter((m) => !m.href).map((m) => soon(m.x)).join('')}</div>`}</div>` });
   }
   // Quest pages (story missions, Stranger strands): grouped by chapter in play order; a planned mission without its
@@ -1535,18 +1601,21 @@ function compSearch(key: string, visible: { slug: string; name: string }[], bysl
     if (!groups.length) continue;
     const items = groups.map((g) => ({ g, items: g.items.map((x) => ({ ...x, href: x.slug ? entHref(x.slug) : covering(x.name) })) }));
     const live = items.reduce((n, g) => n + g.items.filter((x) => x.href).length, 0);
-    out.push({ live, html: `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:col-span-2"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(QUEST_TYPES[ty].label)}</div>
+    const model: Model = { title: QUEST_TYPES[ty].label, groups: items.map(({ g, items: xs }) => ({ name: g.name, ...(g.slug ? { href: `/guides/${COMP_KEY}/${g.slug}/` } : {}), items: xs.filter((x) => x.href).map((x) => ({ name: x.name, href: x.href })), soon: xs.filter((x) => !x.href).map((x) => x.name) })) };
+    out.push({ live, model, html: `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:col-span-2"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(QUEST_TYPES[ty].label)}</div>
       ${items.map(({ g, items: xs }) => `<div class="mt-2.5">${g.slug ? `<a href="${esc(`/guides/${COMP_KEY}/${g.slug}/`)}" class="text-[11px] font-semibold text-zinc-400 hover:text-white">${esc(g.name)}</a>` : `<span class="text-[11px] font-semibold text-zinc-400">${esc(g.name)}</span>`}
       <div class="mt-1 flex flex-wrap gap-1.5">${xs.filter((x) => x.href).map((x) => chip(x.href, x.name)).join('')}</div>${soonFold(xs.filter((x) => !x.href).map((x) => x.name))}</div>`).join('')}</div>` });
   }
   // Built pages of other types outside the taxonomy: built ones only, never "coming soon".
   for (const ty of [...new Set(COMP.entities.map((e) => e.type))].filter((ty) => !QUEST_TYPES[ty] && !(COMP!.taxonomy || []).some((t: any) => t.id === ty))) {
     const built = COMP.entities.filter((e) => e.type === ty);
-    out.push({ live: built.length, html: `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(built[0].typeLabel)}</div>
+    const model: Model = { title: built[0].typeLabel, items: built.map((e) => ({ name: named(e), ...(e.displayName ? { full: e.name } : {}), href: entHref(e.slug) })) };
+    out.push({ live: built.length, model, html: `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(built[0].typeLabel)}</div>
       <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => chip(entHref(e.slug), named(e), e.displayName ? e.name : '')).join('')}</div></div>` });
   }
   // Sections with live entries first (most first), sections with only "coming soon" after; the order otherwise kept.
   const sorted = out.map((x, i) => ({ ...x, i })).sort((a, b) => b.live - a.live || a.i - b.i);
+  COMP_MODEL = { pages: COMP.entities.length, sections: sorted.filter((x) => x.live > 0).map((x) => x.model), comingSoon: sorted.filter((x) => x.live === 0).map((x) => x.model) };
   const liveHtml = sorted.filter((x) => x.live > 0).map((x) => x.html).join('');
   const soonOnly = sorted.filter((x) => x.live === 0);
   // Sections with nothing written yet fold into one line at the end.
@@ -1647,7 +1716,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     const body = `<div class="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_15rem] lg:gap-8">
     <aside class="hidden lg:block"><div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto qc-scroll pr-1"><nav aria-label="${esc(gameName)}"><a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(gameName)}</a><ul>${areaList(key, guideLinks, null, '../')}</ul></nav></div></aside>
     <article class="min-w-0 w-full max-w-3xl mx-auto">
-      <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a> / <span>${esc(label)}</span></p>
+      <p class="qc-site-only text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a> / <span>${esc(label)}</span></p>
       <h1 class="text-3xl font-bold text-white leading-tight">${esc(searchName(e))}</h1>
       <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400"><span class="rounded-md bg-[#a87ffb]/15 px-2 py-0.5 text-[#c4b0ff]">${esc(label)}</span><span>${esc(gameName)}</span>
         ${e.review ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))} · ${e.review.supported}/${e.review.total}</span>` : ''}
@@ -1717,6 +1786,12 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     ld.push(guideArticle({ headline: seo.title, description: seo.description, url, game: gameName, modified: Number((e as any).builtAt) || undefined }));
     const title = seo.title.length + 19 <= 60 ? `${seo.title} | Quest Compendium` : seo.title;
     fs.writeFileSync(path.join(dir, 'index.html'), page({ title, description: seo.description, depth: 3, canonical: url, ld, body: body + entPreview(), draft: !!PREVIEW, guide: key, wide: true }));
+    // page.json: the compendium page as data (the Deck's guide screens): its name as shown and in full, type, text and picture.
+    fs.writeFileSync(path.join(dir, 'page.json'), JSON.stringify({
+      v: 1, kind: 'entity', key, slug: e.slug, name: searchName(e), fullName: e.name, type: label, overview: e.overview || '',
+      story: e.story || [], gameplay: e.gameplay || [], summary: e.summary || null,
+      picture: pagePicture(key, e.slug) ? pictureJson(pagePicture(key, e.slug)!) : undefined,
+    }));
     if (!PREVIEW) {
       sitemap.push(url);
       if (Number((e as any).builtAt)) LASTMOD.set(url, Number((e as any).builtAt));
@@ -1795,7 +1870,7 @@ function renderAchievements(key: string, gameName: string, ach: any, links: Area
       langs,
       path: `guides/${key}/achievements/`,
       body: `<div class="max-w-3xl mx-auto">
-        <p class="text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a></p>
+        <p class="qc-site-only text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a></p>
         <h1 class="text-3xl font-bold text-white">${esc(ui('achH1', { game: gameName }))}</h1>
         <p class="text-zinc-400 mt-2">${esc(ui('achIntro'))}</p>
         <div class="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">${stat(r.time, ui('rmTime'))}${stat(r.difficulty, ui('rmDifficulty'))}${stat(r.playthroughs, ui('rmPlaythroughs'))}${stat(String(list.filter((x) => x.missable).length || r.missables || ''), ui('rmMissables'))}</div>
@@ -2065,6 +2140,7 @@ async function main() {
     // A preview: the site's icons beside it, and its own stylesheet; the website files and the homepage are untouched.
     for (const f of ['icon.svg', 'favicon.ico', 'favicon-96.png', 'favicon-192.png']) if (fs.existsSync(path.resolve('Marketing_Website_Files', f))) fs.copyFileSync(path.resolve('Marketing_Website_Files', f), path.join(OUT, f));
     await buildSiteCss();
+    writeAppFragments(OUT);
     console.log(`Preview: ${OUT}${protos.size ? ` (${protos.size} flagship prototype(s))` : ''}. Nothing published.`);
     process.exit(0);
   }
@@ -2092,6 +2168,7 @@ async function main() {
   };
   walkHtml(OUT);
   console.log(`Links: final URLs in ${relinked} page(s).`);
+  console.log(`App pages: ${writeAppFragments(OUT)} (app.html beside each guide page, for the apps' Guide tab).`);
   await buildSiteCss();
   console.log(`Built ${games.reduce((n, g) => n + g.count, 0)} guide page(s) for ${games.length} game(s)${withDrafts ? ' (drafts included, marked DRAFT and hidden from search)' : ''}.`);
   console.log(`Open ${path.join(OUT, 'guides', 'index.html')} in your browser to look them over.`);

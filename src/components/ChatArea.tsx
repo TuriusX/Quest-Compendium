@@ -46,6 +46,7 @@ import { QuestLogo } from './QuestLogo';
 import { ReportAnswerModal, type ReportTarget } from './ReportAnswerModal';
 import { PlaceBar } from './PlaceBar';
 import { QcGuidesView } from './QcGuidesView';
+import { GuideRefs } from './GuideRefs';
 import { GlainIcon } from './GlainIcon';
 import { Walkthrough, walkthroughDone, OPEN_TOUR_EVENT } from './Walkthrough';
 import { SignInCard } from './SignInCard';
@@ -2014,29 +2015,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     </div>
                   )}
 
-                  {/* "From the guide": the answer used checked guide entries; each opens the guide at that entry */}
-                  {!isUser && msg.guideRefs && msg.guideRefs.length > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {msg.guideRefs.map((r, i) => (
-                        <button
-                          key={`${r.slug}:${r.entry || i}`}
-                          type="button"
-                          onClick={() => window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug: r.slug, entry: r.entry } }))}
-                          title={t('guideBadge.open', { name: r.name, area: r.area })}
-                          className="qc-px-frame inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-400/30 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20 cursor-pointer"
-                        >
-                          {/* The entry's kind icon (chest, secret, boss...) when it has one, as on the guide site; else the book */}
-                          {r.kind && r.kind in ENTRY_ICON_PATHS ? (
-                            <svg className="w-3 h-3 shrink-0" style={{ color: ENTRY_COLORS[r.kind as EntryKind] }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{ __html: ENTRY_ICON_PATHS[r.kind as EntryKind] }} />
-                          ) : (
-                            <BookOpen className="w-3 h-3" />
-                          )}
-                          {i === 0 ? t('guideBadge.label') : ''}
-                          <span className="font-normal text-emerald-100/80 max-w-[14rem] truncate">{i === 0 ? `· ${r.name}` : r.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {/* "From the guide": the answer used checked guide entries; each opens the guide at that entry, with its picture
+                      where the owner turned "App answer" on (GuideRefs) */}
+                  {!isUser && msg.guideRefs && msg.guideRefs.length > 0 && <GuideRefs refs={msg.guideRefs} />}
 
                   {/* Every marker was dropped by the close-up check: what they were and where, in words */}
                   {!isUser && msg.removedMarkers && msg.removedMarkers.length > 0 && !(msg.points && msg.points.length) && (

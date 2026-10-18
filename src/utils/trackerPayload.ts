@@ -33,6 +33,9 @@ export type TrackerItem = {
   missable?: boolean;
   /** What the guide entry is (a chest, a secret, a signpost...), for its small icon (src/utils/entryKind.ts). */
   icon?: EntryKind;
+  /** Its picture (owner-approved, "Quest log / step" on: utils/guidePictures withPictures): a 40×28 thumbnail. */
+  pic?: string;
+  picAlt?: string;
   /** Can be ticked on the tracker. */
   tick?: boolean;
   /**

@@ -9,9 +9,12 @@ import { tipMatches, useAchievementGuideByKey, type AchievementGuide } from '../
 import { samePlace } from '../utils/placeName';
 import { entitySegments, fuzzyScore } from '../../scripts/guides/siteText';
 import type { Achievement } from '../types';
+import { GuideFragment, SITE, type GuideTarget } from './GuideFragment';
 
 /**
- * Quest Compendium's own guides, read natively in the app: all games -> a game's areas -> an area page.
+ * Quest Compendium's own guides in the app: all games -> a game's front page -> its pages. A game's front page and its
+ * pages are the website's own (GuideFragment: what the nightly publish made, so the app and the site show the same
+ * guide); the native views below are what's shown when the site can't be reached.
  * Built to be used while playing:
  *   - opens at the running game, at the area the player is in (or where they left off)
  *   - when the player moves somewhere else, a one-tap "You're in …" jump appears (it never yanks the page away)
@@ -132,6 +135,12 @@ export function QcGuidesView({
   }, [gameName, guideLang, gameAppId, altName, chosenKey]);
 
   const [focus, setFocus] = useState<{ slug: string; id: string; n: number } | null>(null);
+  const openTarget = (t: GuideTarget, game?: string) => {
+    if (!t.slug) return go({ view: 'game', key: t.key, game });
+    if (t.slug === 'achievements') return go({ view: 'ach', key: t.key, game });
+    go({ view: 'area', key: t.key, slug: t.slug, game });
+    setFocus(t.anchor ? { slug: t.slug, id: t.anchor.replace(/^e-/, ''), n: Date.now() } : null);
+  };
   // A search result: its page (or entity page), at the exact entry (highlighted, its section opened).
   const openHit = (hit: SearchHit, game?: string) => {
     const m = hit.h.match(/\/guides\/([^/]+)\/([^/]+)\/(?:#(.+))?$/);
@@ -195,7 +204,13 @@ export function QcGuidesView({
             />
           )}
           {view.view === 'game' && (
-            <AreaList
+            <SitePage
+              key={`site:${view.key}`}
+              gameKey={view.key}
+              onOpen={(t) => openTarget(t, view.game)}
+              onHit={(hit) => openHit(hit, view.game)}
+              onAsk={onAsk}
+              fallback={<AreaList
               key={view.key}
               onHit={(hit) => openHit(hit, view.game)}
               onEntity={(slug) => go({ view: 'entity', key: view.key, slug, game: view.game })}
@@ -205,6 +220,7 @@ export function QcGuidesView({
               ach={achGuide && achGuide.key === view.key ? achGuide : null}
               achievements={achievements}
               onAchievements={() => go({ view: 'ach', key: view.key, game: view.game })}
+            />}
             />
           )}
           {view.view === 'ach' && achGuide && achGuide.key === view.key && (
@@ -215,10 +231,26 @@ export function QcGuidesView({
             />
           )}
           {view.view === 'entity' && (
-            <EntityPage key={`${view.key}/e/${view.slug}`} gameKey={view.key} slug={view.slug} onEntity={(slug) => go({ view: 'entity', key: view.key, slug, game: view.game })} />
+            <SitePage
+              key={`site:${view.key}/${view.slug}`}
+              gameKey={view.key}
+              slug={view.slug}
+              onOpen={(t) => openTarget(t, view.game)}
+              onHit={(hit) => openHit(hit, view.game)}
+              onAsk={onAsk}
+              fallback={<EntityPage key={`${view.key}/e/${view.slug}`} gameKey={view.key} slug={view.slug} onEntity={(slug) => go({ view: 'entity', key: view.key, slug, game: view.game })} />}
+            />
           )}
           {view.view === 'area' && (
-            <AreaPage
+            <SitePage
+              key={`site:${view.key}/${view.slug}`}
+              gameKey={view.key}
+              slug={view.slug}
+              onOpen={(t) => openTarget(t, view.game)}
+              onHit={(hit) => openHit(hit, view.game)}
+              onAsk={onAsk}
+              focus={focus && focus.slug === view.slug ? focus : null}
+              fallback={<AreaPage
               onHit={(hit) => openHit(hit, view.game)}
               onEntity={(slug) => go({ view: 'entity', key: view.key, slug, game: view.game })}
               key={`${view.key}/${view.slug}`}
@@ -229,10 +261,37 @@ export function QcGuidesView({
               achievements={achievements}
               focus={focus && focus.slug === view.slug ? focus : null}
               onGo={(a) => setStack((s) => [...s.slice(0, -1), { view: 'area', key: view.key, slug: a.slug, game: view.game }])}
+            />}
             />
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The website's address of a guide page (the app's language first, then English), each ending in "/". */
+const pageUrls = (key: string, slug?: string) => {
+  const tail = `guides/${key}/${slug ? `${slug}/` : ''}`;
+  return guideLang && guideLang !== 'en' ? [`${SITE}/${guideLang}/${tail}`, `${SITE}/${tail}`] : [`${SITE}/${tail}`];
+};
+
+/** A website guide page in the app (GuideFragment), under the guide-wide search; the native view if it can't load. */
+function SitePage({ gameKey, slug, onOpen, onHit, onAsk, focus, fallback }: {
+  gameKey: string;
+  slug?: string;
+  onOpen: (t: GuideTarget) => void;
+  onHit: (hit: SearchHit) => void;
+  onAsk?: (q: string) => void;
+  focus?: { id: string; n: number } | null;
+  fallback: React.ReactNode;
+}) {
+  const [q, setQ] = useState('');
+  useEffect(() => { if (slug) ls.set(`qc-guide-last:${gameKey}`, slug); }, [gameKey, slug]);
+  return (
+    <div className="space-y-3">
+      <GuideSearch gameKey={gameKey} value={q} onChange={setQ} onPick={(hit) => { setQ(''); onHit(hit); }} />
+      {!q.trim() && <GuideFragment urls={pageUrls(gameKey, slug)} gameKey={gameKey} slug={slug} onOpen={onOpen} onAsk={onAsk} focus={focus} fallback={fallback} />}
     </div>
   );
 }

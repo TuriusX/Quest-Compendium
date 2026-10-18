@@ -31,6 +31,8 @@ export type SitePicture = {
   entry?: string;
   page: boolean;
   step: boolean;
+  /** "App answer": the card under an app answer that uses this entry or page. */
+  answer: boolean;
   alt: string;
   caption: string;
   credit: string;
@@ -60,7 +62,8 @@ export async function loadSitePictures(out: string, only = ''): Promise<number> 
     if (!t.kind || !t.slug) continue;
     const page = !!x.placement?.page && (t.kind === 'area' || t.kind === 'entity');
     const step = !!x.placement?.step;
-    if (!page && !step) continue;
+    const answer = !!x.placement?.answer;
+    if (!page && !step && !answer) continue;
     const k = keyOf(String(x.game), t.kind, String(t.slug), t.id ? String(t.id) : '');
     if (PICS.has(k)) continue;
     // The files, once (a later publish finds them in place).
@@ -79,7 +82,7 @@ export async function loadSitePictures(out: string, only = ''): Promise<number> 
       continue;
     }
     PICS.set(k, {
-      id: x.id, kind: t.kind, game: String(x.game), slug: String(t.slug), entry: t.id ? String(t.id) : undefined, page, step,
+      id: x.id, kind: t.kind, game: String(x.game), slug: String(t.slug), entry: t.id ? String(t.id) : undefined, page, step, answer,
       alt: String(x.alt || t.name || ''), caption: String(x.caption || t.name || ''),
       // Only an official source's credit, and only where its terms ask for one.
       credit: x.source !== 'mine' && x.credit ? String(x.credit) : '',
@@ -99,6 +102,23 @@ export function stepPicture(game: string, slug: string, id: string, kind: 'step'
   const p = PICS.get(keyOf(game, kind, slug, id));
   return p && p.step ? p : null;
 }
+/**
+ * A game's pictures for the apps (guides/{key}/pictures.json): where each may show (page, quest log / step, app answer),
+ * its sizes as absolute addresses, the owner's caption and alt text, and a credit where the source needs one.
+ */
+export function picturesOf(game: string, site = 'https://questcompendium.com') {
+  return [...PICS.values()].filter((p) => p.game === game).map((p) => ({
+    kind: p.kind, slug: p.slug, ...(p.entry ? { id: p.entry } : {}), page: p.page, step: p.step, answer: p.answer,
+    thumb: `${site}${url(p.id, 'thumb.webp')}`, w300: `${site}${url(p.id, 'w300.webp')}`, w600: `${site}${url(p.id, 'w600.webp')}`, big: `${site}${url(p.id, 'w1280.webp')}`,
+    alt: p.alt, caption: p.caption, ...(p.credit ? { credit: p.credit } : {}),
+  }));
+}
+
+/** One picture for the apps' data files (page.json): its sizes as absolute addresses, caption, alt text, credit. */
+export function pictureJson(p: SitePicture, site = 'https://questcompendium.com') {
+  return { thumb: `${site}${url(p.id, 'thumb.webp')}`, w300: `${site}${url(p.id, 'w300.webp')}`, w600: `${site}${url(p.id, 'w600.webp')}`, big: `${site}${url(p.id, 'w1280.webp')}`, alt: p.alt, caption: p.caption, ...(p.credit ? { credit: p.credit } : {}) };
+}
+
 /** The share image's address (absolute, for og:image). */
 export const shareImage = (site: string, p: SitePicture) => `${site}${url(p.id, 'og.jpg')}`;
 
