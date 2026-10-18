@@ -545,7 +545,8 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
   label.sw.na { color: #52525b; cursor: default; }
   .field { display: flex; flex-direction: column; gap: 3px; margin-top: 7px; font-size: 12px; color: var(--dim); }
   .field input, .field textarea { width: 100%; }
-  .acts { display: flex; gap: 6px; margin-top: 10px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .acts button { white-space: nowrap; }
   .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
   .results { max-height: 240px; overflow: auto; margin-top: 6px; border: 1px solid var(--line); border-radius: 8px; }
   .results div { padding: 6px 10px; cursor: pointer; border-top: 1px solid var(--line); } .results div:first-child { border-top: 0; }
