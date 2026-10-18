@@ -52,7 +52,10 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-          navigateFallbackDenylist: [/^\/api/],
+          // Only the app's own pages come from the offline copy: the server's pages (/admin/images, /admin/reviews,
+          // /premium/thanks, /link, /privacy) must reach the server, or they open as a blank copy of the app.
+          navigateFallbackAllowlist: [/^\/(?:index\.html|email-signin|desktop-login)?(?:\?.*)?$/],
+          navigateFallbackDenylist: [/^\/api/, /^\/admin/],
         },
         devOptions: {
           enabled: false,

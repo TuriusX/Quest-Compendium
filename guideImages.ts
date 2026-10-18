@@ -502,7 +502,8 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
   <a href="/admin/reviews" class="small">Review queue</a>
 </header>
 <main>
-  <div id="gate" class="panel"><b>Admin sign-in</b><p class="dim">Sign in with the Google account listed as an admin (ADMIN_EMAILS).</p><button id="signin" class="primary">Sign in with Google</button> <span id="gateMsg" class="dim"></span></div>
+  <div id="gate" class="panel"><b>Admin sign-in</b><p class="dim">This page is for Quest Compendium admins. Sign in with the Google account listed as an admin (ADMIN_EMAILS).</p><button id="signin" class="primary">Sign in with Google</button> <button id="signinRedirect">Sign in (if the popup is blocked)</button><p id="gateMsg" class="dim">Not signed in.</p><noscript><p style="color:var(--bad)">This page needs JavaScript to sign in. Turn JavaScript on for this site and reload.</p></noscript></div>
+  <div id="denied" class="panel" hidden><b>Not allowed</b><p id="deniedMsg" class="dim"></p><button id="switchAcct" class="primary">Sign in with another account</button></div>
   <div id="wanted" class="panel" hidden></div>
   <div id="add" class="panel" hidden>
     <b>Add a picture</b> <span class="dim small">from a press kit, wiki, Steam or IGDB. Never AI-generated pictures. Your own captures come from the desktop app (Ctrl+Shift+P).</span>
@@ -524,9 +525,19 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
 </main>
 <div id="zoom" hidden><img alt=""></div>
 <script type="module">
-  const fb = { ...(await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js")), ...(await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js")) };
-  const { initializeApp, getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } = fb;
+  // Every state says something on the page: signed out (the sign-in card), sign-in blocked or failed (why), loading,
+  // and signed in with an account that isn't an admin (Not allowed). Never an empty page.
+  const gateMsg = (t, bad) => { const m = document.getElementById('gateMsg'); if (m) { m.textContent = t; m.style.color = bad ? 'var(--bad)' : ''; } };
+  let fb;
+  try {
+    fb = { ...(await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js")), ...(await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js")) };
+  } catch (e) {
+    gateMsg('Sign-in could not load (' + (e && e.message ? e.message : e) + '). A blocker or this browser may be stopping www.gstatic.com: allow it for this page, or open it in Chrome, Edge or Firefox.', true);
+    throw e;
+  }
+  const { initializeApp, getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } = fb;
   const auth = getAuth(initializeApp(${cfg}));
+  getRedirectResult(auth).catch((e) => gateMsg('Sign-in failed: ' + (e.code || e.message), true));
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const SOURCE = { mine: 'My capture', press: 'Press kit', igdb: 'IGDB', wiki: 'Wiki', steam: 'Steam', other: 'Other' };
@@ -664,17 +675,47 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
   $('tApproved').addEventListener('click', () => showTab('approved'));
   $('tDeleted').addEventListener('click', () => showTab('deleted'));
   $('game').addEventListener('change', () => { picked = null; $('addPicked').textContent = ''; $('addSave').disabled = true; showIgdb(); load(); });
-  $('signin').addEventListener('click', () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => ($('gateMsg').textContent = e.code || e.message)));
+  const provider = () => { const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' }); return p; };
+  const popup = async () => {
+    try {
+      if (auth.currentUser) await signOut(auth);
+      await signInWithPopup(auth, provider());
+    } catch (e) {
+      const code = e.code || e.message;
+      gateMsg(code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user' ? 'The sign-in popup was blocked or closed. Use "Sign in (if the popup is blocked)".' : 'Sign-in failed: ' + code, true);
+    }
+  };
+  $('signin').addEventListener('click', popup);
+  $('switchAcct').addEventListener('click', popup);
+  $('signinRedirect').addEventListener('click', () => signInWithRedirect(auth, provider()));
+  // The page's own parts (tabs, game list, Add) only once an admin is signed in.
+  const showTools = (on) => { for (const id of ['tWaiting', 'tApproved', 'tDeleted', 'game', 'addBtn', 'top100']) $(id).hidden = !on; };
+  showTools(false);
   onAuthStateChanged(auth, async (u) => {
     $('gate').hidden = !!u;
-    if (!u) return;
+    $('denied').hidden = true;
+    $('list').innerHTML = '';
+    $('wanted').hidden = true;
+    $('add').hidden = true;
+    if (!u) { showTools(false); gateMsg('Not signed in.'); $('msg').textContent = ''; return; }
+    $('msg').textContent = 'Signed in as ' + (u.email || '') + '. Loading…';
     try {
       games = (await api('/api/admin/images/games')).games;
       $('game').innerHTML = '<option value="">All games</option>' + games.map((g) => '<option value="' + esc(g.key) + '">' + esc(g.name) + '</option>').join('');
       const want = new URLSearchParams(location.search).get('game');
       if (want) $('game').value = want;
+      showTools(true);
       await load();
-    } catch (e) { $('msg').textContent = e.message; }
+    } catch (e) {
+      showTools(false);
+      if (/admin/i.test(e.message)) {
+        $('msg').textContent = '';
+        $('deniedMsg').textContent = (u.email || 'This account') + ' is not an admin, so the image queue is closed to it. Sign in with the admin account.';
+        $('denied').hidden = false;
+      } else {
+        $('msg').textContent = 'Could not load the image queue: ' + String(e.message).replace(/.$/, '') + '. Reload to try again.';
+      }
+    }
   });
 </script>
 </body>
