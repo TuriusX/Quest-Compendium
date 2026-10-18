@@ -8,7 +8,8 @@
  *
  *   GET  /editor/connect?to=<guide page URL>   sign in, then back to the page with this device's key
  *   POST /api/editor/connect                   (Firebase admin token) a new key for this device
- *   GET  /editor/qc-editor.js                  the editor (ownerEditorClient.ts), noindex
+ *   GET  /editor/qc-editor.js                  the editor (ownerEditorClient.ts), noindex; the website loads it as
+ *                                              /_qc/e.js?p=1 and calls /_qc/api/… (its _redirects pass them here)
  *   GET  /api/editor/me                        who, and the counts for the owner bar
  *   POST /api/editor/disconnect   { all? }     this device's key (or every device's) removed
  *   GET  /api/editor/edits?key=&slug=          "Fix now" edits (one page's, or the latest 200)
@@ -90,7 +91,8 @@ export function registerOwnerEditor(app: Express, deps: Deps) {
   });
 
   app.get('/editor/qc-editor.js', (req: Request, res: Response) => {
-    const cfg = { api: `https://${req.get('host')}`, site: SITE };
+    // Loaded through the website (/_qc/e.js?p=1): its calls go the same way, so blockers see the site's own address.
+    const cfg = { api: req.query.p === '1' ? `${SITE}/_qc` : `https://${req.get('host')}`, site: SITE };
     res.set('X-Robots-Tag', 'noindex, nofollow').set('Cache-Control', 'no-cache').type('application/javascript')
       // (__name: a helper some TypeScript builds wrap named functions in; defined here so the function runs on its own.)
       .send(`/* Quest Compendium owner editor: does nothing without a connected device. */\n(function(){var __name=function(f){return f};(${qcEditorClient.toString()})(${JSON.stringify(cfg)});})();\n`);

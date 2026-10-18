@@ -533,12 +533,14 @@ function suggestScript(key: string, slug: string, page: 'area' | 'entity'): stri
 }
 
 /**
- * The owner's editor (ownerEditor.ts), guide pages only: a device connected to it holds an editor key (set once from
- * the server's /editor/connect, which arrives as #qc-editor=…); only then is the editor loaded, from the server. For
- * everyone else, and for search engines, this line does nothing and the page is unchanged.
+ * The owner's editor (ownerEditor.ts), on every page this script builds: a device connected to it holds an editor key
+ * (set once from the server's /editor/connect, which arrives as #qc-editor=… on whichever page it lands); only then is
+ * the editor loaded. It comes from this site's own address (/_qc/, passed through to the app server by _redirects),
+ * so content blockers see a first-party script, not a third-party one. For everyone else, and for search engines,
+ * this line does nothing and the page is unchanged.
  */
 function editorLoader(): string {
-  return `<script>try{var m=location.hash.match(/^#qc-editor=([A-Za-z0-9_-]{40,})$/);if(m){localStorage.setItem('qc_editor',m[1]);history.replaceState(null,'',location.pathname+location.search)}if(localStorage.getItem('qc_editor')){var s=document.createElement('script');s.src='${SERVER_URL}/editor/qc-editor.js';s.defer=true;document.head.appendChild(s)}}catch(e){}</script>`;
+  return `<script>try{var m=location.hash.match(/^#qc-editor=([A-Za-z0-9_-]{40,})$/);if(m){localStorage.setItem('qc_editor',m[1]);sessionStorage.setItem('qc_editor_new','1');history.replaceState(null,'',location.pathname+location.search)}if(localStorage.getItem('qc_editor')){var s=document.createElement('script');s.src='/_qc/e.js?p=1';s.async=true;document.head.appendChild(s)}}catch(e){}</script>`;
 }
 
 /** Netlify's _redirects: the moved pages' old URLs, 301 to the pages that replaced them. */
@@ -548,7 +550,9 @@ function writeRedirects(moved: { key: string; from: string; to: string }[], live
   const suggest = CONTRIB_SITE_AUTH
     ? [`/suggest ${SERVER_URL}/suggest 200!`, `/api/contributions ${SERVER_URL}/api/contributions 200!`, `/__/auth/* https://quest-compendium-1bccf.firebaseapp.com/__/auth/:splat 200!`, `/__/firebase/* https://quest-compendium-1bccf.firebaseapp.com/__/firebase/:splat 200!`]
     : [`/suggest ${SERVER_URL}/suggest 302`];
-  const admin = [`/admin ${SERVER_URL}/admin/reviews 302`, `/admin/* ${SERVER_URL}/admin/:splat 302`, ...suggest];
+  // The owner's editor from this site's own address (editorLoader): its script and the calls it makes.
+  const editor = [`/_qc/e.js ${SERVER_URL}/editor/qc-editor.js 200!`, `/_qc/api/editor/* ${SERVER_URL}/api/editor/:splat 200!`, `/_qc/api/admin/images ${SERVER_URL}/api/admin/images 200!`, `/_qc/api/admin/images/* ${SERVER_URL}/api/admin/images/:splat 200!`];
+  const admin = [...editor, `/admin ${SERVER_URL}/admin/reviews 302`, `/admin/* ${SERVER_URL}/admin/:splat 302`, ...suggest];
   fs.writeFileSync(path.join(OUT, '_redirects'), `# Made by scripts/guides/publish.ts: pages that moved (scripts/guides/site-redirects.json, guide aliases).\n${[...admin, ...lines].join('\n')}\n`);
   console.log(`Redirects: ${lines.length} old URL(s) to the pages that replaced them.`);
 }
@@ -628,7 +632,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
     .qc-hit { animation: qc-hit 2.4s ease-out; border-radius: .5rem; }
     @keyframes qc-hit { from { background-color: rgba(168, 127, 251, .2); box-shadow: 0 0 0 1px rgba(168, 127, 251, .55); } to { background-color: transparent; box-shadow: 0 0 0 1px transparent; } }
     ::target-text { background-color: rgba(168, 127, 251, .35); color: inherit; }
-  </style>${opts.guide ? editorLoader() : ''}
+  </style>${editorLoader()}
 </head>
 <body class="min-h-screen"${opts.guide ? ` data-guide="${esc(opts.guide)}"` : ''}${opts.area ? ` data-area="${esc(opts.area)}"` : ''}>
   <nav class="sticky top-0 z-40 bg-[#07070a]/85 backdrop-blur border-b border-white/5" aria-label="Main">
@@ -2157,7 +2161,7 @@ async function main() {
     path.join(OUT, 'sitemap.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${[...new Set(sitemap)].map((u) => `  <url><loc>${u}</loc>${LASTMOD.get(u) ? `<lastmod>${new Date(LASTMOD.get(u)!).toISOString().slice(0, 10)}</lastmod>` : ''}</url>`).join('\n')}\n</urlset>\n`,
   );
-  fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`);
+  fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /_qc/\n\nSitemap: ${SITE}/sitemap.xml\n`);
   if (PREVIEW) {
     // A preview: the site's icons beside it, and its own stylesheet; the website files and the homepage are untouched.
     for (const f of ['icon.svg', 'favicon.ico', 'favicon-96.png', 'favicon-192.png']) if (fs.existsSync(path.resolve('Marketing_Website_Files', f))) fs.copyFileSync(path.resolve('Marketing_Website_Files', f), path.join(OUT, f));

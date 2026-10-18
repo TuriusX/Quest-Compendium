@@ -11,6 +11,8 @@
  */
 /* eslint-disable */
 export function qcEditorClient(cfg: { api: string; site: string }): void {
+  // Loaded early (async, from the page's head): start once the page is there.
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', () => qcEditorClient(cfg)); return; }
   const w: any = window;
   if (w.__qcEditor) return;
   w.__qcEditor = true;
@@ -20,6 +22,16 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
 
   // ---- The page --------------------------------------------------------------------------------------------------
   const m = location.pathname.match(/^\/(?:([a-z]{2})\/)?guides\/([a-z0-9-]+)\/(?:([a-z0-9-]+)\/)?(?:index\.html)?$/);
+  // Just connected (/editor/connect sent the key here): say so, on any page.
+  let fresh = false;
+  try { fresh = sessionStorage.getItem('qc_editor_new') === '1'; sessionStorage.removeItem('qc_editor_new'); } catch { /* */ }
+  if (fresh) {
+    const t = document.createElement('div');
+    t.setAttribute('style', 'position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:2147483002;background:#1a1408;border:1px solid #f5b942;color:#f7e7c2;border-radius:12px;padding:10px 16px;font:600 14px system-ui,sans-serif;box-shadow:0 8px 30px #000a;max-width:calc(100vw - 24px);text-align:center');
+    t.textContent = m ? '✓ This device can edit the guides now. Tap anything on the page to change it.' : '✓ This device can edit the guides now. Open any guide page: the amber Owner bar is at the bottom.';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 7000);
+  }
   if (!m) return;
   const LANG = m[1] || 'en', GAME = m[2], SLUG = m[3] || '';
   const TEXT_OK = !!SLUG && SLUG !== 'achievements';
@@ -338,7 +350,7 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
   const sameTarget = (a: any, b: any) => a.target && b.target && a.target.kind === b.target.kind && a.target.slug === b.target.slug && (a.target.id || '') === (b.target.id || '');
 
   async function openPicture(id: string, img: any) {
-    const p = open(`<h4>Picture</h4><div class="qe-dim" data-what>Loading…</div><div class="qe-row"><button class="qe-btn" data-a="crop">⤧ Recrop</button><button class="qe-btn" data-a="swap">↻ Another picture</button><button class="qe-btn bad" data-a="remove">✕ Remove</button><a class="qe-btn" target="_blank" rel="noopener" href="${esc(cfg.api)}/admin/images?game=${encodeURIComponent(GAME)}">☰ Review queue</a></div><div data-body></div><div data-note></div>`, img.closest('figure') || img);
+    const p = open(`<h4>Picture</h4><div class="qe-dim" data-what>Loading…</div><div class="qe-row"><button class="qe-btn" data-a="crop">⤧ Recrop</button><button class="qe-btn" data-a="swap">↻ Another picture</button><button class="qe-btn bad" data-a="remove">✕ Remove</button><a class="qe-btn" target="_blank" rel="noopener" href="${esc(cfg.site)}/admin/images?game=${encodeURIComponent(GAME)}">☰ Review queue</a></div><div data-body></div><div data-note></div>`, img.closest('figure') || img);
     let x: any = null;
     try { x = (await images()).find((i) => i.id === id) || null; } catch (err: any) { note(p, err.message, 'qe-warn'); }
     const what = p.querySelector('[data-what]');
