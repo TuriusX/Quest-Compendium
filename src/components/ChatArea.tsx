@@ -58,6 +58,7 @@ import { quickChips, quickLabelKey, type QuickId } from '../utils/quickQuestions
 import { displayGameName } from '../utils/gameName';
 import { showFirstRunHints } from '../utils/sessions';
 import { ENTRY_ICON_PATHS, ENTRY_COLORS, type EntryKind } from '../utils/entryKind';
+import { TtsPlayer } from '../utils/ttsPlayer';
 declare const __APP_BUILD__: { version: string } | undefined;
 const BUILD = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : { version: 'dev' };
 
@@ -446,8 +447,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
-  const audioQueueRef = useRef<string[]>([]);
+  // The spoken answer's player (utils/ttsPlayer.ts): its pieces scheduled back to back, seamlessly.
+  const ttsPlayerRef = useRef<TtsPlayer | null>(null);
   const ttsCacheRef = useRef<Map<string, string[]>>(new Map());
   const ttsAbortControllerRef = useRef<AbortController | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -497,12 +498,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         ttsAbortControllerRef.current.abort();
         ttsAbortControllerRef.current = null;
       }
-      audioQueueRef.current = [];
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current.currentTime = 0;
-        currentAudioRef.current = null;
-      }
+      ttsPlayerRef.current?.stop();
+      ttsPlayerRef.current = null;
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
@@ -909,14 +906,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       ttsAbortControllerRef.current.abort();
       ttsAbortControllerRef.current = null;
     }
-    // 2. Clear remaining queued audio chunks
-    audioQueueRef.current = [];
-    // 3. Pause and reset any active HTML5 audio element
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current.currentTime = 0;
-      currentAudioRef.current = null;
-    }
+    // 2. Stop the spoken answer (everything scheduled, and what's still coming)
+    ttsPlayerRef.current?.stop();
+    ttsPlayerRef.current = null;
     // 4. Cancel any native browser speech synthesis queue
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -925,40 +917,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setAudioLoadingId(null);
   };
 
-  const playNextAudioChunk = (msgId: string, src: string) => {
-    if (ttsAbortControllerRef.current?.signal.aborted) return;
-    const audio = new Audio(src);
-    currentAudioRef.current = audio;
-
-    audio.onended = () => {
-      if (currentAudioRef.current === audio) {
-        if (audioQueueRef.current.length > 0) {
-          const nextSrc = audioQueueRef.current.shift()!;
-          playNextAudioChunk(msgId, nextSrc);
-        } else {
-          currentAudioRef.current = null;
-          setPlayingAudioId(null);
-          setAudioLoadingId(null);
-        }
+  // A new spoken answer: its pieces go into one player, which ends the "playing" state when the last has played.
+  const startTtsPlayer = (msgId: string): TtsPlayer => {
+    ttsPlayerRef.current?.stop();
+    const player = new TtsPlayer(() => {
+      if (ttsPlayerRef.current === player) {
+        ttsPlayerRef.current = null;
+        setPlayingAudioId(null);
+        setAudioLoadingId(null);
       }
-    };
-
-    audio.onerror = () => {
-      if (currentAudioRef.current === audio) {
-        if (audioQueueRef.current.length > 0) {
-          const nextSrc = audioQueueRef.current.shift()!;
-          playNextAudioChunk(msgId, nextSrc);
-        } else {
-          currentAudioRef.current = null;
-          setPlayingAudioId(null);
-          setAudioLoadingId(null);
-        }
-      }
-    };
-
-    audio.play().catch((err) => {
-      console.warn('Audio playback start was prevented or interrupted:', err);
     });
+    ttsPlayerRef.current = player;
+    setPlayingAudioId(msgId);
+    return player;
   };
 
   const handlePlayTTS = async (msgId: string, text: string) => {
@@ -977,11 +948,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     if (ttsCacheRef.current.has(cacheKey)) {
       const cached = [...ttsCacheRef.current.get(cacheKey)!];
       if (cached.length > 0) {
-        setPlayingAudioId(msgId);
         setAudioLoadingId(null);
-        const first = cached.shift()!;
-        audioQueueRef.current = cached;
-        playNextAudioChunk(msgId, first);
+        const player = startTtsPlayer(msgId);
+        for (const src of cached) player.enqueue(src);
+        player.finish();
         return;
       }
     }
@@ -1116,6 +1086,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           let buffer = '';
           const collectedChunks: string[] = [];
           let firstChunkPlayed = false;
+          let player: TtsPlayer | null = null;
 
           while (true) {
             const { value, done } = await reader.read();
@@ -1136,19 +1107,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     const audioSrc = `data:${mime};base64,${chunkData.audioBase64}`;
                     collectedChunks.push(audioSrc);
 
+                    // Each piece is decoded now and scheduled to start the moment the one before it ends.
                     if (!firstChunkPlayed) {
                       firstChunkPlayed = true;
                       setAudioLoadingId(null);
                       setTtsStatusError(null);
-                      playNextAudioChunk(msgId, audioSrc);
-                    } else {
-                      audioQueueRef.current.push(audioSrc);
-                      if (!currentAudioRef.current) {
-                        const nextSrc = audioQueueRef.current.shift()!;
-                        setPlayingAudioId(msgId);
-                        playNextAudioChunk(msgId, nextSrc);
-                      }
+                      player = startTtsPlayer(msgId);
                     }
+                    player?.enqueue(audioSrc);
                   }
                 } catch (e) {
                   // Ignore JSON parse errors for incomplete chunks
@@ -1162,7 +1128,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           if (collectedChunks.length > 0) {
             ttsCacheRef.current.set(cacheKey, collectedChunks);
           }
-          if (firstChunkPlayed) return;
+          // Stopped midway: the player is already gone; otherwise it ends after the last piece.
+          if (abortController.signal.aborted) return;
+          if (firstChunkPlayed) { player?.finish(); return; }
           fallbackToBrowserTTS('TTS Rate limit exceeded (100 requests/day for gemini-3.1-flash-tts). Using local fallback.'); return;
         } else if (contentType.includes('application/json')) {
           // Standard JSON payload fallback
@@ -1175,7 +1143,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             const mime = data.mimeType || 'audio/wav';
             const audioSrc = `data:${mime};base64,${data.audioBase64}`;
             ttsCacheRef.current.set(cacheKey, [audioSrc]);
-            playNextAudioChunk(msgId, audioSrc);
+            const player = startTtsPlayer(msgId);
+            player.enqueue(audioSrc);
+            player.finish();
             return;
           }
         }

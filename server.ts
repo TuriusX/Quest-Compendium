@@ -34,6 +34,7 @@ import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeT
 import { questionType } from './src/utils/questionType';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerGuideImages } from './guideImages';
+import { ttsPcm, pcmToWav } from './ttsAudio';
 import { registerOwnerEditor, editorOrAuth } from './ownerEditor';
 import { registerContributions } from './contributions';
 import { registerAnswerReports } from './answerReports';
@@ -2144,31 +2145,6 @@ percentages:
   }
 
   // Helper to convert 16-bit linear PCM audio buffer to standard WAV format
-  function pcmToWav(pcmBuffer: Buffer, sampleRate: number = 24000, numChannels: number = 1): Buffer {
-    const header = Buffer.alloc(44);
-    const dataSize = pcmBuffer.length;
-    const fileSize = dataSize + 36;
-    const byteRate = sampleRate * numChannels * 2;
-    const blockAlign = numChannels * 2;
-
-    header.write('RIFF', 0);
-    header.writeUInt32LE(fileSize, 4);
-    header.write('WAVE', 8);
-
-    header.write('fmt ', 12);
-    header.writeUInt32LE(16, 16);
-    header.writeUInt16LE(1, 20); // 1 = PCM
-    header.writeUInt16LE(numChannels, 22);
-    header.writeUInt32LE(sampleRate, 24);
-    header.writeUInt32LE(byteRate, 28);
-    header.writeUInt16LE(blockAlign, 32);
-    header.writeUInt16LE(16, 34); // 16 bits per sample
-
-    header.write('data', 36);
-    header.writeUInt32LE(dataSize, 40);
-
-    return Buffer.concat([header, pcmBuffer]);
-  }
 
   const TTS_VOICE_MAP: Record<string, string> = {
     'puck': 'Puck',
@@ -2298,7 +2274,8 @@ percentages:
         }
         if (currentChunk) chunks.push(currentChunk);
 
-        const synthesizeChunk = async (chunkText: string): Promise<{pcm: Buffer | null, error?: string}> => {
+        // Each chunk's sound only (ttsAudio.ts): the model's WAV header and its C2PA block are not sound.
+        const synthesizeChunk = async (chunkText: string): Promise<{pcm: Buffer | null, rate?: number, error?: string}> => {
           if (!chunkText.trim()) return { pcm: null };
           try {
             const speak = (model: string) =>
@@ -2326,7 +2303,8 @@ percentages:
             logUsage('narration', ttsModel, ttsResult);
             const inlinePart = ttsResult.candidates?.[0]?.content?.parts?.[0];
             const b64Data = inlinePart?.inlineData?.data;
-            return { pcm: b64Data ? Buffer.from(b64Data, 'base64') : null };
+            const audio = b64Data ? ttsPcm(Buffer.from(b64Data, 'base64'), String(inlinePart?.inlineData?.mimeType || '')) : null;
+            return audio && audio.pcm.length ? { pcm: audio.pcm, rate: audio.sampleRate } : { pcm: null };
           } catch (err: any) {
             if (err?.message?.includes('429') || err?.message?.includes('RESOURCE_EXHAUSTED') || err?.message?.includes('quota')) {
                 return { pcm: null, error: 'QUOTA_EXCEEDED' };
@@ -2339,6 +2317,7 @@ percentages:
 
         if (stream && chunks.length > 0) {
           const allPcmBuffers: Buffer[] = [];
+          const rates = new Set<number>();
 
           // Synthesize Chunk 0 first
           const firstResult = await synthesizeChunk(chunks[0]);
@@ -2353,7 +2332,8 @@ percentages:
 
           if (firstResult.pcm) {
             allPcmBuffers.push(firstResult.pcm);
-            const firstWav = pcmToWav(firstResult.pcm, 24000, 1);
+            rates.add(firstResult.rate || 24000);
+            const firstWav = pcmToWav(firstResult.pcm, firstResult.rate || 24000, 1);
             res.write(JSON.stringify({
               chunkIndex: 0,
               totalChunks: chunks.length,
@@ -2367,14 +2347,15 @@ percentages:
           if (chunks.length > 1) {
             const remainingPromises = chunks.slice(1).map(async (chunk, idx) => {
               const res = await synthesizeChunk(chunk);
-              return { index: idx + 1, pcm: res.pcm };
+              return { index: idx + 1, pcm: res.pcm, rate: res.rate };
             });
 
             const remainingResults = await Promise.all(remainingPromises);
             for (const item of remainingResults) {
               if (item.pcm) {
                 allPcmBuffers.push(item.pcm);
-                const wavBuf = pcmToWav(item.pcm, 24000, 1);
+                rates.add(item.rate || 24000);
+                const wavBuf = pcmToWav(item.pcm, item.rate || 24000, 1);
                 res.write(JSON.stringify({
                   chunkIndex: item.index,
                   totalChunks: chunks.length,
@@ -2387,9 +2368,9 @@ percentages:
           }
 
           // Cache combined audio for instant re-play
-          if (allPcmBuffers.length > 0) {
+          if (allPcmBuffers.length > 0 && rates.size === 1) {
             const combined = Buffer.concat(allPcmBuffers);
-            const fullWav = pcmToWav(combined, 24000, 1);
+            const fullWav = pcmToWav(combined, [...rates][0], 1);
             if (ttsServerCache.size > 100) ttsServerCache.clear();
             ttsServerCache.set(cacheKey, {
               audioBase64: fullWav.toString('base64'),
@@ -2407,10 +2388,11 @@ percentages:
            return res.status(429).json({ error: 'TTS Rate limit exceeded (100 requests/day). Using local fallback.' });
         }
         const validPcms = pcmResults.map(r => r.pcm).filter((b): b is Buffer => b !== null);
+        const rate = pcmResults.find((r) => r.pcm)?.rate || 24000;
 
         if (validPcms.length > 0) {
           const combinedPcm = Buffer.concat(validPcms);
-          const wavBuffer = pcmToWav(combinedPcm, 24000, 1);
+          const wavBuffer = pcmToWav(combinedPcm, rate, 1);
           const resultPayload = {
             audioBase64: wavBuffer.toString('base64'),
             mimeType: 'audio/wav',
