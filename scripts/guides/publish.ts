@@ -540,7 +540,27 @@ function suggestScript(key: string, slug: string, page: 'area' | 'entity'): stri
  * this line does nothing and the page is unchanged.
  */
 function editorLoader(): string {
-  return `<script>try{var m=location.hash.match(/^#qc-editor=([A-Za-z0-9_-]{40,})$/);if(m){localStorage.setItem('qc_editor',m[1]);sessionStorage.setItem('qc_editor_new','1');history.replaceState(null,'',location.pathname+location.search)}if(localStorage.getItem('qc_editor')){var s=document.createElement('script');s.src='/_qc/e.js?p=1';s.async=true;document.head.appendChild(s)}}catch(e){}</script>`;
+  // The key is kept twice (local storage and a first-party cookie, 400 days), each restoring the other, so clearing one
+  // kind of site storage doesn't disconnect the device; only Disconnect (in the editor) removes both.
+  return `<script>try{var k=null,m=location.hash.match(/^#qc-editor=([A-Za-z0-9_-]{40,})$/);if(m){k=m[1];sessionStorage.setItem('qc_editor_new','1');history.replaceState(null,'',location.pathname+location.search)}else{k=localStorage.getItem('qc_editor')||(document.cookie.match(/(?:^|; )qc_editor=([A-Za-z0-9_-]{40,})/)||[])[1]||null}if(k){localStorage.setItem('qc_editor',k);document.cookie='qc_editor='+k+'; Max-Age=34560000; Path=/; Secure; SameSite=Lax';var s=document.createElement('script');s.src='/_qc/e.js?p=1';s.async=true;document.head.appendChild(s)}}catch(e){}</script>`;
+}
+
+/** Every page of the site carries the editor line: the pages built here have it; this adds it to the rest (the homepage, Pricing, FAQ, the 404 page...). */
+function editorEverywhere(root: string): number {
+  let n = 0;
+  const walk = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) { if (e.name !== 'img' && e.name !== 'assets') walk(p); continue; }
+      if (!e.name.endsWith('.html') || e.name === 'app.html') continue;
+      const s = fs.readFileSync(p, 'utf8');
+      if (s.includes('/_qc/e.js') || !s.includes('</head>')) continue;
+      fs.writeFileSync(p, s.replace('</head>', `${editorLoader()}\n</head>`));
+      n++;
+    }
+  };
+  walk(root);
+  return n;
 }
 
 /** Netlify's _redirects: the moved pages' old URLs, 301 to the pages that replaced them. */
@@ -551,7 +571,8 @@ function writeRedirects(moved: { key: string; from: string; to: string }[], live
     ? [`/suggest ${SERVER_URL}/suggest 200!`, `/api/contributions ${SERVER_URL}/api/contributions 200!`, `/__/auth/* https://quest-compendium-1bccf.firebaseapp.com/__/auth/:splat 200!`, `/__/firebase/* https://quest-compendium-1bccf.firebaseapp.com/__/firebase/:splat 200!`]
     : [`/suggest ${SERVER_URL}/suggest 302`];
   // The owner's editor from this site's own address (editorLoader): its script and the calls it makes.
-  const editor = [`/_qc/e.js ${SERVER_URL}/editor/qc-editor.js 200!`, `/_qc/api/editor/* ${SERVER_URL}/api/editor/:splat 200!`, `/_qc/api/admin/images ${SERVER_URL}/api/admin/images 200!`, `/_qc/api/admin/images/* ${SERVER_URL}/api/admin/images/:splat 200!`];
+  // /owner: the short way to connect a device (sign-in happens on the app server: the website can't sign in itself).
+  const editor = [`/owner ${SERVER_URL}/editor/connect?to=${SITE}/guides/ 302`, `/_qc/connect ${SERVER_URL}/editor/connect 302`, `/_qc/e.js ${SERVER_URL}/editor/qc-editor.js 200!`, `/_qc/api/editor/* ${SERVER_URL}/api/editor/:splat 200!`, `/_qc/api/admin/images ${SERVER_URL}/api/admin/images 200!`, `/_qc/api/admin/images/* ${SERVER_URL}/api/admin/images/:splat 200!`];
   const admin = [...editor, `/admin ${SERVER_URL}/admin/reviews 302`, `/admin/* ${SERVER_URL}/admin/:splat 302`, ...suggest];
   fs.writeFileSync(path.join(OUT, '_redirects'), `# Made by scripts/guides/publish.ts: pages that moved (scripts/guides/site-redirects.json, guide aliases).\n${[...admin, ...lines].join('\n')}\n`);
   console.log(`Redirects: ${lines.length} old URL(s) to the pages that replaced them.`);
@@ -2199,6 +2220,7 @@ async function main() {
   walkHtml(OUT);
   console.log(`Links: final URLs in ${relinked} page(s).`);
   console.log(`App pages: ${writeAppFragments(OUT)} (app.html beside each guide page, for the apps' Guide tab).`);
+  console.log(`Editor line added to ${editorEverywhere(OUT)} other page(s) (homepage and the site's own pages).`);
   await buildSiteCss();
   console.log(`Built ${games.reduce((n, g) => n + g.count, 0)} guide page(s) for ${games.length} game(s)${withDrafts ? ' (drafts included, marked DRAFT and hidden from search)' : ''}.`);
   console.log(`Open ${path.join(OUT, 'guides', 'index.html')} in your browser to look them over.`);

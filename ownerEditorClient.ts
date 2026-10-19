@@ -32,8 +32,7 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 7000);
   }
-  if (!m) return;
-  const LANG = m[1] || 'en', GAME = m[2], SLUG = m[3] || '';
+  const LANG = (m && m[1]) || 'en', GAME = m ? m[2] : '', SLUG = (m && m[3]) || '';
   const TEXT_OK = !!SLUG && SLUG !== 'achievements';
   const esc = (s: any) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c]);
   const norm = (s: any) => String(s ?? '').normalize('NFKC').replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();
@@ -44,7 +43,7 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
   async function api(path: string, body?: any): Promise<any> {
     const r = await fetch(cfg.api + path, { method: body ? 'POST' : 'GET', headers: { 'X-QC-Editor': KEY, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
     const j = await r.json().catch(() => ({}));
-    if (r.status === 401) { try { localStorage.removeItem('qc_editor'); } catch { /* */ } teardown(); throw new Error(j.error || 'Not connected.'); }
+    if (r.status === 401) { LOST = true; drawBar(); throw new Error(j.error || 'Not connected.'); }
     if (!r.ok) throw new Error(j.error || r.statusText);
     return j;
   }
@@ -100,11 +99,13 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
   const bar = document.createElement('div');
   bar.className = 'qe-ui qe-bar';
   document.body.appendChild(bar);
-  let me: any = null;
+  let me: any = null, LOST = false;
+  const RECONNECT = `${cfg.site}/_qc/connect`;
   function drawBar() {
+    if (LOST) { bar.innerHTML = `<b>Owner</b><span class="qe-sep">·</span><span>This device isn't connected any more.</span><span class="qe-sep">·</span><a href="${RECONNECT}?to=${encodeURIComponent(location.href.split('#')[0])}" style="color:#f5b942">Reconnect</a>`; document.body.classList.remove('qe-on'); return; }
     const waiting = me ? me.edits.waiting : 0, q = me ? me.queue.waiting + me.queue.held : 0;
     bar.innerHTML = `<button class="qe-tog ${ON ? 'on' : ''}" data-qe="toggle"><i></i><b>Owner</b>${narrow() ? '' : ' editing'}</button>`
-      + (narrow() ? '' : `<span class="qe-sep">·</span><span>${waiting ? `${waiting} waiting for the next publish` : TEXT_OK ? 'Tap anything to change it' : 'Open a page of this guide to edit it'}</span>`)
+      + (narrow() ? '' : `<span class="qe-sep">·</span><span>${waiting ? `${waiting} waiting for the next publish` : TEXT_OK ? 'Tap anything to change it' : GAME ? 'Open a page of this guide to edit it' : 'Open any guide page to edit it'}</span>`)
       + `<span class="qe-sep">·</span><button data-qe="mine">Your edits${me && me.edits.stale ? ` (${me.edits.stale} ⚠)` : ''}</button>`
       + `<span class="qe-sep">·</span><button data-qe="queue">Pipeline${q ? ` (${q})` : ''}</button>`
       + (TEXT_OK && DATA && DATA.kind === 'area' ? `<span class="qe-sep">·</span><button data-qe="add">＋ Missing item</button>` : '');
@@ -480,7 +481,7 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
       try {
         if (ed) { await api('/api/editor/edits/' + ed.dataset.e, { action: ed.dataset.do }); refresh(); return draw('edits'); }
         if (q) { await api('/api/editor/queue/' + q.dataset.q, { action: q.dataset.do }); refresh(); return draw('queue'); }
-        if (off) { await api('/api/editor/disconnect', off.dataset.off === 'all' ? { all: true } : {}); try { localStorage.removeItem('qc_editor'); } catch { /* */ } teardown(); }
+        if (off) { await api('/api/editor/disconnect', off.dataset.off === 'all' ? { all: true } : {}); try { localStorage.removeItem('qc_editor'); document.cookie = 'qc_editor=; Max-Age=0; Path=/; Secure; SameSite=Lax'; } catch { /* */ } teardown(); }
       } catch (err: any) { note(p, err.message, 'qe-warn'); }
     });
     draw(tab);
@@ -503,7 +504,10 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
   }
   (async () => {
     drawBar();
-    try { me = await api('/api/editor/me'); } catch { return; }
+    for (let i = 0; i < 4 && !me; i++) {
+      try { me = await api('/api/editor/me'); } catch { if (LOST) return; await new Promise((r) => setTimeout(r, 1500 * (i + 1))); }
+    }
+    if (!me) return;
     if (TEXT_OK) DATA = await fetch('page.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     // A translated page: the English page too, to tell a line still shown in English (fixed in English, for every language).
     if (TEXT_OK && LANG !== 'en') EN = await fetch(`/guides/${GAME}/${SLUG}/page.json`, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);

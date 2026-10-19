@@ -66,7 +66,8 @@ export function editorOrAuth(requireAuth: Mw): Mw {
   return async (req, res, next) => {
     const key = req.get('x-qc-editor');
     if (!key) return requireAuth(req, res, next);
-    const u = await keyUser(key).catch(() => null);
+    let u: Awaited<ReturnType<typeof keyUser>> = null;
+    try { u = await keyUser(key); } catch { return res.status(503).json({ error: 'The editor is busy for a moment; try again.' }); }
     if (!u) return res.status(401).json({ error: 'This device is no longer connected to the editor.' });
     (req as any).user = { uid: `editor:${u.email}`, email: u.email, email_verified: true, editorKey: u.hash };
     next();
