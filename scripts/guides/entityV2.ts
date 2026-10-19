@@ -57,7 +57,7 @@ export async function searchedEvidence(prompt: string, prefix: string, topic: st
   for (let attempt = 0; attempt < 2 && !res; attempt++) {
     const r: any = await gemini().models.generateContent({
       model: MODEL,
-      contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}${prompt}\nRun a few searches (the game's wikis and guides; never fandom.com or fextralife.com; at most four). Answer in short factual sentences, one fact per line, only what the sources say.` }] }],
+      contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}${prompt}\nRun a few searches (the game's wikis and guides; never fandom.com; at most four). Answer in short factual sentences, one fact per line, only what the sources say.` }] }],
       config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 5000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     if (searchesIn(r)) res = r;

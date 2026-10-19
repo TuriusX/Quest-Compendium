@@ -969,13 +969,7 @@ async function main() {
   // The last compendium link check (after the latest deploy, by this run or the flagship job).
   const lcs: any = state.linkCheck || (await stateRef.get()).data()?.linkCheck;
   if (lcs?.at && Date.now() - lcs.at < 2 * DAY) report.push(lcs.broken?.length ? `🔗❌ Compendium links: ${lcs.broken.length} of ${lcs.checked} don't work on the live site: ${lcs.broken.slice(0, 10).map((b: any) => `${b.url.replace('https://questcompendium.com', '')} (${b.status || 'no answer'})`).join(', ')}.` : `🔗 Compendium links: all ${lcs.checked} work on the live site.`);
-  // Three weeks after Fextralife was blocked as evidence: pass rates of the guides that leaned on it, separately.
-  try {
-    const { fextralifeWatchLines } = await import('./fextralifeWatch');
-    report.push(...(await fextralifeWatchLines(Number(state.fextralifeWatchUntil) || undefined)));
-  } catch (e: any) {
-    console.warn(`Fextralife watch skipped: ${e?.message}`);
-  }
+  // (The Fextralife watch, fextralifeWatch.ts, ended: the owner allowed Fextralife again on Oct 19, 2026.)
   const guidesDone = (flagship.guides || []).every((g: any) => flagship.progress?.[g.key]?.phase === 'done');
   if (flagship.rollout?.enabled && (guidesDone || flagship.rollout.lastRun)) {
     // The traffic-driven rollout: pages live this month against its budget, the last run's pages and failures.

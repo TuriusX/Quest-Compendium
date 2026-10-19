@@ -40,7 +40,7 @@ export async function officialNames(key: string, lang: string, dry = false) {
     const batch = names.slice(i, i + 30);
     const res: any = await gemini().models.generateContent({
       model: MODEL,
-      contents: [{ role: 'user', parts: [{ text: `In the official ${LANG_NAME[lang]} version of the video game "${game}" (its in-game text), what are these places called? For each one whose official ${LANG_NAME[lang]} name a source shows, write one line exactly as: English name = official ${LANG_NAME[lang]} name. Leave out any you can't find in a source; never translate a name yourself.\n${batch.join('\n')}\nRun a few searches (the game's ${LANG_NAME[lang]} wikis and guides; never fandom.com or fextralife.com; at most five).` }] }],
+      contents: [{ role: 'user', parts: [{ text: `In the official ${LANG_NAME[lang]} version of the video game "${game}" (its in-game text), what are these places called? For each one whose official ${LANG_NAME[lang]} name a source shows, write one line exactly as: English name = official ${LANG_NAME[lang]} name. Leave out any you can't find in a source; never translate a name yourself.\n${batch.join('\n')}\nRun a few searches (the game's ${LANG_NAME[lang]} wikis and guides; never fandom.com; at most five).` }] }],
       config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     searchesIn(res);

@@ -91,7 +91,7 @@ async function planSection(game: string, s: Section, n: number): Promise<{ names
   for (let attempt = 0; attempt < 2 && !res; attempt++) {
     const r: any = await gemini().models.generateContent({
       model: MODEL,
-      contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}For a player's guide to the video game "${game}", the section "${s.title}" (${s.what || ''}): list the ${n} ${noun} it covers, exact in-game names${quest ? '' : ', most important first'}. Run a few searches (the game's wikis and guides; never fandom.com or fextralife.com). ${shape}` }] }],
+      contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}For a player's guide to the video game "${game}", the section "${s.title}" (${s.what || ''}): list the ${n} ${noun} it covers, exact in-game names${quest ? '' : ', most important first'}. Run a few searches (the game's wikis and guides; never fandom.com). ${shape}` }] }],
       config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 6000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     console.log(`  [plan] ${s.title}: ${searchesIn(r)} searches`);

@@ -82,7 +82,7 @@ export async function assess(key: string, note = '') {
         if (scope.dollars > MAX_DOLLARS - 0.4) throw new Error(`cost guard: $${scope.dollars.toFixed(2)} spent, next call could pass $${MAX_DOLLARS}`);
         const res: any = await gemini().models.generateContent({
           model: MODEL,
-          contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}${prompt}\nRun a few Google searches (the best walkthrough sites and wikis for this game; never fandom.com or fextralife.com; forums and videos only for what players ask). Answer in short factual lines, one fact per line, only what the sources say.` }] }],
+          contents: [{ role: 'user', parts: [{ text: `${attempt ? 'You must run Google searches before answering. Do not answer from memory.\n\n' : ''}${prompt}\nRun a few Google searches (the best walkthrough sites and wikis for this game; never fandom.com; forums and videos only for what players ask). Answer in short factual lines, one fact per line, only what the sources say.` }] }],
           config: { tools: [{ googleSearch: {} }], temperature: 0.2, maxOutputTokens: 12000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
         });
         const n = searchesIn(res);
@@ -96,7 +96,7 @@ export async function assess(key: string, note = '') {
     const a1 = await searched([
       `For a player's guide to the video game "${game}": how is the game structured (linear, open world, hub-based or branching; how the story is divided; how much player choices matter and where; how much character builds matter; the main collectible kinds; how many missables and of what kind)?`,
       'What do players search for and ask about most for this game?',
-      'Which sections and compendium types do the 3 to 5 best-known guides for this game have (name each site; not Fandom or Fextralife)?',
+      'Which sections and compendium types do the 3 to 5 best-known guides for this game have (name each site; not Fandom)?',
     ].join('\n'));
     const a2 = await searched([
       `For the video game "${game}", how many of each kind of thing does a complete guide cover? For example story missions, side quests, Stranger missions, companions, bosses, merchants, legendary animals, and each collectible kind. Use the game's own terms and give 10 to 16 kinds, each with its number as the sources give it.`,

@@ -44,11 +44,12 @@ const TOPICS: { topic: string; ask: (game: string, area: string, neighbours: str
  */
 export const LOW_TRUST = /(^|\.)(reddit\.com|youtube\.com|youtu\.be|steamcommunity\.com|facebook\.com|x\.com|twitter\.com|tiktok\.com|quora\.com|scribd\.com|pinterest\.com|royalcdkeys\.com|mmoexp\.com|plarium\.com|g2a\.com|eneba\.com|kinguin\.net|instant-gaming\.com)$/i;
 /**
- * Sites never used as evidence at all: their robots.txt disallows AI crawlers and their terms forbid AI use (Fandom;
- * Fextralife/Valnet: "development or operation of artificial intelligence ... including retrieval-augmented
- * generation"; checked Oct 2026). Lines only they back are dropped, and they're taken off every other line.
+ * Sites never used as evidence at all: Fandom (its robots.txt disallows AI crawlers and its terms forbid AI use). Lines
+ * only it backs are dropped, and it's taken off every other line. Fextralife was blocked too from Oct 11, 2026 (Valnet's
+ * terms forbid "development or operation of artificial intelligence ... including retrieval-augmented generation");
+ * the owner allowed it again for content and pictures on Oct 19, 2026.
  */
-export const BLOCKED = /(^|\.)(fandom\.com|fextralife\.com)$/i;
+export const BLOCKED = /(^|\.)fandom\.com$/i;
 export const trustedSites = (sites: string[]) => sites.filter((s) => !LOW_TRUST.test(s) && !BLOCKED.test(s));
 /** The pack with low-trust-only evidence left out (and low-trust sites off each line). */
 export function trusted(p: EvidencePack): EvidencePack {

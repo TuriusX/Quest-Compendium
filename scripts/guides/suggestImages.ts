@@ -185,6 +185,50 @@ async function wikiImage(domain: string, title: string): Promise<{ url: string; 
   return hit && same(hit, title) ? pick(await api(`action=query&prop=pageimages&piprop=original&titles=${encodeURIComponent(hit)}`)) : null;
 }
 
+/**
+ * Fextralife (allowed by the owner for pictures and content, Oct 19 2026): the game's wiki there, found for free from
+ * the game's name ("Elden Ring" -> eldenring.wiki.fextralife.com) and kept in guideImageSources/{key}.fextralife.
+ * Valnet's terms don't grant reuse; every picture still waits for the owner's approval in /admin/images.
+ */
+export function fextralifeGuesses(game: string): string[] {
+  const words = game.toLowerCase().replace(/[™®©]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+  const main = game.toLowerCase().split(/[:\-–—(]/)[0].split(/[^a-z0-9]+/).filter(Boolean);
+  const noThe = (w: string[]) => (w[0] === 'the' ? w.slice(1) : w);
+  // The part after a colon names the game in long series titles ("The Elder Scrolls V: Skyrim" -> skyrim).
+  const sub = (game.toLowerCase().split(':')[1] || '').split(/[-–—(]/)[0].split(/[^a-z0-9]+/).filter(Boolean);
+  const out = [main, noThe(main), words, noThe(words), main.slice(0, 2), noThe(main).slice(0, 2), sub.slice(0, 1), sub].map((w) => w.join('')).filter((x) => x.length >= 3);
+  return [...new Set(out)].map((x) => `${x}.wiki.fextralife.com`);
+}
+async function fextralifeDomain(key: string, game: string, src: any): Promise<string> {
+  if (src.fextralife !== undefined) return src.fextralife?.domain || '';
+  let found = '';
+  for (const d of fextralifeGuesses(game)) {
+    const ok = await fetch(`https://${d}/`, { headers: { 'User-Agent': UA }, redirect: 'follow' }).then((r) => r.ok).catch(() => false);
+    if (ok) { found = d; break; }
+  }
+  await SOURCES().doc(key).set({ fextralife: found ? { domain: found } : null }, { merge: true });
+  return found;
+}
+/** A Fextralife page's main picture (its og:image), under the page's own name. */
+export async function fextralifeImage(domain: string, title: string): Promise<{ url: string; page: string; title: string } | null> {
+  const at = (t: string) => `https://${domain}/${encodeURIComponent(t.replace(/ /g, '+')).replace(/%2B/g, '+').replace(/%2C/g, ',')}`;
+  const get = (u: string) => fetch(u, { headers: { 'User-Agent': UA } }).then((r) => (r.ok ? r.text() : '')).catch(() => '');
+  // Its page names are case-sensitive: the guide's name, else every word capitalised ("Dutch Van Der Linde").
+  let page = at(title);
+  let html = await get(page);
+  const caps = title.replace(/\b([a-z])/g, (m) => m.toUpperCase());
+  if (!html && caps !== title) html = await get((page = at(caps)));
+  // The page's picture: its og:image, else the article's first picture (never the wiki's logo).
+  const first = (html.match(/<img[^>]*class="mw-file-element"[^>]*>/g) || []).map((t) => (t.match(/src="([^"]+)"/) || [])[1] || '').find((u) => u && !/logo/i.test(u)) || '';
+  const og = (html.match(/<meta property="og:image" content="([^"]+)"/) || [])[1] || first;
+  const name = ((html.match(/<meta property="og:title" content="([^"]+)"/) || [])[1] || title).replace(/\s*\|.*$/, '')
+    .replace(/&#0?39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  // Only the page's own picture (a file of this wiki), never the site's default.
+  // A thumbnail (".../thumb/a/ab/Name.png/300px-Name.png"): the full-size file instead.
+  const full = og.replace(/&amp;/g, '&').replace(/\/thumb(\/[0-9a-f]\/[0-9a-f]{2}\/[^/?]+)\/[^/]+$/, '$1');
+  return /^https:\/\/[a-z0-9.]*fextralifeimages\.com\/file\//.test(full) && !/logo|default|banner/i.test(full) ? { url: full, page, title: name } : null;
+}
+
 /** Every picture on a wiki page, biggest first: the page's other pictures when its main one was turned down. */
 async function wikiPageImages(domain: string, title: string): Promise<{ url: string; name: string }[]> {
   const q = `action=query&format=json&formatversion=2&redirects=1&generator=images&gimlimit=50&prop=imageinfo&iiprop=url|size|mime&titles=${encodeURIComponent(title)}`;
@@ -257,28 +301,38 @@ async function suggestFor(key: string, r: Run): Promise<void> {
   };
   let finished = true;
 
-  // 1. The wiki: labelled by name, checked cheaply.
+  // 1. The wikis (the game's Fandom wiki, then its Fextralife wiki): labelled by name, checked cheaply.
   const wiki = src.wiki?.domain ? String(src.wiki.domain) : '';
-  for (const t of top) {
-    if (!wiki) { mark(t, 'wiki', 'no wiki'); continue; }
+  const fx = await fextralifeDomain(key, game, src);
+  const wikis = [
+    ...(wiki ? [{ find: (n: string) => wikiImage(wiki, n), name: `Wiki (${wiki})`, credit: `Image: ${src.wiki?.name || wiki}, CC BY-SA`, terms: 'Fandom wikis: CC BY-SA, credit the wiki' }] : []),
+    ...(fx ? [{ find: (n: string) => fextralifeImage(fx, n), name: `Fextralife (${fx})`, credit: null, terms: 'Fextralife (Valnet): its terms do not grant reuse; allowed by the owner (Oct 19, 2026)' }] : []),
+  ];
+  wikiLoop: for (const t of top) {
+    if (!wikis.length) { mark(t, 'wiki', 'no wiki'); continue; }
     if (have.has(t)) { mark(t, 'wiki', 'has a picture'); continue; }
-    const w = await wikiImage(wiki, t.name);
-    if (!w || have.refs.has(w.url)) { mark(t, 'wiki', w ? 'seen before' : 'none'); continue; }
-    const buf = await download(w.url);
-    const img = buf && (await forLook(buf));
-    if (!buf || !img) { mark(t, 'wiki', 'too small'); continue; }
-    if (!canSpend(r, COST.check)) { finished = false; break; }
-    r.checked++;
-    have.refs.add(w.url);
-    const c = await check(game, img.jpeg, t, w.title);
-    if (!c.ok) { mark(t, 'wiki', 'turned down'); r.log.push(`wiki ✗ ${t.name}: ${c.what}`); continue; }
-    await suggest(t, buf, (w.url.match(/\.(png|jpe?g|webp)/i)?.[1] || 'jpg').replace('jpeg', 'jpg'), {
-      source: 'wiki', sourceUrl: w.url, sourceRef: w.url, sourceName: `Wiki (${wiki})`, confidence: 'high',
-      why: `The wiki page "${w.title}" uses this as its main picture. ${c.what.replace(/^(?:this|it) is /i, 'It is ').replace(/^(?:an?|the) /, (m) => m[0].toUpperCase() + m.slice(1))}`,
-      credit: `Image: ${src.wiki?.name || wiki}, CC BY-SA`, terms: 'Fandom wikis: CC BY-SA, credit the wiki',
-    });
-    mark(t, 'wiki', 'found');
-    r.log.push(`wiki ✓ ${t.name}`);
+    let why = 'none';
+    for (const wk of wikis) {
+      const w = await wk.find(t.name);
+      if (!w || have.refs.has(w.url)) { if (w) why = 'seen before'; continue; }
+      const buf = await download(w.url);
+      const img = buf && (await forLook(buf));
+      if (!buf || !img) { why = 'too small'; continue; }
+      if (!canSpend(r, COST.check)) { finished = false; break wikiLoop; }
+      r.checked++;
+      have.refs.add(w.url);
+      const c = await check(game, img.jpeg, t, w.title);
+      if (!c.ok) { why = 'turned down'; r.log.push(`${wk.name} ✗ ${t.name}: ${c.what}`); continue; }
+      await suggest(t, buf, (w.url.match(/\.(png|jpe?g|webp)/i)?.[1] || 'jpg').replace('jpeg', 'jpg'), {
+        source: 'wiki', sourceUrl: w.url, sourceRef: w.url, sourceName: wk.name, confidence: 'high',
+        why: `The wiki page "${w.title}" uses this as its main picture. ${c.what.replace(/^(?:this|it) is /i, 'It is ').replace(/^(?:an?|the) /, (m) => m[0].toUpperCase() + m.slice(1))}`,
+        credit: wk.credit, terms: wk.terms,
+      });
+      why = 'found';
+      r.log.push(`${wk.name} ✓ ${t.name}`);
+      break;
+    }
+    mark(t, 'wiki', why);
   }
 
   // 2. IGDB and 3. the press kit: unlabelled, so Flash looks at each against the whole target list.
@@ -421,6 +475,25 @@ export async function findAnother(key: string, target: ImageTarget): Promise<{ i
           source: 'wiki', sourceUrl: w.url, sourceRef: w.url, sourceName: `Wiki (${wiki})`, confidence: 'high',
           why: `Another picture from the wiki page "${target.name}". ${c.what}`,
           credit: `Image: ${src.wiki?.name || wiki}, CC BY-SA`, terms: 'Fandom wikis: CC BY-SA, credit the wiki',
+        } as any);
+      }
+    }
+    // Its Fextralife page's picture, checked like a wiki's.
+    const fx = await fextralifeDomain(key, game, src);
+    const f = fx ? await fextralifeImage(fx, target.name) : null;
+    if (f && !have.refs.has(f.url)) {
+      if (!fits(COST.check)) return null;
+      const buf = await download(f.url);
+      const img = buf && (await forLook(buf));
+      have.refs.add(f.url);
+      if (buf && img) {
+        tried++;
+        const c = await check(game, img.jpeg, t, f.title);
+        if (c.ok) return addImage({
+          game: key, target: stored, buf, ext: (f.url.match(/\.(png|jpe?g|webp)/i)?.[1] || 'jpg').replace('jpeg', 'jpg'), by: 'suggester', status: 'suggested',
+          source: 'wiki', sourceUrl: f.url, sourceRef: f.url, sourceName: `Fextralife (${fx})`, confidence: 'high',
+          why: `The Fextralife page "${f.title}" uses this as its main picture. ${c.what}`,
+          credit: null, terms: 'Fextralife (Valnet): its terms do not grant reuse; allowed by the owner (Oct 19, 2026)',
         } as any);
       }
     }

@@ -64,7 +64,7 @@ test("unsourced entries may go from a page nobody finds, or from an unchecked on
 
 test("an entry's own sources decide; banned and low-trust sites and our own site don't count", () => {
   const old = { status: "published", verified: false, items: [
-    { name: "Golden Gun", sources: ["fextralife.com", "reddit.com", "questcompendium.com"] },
+    { name: "Golden Gun", sources: ["prey.fandom.com", "reddit.com", "questcompendium.com"] },
     { name: "Q-Beam", sources: ["https://www.ign.com/wikis/prey"] },
   ] };
   const v = rebuildVerdict(old, { items: [] }, 0);

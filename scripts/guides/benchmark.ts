@@ -2,7 +2,7 @@
  * The usefulness benchmark for compendium pages: what the best quick answer about an entity says (the kind of answer
  * Google's AI overview gives), and whether our page covers it.
  *
- *   one searched call (allowed sources only: Fandom and Fextralife never count): the best quick answer for the entity,
+ *   one searched call (allowed sources only: Fandom never counts): the best quick answer for the entity,
  *     its key points (each marked core or extra, with a kind: location, how to get or unlock, quests and outcomes,
  *     choices and consequences, recruitment and romance, combat and strategy, rewards and drops, timing and missables,
  *     identity and lore, stats and abilities, other), and the questions players most ask about it; the sentences the
@@ -94,7 +94,7 @@ export function pageText(e: any): string {
 /** The best quick answer, its key points and the top questions, searched (allowed sources only). */
 export async function benchmarkAnswer(game: string, name: string, typeLabel: string): Promise<Omit<Benchmark, 'at' | 'cost'>> {
   const prompt = [
-    `A player of the video game "${game}" searches for "${name}" (${typeLabel}). Search the web (the game's wikis and guides; never fandom.com or fextralife.com) and write the best possible quick answer: what a player most needs to know, the way a top search answer would put it.`,
+    `A player of the video game "${game}" searches for "${name}" (${typeLabel}). Search the web (the game's wikis and guides; never fandom.com) and write the best possible quick answer: what a player most needs to know, the way a top search answer would put it.`,
     'Then list its key points and the questions players most ask about it. Use exactly this layout:',
     'ANSWER:',
     '<4 to 8 sentences>',
