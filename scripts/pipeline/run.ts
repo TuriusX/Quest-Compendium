@@ -919,7 +919,10 @@ async function main() {
   try {
     const coreSt: any = (await db().collection('system').doc('core').get()).data() || {};
     if (Array.isArray(coreSt.guides) && coreSt.guides.length) {
-      const { coreEstimate, coreBudget } = await import('../guides/core');
+      const { coreEstimate, coreBudget, boostLine } = await import('../guides/core');
+      // This month's moved fund (October 2026: re-verification of the top pages): progress, cost and searches.
+      const bl = await boostLine().catch(() => null);
+      if (bl) RUN.head.push(bl);
       const e = await coreEstimate();
       const b = await coreBudget();
       // The core programme's last day (every unit it built: quest pages, rebuilds, pages), first in the summary.

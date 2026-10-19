@@ -270,8 +270,89 @@ export async function logUnit(u: { key: string; slug: string; status: string; do
 }
 
 /** One run: the first incomplete guide in the list, then the next, while the budget, time and limits allow. */
+/**
+ * A fund moved to core for one month (system/core.boost, owner-approved: October 2026, the pipeline's unused $31):
+ * the approved re-verification queue (novemberWork.ts, system/auditWork: the most-searched unchecked pages, highest
+ * Search Console impressions first) rebuilt with the evidence method, before the programme's own work. It shares core's
+ * daily cap (the same $6 a day), never starts a page that could take it past its total (then it stops and the summary
+ * asks), and keeps the owner's checkpoint: every 10 pages, under 70% passed pauses it. Its spending is its own, not the
+ * programme's month; pages it does are skipped when November's work reaches them (November's allowance is untouched).
+ *
+ * system/core.boost: { month, budget, purpose: 'reverify', from, spent, searches, done, passed, log: [...], paused,
+ *   checkpoint: { pages: 10, minPass: 0.7, result } }
+ */
+export async function runBoost(): Promise<void> {
+  const st: any = (await cref().get()).data() || {};
+  const bo = st.boost;
+  if (!bo || bo.month !== month() || bo.purpose !== 'reverify') return;
+  if (bo.paused) { console.log(`Re-verification fund: paused (${bo.paused.why}).`); return; }
+  const aw: any = (await db().collection('system').doc('auditWork').get()).data() || {};
+  const queue: any[] = Array.isArray(aw.queue) ? aw.queue : [];
+  const { doOne } = await import('./novemberWork');
+  const budget = Number(bo.budget || 0);
+  let spent = Number(bo.spent || 0), searches = Number(bo.searches || 0), done = Number(bo.done || 0), passed = Number(bo.passed || 0);
+  let next = Number(bo.next || 0);
+  // Today's room is core's daily cap, shared with the programme (whatever ran today already counts).
+  let todaySpent = st.day === today() ? Number(st.spentToday || 0) : 0;
+  const daily = Number.isFinite(Number(st.daily)) ? Number(st.daily) : CORE_DAILY_DEFAULT;
+  // The most a page has cost lately: a page is started only if even that much keeps the fund within its total.
+  let worst = Math.max(0.6, ...((bo.log || []) as any[]).slice(-10).map((x) => Number(x.dollars || 0)));
+  const timeUp = () => Date.now() - RUN_STARTED > MINUTES * 60_000;
+  const cp = { pages: 10, minPass: 0.7, ...(bo.checkpoint || {}) };
+  let stop = '';
+  while (next < queue.length) {
+    const w = queue[next];
+    if (w.kind !== 'reverify') { next++; continue; }
+    // Already checked since the queue was made (the programme or a retry did it): skipped, free.
+    const a: any = (await db().collection('guides').doc(w.key).collection('areas').doc(w.ref).get()).data();
+    if (!a || a.status !== 'published' || a.verified === true) { next++; continue; }
+    if (spent + worst > budget) { stop = `the $${budget} fund is used up as far as it safely goes ($${spent.toFixed(2)} spent; the next page could cost up to $${worst.toFixed(2)}). Say if it should go further`; break; }
+    if (todaySpent + worst > daily) { stop = `today's $${daily} is used`; break; }
+    if (timeUp()) { stop = 'out of time for tonight'; break; }
+    const r = await doOne(w);
+    if (r.status === 'busy') { stop = `${w.key} was in use`; break; }
+    next++;
+    spent += r.dollars; searches += r.searches; todaySpent += r.dollars; done++;
+    worst = Math.max(worst * 0.9, r.dollars, 0.4);
+    const ok = /^live|held by the rebuild guard/.test(r.status);
+    if (ok) passed++;
+    const entry = { at: Date.now(), key: w.key, ref: w.ref, impressions: w.impressions || 0, status: r.status, dollars: Math.round(r.dollars * 1000) / 1000, searches: r.searches, detail: r.detail.slice(0, 120) };
+    console.log(`  re-verify ${w.key}/${w.ref}: ${r.status}, $${r.dollars.toFixed(3)}, ${r.searches} search(es)`);
+    // The fund's books and core's day (the shared cap); November's work starts after what's done here.
+    await cref().set({ boost: { spent, searches, done, passed, next, log: FieldValue.arrayUnion(entry) }, day: today(), spentToday: todaySpent }, { merge: true });
+    await db().collection('system').doc('auditWork').set({ next: Math.max(Number(aw.next || 0), next) }, { merge: true });
+    // The checkpoint, every 10 pages: the last 10's pass rate.
+    if (done % cp.pages === 0) {
+      const last: any[] = [...((bo.log || []) as any[]), entry].slice(-cp.pages);
+      const rate = last.filter((x) => /^live|held by the rebuild guard/.test(String(x.status))).length / last.length;
+      const bad = rate < cp.minPass;
+      await cref().set({ boost: { checkpoint: { ...cp, result: { at: Date.now(), pages: last.length, pass: Math.round(rate * 100) / 100, paused: bad } }, ...(bad ? { paused: { at: Date.now(), why: `${Math.round(rate * 100)}% of the last ${last.length} pages passed (the limit is ${Math.round(cp.minPass * 100)}%)` } } : {}) } }, { merge: true });
+      if (bad) { stop = 'the checkpoint paused it'; break; }
+    }
+  }
+  if (next >= queue.length) stop ||= 'the queue is done';
+  await cref().set({ boost: { lastStop: { at: Date.now(), why: stop } } }, { merge: true });
+  console.log(`Re-verification fund: ${done} page(s) so far, $${spent.toFixed(2)} of $${budget}; stopped: ${stop || 'nothing to do'}.`);
+}
+
+/** The fund's line for the Discord summary (run.ts): progress, cost, searches and their cost, the checkpoint. */
+export async function boostLine(): Promise<string | null> {
+  const st: any = (await cref().get()).data() || {};
+  const bo = st.boost;
+  if (!bo || bo.month !== month()) return null;
+  const { SEARCH_DOLLARS } = await import('../../usage');
+  const day = ((bo.log || []) as any[]).filter((x) => Number(x.at) >= Date.now() - 24 * 3600_000);
+  const ok = (x: any) => /^live|held by the rebuild guard/.test(String(x.status));
+  const dayCost = day.reduce((a, x) => a + Number(x.dollars || 0), 0), daySearches = day.reduce((a, x) => a + Number(x.searches || 0), 0);
+  const cp = bo.checkpoint?.result;
+  const name = (x: any) => `${String(x.ref).replace(/-/g, ' ')}${ok(x) ? '' : ` (${String(x.status).replace(/^not live /, '')})`}`;
+  return `🔍 Re-verification (October fund, $${bo.budget} moved from the pipeline): last day ${day.length} page(s), ${day.filter(ok).length} passed, $${dayCost.toFixed(2)} (${daySearches} searches ≈ $${(daySearches * SEARCH_DOLLARS).toFixed(2)})${day.length ? `: ${day.slice(0, 12).map(name).join(', ')}${day.length > 12 ? '…' : ''}` : ''}. In all: ${Number(bo.done || 0)} page(s), ${Number(bo.passed || 0)} passed, $${Number(bo.spent || 0).toFixed(2)} of $${bo.budget} (${Number(bo.searches || 0)} searches ≈ $${(Number(bo.searches || 0) * SEARCH_DOLLARS).toFixed(2)})${cp ? `; checkpoint: ${Math.round(Number(cp.pass) * 100)}% of the last ${cp.pages} passed` : ''}.${bo.paused ? ` ⏸️ Paused: ${bo.paused.why}. Say whether to go on.` : bo.lastStop?.why && /fund is used up/.test(bo.lastStop.why) ? ` ✋ Stopped: ${bo.lastStop.why}.` : ''}`;
+}
+
 export async function runCore(): Promise<void> {
   process.env.CORE_CHARGED = '1'; // charged to the core budget, so not to the local-runs ledger too (a local run)
+  // This month's moved fund first (October 2026: re-verification), within core's daily cap.
+  try { await runBoost(); } catch (e: any) { console.warn(`Re-verification fund skipped: ${e?.message || e}`); }
   const st: any = (await cref().get()).data() || {};
   if (!st.approved || !Array.isArray(st.guides) || !st.guides.length) { console.log('Core guides: no approved list yet (system/core.approved and guides). Nothing to do.'); return; }
   if (st.paused) { console.log(`Core guides: paused (${st.paused.why || 'until the owner says go'}).`); return; }

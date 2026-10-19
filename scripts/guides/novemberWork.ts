@@ -32,7 +32,7 @@ const ref = () => db().collection('system').doc('auditWork');
 const month = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }).slice(0, 7);
 const day = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
 
-type Work = { kind: 'reverify' | 'epilogue' | 'place' | 'mission' | 'glossary' | 'conflicts'; key: string; ref: string; impressions?: number };
+export type Work = { kind: 'reverify' | 'epilogue' | 'place' | 'mission' | 'glossary' | 'conflicts'; key: string; ref: string; impressions?: number };
 
 /** The queue, in the owner's order (re-verification first, highest impressions first). */
 export async function buildQueue(gscPages: [string, number, number, number][]): Promise<Work[]> {
@@ -80,11 +80,12 @@ export async function buildQueue(gscPages: [string, number, number, number][]): 
   return q;
 }
 
-async function doOne(w: Work): Promise<{ status: string; dollars: number; detail: string }> {
+/** One piece of work, with what it cost (searches included) and how many searches it made. */
+export async function doOne(w: Work): Promise<{ status: string; dollars: number; detail: string; searches: number }> {
   const scope = { dollars: 0, searches: 0 };
   let status = 'done', detail = '';
   const lk = await acquireGuideLock(w.key, `November work: ${w.kind}`);
-  if (isRefusal(lk)) return { status: 'busy', dollars: 0, detail: `${w.key} is in use` };
+  if (isRefusal(lk)) return { status: 'busy', dollars: 0, detail: `${w.key} is in use`, searches: 0 };
   try {
     await usageScope.run(scope, async () => {
       if (w.kind === 'reverify') {
@@ -132,7 +133,7 @@ async function doOne(w: Work): Promise<{ status: string; dollars: number; detail
   } finally {
     await lk.release().catch(() => {});
   }
-  return { status, dollars: scope.dollars, detail };
+  return { status, dollars: scope.dollars, detail, searches: scope.searches };
 }
 
 /** Up to max dollars of the next work today (November 2026 only, within the allowance and the daily cap). */
