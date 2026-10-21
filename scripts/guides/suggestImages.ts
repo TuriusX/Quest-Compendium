@@ -546,11 +546,13 @@ export async function suggestNightly(): Promise<string | null> {
   const done = st.pages || {};
   const order: string[] = [];
   for (const p of pages) if (!done[`${p.key}/${p.slug}`]?.all && !order.includes(p.key)) order.push(p.key);
-  if (!order.length) return null;
+  // Its own budget (not the pipeline's): shown every night, so a quiet night still says it ran.
+  const own = () => `$${(5 - b.monthLeft).toFixed(2)} of its own $5 this month`;
+  if (!order.length) return `🖼️ Suggested pictures: every top-100 page has been tried; nothing new tonight (${own()}).`;
   const r = await suggestGames(order, cap, Math.min(15, 30 - waiting));
   await b.add(spent(r));
   await STATE().set({ last: { at: Date.now(), suggested: r.suggested, checked: r.checked, dollars: spent(r) } }, { merge: true });
-  return `🖼️ Suggested pictures: ${r.suggested} from ${r.checked} checked ($${spent(r).toFixed(2)}${r.stopped ? `, stopped at ${r.stopped}` : ''}).`;
+  return `🖼️ Suggested pictures: ${r.suggested} from ${r.checked} checked ($${spent(r).toFixed(2)}${r.stopped ? `, stopped at ${r.stopped}` : ''}; ${own()}, ${waiting + r.suggested} waiting for you).`;
 }
 
 async function main() {
