@@ -866,6 +866,15 @@ async function main() {
   } catch (e: any) {
     console.warn(`November site work skipped: ${e?.message}`);
   }
+  // Mondays: do re-verified pages gain search traffic? Against similar untouched pages (reverifyStudy.ts), read only.
+  if (MONDAY) {
+    try {
+      const { reverifyStudyLines } = await import('./reverifyStudy');
+      for (const l of await reverifyStudyLines()) report.push(l);
+    } catch (e: any) {
+      console.warn(`Re-verification comparison skipped: ${e?.message}`);
+    }
+  }
   // Mondays: the weekly player section (playerWeek.ts): active players, their AI cost, who ran out of questions, and
   // the alert for revisiting the free limits (at the top of the summary).
   if (MONDAY) {
