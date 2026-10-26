@@ -60,11 +60,17 @@ export async function reverifyStudyLines(): Promise<string[]> {
     const a: any = (await db().collection('guides').doc(k).collection('areas').doc(s).get()).data();
     if (a && a.status === 'published' && a.verified !== true) control.push(id);
   }
+  const stats = (ids: string[]) => ({ b: sum(ids.map((id) => st.baseline[id])), n: sum(ids.map((id) => now[id] || [0, 0, 0])) });
   const line = (name: string, ids: string[]) => {
-    const b = sum(ids.map((id) => st.baseline[id])), n = sum(ids.map((id) => now[id] || [0, 0, 0]));
+    const { b, n } = stats(ids);
     return `${name} (${ids.length} pages): impressions ${b.imp} → ${n.imp} (${pct(b.imp, n.imp)}), clicks ${b.clk} → ${n.clk} (${pct(b.clk, n.clk)}), position ${b.pos.toFixed(1)} → ${n.pos.toFixed(1)}`;
   };
-  return [`📈 Re-verification vs untouched pages, Search Console ${ps.range.start} to ${ps.range.end} against ${st.baselineRange.start} to ${st.baselineRange.end}: ${line('re-verified', treated)}; ${line('untouched, similar traffic', control)}. (Lower position is better; site-wide changes hit both groups alike.)`];
+  const text = `Re-verification vs untouched pages, Search Console ${ps.range.start} to ${ps.range.end} against ${st.baselineRange.start} to ${st.baselineRange.end}: ${line('re-verified', treated)}; ${line('untouched, similar traffic', control)}. (Lower position is better; site-wide changes hit both groups alike.)`;
+  // The owner's flag (Oct 26 2026): no gain, or a loss, or no better than the pages left alone.
+  const t = stats(treated), c = stats(control);
+  const change = (x: { b: { imp: number }; n: { imp: number } }) => (x.b.imp ? (x.n.imp - x.b.imp) / x.b.imp : 0);
+  const flag = treated.length > 0 && (change(t) <= 0 || change(t) <= change(c));
+  return [flag ? `⚠️ Re-verification isn't gaining traffic: ${change(t) <= 0 ? 'the re-verified pages show no gain or a loss' : 'the re-verified pages do no better than similar untouched ones'}. ${text}` : `📈 ${text}`];
 }
 
 if (/reverifyStudy\.ts$/.test(process.argv[1] || '')) {

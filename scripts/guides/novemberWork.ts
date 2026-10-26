@@ -1,6 +1,8 @@
 /**
- * The site audit's content work (roadmap item 22), approved by the owner for November 2026: a $115 allowance of its own
- * (system/auditWork), spent at most AUDIT_DAILY a day by the nightly pipeline, in the owner's order:
+ * The site audit's content work (roadmap item 22) for November 2026, in the owner's order. Since Oct 26 2026 (owner) it
+ * has no allowance of its own: it is paid from the pipeline's November cap ($60; the nightly run gives it at most
+ * AUDIT_DAILY a day, never more than the pipeline has left that day and month, and charges what it spent like any
+ * step). Rebuilds keep the old page's entries unless sources contradict them (rebuildGuard.ts). The order:
  *
  *   1. reverify    the queue's pages (highest Search Console impressions first) rebuilt with the evidence method; a page
  *                  goes live only when it passes the review and the rebuild guard agrees
@@ -21,13 +23,7 @@ import { db, arg, usageScope } from './common';
 import { acquireGuideLock, isRefusal, releaseGuideLocks } from './guideLock';
 
 export const AUDIT_MONTH = '2026-11';
-export const AUDIT_BUDGET = 115;
 export const AUDIT_DAILY = Number(process.env.AUDIT_DAILY || 5);
-/**
- * Re-verification stops at this much, so the rest of item 22 (about $25: missions, places, names, contradictions) still
- * fits the allowance. The test (17 Oct) measured $0.38-0.59 a page on thinly documented games, not the planned $0.22.
- */
-export const REVERIFY_CAP = Number(process.env.AUDIT_REVERIFY_CAP || 90);
 const ref = () => db().collection('system').doc('auditWork');
 const month = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }).slice(0, 7);
 const day = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
@@ -136,30 +132,38 @@ export async function doOne(w: Work): Promise<{ status: string; dollars: number;
   return { status, dollars: scope.dollars, detail, searches: scope.searches };
 }
 
-/** Up to max dollars of the next work today (November 2026 only, within the allowance and the daily cap). */
-export async function runAuditWork(max = AUDIT_DAILY): Promise<string[]> {
-  if (month() !== AUDIT_MONTH && !process.env.AUDIT_FORCE) return [];
+/**
+ * Up to max dollars of the next work today (November 2026 only). The caller passes what the pipeline has left (its
+ * November cap); at most AUDIT_DAILY a day. Returns the summary lines and what it spent, for the pipeline to charge.
+ */
+export async function runAuditWork(max = AUDIT_DAILY): Promise<{ lines: string[]; dollars: number; searches: number }> {
+  const none = { lines: [] as string[], dollars: 0, searches: 0 };
+  if (month() !== AUDIT_MONTH && !process.env.AUDIT_FORCE) return none;
   const st: any = (await ref().get()).data() || {};
-  if (!st.approved || !Array.isArray(st.queue)) return [];
+  if (!st.approved || !Array.isArray(st.queue) || st.paused) return none;
   const spentToday = st.day === day() ? Number(st.spentToday || 0) : 0;
-  let room = Math.min(max, AUDIT_DAILY - spentToday, AUDIT_BUDGET - Number(st.spent || 0));
+  let room = Math.min(max, AUDIT_DAILY - spentToday);
+  let searches = 0;
   const lines: string[] = [];
   let next = Number(st.next || 0), spent = Number(st.spent || 0), today = spentToday, guess = 0.25;
   let reverifySpent = Number(st.reverifySpent || 0);
   while (room > guess && next < st.queue.length) {
     const w: Work = st.queue[next];
-    // Past the re-verification cap, the rest of its queue is skipped (listed as left for later).
-    if (w.kind === 'reverify' && reverifySpent >= REVERIFY_CAP) { next++; continue; }
+    // Already checked since the queue was made (the October fund, the core programme): skipped, free.
+    if (w.kind === 'reverify') {
+      const a: any = (await db().collection('guides').doc(w.key).collection('areas').doc(w.ref).get()).data();
+      if (!a || a.status !== 'published' || a.verified === true) { next++; continue; }
+    }
     const r = await doOne(w);
     if (r.status === 'busy') break;
-    spent += r.dollars; today += r.dollars; room -= r.dollars; guess = Math.max(guess * 0.8, r.dollars);
+    spent += r.dollars; today += r.dollars; room -= r.dollars; searches += r.searches; guess = Math.max(guess * 0.8, r.dollars);
     if (w.kind === 'reverify') reverifySpent += r.dollars;
     next++;
     lines.push(`${w.kind} ${w.key}/${w.ref}: ${r.status}, $${r.dollars.toFixed(3)}${r.detail ? ` (${r.detail})` : ''}`);
     await ref().set({ next, spent, reverifySpent, day: day(), spentToday: today, log: FieldValue.arrayUnion({ at: Date.now(), kind: w.kind, key: w.key, ref: w.ref, status: r.status, dollars: Math.round(r.dollars * 1000) / 1000 }) }, { merge: true });
   }
-  if (lines.length) lines.unshift(`🧭 November site work (roadmap 22): ${lines.length} item(s) today, $${(today - spentToday).toFixed(2)}; $${spent.toFixed(2)} of $${AUDIT_BUDGET} spent, ${st.queue.length - next} item(s) left.`);
-  return lines;
+  if (lines.length) lines.unshift(`🧭 November site work (roadmap 22, from the pipeline's November cap): ${lines.length} item(s) today, $${(today - spentToday).toFixed(2)}; $${spent.toFixed(2)} so far this month, ${st.queue.length - next} item(s) left.`);
+  return { lines, dollars: today - spentToday, searches };
 }
 
 async function main() {
@@ -167,13 +171,13 @@ async function main() {
     const gsc = JSON.parse(fs.readFileSync(String(arg('gsc') || 'C:/Users/Noah/Desktop/QC-site-audit/notes/gsc.json'), 'utf8'));
     const queue = await buildQueue(gsc.pages);
     const counts = queue.reduce((m: Record<string, number>, w) => ((m[w.kind] = (m[w.kind] || 0) + 1), m), {});
-    await ref().set({ approved: { by: 'owner', at: Date.now(), note: 'roadmap item 22, ~$115, re-verification first by impressions' }, month: AUDIT_MONTH, budget: AUDIT_BUDGET, daily: AUDIT_DAILY, queue, next: 0, spent: 0 }, { merge: true });
-    console.log(`Queue written: ${queue.length} item(s) ${JSON.stringify(counts)}; $${AUDIT_BUDGET} for ${AUDIT_MONTH}, at most $${AUDIT_DAILY} a day.`);
+    await ref().set({ approved: { by: 'owner', at: Date.now(), note: 'roadmap item 22, ~$115, re-verification first by impressions' }, month: AUDIT_MONTH, budget: "the pipeline's November cap", daily: AUDIT_DAILY, queue, next: 0, spent: 0 }, { merge: true });
+    console.log(`Queue written: ${queue.length} item(s) ${JSON.stringify(counts)}; paid from the pipeline's ${AUDIT_MONTH} cap, at most $${AUDIT_DAILY} a day.`);
   } else if (arg('run') === 'true') {
-    for (const l of await runAuditWork(Number(arg('max', String(AUDIT_DAILY))) || AUDIT_DAILY)) console.log(l);
+    for (const l of (await runAuditWork(Number(arg('max', String(AUDIT_DAILY))) || AUDIT_DAILY)).lines) console.log(l);
   } else {
     const st: any = (await ref().get()).data() || {};
-    console.log(`${st.month}: $${Number(st.spent || 0).toFixed(2)} of $${st.budget} spent; ${Number(st.next || 0)} of ${(st.queue || []).length} item(s) done.`);
+    console.log(`${st.month}: $${Number(st.spent || 0).toFixed(2)} spent (from the pipeline's cap); ${Number(st.next || 0)} of ${(st.queue || []).length} item(s) done.`);
   }
   await releaseGuideLocks().catch(() => {});
   setTimeout(() => process.exit(0), 300);

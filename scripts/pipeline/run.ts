@@ -858,11 +858,17 @@ async function main() {
     if (failedPages.length) report.push(`⚠️ Re-verification failed (old content kept, no badge; ${failedPages.length} page(s), say which to retry): ${failedPages.slice(0, 25).join('; ')}${failedPages.length > 25 ? `; and ${failedPages.length - 25} more` : ''}.`);
     }
   }
-  // The site audit's November content work (roadmap 22, novemberWork.ts): its own owner-approved allowance, at most
-  // AUDIT_DAILY a day, re-verification of the most-searched unchecked pages first. Does nothing outside November 2026.
+  // The site audit's November content work (roadmap 22, novemberWork.ts), paid from this pipeline's November cap (owner,
+  // Oct 26 2026): at most AUDIT_DAILY a day and never more than the pipeline has left; what it spends is charged here.
+  // Re-verification of the most-searched unchecked pages first. Does nothing outside November 2026.
   try {
-    const { runAuditWork } = await import('../guides/novemberWork');
-    for (const l of await runAuditWork()) report.push(l);
+    const { runAuditWork, AUDIT_DAILY } = await import('../guides/novemberWork');
+    const left = room();
+    if (left >= 0.5) {
+      const aw = await runAuditWork(Math.min(AUDIT_DAILY, left));
+      if (aw.dollars > 0 || aw.searches > 0) await charge({ dollars: aw.dollars, searches: aw.searches }, 'November site work');
+      for (const l of aw.lines) report.push(l);
+    }
   } catch (e: any) {
     console.warn(`November site work skipped: ${e?.message}`);
   }
@@ -870,7 +876,7 @@ async function main() {
   if (MONDAY) {
     try {
       const { reverifyStudyLines } = await import('./reverifyStudy');
-      for (const l of await reverifyStudyLines()) report.push(l);
+      for (const l of await reverifyStudyLines()) (l.startsWith('⚠️') ? RUN.head : report).push(l);
     } catch (e: any) {
       console.warn(`Re-verification comparison skipped: ${e?.message}`);
     }
