@@ -226,7 +226,7 @@ async function confirmButtonPressed(i: any): Promise<any> {
 
 export function registerDiscord(app: Express) {
   // Raw body: the signature is over the exact bytes Discord sent (so this is registered before express.json).
-  app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '1mb' }), async (req: Request, res: Response) => {
+  app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '1mb', inflate: false }), async (req: Request, res: Response) => {
     const raw = req.body as Buffer;
     if (!verifyDiscordSignature(raw, String(req.headers['x-signature-ed25519'] || ''), String(req.headers['x-signature-timestamp'] || ''), PUBLIC_KEY())) {
       return res.status(401).send('invalid request signature');

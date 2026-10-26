@@ -264,7 +264,7 @@ async function startServer() {
   app.use(cors());
 
   // --- STRIPE WEBHOOK (Must be before express.json so it can read raw body) ---
-  app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  app.post('/api/webhook', express.raw({ type: 'application/json', inflate: false }), async (req, res) => {
     const sig = req.headers['stripe-signature'];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -316,8 +316,10 @@ async function startServer() {
   // The Discord bot's interactions (/correction, the moderators' Confirm button): signed over the raw body, so before
   // express.json like the Stripe webhook.
   registerDiscord(app);
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+  // Compressed request bodies are refused (415): no client of ours sends one, and it keeps the zlib inflate path out
+  // of reach (Node.js security release of Oct 2026, a compressed-body bug among its fixes).
+  app.use(express.json({ limit: '50mb', inflate: false }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb', inflate: false }));
 
   // --- Auth Middleware ---
   // Require authenticated user (supports Firebase Auth tokens or guest trial tokens)
