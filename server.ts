@@ -203,9 +203,15 @@ async function premiumFor(idToken: string, uid: string, email: string | null, us
   return d;
 }
 
+/**
+ * A secret from the environment without whitespace or control characters (none belongs in a key). A value pasted into
+ * Secret Manager on Windows can end in a line break (and a Ctrl+Z), which made every Stripe call fail as a connection error.
+ */
+const secretEnv = (name: string) => String(process.env[name] || '').replace(/[\s\u0000-\u001f\u007f]+/g, '');
+
 function getStripe(): Stripe {
   if (!stripeClient) {
-    const key = process.env.STRIPE_SECRET_KEY;
+    const key = secretEnv('STRIPE_SECRET_KEY');
     if (!key) {
       throw new Error('STRIPE_SECRET_KEY environment variable is required for checkout.');
     }
@@ -266,7 +272,7 @@ async function startServer() {
   // --- STRIPE WEBHOOK (Must be before express.json so it can read raw body) ---
   app.post('/api/webhook', express.raw({ type: 'application/json', inflate: false }), async (req, res) => {
     const sig = req.headers['stripe-signature'];
-    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    const endpointSecret = secretEnv('STRIPE_WEBHOOK_SECRET');
 
     if (!endpointSecret) {
       return res.status(400).send('Webhook secret not configured.');
@@ -510,14 +516,14 @@ async function startServer() {
 
   function verifySeal(userData: any) {
     if (!userData.securitySeal) return false;
-    const secret = process.env.STRIPE_WEBHOOK_SECRET || 'default_secret';
+    const secret = (secretEnv('STRIPE_WEBHOOK_SECRET') || 'default_secret');
     const payload = `${userData.proQueriesAvailable}-${userData.flashQueriesAvailable}-${userData.lastResetDate}`;
     const expectedSeal = crypto.createHmac('sha256', secret).update(payload).digest('hex');
     return userData.securitySeal === expectedSeal;
   }
 
   function generateSeal(userData: any) {
-    const secret = process.env.STRIPE_WEBHOOK_SECRET || 'default_secret';
+    const secret = (secretEnv('STRIPE_WEBHOOK_SECRET') || 'default_secret');
     const payload = `${userData.proQueriesAvailable}-${userData.flashQueriesAvailable}-${userData.lastResetDate}`;
     return crypto.createHmac('sha256', secret).update(payload).digest('hex');
   }
