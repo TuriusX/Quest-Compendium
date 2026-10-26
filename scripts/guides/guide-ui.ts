@@ -77,6 +77,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   keyFight: 'Key fight',
   route: 'Route',
   newEntry: 'New',
+  unconfirmed: 'Not yet confirmed',
   checklists: 'Checklists',
   sourcesFrom: 'Facts from {wiki} ({pages}), written in our own words.',
   sourcesLicence: 'Licence: {licence}.',

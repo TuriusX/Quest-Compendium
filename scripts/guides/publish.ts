@@ -720,8 +720,15 @@ const ICON = {
  * ticked together carry one id each), so links and text fragments can land on it; copies (a flagship walkthrough's)
  * don't, so ids stay unique. icon: the entry's kind icon before the text (kindIcon); left out, the row has no slot.
  */
+/**
+ * Entries kept from before a rebuild that its sources didn't confirm (rebuildGuard.ts carryOver, `unconfirmed`): set
+ * per page by areaBody, and shown on their row as "Not yet confirmed".
+ */
+let UNCONFIRMED = new Set<string>();
+const unconfirmedTag = () => ` <span class="ml-1 rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-200" title="${esc(ui('unconfirmed'))}">${esc(ui('unconfirmed'))}</span>`;
 const checkRow = (id: string, html: string, anchor = false, icon = '') => {
   const ids = id.split('+');
+  if (ids.some((x) => UNCONFIRMED.has(x))) html += unconfirmedTag();
   const extra = anchor ? ids.slice(1).map((x) => `<span id="e-${esc(x)}"></span>`).join('') : '';
   return `<label${anchor ? ` id="e-${esc(ids[0])}"` : ''} class="qc-check flex gap-3 items-start px-3 py-2 rounded-lg hover:bg-white/[0.04] cursor-pointer${anchor ? ' scroll-mt-20' : ''}" data-check="${esc(id)}"><input type="checkbox" aria-label="${esc(ui('gotIt'))}">${extra}${icon}<span class="text-sm leading-snug text-zinc-300">${html}</span></label>`;
 };
@@ -859,6 +866,7 @@ function peopleCards(slug: string, own?: { groups?: any[] }): string {
 }
 
 function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[], prev?: AreaLink, next?: AreaLink, up = '../../../', achs: any[] = []) {
+  UNCONFIRMED = new Set([...(a.items || []), ...(a.secrets || []), ...((a.sections || []) as any[]).flatMap((x: any) => x.entries || [])].filter((e: any) => e?.unconfirmed).map((e: any) => String(e.id)));
   const items = a.items.map(cleanEntry);
   // Entries in the same container or spot are one line ("Ornate Chest under the Scuffed Rock: Harper's Map, Harper's
   // Notebook"), ticked together (the row's id joins theirs with "+"), as in the app. A secret about that spot joins it.
@@ -958,10 +966,10 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const fightRow = (label: string, v?: string) => (v ? `<p class="mt-1 text-sm text-zinc-300"><span class="text-zinc-500">${esc(label)}:</span> ${esc(v)}</p>` : '');
   const fights = (a.fights || []).length
     ? `<div class="space-y-2">${(a.fights || [])
-        .map((f) => `<div id="${esc(f.id)}" class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="flex items-center gap-2 font-semibold text-white">${entryIconSvg('boss')}${esc(f.name)}</div>${fightRow(ui('fightEnemies'), f.enemies)}${fightRow(ui('fightThreats'), f.threats)}${fightRow(ui('fightWeak'), f.weaknesses)}${fightRow(ui('fightTactics'), f.tactics)}${fightRow(ui('fightRewards'), f.rewards)}</div>`)
+        .map((f) => `<div id="${esc(f.id)}" class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="flex items-center gap-2 font-semibold text-white">${entryIconSvg('boss')}${esc(f.name)}${(f as any).unconfirmed ? unconfirmedTag() : ''}</div>${fightRow(ui('fightEnemies'), f.enemies)}${fightRow(ui('fightThreats'), f.threats)}${fightRow(ui('fightWeak'), f.weaknesses)}${fightRow(ui('fightTactics'), f.tactics)}${fightRow(ui('fightRewards'), f.rewards)}</div>`)
         .join('')}</div>`
     : '';
-  const shops = a.shops.length ? `<ul class="space-y-1.5 px-3">${a.shops.map(cleanEntry).map((e) => `<li id="e-${esc(e.id)}" class="text-sm scroll-mt-20"><strong class="text-white">${esc(e.name)}</strong>${e.sells ? `<span class="text-zinc-400">: ${esc(e.sells)}</span>` : ''}</li>`).join('')}</ul>` : '';
+  const shops = a.shops.length ? `<ul class="space-y-1.5 px-3">${a.shops.map(cleanEntry).map((e) => `<li id="e-${esc(e.id)}" class="text-sm scroll-mt-20"><strong class="text-white">${esc(e.name)}</strong>${e.sells ? `<span class="text-zinc-400">: ${esc(e.sells)}</span>` : ''}${(e as any).unconfirmed ? unconfirmedTag() : ''}</li>`).join('')}</ul>` : '';
   const tips = a.tips.length ? `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${a.tips.map((t, i) => `<li id="tip-${i + 1}" class="scroll-mt-20">${esc(t)}</li>`).join('')}</ul>` : '';
   const navCard = (x: AreaLink | undefined, dir: 'prev' | 'next') =>
     x

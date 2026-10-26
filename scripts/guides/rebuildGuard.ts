@@ -4,12 +4,12 @@
  * (items, secrets, shops, fights), the choices and the walkthrough's length.
  *
  * A rebuild that passed its review can still lose correct content: the new evidence pack happened to miss it, and the
- * "fill gaps" step drops what the reviewer can't support (Crow's Perch lost its Oswin and Baron fights that way). So:
- * - a rebuild that drops entries the old page had from trusted sources is held for the owner (the live page stays);
- * - so is one that drops anything from a page people find in Google (Search Console impressions), sourced or not:
- *   it ranks with what it has;
- * - a rebuild that only drops unsourced entries from a page nobody finds goes live (quick pages from memory are what
- *   rebuilds exist to replace).
+ * "fill gaps" step drops what the reviewer can't support (Crow's Perch lost its Oswin and Baron fights that way; the
+ * October 2026 re-verification dropped bobbleheads, skill books and missables from 31 pages that way). So, since
+ * Oct 22 2026 (owner): existing entries are kept unless sources contradict them. A rebuild carries the old page's
+ * entries it lost over, marked "not yet confirmed" (flagship.ts writePage, carryOver), and a rebuild that still drops
+ * any named entry (an item, missable, secret, service, fight, checklist row or choice) is held for the owner, whatever
+ * the page's check, sources or traffic. Only an entry the rebuild's own claim check found contradicted may go.
  * Restructures (promote.ts) never retire a page with impressions unless the new outline has a page with its name.
  * A held rebuild is saved in the page's history (role "held") and flagged on the live page (rebuildHeld: reasons and
  * what it would drop), with a line in Discord. The owner puts it live after reading it:
@@ -24,7 +24,7 @@ import { trustedSites } from './claimCheck';
 import { pageImpressions } from './pageStats';
 import { notifyOwner } from '../pipeline/summary';
 
-export type Lost = { kind: 'item' | 'secret' | 'shop' | 'fight' | 'choice' | 'walkthrough'; name: string; sourced: boolean };
+export type Lost = { kind: 'item' | 'secret' | 'shop' | 'fight' | 'choice' | 'checklist' | 'walkthrough'; name: string; sourced: boolean };
 export type RebuildVerdict = { hold: boolean; reasons: string[]; lost: Lost[] };
 
 /** Our own site and code or mod hosts are never a source for a claim, whatever a stored list says. */
@@ -76,12 +76,14 @@ const LISTS: { kind: Lost['kind']; field: string; name: (e: any) => string }[] =
   { kind: 'fight', field: 'fights', name: (e) => e?.name },
   { kind: 'choice', field: 'choices', name: (e) => e?.title },
 ];
+/** Checklist rows (a page's own sections, "Don't miss" among them): named by their text. */
+const sectionEntries = (p: any): any[] => (Array.isArray(p?.sections) ? p.sections : []).flatMap((x: any) => (Array.isArray(x?.entries) ? x.entries : []));
 
 /**
  * Old page vs new page (each the whole page as it would be live), and the page's Search Console impressions. Pure:
  * the test replays it on stored pages for free.
  */
-export function rebuildVerdict(oldPage: any, newPage: any, impressions = 0): RebuildVerdict {
+export function rebuildVerdict(oldPage: any, newPage: any, impressions = 0, contradicted: Set<string> = new Set()): RebuildVerdict {
   if (!oldPage) return { hold: false, reasons: [], lost: [] };
   // A page that was checked against sources (and the sources it lists) vouches for entries that carry no list of their
   // own: evidence pages keep their sources on the page, not on each entry.
@@ -97,22 +99,88 @@ export function rebuildVerdict(oldPage: any, newPage: any, impressions = 0): Reb
       lost.push({ kind: l.kind, name: name.slice(0, 120), sourced: own });
     }
   }
+  // Checklist rows: still there if their words are (like a secret, they have no name of their own).
+  for (const e of sectionEntries(oldPage)) {
+    const name = String(e?.text || '').trim();
+    if (!name || kept(name, 'secret', [], text)) continue;
+    lost.push({ kind: 'checklist', name: name.slice(0, 120), sourced: Array.isArray(e?.sources) && e.sources.length ? trusted(e.sources).length > 0 : pageSourced });
+  }
   // A walkthrough cut to less than two thirds of its steps lost content, even when each step's name moved.
   const before = Array.isArray(oldPage.walkthrough) ? oldPage.walkthrough.length : 0;
   const after = Array.isArray(newPage?.walkthrough) ? newPage.walkthrough.length : 0;
   if (before >= 3 && after < Math.ceil((before * 2) / 3)) lost.push({ kind: 'walkthrough', name: `${before} steps → ${after}`, sourced: pageSourced });
 
-  const sourced = lost.filter((x) => x.sourced);
   const reasons: string[] = [];
   const list = (xs: Lost[]) => xs.slice(0, 8).map((x) => (x.kind === 'walkthrough' ? `walkthrough ${x.name}` : `${x.kind} "${x.name}"`)).join(', ') + (xs.length > 8 ? ` and ${xs.length - 8} more` : '');
+  // Any named entry lost holds the rebuild (owner, Oct 22 2026), sourced or not, checked page or not, found in Google or
+  // not; only what the rebuild's claim check found contradicted may go.
+  const dropped = lost.filter((x) => !contradicted.has(normName(x.name)));
+  const sourced = dropped.filter((x) => x.sourced);
   if (sourced.length) reasons.push(`the rebuild drops ${sourced.length} sourced entr${sourced.length === 1 ? 'y' : 'ies'}: ${list(sourced)}`);
-  // A page never checked against sources (verified: false) losing its unsourced entries is the point of re-verifying it:
-  // only a checked page with search traffic is held for unsourced losses too.
-  if (impressions > 0 && oldPage.verified !== false && lost.length > sourced.length) {
-    const rest = lost.filter((x) => !x.sourced);
-    reasons.push(`the page has ${impressions} Search Console impressions and the rebuild drops ${rest.length} more: ${list(rest)}`);
-  }
+  const rest = dropped.filter((x) => !x.sourced);
+  if (rest.length) reasons.push(`the rebuild drops ${rest.length} entr${rest.length === 1 ? 'y' : 'ies'} its sources don't contradict${impressions > 0 ? ` (the page has ${impressions} Search Console impressions)` : ''}: ${list(rest)}`);
   return { hold: reasons.length > 0, reasons, lost };
+}
+
+/**
+ * Existing entries are kept unless sources contradict them (owner, Oct 22 2026): the old page's entries the rebuilt
+ * fields no longer have (by the same comparison as the guard), added back marked `unconfirmed` ("Not yet confirmed" on
+ * the page) with their own sources. Items, secrets, services, fights and choices go back in their lists; checklist rows
+ * into the section of the same title (a new section when the rebuild has none). Returns the fields with them, and what
+ * was carried over.
+ */
+export function carryOver(oldPage: any, fields: any, contradicted: Set<string> = new Set()): { fields: any; carried: Lost[] } {
+  if (!oldPage) return { fields, carried: [] };
+  const merged = { ...oldPage, ...fields };
+  const v = rebuildVerdict(oldPage, merged, 0, contradicted);
+  const want = new Set(v.lost.filter((x) => x.kind !== 'walkthrough' && !contradicted.has(normName(x.name))).map((x) => `${x.kind}|${x.name}`));
+  if (!want.size) return { fields, carried: [] };
+  const out = { ...fields };
+  const ids = new Set<string>();
+  for (const k of ['items', 'secrets', 'shops', 'fights']) for (const e of Array.isArray(merged[k]) ? merged[k] : []) if (e?.id) ids.add(String(e.id));
+  for (const e of sectionEntries(merged)) if (e?.id) ids.add(String(e.id));
+  const freeId = (id: unknown, prefix: string) => {
+    let n = String(id || `${prefix}${ids.size + 1}`);
+    while (ids.has(n)) n = `${n}r`;
+    ids.add(n);
+    return n;
+  };
+  const carried: Lost[] = [];
+  for (const l of LISTS) {
+    for (const e of Array.isArray(oldPage[l.field]) ? oldPage[l.field] : []) {
+      const name = String(l.name(e) || '').trim().slice(0, 120);
+      if (!want.has(`${l.kind}|${name}`)) continue;
+      const list = Array.isArray(out[l.field]) ? [...out[l.field]] : Array.isArray(merged[l.field]) ? [...merged[l.field]] : [];
+      list.push({ ...e, ...(e?.id || l.field !== 'choices' ? { id: freeId(e?.id, l.field[0]) } : {}), unconfirmed: true });
+      out[l.field] = list;
+      carried.push({ kind: l.kind, name, sourced: false });
+    }
+  }
+  const sections = (Array.isArray(out.sections) ? out.sections : Array.isArray(merged.sections) ? merged.sections : []).map((x: any) => ({ ...x, entries: [...(x.entries || [])] }));
+  for (const x of Array.isArray(oldPage.sections) ? oldPage.sections : []) {
+    for (const e of x?.entries || []) {
+      const name = String(e?.text || '').trim().slice(0, 120);
+      if (!want.has(`checklist|${name}`)) continue;
+      let sec = sections.find((y: any) => normName(y.title) === normName(x.title));
+      if (!sec) { sec = { ...x, entries: [] }; sections.push(sec); }
+      sec.entries.push({ ...e, id: freeId(e?.id, 'c'), unconfirmed: true });
+      carried.push({ kind: 'checklist', name, sourced: false });
+    }
+  }
+  if (carried.some((c) => c.kind === 'checklist')) out.sections = sections;
+  return { fields: out, carried };
+}
+
+/** The names a rebuild's claim check found contradicted (its removed claims), for carryOver and the guard. */
+export function contradictedNames(pr: any, oldPage: any): Set<string> {
+  const claims = ((pr?.claims?.removed || []) as any[]).filter((c) => c?.verdict === 'contradicted').map((c) => ` ${normName(c.claim)} `);
+  const out = new Set<string>();
+  if (!claims.length || !oldPage) return out;
+  const names: string[] = [];
+  for (const l of LISTS) for (const e of Array.isArray(oldPage[l.field]) ? oldPage[l.field] : []) names.push(String(l.name(e) || ''));
+  for (const e of sectionEntries(oldPage)) names.push(String(e?.text || ''));
+  for (const n of names) { const k = normName(n); if (k.length >= 4 && claims.some((c) => c.includes(` ${k} `))) out.add(k); }
+  return out;
 }
 
 /**
@@ -143,13 +211,13 @@ const hasContent = (p: any) => ['items', 'secrets', 'shops', 'fights', 'choices'
  * first), false when the rebuild is held (the live page keeps its content and gets the rebuildHeld flag). A staged
  * build isn't live, so it always goes ahead; promote.ts checks it when it goes live.
  */
-export async function guardRebuild(target: string, slug: string, ref: FirebaseFirestore.DocumentReference, fields: any): Promise<boolean> {
+export async function guardRebuild(target: string, slug: string, ref: FirebaseFirestore.DocumentReference, fields: any, contradicted: Set<string> = new Set()): Promise<boolean> {
   if (isStageKey(target)) return true;
   const old: any = (await ref.get()).data();
   if (!old || !hasContent(old)) return true;
   const impressions = await pageImpressions(target, slug);
   // Only a published page can lose readers; a held or draft page is saved to the history and replaced.
-  const v = old.status === 'published' ? rebuildVerdict(old, { ...old, ...fields }, impressions) : { hold: false, reasons: [], lost: [] };
+  const v = old.status === 'published' ? rebuildVerdict(old, { ...old, ...fields }, impressions, contradicted) : { hold: false, reasons: [], lost: [] };
   if (v.hold) {
     const id = await saveHistory(target, slug, fields, 'held', { reasons: v.reasons, lost: v.lost, impressions });
     await ref.set({ rebuildHeld: JSON.parse(JSON.stringify({ at: Date.now(), reasons: v.reasons, lost: v.lost.slice(0, 40), history: id, impressions })) }, { merge: true });

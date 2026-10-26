@@ -51,7 +51,7 @@ import { promote, stageCopy, discard } from './promote';
 import { deployToNetlify } from '../pipeline/netlify';
 import { FieldValue } from 'firebase-admin/firestore';
 import { acquireGuideLock, waitForGuideLock, isRefusal, lockedLine, releaseGuideLocks, SITE_LOCK, type GuideLock } from './guideLock';
-import { guardRebuild } from './rebuildGuard';
+import { guardRebuild, carryOver, contradictedNames } from './rebuildGuard';
 
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const none = (v: string | undefined) => !v || /^(none|n\/a|-+|no|nothing)\.?$/i.test(v.trim());
@@ -801,10 +801,15 @@ async function writePage(target: string, slug: string, pr: any): Promise<boolean
     flagship: { at: Date.now(), cost: pr.cost?.dollars ?? null, model: pr.model, mode: pr.mode || 'searched' }, updatedAt: Date.now(),
   }));
   const ref = db().collection('guides').doc(target).collection('areas').doc(slug);
-  // The live version is saved first, and a rebuild that would lose content is held (a staged build goes through the
-  // same check when promote.ts puts it live).
-  if (!(await guardRebuild(target, slug, ref, fields))) return false;
-  await ref.set({ ...fields, rebuildHeld: null }, { merge: true });
+  // Existing entries are kept unless sources contradict them (owner, Oct 22 2026): what the rebuild lost comes back,
+  // marked "not yet confirmed". Then the live version is saved, and a rebuild that would still lose a named entry is
+  // held (a staged build goes through the same check when promote.ts puts it live).
+  const old: any = (await ref.get()).data();
+  const contradicted = contradictedNames(pr, old);
+  const { fields: kept, carried } = carryOver(old, fields, contradicted);
+  if (carried.length) console.log(`  kept ${carried.length} entr${carried.length === 1 ? 'y' : 'ies'} from the old page, marked not yet confirmed: ${carried.map((c) => c.name).slice(0, 8).join('; ')}`);
+  if (!(await guardRebuild(target, slug, ref, kept, contradicted))) return false;
+  await ref.set({ ...kept, rebuildHeld: null }, { merge: true });
   return true;
 }
 
