@@ -138,6 +138,8 @@ export interface ChatMessage {
   guideRefs?: { key: string; slug: string; area: string; entry?: string; name: string; kind?: EntryKind | 'step' | 'area' }[];
   /** Hidden after an "offensive or harmful" report, until the player taps "Show anyway". */
   collapsed?: boolean;
+  /** The compendium tab this message came from, when several were merged into one game (a divider shows the name). */
+  fromCompendium?: string;
 }
 
 export interface PlaceGuess {
@@ -175,6 +177,44 @@ export interface GameTab {
   guideSteps?: { kind: 'quest' | 'walk'; key: string; slug: string; name: string; from?: string; answerId?: string };
   /** The guide the player picked for a Steam app that holds several games (Mass Effect Legendary Edition: ME1 or ME2). */
   guideKey?: string;
+  createdAt: number;
+  lastActive: number;
+}
+
+/**
+ * One space per game (games-not-tabs, owner Oct 27 2026; behind a flag until switched on): replaces compendium tabs.
+ * What belongs to the game is here; what belongs to a run of it is in its playthroughs (GamePlaythrough).
+ */
+export interface GameSpace {
+  /** A guide key when the game has a guide, else steam:<appId>, else name:<loose name>; tab:<tabId> = needs a game. */
+  id: string;
+  name: string;
+  icon?: string;
+  kind: 'game' | 'unsorted' | 'other';
+  activeSteamGame?: SteamGameData | null;
+  /** The game picked in a collection (Mass Effect Legendary Edition: ME2): the guide this space uses. */
+  collectionPick?: string;
+  notes: string;
+  currentPlaythrough: string;
+  /** The compendium tabs this space was made from (migration; never reused for anything else). */
+  fromTabs: string[];
+  createdAt: number;
+  lastActive: number;
+}
+
+export interface GamePlaythrough {
+  id: string;
+  gameId: string;
+  name: string;
+  messages: ChatMessage[];
+  personalQuests: PersonalQuest[];
+  place?: GameTab['place'];
+  guideSteps?: GameTab['guideSteps'];
+  /**
+   * The game names its playthrough memory (users/{uid}/playthrough/{playKey(name)}) and progress (settings.gameDone,
+   * lower case) were kept under before: read from all of them, so nothing a merged tab remembered is left behind.
+   */
+  legacyGames: string[];
   createdAt: number;
   lastActive: number;
 }
