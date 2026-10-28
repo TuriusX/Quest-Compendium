@@ -40,6 +40,7 @@ import { registerContributions } from './contributions';
 import { registerAnswerReports } from './answerReports';
 import { registerAnswerFeedback, recordMarkerCheck } from './answerFeedback';
 import { registerDiscord } from './discord';
+import { pingNewSignup } from './signupPing';
 import { STEPS_RULES, extractSteps } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
@@ -663,9 +664,14 @@ async function startServer() {
         const src = cleanTag(req.headers['x-qc-from']) || (String(req.headers['x-qc-app'] || '') === 'desktop' ? 'desktop' : 'untagged');
         void (async () => {
           try {
-            const created = Date.parse((await getAuth().getUser(userId)).metadata.creationTime);
+            const account = await getAuth().getUser(userId);
+            const created = Date.parse(account.metadata.creationTime);
             await getFirestore().collection('users').doc(userId).set({ signupSource: src }, { merge: true });
-            if (Date.now() - created < 2 * 86_400_000) recordSignupSource(userId, src);
+            if (Date.now() - created < 2 * 86_400_000) {
+              recordSignupSource(userId, src);
+              // The owner's instant ping (signupPing.ts), once per account.
+              await pingNewSignup(userId, account, String(req.headers['x-qc-app'] || ''), src);
+            }
           } catch { /* counted next time */ }
         })();
       }
