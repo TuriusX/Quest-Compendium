@@ -67,6 +67,8 @@ interface HeaderBarProps {
    * Games-not-tabs (flag on): the game's playthroughs. "New playthrough" is in the ⋯ menu; switching too, when there
    * are several (the current one's name then shows by the game's).
    */
+  /** The running game's space (games mode): first in the game list. */
+  runningTabId?: string;
   playthroughs?: { current: string; list: { id: string; name: string }[]; onNew: () => void; onSwitch: (id: string) => void; onRename: (id: string, name: string) => void };
 }
 
@@ -106,6 +108,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onSync,
   onCompact,
   playthroughs,
+  runningTabId,
 }) => {
   const t = useT();
   const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
@@ -156,21 +159,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           onStartCreateTab={onStartCreateTab}
           onStartRenameTab={onStartRenameTab}
           gamesMode={!!playthroughs}
+          runningTabId={runningTabId}
           onDeleteTab={onDeleteTab}
           onOpenGuides={onOpenGuides}
           onOpenNotes={onOpenNotes}
           onOpenQuests={onOpenQuests}
         />
-        {playthroughs && playthroughs.list.length > 1 && (() => {
-          // "#2" for a numbered playthrough, else its own name; the full name on hover.
-          const name = playthroughs.list.find((p) => p.id === playthroughs.current)?.name || '';
-          const n = name.match(/^Playthrough (\d+)$/)?.[1];
-          return (
-            <span className="ml-1.5 self-center flex-shrink-0 max-w-[7rem] truncate text-[11px] font-semibold text-zinc-300 border border-white/15 rounded-md px-1.5 py-0.5" title={`${t('spaces.playthroughs')}: ${name}`}>
-              {n ? `#${n}` : name}
-            </span>
-          );
-        })()}
       </div>
 
       {/* Right controls */}

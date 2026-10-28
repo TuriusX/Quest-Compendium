@@ -69,7 +69,8 @@ import { resolveTabWithServer } from './utils/spacesResolve';
 import { fetchGuideIndex } from './utils/guideIndex';
 import { setTickScope } from './utils/guideProgress';
 import { readTombstones } from './hooks/tabMerge';
-import { SpacesNotice } from './components/SpacesNotice';
+import { MigrationNotice, WhichGamePrompt } from './components/SpacesNotice';
+import { GameLine } from './components/GameLine';
 
 /**
  * The running game's picture, sharp at any screen scale (utils/artCache.ts): IGDB's key art at 720p when its guide has
@@ -309,12 +310,13 @@ export default function App() {
   const [spaces, setSpaces] = useState<SpacesState | null>(null);
   const spacesRef = useRef<SpacesState | null>(null);
   spacesRef.current = spaces;
-  const spaceTabs = useMemo(() => (spaces ? toTabs(spaces) : null), [spaces]);
+  const unknownName = tr('spaces.whichGame');
+  const spaceTabs = useMemo(() => (spaces ? toTabs(spaces, unknownName) : null), [spaces, unknownName]);
   const tabs: GameTab[] = spacesOn && spaceTabs ? spaceTabs : legacyTabs;
   const setTabs: React.Dispatch<React.SetStateAction<GameTab[]>> = useCallback((u: React.SetStateAction<GameTab[]>) => {
-    if (spacesOn && spacesRef.current) setSpaces((cur) => (cur ? applyTabs(cur, typeof u === 'function' ? u(toTabs(cur)) : u) : cur));
+    if (spacesOn && spacesRef.current) setSpaces((cur) => (cur ? applyTabs(cur, typeof u === 'function' ? u(toTabs(cur, unknownName)) : u) : cur));
     else setLegacyTabs(u);
-  }, [spacesOn]);
+  }, [spacesOn, unknownName]);
 
   const [activeTabId, setActiveTabId] = useState<string>(() => {
     return tabs[0]?.id || '';
@@ -2713,23 +2715,42 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           onSync={syncDiagnostics?.triggerSyncNow}
           onCompact={isDesktop && activeTab ? () => chooseView('compact') : undefined}
           playthroughs={playthroughMenu}
+          runningTabId={spacesOn && spaces ? runningTab?.id : undefined}
         />}
-        {!compact && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
-        {!compact && spacesOn && spaces && (spaces.notice || spaces.games.find((g) => g.id === activeTab?.id)?.kind === 'unsorted') && (
-          <SpacesNotice
-            spaces={spaces}
-            activeId={activeTab?.id || ''}
-            catalog={spacesCatalog}
-            soundEnabled={settings.soundEnabled}
-            onDismiss={() => setSpaces((cur) => (cur ? { ...cur, notice: undefined } : cur))}
-            onKeepSeparate={(gameId) => setSpaces((cur) => (cur ? splitMerged(cur, gameId) : cur))}
-            onAssign={(spaceId, game) => {
-              setSpaces((cur) => (cur ? assignGame(cur, spaceId, game) : cur));
-              setActiveTabId(game.id);
-            }}
-            onKeepOther={(spaceId) => setSpaces((cur) => (cur ? { ...cur, games: cur.games.map((g) => (g.id === spaceId ? { ...g, kind: 'other' } : g)) } : cur))}
-          />
-        )}
+        {/* With one space per game (flag on): the game's full name on its own line (or "Which game is this?"), the
+            detection line only when it has something to do, and the one-time migration notice. */}
+        {!compact && (spacesOn && spaces ? (
+          <>
+            {activeTab && (
+              <GameLine
+                name={activeTab.name}
+                running={!!detection.running && detection.open}
+                playthrough={activeTab.playthrough}
+                prompt={activeTab.unknownGame ? (
+                  <WhichGamePrompt
+                    key={activeTab.id}
+                    spaces={spaces}
+                    spaceId={activeTab.id}
+                    catalog={spacesCatalog}
+                    soundEnabled={settings.soundEnabled}
+                    onAssign={(spaceId, game) => {
+                      setSpaces((cur) => (cur ? assignGame(cur, spaceId, game) : cur));
+                      setActiveTabId(game.id);
+                    }}
+                    onKeepOther={(spaceId) => setSpaces((cur) => (cur ? { ...cur, games: cur.games.map((g) => (g.id === spaceId ? { ...g, kind: 'other' } : g)) } : cur))}
+                  />
+                ) : undefined}
+              />
+            )}
+            {((detection.running && (!detection.open || detection.choose)) || (!detection.running && detection.confirm)) && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
+            <MigrationNotice
+              spaces={spaces}
+              soundEnabled={settings.soundEnabled}
+              onDismiss={() => setSpaces((cur) => (cur ? { ...cur, notice: undefined } : cur))}
+              onKeepSeparate={(gameId) => setSpaces((cur) => (cur ? splitMerged(cur, gameId) : cur))}
+            />
+          </>
+        ) : <DetectionLine d={detection} soundEnabled={settings.soundEnabled} />)}
         {/* Updates (desktop), under the header: "Version X is ready" and, after one installs, a one-time "What's new". A dev server shows
             both with sample notes at ?previewUpdate (for screenshots). */}
         {(isDesktop || previewUpdate) && (

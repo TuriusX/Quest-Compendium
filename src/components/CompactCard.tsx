@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, BookOpen, Maximize2, Play, X } from './icons';
 import { useT } from '../i18n';
-import { useGameArt } from '../utils/gameArt';
-import { sharpIgdb, steamCover, steamHeader, useArt } from '../utils/artCache';
+import { GameCover } from './GameCover';
 import { playBlipSound } from '../utils/audio';
 import { QuestionsPill } from './QuestionsPill';
 import type { Detection } from './DetectionLine';
@@ -19,35 +18,6 @@ export type CompactLayout = 'card' | 'ribbon';
 
 export type CompactObjective = { title?: string; step?: string } | null;
 export type CompactNear = { label: string; where?: string; missable?: boolean } | null;
-
-/**
- * The cover, sharp at any screen scale (utils/artCache.ts: the largest size, scaled down, kept on this computer): IGDB's
- * when the game has a guide, else Steam's library portrait, else the picture the game came with, else Steam's header,
- * else the game's initials.
- */
-function CoverArt({ appId, name, fallback, live, className }: { appId?: number; name: string; fallback?: string; live: boolean; className: string }) {
-  const t = useT();
-  const ig = useGameArt(appId || null, name || null);
-  const src = useArt([ig.cover && sharpIgdb(ig.cover, 'cover'), steamCover(appId), fallback && sharpIgdb(fallback, 'cover'), steamHeader(appId)]);
-  const initials = name.replace(/[^\p{L}\p{N} ]/gu, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-  return (
-    <div className={`relative flex-shrink-0 rounded-md border border-white/15 bg-gradient-to-br from-[var(--accent-dim)] to-black/60 ${className}`}>
-      {src ? (
-        <img src={src} alt="" decoding="async" draggable={false} className="w-full h-full object-cover rounded-md" />
-      ) : src === null ? (
-        <span className="absolute inset-0 grid place-items-center text-[11px] font-bold text-[var(--accent-color)]">{initials}</span>
-      ) : null}
-      {live && (
-        <span
-          className="absolute -right-1 -bottom-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0b0b10] shadow-[0_0_6px_rgba(52,211,153,0.9)]"
-          title={t('compact.running')}
-          aria-label={t('compact.running')}
-          role="img"
-        />
-      )}
-    </div>
-  );
-}
 
 export function CompactCard(p: {
   layout: CompactLayout;
@@ -151,7 +121,7 @@ export function CompactCard(p: {
     return (
       <div className="flex-1 h-full flex items-center gap-2.5 px-2.5 overflow-hidden bg-gradient-to-b from-[#0d0e14] to-[#07070b]">
         <button type="button" onClick={expand} title={tip} className="cursor-pointer" style={noDrag}>
-          <CoverArt appId={p.appId} name={p.gameName} fallback={p.fallbackArt} live={live} className="w-8 h-12" />
+          <GameCover appId={p.appId} name={p.gameName} fallback={p.fallbackArt} live={live} className="w-8 h-12" />
         </button>
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
           {where}
@@ -167,7 +137,7 @@ export function CompactCard(p: {
   return (
     <div className="flex-1 h-full flex gap-2.5 p-2.5 overflow-hidden bg-gradient-to-b from-[#0d0e14] to-[#07070b]">
       <button type="button" onClick={expand} title={tip} className="self-stretch cursor-pointer" style={noDrag}>
-        <CoverArt appId={p.appId} name={p.gameName} fallback={p.fallbackArt} live={live} className="w-14 h-full" />
+        <GameCover appId={p.appId} name={p.gameName} fallback={p.fallbackArt} live={live} className="w-14 h-full" />
       </button>
       <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
         <div className="flex items-center gap-2 min-w-0">

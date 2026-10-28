@@ -43,15 +43,21 @@ export function memoryKeyOf(g: GameSpace, p: GamePlaythrough | undefined): strin
   return `${g.activeSteamGame?.name || g.name}~${p.id}`;
 }
 
-/** The app's view: one tab per game, its current playthrough (most recently used game first). */
-export function toTabs(s: SpacesState): GameTab[] {
+/**
+ * The app's view: one tab per game, its current playthrough. A space with no game yet is named `unknownName` ("Which
+ * game is this?"), never its old compendium's name, and one with nothing in it (no messages, no notes) isn't shown.
+ */
+export function toTabs(s: SpacesState, unknownName = 'Which game is this?'): GameTab[] {
   return s.games
     .filter((g) => s.deleted[g.id] === undefined || g.lastActive > s.deleted[g.id])
+    .filter((g) => g.kind !== 'unsorted' || !!textOf(g.notes) || playthroughsOf(s, g.id).some((p) => p.messages.length > 0))
     .map((g) => {
       const p = currentPt(s, g);
+      const unknown = g.kind === 'unsorted';
       const tab: GameTab = {
         id: g.id,
-        name: g.name,
+        name: unknown ? unknownName : g.name,
+        ...(unknown ? { unknownGame: true } : {}),
         ...(g.icon ? { icon: g.icon } : {}),
         activeSteamGame: g.activeSteamGame ?? null,
         messages: p?.messages || [],
@@ -100,7 +106,7 @@ export function applyTabs(s: SpacesState, tabs: GameTab[], now = Date.now()): Sp
     if (!same(t.icon, g.icon)) { ng.icon = t.icon; gameChanged = true; }
     if (!same(t.activeSteamGame, g.activeSteamGame)) { ng.activeSteamGame = t.activeSteamGame ?? null; gameChanged = true; }
     if (!same(t.guideKey, g.collectionPick)) { ng.collectionPick = t.guideKey; gameChanged = true; }
-    if (t.name && t.name !== g.name) { ng.name = t.name; gameChanged = true; }
+    if (t.name && t.name !== g.name && !t.unknownGame) { ng.name = t.name; gameChanged = true; }
     if (gameChanged) ng.lastActive = Math.max(g.lastActive, t.lastActive || now);
     games.push(ng);
     if (p) {

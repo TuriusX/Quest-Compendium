@@ -183,6 +183,8 @@ export interface GameTab {
    */
   memoryKey?: string;
   playthrough?: { id: string; name: string; count: number };
+  /** A space with no game yet ("Which game is this?"): its old compendium name is never shown. */
+  unknownGame?: boolean;
   createdAt: number;
   lastActive: number;
 }
