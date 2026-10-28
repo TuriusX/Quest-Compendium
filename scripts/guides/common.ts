@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { apiLimits, searchesToday, recordSearchDay, pipelineRoom, SearchDayWait } from '../../apiLimits';
-import { pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY } from '../../searchGuard';
+import { pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY, recordMonthly } from '../../searchGuard';
 import { GoogleGenAI } from '@google/genai';
 import { AsyncLocalStorage } from 'async_hooks';
 import { billedUsage, withOutputCap, maybeBilledFailure, worstCaseDollars } from '../../usage';
@@ -92,7 +92,8 @@ export function gemini(): GoogleGenAI {
       throw e;
     }
     const u = billedUsage(String(request?.model || ''), res);
-    if (u.searches) await recordSearchDay(u.searches, 'pipeline');
+    // Every search counts toward today's total and the month's (searchGuard.ts), here, once, and before the call returns.
+    if (u.searches) await Promise.all([recordSearchDay(u.searches, 'pipeline'), recordMonthly(u.searches)]);
     ledger.calls++; ledger.input += u.input; ledger.output += u.output; ledger.thinking += u.thinking; ledger.searches += u.searches;
     ledger.tokenDollars += u.tokenDollars; ledger.searchDollars += u.searchDollars;
     if (!u.priced) ledger.unpriced++;

@@ -50,7 +50,7 @@ import {
   type GuideArea, type GuideEntry, type GuideSection, type GuideFight, type Layout,
 } from './common';
 import { stageCopy } from './promote';
-import { getGameFacts, saveGameFacts, recordMonthly } from '../../searchGuard';
+import { getGameFacts, saveGameFacts } from '../../searchGuard';
 import { estimateCost } from '../../usage';
 import { ThinkingLevel } from '@google/genai';
 
@@ -123,7 +123,6 @@ async function grounded(prompt: string, label: string, requireSearch = true, mod
     });
     const n = searchesIn(res);
     searches += n;
-    recordMonthly(n); // guide runs count toward the app's monthly search total too
     const cost = estimateCost(model, res);
     if (cost === null) unpriced++;
     else dollars += cost;

@@ -15,7 +15,6 @@
  */
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, parseJson, searchesIn, sourcesIn } from './common';
-import { recordMonthly } from '../../searchGuard';
 
 /** Community wikis by guide key: where articles live, their licence, and what to call them. */
 export const WIKIS: Record<string, { host: string; name: string; article: (title: string) => string; license: string; licenseUrl: string }> = {
@@ -178,7 +177,6 @@ async function searchedPack(key: string, slug: string, page: any, ref: FirebaseF
     if (searchesIn(res)) break;
   }
   const n = searchesIn(res);
-  if (n) recordMonthly(n);
   const cited = sourcesIn(res);
   if (!n || !cited.length) return null; // nothing from memory
   // The notes as the pack's JSON (no searching: only what the notes say).

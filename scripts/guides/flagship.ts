@@ -36,7 +36,6 @@ import {
   db, gemini, MODEL, arg, searchesIn, sourcesIn, parseItem, ledger, ledgerDollars, usageScope, MISSABLE_STANDARD, stageKey, addChildUsage, slug as slugOf, LAYOUT_CHOICES, isLayout,
   type GuideEntry, type GuideStep, type GuideChoice, type GuideAdvice, type GuideFight, type GuideInfo,
 } from './common';
-import { recordMonthly } from '../../searchGuard';
 import { infoForPage } from './areaInfo';
 import { fightsForPage } from './fights';
 import { call, reviewerFor, queueForReview, MIN_PAGES, type Review } from './review';
@@ -68,7 +67,6 @@ async function grounded(prompt: string, label: string, fromNotes = false): Promi
       config: { tools: [{ googleSearch: {} }], temperature: 0.3, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     const n = searchesIn(res);
-    if (n) recordMonthly(n);
     console.log(`  [${label}] ${n} searches`);
     // Writing from sourced research notes: a reply that didn't need to search more is fine (the notes' sources stand).
     if (!n && fromNotes) return { text: String(res?.text || ''), sources: [] };
@@ -475,7 +473,6 @@ async function buildPage(key: string, game: string, slug: string, order: { slug:
         config: { tools: [{ googleSearch: {} }], temperature: 0.2, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
       });
       const n = searchesIn(res);
-      if (n) recordMonthly(n);
       console.log(`  [gaps: ${gapLines.length}] ${n} searches`);
       // Only a reply that searched counts (one from memory is no source): otherwise the gap lines are dropped.
       if (n && sourcesIn(res).length) {
@@ -1282,7 +1279,6 @@ async function packOutline(game: string, layout?: string, note?: string) {
       config: { tools: [{ googleSearch: {} }], temperature: 0.2, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     const n = searchesIn(res);
-    if (n) recordMonthly(n);
     console.log(`  [outline] ${n} searches`);
     if (!n) continue;
     const text = String(res?.text || '');

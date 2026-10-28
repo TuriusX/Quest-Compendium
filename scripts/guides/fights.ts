@@ -14,7 +14,6 @@
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, searchesIn, sourcesIn, stageKey, guideRelease, releasedAfter, QUICK_MODEL_CUTOFF, type GuideFight } from './common';
 import { estimateCost } from '../../usage';
-import { recordMonthly } from '../../searchGuard';
 
 /** Estimates for the plan (from typical calls of this shape). */
 export const FIGHT_EST = {
@@ -77,7 +76,6 @@ export async function fightsForPage(game: string, page: any, quick: boolean): Pr
       config: { ...(quick ? {} : { tools: [{ googleSearch: {} }] }), temperature: 0.2, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     const n = quick ? 0 : searchesIn(res);
-    if (n) recordMonthly(n);
     searches += n;
     dollars += estimateCost(MODEL, res) || 0;
     if (quick) return { fights: parseFightLines(String(res?.text || '')), searches, dollars, checked: true };

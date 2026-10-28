@@ -13,7 +13,6 @@
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, searchesIn, sourcesIn, stageKey, guideRelease, releasedAfter, QUICK_MODEL_CUTOFF, MISSABLE_STANDARD, parseItem, gameKey } from './common';
 import { estimateCost } from '../../usage';
-import { recordMonthly } from '../../searchGuard';
 
 /** Estimates for the plan (from typical calls of this shape). */
 export const MISS_EST = { searchesPerPage: 5, carefulPageDollars: 0.014, quickPageDollars: 0.006, flashGateDollars: 0.03, proGateDollars: 0.08 };
@@ -82,7 +81,6 @@ export async function missablesForPage(game: string, page: any, quick: boolean):
       config: { ...(quick ? {} : { tools: [{ googleSearch: {} }] }), temperature: 0.2, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     const n = quick ? 0 : searchesIn(res);
-    if (n) recordMonthly(n);
     searches += n;
     dollars += estimateCost(MODEL, res) || 0;
     if (quick) return { rewrites: parseMissLines(String(res?.text || ''), ids), sources: [], searches, dollars, checked: true };

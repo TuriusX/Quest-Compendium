@@ -13,7 +13,6 @@
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, searchesIn, sourcesIn, stageKey, gameKey, guideRelease, releasedAfter, QUICK_MODEL_CUTOFF, INFO_FORMAT, WAY_FORMAT, parseInfoFields, parseWayFields, hasInfo, type GuideInfo } from './common';
 import { estimateCost } from '../../usage';
-import { recordMonthly } from '../../searchGuard';
 import { TOP_GUIDES } from './missables';
 
 /** Estimates (per page) for the plan. */
@@ -53,7 +52,6 @@ export async function infoForPage(game: string, page: any, neighbours: string[],
       config: { ...(quick ? {} : { tools: [{ googleSearch: {} }] }), temperature: 0.2, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     const n = quick ? 0 : searchesIn(res);
-    if (n) recordMonthly(n);
     searches += n;
     dollars += estimateCost(MODEL, res) || 0;
     if (quick) return { info: parseInfoReply(String(res?.text || '')), searches, dollars, checked: true };

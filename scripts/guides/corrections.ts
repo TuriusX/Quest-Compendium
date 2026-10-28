@@ -30,7 +30,6 @@ import { db, gemini, MODEL, arg, parseJson, searchesIn, stageKey, type GuideFigh
 import { fightKnown } from '../../missingFights';
 import { parseFightLines, FIGHT_FORMAT } from './fights';
 import { estimateCost } from '../../usage';
-import { recordMonthly } from '../../searchGuard';
 import { reporterCount } from '../../corrections';
 import { stageCopy, discard } from './promote';
 import { gateGuide } from './review';
@@ -110,7 +109,6 @@ async function sourceCheck(game: string, area: string, kind: string, entry: any,
   });
   const n = searchesIn(res);
   searches += n;
-  if (n) recordMonthly(n);
   dollars += estimateCost(MODEL, res) || 0;
   const text = String(res?.text || '');
   const line = (k: string) => cut((text.match(new RegExp(`^\\W*${k}\\W*:[ \\t]*(.*)$`, 'im')) || [])[1], 600).replace(/^(empty|none|n\/a|-)$/i, '');
@@ -144,7 +142,6 @@ async function fightSourceCheck(game: string, area: string, g: any, reports: Rep
   });
   const n = searchesIn(res);
   searches += n;
-  if (n) recordMonthly(n);
   dollars += estimateCost(MODEL, res) || 0;
   const text = String(res?.text || '');
   const line = (k: string) => cut((text.match(new RegExp(`^\\W*${k}\\W*:[ \\t]*(.*)$`, 'im')) || [])[1], 600);

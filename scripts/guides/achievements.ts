@@ -15,7 +15,6 @@
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, gameKey, arg, searchesIn, editionOf, editionNote } from './common';
 import { estimateCost } from '../../usage';
-import { recordMonthly } from '../../searchGuard';
 import { acquireGuideLock, isRefusal, lockedLine, releaseGuideLocks } from './guideLock';
 
 const game = arg('game');
@@ -104,7 +103,6 @@ async function main() {
       });
       const n = searchesIn(res);
       searches += n;
-      if (n) recordMonthly(n);
       dollars += estimateCost(MODEL, res) || 0;
       console.log(`  [${label}] ${n} searches (total ${searches}/${maxSearches}, ≈ $${dollars.toFixed(3)})`);
       if (quick || n > 0) return String(res?.text || '');

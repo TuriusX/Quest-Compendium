@@ -12,7 +12,6 @@
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, searchesIn, sourcesIn, stageKey, MISSABLE_STANDARD, parseItem } from './common';
 import { estimateCost } from '../../usage';
-import { recordMonthly } from '../../searchGuard';
 import type { PlanPage } from '../pipeline/searchConsole';
 
 const SEARCHES_PER_PAGE = 6;
@@ -114,7 +113,6 @@ export async function writeQueryFixes(key: string, game: string, maxSearches: nu
         config: { ...(p.careful ? { tools: [{ googleSearch: {} }] } : {}), temperature: 0.2, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
       });
       const n = p.careful ? searchesIn(res) : 0;
-      if (n) recordMonthly(n);
       searches += n;
       dollars += estimateCost(MODEL, res) || 0;
       if (p.careful && !n) continue;

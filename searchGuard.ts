@@ -5,8 +5,9 @@
  * month across the project, then $14 per 1,000. Three guards, all tunable with environment variables:
  *   - per player per day: FREE_DAILY_SEARCHES (default 3), PREMIUM_DAILY_SEARCHES (default 10); counted on the player's
  *     user document (searchesToday / searchDay). Guests share the free allowance, counted in memory per guest id.
- *   - per month, two separate shares, counted in Firestore at system/searchBudget { month: 'YYYY-MM', count, pipeline,
- *     players, flagship } (count: all of them):
+ *   - per month, two separate shares, counted in Firestore at searchMonths/{YYYY-MM} { count, pipeline, players,
+ *     flagship } (count: all of them; atomic increments, so concurrent writers never lose a count; months before
+ *     November 2026 were kept at system/searchBudget):
  *       players (chat, the Steam Deck's web search): PLAYER_MONTHLY_SEARCHES (2,000), their own reserve, which the
  *         pipeline can never use; past the free 5,000 a month they're paid ($14 per 1,000).
  *       the pipeline and the flagship builds together: pipelineShare(month), PIPELINE_MONTHLY_SEARCHES (4,800) or a
@@ -67,9 +68,14 @@ export async function searchMonth(fresh = false): Promise<SearchMonth> {
   const m = thisMonth();
   if (!fresh && monthly.month === m && Date.now() - monthly.readAt < 60_000) return monthly;
   try {
-    const snap = await getFirestore().collection('system').doc('searchBudget').get();
-    const d: any = snap.exists ? snap.data() : null;
-    monthly = d && d.month === m ? { ...splitOf(d), month: m, readAt: Date.now() } : { ...zero(m), readAt: Date.now() };
+    const snap = await getFirestore().collection('searchMonths').doc(m).get();
+    let d: any = snap.exists ? { ...snap.data(), month: m } : null;
+    // Before searchMonths existed (October 2026), the month was kept in system/searchBudget.
+    if (!d) {
+      const old: any = (await getFirestore().collection('system').doc('searchBudget').get()).data();
+      if (old?.month === m) d = old;
+    }
+    monthly = d ? { ...splitOf(d), month: m, readAt: Date.now() } : { ...zero(m), readAt: Date.now() };
   } catch {
     monthly = { ...(monthly.month === m ? monthly : zero(m)), readAt: Date.now() };
   }
@@ -97,11 +103,14 @@ export async function monthlyBudgetOk(): Promise<boolean> {
 }
 
 /**
- * Add searches to the month's count (fire-and-forget), for who ran them. Scripts default to the pipeline, or the
- * flagship builds when the job says so (SEARCH_BUDGET_EXEMPT=1: their dollars are a separate budget, their searches
- * count toward the pipeline's share).
+ * Add searches to the month's count, for who ran them. Scripts default to the pipeline, or the flagship builds when the
+ * job says so (SEARCH_BUDGET_EXEMPT=1: their dollars are a separate budget, their searches count toward the pipeline's
+ * share). Every searching call of the scripts is counted here once, by the shared client (scripts/guides/common.ts
+ * gemini(), which awaits it, so a script that exits right after doesn't lose it); players' by recordPlayerSearches.
+ * Until Oct 28 2026 the scripts counted at a dozen places of their own, fire-and-forget, and most of the core runs'
+ * searches never reached the month (October: about 5,070 not counted).
  */
-export function recordMonthly(n: number, who: SearchWho = process.env.SEARCH_BUDGET_EXEMPT === '1' ? 'flagship' : 'pipeline'): void {
+export async function recordMonthly(n: number, who: SearchWho = process.env.SEARCH_BUDGET_EXEMPT === '1' ? 'flagship' : 'pipeline'): Promise<void> {
   if (!n) return;
   const m = thisMonth();
   if (monthly.month !== m) monthly = { ...zero(m), readAt: 0 };
@@ -117,15 +126,11 @@ export function recordMonthly(n: number, who: SearchWho = process.env.SEARCH_BUD
   } catch {
     return; // no database access (e.g. local dev without credentials): the in-memory count still applies
   }
-  const ref = db.collection('system').doc('searchBudget');
-  db
-    .runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      const d: any = snap.exists ? snap.data() : null;
-      const cur = d && d.month === m ? splitOf(d) : zero(m);
-      tx.set(ref, { month: m, count: cur.count + n, pipeline: cur.pipeline, players: cur.players, flagship: cur.flagship, [who]: cur[who] + n, updatedAt: Date.now() });
-    })
-    .catch((e) => console.warn('[search] could not update the monthly count:', e?.message));
+  try {
+    await db.collection('searchMonths').doc(m).set({ month: m, count: FieldValue.increment(n), [who]: FieldValue.increment(n), updatedAt: Date.now() }, { merge: true });
+  } catch (e: any) {
+    console.warn('[search] could not update the monthly count:', e?.message);
+  }
 }
 
 // ---- per-player daily allowance ----
@@ -167,7 +172,7 @@ export async function playerSearchesToday(): Promise<boolean> {
 /** Searches players' features ran (chat, the Steam Deck's web search): the month's count and today's. */
 export function recordPlayerSearches(n: number): void {
   if (!n) return;
-  recordMonthly(n, 'players');
+  void recordMonthly(n, 'players');
   void recordSearchDay(n, 'players');
 }
 

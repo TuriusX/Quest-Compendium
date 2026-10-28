@@ -34,7 +34,6 @@ import {
   LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, REVIEWER_CUTOFF, MISSABLE_STANDARD, missableGaps, type Layout,
 } from './common';
 import { estimateCost } from '../../usage';
-import { recordMonthly } from '../../searchGuard';
 import { promote } from './promote';
 import { PRO_MODEL, FLASH_REVIEW_MODEL, takePro, proExhausted, isQuotaError, ProQuotaWait, type ReviewTier, type ProKind } from './reviewerQuota';
 
@@ -258,7 +257,6 @@ async function spotCheck(rv: Reviewer, game: string, pages: any[], allPages: boo
     });
     const n = searchesIn(res);
     searches += n;
-    if (n) recordMonthly(n);
     dollars += estimateCost(rv.model, res) || 0;
     const text = String(res?.text || '');
     if (process.env.REVIEW_DEBUG) console.log('[spot-check]', n, 'searches\n', text.slice(0, 1500));
