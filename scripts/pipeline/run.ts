@@ -563,12 +563,27 @@ async function main() {
   }
   if (daysLeft < 7 && !nextCapSet) RUN.head.push(`📅 Before ${nextName} 1: set ${nextName}'s pipeline cap. Without one it falls back to the default $${env('PIPELINE_MONTHLY_AI_DOLLARS', 10)} a month (this month: $${AI_CAP}).`);
   if (holdPendingDecision && (daysLeft < 7 || (state.queueHold?.until && month >= String(state.queueHold.until)))) RUN.head.push(`📅 Decide which held repairs to approve (${held.length} waiting). The repair queue stays on hold until you do; it won't resume on ${state.queueHold?.until && month < String(state.queueHold.until) ? `${nextName} 1` : 'its own'}.`);
+  // Repairs the owner left out when deciding (system/pipeline.queueParked): never run, listed until they decide.
+  if (Array.isArray(state.queueParked) && state.queueParked.length && new Date().getUTCDay() === 1) {
+    report.push(`🅿️ ${state.queueParked.length} repair(s) parked by the owner, not run: ${state.queueParked.slice(0, 6).map((q: QueueItem) => q.game).join(', ')}${state.queueParked.length > 6 ? '…' : ''} (system/pipeline.queueParked).`);
+  }
   if (held.length) {
     queue.splice(0, queue.length, ...queue.filter((q) => q.approved));
     report.push(`⏸️ Repairs on hold until ${state.queueHold.until}: ${held.length} waiting, ${queue.length} approved run.${state.queueHold.why ? ` Why: ${state.queueHold.why}.` : ''}`);
   }
+  // The owner's total for the repairs they approved (queueHold.approvedDollars, Oct 28 2026: $15 inside the month's
+  // cap): what's left of it is each approved repair's hard limit, and none starts with less than $0.25 left.
+  const approvedBudget = Number(state.queueHold?.approvedDollars);
+  const approvedLeft = () => (Number.isFinite(approvedBudget) ? approvedBudget - Number(state.queueHold?.approvedSpent || 0) : Infinity);
+  let approvedStopNoted = false;
   while (queue.length && !DRY && !paused) {
     const item = queue.shift()!;
+    if (item.approved && approvedLeft() < 0.25) {
+      waiting.push(item);
+      if (!approvedStopNoted) report.push(`⏸️ Approved repairs stopped at the owner's $${approvedBudget.toFixed(2)} ($${Number(state.queueHold?.approvedSpent || 0).toFixed(2)} spent); the rest wait for a new approval.`);
+      approvedStopNoted = true;
+      continue;
+    }
     const action = item.mode === 'quick' ? 'outline' : item.mode;
     // Careful builds, and outline rebuilds of new releases (careful too), need real search room; fixes and quick
     // rebuilds search little (spot-checks, careful pages of new games).
@@ -585,10 +600,21 @@ async function main() {
       continue;
     }
     // Key fights search one call a page (a big guide needs about 300): the careful cap, without needing careful room.
-    const cap = affordable(big || ['fights', 'missables', 'queries', 'info'].includes(action) ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom));
-    console.log(`\n▶ queue ${action} ${item.game} (up to ${cap} searches)`);
+    const budgetLeft = item.approved ? approvedLeft() : Infinity;
+    const cap = Math.min(
+      affordable(big || ['fights', 'missables', 'queries', 'info'].includes(action) ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom)),
+      Number.isFinite(budgetLeft) ? Math.floor((Math.max(0, budgetLeft - 0.3) * 0.8) / SEARCH_DOLLARS) : Infinity,
+    );
+    console.log(`\n▶ queue ${action} ${item.game} (up to ${cap} searches${Number.isFinite(budgetLeft) ? `, $${budgetLeft.toFixed(2)} of the approved total left` : ''})`);
+    const before = spendLeft;
+    if (Number.isFinite(budgetLeft)) spendLeft = () => Math.min(room(), budgetLeft);
     const r = runScript(['scripts/guides/repair.ts', '--game', item.game, '--action', action, '--max-searches', String(cap), ...(item.report ? ['--report', item.report] : []), ...(item.regate ? ['--regate'] : [])]);
+    spendLeft = before;
     await charge(r, `queue ${item.regate ? 're-gate ' : ''}${action} ${item.game}`);
+    if (item.approved && Number.isFinite(approvedBudget)) {
+      state.queueHold = { ...state.queueHold, approvedSpent: Number(state.queueHold?.approvedSpent || 0) + r.dollars };
+      await db().collection('system').doc('pipeline').set({ queueHold: state.queueHold }, { merge: true });
+    }
     queueRoom -= r.searches;
     const g = await guideInfo(item.game);
     guideCache.delete(g.key);
