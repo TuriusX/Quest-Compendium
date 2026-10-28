@@ -56,24 +56,24 @@ import { readCloud, writeCloud } from './utils/playthroughCloud';
 import { PlaythroughPanel } from './components/PlaythroughPanel';
 import { appSource, isPhone } from './utils/source';
 import { useGameArt } from './utils/gameArt';
+import { sharpIgdb, steamHeader, useArt } from './utils/artCache';
 import { deviceId } from './utils/deviceId';
 import { tabForGame } from './utils/runningGame';
 import { DetectionLine, type Detection } from './components/DetectionLine';
 import { gameSpacesOn, learn, resolveProgram, type ProgramGame } from './utils/learnedGames';
 
-/** The running game's picture: IGDB's key art when its guide has it, else Steam's header; hidden if neither loads. */
+/**
+ * The running game's picture, sharp at any screen scale (utils/artCache.ts): IGDB's key art at 720p when its guide has
+ * it, else Steam's header; hidden if neither loads.
+ */
 function RunningGameArt({ appId, name }: { appId: number; name?: string }) {
   const ig = useGameArt(appId, name);
-  const steam = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`;
-  const [src, setSrc] = React.useState<string>('');
-  const shown = src || ig.art || steam;
-  return (
-    <img
-      src={shown}
-      alt=""
-      className="w-16 h-10 object-cover rounded-lg border border-white/10 flex-shrink-0"
-      onError={(e) => { if (shown !== steam) setSrc(steam); else (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-    />
+  const src = useArt([ig.art && sharpIgdb(ig.art, 'wide'), steamHeader(appId)]);
+  if (src === null) return null;
+  return src ? (
+    <img src={src} alt="" decoding="async" className="w-16 h-10 object-cover rounded-lg border border-white/10 flex-shrink-0" />
+  ) : (
+    <span className="w-16 h-10 rounded-lg border border-white/10 bg-white/5 flex-shrink-0" />
   );
 }
 

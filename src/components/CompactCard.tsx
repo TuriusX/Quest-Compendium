@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AlertTriangle, BookOpen, Maximize2, Play } from './icons';
 import { useT } from '../i18n';
 import { useGameArt } from '../utils/gameArt';
+import { sharpIgdb, steamCover, steamHeader, useArt } from '../utils/artCache';
 import { playBlipSound } from '../utils/audio';
 import { QuestionsPill } from './QuestionsPill';
 import type { Detection } from './DetectionLine';
@@ -19,23 +20,23 @@ export type CompactLayout = 'card' | 'ribbon';
 export type CompactObjective = { title?: string; step?: string } | null;
 export type CompactNear = { label: string; where?: string; missable?: boolean } | null;
 
-/** The cover: IGDB's when the game has a guide, else Steam's library portrait, else its header, else the initials. */
+/**
+ * The cover, sharp at any screen scale (utils/artCache.ts: the largest size, scaled down, kept on this computer): IGDB's
+ * when the game has a guide, else Steam's library portrait, else the picture the game came with, else Steam's header,
+ * else the game's initials.
+ */
 function CoverArt({ appId, name, fallback, live, className }: { appId?: number; name: string; fallback?: string; live: boolean; className: string }) {
   const t = useT();
   const ig = useGameArt(appId || null, name || null);
-  const steamCover = appId ? `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg` : '';
-  const steamHeader = appId ? `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg` : '';
-  const tries = [ig.cover, steamCover, fallback, steamHeader].filter(Boolean) as string[];
-  const [failed, setFailed] = useState<string[]>([]);
-  const src = tries.find((s) => !failed.includes(s));
+  const src = useArt([ig.cover && sharpIgdb(ig.cover, 'cover'), steamCover(appId), fallback && sharpIgdb(fallback, 'cover'), steamHeader(appId)]);
   const initials = name.replace(/[^\p{L}\p{N} ]/gu, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   return (
     <div className={`relative flex-shrink-0 rounded-md border border-white/15 bg-gradient-to-br from-[var(--accent-dim)] to-black/60 ${className}`}>
       {src ? (
-        <img src={src} alt="" className="w-full h-full object-cover rounded-md" onError={() => setFailed((f) => [...f, src])} />
-      ) : (
+        <img src={src} alt="" decoding="async" draggable={false} className="w-full h-full object-cover rounded-md" />
+      ) : src === null ? (
         <span className="absolute inset-0 grid place-items-center text-[11px] font-bold text-[var(--accent-color)]">{initials}</span>
-      )}
+      ) : null}
       {live && (
         <span
           className="absolute -right-1 -bottom-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0b0b10] shadow-[0_0_6px_rgba(52,211,153,0.9)]"

@@ -5,6 +5,23 @@ import { POPULAR_STEAM_GAMES } from '../data/mockGames';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import { getApiBaseUrl } from '../utils/api';
 import { auth } from '../lib/firebase';
+import { sharpIgdb, steamAppIdOf, steamHeader, useArt } from '../utils/artCache';
+
+/**
+ * A result's picture, sharp at any screen scale (utils/artCache.ts): Steam's header (460 px) rather than the search's
+ * 120 px capsule, kept on this computer; the icon when there's none.
+ */
+function ResultArt({ game }: { game: SteamGameData }) {
+  const appId = Number(game.appId) || steamAppIdOf(game.headerImage);
+  const src = useArt([steamHeader(appId), game.headerImage && sharpIgdb(game.headerImage, 'wide')]);
+  return src ? (
+    <img src={src} alt={game.name} decoding="async" className="w-16 h-10 object-cover rounded-lg border border-white/15 flex-shrink-0" />
+  ) : (
+    <div className="w-16 h-10 bg-white/5 rounded-lg border border-white/10 flex items-center justify-center flex-shrink-0">
+      <Gamepad2 className="w-5 h-5 text-zinc-400 group-hover:text-[var(--accent-color)] transition-colors" />
+    </div>
+  );
+}
 
 interface QuickGameSearchModalProps {
   isOpen: boolean;
@@ -168,17 +185,7 @@ export const QuickGameSearchModal: React.FC<QuickGameSearchModalProps> = ({
                 className="p-3 rounded-xl border border-white/[0.08] bg-black/40 hover:bg-white/[0.06] hover:border-[var(--accent-border)] transition-all cursor-pointer flex items-center justify-between group shadow-sm"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  {game.headerImage ? (
-                    <img 
-                      src={game.headerImage} 
-                      alt={game.name} 
-                      className="w-16 h-10 object-cover rounded-lg border border-white/15 flex-shrink-0" 
-                    />
-                  ) : (
-                    <div className="w-16 h-10 bg-white/5 rounded-lg border border-white/10 flex items-center justify-center flex-shrink-0">
-                      <Gamepad2 className="w-5 h-5 text-zinc-400 group-hover:text-[var(--accent-color)] transition-colors" />
-                    </div>
-                  )}
+                  <ResultArt game={game} />
 
                   <div className="min-w-0">
                     <div className="font-semibold text-xs text-white group-hover:text-[var(--accent-color)] transition-colors truncate">
