@@ -186,7 +186,7 @@ export function GuideFragment({
     // Ticks made elsewhere (the quest log, the tracker) show here too.
     const onDone = (e: Event) => {
       const d = (e as CustomEvent).detail;
-      if (d && d.key === gameKey && d.slug === slug) paint();
+      if (d && ((d.key === gameKey && d.slug === slug) || d.key === '*')) paint(); // '*': the playthrough changed
     };
     window.addEventListener(GUIDE_DONE_EVENT, onDone);
     return () => {

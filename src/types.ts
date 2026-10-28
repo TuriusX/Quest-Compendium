@@ -177,6 +177,12 @@ export interface GameTab {
   guideSteps?: { kind: 'quest' | 'walk'; key: string; slug: string; name: string; from?: string; answerId?: string };
   /** The guide the player picked for a Steam app that holds several games (Mass Effect Legendary Edition: ME1 or ME2). */
   guideKey?: string;
+  /**
+   * Games-not-tabs (flag on; utils/spacesStore.ts toTabs): the name this playthrough's memory and progress are kept
+   * under (the first keeps its old tab's), and the current playthrough (shown when a game has more than one).
+   */
+  memoryKey?: string;
+  playthrough?: { id: string; name: string; count: number };
   createdAt: number;
   lastActive: number;
 }

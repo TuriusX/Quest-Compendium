@@ -4,7 +4,21 @@
  * every change fires a 'qc-guide-done' event ({ key, slug }) that both listen to.
  */
 export const GUIDE_DONE_EVENT = 'qc-guide-done';
-const doneKey = (key: string, slug: string) => `qc-guide-done:${key}:${slug}`;
+/**
+ * Games-not-tabs (flag on): a later playthrough has its own ticks ("~pt2" after the guide key); the first keeps the
+ * guide's own, so nothing ticked before moves. Set by the app when the playthrough changes.
+ */
+let tickScope = '';
+export function setTickScope(scope: string): void {
+  if (scope === tickScope) return;
+  tickScope = scope;
+  try {
+    window.dispatchEvent(new CustomEvent(GUIDE_DONE_EVENT, { detail: { key: '*', slug: '*' } }));
+  } catch {
+    /* no window (tests) */
+  }
+}
+const doneKey = (key: string, slug: string) => `qc-guide-done:${key}${tickScope}:${slug}`;
 
 export function readDone(key: string, slug: string): Set<string> {
   try {

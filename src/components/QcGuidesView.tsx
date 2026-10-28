@@ -660,7 +660,7 @@ function AreaPage({
   useEffect(() => {
     const onDone = (e: Event) => {
       const d = (e as CustomEvent).detail;
-      if (d && d.key === gameKey && d.slug === slug) setDone(readDone(gameKey, slug));
+      if (d && ((d.key === gameKey && d.slug === slug) || d.key === '*')) setDone(readDone(gameKey, slug)); // '*': the playthrough changed
     };
     window.addEventListener(GUIDE_DONE_EVENT, onDone);
     return () => window.removeEventListener(GUIDE_DONE_EVENT, onDone);

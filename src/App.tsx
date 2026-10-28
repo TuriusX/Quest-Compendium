@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { balancesOf, deviceTimeZone, topUpLine, untilReset } from './utils/answerModel';
 import { BookOpen, Plus, Sparkles, Gamepad2, Search, Camera, Mic, Moon, FileText, Globe } from './components/icons';
 import { 
@@ -62,6 +62,14 @@ import { deviceId } from './utils/deviceId';
 import { tabForGame } from './utils/runningGame';
 import { DetectionLine, type Detection } from './components/DetectionLine';
 import { gameSpacesOn, learn, resolveProgram, type ProgramGame } from './utils/learnedGames';
+import { applyTabs, assignGame, emptySpaces, importPlan, newPlaythrough, playthroughsOf, readSpaces, renamePlaythrough, splitMerged, switchPlaythrough, toTabs, writeSpaces, type SpacesState } from './utils/spacesStore';
+import { loadCloudSpaces, mergeSpaces, saveCloudSpaces } from './utils/spacesCloud';
+import { planMigration, type CatalogGame } from './utils/gameSpaces';
+import { resolveTabWithServer } from './utils/spacesResolve';
+import { fetchGuideIndex } from './utils/guideIndex';
+import { setTickScope } from './utils/guideProgress';
+import { readTombstones } from './hooks/tabMerge';
+import { SpacesNotice } from './components/SpacesNotice';
 
 /**
  * The running game's picture, sharp at any screen scale (utils/artCache.ts): IGDB's key art at 720p when its guide has
@@ -253,7 +261,7 @@ export default function App() {
     }
   });
 
-  const [tabs, setTabs] = useState<GameTab[]>(() => {
+  const [legacyTabs, setLegacyTabs] = useState<GameTab[]>(() => {
     try {
       const isGuest = typeof window !== 'undefined' && Boolean(localStorage.getItem('quest_guest_session'));
       if (isGuest) {
@@ -293,6 +301,21 @@ export default function App() {
     return [];
   });
 
+  // One space per game (games-not-tabs, behind the qc-game-spaces flag; utils/spacesStore.ts): with the flag on, the
+  // app's tabs are the player's games, each showing its current playthrough, and what the app changes goes back to the
+  // game or the playthrough. The compendium tabs above stay as they were (the migration's backup, synced as before).
+  // spaces is null until this device's are ready (the compendium tabs show meanwhile).
+  const spacesOn = useMemo(() => gameSpacesOn(), []);
+  const [spaces, setSpaces] = useState<SpacesState | null>(null);
+  const spacesRef = useRef<SpacesState | null>(null);
+  spacesRef.current = spaces;
+  const spaceTabs = useMemo(() => (spaces ? toTabs(spaces) : null), [spaces]);
+  const tabs: GameTab[] = spacesOn && spaceTabs ? spaceTabs : legacyTabs;
+  const setTabs: React.Dispatch<React.SetStateAction<GameTab[]>> = useCallback((u: React.SetStateAction<GameTab[]>) => {
+    if (spacesOn && spacesRef.current) setSpaces((cur) => (cur ? applyTabs(cur, typeof u === 'function' ? u(toTabs(cur)) : u) : cur));
+    else setLegacyTabs(u);
+  }, [spacesOn]);
+
   const [activeTabId, setActiveTabId] = useState<string>(() => {
     return tabs[0]?.id || '';
   });
@@ -301,7 +324,9 @@ export default function App() {
   useEffect(() => {
     if (tabs.length > 0) {
       if (!tabs.some(t => t.id === activeTabId)) {
-        setActiveTabId(tabs[0].id);
+        // A game the app added that already had a space: show that space (spacesStore applyTabs alias).
+        const alias = spaces?.alias?.[activeTabId];
+        setActiveTabId(alias && tabs.some((t) => t.id === alias) ? alias : tabs[0].id);
       }
     } else if (activeTabId !== '') {
       setActiveTabId('');
@@ -346,7 +371,6 @@ export default function App() {
   // Detection beyond Steam (games-not-tabs, behind the qc-game-spaces flag; utils/learnedGames.ts): a launcher's game,
   // an emulator's or a program the player named is the running game while Steam runs nothing. Unknown ones are asked
   // about once (the detection line) and remembered; until then the game last picked stays open.
-  const spacesOn = useMemo(() => gameSpacesOn(), []);
   const [programGame, setProgramGame] = useState<ProgramGame | null>(null);
   const programVerdict = useMemo(() => resolveProgram(spacesOn ? programGame : null, settings.learnedPrograms), [spacesOn, programGame, settings.learnedPrograms]);
   const globalActiveGame: SteamGameData | null = steamGame || (programVerdict.state === 'game' ? programVerdict.game : null);
@@ -388,7 +412,7 @@ export default function App() {
     };
   }, [isDraggingAch]);
 
-  const { user, subscriptionStatus, userData, isInitializing, isOutdated, syncDiagnostics } = useCloudSync(settings, tabs, setSettings, setTabs);
+  const { user, subscriptionStatus, userData, isInitializing, isOutdated, syncDiagnostics } = useCloudSync(settings, legacyTabs, setSettings, setLegacyTabs);
 
   // Switch and isolate tabs when user transitions between Guest and Authenticated User
   const lastUserIdentityRef = useRef<string | null>(null);
@@ -405,14 +429,14 @@ export default function App() {
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed)) {
               const cleaned = parsed.filter(t => t && t.id !== 'guest-welcome-compendium' && t.name !== 'Welcome, Explorer');
-              setTabs(cleaned);
+              setLegacyTabs(cleaned);
               setActiveTabId(cleaned[0]?.id || '');
               lastUserIdentityRef.current = currentIdentity;
               return;
             }
           }
         } catch {}
-        setTabs([]);
+        setLegacyTabs([]);
         setActiveTabId('');
       } else if (user && !user.isGuest) {
         // Switching to Google account: restore user-specific tabs if local is empty/default
@@ -423,7 +447,7 @@ export default function App() {
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed)) {
               const cleaned = parsed.filter(t => t && t.id !== 'guest-welcome-compendium' && t.name !== 'Welcome, Explorer');
-              setTabs(cleaned);
+              setLegacyTabs(cleaned);
               setActiveTabId(cleaned[0]?.id || '');
             }
           }
@@ -450,6 +474,67 @@ export default function App() {
   }, [user, isInitializing]);
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || null;
+
+  // ---- Game spaces (flag on): this device's, merged with the account's, then the compendium tabs migrated in (safe on
+  // every start: only what's missing is added, nothing is removed, the tabs stay as they were). A failed check or no
+  // connection leaves the compendiums showing; it's tried again on the next start. ----
+  const spacesOwner = user && !user.isGuest ? user.uid : 'guest';
+  const [spacesCatalog, setSpacesCatalog] = useState<CatalogGame[]>([]);
+  useEffect(() => {
+    if (!spacesOn || isInitializing) return;
+    let live = true;
+    setSpaces(null);
+    (async () => {
+      let s = readSpaces(spacesOwner) || emptySpaces();
+      if (user && !user.isGuest) {
+        try {
+          s = mergeSpaces(s, await loadCloudSpaces(user.uid));
+        } catch (e: any) {
+          console.warn('[spaces] the account copy could not be read:', e?.message);
+        }
+      }
+      const catalog = (await fetchGuideIndex().catch(() => [])).map((g) => ({ id: g.key, name: g.game }));
+      if (live) setSpacesCatalog(catalog);
+      try {
+        const plan = await planMigration(legacyTabs, readTombstones(), resolveTabWithServer, catalog, s.tabMap);
+        if (plan.ok) s = importPlan(s, plan);
+        else console.warn('[spaces] the migration check failed; the compendiums stay:', plan.problems.join('; '));
+        if (!plan.ok && !s.games.length) return;
+      } catch (e: any) {
+        console.warn('[spaces] the migration waits for a connection:', e?.message);
+        if (!s.games.length) return;
+      }
+      if (live) setSpaces(s);
+    })();
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spacesOn, isInitializing, spacesOwner]);
+  // Saved on this computer at once, and on the account a few seconds after the last change (only what changed).
+  const spacesSaved = useRef(new Map<string, string>());
+  useEffect(() => { spacesSaved.current = new Map(); }, [spacesOwner]);
+  useEffect(() => {
+    if (!spaces) return;
+    writeSpaces(spacesOwner, spaces);
+    if (!user || user.isGuest) return;
+    const uid = user.uid;
+    const t = setTimeout(() => {
+      saveCloudSpaces(uid, spaces, spacesSaved.current).catch((e) => console.warn('[spaces] not saved to the account:', e?.message));
+    }, 3000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spaces]);
+  // A later playthrough has its own guide ticks (utils/guideProgress.ts); the first keeps the guide's.
+  const ptId = spacesOn ? activeTab?.playthrough?.id : undefined;
+  useEffect(() => setTickScope(ptId && ptId !== 'pt1' ? `~${ptId}` : ''), [ptId]);
+  const playthroughMenu = spacesOn && spaces && activeTab
+    ? {
+        current: activeTab.playthrough?.id || 'pt1',
+        list: playthroughsOf(spaces, activeTab.id).map((p) => ({ id: p.id, name: p.name })),
+        onNew: () => setSpaces((cur) => (cur ? newPlaythrough(cur, activeTab.id) : cur)),
+        onSwitch: (id: string) => setSpaces((cur) => (cur ? switchPlaythrough(cur, activeTab.id, id) : cur)),
+        onRename: (id: string, name: string) => setSpaces((cur) => (cur ? renamePlaythrough(cur, activeTab.id, id, name) : cur)),
+      }
+    : undefined;
   
   // The running game's compendium, and whether it's the open one. Questions are about the open compendium's game;
   // the running game's live data (achievements, news, "running now") joins in only on its own compendium.
@@ -667,7 +752,7 @@ export default function App() {
   // Where the player is: the tab's place, else the place saved for this game.
   // (The same key as gameProgressKey below, which is declared later in this component.)
   const trackerPlace = activeTab
-    ? activeTab.place || settings.gameProgress?.[(activeTab.activeSteamGame?.name || activeTab.name || '').trim().toLowerCase()]
+    ? activeTab.place || settings.gameProgress?.[(activeTab.memoryKey || activeTab.activeSteamGame?.name || activeTab.name || '').trim().toLowerCase()]
     : undefined;
   const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, trackerPlace?.name, trackerPlace?.story, useLocale(), Number(activeTab?.activeSteamGame?.appId || activeGame?.appId) || 0, activeTab?.name, activeTab?.guideKey);
   const trackerGameRef = useRef(trackerGame);
@@ -969,6 +1054,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     guideTickPrev.current = { id, set: readDone(key, area.slug) };
     const on = (e: Event) => {
       const d = (e as CustomEvent).detail || {};
+      // Another playthrough's ticks (games-not-tabs): nothing was ticked, only what's shown changed.
+      if (d.key === '*') { guideTickPrev.current = { id, set: readDone(key, area.slug) }; return; }
       if (d.key !== key || d.slug !== area.slug) return;
       const now = readDone(key, area.slug);
       const prev = guideTickPrev.current?.id === id ? guideTickPrev.current.set : new Set<string>();
@@ -1273,7 +1360,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   };
 
   // Where the player is in each game, kept in settings so it outlives any one compendium.
-  const gameProgressKey = (t: GameTab) => (t.activeSteamGame?.name || t.name || '').trim().toLowerCase();
+  const gameProgressKey = (t: GameTab) => (t.memoryKey || t.activeSteamGame?.name || t.name || '').trim().toLowerCase();
   const rememberGameProgress = (t: GameTab, place: NonNullable<GameTab['place']>) => {
     const key = gameProgressKey(t);
     if (!key) return;
@@ -1288,7 +1375,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // ---- Playthrough memory (roadmap item 8, utils/playthrough.ts) ----
   // The active game's record: this computer's copy merged with the account's (signed in), saved to both on change.
   const memoryOn = settings.playthroughMemory !== false;
-  const playGame = activeTab ? (activeTab.activeSteamGame?.name || activeTab.name || '').trim() : '';
+  const playGame = activeTab ? (activeTab.memoryKey || activeTab.activeSteamGame?.name || activeTab.name || '').trim() : '';
   const playOwner = user && !(user as any).isGuest ? String((user as any).uid) : 'guest';
   const playUid = user && !(user as any).isGuest ? String((user as any).uid) : '';
   const [play, setPlay] = useState<Playthrough>(emptyPlaythrough());
@@ -1693,20 +1780,20 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
 
     try {
       if (user?.isGuest) {
-        localStorage.setItem('quest_guest_tabs', JSON.stringify(tabs));
+        localStorage.setItem('quest_guest_tabs', JSON.stringify(legacyTabs));
       } else if (user && !user.isGuest) {
-        localStorage.setItem(`quest_compendium_tabs_${user.uid}`, JSON.stringify(tabs));
-        localStorage.setItem('quest_compendium_tabs', JSON.stringify(tabs));
+        localStorage.setItem(`quest_compendium_tabs_${user.uid}`, JSON.stringify(legacyTabs));
+        localStorage.setItem('quest_compendium_tabs', JSON.stringify(legacyTabs));
       } else {
         const isGuestSaved = typeof window !== 'undefined' && Boolean(localStorage.getItem('quest_guest_session'));
         if (isGuestSaved) {
-          localStorage.setItem('quest_guest_tabs', JSON.stringify(tabs));
+          localStorage.setItem('quest_guest_tabs', JSON.stringify(legacyTabs));
         } else {
-          localStorage.setItem('quest_compendium_tabs', JSON.stringify(tabs));
+          localStorage.setItem('quest_compendium_tabs', JSON.stringify(legacyTabs));
         }
       }
     } catch {}
-  }, [tabs, user, isInitializing]);
+  }, [legacyTabs, user, isInitializing]);
 
   // Fetch Steam Profile
   useEffect(() => {
@@ -2394,6 +2481,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     if (activeTabId === tabId) {
       setActiveTabId(remaining.length > 0 ? remaining[0].id : '');
     }
+    // A game space (flag on): deleted and tombstoned by the spaces store; the compendium tabs aren't touched.
+    if (spacesOn && spacesRef.current) return;
 
     // Record a timestamped deletion. Sync shares it with every device so the tab is not restored (see tabMerge.ts).
     recordTombstone(tabId);
@@ -2594,8 +2683,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           detection={detection}
           chosenGame={activeTab?.guideKey ? { game: collection?.games.find((g) => g.key === activeTab.guideKey)?.game || activeTab.guideKey, onChange: () => chooseCollectionGame(activeTab.id, undefined) } : undefined}
           onSelectTab={handleSelectTab}
-          onStartCreateTab={handleStartCreateTab}
-          onStartRenameTab={handleStartRenameTab}
+          onStartCreateTab={spacesOn && spaces ? () => setIsGameSearchOpen(true) : handleStartCreateTab}
+          onStartRenameTab={spacesOn && spaces ? undefined : handleStartRenameTab}
           onDeleteTab={handleDeleteTab}
           onOpenGuides={() => setIsBrowserMode(true)}
           onOpenNotes={() => setIsNotesOpen(true)}
@@ -2623,8 +2712,24 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           theme={settings.theme}
           onSync={syncDiagnostics?.triggerSyncNow}
           onCompact={isDesktop && activeTab ? () => chooseView('compact') : undefined}
+          playthroughs={playthroughMenu}
         />}
         {!compact && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
+        {!compact && spacesOn && spaces && (spaces.notice || spaces.games.find((g) => g.id === activeTab?.id)?.kind === 'unsorted') && (
+          <SpacesNotice
+            spaces={spaces}
+            activeId={activeTab?.id || ''}
+            catalog={spacesCatalog}
+            soundEnabled={settings.soundEnabled}
+            onDismiss={() => setSpaces((cur) => (cur ? { ...cur, notice: undefined } : cur))}
+            onKeepSeparate={(gameId) => setSpaces((cur) => (cur ? splitMerged(cur, gameId) : cur))}
+            onAssign={(spaceId, game) => {
+              setSpaces((cur) => (cur ? assignGame(cur, spaceId, game) : cur));
+              setActiveTabId(game.id);
+            }}
+            onKeepOther={(spaceId) => setSpaces((cur) => (cur ? { ...cur, games: cur.games.map((g) => (g.id === spaceId ? { ...g, kind: 'other' } : g)) } : cur))}
+          />
+        )}
         {/* Updates (desktop), under the header: "Version X is ready" and, after one installs, a one-time "What's new". A dev server shows
             both with sample notes at ?previewUpdate (for screenshots). */}
         {(isDesktop || previewUpdate) && (

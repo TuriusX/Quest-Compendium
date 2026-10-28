@@ -33,7 +33,7 @@ interface HeaderBarProps {
   chosenGame?: { game: string; onChange: () => void };
   onSelectTab: (tabId: string) => void;
   onStartCreateTab: () => void;
-  onStartRenameTab: (tabId: string, currentName: string) => void;
+  onStartRenameTab?: (tabId: string, currentName: string) => void;
   onDeleteTab: (tabId: string) => void;
   onOpenGuides: () => void;
   onOpenNotes: () => void;
@@ -63,6 +63,11 @@ interface HeaderBarProps {
   onSync?: () => Promise<boolean>;
   /** Switch to the compact view (the small resting state over the game). */
   onCompact?: () => void;
+  /**
+   * Games-not-tabs (flag on): the game's playthroughs. "New playthrough" is in the ⋯ menu; switching too, when there
+   * are several (the current one's name then shows by the game's).
+   */
+  playthroughs?: { current: string; list: { id: string; name: string }[]; onNew: () => void; onSwitch: (id: string) => void; onRename: (id: string, name: string) => void };
 }
 
 /**
@@ -100,6 +105,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   questLogReady = true,
   onSync,
   onCompact,
+  playthroughs,
 }) => {
   const t = useT();
   const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
@@ -114,7 +120,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     setTimeout(() => menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true }), 0);
   }, [menuOpen]);
   const onMenuKey = (e: React.KeyboardEvent) => {
-    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') || []);
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]') || []);
     const i = items.indexOf(document.activeElement as HTMLElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
@@ -149,11 +155,22 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           onSelectTab={onSelectTab}
           onStartCreateTab={onStartCreateTab}
           onStartRenameTab={onStartRenameTab}
+          gamesMode={!!playthroughs}
           onDeleteTab={onDeleteTab}
           onOpenGuides={onOpenGuides}
           onOpenNotes={onOpenNotes}
           onOpenQuests={onOpenQuests}
         />
+        {playthroughs && playthroughs.list.length > 1 && (() => {
+          // "#2" for a numbered playthrough, else its own name; the full name on hover.
+          const name = playthroughs.list.find((p) => p.id === playthroughs.current)?.name || '';
+          const n = name.match(/^Playthrough (\d+)$/)?.[1];
+          return (
+            <span className="ml-1.5 self-center flex-shrink-0 max-w-[7rem] truncate text-[11px] font-semibold text-zinc-300 border border-white/15 rounded-md px-1.5 py-0.5" title={`${t('spaces.playthroughs')}: ${name}`}>
+              {n ? `#${n}` : name}
+            </span>
+          );
+        })()}
       </div>
 
       {/* Right controls */}
@@ -248,6 +265,20 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     <span className="flex-1">{t('common.achievements')}</span>
                     {totalCount > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.08] text-zinc-300 font-mono font-bold">{unlockedCount}/{totalCount}</span>}
                   </button>
+                )}
+                {playthroughs && (
+                  <>
+                    {playthroughs.list.length > 1 && playthroughs.list.map((p) => (
+                      <button key={p.id} type="button" role="menuitemradio" aria-checked={p.id === playthroughs.current} onClick={pick(() => { playBlipSound(soundEnabled); playthroughs.onSwitch(p.id); })} className={menuItem}>
+                        <span className="w-4 h-4 flex items-center justify-center text-[12px] text-[var(--accent-color)]" aria-hidden="true">{p.id === playthroughs.current ? '●' : '○'}</span>
+                        <span className="flex-1 truncate">{p.name}</span>
+                      </button>
+                    ))}
+                    <button type="button" role="menuitem" title={t('spaces.newPlaythroughHint')} onClick={pick(() => { playBlipSound(soundEnabled); playthroughs.onNew(); })} className={menuItem}>
+                      <span className="w-4 h-4 flex items-center justify-center text-[14px] text-[var(--accent-color)]" aria-hidden="true">＋</span>
+                      <span className="flex-1">{t('spaces.newPlaythrough')}</span>
+                    </button>
+                  </>
                 )}
                 {onCompact && (
                   <button type="button" role="menuitem" onClick={pick(onCompact)} className={menuItem}>

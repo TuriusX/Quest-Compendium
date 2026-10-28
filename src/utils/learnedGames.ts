@@ -12,8 +12,13 @@ import type { SteamGameData } from '../types';
 
 import { GAME_SPACES_FLAG } from './gameSpaces';
 export { GAME_SPACES_FLAG };
+/**
+ * On for this computer (localStorage qc-game-spaces = '1'), or for a whole build (VITE_GAME_SPACES=1: the owner's
+ * test builds). Off everywhere else.
+ */
 export const gameSpacesOn = (): boolean => {
   try {
+    if ((import.meta as any).env?.VITE_GAME_SPACES === '1') return true;
     return localStorage.getItem(GAME_SPACES_FLAG) === '1';
   } catch {
     return false;

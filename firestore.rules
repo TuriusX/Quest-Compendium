@@ -42,6 +42,15 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId) && request.resource.data.entries is list && request.resource.data.entries.size() <= 40;
       }
+
+      // One space per game (games-not-tabs, behind the app's flag): a document per game (and _meta, the migration's
+      // map) and one per playthrough of it: the player's own.
+      match /games/{gameId} {
+        allow read, write: if isOwner(userId);
+        match /playthroughs/{ptId} {
+          allow read, write: if isOwner(userId);
+        }
+      }
     }
 
     // App configuration (client update checks, desktop version info): public read, no client writes

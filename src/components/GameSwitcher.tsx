@@ -37,6 +37,7 @@ export function GameSwitcher({
   onOpenGuides,
   onOpenNotes,
   onOpenQuests,
+  gamesMode = false,
 }: {
   tabs: GameTab[];
   activeTabId: string | null;
@@ -49,7 +50,10 @@ export function GameSwitcher({
   soundEnabled: boolean;
   onSelectTab: (id: string) => void;
   onStartCreateTab: () => void;
-  onStartRenameTab: (id: string, name: string) => void;
+  /** Rename a compendium (not with one space per game: a game keeps its name). */
+  onStartRenameTab?: (id: string, name: string) => void;
+  /** One space per game (flag on): "Add a game" in place of "New compendium". */
+  gamesMode?: boolean;
   onDeleteTab: (id: string) => void;
   onOpenGuides: () => void;
   onOpenNotes: () => void;
@@ -171,7 +175,7 @@ export function GameSwitcher({
                     </button>
                     {/* Rename and delete: on hover or focus (and right-click focuses rename) */}
                     <span className="hidden group-hover:flex group-focus-within:flex items-center pr-1 flex-shrink-0">
-                      <button
+                      {onStartRenameTab && <button
                         type="button"
                         role="menuitem"
                         data-rename
@@ -181,7 +185,7 @@ export function GameSwitcher({
                         className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 focus:bg-white/10 outline-none cursor-pointer"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
-                      </button>
+                      </button>}
                       <button
                         type="button"
                         role="menuitem"
@@ -209,7 +213,7 @@ export function GameSwitcher({
             <div className="h-px bg-white/[0.08] my-1.5 mx-1" />
             <button type="button" role="menuitem" onClick={pick(onStartCreateTab)} className={item}>
               <Plus className="w-4 h-4 text-[var(--accent-color)]" />
-              <span>{t('side.new')}</span>
+              <span>{gamesMode ? t('spaces.addGame') : t('side.new')}</span>
             </button>
             <button type="button" role="menuitem" onClick={pick(onOpenGuides)} className={item}>
               <Globe className="w-4 h-4 text-sky-400" />
