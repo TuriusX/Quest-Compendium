@@ -1,5 +1,5 @@
-import React from 'react';
-import { AlertTriangle, BookOpen, Maximize2, Play } from './icons';
+import React, { useState } from 'react';
+import { AlertTriangle, BookOpen, Maximize2, Play, X } from './icons';
 import { useT } from '../i18n';
 import { useGameArt } from '../utils/gameArt';
 import { sharpIgdb, steamCover, steamHeader, useArt } from '../utils/artCache';
@@ -65,12 +65,15 @@ export function CompactCard(p: {
   onExpand?: () => void;
   onNear?: () => void;
   onObjective?: () => void;
+  /** Close the app (desktop): syncs first, like the full view's ✕. */
+  onClose?: () => void;
 }) {
   const t = useT();
   const d = p.detection;
   const live = !!d?.running && d.open;
   const other = !!d?.running && !d.open ? d.running : '';
   const ribbon = p.layout === 'ribbon';
+  const [closing, setClosing] = useState(false);
   const expand = () => {
     playBlipSound(p.soundEnabled);
     p.onExpand?.();
@@ -111,6 +114,18 @@ export function CompactCard(p: {
       >
         <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
       </button>
+      {p.onClose && (
+        <button
+          type="button"
+          onClick={() => { if (closing) return; setClosing(true); playBlipSound(p.soundEnabled); p.onClose?.(); }}
+          disabled={closing}
+          title={closing ? t('header.closing') : t('header.close')}
+          aria-label={t('header.close')}
+          className="w-6 h-6 rounded-md flex items-center justify-center text-zinc-400 hover:text-red-400 hover:bg-red-500/20 cursor-pointer disabled:opacity-50"
+        >
+          <X className="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
+      )}
     </span>
   );
   // Line 2: the objective and its next step, else "Next here", else one hint (a collection's "Which game?" first).

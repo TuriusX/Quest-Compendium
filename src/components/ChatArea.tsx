@@ -139,6 +139,8 @@ interface ChatAreaProps {
   onExpand?: () => void;
   /** Show the quest log (the compact view's objective line). */
   onShowQuestLog?: () => void;
+  /** Close the app from the compact view (desktop; syncs first). */
+  onCloseApp?: () => void;
 }
 
 /**
@@ -255,6 +257,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   detectionLine,
   onExpand,
   onShowQuestLog,
+  onCloseApp,
   onUpdateMessage,
   markerLifetime,
   onChangeMarkerLifetime,
@@ -1462,6 +1465,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         askForm={askForm}
         onExpand={onExpand}
         onObjective={onShowQuestLog}
+        onClose={onCloseApp}
         // Near you: the next thing the guide lists here, unticked (missables first). Opens it in the guide. Free.
         onNear={nearYou ? () => {
           const [, slug, ...rest] = nearYou.id.split(':');

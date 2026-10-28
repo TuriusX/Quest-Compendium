@@ -11,6 +11,7 @@ import {
   Minimize2
 } from './icons';
 import { PWAInstallButton } from './PWAInstallButton';
+import { closeAppAfterSync } from '../utils/closeApp';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import { useT } from '../i18n';
@@ -124,23 +125,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const handleCloseApp = async () => {
     if (isClosing) return;
     setIsClosing(true);
-    try {
-      if (onSync) {
-        await Promise.race([
-          onSync(),
-          new Promise(resolve => setTimeout(resolve, 1500))
-        ]);
-      } else if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('quest_flush_sync'));
-        await new Promise(resolve => setTimeout(resolve, 800));
-      }
-    } catch (err) {
-      console.warn('[HeaderBar] Auto-sync on close error:', err);
-    } finally {
-      if ((window as any).electronAPI?.closeApp) {
-        (window as any).electronAPI.closeApp();
-      }
-    }
+    await closeAppAfterSync(onSync);
   };
 
   const achievements = activeGame?.achievements || [];

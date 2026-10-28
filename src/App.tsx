@@ -57,6 +57,7 @@ import { PlaythroughPanel } from './components/PlaythroughPanel';
 import { appSource, isPhone } from './utils/source';
 import { useGameArt } from './utils/gameArt';
 import { sharpIgdb, steamHeader, useArt } from './utils/artCache';
+import { closeAppAfterSync } from './utils/closeApp';
 import { deviceId } from './utils/deviceId';
 import { tabForGame } from './utils/runningGame';
 import { DetectionLine, type Detection } from './components/DetectionLine';
@@ -2841,6 +2842,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 detectionLine={<DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
                 onExpand={() => chooseView('full')}
                 onShowQuestLog={isDesktop ? () => { if (!questLogVisible) toggleQuestLog(); } : undefined}
+                onCloseApp={isDesktop ? () => void closeAppAfterSync(syncDiagnostics?.triggerSyncNow) : undefined}
               />
             )}
 
