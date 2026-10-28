@@ -28,7 +28,7 @@
  */
 
 function createFocusHelper() {
-  const noop = { available: false, take: () => null, restore: () => {}, other: () => null, describe: () => '', windowInFolder: () => null };
+  const noop = { available: false, take: () => null, restore: () => {}, other: () => null, describe: () => '', windowInFolder: () => null, foregroundInfo: () => null };
   if (process.platform !== 'win32') return noop;
   let api;
   try {
@@ -144,6 +144,24 @@ function createFocusHelper() {
 
   return {
     available: true,
+
+    /**
+     * The focused window when it isn't ours: its title, its program's full path and its rectangle (games-not-tabs
+     * detection beyond Steam, electron/gameDetect.cjs). Null when it's ours or nothing is focused.
+     */
+    pidOf: (hwnd) => pidOf(hwnd),
+
+    foregroundInfo() {
+      try {
+        const h = foreground();
+        if (!h || isOurs(h)) return null;
+        const r = {};
+        api.GetWindowRect(h, r);
+        return { hwnd: h, title: titleOf(h), path: exePathOf(h), rect: { x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top } };
+      } catch {
+        return null;
+      }
+    },
 
     /** Focus `win`. Returns the non-overlay window that had focus before (to hand it back later), or null. */
     take(win) {

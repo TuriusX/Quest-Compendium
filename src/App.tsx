@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { balancesOf, deviceTimeZone, topUpLine, untilReset } from './utils/answerModel';
 import { BookOpen, Plus, Sparkles, Gamepad2, Search, Camera, Mic, Moon, FileText, Globe } from './components/icons';
 import { 
@@ -59,6 +59,7 @@ import { useGameArt } from './utils/gameArt';
 import { deviceId } from './utils/deviceId';
 import { tabForGame } from './utils/runningGame';
 import { DetectionLine, type Detection } from './components/DetectionLine';
+import { gameSpacesOn, learn, resolveProgram, type ProgramGame } from './utils/learnedGames';
 
 /** The running game's picture: IGDB's key art when its guide has it, else Steam's header; hidden if neither loads. */
 function RunningGameArt({ appId, name }: { appId: number; name?: string }) {
@@ -340,7 +341,14 @@ export default function App() {
   const [viewNow, setViewNow] = useState<'compact' | 'full' | null>(null);
   const [examinedImageUrl, setExaminedImageUrl] = useState<string | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
-  const [globalActiveGame, setGlobalActiveGame] = useState<SteamGameData | null>(null);
+  const [steamGame, setGlobalActiveGame] = useState<SteamGameData | null>(null);
+  // Detection beyond Steam (games-not-tabs, behind the qc-game-spaces flag; utils/learnedGames.ts): a launcher's game,
+  // an emulator's or a program the player named is the running game while Steam runs nothing. Unknown ones are asked
+  // about once (the detection line) and remembered; until then the game last picked stays open.
+  const spacesOn = useMemo(() => gameSpacesOn(), []);
+  const [programGame, setProgramGame] = useState<ProgramGame | null>(null);
+  const programVerdict = useMemo(() => resolveProgram(spacesOn ? programGame : null, settings.learnedPrograms), [spacesOn, programGame, settings.learnedPrograms]);
+  const globalActiveGame: SteamGameData | null = steamGame || (programVerdict.state === 'game' ? programVerdict.game : null);
 
   // --- Resizing States ---
   const [achDrawerWidth, setAchDrawerWidth] = useState(384);
@@ -468,6 +476,15 @@ export default function App() {
       if (runningTab) handleSelectTab(runningTab.id);
       else handleCreateTab(globalActiveGame.name, { ...globalActiveGame, isAutoDetected: false });
     },
+    ...(programVerdict.state === 'ask' && !steamGame && programGame
+      ? {
+          confirm: {
+            guess: programVerdict.guess,
+            via: programVerdict.via,
+            onAnswer: (name: string | null) => setSettings((s) => ({ ...s, learnedPrograms: learn(s.learnedPrograms, programGame.key, name) })),
+          },
+        }
+      : {}),
   };
   // A Steam app that holds several games with guides (Mass Effect Legendary Edition, the Kingdom Hearts collections):
   // its games, so the detection line can ask once which one this compendium is (guidesApi.ts guideCollection).
@@ -526,6 +543,13 @@ export default function App() {
       });
     }
   }, []);
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!spacesOn || !api?.setDetectBeyondSteam) return;
+    api.setDetectBeyondSteam(true);
+    api.onProgramDetected?.((g: ProgramGame | null) => setProgramGame(g));
+    api.getProgramGame?.().then((g: ProgramGame | null) => setProgramGame(g)).catch(() => {});
+  }, [spacesOn]);
 
   useEffect(() => {
     if ((window as any).electronAPI?.resizeWindow) {
@@ -2447,6 +2471,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   }, [runningKey, isInitializing, tabs.length, runningTab?.id]);
   const view = viewNow ?? (runningKey ? viewByGame[runningKey] ?? 'compact' : 'full');
   const compact = isDesktop && !!activeTab && !isBrowserMode && view === 'compact';
+  // The compact card, or in the bottom corners the ribbon (two rows: it covers the least of the game there).
+  const compactLayout: 'card' | 'ribbon' = String(settings.dockPosition || '').startsWith('bottom') ? 'ribbon' : 'card';
   // The player chose a view (Ctrl+Shift+F, the ⋯ menu, the compact card): remembered for the running game.
   const chooseView = (v: 'compact' | 'full') => {
     setViewNow(v);
@@ -2460,12 +2486,12 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     });
   };
   useEffect(() => {
-    (window as any).electronAPI?.setCompact?.(compact);
-    // The side panels close, so the window is back to its base width.
+    (window as any).electronAPI?.setCompact?.(compact, compactLayout);
+    // The side panels close (the compact view has its own size).
     if (compact) {
       setIsAchDrawerOpen(false);
     }
-  }, [compact]);
+  }, [compact, compactLayout]);
   // A question asked from anywhere (the screenshot shortcut too) opens the full view, where its answer appears.
   useEffect(() => {
     if (isLoadingAi && compact) setViewNow('full');
@@ -2810,8 +2836,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 customApiKey={settings.customApiKey}
                 openAiApiKey={settings.openAiApiKey}
                 compact={compact}
+                compactLayout={compactLayout}
+                detection={detection}
                 detectionLine={<DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
                 onExpand={() => chooseView('full')}
+                onShowQuestLog={isDesktop ? () => { if (!questLogVisible) toggleQuestLog(); } : undefined}
               />
             )}
 

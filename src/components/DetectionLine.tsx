@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useT } from '../i18n';
 import { displayGameName } from '../utils/gameName';
 import { playBlipSound } from '../utils/audio';
@@ -15,6 +15,11 @@ export interface Detection {
   available: boolean;
   /** The running Steam app holds several games with guides and this compendium hasn't said which: "Which game?". */
   choose?: { games: { key: string; game: string }[]; onPick: (key: string) => void };
+  /**
+   * Learned detection (games-not-tabs, behind its flag): a program beyond Steam that isn't known yet, asked once.
+   * guess = the game read from its title or installer (null: "Which game is this?"); onAnswer(null) = not a game.
+   */
+  confirm?: { guess: string | null; via: string; onAnswer: (name: string | null) => void };
 }
 
 /**
@@ -23,9 +28,43 @@ export interface Detection {
  *   "▶ Playing Baldur's Gate 3 · this compendium", or "No game detected · start one in Steam and it shows here".
  * Switch is an ordinary button, so the controller reaches it like any other.
  */
+/** "Playing X? Yes · Another game… · Not a game", or "Which game is this?" with a name to type. */
+function ConfirmProgram({ c, soundEnabled }: { c: NonNullable<Detection['confirm']>; soundEnabled: boolean }) {
+  const t = useT();
+  const [typing, setTyping] = useState(!c.guess);
+  const [name, setName] = useState('');
+  const answer = (v: string | null) => {
+    playBlipSound(soundEnabled);
+    c.onAnswer(v);
+  };
+  const btn = 'h-5 px-2 rounded-md font-bold text-[11px] cursor-pointer whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-white';
+  return (
+    <div role="status" title={t('detect.via', { via: c.via })} className="h-7 flex-shrink-0 flex items-center gap-1.5 px-3 border-b border-white/[0.06] text-[12px] bg-emerald-500/[0.12] text-emerald-100" style={{ WebkitAppRegion: 'no-drag' } as any}>
+      <span className="text-emerald-400 text-[10px]" aria-hidden="true">▶</span>
+      {typing ? (
+        <form className="flex-1 min-w-0 flex items-center gap-1.5" onSubmit={(e) => { e.preventDefault(); if (name.trim()) answer(name.trim()); }}>
+          <span className="flex-shrink-0">{t('detect.askUnknown')}</span>
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={c.guess || t('detect.namePlaceholder')} aria-label={t('detect.askUnknown')} className="flex-1 min-w-0 h-5 px-1.5 rounded bg-black/40 border border-emerald-500/30 text-[11.5px] text-white outline-none focus:border-emerald-300" />
+          <button type="submit" disabled={!name.trim()} className={`${btn} bg-emerald-400 text-[#06140d] disabled:opacity-40`}>{t('detect.save')}</button>
+        </form>
+      ) : (
+        <>
+          <span className="truncate min-w-0">{t('detect.ask', { game: displayGameName(c.guess) })}</span>
+          <span className="ml-auto flex-shrink-0 flex items-center gap-1">
+            <button type="button" onClick={() => answer(c.guess)} className={`${btn} bg-emerald-400 text-[#06140d]`}>{t('detect.yes')}</button>
+            <button type="button" onClick={() => setTyping(true)} className={`${btn} border border-emerald-500/40 text-emerald-100`}>{t('detect.other')}</button>
+          </span>
+        </>
+      )}
+      <button type="button" onClick={() => answer(null)} className={`${btn} flex-shrink-0 text-emerald-200/70 hover:text-white`}>{t('detect.notGame')}</button>
+    </div>
+  );
+}
+
 export function DetectionLine({ d, soundEnabled = true }: { d: Detection; soundEnabled?: boolean }) {
   const t = useT();
   if (!d.available) return null;
+  if (!d.running && d.confirm) return <ConfirmProgram key={d.confirm.via + (d.confirm.guess || '')} c={d.confirm} soundEnabled={soundEnabled} />;
   const name = displayGameName(d.running);
   const tone = !d.running ? 'bg-white/[0.02] text-zinc-500' : d.open ? 'bg-emerald-500/[0.06] text-emerald-200/90' : 'bg-emerald-500/[0.12] text-emerald-100';
   return (

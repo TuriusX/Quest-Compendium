@@ -7,7 +7,8 @@ import {
   Square,
   RefreshCw,
   LogIn,
-  MessageSquareText
+  MessageSquareText,
+  Minimize2
 } from './icons';
 import { PWAInstallButton } from './PWAInstallButton';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
@@ -192,6 +193,19 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         {/* Tuck the panel away (the quest log has its own bookmark on the panel's edge, and is in the ⋯ menu). */}
         {isDesktop && (
           <>
+            {/* The compact view, in sight (owner, Oct 27 2026; also in the ⋯ menu and on Ctrl+Shift+F) */}
+            {onCompact && (
+              <button
+                type="button"
+                style={{ WebkitAppRegion: "no-drag" } as any}
+                onClick={() => { playBlipSound(soundEnabled); onCompact(); }}
+                title={`${t('compact.collapse')} (Ctrl+Shift+F)`}
+                aria-label={t('compact.collapse')}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer"
+              >
+                <Minimize2 className="w-4 h-4" aria-hidden="true" />
+              </button>
+            )}
             {/* Tuck away: the panel slides to the screen edge (Esc does the same) */}
             {onTuckAway && (
               <button

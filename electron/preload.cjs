@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setUiScale: (scale) => ipcRenderer.send('set-ui-scale', scale),
   resizeWindow: (width) => ipcRenderer.send('resize-window', width),
   /** The compact view: the window shrinks to its small resting height (true) or back to full height (false). */
-  setCompact: (on) => ipcRenderer.send('set-compact', !!on),
+  setCompact: (on, layout) => ipcRenderer.send('set-compact', !!on, layout === 'ribbon' ? 'ribbon' : 'card'),
   setDockPosition: (pos) => ipcRenderer.send('set-dock-position', pos),
   toggleSlide: () => ipcRenderer.send('toggle-slide'),
   // Hold to talk: after sending, the panel slides away and the answer is read aloud.
@@ -39,6 +39,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onDesktopAuthSuccess: (callback) => ipcRenderer.on('desktop-auth-success', (event, token) => callback(token)),
   onDesktopSteamSuccess: (callback) => ipcRenderer.on('desktop-steam-success', (event, steamId) => callback(steamId)),
   onActiveGameDetected: (callback) => ipcRenderer.on('active-game-detected', (event, gameData) => callback(gameData)),
+  // Detection beyond Steam (games-not-tabs; off until the app's flag turns it on): a game from a launcher, an emulator
+  // or the screen-filling program, as electron/gameDetect.cjs describes it (null when it closes).
+  setDetectBeyondSteam: (on) => ipcRenderer.send('set-detect-beyond-steam', !!on),
+  getProgramGame: () => ipcRenderer.invoke('get-program-game'),
+  onProgramDetected: (callback) => ipcRenderer.on('program-detected', (event, game) => callback(game)),
   onTriggerVoiceInputStart: (callback) => { ipcRenderer.removeAllListeners('trigger-voice-input-start'); ipcRenderer.on('trigger-voice-input-start', () => callback()); },
   onTriggerVoiceInputStop: (callback) => { ipcRenderer.removeAllListeners('trigger-voice-input-stop'); ipcRenderer.on('trigger-voice-input-stop', () => callback()); },
   onTriggerVoiceInput: (callback) => { ipcRenderer.removeAllListeners('trigger-voice-input'); ipcRenderer.on('trigger-voice-input', () => callback()); },

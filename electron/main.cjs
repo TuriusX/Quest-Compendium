@@ -112,10 +112,15 @@ let localAuthPort = null;
 let currentUiScale = 1.0;
 let baseLogicalWidth = 550;
 let baseLogicalHeight = 800;
-// The compact view (the app's small resting state over the game): the window is this tall (before the UI scale)
-// and stays on its dock edge; the full height comes back when the full view opens.
-const COMPACT_LOGICAL_HEIGHT = 176;
+// The compact view (the app's small resting state over the game): the window is this size (before the UI scale) and
+// stays in its dock corner; the full size comes back when the full view opens. Two layouts (owner, Oct 27 2026): the
+// card (box art and three lines) and, in the bottom corners, the ribbon (two rows, the question box beside them).
+const COMPACT_SIZES = { card: { width: 460, height: 104 }, ribbon: { width: 560, height: 64 } };
 let compactMode = false;
+let compactLayout = 'card';
+const compactSize = () => COMPACT_SIZES[compactLayout] || COMPACT_SIZES.card;
+const logicalWidth = () => (compactMode ? compactSize().width : baseLogicalWidth);
+const logicalHeight = () => (compactMode ? compactSize().height : baseLogicalHeight);
 
 // Auth Server
 const authServer = http.createServer((req, res) => {
@@ -1046,6 +1051,47 @@ setInterval(() => {
   }
 }, 3000);
 
+// Detection beyond Steam (games-not-tabs phase 2, electron/gameDetect.cjs): off until the app turns it on (its
+// qc-game-spaces flag). While Steam runs nothing, the focused program is looked at every 3 seconds; a game is reported
+// as 'program-detected' and stays the detected one until its program closes or another game takes the screen.
+const gameDetect = require('./gameDetect.cjs');
+let detectBeyondSteam = false;
+let installedGames = [];
+let installedAt = 0;
+let programGame = null; // { ...classify(), pid }
+const sendProgramGame = () => mainWindow?.webContents?.send('program-detected', programGame ? { ...programGame, pid: undefined } : null);
+ipcMain.on('set-detect-beyond-steam', (event, on) => {
+  detectBeyondSteam = !!on;
+  if (!detectBeyondSteam && programGame) { programGame = null; sendProgramGame(); }
+});
+ipcMain.handle('get-program-game', () => (programGame ? { ...programGame, pid: undefined } : null));
+const alive = (pid) => { if (!pid) return true; try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+setInterval(async () => {
+  if (!detectBeyondSteam || process.platform !== 'win32') return;
+  if (activeSteamGame) {
+    if (programGame) { programGame = null; sendProgramGame(); }
+    return;
+  }
+  if (Date.now() - installedAt > 10 * 60 * 1000) {
+    installedAt = Date.now();
+    gameDetect.scanInstalled().then((list) => { installedGames = list; }).catch(() => {});
+  }
+  if (programGame && !alive(programGame.pid)) { programGame = null; sendProgramGame(); }
+  const fg = focusHelper.foregroundInfo();
+  if (!fg) return; // ours, or nothing focused: keep what was detected
+  const displays = screen.getAllDisplays().map((d) => d.bounds);
+  // Window rectangles are in physical pixels; displays in logical ones.
+  const sf = screen.getPrimaryDisplay().scaleFactor || 1;
+  const rect = { x: fg.rect.x / sf, y: fg.rect.y / sf, width: fg.rect.width / sf, height: fg.rect.height / sf };
+  const found = gameDetect.classify({ path: fg.path, title: fg.title, rect }, installedGames, displays);
+  if (!found) return; // a browser, Discord, a small window: the game (if any) is still the one detected
+  if (programGame && programGame.key === found.key && programGame.name === found.name) return;
+  const pid = focusHelper.pidOf ? focusHelper.pidOf(fg.hwnd) : 0;
+  programGame = { ...found, pid };
+  console.log(`[detect] ${found.source}: ${found.name || '(no name)'} [${found.exe}]`);
+  sendProgramGame();
+}, 3000);
+
 // The Microsoft Store package (MSIX/AppX): the Store updates the app, so it skips the app's own version check.
 // The installed version ("0.5.6"), for the app's one-time "What's new" after an update.
 ipcMain.on('get-app-version', (event) => {
@@ -1122,8 +1168,8 @@ ipcMain.on('set-ui-scale', (event, scale) => {
     const screenWidth = primaryDisplay.workAreaSize.width;
     const sHeight = primaryDisplay.workAreaSize.height;
 
-    const newWidth = Math.round(baseLogicalWidth * scale);
-    const newHeight = Math.round((compactMode ? COMPACT_LOGICAL_HEIGHT : baseLogicalHeight) * scale);
+    const newWidth = Math.round(logicalWidth() * scale);
+    const newHeight = Math.round(logicalHeight() * scale);
 
     let newX = bounds.x;
     let newY = bounds.y;
@@ -1149,24 +1195,33 @@ ipcMain.on('set-ui-scale', (event, scale) => {
   }
 });
 
-// Compact view on / off: only the height changes; a window docked at the bottom keeps its bottom edge there.
-ipcMain.on('set-compact', (event, on) => {
+// Compact view on / off (and its layout): the window keeps its dock corner (a right corner its right edge, a bottom
+// corner its bottom edge); floating, it keeps its top-left and stays on screen.
+ipcMain.on('set-compact', (event, on, layout) => {
   on = !!on;
-  if (!mainWindow || on === compactMode) return;
+  const nextLayout = layout === 'ribbon' ? 'ribbon' : 'card';
+  if (!mainWindow || (on === compactMode && (!on || nextLayout === compactLayout))) return;
   compactMode = on;
+  compactLayout = nextLayout;
   const bounds = mainWindow.getBounds();
-  const sHeight = screen.getPrimaryDisplay().workAreaSize.height;
-  const height = Math.round((on ? COMPACT_LOGICAL_HEIGHT : baseLogicalHeight) * currentUiScale);
-  let y = bounds.y;
+  const { width: sWidth, height: sHeight } = screen.getPrimaryDisplay().workAreaSize;
+  const width = Math.round(logicalWidth() * currentUiScale);
+  const height = Math.round(logicalHeight() * currentUiScale);
+  let { x, y } = bounds;
+  if (currentDockPosition === 'top-right' || currentDockPosition === 'bottom-right') x = sWidth - width;
+  else if (currentDockPosition === 'top-left' || currentDockPosition === 'bottom-left') x = 0;
   if (currentDockPosition === 'top-right' || currentDockPosition === 'top-left') y = 0;
   else if (currentDockPosition === 'bottom-right' || currentDockPosition === 'bottom-left') y = sHeight - height;
-  else if (!on) y = Math.max(0, Math.min(bounds.y, sHeight - height)); // floating: stay on screen when growing
-  mainWindow.setBounds({ x: bounds.x, y, width: bounds.width, height });
+  else {
+    x = Math.max(0, Math.min(x, sWidth - width));
+    y = Math.max(0, Math.min(y, sHeight - height));
+  }
+  mainWindow.setBounds({ x, y, width, height });
 });
 
 ipcMain.on('resize-window', (event, width) => {
   baseLogicalWidth = width;
-  if (mainWindow) {
+  if (mainWindow && !compactMode) { // compact has its own width; this one comes back with the full view
     const bounds = mainWindow.getBounds();
     const primaryDisplay = screen.getPrimaryDisplay();
     const screenWidth = primaryDisplay.workAreaSize.width;

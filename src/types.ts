@@ -249,6 +249,11 @@ export interface AppSettings {
   openAiApiKey?: string;
   hideAppShortcut: string;
   /**
+   * Learned detection (games-not-tabs): what the player said each program beyond Steam is (src/utils/learnedGames.ts),
+   * so it's never asked again; { none: true } = not a game.
+   */
+  learnedPrograms?: Record<string, { name: string; appId?: number } | { none: true }>;
+  /**
    * The "free your mouse" tips (many games lock the cursor; the show/hide shortcut frees it): how many times the quest
    * log's hint has been shown prominently (after 10 it's a subtle line), whether it was dismissed with its ×, and how
    * many times the panel's "Mouse unlocked" toast has shown (it stops after 10).
