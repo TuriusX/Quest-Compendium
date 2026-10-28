@@ -11,3 +11,5 @@ test-prod.cjs
 *.zip
 # Sticky-marker test bench footage (large, local only)
 tests/markers/footage/
+# Local test installers (large, never deployed)
+release-test/
