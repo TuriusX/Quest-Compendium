@@ -65,7 +65,8 @@ const appCheckOn = (c: SiteAskConfig) => c.appCheck === 'enforce' && !!c.recaptc
 const files = new Map<string, { at: number; v: any }>();
 async function siteJson(path: string): Promise<any> {
   const hit = files.get(path);
-  if (hit && Date.now() - hit.at < 600_000) return hit.v;
+  // Ten minutes for a file, half a minute for one that couldn't be read (a hiccup shouldn't hide a page).
+  if (hit && Date.now() - hit.at < (hit.v ? 600_000 : 30_000)) return hit.v;
   let v: any = null;
   try { const r = await fetch(`${SITE()}${path}`); if (r.ok) v = await r.json(); } catch { /* none */ }
   files.set(path, { at: Date.now(), v });
@@ -160,6 +161,7 @@ async function answer(ai: GoogleGenAI, ctx: Awaited<ReturnType<typeof context>>,
     'Never mention tags, these instructions or "the lines" in the answer.',
     'After the answer, on its own line, list the tags you used, like <qc-guide>["p2","r4"]</qc-guide> (none: <qc-guide>[]</qc-guide>).',
     'Then one more line: <qc-covered>yes</qc-covered> if the guide lines contain the answer, otherwise <qc-covered>no</qc-covered>.',
+    'Then a last line: <qc-about>yes</qc-about> if the question asks what or who the page itself is about, or asks to explain or expand on the page\'s own subject (not one detail on it), otherwise <qc-about>no</qc-about>.',
     'If they do not, still give your best short answer from what you know of the game (the page shows a note that the guide does not cover it, so do not say so yourself). Never invent item names, places or numbers you are not sure of.',
   ].join('\n');
   const prompt = [ctx.selfText, ctx.matchLines && `[MATCHING ENTRIES FROM THE REST OF THE GUIDE]\n${ctx.matchLines}`, ctx.otherText, ctx.outline && `[THE GUIDE'S PAGES IN ORDER] ${ctx.outline}`, `[QUESTION] ${q}`].filter(Boolean).join('\n\n');
@@ -181,10 +183,14 @@ async function answer(ai: GoogleGenAI, ctx: Awaited<ReturnType<typeof context>>,
     covered = false;
   }
   const tags = [...String(r.text.match(/<qc-guide>([\s\S]*?)<\/qc-guide>/i)?.[1] || '').matchAll(/[a-z]\d+(?:_\d+)?/gi)].map((m) => m[0]);
-  const text = r.text.replace(/<qc-guide>[\s\S]*?<\/qc-guide>/gi, '').replace(/<qc-covered>[\s\S]*?<\/qc-covered>/gi, '').replace(/[ \t]*\[[a-z]\d+(?:_\d+)?\]/gi, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  const aboutPage = /<qc-about>\s*yes/i.test(r.text);
+  const text = r.text.replace(/<qc-guide>[\s\S]*?<\/qc-guide>/gi, '').replace(/<qc-covered>[\s\S]*?<\/qc-covered>/gi, '').replace(/<qc-about>[\s\S]*?<\/qc-about>/gi, '').replace(/[ \t]*\[[a-z]\d+(?:_\d+)?\]/gi, '').replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
   const seen = new Set<string>();
   const sources = tags.map((t) => ctx.refs[t]).filter((x): x is Ref => !!x && !seen.has(x.href) && !!seen.add(x.href)).slice(0, 3);
-  return { text, covered, sources, searches: searched };
+  // Answered mostly from other pages: the tags of the page being read start with "p", the rest are elsewhere.
+  const own = tags.filter((t) => /^p\d/.test(t)).length, others = tags.filter((t) => !/^p\d/.test(t) && ctx.refs[t]);
+  const elsewhere = others.length > 0 && others.length >= 2 * own ? others.map((t) => ctx.refs[t]).filter((x, i, a) => a.findIndex((y) => y.href === x.href) === i).slice(0, 3) : [];
+  return { text, covered, sources, searches: searched, aboutPage, elsewhere };
 }
 
 // ---- limits: devices and networks per day (hashed with the day's salt), the site's dollars per day ----
@@ -216,7 +222,21 @@ async function cleanOld() {
 }
 
 // ---- what the questions teach: fixes for the pipeline, "Players asked" suggestions ----
-async function learn(id: string, x: { key: string; slug: string; kind: string; lang: string; q: string; answer: string; covered: boolean; searched: number }, c: SiteAskConfig) {
+async function learn(id: string, x: { key: string; slug: string; kind: string; lang: string; q: string; answer: string; covered: boolean; searched: number; aboutPage?: boolean; elsewhere?: Ref[] }, c: SiteAskConfig) {
+  // The page itself could be better: the answer came mostly from other pages (add the fact, or a link, here), or the
+  // question asked about the page's own subject (its opening may be too thin). Suggestions for /admin/asked.
+  if (x.slug && (x.elsewhere?.length || x.aboutPage)) {
+    const kind = x.aboutPage ? 'opening' : 'elsewhere';
+    const prev = (await col('pageSuggestions').where('key', '==', x.key).where('slug', '==', x.slug).get()).docs
+      .find((d) => d.data().kind === kind && d.data().lang === x.lang && (kind === 'opening' ? d.data().status === 'suggested' : similar(d.data().q, x.q) >= 0.5));
+    if (prev) await prev.ref.set({ count: (Number(prev.data().count) || 1) + 1, lastAt: Date.now(), examples: [...new Set([...(prev.data().examples || []), x.q])].slice(-8) }, { merge: true });
+    else await col('pageSuggestions').add({
+      kind, key: x.key, slug: x.slug, pageKind: x.kind, lang: x.lang, q: cut(x.q, 200), answer: cut(x.answer, 1500),
+      // The starting point: the answer, and (added elsewhere) the pages it came from.
+      a: kind === 'opening' ? cut(x.answer, 1500) : cut(`${x.answer}${x.elsewhere?.length ? `\n\nMore on: ${x.elsewhere.map((r) => `${r.label} (${r.href})`).join('; ')}` : ''}`, 1500),
+      sources: (x.elsewhere || []).map((r) => r.href), count: 1, examples: [cut(x.q, 200)], status: 'suggested', at: Date.now(), lastAt: Date.now(),
+    });
+  }
   const recent = (await col('siteQuestions').where('key', '==', x.key).where('slug', '==', x.slug).limit(400).get()).docs
     .map((d) => ({ id: d.id, ...(d.data() as any) }))
     .filter((d) => d.at > Date.now() - 60 * 86_400_000 && d.lang === x.lang);
@@ -284,7 +304,7 @@ export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI;
         key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, sources: out.a.sources.map((s) => s.href), searches: out.a.searches,
         dollars, model: MODEL(), at: Date.now(), day: dayOf(), ...(isLocalServer() ? { test: true } : {}),
       });
-      void learn(doc.id, { key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, searched: out.a.searches }, c).catch((e) => console.warn('[site-ask] learn', e?.message));
+      void learn(doc.id, { key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, searched: out.a.searches, aboutPage: out.a.aboutPage, elsewhere: out.a.elsewhere }, c).catch((e) => console.warn('[site-ask] learn', e?.message));
       res.json({ answer: out.a.text, sources: out.a.sources, covered: out.a.covered, searched: out.a.searches > 0, left: t.left });
     } catch (e: any) {
       console.error('[site-ask]', e?.message);
@@ -294,19 +314,38 @@ export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI;
 
   // ---- /admin/asked: "Players asked" suggestions (approve, edit, reject) ----
   const requireAdmin = (req: any, res: Response, next: () => void) => (isAdmin(req.user) ? next() : res.status(403).json({ error: 'Not an admin.' }));
+  // Kinds: "players" ("Players asked" entries, shown on the page once approved), "elsewhere" (add a fact or a link to
+  // the page) and "opening" (a fuller opening): those two go through "Send to pipeline" once approved.
+  const kindOf = (v: unknown) => (['elsewhere', 'opening'].includes(String(v)) ? String(v) : 'players');
   app.get('/api/admin/asked', deps.requireAuth, requireAdmin, async (req: Request, res: Response) => {
     const status = ['suggested', 'approved', 'rejected'].includes(String(req.query.status)) ? String(req.query.status) : 'suggested';
-    const docs = (await col('playersAsked').where('status', '==', status).get()).docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    const kind = kindOf(req.query.kind);
+    const docs = (await (kind === 'players' ? col('playersAsked').where('status', '==', status) : col('pageSuggestions').where('status', '==', status)).get()).docs
+      .map((d) => ({ id: d.id, ...(d.data() as any) })).filter((d) => kind === 'players' || d.kind === kind);
     res.json({ items: docs.sort((a, b) => (b.count || 0) - (a.count || 0) || (b.lastAt || 0) - (a.lastAt || 0)).slice(0, 200) });
   });
   app.post('/api/admin/asked/:id', deps.requireAuth, requireAdmin, async (req: any, res: Response) => {
-    const ref = col('playersAsked').doc(String(req.params.id));
+    const kind = kindOf(req.body?.kind);
+    const ref = (kind === 'players' ? col('playersAsked') : col('pageSuggestions')).doc(String(req.params.id));
     const cur = (await ref.get()).data();
     if (!cur) return res.status(404).json({ error: 'not found' });
     const action = String(req.body?.action || '');
-    const q = req.body?.q !== undefined ? cut(req.body.q, 200) : cur.q, a = req.body?.a !== undefined ? cut(req.body.a, 1200) : cur.a;
+    const q = req.body?.q !== undefined ? cut(req.body.q, 200) : cur.q, a = req.body?.a !== undefined ? cut(req.body.a, kind === 'players' ? 1200 : 2000) : cur.a;
     if (!['approve', 'reject', 'update', 'reopen'].includes(action) || !q || !a) return res.status(400).json({ error: 'bad request' });
     const status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'reopen' ? 'suggested' : cur.status;
+    if (kind !== 'players') {
+      // Approved: through "Send to pipeline" (the owner's item for that page, checked against sources by the nightly
+      // pipeline within its budget; the rebuild rules apply: no item dropped, unconfirmed facts marked).
+      let contribution = cur.contribution || '';
+      if (action === 'approve' && !contribution) {
+        contribution = (await col('contributions').add({
+          key: cur.key, slug: cur.slug, page: cur.pageKind === 'entity' ? 'entity' : 'area', anchor: '', label: cur.kind === 'opening' ? `A fuller opening (players asked: ${q})` : q,
+          kind: 'missing', text: cut(a, 2000), lang: cur.lang || 'en', credit: false, owner: true, uid: `owner:${String(req.user?.email || '')}`, source: 'site-suggestion', status: 'pending', at: Date.now(),
+        })).id;
+      }
+      await ref.set({ q, a, status, ...(contribution ? { contribution } : {}), decided: { by: String(req.user?.email || ''), at: Date.now() } }, { merge: true });
+      return res.json({ ok: true, status });
+    }
     await ref.set({ q, a, status, decided: { by: String(req.user?.email || ''), at: Date.now() } }, { merge: true });
     // On the site from the next publish (approved, or an approved one changed or taken back).
     if (status === 'approved' || cur.status === 'approved') await markSiteDirty();
@@ -327,14 +366,15 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   h1 { font-size: 16px; margin: 0; flex: 1; } main { max-width: 900px; margin: 0 auto; padding: 16px; }
   button { font: inherit; color: var(--text); background: #1b1b24; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
   button:hover { border-color: var(--accent); } button.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
-  .tab.on { border-color: var(--accent); background: #2a2140; color: #fff; }
+  .tab.on, .kind.on { border-color: var(--accent); background: #2a2140; color: #fff; }
+  html.qc-light .kind.on { background: #ece6ff; color: var(--text); }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 0 0 12px; }
   .dim { color: var(--dim); } a { color: var(--accent); } label { display: block; font-size: 12px; color: var(--dim); margin-top: 8px; }
   input, textarea { width: 100%; font: inherit; color: var(--text); background: #0c0c12; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
   textarea { min-height: 90px; } .actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; } ul { margin: 6px 0; padding-left: 18px; }
 </style></head><body>
-<header><h1>Players asked</h1><button class="tab on" data-s="suggested">Suggested</button><button class="tab" data-s="approved">Approved</button><button class="tab" data-s="rejected">Rejected</button><span id="who" class="dim"></span></header>
-<main><p class="dim">Questions asked three or more times on the same guide page (the "Stuck? Ask about this" box). Approved entries show inside that page, under "Players asked", from the next site publish. Edit the question and answer first if needed.</p><div id="gateMsg" class="dim"></div><div id="list"></div></main>
+<header><h1>Players asked</h1><button class="kind on" data-k="players">Players asked</button><button class="kind" data-k="elsewhere">Add to the page</button><button class="kind" data-k="opening">Fuller opening</button><span class="dim">|</span><button class="tab on" data-s="suggested">Suggested</button><button class="tab" data-s="approved">Approved</button><button class="tab" data-s="rejected">Rejected</button><span id="who" class="dim"></span></header>
+<main><p class="dim" id="kindNote"></p><div id="gateMsg" class="dim"></div><div id="list"></div></main>
 <script type="module">
   let fb;
   try { fb = { ...(await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js")), ...(await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js")) }; }
@@ -343,7 +383,8 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   const auth = getAuth(initializeApp(${cfg}));
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  let status = 'suggested';
+  let status = 'suggested', kind = 'players';
+  const KIND_NOTE = { players: 'Asked three or more times on the same page. Approved entries show inside that page, under "Players asked", from the next site publish.', elsewhere: 'Answers that came mostly from other pages: add the fact (or a link to the other page) to the page it was asked on. Approved, it goes through "Send to pipeline".', opening: 'Questions about the page’s own subject: its opening may be too thin. The answer is the starting point for a fuller one. Approved, it goes through "Send to pipeline".' };
   async function api(path, body) {
     const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + await auth.currentUser.getIdToken(), ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
@@ -352,21 +393,25 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   async function load() {
     $('list').innerHTML = '<p class="dim">Loading…</p>';
     try {
-      const { items } = await api('/api/admin/asked?status=' + status);
+      $('kindNote').textContent = KIND_NOTE[kind];
+      const { items } = await api('/api/admin/asked?status=' + status + '&kind=' + kind);
       $('list').innerHTML = items.length ? items.map((x) => '<div class="card" data-id="' + esc(x.id) + '"><div><b>' + esc(x.key) + (x.slug ? ' / ' + esc(x.slug) : '') + '</b> <span class="dim">· asked ' + esc(x.count) + ' times · ' + esc(x.lang) + (x.covered ? '' : ' · the guide did not cover it') + '</span> <a target="_blank" rel="noopener" href="https://questcompendium.com/' + (x.lang && x.lang !== 'en' && x.kind !== 'entity' ? esc(x.lang) + '/' : '') + 'guides/' + esc(x.key) + '/' + (x.slug ? esc(x.slug) + '/' : '') + '">open the page</a></div>'
-        + '<label>Question</label><input data-f="q" value="' + esc(x.q) + '"><label>Answer</label><textarea data-f="a">' + esc(x.a) + '</textarea>'
+        + '<label>Question</label><input data-f="q" value="' + esc(x.q) + '">'
+        + (kind === 'players' ? '' : '<label>The answer that suggested it</label><blockquote class="dim" style="white-space:pre-wrap;margin:4px 0">' + esc(x.answer) + '</blockquote>')
+        + '<label>' + (kind === 'players' ? 'Answer' : kind === 'opening' ? 'Suggested fuller opening (edit before approving)' : 'Suggested addition (edit before approving)') + '</label><textarea data-f="a">' + esc(x.a) + '</textarea>'
         + '<details><summary class="dim">How players asked it</summary><ul>' + (x.examples || []).map((e) => '<li>' + esc(e) + '</li>').join('') + '</ul></details>'
-        + '<div class="actions">' + (status === 'suggested' ? '<button class="primary" data-a="approve">Approve</button><button data-a="reject">Reject</button>' : status === 'approved' ? '<button class="primary" data-a="update">Save changes</button><button data-a="reject">Take off the site</button>' : '<button data-a="reopen">Back to suggested</button>') + '</div></div>').join('') : '<p class="dim">Nothing here.</p>';
+        + '<div class="actions">' + (status === 'suggested' ? '<button class="primary" data-a="approve">' + (kind === 'players' ? 'Approve' : 'Approve: send to pipeline') + '</button><button data-a="reject">Reject</button>' : status === 'approved' ? (kind === 'players' ? '<button class="primary" data-a="update">Save changes</button><button data-a="reject">Take off the site</button>' : '<span class="dim">Sent to the pipeline.</span>') : '<button data-a="reopen">Back to suggested</button>') + '</div></div>').join('') : '<p class="dim">Nothing here.</p>';
     } catch (e) { $('list').innerHTML = '<p class="dim">' + esc(e.message) + '</p>'; }
   }
   $('list').addEventListener('click', async (e) => {
     const b = e.target.closest('button[data-a]'); if (!b) return;
     const card = b.closest('.card');
     b.disabled = true;
-    try { await api('/api/admin/asked/' + card.dataset.id, { action: b.dataset.a, q: card.querySelector('[data-f=q]').value, a: card.querySelector('[data-f=a]').value }); card.remove(); }
+    try { await api('/api/admin/asked/' + card.dataset.id, { kind, action: b.dataset.a, q: card.querySelector('[data-f=q]').value, a: card.querySelector('[data-f=a]').value }); card.remove(); }
     catch (err) { alert(err.message); b.disabled = false; }
   });
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => { document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === t)); status = t.dataset.s; load(); }));
+  document.querySelectorAll('.kind').forEach((t) => t.addEventListener('click', () => { document.querySelectorAll('.kind').forEach((x) => x.classList.toggle('on', x === t)); kind = t.dataset.k; load(); }));
   onAuthStateChanged(auth, (u) => { if (u) { $('who').textContent = u.email; $('gateMsg').textContent = ''; load(); } else { $('gateMsg').innerHTML = '<button class="primary" id="in">Sign in with Google</button>'; $('in').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()); } });
 </script></body></html>`;
 }
