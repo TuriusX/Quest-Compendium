@@ -14,6 +14,9 @@
  * /guides/, and Netlify's upload sends only new files), in the sizes already made: 300 and 600 wide in AVIF and WebP,
  * 1280 WebP for the enlarged view, a 160 WebP thumbnail.
  *
+ * The improved version (imageEnhance.ts: touch-ups, a portrait's upscale) when there is one and the owner hasn't
+ * switched it to the original: its files at /img/g/{id}/{stamp}/, a new stamp each time it changes.
+ *
  * Every cut of a picture (the page's 4:3 and phone square, the 16:9 thumbnails, the share image) is centred on its
  * focal point (src/utils/focus.ts): the owner's, or the one found once when it is first published (pictureFocus.ts).
  */
@@ -24,12 +27,15 @@ import { getStorage } from 'firebase-admin/storage';
 import { db } from './common';
 import { asFocus, defaultFocus, coverOffsets, coverPosition, type Focus } from '../../src/utils/focus';
 import { findFocus, pictureBudget, FOCUS_COST } from './pictureFocus';
+import { liveFiles } from '../../imageEnhance';
 
 const BUCKET = process.env.GUIDE_IMAGE_BUCKET || 'quest-compendium-guide-images';
 const FILES = ['w300.webp', 'w300.avif', 'w600.webp', 'w600.avif', 'w1280.webp', 'thumb.webp'];
 
 export type SitePicture = {
   id: string;
+  /** Its files' folder under /img/g/: the id, or id/stamp for the improved version. */
+  dir: string;
   kind: 'area' | 'entity' | 'step' | 'entry';
   game: string;
   slug: string;
@@ -77,13 +83,14 @@ export async function loadSitePictures(out: string, only = ''): Promise<number> 
     const k = keyOf(String(x.game), t.kind, String(t.slug), t.id ? String(t.id) : '');
     if (PICS.has(k)) continue;
     // The files, once (a later publish finds them in place).
-    const dir = path.join(out, 'img', 'g', x.id);
+    const live = liveFiles(x.id, x);
+    const dir = path.join(out, 'img', 'g', ...live.site.split('/'));
     let focus: Focus, w = 0, h = 0;
     try {
       fs.mkdirSync(dir, { recursive: true });
       for (const f of FILES) {
         const file = path.join(dir, f);
-        if (!fs.existsSync(file)) fs.writeFileSync(file, (await bucket.file(`v/${x.id}/${f}`).download())[0]);
+        if (!fs.existsSync(file)) fs.writeFileSync(file, (await bucket.file(`${live.bucket}${f}`).download())[0]);
       }
       const big = path.join(dir, 'w1280.webp');
       ({ width: w = 0, height: h = 0 } = await sharp(big).metadata());
@@ -112,7 +119,7 @@ export async function loadSitePictures(out: string, only = ''): Promise<number> 
       continue;
     }
     PICS.set(k, {
-      id: x.id, kind: t.kind, game: String(x.game), slug: String(t.slug), entry: t.id ? String(t.id) : undefined, page, step, answer,
+      id: x.id, dir: live.site, kind: t.kind, game: String(x.game), slug: String(t.slug), entry: t.id ? String(t.id) : undefined, page, step, answer,
       alt: String(x.alt || t.name || ''), caption: String(x.caption || t.name || ''),
       // Only an official source's credit, and only where its terms ask for one.
       credit: x.source !== 'mine' && x.credit ? String(x.credit) : '',
@@ -140,18 +147,18 @@ export function stepPicture(game: string, slug: string, id: string, kind: 'step'
 export function picturesOf(game: string, site = 'https://questcompendium.com') {
   return [...PICS.values()].filter((p) => p.game === game).map((p) => ({
     kind: p.kind, slug: p.slug, ...(p.entry ? { id: p.entry } : {}), page: p.page, step: p.step, answer: p.answer,
-    thumb: `${site}${url(p.id, 'thumb.webp')}`, w300: `${site}${url(p.id, 'w300.webp')}`, w600: `${site}${url(p.id, 'w600.webp')}`, big: `${site}${url(p.id, 'w1280.webp')}`,
+    thumb: `${site}${url(p.dir, 'thumb.webp')}`, w300: `${site}${url(p.dir, 'w300.webp')}`, w600: `${site}${url(p.dir, 'w600.webp')}`, big: `${site}${url(p.dir, 'w1280.webp')}`,
     alt: p.alt, caption: p.caption, ...(p.credit ? { credit: p.credit } : {}), w: p.width, h: p.height, focus: p.focus,
   }));
 }
 
 /** One picture for the apps' data files (page.json): its sizes as absolute addresses, caption, alt text, credit. */
 export function pictureJson(p: SitePicture, site = 'https://questcompendium.com') {
-  return { thumb: `${site}${url(p.id, 'thumb.webp')}`, w300: `${site}${url(p.id, 'w300.webp')}`, w600: `${site}${url(p.id, 'w600.webp')}`, big: `${site}${url(p.id, 'w1280.webp')}`, alt: p.alt, caption: p.caption, ...(p.credit ? { credit: p.credit } : {}), w: p.width, h: p.height, focus: p.focus };
+  return { thumb: `${site}${url(p.dir, 'thumb.webp')}`, w300: `${site}${url(p.dir, 'w300.webp')}`, w600: `${site}${url(p.dir, 'w600.webp')}`, big: `${site}${url(p.dir, 'w1280.webp')}`, alt: p.alt, caption: p.caption, ...(p.credit ? { credit: p.credit } : {}), w: p.width, h: p.height, focus: p.focus };
 }
 
 /** The share image's address (absolute, for og:image). */
-export const shareImage = (site: string, p: SitePicture) => `${site}${url(p.id, 'og.jpg')}`;
+export const shareImage = (site: string, p: SitePicture) => `${site}${url(p.dir, 'og.jpg')}`;
 
 const credit = (p: SitePicture) => (p.credit ? `<span class="block text-zinc-500">${esc(p.credit)}</span>` : '');
 
@@ -164,8 +171,8 @@ export function heroHtml(p: SitePicture): string {
   // Cut around its focal point: the phone's square and the 4:3 from 640px up each have their own position.
   const fp = `--fp:${coverPosition(p.width, p.height, p.focus, 104, 104)};--fp-sm:${coverPosition(p.width, p.height, p.focus, 288, 216)}`;
   return `<figure class="float-right ml-4 sm:ml-5 mb-3 mt-1 w-28 sm:w-[300px] rounded-xl border border-[#c4b0ff]/25 bg-[#12121b] p-1 sm:p-1.5">
-        <a href="${url(p.id, 'w1280.webp')}" class="relative block" aria-label="${esc(p.caption)}">
-          <picture><source type="image/avif" srcset="${url(p.id, 'w300.avif')} 300w, ${url(p.id, 'w600.avif')} 600w" sizes="${sizes}"><img src="${url(p.id, 'w600.webp')}" srcset="${url(p.id, 'w300.webp')} 300w, ${url(p.id, 'w600.webp')} 600w" sizes="${sizes}" width="288" height="216" alt="${esc(p.alt)}" fetchpriority="high" decoding="async" style="${fp}" class="block w-full aspect-square sm:aspect-[4/3] object-cover [object-position:var(--fp)] sm:[object-position:var(--fp-sm)] rounded-lg"></picture>
+        <a href="${url(p.dir, 'w1280.webp')}" class="relative block" aria-label="${esc(p.caption)}">
+          <picture><source type="image/avif" srcset="${url(p.dir, 'w300.avif')} 300w, ${url(p.dir, 'w600.avif')} 600w" sizes="${sizes}"><img src="${url(p.dir, 'w600.webp')}" srcset="${url(p.dir, 'w300.webp')} 300w, ${url(p.dir, 'w600.webp')} 600w" sizes="${sizes}" width="288" height="216" alt="${esc(p.alt)}" fetchpriority="high" decoding="async" style="${fp}" class="block w-full aspect-square sm:aspect-[4/3] object-cover [object-position:var(--fp)] sm:[object-position:var(--fp-sm)] rounded-lg"></picture>
           <span class="sm:hidden absolute right-1 bottom-1 rounded bg-black/65 px-1 text-[10px] leading-4 text-white" aria-hidden="true">&#10530;</span>
         </a>
         ${p.caption || p.credit ? `<figcaption class="mt-1 sm:mt-1.5 text-[10.5px] sm:text-xs leading-snug"><span class="hidden sm:block font-semibold text-zinc-200">${esc(p.caption)}</span>${credit(p)}</figcaption>` : ''}
@@ -175,18 +182,18 @@ export function heroHtml(p: SitePicture): string {
 /** A walkthrough step's picture: 160×90 under its text, lazy (below the first screen), the link opens it large. */
 export function stepHtml(p: SitePicture): string {
   return `<figure class="mt-2 flex items-center gap-3">
-              <a href="${url(p.id, 'w1280.webp')}" class="shrink-0" aria-label="${esc(p.caption)}"><img src="${url(p.id, 'thumb.webp')}" srcset="${url(p.id, 'thumb.webp')} 160w, ${url(p.id, 'w300.webp')} 300w" sizes="160px" width="160" height="90" loading="lazy" decoding="async" alt="${esc(p.alt)}" style="object-position:${coverPosition(p.width, p.height, p.focus, 160, 90)}" class="block w-40 aspect-video object-cover rounded-lg border border-white/10"></a>
+              <a href="${url(p.dir, 'w1280.webp')}" class="shrink-0" aria-label="${esc(p.caption)}"><img src="${url(p.dir, 'thumb.webp')}" srcset="${url(p.dir, 'thumb.webp')} 160w, ${url(p.dir, 'w300.webp')} 300w" sizes="160px" width="160" height="90" loading="lazy" decoding="async" alt="${esc(p.alt)}" style="object-position:${coverPosition(p.width, p.height, p.focus, 160, 90)}" class="block w-40 aspect-video object-cover rounded-lg border border-white/10"></a>
               <figcaption class="text-xs leading-snug text-zinc-400">${esc(p.caption)}${credit(p)}</figcaption>
             </figure>`;
 }
 
 /** A checklist entry's picture: a small one under the entry's text, lazy. */
 export function entryHtml(p: SitePicture): string {
-  return `<a href="${url(p.id, 'w1280.webp')}" class="mt-1.5 block w-24" aria-label="${esc(p.caption)}"><img src="${url(p.id, 'thumb.webp')}" width="96" height="54" loading="lazy" decoding="async" alt="${esc(p.alt)}" style="object-position:${coverPosition(p.width, p.height, p.focus, 96, 54)}" class="block w-24 aspect-video object-cover rounded-md border border-white/10"></a>${p.credit ? `<span class="block text-[11px] text-zinc-500">${esc(p.credit)}</span>` : ''}`;
+  return `<a href="${url(p.dir, 'w1280.webp')}" class="mt-1.5 block w-24" aria-label="${esc(p.caption)}"><img src="${url(p.dir, 'thumb.webp')}" width="96" height="54" loading="lazy" decoding="async" alt="${esc(p.alt)}" style="object-position:${coverPosition(p.width, p.height, p.focus, 96, 54)}" class="block w-24 aspect-video object-cover rounded-md border border-white/10"></a>${p.credit ? `<span class="block text-[11px] text-zinc-500">${esc(p.credit)}</span>` : ''}`;
 }
 
 /** A small picture on a guide front page's card (a portrait or a place's thumbnail), cut around its focal point, lazy. */
 export function cardHtml(p: SitePicture, w: number, h: number, cls: string): string {
   // The 300-wide cut keeps the picture's own shape (the 160 thumbnail is already cut to 16:9).
-  return `<img src="${url(p.id, 'w300.webp')}" width="${w}" height="${h}" loading="lazy" decoding="async" alt="${esc(p.alt)}" style="object-position:${coverPosition(p.width, p.height, p.focus, w, h)}" class="${cls}">`;
+  return `<img src="${url(p.dir, 'w300.webp')}" width="${w}" height="${h}" loading="lazy" decoding="async" alt="${esc(p.alt)}" style="object-position:${coverPosition(p.width, p.height, p.focus, w, h)}" class="${cls}">`;
 }

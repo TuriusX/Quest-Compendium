@@ -4,7 +4,7 @@
  *
  * In edit mode (the amber owner bar's switch), a tap or click on the page picks what to change:
  *   - a picture: Recrop (focal point), Another picture (the page's other pictures, or find a new one), Replace picture,
- *     Remove, the page's review queue;
+ *     Remove, the page's review queue; what its touch-up did, with the "Original" switch (or Touch up, for his own);
  *   - Add picture (the page's button under its title, or on an entry or step's panel): upload, paste, a link or Find
  *     one, then trim and focal point; saved as the owner's own (guideImages.ts /api/admin/images/mine);
  *   - text: the guide fields it shows (from the page's own page.json), then Fix now (edit it; a selected sentence on
@@ -368,9 +368,11 @@ export function qcEditorClient(cfg: { api: string; site: string; direct?: string
   const sameTarget = (a: any, b: any) => a.target && b.target && a.target.kind === b.target.kind && a.target.slug === b.target.slug && (a.target.id || '') === (b.target.id || '');
 
   async function openPicture(id: string, img: any) {
-    const p = open(`<h4>Picture</h4><div class="qe-dim" data-what>Loading…</div><div class="qe-row"><button class="qe-btn" data-a="crop">⤧ Recrop</button><button class="qe-btn" data-a="swap">↻ Another picture</button><button class="qe-btn" data-a="replace">⇄ Replace picture</button><button class="qe-btn bad" data-a="remove">✕ Remove</button><a class="qe-btn" target="_blank" rel="noopener" href="${esc(cfg.site)}/admin/images?game=${encodeURIComponent(GAME)}">☰ Review queue</a></div><div data-body></div><div data-note></div>`, img.closest('figure') || img);
+    const p = open(`<h4>Picture</h4><div class="qe-dim" data-what>Loading…</div><div class="qe-row"><button class="qe-btn" data-a="crop">⤧ Recrop</button><button class="qe-btn" data-a="swap">↻ Another picture</button><button class="qe-btn" data-a="replace">⇄ Replace picture</button><button class="qe-btn bad" data-a="remove">✕ Remove</button><a class="qe-btn" target="_blank" rel="noopener" href="${esc(cfg.site)}/admin/images?game=${encodeURIComponent(GAME)}">☰ Review queue</a></div><div data-enh></div><div data-body></div><div data-note></div>`, img.closest('figure') || img);
     let x: any = null;
     try { x = (await images()).find((i) => i.id === id) || null; } catch (err: any) { note(p, err.message, 'qe-warn'); }
+    const enh = p.querySelector('[data-enh]');
+    if (enh && x) drawEnh(p, enh, x);
     const what = p.querySelector('[data-what]');
     if (what) what.textContent = x ? `${x.target.name} · ${x.target.label}${x.caption && x.caption !== x.target.name ? ` · “${x.caption}”` : ''}` : 'This picture isn\'t in the approved list (it may have just changed).';
     const body = p.querySelector('[data-body]');
@@ -392,6 +394,35 @@ export function qcEditorClient(cfg: { api: string; site: string; direct?: string
         };
       }
     });
+  }
+
+  // The touch-up (imageEnhance.ts): what it did, and the "Original" switch; his own pictures: Touch up, if he wants.
+  function drawEnh(p: any, box: any, x: any) {
+    const e = x.enhance || {}, u = e.upscale;
+    const why = u && u.status !== 'done' ? `<div class="qe-dim">Upscale not used: ${esc(u.why)}</div>` : '';
+    box.innerHTML = e.dir
+      ? `<div class="qe-row"><span class="qe-dim">✨ Touched up: ${esc(e.label || 'improved')}</span><button class="qe-chip ${x.useOriginal ? 'on' : ''}" data-orig>${x.useOriginal ? '✓ ' : ''}Original</button></div>${why}`
+      : x.owner ? `<div class="qe-row"><span class="qe-dim">Yours, as you added it.</span><button class="qe-chip" data-tu>✨ Touch up</button></div>${why}` : why;
+    const o = box.querySelector('[data-orig]'), t = box.querySelector('[data-tu]');
+    if (o) o.onclick = async () => {
+      try {
+        await api('/api/admin/images/' + encodeURIComponent(x.id), { action: 'update', useOriginal: !x.useOriginal });
+        x.useOriginal = !x.useOriginal;
+        drawEnh(p, box, x);
+        note(p, (x.useOriginal ? 'The original' : 'The touched-up version') + ' goes on the site with the next daily publish.', 'qe-ok');
+      } catch (err: any) { note(p, err.message, 'qe-warn'); }
+    };
+    if (t) t.onclick = async () => {
+      t.setAttribute('disabled', '');
+      note(p, 'Touching up (a portrait is upscaled too: up to a minute)…');
+      try {
+        const j = await api('/api/admin/images/' + encodeURIComponent(x.id), { action: 'touchup' }, true);
+        Object.assign(x, j.image);
+        IMGS = null;
+        drawEnh(p, box, x);
+        note(p, j.changed ? 'Touched up: on the site with the next daily publish. "Original" turns it back.' : 'It needed nothing.', 'qe-ok');
+      } catch (err: any) { note(p, err.message, 'qe-warn'); t.removeAttribute('disabled'); }
+    };
   }
 
   function recrop(p: any, body: any, x: any, img: any) {

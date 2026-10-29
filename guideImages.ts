@@ -9,7 +9,10 @@
  *   POST /api/admin/images/:id              { action: approve | delete | restore | update, target?, placement?,
  *                                           caption?, alt?, credit?, terms?, focus? }  (focus: {x, y} 0..1, the point
  *                                           every cut keeps in frame (src/utils/focus.ts); null: back to automatic)
- *   GET  /api/admin/images/:id/file/:size   one of its stored sizes (the admin page shows them; it can't use a URL)
+ *   GET  /api/admin/images/:id/file/:size   one of its stored sizes (the admin page shows them; it can't use a URL): the
+ *                                           live one (improved unless switched to the original), or ?v=original
+ *   POST /api/admin/images/:id { action: touchup }  improve one of the owner's own pictures (imageEnhance.ts), and
+ *                                           { action: update, useOriginal } the "Original" switch
  *   GET  /api/admin/images/targets?game=&q= what a picture can belong to: areas, characters and other compendium
  *                                           pages, an area's items, secrets, fights and checklist lines, its steps
  *   POST /api/admin/images/:id/find-another a suggestion turned down ("Not this") and the next best picture for the same
@@ -319,6 +322,12 @@ export async function addImage(input: {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   });
+  // The finder's pictures are touched up before the owner sees them (imageEnhance.ts; the upscale of a character
+  // portrait follows in the nightly run). The owner's own pictures are left as they are.
+  if (input.by === 'suggester') {
+    try { const { enhanceImage } = await import('./imageEnhance'); await enhanceImage(id, { upscale: false }); }
+    catch (e: any) { console.warn(`[images] touch-up of ${id} failed: ${e?.message}`); }
+  }
   return id;
 }
 
@@ -349,7 +358,8 @@ export function registerGuideImages(app: Express, deps: Deps) {
     try {
       const x: any = (await col().doc(String(req.params.id)).get()).data();
       if (!x) return res.status(404).json({ error: 'No such image.' });
-      const path = size === 'original' ? x.original?.path : `v/${req.params.id}/${size}`;
+      const { liveFiles } = await import('./imageEnhance');
+      const path = size === 'original' ? x.original?.path : req.query.v === 'original' ? `v/${req.params.id}/${size}` : `${liveFiles(String(req.params.id), x).bucket}${size}`;
       const [buf] = await bucket().file(path).download();
       res.set('Cache-Control', 'private, max-age=3600');
       res.type(size === 'original' ? path.split('.').pop() : size.split('.').pop()).send(buf);
@@ -472,6 +482,11 @@ export function registerGuideImages(app: Express, deps: Deps) {
         const x: any = (await r.get()).data();
         if (x && x.game === game && x.status === 'suggested') await r.set({ ...gone, ...(d === String(b.found) ? { adoptedAs: id } : { notChosen: true }) }, { merge: true });
       }
+      // A Find one choice was shown touched up: his copy keeps the touch-up he picked (switchable to the original).
+      if (found?.enhance?.dir) {
+        try { const { enhanceImage } = await import('./imageEnhance'); await enhanceImage(id, { force: true, upscale: false }); }
+        catch (e: any) { console.warn(`[images] touch-up of ${id} failed: ${e?.message}`); }
+      }
       await markSiteDirty();
       res.json({ ok: true, id, image: { id, ...((await col().doc(id).get()).data() as any) } });
     } catch (e: any) {
@@ -527,6 +542,17 @@ export function registerGuideImages(app: Express, deps: Deps) {
       const x: any = (await ref.get()).data();
       if (!x) return res.status(404).json({ error: 'No such image.' });
       const by = String((req as any).user?.email || '');
+      // Touch up (the owner asked; his own pictures too): the touch-ups, and the upscale for a character portrait,
+      // within the pictures' budget. The original stays; the "Original" switch turns it back.
+      if (b.action === 'touchup') {
+        const { enhanceImage } = await import('./imageEnhance');
+        const { pictureBudget } = await import('./scripts/guides/pictureFocus');
+        const pb = await pictureBudget();
+        const r = await enhanceImage(String(req.params.id), { force: true, upscale: true, budget: { left: () => Math.min(pb.nightLeft, pb.monthLeft), add: pb.add } });
+        const now: any = (await ref.get()).data();
+        if (now?.status === 'approved') await markSiteDirty();
+        return res.json({ ok: true, changed: !!r?.changed, image: { id: ref.id, ...now } });
+      }
       const patch: Record<string, any> = { updatedAt: Date.now() };
       if (b.action === 'approve') Object.assign(patch, { status: 'approved', approvedBy: by, approvedAt: Date.now(), lowMatch: false });
       else if (b.action === 'delete') Object.assign(patch, { status: 'deleted', deletedBy: by, deletedAt: Date.now() });
@@ -552,6 +578,8 @@ export function registerGuideImages(app: Express, deps: Deps) {
         };
       }
       for (const k of ['caption', 'alt'] as const) if (typeof b[k] === 'string') patch[k] = clean(b[k], k === 'alt' ? 300 : 160);
+      // The "Original" switch: the untouched picture instead of the improved one (both are kept).
+      if (typeof b.useOriginal === 'boolean') patch.useOriginal = b.useOriginal;
       // The owner's focal point (Crop): every cut is centred there from the next publish. null: the automatic one again.
       if ('focus' in b) {
         const f = b.focus === null ? null : asFocus(b.focus);
@@ -773,7 +801,9 @@ ${ADMIN_THEME_BUTTON}</header>
   }
   // The files are private: fetched with the sign-in token, shown from a blob.
   async function fileUrl(id, size) {
-    const k = id + '/' + size;
+    const x = items.find((i) => i.id === id) || {};
+    // The live version (improved, or the original when switched): cached per version.
+    const k = id + '/' + size + '/' + (x.useOriginal ? 'o' : (x.enhance && x.enhance.dir) || 'o');
     if (blobs.has(k)) return blobs.get(k);
     const token = await auth.currentUser.getIdToken();
     const r = await fetch('/api/admin/images/' + encodeURIComponent(id) + '/file/' + size, { headers: { Authorization: 'Bearer ' + token } });
@@ -785,6 +815,14 @@ ${ADMIN_THEME_BUTTON}</header>
   const gameName = (k) => (games.find((g) => g.key === k) || {}).name || k;
   const pageLink = (x) => '<a href="' + SITE + esc(x.game) + '/' + esc(x.target.slug) + '/' + (x.target.id ? '#e-' + esc(x.target.id) : '') + '" target="_blank" rel="noopener">open</a>';
 
+  // What was done to make it better (imageEnhance.ts), and the "Original" switch; the owner's own: Touch up.
+  function enhanceLine(x) {
+    const e = x.enhance || {}, u = e.upscale;
+    const failed = u && u.status !== 'done' ? '<div class="small dim">Upscale not used: ' + esc(u.why) + '</div>' : '';
+    if (e.dir) return '<div class="small" style="margin-top:6px">✨ Touched up: ' + esc(e.label || 'improved') + ' <label class="sw" title="Show and publish the untouched original instead"><input type="checkbox" data-orig="' + x.id + '"' + (x.useOriginal ? ' checked' : '') + '>Original</label></div>' + failed;
+    if (x.owner) return '<div class="small dim" style="margin-top:6px">Yours, as you added it. <button data-act="touchup" data-id="' + x.id + '">✨ Touch up</button></div>' + failed;
+    return e.at ? '<div class="small dim" style="margin-top:6px">Measured: nothing to touch up.</div>' + failed : '';
+  }
   function card(x) {
     const p = x.placement || {};
     const pageNa = !(x.target.kind === 'area' || x.target.kind === 'entity');
@@ -796,6 +834,7 @@ ${ADMIN_THEME_BUTTON}</header>
       + (x.status === 'suggested' || x.confidence
         ? '<div class="why"><b>Why:</b> ' + esc(x.why || '') + (x.confidence ? '<br><span class="dim">Confidence:</span> <span class="' + (x.confidence === 'high' ? 'hi' : 'mid') + '">' + esc(x.confidence) + '</span>' : '') + (x.altGuess ? ' · <span class="dim">Also possible:</span> ' + esc(x.altGuess) : '') + '</div>'
         : x.lowMatch ? '<div class="small warn">Not sure about this match: check it before approving.</div>' : x.why ? '<div class="small dim">Matched: ' + esc(x.why) + '</div>' : '')
+      + enhanceLine(x)
       + '<div style="margin-top:8px">' + sw('page', 'Guide page', pageNa) + sw('answer', 'App answer', false) + sw('step', 'Quest log / step', false) + '</div>'
       + '<div class="small dim">Quest log / step: only when the picture shows what the objective needs (the lever, the lamp, the door).</div>'
       + '<div class="field">Caption<input data-f="caption" data-id="' + x.id + '" value="' + esc(x.caption) + '"></div>'
@@ -884,6 +923,14 @@ ${ADMIN_THEME_BUTTON}</header>
     }
     if (b.dataset.act === 'cropcancel') { document.querySelector('[data-crop="' + id + '"]').hidden = true; return; }
     if (b.dataset.act === 'rematch') { const box = document.querySelector('[data-rm="' + id + '"]'); box.hidden = !box.hidden; box.querySelector('input').focus(); return; }
+    if (b.dataset.act === 'touchup') {
+      const note = document.querySelector('[data-note="' + id + '"]');
+      b.disabled = true;
+      note.className = 'small dim';
+      note.textContent = 'Touching up (a portrait is upscaled too: up to a minute)…';
+      try { await api('/api/admin/images/' + encodeURIComponent(id), { action: 'touchup' }); await load(); } catch (err) { note.className = 'small warn'; note.textContent = err.message; b.disabled = false; }
+      return;
+    }
     if (b.dataset.act === 'another') {
       // Can take a little while: it downloads and checks pictures one by one, up to $0.10 a click.
       const note = document.querySelector('[data-note="' + id + '"]');
@@ -916,6 +963,20 @@ ${ADMIN_THEME_BUTTON}</header>
     });
   }));
   $('list').addEventListener('change', async (e) => {
+    const o = e.target.closest('input[data-orig]');
+    if (o) {
+      const x = items.find((i) => i.id === o.dataset.orig);
+      try {
+        await api('/api/admin/images/' + encodeURIComponent(x.id), { action: 'update', useOriginal: o.checked });
+        x.useOriginal = o.checked;
+        const im = document.querySelector('img[data-img="' + x.id + '"]');
+        if (im) im.src = await fileUrl(x.id, 'w600.webp');
+        const note = document.querySelector('[data-note="' + x.id + '"]');
+        note.className = 'small dim';
+        note.textContent = (o.checked ? 'Original' : 'Touched-up version') + ' shown' + (x.status === 'approved' ? ': live with the next publish.' : '.');
+      } catch (err) { alert(err.message); o.checked = !o.checked; }
+      return;
+    }
     const c = e.target.closest('input[data-pl]');
     if (c) { try { await api('/api/admin/images/' + encodeURIComponent(c.dataset.id), { action: 'update', placement: { [c.dataset.pl]: c.checked } }); } catch (err) { alert(err.message); c.checked = !c.checked; } return; }
     const f = e.target.closest('input[data-f]');

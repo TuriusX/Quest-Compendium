@@ -972,6 +972,13 @@ async function main() {
     } catch (e: any) {
       console.warn(`Pictures line skipped: ${e?.message}`);
     }
+    // Pictures touched up and upscaled this week, and the upscales that failed the check (imageEnhance.ts).
+    try {
+      const { enhanceWeekLines } = await import('../../imageEnhance');
+      report.push(...(await enhanceWeekLines()));
+    } catch (e: any) {
+      console.warn(`Touch-ups line skipped: ${e?.message}`);
+    }
   }
   // Suggested pictures (roadmap 14): wiki, IGDB and press kit pictures for the top pages, into /admin/images for the
   // owner to approve. Its own limits: 15 or $0.50 a night, $5 a month, none while 30 wait; on once
@@ -981,6 +988,18 @@ async function main() {
     if (line) report.push(line);
   } catch (e: any) {
     console.warn(`Suggested pictures skipped: ${e?.message}`);
+  }
+  // Better pictures (imageEnhance.ts; owner, Oct 29 2026): every new picture touched up, and character portraits
+  // upscaled (checked against the original; kept only when they pass), within the pictures' budget. The owner's own
+  // pictures are left alone; the original is always kept ("Original" switch on /admin/images).
+  if (!DRY) {
+    try {
+      const { enhanceNightly } = await import('../guides/enhanceImages');
+      const line = await enhanceNightly();
+      if (line) report.push(line);
+    } catch (e: any) {
+      console.warn(`Picture touch-ups skipped: ${e?.message}`);
+    }
   }
   // Core guides (scripts/guides/core.ts): completeness per guide, this month's shared budget, and what's left.
   try {
