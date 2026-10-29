@@ -252,6 +252,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   mineTitle: 'Continue where you left off',
   mineContinue: 'Continue: {page}',
   minePct: '{n}% done',
+  themeToggle: 'Light or dark mode',
 };
 export const SOURCE_STRINGS = GUIDE_UI_EN;
 export const HAND_WRITTEN = {};

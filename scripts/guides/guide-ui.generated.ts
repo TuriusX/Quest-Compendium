@@ -251,7 +251,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "accSynced": "Deine Häkchen synchronisieren sich mit der App und dem Steam Deck.",
     "mineTitle": "Weitermachen, wo du aufgehört hast",
     "mineContinue": "Weiter: {page}",
-    "minePct": "{n} % fertig"
+    "minePct": "{n} % fertig",
+    "themeToggle": "Heller oder dunkler Modus"
   },
   es: {
     "navGuides": "Guías",
@@ -500,7 +501,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "accSynced": "Tus marcas se sincronizan con la app y la Steam Deck.",
     "mineTitle": "Continúa donde lo dejaste",
     "mineContinue": "Continuar: {page}",
-    "minePct": "{n}% completado"
+    "minePct": "{n}% completado",
+    "themeToggle": "Modo claro u oscuro"
   },
   fr: {
     "navGuides": "Guides",
@@ -749,7 +751,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "accSynced": "Tes coches sont synchronisées avec l'application et le Steam Deck.",
     "mineTitle": "Reprendre où tu t'es arrêté",
     "mineContinue": "Reprendre : {page}",
-    "minePct": "{n} % terminé"
+    "minePct": "{n} % terminé",
+    "themeToggle": "Mode clair ou sombre"
   },
   ja: {
     "navGuides": "攻略ガイド",
@@ -998,7 +1001,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "accSynced": "チェック状況はアプリやSteam Deckと同期されます。",
     "mineTitle": "前回の続きから再開",
     "mineContinue": "続きから: {page}",
-    "minePct": "{n}% 完了"
+    "minePct": "{n}% 完了",
+    "themeToggle": "ライト／ダークモード切替"
   },
   ko: {
     "navGuides": "공략",
@@ -1247,7 +1251,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "accSynced": "체크 내역이 앱 및 Steam Deck과 연동돼요.",
     "mineTitle": "이어서 하기",
     "mineContinue": "이어보기: {page}",
-    "minePct": "{n}% 완료"
+    "minePct": "{n}% 완료",
+    "themeToggle": "라이트 또는 다크 모드"
   },
   pt: {
     "navGuides": "Guias",
@@ -1496,7 +1501,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "accSynced": "Seu progresso sincroniza com o app e no Steam Deck.",
     "mineTitle": "Continue de onde parou",
     "mineContinue": "Continuar: {page}",
-    "minePct": "{n}% concluído"
+    "minePct": "{n}% concluído",
+    "themeToggle": "Modo claro ou escuro"
   },
   ru: {
     "navGuides": "Гайды",
@@ -1745,7 +1751,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "accSynced": "Отметки синхронизируются с приложением и Steam Deck.",
     "mineTitle": "Продолжить с места остановки",
     "mineContinue": "Продолжить: {page}",
-    "minePct": "Готово: {n}%"
+    "minePct": "Готово: {n}%",
+    "themeToggle": "Светлая или тёмная тема"
   },
   zh: {
     "navGuides": "攻略",
@@ -1994,6 +2001,7 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "accSynced": "你的勾选记录会与应用及 Steam Deck 同步。",
     "mineTitle": "从上次离开的地方继续",
     "mineContinue": "继续：{page}",
-    "minePct": "已完成 {n}%"
+    "minePct": "已完成 {n}%",
+    "themeToggle": "浅色或深色模式"
   },
 };

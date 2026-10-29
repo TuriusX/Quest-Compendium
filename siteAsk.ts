@@ -34,6 +34,7 @@ import { clientIp } from './guestGuard';
 import { isAdmin } from './reviewQueue';
 import { markSiteDirty } from './ownerEditor';
 import { isLocalServer } from './testTraffic';
+import { ADMIN_THEME_HEAD, ADMIN_THEME_BUTTON } from './adminTheme';
 
 const SITE = () => (process.env.QC_SITE_URL || 'https://questcompendium.com').replace(/\/$/, '');
 const MODEL = () => process.env.MAIN_MODEL || 'gemini-3.8-flash';
@@ -48,17 +49,73 @@ const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim
  */
 const col = (name: string) => getFirestore().collection(isLocalServer() ? `test_${name}` : name);
 
-export type SiteAskConfig = { enabled: boolean; appCheck: 'enforce' | 'off'; recaptchaKey: string; dailyDollars: number; perDevice: number; perIp: number; perSignedIn: number; perPremium: number; fixesPerDay: number };
-const DEFAULTS: SiteAskConfig = { enabled: false, appCheck: 'enforce', recaptchaKey: '', dailyDollars: 1, perDevice: 2, perIp: 10, perSignedIn: 10, perPremium: 50, fixesPerDay: 10 };
+export type SiteAskConfig = { enabled: boolean; appCheck: 'enforce' | 'off'; recaptchaKey: string; dailyDollars: number; perDevice: number; perIp: number; perSignedIn: number; perPremium: number; fixesPerDay: number; monthlyChecks: number; autoOff?: { month: string; at: number; checks: number } };
+const DEFAULTS: SiteAskConfig = { enabled: false, appCheck: 'enforce', recaptchaKey: '', dailyDollars: 1, perDevice: 2, perIp: 10, perSignedIn: 10, perPremium: 50, fixesPerDay: 10, monthlyChecks: 8000 };
 let cfgCache: { at: number; v: SiteAskConfig } | null = null;
 export async function siteAskConfig(fresh = false): Promise<SiteAskConfig> {
   if (!fresh && cfgCache && Date.now() - cfgCache.at < 30_000) return cfgCache.v;
   let v = DEFAULTS;
   try { v = { ...DEFAULTS, ...((await getFirestore().collection('config').doc('siteAsk').get()).data() || {}) } as SiteAskConfig; } catch { /* the defaults: off */ }
+  // Switched off by the reCAPTCHA safety net this month (guard): off until the month is over.
+  if (v.autoOff?.month === new Date().toISOString().slice(0, 7)) v = { ...v, enabled: false };
   if (isLocalServer() && process.env.QC_SITE_ASK_ON === '1') v = { ...v, enabled: true, perIp: Number(process.env.QC_SITE_ASK_PER_IP) || v.perIp, perDevice: Number(process.env.QC_SITE_ASK_PER_DEVICE) || v.perDevice };
   cfgCache = { at: Date.now(), v };
   return v;
 }
+// ---- The reCAPTCHA safety net (owner, Oct 29 2026): Google's first 10,000 checks a month are free, and there's no
+// spending cap. Every 10 minutes the server reads this month's checks (Cloud Monitoring,
+// recaptchaenterprise.googleapis.com/assessment_count; the server's account reads it with Monitoring Viewer); past
+// config/siteAsk.monthlyChecks (8,000) the box switches itself off (config/siteAsk.autoOff) and says so on Discord, and it
+// switches back on when the next month starts (UTC, like Google's billing month).
+const PROJECT = () => process.env.GOOGLE_CLOUD_PROJECT || 'quest-compendium-1bccf';
+async function recaptchaChecksThisMonth(): Promise<number | null> {
+  if (isLocalServer()) return null;
+  try {
+    // The server's own access token, from the Cloud Run metadata server.
+    const tok: any = await (await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', { headers: { 'Metadata-Flavor': 'Google' } })).json();
+    const start = new Date(); start.setUTCDate(1); start.setUTCHours(0, 0, 0, 0);
+    const end = new Date();
+    const q = new URLSearchParams({
+      filter: 'metric.type="recaptchaenterprise.googleapis.com/assessment_count"',
+      'interval.startTime': start.toISOString(), 'interval.endTime': end.toISOString(),
+      'aggregation.alignmentPeriod': `${Math.max(60, Math.ceil((end.getTime() - start.getTime()) / 1000))}s`,
+      'aggregation.perSeriesAligner': 'ALIGN_SUM', 'aggregation.crossSeriesReducer': 'REDUCE_SUM',
+    });
+    const r = await fetch(`https://monitoring.googleapis.com/v3/projects/${PROJECT()}/timeSeries?${q}`, { headers: { Authorization: `Bearer ${tok.access_token}` } });
+    if (!r.ok) { console.warn(`[site-ask] reCAPTCHA count: ${r.status}`); return null; }
+    const j: any = await r.json();
+    return (j.timeSeries || []).reduce((n: number, t: any) => n + (t.points || []).reduce((m: number, pt: any) => m + Number(pt.value?.int64Value || 0), 0), 0);
+  } catch (e: any) {
+    console.warn(`[site-ask] reCAPTCHA count: ${e?.message}`);
+    return null;
+  }
+}
+const discord = (content: string) => {
+  const hook = process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_SIGNUP_WEBHOOK_URL;
+  return hook ? fetch(hook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) }).catch(() => {}) : Promise.resolve();
+};
+let guardAt = 0;
+async function guard(): Promise<void> {
+  if (Date.now() - guardAt < 600_000) return;
+  guardAt = Date.now();
+  const raw: any = (await getFirestore().collection('config').doc('siteAsk').get()).data() || {};
+  const month = new Date().toISOString().slice(0, 7), limit = Number(raw.monthlyChecks) || DEFAULTS.monthlyChecks;
+  // A new month: back on (the safety net only ever switches off its own month).
+  if (raw.autoOff && raw.autoOff.month !== month) {
+    await getFirestore().collection('config').doc('siteAsk').set({ autoOff: FieldValue.delete() }, { merge: true });
+    await discord(`✅ The guide pages' ask box is back on for ${month} (it was switched off in ${raw.autoOff.month} after ${raw.autoOff.checks} reCAPTCHA checks).`);
+    cfgCache = null;
+  }
+  const n = await recaptchaChecksThisMonth();
+  if (n === null) return;
+  await getFirestore().collection('config').doc('siteAsk').set({ checks: { month, n, at: Date.now() } }, { merge: true });
+  if (n >= limit && raw.autoOff?.month !== month && raw.enabled) {
+    await getFirestore().collection('config').doc('siteAsk').set({ autoOff: { month, at: Date.now(), checks: n } }, { merge: true });
+    cfgCache = null;
+    await discord(`⛔ The guide pages' ask box switched itself off: ${n} reCAPTCHA checks this month (the limit is ${limit}; Google's free 10,000 a month must not be passed). It comes back on when ${month} is over.`);
+  }
+}
+
 /** App Check is checked on the deployed server once the reCAPTCHA key is set (a local server skips it unless asked to). */
 const appCheckOn = (c: SiteAskConfig) => c.appCheck === 'enforce' && !!c.recaptchaKey && (!isLocalServer() || process.env.QC_SITE_ASK_APPCHECK === '1');
 
@@ -280,6 +337,7 @@ type SiteAccount = { uid: string; premium: boolean };
 export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI; requireAuth: any; firebaseWebConfig: Record<string, string>; siteAccount?: (req: Request) => Promise<SiteAccount | { error: 'auth' } | null> }) {
   // The box asks whether it's on (and for the App Check key) when a page opens.
   app.get('/api/site/ask/config', async (_req: Request, res: Response) => {
+    void guard().catch((e) => console.warn('[site-ask] guard', e?.message));
     const c = await siteAskConfig();
     res.set('Cache-Control', 'public, max-age=30');
     res.json(c.enabled ? { on: true, perDevice: c.perDevice, ...(appCheckOn(c) ? { appCheck: { key: c.recaptchaKey, firebase: deps.firebaseWebConfig } } : {}) } : { on: false });
@@ -377,7 +435,7 @@ export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI;
 function adminPage(firebaseConfig: Record<string, string>): string {
   const cfg = JSON.stringify(firebaseConfig).replace(/</g, '\\u003c');
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<html lang="en"><head>${ADMIN_THEME_HEAD}<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
 <title>Players asked</title>
 <style>
   :root { color-scheme: dark; --bg: #07070a; --card: #111118; --line: #24242e; --text: #e4e4e7; --dim: #a1a1aa; --accent: #a87ffb; --ok: #4ade80; --bad: #f87171; }
@@ -393,7 +451,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   input, textarea { width: 100%; font: inherit; color: var(--text); background: #0c0c12; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
   textarea { min-height: 90px; } .actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; } ul { margin: 6px 0; padding-left: 18px; }
 </style></head><body>
-<header><h1>Players asked</h1><button class="kind on" data-k="players">Players asked</button><button class="kind" data-k="elsewhere">Add to the page</button><button class="kind" data-k="opening">Fuller opening</button><span class="dim">|</span><button class="tab on" data-s="suggested">Suggested</button><button class="tab" data-s="approved">Approved</button><button class="tab" data-s="rejected">Rejected</button><span id="who" class="dim"></span></header>
+<header><h1>Players asked</h1><button class="kind on" data-k="players">Players asked</button><button class="kind" data-k="elsewhere">Add to the page</button><button class="kind" data-k="opening">Fuller opening</button><span class="dim">|</span><button class="tab on" data-s="suggested">Suggested</button><button class="tab" data-s="approved">Approved</button><button class="tab" data-s="rejected">Rejected</button><span id="who" class="dim"></span>${ADMIN_THEME_BUTTON}</header>
 <main><p class="dim" id="kindNote"></p><div id="gateMsg" class="dim"></div><div id="list"></div></main>
 <script type="module">
   let fb;

@@ -21,6 +21,7 @@ import type { Express, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { getFirestore } from 'firebase-admin/firestore';
 import { saveCandidate, entryById, looksLikeSpam, playerHash, REPORTER_WEIGHT } from './corrections';
+import { ADMIN_THEME_HEAD, ADMIN_THEME_BUTTON } from './adminTheme';
 
 type Mw = (req: Request, res: Response, next: NextFunction) => any;
 type Deps = { requireAuth: Mw; optionalAuth: Mw; firebaseWebConfig: Record<string, string> };
@@ -148,7 +149,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   const cfg = JSON.stringify(firebaseConfig).replace(/</g, '\\u003c');
   return `<!doctype html>
 <html lang="en">
-<head>
+<head>${ADMIN_THEME_HEAD}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
@@ -201,7 +202,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   <nav class="tabs"><button id="tabGuides" class="tab on">Guides</button><button id="tabCorr" class="tab">Corrections</button><button id="tabSearch" class="tab">Search</button><button id="tabReports" class="tab">Reports</button><button id="tabQuality" class="tab">Quality</button><button id="tabCosts" class="tab">Costs</button><button id="tabBlue" class="tab">Blueprints</button><button id="tabContrib" class="tab">Suggestions</button></nav>
   <select id="filter" aria-label="Show"><option value="all">All open</option><option value="review">Failed reviews</option><option value="report">Player reports</option></select>
   <button id="signin" class="primary">Sign in with Google</button>
-</header>
+${ADMIN_THEME_BUTTON}</header>
 <main>
   <p id="limits" class="dim" hidden></p>
   <div id="gate" class="card">
