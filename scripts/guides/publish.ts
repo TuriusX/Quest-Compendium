@@ -1715,7 +1715,7 @@ function askBox(key: string, game: string, slug: string, kind: 'area' | 'entity'
   const T = {
     thinking: ui('askThinking'), from: ui('askFrom'), notCovered: ui('askNotCovered'), notCoveredSearched: ui('askNotCoveredSearched'), limit: ui('askLimit'), signIn: ui('askSignIn'),
     capped: ui('askCapped'), getApp: ui('askGetApp'), error: ui('askError'), left: ui('askLeft'), leftOne: ui('askLeftOne'),
-    limitFree: ui('askLimitFree'), signInAsk: ui('askSignInAsk'), accountOut: ui('askAccountOut'), premium: ui('askPremium'), leftAcct: ui('askLeftAccount'),
+    limitFree: ui('askLimitFree'), signInAsk: ui('askSignInAsk'), accountOut: ui('askAccountOut'), accountOutFree: ui('askAccountOutFree'), premium: ui('askPremium'), leftAcct: ui('askLeftAccount'),
   };
   const download = `/${LP}index.html?from=guide#download`;
   return `<div hidden data-qc-ask data-key="${esc(key)}" data-slug="${esc(slug)}" data-kind="${kind}" data-lang="${LANG}" data-game="${esc(game)}" data-page="${esc(page)}" data-api="${esc(SERVER_URL)}" data-app="${esc(`${SERVER_URL}/?from=guide`)}" data-download="${esc(download)}" data-t="${esc(JSON.stringify(T))}" class="qc-site-only mt-5 rounded-xl border border-[#a87ffb]/30 bg-[#a87ffb]/[0.06] px-3.5 py-2.5">
@@ -1771,8 +1771,8 @@ const ASK_JS = String.raw`// "Stuck? Ask about this" (scripts/guides/publish.ts 
     }).then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});}).then(function(x){
       var j=x.j;
       if(j.off){box.hidden=true;return;}
-      if(j.limit==='account'){msg(T.accountOut,j.premium?[]:[link(T.premium,d.app+'&premium=1')]);return;}
-      if(j.limit==='site'){msg(T.capped,[signInFor(q),link(T.getApp,d.download)]);return;}
+      if(j.limit==='account'){msg(j.premium?T.accountOut.replace('{n}',j.premiumPerDay):T.accountOutFree.replace('{n}',j.freePerDay).replace('{m}',j.premiumPerDay),j.premium?[]:[link(T.premium,d.app+'&premium=1')]);return;}
+      if(j.limit==='site'){msg(T.capped,j.account?[link(T.premium,d.app+'&premium=1'),link(T.getApp,d.download)]:[signInFor(q),link(T.getApp,d.download)]);return;}
       if(j.limit){msg(T.limitFree.replace('{n}',j.freePerDay||''),[signInFor(q)]);return;}
       if(!x.ok||!j.answer){msg(T.error);return;}
       var el=tpl('answer');
