@@ -238,6 +238,19 @@ export const GUIDE_UI_EN: Record<string, string> = {
   askLeft: '{n} free questions left today',
   askLeftOne: '1 free question left today',
   playersAsked: 'Players asked',
+  askLimitFree: "That's today's free questions here. A free account gets {n} questions a day.",
+  askSignInAsk: 'Sign in and ask',
+  askAccountOut: "You've used today's questions. They reset at midnight.",
+  askPremium: 'Get Premium',
+  askLeftAccount: '{n} questions left today',
+  accSignIn: 'Sign in',
+  accSignOut: 'Sign out',
+  accPremium: 'Premium',
+  accFree: 'Free plan',
+  accSynced: 'Your ticks sync with the app and the Steam Deck.',
+  mineTitle: 'Continue where you left off',
+  mineContinue: 'Continue: {page}',
+  minePct: '{n}% done',
 };
 export const SOURCE_STRINGS = GUIDE_UI_EN;
 export const HAND_WRITTEN = {};

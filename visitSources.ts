@@ -14,7 +14,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { statsDay } from './searchGuard';
 import { isLocalServer, isTestTraffic } from './testTraffic';
 
-export const TAGS = ['guide', 'home', 'store', 'discord'] as const;
+export const TAGS = ['guide', 'home', 'store', 'discord', 'site'] as const;
 const BOT = /bot|crawl|spider|slurp|preview|headless|lighthouse|python|curl|wget|node|go-http|axios|java\/|facebookexternal|discord|slack|whatsapp|telegram|google-|bingpreview|embedly|quora|pinterest|vkshare|skype/i;
 
 /** A tag the app knows ("guide"), or ''. */

@@ -41,6 +41,7 @@ import { registerAnswerReports } from './answerReports';
 import { registerAnswerFeedback, recordMarkerCheck } from './answerFeedback';
 import { registerDiscord } from './discord';
 import { registerSiteAsk } from './siteAsk';
+import { registerSiteAccount } from './siteAccount';
 import { pingNewSignup } from './signupPing';
 import { STEPS_RULES, extractSteps } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
@@ -459,6 +460,33 @@ async function startServer() {
   registerSiteAsk(app, {
     gemini: getGeminiClient,
     requireAuth,
+    // A signed-in player on the website: the app's allowance (one shared pool), a Fast question each (Pro when no Fast
+    // is left). null: not signed in; { error }: a token that doesn't check out.
+    siteAccount: async (req: any) => {
+      const h = String(req.headers.authorization || '');
+      if (!h.startsWith('Bearer ') || h.startsWith('Bearer guest_')) return null;
+      const idToken = h.slice(7);
+      try { req.user = await getAuth().verifyIdToken(idToken); } catch { return { error: 'auth' as const }; }
+      const userId = String(req.user.uid);
+      const email = typeof req.user.email === 'string' ? req.user.email.trim().toLowerCase() : null;
+      let userData: any = (await getFirestoreDocREST(idToken, userId)) || { isPremium: false };
+      const premium = (await premiumFor(idToken, userId, email, userData)).isPremium;
+      const free = freeRulesFor(req, premium);
+      userData = await syncUserLimits(userData, tzOf(req), premium, free.limited);
+      await capByPools(userData, free);
+      const left = () => (Number(userData.proQueriesAvailable) || 0) + (Number(userData.flashQueriesAvailable) || 0);
+      return {
+        uid: userId, premium, left: left(),
+        charge: async () => {
+          const b = Number(userData.flashQueriesAvailable) > 0 ? 'flash' : 'pro';
+          if (b === 'pro') userData.proQueriesAvailable = Math.max(0, Number(userData.proQueriesAvailable) - 1);
+          else userData.flashQueriesAvailable = Math.max(0, Number(userData.flashQueriesAvailable) - 1);
+          if (free.keys.length) spendFromPools(free, String(userData.lastResetDate), b as any);
+          await updateFirestoreDocREST(idToken, userId, { lastResetDate: userData.lastResetDate, proQueriesAvailable: userData.proQueriesAvailable, flashQueriesAvailable: userData.flashQueriesAvailable, allowancePlan: userData.allowancePlan });
+          return left();
+        },
+      };
+    },
     firebaseWebConfig: {
       apiKey: process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY',
       authDomain: 'quest-compendium-1bccf.firebaseapp.com',
@@ -466,6 +494,9 @@ async function startServer() {
       appId: '1:890629309063:web:87293cf13f922fd3edee22',
     },
   });
+
+  // Signed in on the website: its guide ticks follow the account (siteAccount.ts).
+  registerSiteAccount(app, { requireAuth });
 
   // "Known here": what the game knowledge base already knows about the player's confirmed place. Straight from the
   // database, no AI call, so it never costs a question.

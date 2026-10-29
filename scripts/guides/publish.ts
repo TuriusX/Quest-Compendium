@@ -284,7 +284,7 @@ const REPORT_API = `${SERVER_URL}/api/guides/report`;
 const SCRIPT = `
 (function(){
   function load(k){try{return new Set(JSON.parse(localStorage.getItem(k)||'[]'))}catch(e){return new Set()}}
-  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}try{window.dispatchEvent(new CustomEvent('qc-tick-saved',{detail:{k:k}}))}catch(e){}}
   var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
   if(K&&S){
     try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
@@ -298,6 +298,8 @@ const SCRIPT = `
     });
     refresh();
     counts();
+    // Ticks from the account (assets/account.js, after signing in) repaint the page.
+    window.addEventListener('qc-ticks-changed',function(){done=load(key);refresh();counts();progress();});
   }
   var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
     var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
@@ -667,11 +669,13 @@ function page(opts: { title: string; description: string; depth: number; canonic
         <a href="/${LP}#faq" class="hidden md:inline hover:text-white">${esc(ui('navFaq'))}</a>
         <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('navGetApp'))}</a>
         ${menu}
+        ${accountSlot()}
       </div>
     </div>
   </nav>
   ${opts.draft ? '<div class="bg-amber-500/15 border-b border-amber-500/30 text-amber-300 text-sm text-center py-2">DRAFT preview: not public yet</div>' : ''}
   <main class="${opts.wide ? 'max-w-[88rem]' : 'max-w-6xl'} mx-auto px-5 sm:px-6 py-8">${opts.body}</main>
+  <script src="/assets/account.js" defer></script>
   <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     ${esc(ui('footerReport'))
       .replace('{report}', `<button type="button" data-report class="text-[#a87ffb] hover:underline">${esc(ui('reportLink'))}</button>`)
@@ -1471,7 +1475,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   // as compSections made them (display names, links, what's coming soon), and whether it has an achievement guide.
   fs.writeFileSync(path.join(dir, 'guide.json'), JSON.stringify({
     v: 1, key, game: gameName, lang: LANG,
-    areas: links.map((l) => ({ slug: l.slug, name: l.name, ...(l.story ? { story: l.story } : {}), ...(l.group ? { group: l.group } : {}) })),
+    areas: links.map((l) => ({ slug: l.slug, name: l.name, ...(l.story ? { story: l.story } : {}), ...(l.group ? { group: l.group } : {}), total: l.total })),
     compendium: COMP?.entities.length ? COMP_MODEL : null,
     achievements: !!achHere?.list?.length,
   }));
@@ -1581,6 +1585,124 @@ function guideSearchBox(key: string, listSel: string, cls = 'mt-6'): string {
   q.addEventListener('focus',load);q.addEventListener('input',run);})();</script>`;
 }
 
+// ---- Signed in on the website (owner, Oct 29 2026): the same accounts as the app (Google, the same Firebase project).
+// Every guide stays open without signing in. assets/account.js: the header's account menu, ticks that follow the
+// account (siteAccount.ts on the server), "Continue where you left off" on the guides list, and window.QC_AUTH for the
+// ask box (one shared allowance with the app). Firebase loads only for someone who signs in, or has before.
+const SITE_FIREBASE = { apiKey: 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY', authDomain: 'quest-compendium-1bccf.firebaseapp.com', projectId: 'quest-compendium-1bccf', appId: '1:890629309063:web:87293cf13f922fd3edee22' };
+/** The header's account slot (filled by account.js); its layouts are templates here, so the stylesheet has their classes. */
+function accountSlot(): string {
+  const T = { signIn: ui('accSignIn'), signOut: ui('accSignOut'), premium: ui('accPremium'), free: ui('accFree'), synced: ui('accSynced') };
+  return `<div data-qc-account data-api="${esc(SERVER_URL)}" data-app="${esc(`${SERVER_URL}/?from=site`)}" data-t="${esc(JSON.stringify(T))}" class="relative flex shrink-0 items-center">
+          <template data-acc-out><button type="button" data-acc-signin class="rounded-lg border border-white/15 px-2.5 py-1 text-sm font-semibold text-white hover:border-[#a87ffb]/60 hover:bg-white/5"></button></template>
+          <template data-acc-in><details class="relative"><summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-white/5"><span data-acc-initial class="grid h-7 w-7 place-items-center rounded-full bg-[#a87ffb]/30 text-xs font-bold text-white"></span><span data-acc-name class="hidden max-w-[9rem] truncate text-sm text-zinc-300 lg:block"></span></summary>
+            <div class="absolute right-0 z-50 mt-2 w-64 whitespace-normal rounded-xl border border-white/10 bg-[#0c0d14] p-3 text-sm shadow-xl"><div data-acc-name class="truncate font-semibold text-white"></div><div data-acc-email class="truncate text-xs text-zinc-500"></div><div class="mt-2"><span data-acc-plan class="rounded-md border border-white/15 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-300"></span></div><p data-acc-synced class="mt-2 text-xs text-zinc-400"></p><button type="button" data-acc-signout class="mt-3 w-full rounded-lg border border-white/10 px-3 py-1.5 text-left text-zinc-300 hover:bg-white/5 hover:text-white"></button></div></details></template>
+        </div>`;
+}
+/** The guides list's "Continue where you left off" (shown signed in, from the account's ticks). */
+function continueSection(): string {
+  return `<section data-qc-mine hidden class="mb-8" data-lp="/${LP}" data-t="${esc(JSON.stringify({ cont: ui('mineContinue'), pct: ui('minePct') }))}"><h2 class="mb-3 text-lg font-bold text-white">${esc(ui('mineTitle'))}</h2><div data-mine-list class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+    <template data-mine-card><a class="flex min-w-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 hover:border-[#a87ffb]/50 hover:bg-white/[0.06]"><img data-mine-art alt="" class="h-14 w-24 shrink-0 rounded-lg object-cover"><span class="min-w-0 flex-1"><span data-mine-game class="block truncate font-semibold text-white"></span><span data-mine-page class="block truncate text-xs text-zinc-400"></span><span class="mt-1.5 flex items-center gap-2"><span class="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><span data-mine-bar class="block h-full bg-[#a87ffb]"></span></span><span data-mine-pct class="text-xs tabular-nums text-zinc-400"></span></span></span></a></template></section>`;
+}
+function writeAccountScript() {
+  fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(OUT, 'assets', 'account.js'), ACCOUNT_JS.replace('__CFG__', JSON.stringify(SITE_FIREBASE)));
+}
+const ACCOUNT_JS = String.raw`// Signed in on questcompendium.com (scripts/guides/publish.ts accountSlot; the server's siteAccount.ts and siteAsk.ts).
+(function(){
+  var CFG=__CFG__, GS='https://www.gstatic.com/firebasejs/10.13.0/';
+  var slot=document.querySelector('[data-qc-account]'); if(!slot) return;
+  var d=slot.dataset, T=JSON.parse(d.t), API=d.api;
+  var st={user:null,premium:false,ready:false}, fb=null, listeners=[], waiting=[];
+  function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v);}catch(e){return null;}}
+  function load(){
+    if(!fb) fb=Promise.all([import(GS+'firebase-app.js'),import(GS+'firebase-auth.js')]).then(function(m){
+      var app=m[0].initializeApp(CFG,'qc-site'), auth=m[1].getAuth(app);
+      // Local tests: the Auth emulator (test accounts only), never on the real site.
+      if(location.hostname==='localhost'&&ls('qc-auth-emulator'))m[1].connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});
+      m[1].onAuthStateChanged(auth,onUser);
+      return{m:m[1],auth:auth};
+    });
+    return fb;
+  }
+  function token(){return st.user?st.user.getIdToken():Promise.resolve('');}
+  function api(path,body){return token().then(function(t){return fetch(API+path,{method:body?'POST':'GET',headers:Object.assign({Authorization:'Bearer '+t,'x-qc-app':'site','x-qc-from':'site'},body?{'Content-Type':'application/json'}:{}),body:body?JSON.stringify(body):undefined});}).then(function(r){return r.json();});}
+  function onUser(u){
+    st.user=u||null; st.ready=true; ls('qc-site-auth',u?'1':null); render();
+    if(u){ api('/api/user/status').then(function(j){st.premium=!!(j&&(j.isPremium||(j.userData&&j.userData.isPremium)));render();}).catch(function(){}); syncTicks(); }
+    while(waiting.length) waiting.shift()(st.user);
+    listeners.forEach(function(f){try{f(st);}catch(e){}});
+  }
+  // Ticks: the browser's are added to the account's on sign-in (never removed), then each page's changes are sent.
+  function localTicks(){var out={};try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('qcw:')===0){var v=JSON.parse(localStorage.getItem(k)||'[]');if(Array.isArray(v)&&v.length)out[k.slice(4)]=v.map(String);}}}catch(e){}return out;}
+  function syncTicks(){
+    api('/api/site/ticks',{merge:localTicks()}).then(function(j){
+      if(!j||!j.done) return;
+      Object.keys(j.done).forEach(function(k){ls('qcw:'+k,JSON.stringify(j.done[k]));});
+      st.done=j.done;
+      window.dispatchEvent(new Event('qc-ticks-changed'));
+      mine();
+    }).catch(function(){});
+  }
+  var pending={},timer=null;
+  window.addEventListener('qc-tick-saved',function(e){
+    if(!st.user||!e.detail||String(e.detail.k).indexOf('qcw:')!==0) return;
+    var k=String(e.detail.k).slice(4); var v=[];try{v=JSON.parse(localStorage.getItem(e.detail.k)||'[]');}catch(x){}
+    pending[k]=v; clearTimeout(timer);
+    timer=setTimeout(function(){var set=pending;pending={};api('/api/site/ticks',{set:set}).catch(function(){});},1200);
+  });
+  function tpl(name){return slot.querySelector('template[data-acc-'+name+']').content.firstElementChild.cloneNode(true);}
+  function render(){
+    [].slice.call(slot.children).forEach(function(c){if(c.tagName!=='TEMPLATE')c.remove();});
+    if(!st.ready&&ls('qc-site-auth')) return; // restoring the session: nothing until it's known
+    if(!st.user){var b=tpl('out');b.textContent=T.signIn;b.addEventListener('click',function(){window.QC_AUTH.signIn();});slot.appendChild(b);return;}
+    var el=tpl('in'),n=st.user.displayName||st.user.email||'';
+    el.querySelector('[data-acc-initial]').textContent=(n.trim()[0]||'?').toUpperCase();
+    [].forEach.call(el.querySelectorAll('[data-acc-name]'),function(x){x.textContent=n;});
+    el.querySelector('[data-acc-email]').textContent=st.user.email||'';
+    el.querySelector('[data-acc-plan]').textContent=st.premium?T.premium:T.free;
+    el.querySelector('[data-acc-synced]').textContent=T.synced;
+    var so=el.querySelector('[data-acc-signout]');so.textContent=T.signOut;so.addEventListener('click',function(){window.QC_AUTH.signOut();});
+    slot.appendChild(el);
+  }
+  // The guides list: the player's games first, with progress and the last page they had open.
+  function mine(){
+    var sec=document.querySelector('[data-qc-mine]'); if(!sec||!st.user||!st.done) return;
+    var M=JSON.parse(sec.dataset.t), lp=sec.dataset.lp, by={};
+    Object.keys(st.done).forEach(function(k){var g=k.split(':')[0];(by[g]=by[g]||{})[k.slice(g.length+1)]=st.done[k];});
+    var keys=Object.keys(by); if(!keys.length) return;
+    fetch(lp+'guides/index.json').then(function(r){return r.json();}).catch(function(){return fetch('/guides/index.json').then(function(r){return r.json();});}).then(function(ix){
+      var games={};(ix.games||[]).forEach(function(g){games[g.key]=g;});
+      keys=keys.filter(function(k){return games[k];});
+      return Promise.all(keys.map(function(k){return fetch(lp+'guides/'+k+'/guide.json').then(function(r){return r.ok?r.json():fetch('/guides/'+k+'/guide.json').then(function(x){return x.json();});}).catch(function(){return null;});})).then(function(gs){
+        var rows=keys.map(function(k,i){var g=gs[i]||{},areas=g.areas||[],tot=0,got=0;areas.forEach(function(a){var t=+a.total||0,n=(by[k][a.slug]||[]).length;tot+=t;got+=Math.min(n,t);});
+          var last=ls('qcw-last:'+k), page=areas.find(function(a){return a.slug===last;});
+          return{k:k,game:games[k],pct:tot?Math.round(100*got/tot):0,page:page,last:last?1:0,n:got};});
+        rows.sort(function(a,b){return b.last-a.last||b.n-a.n;});
+        var list=sec.querySelector('[data-mine-list]');list.replaceChildren();
+        rows.slice(0,6).forEach(function(r){var c=sec.querySelector('template[data-mine-card]').content.firstElementChild.cloneNode(true);
+          c.href=lp+'guides/'+r.k+'/'+(r.page?r.page.slug+'/':'');
+          var img=c.querySelector('[data-mine-art]');if(r.game.art)img.src=r.game.art;else img.remove();
+          c.querySelector('[data-mine-game]').textContent=r.game.game;
+          c.querySelector('[data-mine-page]').textContent=r.page?M.cont.replace('{page}',r.page.name):'';
+          c.querySelector('[data-mine-bar]').style.width=r.pct+'%';
+          c.querySelector('[data-mine-pct]').textContent=M.pct.replace('{n}',r.pct);
+          list.appendChild(c);});
+        sec.hidden=!rows.length;
+      });
+    }).catch(function(){});
+  }
+  window.QC_AUTH={
+    state:st, token:token,
+    signIn:function(){return load().then(function(x){return x.m.signInWithPopup(x.auth,new x.m.GoogleAuthProvider());}).then(function(){return st.user||new Promise(function(r){waiting.push(r);});});},
+    signOut:function(){return load().then(function(x){return x.m.signOut(x.auth);}).then(function(){st.done=null;var sec=document.querySelector('[data-qc-mine]');if(sec)sec.hidden=true;});},
+    onChange:function(f){listeners.push(f);}
+  };
+  render();
+  if(ls('qc-site-auth')) load();
+})();
+`;
+
 // ---- "Stuck? Ask about this" (siteAsk.ts on the server; owner, Oct 29 2026) ----
 /** Approved "Players asked" entries by guide page ("key/slug"; the front page's slug is ""). */
 const PLAYERS_ASKED = new Map<string, { q: string; a: string; lang: string }[]>();
@@ -1593,6 +1715,7 @@ function askBox(key: string, game: string, slug: string, kind: 'area' | 'entity'
   const T = {
     thinking: ui('askThinking'), from: ui('askFrom'), notCovered: ui('askNotCovered'), notCoveredSearched: ui('askNotCoveredSearched'), limit: ui('askLimit'), signIn: ui('askSignIn'),
     capped: ui('askCapped'), getApp: ui('askGetApp'), error: ui('askError'), left: ui('askLeft'), leftOne: ui('askLeftOne'),
+    limitFree: ui('askLimitFree'), signInAsk: ui('askSignInAsk'), accountOut: ui('askAccountOut'), premium: ui('askPremium'), leftAcct: ui('askLeftAccount'),
   };
   const download = `/${LP}index.html?from=guide#download`;
   return `<div hidden data-qc-ask data-key="${esc(key)}" data-slug="${esc(slug)}" data-kind="${kind}" data-lang="${LANG}" data-game="${esc(game)}" data-page="${esc(page)}" data-api="${esc(SERVER_URL)}" data-app="${esc(`${SERVER_URL}/?from=guide`)}" data-download="${esc(download)}" data-t="${esc(JSON.stringify(T))}" class="qc-site-only mt-5 rounded-xl border border-[#a87ffb]/30 bg-[#a87ffb]/[0.06] px-3.5 py-2.5">
@@ -1634,17 +1757,23 @@ const ASK_JS = String.raw`// "Stuck? Ask about this" (scripts/guides/publish.ts 
   function msg(text,links){var p=tpl('msg');p.textContent=text;(links||[]).forEach(function(l,i){p.appendChild(document.createTextNode(i?' · ':' '));p.appendChild(l);});out.replaceChildren(p);}
   // "Sign in for more": the web app, with the question (and where it was asked) in the box.
   function signInHref(q){var t=d.game+(d.page&&d.page!==d.game?' ('+d.page+')':'')+': '+q;return d.app+'&ask='+encodeURIComponent(t);}
-  form.addEventListener('submit',function(ev){
-    ev.preventDefault();
-    var q=input.value.trim(); if(q.length<3) return;
+  // "Sign in and ask": signing in right there (assets/account.js), then the question is asked.
+  function signInFor(q){
+    if(!window.QC_AUTH) return link(T.signIn,signInHref(q));
+    var a=link(T.signInAsk,'#');a.addEventListener('click',function(e){e.preventDefault();window.QC_AUTH.signIn().then(function(u){if(u)ask(q);}).catch(function(){});});return a;
+  }
+  function ask(q){
     btn.disabled=true; msg(T.thinking);
-    token().then(function(tk){
-      return fetch(api+'/api/site/ask',{method:'POST',headers:{'Content-Type':'application/json','X-Firebase-AppCheck':tk},body:JSON.stringify({key:d.key,slug:d.slug,kind:d.kind,lang:d.lang,q:q,device:dev})});
+    var A=window.QC_AUTH, signed=!!(A&&A.state.user);
+    Promise.all([token(),signed?A.token():'']).then(function(t){
+      var h={'Content-Type':'application/json','X-Firebase-AppCheck':t[0]};if(t[1])h.Authorization='Bearer '+t[1];
+      return fetch(api+'/api/site/ask',{method:'POST',headers:h,body:JSON.stringify({key:d.key,slug:d.slug,kind:d.kind,lang:d.lang,q:q,device:dev})});
     }).then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});}).then(function(x){
       var j=x.j;
       if(j.off){box.hidden=true;return;}
-      if(j.limit==='site'){msg(T.capped,[link(T.signIn,signInHref(q)),link(T.getApp,d.download)]);return;}
-      if(j.limit){msg(T.limit,[link(T.signIn,signInHref(q))]);return;}
+      if(j.limit==='account'){msg(T.accountOut,j.premium?[]:[link(T.premium,d.app+'&premium=1')]);return;}
+      if(j.limit==='site'){msg(T.capped,[signInFor(q),link(T.getApp,d.download)]);return;}
+      if(j.limit){msg(T.limitFree.replace('{n}',j.freePerDay||''),[signInFor(q)]);return;}
       if(!x.ok||!j.answer){msg(T.error);return;}
       var el=tpl('answer');
       el.querySelector('[data-q]').textContent=q;
@@ -1653,9 +1782,13 @@ const ASK_JS = String.raw`// "Stuck? Ask about this" (scripts/guides/publish.ts 
       if(j.covered) note.remove(); else note.textContent=j.searched?T.notCoveredSearched:T.notCovered;
       var src=el.querySelector('[data-src]');
       if(j.sources&&j.sources.length){src.textContent=T.from+' ';j.sources.forEach(function(s,i){if(i)src.appendChild(document.createTextNode(' · '));src.appendChild(link(s.label,s.href));});}else src.remove();
-      if(typeof j.left==='number'){var l=tpl('msg');l.textContent=(j.left===1?T.leftOne:T.left).replace('{n}',j.left);el.appendChild(l);}
+      if(typeof j.left==='number'){var l=tpl('msg');l.textContent=(j.account?T.leftAcct:j.left===1?T.leftOne:T.left).replace('{n}',j.left);el.appendChild(l);}
       out.replaceChildren(el); input.value='';
     }).catch(function(){msg(T.error);}).then(function(){btn.disabled=false;});
+  }
+  form.addEventListener('submit',function(ev){
+    ev.preventDefault();
+    var q=input.value.trim(); if(q.length>=3) ask(q);
   });
 })();
 `;
@@ -1936,8 +2069,8 @@ function compIndexHtml(key: string, links: AreaLink[], visible: { slug: string; 
     ${parts.map(part).join('')}</div>
   <script>(function(){var __name=function(f){return f;};var compIndex=${compIndex.toString()};var K=${JSON.stringify(key)};
   function rd(s){try{var v=JSON.parse(localStorage.getItem('qcw:'+K+':'+s)||'[]');return Array.isArray(v)?v.map(String):[]}catch(e){return[]}}
-  function wr(s,v){try{localStorage.setItem('qcw:'+K+':'+s,JSON.stringify(v))}catch(e){}}
-  compIndex(document,rd,wr);
+  function wr(s,v){try{localStorage.setItem('qcw:'+K+':'+s,JSON.stringify(v))}catch(e){}try{window.dispatchEvent(new CustomEvent('qc-tick-saved',{detail:{k:'qcw:'+K+':'+s}}))}catch(e){}}
+  var paint=compIndex(document,rd,wr);window.addEventListener('qc-ticks-changed',paint);
   document.querySelectorAll('.qc-soon').forEach(function(s){s.addEventListener('click',function(){var t=s.textContent;s.textContent=s.getAttribute('data-soon');setTimeout(function(){s.textContent=t;},1400);});});})();</script>`;
 }
 
@@ -2238,6 +2371,7 @@ function indexBody(list: { key: string; game: string; count: number; players?: n
     items.length ? `<section data-hide-when-searching class="mb-8"><h2 class="text-lg font-bold text-white mb-3">${esc(title)}</h2><div class="grid ${CARD_MODE === 'A' ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-6' : 'sm:grid-cols-2 lg:grid-cols-4'} gap-3">${items.map((g) => card(g, false)).join('')}</div></section>` : '';
   const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].filter((l) => seen.has(l));
   return `<h1 class="text-3xl font-bold text-white">${esc(ui('indexH1'))}</h1><p class="text-zinc-400 mt-2 mb-6 max-w-2xl">${esc(ui('indexIntro', { n: list.length }))}</p>
+    ${continueSection()}
     ${list.length > 8 ? row(ui('popular'), popular) + row(ui('newGuides'), fresh) : ''}
     <div class="flex flex-col sm:flex-row gap-3 sm:items-center mb-3">
       <h2 class="text-lg font-bold text-white sm:mr-auto">${esc(ui('allGames'))}</h2>
@@ -2493,6 +2627,7 @@ async function main() {
     // A preview: the site's icons beside it, and its own stylesheet; the website files and the homepage are untouched.
     for (const f of ['icon.svg', 'favicon.ico', 'favicon-96.png', 'favicon-192.png']) if (fs.existsSync(path.resolve('Marketing_Website_Files', f))) fs.copyFileSync(path.resolve('Marketing_Website_Files', f), path.join(OUT, f));
     writeAskScript();
+    writeAccountScript();
     await buildSiteCss();
     writeAppFragments(OUT);
     console.log(`Preview: ${OUT}${protos.size ? ` (${protos.size} flagship prototype(s))` : ''}. Nothing published.`);
@@ -2529,6 +2664,7 @@ async function main() {
   console.log(`App pages: ${writeAppFragments(OUT)} (app.html beside each guide page, for the apps' Guide tab).`);
   console.log(`Editor line added to ${editorEverywhere(OUT)} other page(s) (homepage and the site's own pages).`);
   writeAskScript();
+  writeAccountScript();
   await buildSiteCss();
   console.log(`Built ${games.reduce((n, g) => n + g.count, 0)} guide page(s) for ${games.length} game(s)${withDrafts ? ' (drafts included, marked DRAFT and hidden from search)' : ''}.`);
   console.log(`Open ${path.join(OUT, 'guides', 'index.html')} in your browser to look them over.`);

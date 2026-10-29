@@ -12,7 +12,7 @@ import type { UserRecord } from 'firebase-admin/auth';
 import { realAccounts } from './ownerStats';
 
 const PROVIDERS: Record<string, string> = { 'google.com': 'Google', 'password': 'email and password', 'emailLink': 'email link', 'apple.com': 'Apple', 'github.com': 'GitHub', 'microsoft.com': 'Microsoft' };
-const APPS: Record<string, string> = { desktop: 'desktop app', web: 'web app', deck: 'Steam Deck' };
+const APPS: Record<string, string> = { desktop: 'desktop app', web: 'web app', deck: 'Steam Deck', site: 'website' };
 
 export function signupPingText(user: Pick<UserRecord, 'providerData' | 'metadata'>, app: string, src: string, now = Date.now(), total?: { all: number; week: number }): string {
   const pid = user.providerData?.[0]?.providerId || '';

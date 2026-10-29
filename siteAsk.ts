@@ -8,8 +8,9 @@
  *     No search unless the guide doesn't cover it; then one Google-grounded call, if the day's searches allow. Each
  *     answer links the guide sections it used.
  *   Who may ask: Firebase App Check (reCAPTCHA Enterprise, config/siteAsk.recaptchaKey; enforced on the deployed
- *     server once the key is set); 3 questions a device a day and 10 a network, no account; then "Sign in for more"
- *     (the web app, with the question filled in), where the normal free / Premium limits apply. The site's free
+ *     server once the key is set); 2 questions a device a day and 10 a network, no account; then "Sign in for more"
+ *     (signing in right there; the question is then asked), and a signed-in player's questions use the app's allowance
+ *     (one shared pool, free or Premium; siteAccount in server.ts). The site's free
  *     questions stop at config/siteAsk.dailyDollars ($1) a day: then "sign in or get the app".
  *   Kept (nothing that identifies the person): siteQuestions/{id} { key, slug, kind, lang, q, answer, covered, sources,
  *     dollars, searches, at, day }. Device and network counts are one-way hashes with a salt that changes every day, in
@@ -33,6 +34,7 @@ import { clientIp } from './guestGuard';
 import { isAdmin } from './reviewQueue';
 import { markSiteDirty } from './ownerEditor';
 import { isLocalServer } from './testTraffic';
+import { allowances } from './allowances';
 
 const SITE = () => (process.env.QC_SITE_URL || 'https://questcompendium.com').replace(/\/$/, '');
 const MODEL = () => process.env.MAIN_MODEL || 'gemini-3.8-flash';
@@ -48,13 +50,13 @@ const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim
 const col = (name: string) => getFirestore().collection(isLocalServer() ? `test_${name}` : name);
 
 export type SiteAskConfig = { enabled: boolean; appCheck: 'enforce' | 'off'; recaptchaKey: string; dailyDollars: number; perDevice: number; perIp: number; fixesPerDay: number };
-const DEFAULTS: SiteAskConfig = { enabled: false, appCheck: 'enforce', recaptchaKey: '', dailyDollars: 1, perDevice: 3, perIp: 10, fixesPerDay: 10 };
+const DEFAULTS: SiteAskConfig = { enabled: false, appCheck: 'enforce', recaptchaKey: '', dailyDollars: 1, perDevice: 2, perIp: 10, fixesPerDay: 10 };
 let cfgCache: { at: number; v: SiteAskConfig } | null = null;
 export async function siteAskConfig(fresh = false): Promise<SiteAskConfig> {
   if (!fresh && cfgCache && Date.now() - cfgCache.at < 30_000) return cfgCache.v;
   let v = DEFAULTS;
   try { v = { ...DEFAULTS, ...((await getFirestore().collection('config').doc('siteAsk').get()).data() || {}) } as SiteAskConfig; } catch { /* the defaults: off */ }
-  if (isLocalServer() && process.env.QC_SITE_ASK_ON === '1') v = { ...v, enabled: true, perIp: Number(process.env.QC_SITE_ASK_PER_IP) || v.perIp };
+  if (isLocalServer() && process.env.QC_SITE_ASK_ON === '1') v = { ...v, enabled: true, perIp: Number(process.env.QC_SITE_ASK_PER_IP) || v.perIp, perDevice: Number(process.env.QC_SITE_ASK_PER_DEVICE) || v.perDevice };
   cfgCache = { at: Date.now(), v };
   return v;
 }
@@ -264,7 +266,8 @@ async function learn(id: string, x: { key: string; slug: string; kind: string; l
   }
 }
 
-export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI; requireAuth: any; firebaseWebConfig: Record<string, string> }) {
+type SiteAccount = { uid: string; premium: boolean; left: number; charge: () => Promise<number> };
+export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI; requireAuth: any; firebaseWebConfig: Record<string, string>; siteAccount?: (req: Request) => Promise<SiteAccount | { error: 'auth' } | null> }) {
   // The box asks whether it's on (and for the App Check key) when a page opens.
   app.get('/api/site/ask/config', async (_req: Request, res: Response) => {
     const c = await siteAskConfig();
@@ -284,8 +287,17 @@ export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI;
     const q = cut(b.q, 300), device = String(b.device || '');
     if (!/^[a-z0-9-]{2,120}$/.test(key) || (slug && !/^[a-z0-9-]{1,160}$/.test(slug)) || q.length < 3 || !/^[a-f0-9]{16,64}$/.test(device)) return res.status(400).json({ error: 'bad request' });
     void cleanOld().catch(() => {});
-    const t = await take(device, clientIp(req, HOPS), c);
-    if (t.ok === false) return res.json({ limit: t.why });
+    // Signed in: the app's allowance (one shared pool), not the site's free questions.
+    const signedIn = deps.siteAccount ? await deps.siteAccount(req) : null;
+    if (signedIn && 'error' in signedIn) return res.status(401).json({ error: 'auth' });
+    const acct = signedIn as SiteAccount | null;
+    if (acct && acct.left <= 0) return res.json({ limit: 'account', premium: acct.premium });
+    const t: Take = acct ? { ok: true, left: acct.left - 1 } : await take(device, clientIp(req, HOPS), c);
+    if (t.ok === false) {
+      // How many questions a free account gets, so the reason to sign in is clear.
+      const free = (await allowances()).free;
+      return res.json({ limit: t.why, freePerDay: (Number(free.pro) || 0) + (Number(free.flash) || 0) });
+    }
     const scope = { dollars: 0, searches: 0 };
     try {
       const out = await requestCost.run(scope, async () => {
@@ -293,19 +305,21 @@ export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI;
         if (!ctx.selfText && !ctx.matchLines) return null;
         // A search only with room for it: the day's and month's searches, and enough of the site's dollars left.
         const day: any = (await col('siteAskDays').doc(dayOf()).get()).data() || {};
-        const mayLookUp = (Number(day.dollars) || 0) + 0.05 < c.dailyDollars && (await playerSearchesToday()) && (await monthlyBudgetOk());
+        const mayLookUp = (acct ? true : (Number(day.dollars) || 0) + 0.05 < c.dailyDollars) && (await playerSearchesToday()) && (await monthlyBudgetOk());
         return { ctx, a: await answer(deps.gemini(), ctx, q, lang, mayLookUp) };
       });
       if (!out) return res.status(404).json({ error: 'no guide' });
       if (out.a.searches) recordPlayerSearches(out.a.searches);
       const dollars = Math.round(scope.dollars * 10000) / 10000;
-      await col('siteAskDays').doc(dayOf()).set({ dollars: FieldValue.increment(dollars), questions: FieldValue.increment(1) }, { merge: true });
+      // The site's free-question dollars count signed-out questions only (signed-in ones use the player's allowance).
+      await col('siteAskDays').doc(dayOf()).set(acct ? { questions: FieldValue.increment(1), signedIn: FieldValue.increment(1) } : { dollars: FieldValue.increment(dollars), questions: FieldValue.increment(1) }, { merge: true });
+      const left = acct ? await acct.charge() : t.left;
       const doc = await col('siteQuestions').add({
-        key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, sources: out.a.sources.map((s) => s.href), searches: out.a.searches,
+        key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, signedIn: !!acct, sources: out.a.sources.map((s) => s.href), searches: out.a.searches,
         dollars, model: MODEL(), at: Date.now(), day: dayOf(), ...(isLocalServer() ? { test: true } : {}),
       });
       void learn(doc.id, { key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, searched: out.a.searches, aboutPage: out.a.aboutPage, elsewhere: out.a.elsewhere }, c).catch((e) => console.warn('[site-ask] learn', e?.message));
-      res.json({ answer: out.a.text, sources: out.a.sources, covered: out.a.covered, searched: out.a.searches > 0, left: t.left });
+      res.json({ answer: out.a.text, sources: out.a.sources, covered: out.a.covered, searched: out.a.searches > 0, left, ...(acct ? { account: true } : {}) });
     } catch (e: any) {
       console.error('[site-ask]', e?.message);
       res.status(500).json({ error: 'failed' });

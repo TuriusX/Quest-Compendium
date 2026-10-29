@@ -32,6 +32,17 @@ async function whoToLeaveOut(): Promise<Who> {
 const isLeftOut = (u: UserRecord, w: Who) =>
   ownerEmails().includes(String(u.email || '').toLowerCase()) || w.ownerHashes.has(playerHash(u.uid)) || w.testUids.has(u.uid) || TEST_EMAIL.test(String(u.email || ''));
 
+/** Real accounts that signed up on the website (users.signupSource "site"), with their creation times. */
+async function siteSignups(w: Who): Promise<number[]> {
+  const ids = (await getFirestore().collection('users').where('signupSource', '==', 'site').get()).docs.map((d) => d.id);
+  const out: number[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const r = await getAuth().getUsers(ids.slice(i, i + 100).map((uid) => ({ uid })));
+    for (const u of r.users) if (!isLeftOut(u, w)) out.push(Date.parse(u.metadata.creationTime));
+  }
+  return out;
+}
+
 /** Real accounts (not the owner's, not test ones), with their creation times. */
 export async function realAccounts(w?: Who): Promise<number[]> {
   const who = w || (await whoToLeaveOut());
@@ -87,7 +98,7 @@ const APP_NAMES: [string, string][] = [['desktop', 'desktop'], ['deck', 'Deck'],
 const change = (now: number, before: number) => (before ? ` (${now >= before ? '+' : ''}${Math.round(((now - before) / before) * 100)}%)` : now ? ' (new)' : '');
 const money = (n: number) => `$${n.toFixed(2)}`;
 
-function block(title: string, a: Activity, signups: number, prev?: { a: Activity; signups: number }): string {
+function block(title: string, a: Activity, signups: number, prev?: { a: Activity; signups: number }, fromSite = 0): string {
   const vs = (now: number, before?: number) => (prev && before !== undefined ? ` vs ${before}${change(now, before)}` : '');
   const plat = APP_NAMES.map(([k, label]) => `${label} ${a.apps[k] || 0}`).join(' · ');
   return [
@@ -95,7 +106,7 @@ function block(title: string, a: Activity, signups: number, prev?: { a: Activity
     `Questions: ${a.questions}${vs(a.questions, prev?.a.questions)}`,
     `Players: ${a.players + a.guests} (${a.players} signed in, ${a.guests} guest${a.guests === 1 ? '' : 's'})${vs(a.players + a.guests, prev ? prev.a.players + prev.a.guests : undefined)}`,
     `By platform (questions): ${plat}`,
-    `New sign-ups: ${signups}${vs(signups, prev?.signups)}`,
+    `New sign-ups: ${signups}${fromSite ? ` (${fromSite} from the site)` : ''}${vs(signups, prev?.signups)}`,
   ].join('\n');
 }
 
@@ -115,8 +126,9 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   const span = (ms: number) => activity(now - ms, now, w, owners);
   const before = (ms: number) => activity(now - 2 * ms, now - ms, w, owners);
   const longMs = (window === '30d' ? 30 : 7) * DAY;
-  const [created, day, long, prev, subs] = await Promise.all([
+  const [created, siteCreated, day, long, prev, subs] = await Promise.all([
     realAccounts(w),
+    siteSignups(w),
     !window || window === '24h' ? span(DAY) : null,
     window !== '24h' ? span(longMs) : null,
     window !== '24h' ? before(longMs) : null,
@@ -124,10 +136,11 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   ]);
   const signedUp = (from: number, to: number) => created.filter((t) => t >= from && t < to).length;
   const parts: string[] = [];
-  if (day) parts.push(block('Last 24 hours', day, signedUp(now - DAY, now)));
+  const fromSite = (from: number, to: number) => siteCreated.filter((t) => t >= from && t < to).length;
+  if (day) parts.push(block('Last 24 hours', day, signedUp(now - DAY, now), undefined, fromSite(now - DAY, now)));
   if (long && prev) {
     const n = longMs / DAY;
-    parts.push(block(`Last ${n} days (vs the ${n} before)`, long, signedUp(now - longMs, now), { a: prev, signups: signedUp(now - 2 * longMs, now - longMs) }));
+    parts.push(block(`Last ${n} days (vs the ${n} before)`, long, signedUp(now - longMs, now), { a: prev, signups: signedUp(now - 2 * longMs, now - longMs) }, fromSite(now - longMs, now)));
   }
   // The website's ask box, apart from the players' numbers above (siteAsk.ts).
   const siteMs = window === '30d' ? 30 * DAY : window === '7d' ? 7 * DAY : DAY;
