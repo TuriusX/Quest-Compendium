@@ -10,7 +10,8 @@
  *     and the guides' own pages (duplicates, thin pages, facts on the wrong page, lists in a poor order).
  *
  * What it may do, at most config/autoImprove.maxChanges (20) a night, of which at most maxDestructive (5) delete or
- * replace anything, within the pipeline's budget (PIPELINE_STEP_DOLLARS) and config/autoImprove.nightlyDollars:
+ * replace anything, within the pipeline's budget (PIPELINE_STEP_DOLLARS), config/autoImprove.nightlyDollars ($1.50) and
+ * its own monthly cap inside the pipeline's (monthlyDollars, $10; owner, Oct 29 2026: reached, it stops until the 1st):
  *   add       a missing fact on the page it was asked on (appended to the field it fits);
  *   opening   a fuller opening (sentences added to the page's overview);
  *   asked     a "Players asked" entry: the question reworded neutrally, the answer only what sources back;
@@ -50,8 +51,8 @@ const DAY = 86_400_000;
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const sha = (s: string) => crypto.createHash('sha1').update(s).digest('hex').slice(0, 20);
 
-type Cfg = { enabled: boolean; maxChanges: number; maxDestructive: number; nightlyDollars: number; minAsks: number; impressionsKeep: number; reviewPages: number; appClusters: number };
-const DEFAULTS: Cfg = { enabled: true, maxChanges: 20, maxDestructive: 5, nightlyDollars: 1.5, minAsks: 3, impressionsKeep: 10, reviewPages: 3, appClusters: 3 };
+type Cfg = { enabled: boolean; maxChanges: number; maxDestructive: number; nightlyDollars: number; monthlyDollars: number; minAsks: number; impressionsKeep: number; reviewPages: number; appClusters: number };
+const DEFAULTS: Cfg = { enabled: true, maxChanges: 20, maxDestructive: 5, nightlyDollars: 1.5, monthlyDollars: 10, minAsks: 3, impressionsKeep: 10, reviewPages: 3, appClusters: 3 };
 
 type Kind = 'add' | 'opening' | 'asked' | 'correct' | 'merge' | 'move' | 'order';
 const DESTRUCTIVE = new Set<Kind>(['correct', 'merge', 'move']);
@@ -206,7 +207,18 @@ let CFG = DEFAULTS;
 let searchesLeft = true;
 const startDollars = ledgerDollars();
 const stepLimit = Number(process.env.PIPELINE_STEP_DOLLARS || 0);
-const room = () => Math.min(CFG.nightlyDollars, stepLimit || Infinity) - (ledgerDollars() - startDollars);
+/** This month's spending so far (system/autoImprove.month, UTC month), for the monthly cap. */
+const MONTH = new Date().toISOString().slice(0, 7);
+let monthBefore = 0;
+const room = () => Math.min(CFG.nightlyDollars, stepLimit || Infinity, CFG.monthlyDollars - monthBefore) - (ledgerDollars() - startDollars);
+/** Adds tonight's spending to the month's; notes when the cap was reached (the Monday summary says so). */
+async function saveMonth() {
+  const dollars = monthBefore + (ledgerDollars() - startDollars);
+  const sys = db().collection('system').doc('autoImprove');
+  const cur: any = ((await sys.get()).data() || {}).month || {};
+  const capAt = cur.id === MONTH && cur.capAt ? cur.capAt : dollars >= CFG.monthlyDollars - 0.05 ? Date.now() : null;
+  await sys.set({ month: { id: MONTH, dollars, cap: CFG.monthlyDollars, capAt } }, { merge: true });
+}
 const made: Change[] = [];
 const skipped: string[] = [];
 let blocked = new Set<string>();
@@ -624,16 +636,25 @@ async function main() {
   // Every change made before, live or undone: never made twice, and never again once undone.
   blocked = new Set((await db().collection('autoChanges').get()).docs.map((d) => String(d.data().sig || '')).filter(Boolean));
   const sys = db().collection('system').doc('autoImprove');
-  tried = ((await sys.get()).data() || {}).tried || {};
+  const state: any = (await sys.get()).data() || {};
+  tried = state.tried || {};
+  monthBefore = state.month?.id === MONTH ? Number(state.month.dollars) || 0 : 0;
+  if (monthBefore >= CFG.monthlyDollars - 0.05) {
+    if (!DRY) await saveMonth();
+    console.log(`Done: improvements: paused until the 1st ($${monthBefore.toFixed(2)} of the $${CFG.monthlyDollars} monthly cap used).`);
+    setTimeout(() => process.exit(0), 300);
+    return;
+  }
   const steps: [string, () => Promise<void>][] = [['corrections', corrections], ['missing facts', missingFacts], ['players asked', playersAsked], ['page suggestions', pageSuggestions], ['app questions', appQuestions], ['merges', merges], ['structure', structure]];
   for (const [name, fn] of steps) {
     if (full() || room() < 0.05) break;
     try { await fn(); } catch (e: any) { console.log(`  ${name}: stopped (${cut(e?.message || e, 160)})`); }
   }
+  if (!DRY) await saveMonth();
   if (!DRY) await sys.set({ tried: Object.fromEntries(Object.entries(tried).filter(([, t]) => t > Date.now() - 30 * DAY)), lastRun: { at: Date.now(), changes: made.length, skipped: skipped.length, dollars: ledgerDollars() - startDollars } }, { merge: true });
   const n = (k: Kind) => made.filter((c) => c.kind === k).length;
   const parts = ([['add', 'fact(s) added'], ['opening', 'fuller opening(s)'], ['asked', '"Players asked"'], ['correct', 'correction(s)'], ['merge', 'merge(s)'], ['move', 'move(s)'], ['order', 'reorder(s)']] as [Kind, string][]).filter(([k]) => n(k)).map(([k, l]) => `${n(k)} ${l}`);
   console.log(`Done: improvements: ${made.length} change(s) on ${touched.size} page(s)${parts.length ? ` (${parts.join(', ')})` : ''}${skipped.length ? `; ${skipped.length} not confirmed by sources, left as they are` : ''}; $${(ledgerDollars() - startDollars).toFixed(2)}.`);
   setTimeout(() => process.exit(0), 300);
 }
-main().catch((e) => { console.error('improvements failed:', e?.message || e); process.exit(1); });
+main().catch(async (e) => { console.error('improvements failed:', e?.message || e); if (!DRY) await saveMonth().catch(() => {}); process.exit(1); });

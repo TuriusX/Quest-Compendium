@@ -56,10 +56,22 @@ export function registerAutoChanges(app: Express, deps: { requireAuth: any; fire
 
 // ---- the Monday summary --------------------------------------------------------------------------------------------
 const KIND_LABEL: Record<string, string> = { add: 'fact added', opening: 'fuller opening', asked: '"Players asked"', correct: 'corrected', merge: 'merged', move: 'moved', order: 'reordered' };
+/** The nightly improver's spending this UTC month and its monthly cap (system/autoImprove.month, config/autoImprove). */
+export async function improverMonth(now = Date.now()): Promise<{ dollars: number; cap: number; capAt: number | null }> {
+  const db = getFirestore();
+  const [m, c]: any[] = await Promise.all([db.collection('system').doc('autoImprove').get(), db.collection('config').doc('autoImprove').get()]);
+  const cur = m.data()?.month || {};
+  const cap = Number(c.data()?.monthlyDollars) || 10;
+  if (cur.id !== new Date(now).toISOString().slice(0, 7)) return { dollars: 0, cap, capAt: null };
+  return { dollars: Number(cur.dollars) || 0, cap, capAt: cur.capAt || null };
+}
+
 export async function autoWeekLines(now = Date.now()): Promise<string[]> {
   const week = (await col().where('at', '>=', now - 7 * 86_400_000).get()).docs.map((d) => d.data() as any);
   const link = `${SITE()}/admin/asked`;
-  if (!week.length) return [`🔧 Guide improvements this week: none. Log: ${link}`];
+  const m = await improverMonth(now);
+  const paused = m.capAt ? [`⏸️ Guide improvements reached their $${m.cap} monthly cap on ${new Date(m.capAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })} ($${m.dollars.toFixed(2)} spent): they stop until the 1st.`] : [];
+  if (!week.length) return [`🔧 Guide improvements this week: none. Log: ${link}`, ...paused];
   const live = week.filter((c) => c.status === 'live');
   const pages = new Map<string, { name: string; n: number }>();
   for (const c of live) {
@@ -70,6 +82,7 @@ export async function autoWeekLines(now = Date.now()): Promise<string[]> {
   const top = [...pages.values()].sort((a, b) => b.n - a.n).slice(0, 10).map((p) => `${p.name}${p.n > 1 ? ` (${p.n})` : ''}`);
   const out = [`🔧 Guide improvements this week: ${live.length} change(s) on ${pages.size} page(s) (${kinds.join(', ')}): ${top.join(', ')}${pages.size > top.length ? ', …' : ''}.${week.length > live.length ? ` ${week.length - live.length} undone.` : ''} Log and undo: ${link}`];
   const gone = live.filter((c) => c.destructive);
+  out.push(...paused);
   if (gone.length) out.push(`🗑️ Deleted, merged or replaced: ${gone.slice(0, 10).map((c) => `${c.name} (${c.key}): ${c.reason}`).join(' · ')}${gone.length > 10 ? ` · and ${gone.length - 10} more on the log` : ''}`);
   return out;
 }

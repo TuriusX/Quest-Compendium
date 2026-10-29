@@ -491,11 +491,12 @@ async function main() {
   }
   // ---- 3b'''. the guides improve themselves (scripts/guides/autoImprove.ts; owner, Oct 29 2026): players' questions (the
   // site's and the app's) and the pipeline's own checks turned into checked changes, no approval; at most 20 a night (5
-  // deleting or replacing), each logged on /admin/asked with an undo; config/autoImprove.nightlyDollars of the budget ----
+  // deleting or replacing), each logged on /admin/asked with an undo; config/autoImprove.nightlyDollars of the budget, and
+  // its own monthly cap (monthlyDollars, $10): reached, it stops until the 1st and Monday's summary says so ----
   if (!DRY && room() >= 0.2) {
     const ai = runScript(['scripts/guides/autoImprove.ts']);
     await charge(ai, 'improvements');
-    if (ai.summary && !/^improvements: 0 change/.test(ai.summary)) report.push(`${ai.ok ? '🔧' : '⚠️'} ${ai.summary || 'improvements failed (see the job log)'}`);
+    if (ai.summary && !/^improvements: (0 change|paused)/.test(ai.summary)) report.push(`${ai.ok ? '🔧' : '⚠️'} ${ai.summary || 'improvements failed (see the job log)'}`);
     if (/^improvements: [1-9]/.test(ai.summary || '')) changed = true;
   }
   let queueRoom = Math.min(QUEUE_DAILY, shareRoom) - correctionSearches;
