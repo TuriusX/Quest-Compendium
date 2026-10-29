@@ -3,14 +3,16 @@
  * "(qcEditorClient)(cfg)"; it must stay self-contained: no imports, nothing from outside this function).
  *
  * In edit mode (the amber owner bar's switch), a tap or click on the page picks what to change:
- *   - a picture: Recrop (focal point), Another picture (the page's other pictures, or find a new one), Remove, the
- *     page's review queue;
+ *   - a picture: Recrop (focal point), Another picture (the page's other pictures, or find a new one), Replace picture,
+ *     Remove, the page's review queue;
+ *   - Add picture (the page's button under its title, or on an entry or step's panel): upload, paste, a link or Find
+ *     one, then trim and focal point; saved as the owner's own (guideImages.ts /api/admin/images/mine);
  *   - text: the guide fields it shows (from the page's own page.json), then Fix now (edit it; a selected sentence on
  *     desktop, or one picked from the field), Send to pipeline, or Add a missing item.
  * Nothing changes for players until the next daily publish. Owner controls are amber, never the site's purple.
  */
 /* eslint-disable */
-export function qcEditorClient(cfg: { api: string; site: string }): void {
+export function qcEditorClient(cfg: { api: string; site: string; direct?: string }): void {
   // Loaded early (async, from the page's head): start once the page is there.
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', () => qcEditorClient(cfg)); return; }
   const w: any = window;
@@ -40,8 +42,9 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
   let ON = true;
   try { ON = localStorage.getItem('qc_editor_on') !== '0'; } catch { /* */ }
 
-  async function api(path: string, body?: any): Promise<any> {
-    const r = await fetch(cfg.api + path, { method: body ? 'POST' : 'GET', headers: { 'X-QC-Editor': KEY, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  // direct: straight to the app server (CORS), for a call that can outlast the website's relay (Find one).
+  async function api(path: string, body?: any, direct = false): Promise<any> {
+    const r = await fetch((direct && cfg.direct ? cfg.direct : cfg.api) + path, { method: body ? 'POST' : 'GET', headers: { 'X-QC-Editor': KEY, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
     const j = await r.json().catch(() => ({}));
     if (r.status === 401) { LOST = true; drawBar(); throw new Error(j.error || 'Not connected.'); }
     if (!r.ok) throw new Error(j.error || r.statusText);
@@ -90,6 +93,14 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
   .qe-cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 8px 0; }
   .qe-cands figure { margin: 0; } .qe-cands img { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 6px; display: block; background: #0d0b07; }
   .qe-cands figcaption { font-size: 11.5px; color: #a99d86; margin: 3px 0; }
+  .qe-drop { display: block; border: 1px dashed #f5b942; border-radius: 10px; padding: 14px; text-align: center; cursor: pointer; color: #f7e7c2; font-weight: 700; margin: 8px 0 4px; }
+  .qe-paste { min-height: 38px; border: 1px dashed #5a4a28; border-radius: 8px; padding: 8px; color: #a99d86; font-size: 12.5px; margin: 6px 0; outline: none; }
+  .qe-cropper { overflow: hidden; margin-top: 4px; } .qe-cropper img { touch-action: none; user-select: none; -webkit-user-drag: none; }
+  .qe-rect { position: absolute; border: 2px solid #f5b942; box-shadow: 0 0 0 9999px #0009; pointer-events: none; }
+  .qe-prev canvas { border-radius: 6px; display: block; background: #0d0b07; }
+  .qe-addpic { all: unset; display: none !important; cursor: pointer; margin: 8px 0; padding: 6px 12px; border-radius: 8px; border: 1px dashed #f5b942; color: #f5b942; font: 700 13px system-ui, sans-serif; }
+  body.qe-on .qe-addpic { display: inline-block !important; }
+  .qe-newpic { margin: 8px 0; max-width: 300px; } .qe-newpic img { width: 100%; border-radius: 8px; outline: 2px dashed #f5b942; display: block; } .qe-newpic figcaption { font-size: 12px; color: #f5b942; margin-top: 3px; }
   .qe-list { width: 100%; border-collapse: collapse; font-size: 13px; } .qe-list td { padding: 7px 6px; border-top: 1px solid #2a2618; vertical-align: top; }
   .qe-list a { color: #f5b942; } .qe-tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 5px; border: 1px solid #5a4a28; white-space: nowrap; }
   `;
@@ -218,7 +229,9 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
     const fields = fieldsFor(block, sel);
     const about = norm(sel || block.textContent).slice(0, 160);
     const head = `<h4>${esc(about.length > 70 ? about.slice(0, 70) + '…' : about)}</h4>`;
-    const acts = `<div class="qe-row"><button class="qe-btn" data-a="pipe">⚑ Send to pipeline</button>${DATA && DATA.kind === 'area' ? '<button class="qe-btn" data-a="add">＋ Add a missing item here</button>' : ''}<button class="qe-btn" data-x>Cancel</button></div>`;
+    // A picture for the entry or step tapped (or the page, from its title).
+    const pt = entryFor(block) || (block.tagName === 'H1' ? pageFor(block) : null);
+    const acts = `<div class="qe-row">${pt ? `<button class="qe-btn" data-a="pic">${pt.replace ? '⇄ Replace picture' : '🖼 Add picture'}</button>` : ''}<button class="qe-btn" data-a="pipe">⚑ Send to pipeline</button>${DATA && DATA.kind === 'area' ? '<button class="qe-btn" data-a="add">＋ Add a missing item here</button>' : ''}<button class="qe-btn" data-x>Cancel</button></div>`;
     const body = fields.length
       ? fields.map((l, i) => `<div class="qe-field"><div class="qe-k">${esc(pretty(l))}</div><div class="qe-v">${esc(l.value)}</div><button class="qe-btn p" data-fix="${i}">✎ Fix now</button></div>`).join('')
       : '<p class="qe-dim">This part is put together from other data, so it can\'t be edited here. Send it to the pipeline instead.</p>';
@@ -228,6 +241,7 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
       if (f) return openFix(block, fields[Number(f.dataset.fix)], sel);
       const a = e.target.closest('[data-a]');
       if (a && a.dataset.a === 'pipe') return openPipeline(block, about);
+      if (a && a.dataset.a === 'pic' && pt) return addPicture(pt);
       if (a && a.dataset.a === 'add') return openMissing(block);
     });
   }
@@ -354,7 +368,7 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
   const sameTarget = (a: any, b: any) => a.target && b.target && a.target.kind === b.target.kind && a.target.slug === b.target.slug && (a.target.id || '') === (b.target.id || '');
 
   async function openPicture(id: string, img: any) {
-    const p = open(`<h4>Picture</h4><div class="qe-dim" data-what>Loading…</div><div class="qe-row"><button class="qe-btn" data-a="crop">⤧ Recrop</button><button class="qe-btn" data-a="swap">↻ Another picture</button><button class="qe-btn bad" data-a="remove">✕ Remove</button><a class="qe-btn" target="_blank" rel="noopener" href="${esc(cfg.site)}/admin/images?game=${encodeURIComponent(GAME)}">☰ Review queue</a></div><div data-body></div><div data-note></div>`, img.closest('figure') || img);
+    const p = open(`<h4>Picture</h4><div class="qe-dim" data-what>Loading…</div><div class="qe-row"><button class="qe-btn" data-a="crop">⤧ Recrop</button><button class="qe-btn" data-a="swap">↻ Another picture</button><button class="qe-btn" data-a="replace">⇄ Replace picture</button><button class="qe-btn bad" data-a="remove">✕ Remove</button><a class="qe-btn" target="_blank" rel="noopener" href="${esc(cfg.site)}/admin/images?game=${encodeURIComponent(GAME)}">☰ Review queue</a></div><div data-body></div><div data-note></div>`, img.closest('figure') || img);
     let x: any = null;
     try { x = (await images()).find((i) => i.id === id) || null; } catch (err: any) { note(p, err.message, 'qe-warn'); }
     const what = p.querySelector('[data-what]');
@@ -365,6 +379,7 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
       if (!a || !x) return;
       if (a.dataset.a === 'crop') return recrop(p, body, x, img);
       if (a.dataset.a === 'swap') return swap(p, body, x, img);
+      if (a.dataset.a === 'replace') return addPicture({ target: x.target, name: x.target.name, replace: x.id, near: img.closest('figure') || img, host: img });
       if (a.dataset.a === 'remove') {
         body.innerHTML = '<p>Take this picture off the page? You can bring it back from /admin/images → Deleted.</p><div class="qe-row"><button class="qe-btn bad" data-rm>Remove it</button><button class="qe-btn" data-x>Keep it</button></div>';
         body.querySelector('[data-rm]').onclick = async () => {
@@ -451,6 +466,196 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
     };
   }
 
+  // ---- Add / Replace picture (owner, Oct 29 2026) ---------------------------------------------------------------------
+  // Upload (a file, a paste or a drop), an image link, or Find one (the picture finder for this page or entry now). Then
+  // trim and set the focal point; saved as the owner's own: approved at once, never replaced by anything automatic.
+  type PicFor = { target: any; name: string; replace?: string; near: any; host?: any };
+  // Pictures added on this visit (before the publish shows them): the next Add here is a Replace of that one.
+  const ADDED: Record<string, { id: string; img: any }> = {};
+  const tk = (t: any) => `${t.kind}|${t.slug}|${t.id || ''}`;
+  const picId = (pic: any) => { const mm = pic && String(pic.thumb || pic.w600 || '').match(/\/img\/g\/([A-Za-z0-9]+)\//); return mm ? mm[1] : ''; };
+  function pageFor(near: any): PicFor | null {
+    if (!DATA || (DATA.kind !== 'area' && DATA.kind !== 'entity')) return null;
+    const host = document.querySelector('article figure img[src*="/img/g/"]');
+    const target = { kind: DATA.kind, slug: SLUG }, a = ADDED[tk(target)];
+    return { target, name: DATA.name || SLUG, replace: a ? a.id : picId(DATA.picture) || undefined, near, host: a ? a.img : DATA.picture ? host : undefined };
+  }
+  function entryFor(block: any): PicFor | null {
+    if (!DATA || DATA.kind !== 'area') return null;
+    const first = (s: any) => String(s || '').split(/[.:;]/)[0].slice(0, 70);
+    for (const id of anchorsOf(block)) {
+      const st = (DATA.walkthrough || []).find((s: any) => String(s.id) === id || 'step-' + s.id === id);
+      const e = st ? null : [...(DATA.items || []), ...(DATA.secrets || [])].find((x: any) => String(x.id) === id);
+      const it = st || e;
+      if (!it) continue;
+      const row = block.closest('li, label.qc-check, [id]') || block;
+      const target = { kind: st ? 'step' : 'entry', slug: SLUG, id: String(it.id) }, a = ADDED[tk(target)];
+      return { target, name: st ? st.title : it.name || first(it.text), replace: a ? a.id : picId(it.picture) || undefined, near: block, host: a ? a.img : it.picture ? row.querySelector('img[src*="/img/g/"]') : undefined };
+    }
+    return null;
+  }
+  const CUTS2 = [[150, 150, 'Phone'], [200, 150, 'Guide page'], [160, 90, 'Thumbnail'], [240, 126, 'Share image']] as [number, number, string][];
+  /** A picture from this device, made at most 2560 wide or tall (the stored sizes go to 1280), turned upright. */
+  function readImage(file: any): Promise<string> {
+    return new Promise((ok, bad) => {
+      if (!file || !/^image\//.test(file.type)) return bad(new Error('That is not a picture.'));
+      const u = URL.createObjectURL(file), im = new Image();
+      im.onload = () => {
+        const s = Math.min(1, 2560 / Math.max(im.naturalWidth, im.naturalHeight));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(im.naturalWidth * s); cv.height = Math.round(im.naturalHeight * s);
+        cv.getContext('2d')!.drawImage(im, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(u);
+        ok(cv.toDataURL('image/jpeg', 0.9));
+      };
+      im.onerror = () => bad(new Error('That picture could not be read.'));
+      im.src = u;
+    });
+  }
+  function addPicture(t: PicFor) {
+    let found: any[] = [], pick: any = null;
+    const p = open(`<h4>${t.replace ? '⇄ Replace picture' : '🖼 Add picture'} · ${esc(t.name)}</h4>`
+      + `<div>${[['upload', 'Upload or paste'], ['link', 'Image link'], ['find', 'Find one']].map(([k, l], i) => `<button class="qe-chip ${i ? '' : 'on'}" data-m="${k}">${l}</button>`).join('')}</div>`
+      + '<div data-src></div><div data-crop></div><div data-note></div>', t.near, true);
+    const src = p.querySelector('[data-src]'), box = p.querySelector('[data-crop]');
+    const take = async (file: any) => {
+      try { const d = await readImage(file); pick = { kind: 'upload', data: d, show: d }; cropStep(); } catch (err: any) { note(p, err.message, 'qe-warn'); }
+    };
+    const mode = (m: string) => {
+      p.querySelectorAll('[data-m]').forEach((x: any) => x.classList.toggle('on', x.dataset.m === m));
+      box.innerHTML = ''; pick = null; note(p, '');
+      if (m === 'upload') {
+        src.innerHTML = '<label class="qe-drop">Choose a picture from this device<input type="file" accept="image/*" hidden data-file></label>'
+          + '<div class="qe-paste" contenteditable="true" data-paste>…or paste one here (Ctrl+V, or long-press → Paste), or drop it on this panel.</div>';
+        src.querySelector('[data-file]').onchange = (e: any) => take(e.target.files && e.target.files[0]);
+      } else if (m === 'link') {
+        src.innerHTML = '<input data-url placeholder="https://… (the picture\'s own address)"><div class="qe-row"><button class="qe-btn p" data-load>Use this link</button></div><div class="qe-dim">Its site is kept for the credit line.</div>';
+        src.querySelector('[data-load]').onclick = () => {
+          const u = String(src.querySelector('[data-url]').value).trim();
+          if (!/^https?:\/\/\S+$/i.test(u)) return note(p, 'Paste the picture\'s web address (starting with https://).', 'qe-warn');
+          pick = { kind: 'link', url: u, show: u }; cropStep();
+        };
+      } else {
+        src.innerHTML = '<div class="qe-row"><button class="qe-btn p" data-find>Look now</button></div><div class="qe-dim">The picture finder for just this one, now: the wiki, Fextralife and the press kit. Up to $0.10 of the pictures\' budget; it can take a minute.</div><div data-cands></div>';
+        src.querySelector('[data-find]').onclick = async (e: any) => {
+          const b = e.target; b.setAttribute('disabled', ''); note(p, 'Looking…');
+          try {
+            const j = await api('/api/admin/images/find', { game: GAME, target: t.target }, true);
+            found = j.items || [];
+            note(p, j.message, found.length ? 'qe-ok' : 'qe-warn');
+            const c = src.querySelector('[data-cands]');
+            c.innerHTML = found.length ? `<div class="qe-cands">${found.map((x) => `<figure><img data-c="${x.id}" alt=""><figcaption>${esc(x.sourceName || x.source)}</figcaption><button class="qe-btn p" data-use="${x.id}">Use this</button></figure>`).join('')}</div>` : '';
+            for (const x of found) fileUrl(x.id, 'w600.webp').then((u) => { const im = c.querySelector(`img[data-c="${x.id}"]`); if (im) im.src = u; });
+            c.onclick = async (ev: any) => {
+              const u = ev.target.closest('[data-use]');
+              if (!u) return;
+              pick = { kind: 'found', id: u.dataset.use, show: await fileUrl(u.dataset.use, 'w1280.webp') };
+              cropStep();
+            };
+          } catch (err: any) { note(p, err.message, 'qe-warn'); }
+          b.removeAttribute('disabled');
+        };
+      }
+    };
+    p.addEventListener('click', (e: any) => { const m = e.target.closest('[data-m]'); if (m) mode(m.dataset.m); });
+    // Paste (anywhere while this panel is open) and drop.
+    const onPaste = (e: any) => {
+      if (!panel || panel !== p) { document.removeEventListener('paste', onPaste); return; }
+      const f = Array.from((e.clipboardData && e.clipboardData.files) || []).find((x: any) => /^image\//.test(x.type));
+      if (f) { e.preventDefault(); mode('upload'); take(f); }
+      else if (e.target.closest && e.target.closest('[data-paste]')) { e.preventDefault(); note(p, 'There\'s no picture on the clipboard (copy the picture itself, not its page).', 'qe-warn'); }
+    };
+    document.addEventListener('paste', onPaste);
+    p.addEventListener('dragover', (e: any) => e.preventDefault());
+    p.addEventListener('drop', (e: any) => { const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) { e.preventDefault(); mode('upload'); take(f); } });
+    mode('upload');
+
+    // Trim (drag) and focal point (tap), with the site's cuts previewed as you go.
+    function cropStep() {
+      let crop: any = null, focus: any = null;
+      box.innerHTML = '<p class="qe-dim">Drag across the picture to trim it (optional). Tap where it must stay in frame (a face, the tower).</p>'
+        + '<div class="qe-whole qe-cropper"><img alt="" referrerpolicy="no-referrer" draggable="false"><span class="qe-rect" hidden></span><span class="qe-dot" hidden></span></div>'
+        + `<div class="qe-prev">${CUTS2.map((c) => `<div><canvas width="${c[0]}" height="${c[1]}" style="width:${c[0]}px;height:${c[1]}px"></canvas><span>${c[2]}</span></div>`).join('')}</div>`
+        + '<div class="qe-row"><button class="qe-btn p" data-save>Save picture</button><button class="qe-btn" data-whole>Whole picture</button><button class="qe-btn" data-x>Cancel</button></div>';
+      const img = box.querySelector('.qe-cropper img'), rect = box.querySelector('.qe-rect'), dot = box.querySelector('.qe-dot');
+      let shown = false;
+      const draw = () => {
+        rect.hidden = !crop; dot.hidden = !focus;
+        const W = img.clientWidth, H = img.clientHeight;
+        if (crop) Object.assign(rect.style, { left: crop.x * W + 'px', top: crop.y * H + 'px', width: crop.w * W + 'px', height: crop.h * H + 'px' });
+        if (focus) { dot.style.left = focus.x * W + 'px'; dot.style.top = focus.y * H + 'px'; }
+        if (!shown) return;
+        const c = crop || { x: 0, y: 0, w: 1, h: 1 }, NW = img.naturalWidth, NH = img.naturalHeight;
+        box.querySelectorAll('.qe-prev canvas').forEach((cv: any, i: number) => {
+          const [bw, bh] = CUTS2[i], sw = c.w * NW, sh = c.h * NH, s = Math.max(bw / sw, bh / sh);
+          const fx = focus ? (focus.x - c.x) / c.w : 0.5, fy = focus ? (focus.y - c.y) / c.h : 0.5;
+          const off = (len: number, bx: number, at: number) => (len <= bx ? 0 : Math.min(len - bx, Math.max(0, at * len - bx / 2)));
+          try { const g = cv.getContext('2d'); g.clearRect(0, 0, bw, bh); g.drawImage(img, c.x * NW + off(sw * s, bw, fx) / s, c.y * NH + off(sh * s, bh, fy) / s, bw / s, bh / s, 0, 0, bw, bh); } catch { /* */ }
+        });
+      };
+      img.onload = () => { shown = true; draw(); };
+      img.onerror = () => { box.querySelector('.qe-dim').textContent = 'This picture can\'t be shown here (its site may block it). Save tries it anyway, whole.'; };
+      img.src = pick.show;
+      const at = (e: any) => { const r = img.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) }; };
+      let start: any = null, moved = false;
+      img.addEventListener('pointerdown', (e: any) => { e.preventDefault(); start = at(e); moved = false; try { img.setPointerCapture(e.pointerId); } catch { /* */ } });
+      img.addEventListener('pointermove', (e: any) => {
+        if (!start) return;
+        const q = at(e);
+        if (!moved && Math.abs(q.x - start.x) * img.clientWidth < 8 && Math.abs(q.y - start.y) * img.clientHeight < 8) return;
+        moved = true;
+        crop = { x: Math.min(start.x, q.x), y: Math.min(start.y, q.y), w: Math.abs(q.x - start.x), h: Math.abs(q.y - start.y) };
+        if (focus && (focus.x < crop.x || focus.x > crop.x + crop.w || focus.y < crop.y || focus.y > crop.y + crop.h)) focus = null;
+        draw();
+      });
+      img.addEventListener('pointerup', (e: any) => {
+        if (!start) return;
+        const q = at(e);
+        if (!moved) { if (!crop || (q.x >= crop.x && q.x <= crop.x + crop.w && q.y >= crop.y && q.y <= crop.y + crop.h)) focus = q; }
+        else if (crop && (crop.w < 0.05 || crop.h < 0.05)) crop = null;
+        start = null; draw();
+      });
+      box.querySelector('[data-whole]').onclick = () => { crop = null; draw(); };
+      box.querySelector('[data-save]').onclick = async (e: any) => {
+        const b = e.target; b.setAttribute('disabled', ''); note(p, 'Saving…');
+        const c = crop || { x: 0, y: 0, w: 1, h: 1 };
+        const body: any = {
+          game: GAME, target: t.target, replace: t.replace,
+          crop: crop ? { fx: crop.x, fy: crop.y, fw: crop.w, fh: crop.h } : null,
+          focus: focus ? { x: (focus.x - c.x) / c.w, y: (focus.y - c.y) / c.h } : null,
+          discard: found.map((x) => x.id).filter((id) => !(pick.kind === 'found' && id === pick.id)),
+          ...(pick.kind === 'upload' ? { imageBase64: pick.data } : pick.kind === 'link' ? { url: pick.url } : { found: pick.id }),
+        };
+        try {
+          const j = await api('/api/admin/images/mine', body);
+          IMGS = null;
+          const nu = await fileUrl(j.id, 'w600.webp');
+          showNew(t, nu || pick.show, j.id);
+          box.innerHTML = '';
+          src.innerHTML = `<p class="qe-ok">${t.replace ? 'Replaced' : 'Added'}, as yours: shown here now; on the site, in the app and on the Deck with the next daily publish. The picture finder and the nightly improvements never replace it.</p><div class="qe-row"><button class="qe-btn" data-x>Close</button></div>`;
+          note(p, '');
+        } catch (err: any) { note(p, err.message, 'qe-warn'); b.removeAttribute('disabled'); }
+      };
+    }
+  }
+  // The new picture on the page at once (for the owner; players see it after the publish).
+  function showNew(t: PicFor, url: string, id: string) {
+    const pageLevel = t.target.kind === 'area' || t.target.kind === 'entity';
+    let img = t.host;
+    if (img) { img.removeAttribute('srcset'); const ps = img.closest('picture'); if (ps) ps.querySelectorAll('source').forEach((s: any) => s.remove()); img.src = url; img.style.opacity = ''; }
+    else {
+      const f = document.createElement('figure');
+      f.className = 'qe-ui qe-newpic';
+      f.innerHTML = `<img src="${esc(url)}" alt=""><figcaption>Yours · on the site with the next publish · tap to replace</figcaption>`;
+      const at = pageLevel ? document.querySelector('.qe-addpic') || document.querySelector('article h1') : t.near;
+      if (at) at.insertAdjacentElement('afterend', f);
+      img = f.querySelector('img');
+      f.onclick = () => addPicture({ ...t, replace: ADDED[tk(t.target)].id, host: ADDED[tk(t.target)].img, near: f });
+    }
+    ADDED[tk(t.target)] = { id, img };
+    if (pageLevel) document.querySelectorAll('.qe-addpic').forEach((b: any) => { b.textContent = '⇄ Replace picture'; });
+  }
+
   // ---- Your edits and the pipeline items ------------------------------------------------------------------------------
   const STATE: any = { applied: 'Live', kept: 'Live (the page says it now)', stale: '⚠ No longer fits its page' };
   const pageLink = (key: string, slug: string, lang?: string) => `<a href="${cfg.site}/${lang && lang !== 'en' ? lang + '/' : ''}guides/${esc(key)}/${esc(slug)}/">${esc(slug.replace(/-/g, ' '))}</a>`;
@@ -514,6 +719,28 @@ export function qcEditorClient(cfg: { api: string; site: string }): void {
     document.body.classList.toggle('qe-on', ON);
     READY = true;
     drawBar();
+    // A page without a picture: Add picture under its title (edit mode only).
+    const h1 = document.querySelector('article h1'), pg = pageFor(h1);
+    if (h1 && pg && !pg.replace) {
+      const b = document.createElement('button');
+      b.className = 'qe-ui qe-addpic';
+      b.textContent = '🖼 Add picture';
+      b.onclick = () => addPicture(pageFor(b)!);
+      h1.insertAdjacentElement('afterend', b);
+    }
+    // The owner's pictures here that the next publish will show (added earlier, on any device): shown now, and the next
+    // Add for that place is a Replace of it.
+    images().then((list) => {
+      const shown = new Set([DATA && DATA.picture, ...((DATA && [...(DATA.walkthrough || []), ...(DATA.items || []), ...(DATA.secrets || [])]) || []).map((e: any) => e && e.picture)].map(picId).filter(Boolean));
+      // The newest of his per place (the one the publish will show).
+      const newest: Record<string, any> = {};
+      for (const x of list) if (x.status === 'approved' && x.owner && x.target && x.target.slug === SLUG && !shown.has(x.id) && (!newest[tk(x.target)] || (x.approvedAt || 0) > (newest[tk(x.target)].approvedAt || 0))) newest[tk(x.target)] = x;
+      for (const x of Object.values(newest)) {
+        const t = x.target.kind === 'area' || x.target.kind === 'entity' ? pageFor(h1) : null;
+        if (t) fileUrl(x.id, 'w600.webp').then((u) => { if (u && !ADDED[tk(x.target)]) showNew(t, u, x.id); });
+        else ADDED[tk(x.target)] = { id: x.id, img: undefined };
+      }
+    }).catch(() => undefined);
     markEdits();
     addEventListener('resize', () => drawBar());
     document.addEventListener('keydown', (e: any) => { if (e.key === 'Escape') close(); });

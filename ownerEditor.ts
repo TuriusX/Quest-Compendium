@@ -93,7 +93,8 @@ export function registerOwnerEditor(app: Express, deps: Deps) {
 
   app.get('/editor/qc-editor.js', (req: Request, res: Response) => {
     // Loaded through the website (/_qc/e.js?p=1): its calls go the same way, so blockers see the site's own address.
-    const cfg = { api: req.query.p === '1' ? `${SITE}/_qc` : `https://${req.get('host')}`, site: SITE };
+    // direct: this server's own address, for the one call that can outlast the website's relay (Find one).
+    const cfg = { api: req.query.p === '1' ? `${SITE}/_qc` : `https://${req.get('host')}`, site: SITE, direct: process.env.QC_SERVER_URL || 'https://quest-compendium-890629309063.us-east1.run.app' };
     res.set('X-Robots-Tag', 'noindex, nofollow').set('Cache-Control', 'no-cache').type('application/javascript')
       // (__name: a helper some TypeScript builds wrap named functions in; defined here so the function runs on its own.)
       .send(`/* Quest Compendium owner editor: does nothing without a connected device. */\n(function(){var __name=function(f){return f};(${qcEditorClient.toString()})(${JSON.stringify(cfg)});})();\n`);

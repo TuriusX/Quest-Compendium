@@ -444,13 +444,16 @@ const budget = pictureBudget;
  * only). At most $0.10 a click, counted in the night's $0.50 and the month's $5. Nothing found: the page goes on
  * "Needs your capture". IGDB isn't looked at again: every IGDB picture of the game was already looked at for every page.
  */
-export async function findAnother(key: string, target: ImageTarget): Promise<{ id: string | null; tried: number; spent: number; message: string }> {
+export async function findAnother(key: string, target: ImageTarget, want = 1): Promise<{ id: string | null; ids: string[]; tried: number; spent: number; message: string }> {
   const b = await budget();
   const cap = Math.min(0.1, b.nightLeft, b.monthLeft);
-  if (cap < 0.005) return { id: null, tried: 0, spent: 0, message: b.monthLeft < 0.005 ? "This month's $5 for pictures is used up." : "Tonight's $0.50 for pictures is used up. Try again tomorrow." };
+  if (cap < 0.005) return { id: null, ids: [], tried: 0, spent: 0, message: b.monthLeft < 0.005 ? "This month's $5 for pictures is used up." : "Tonight's $0.50 for pictures is used up. Try again tomorrow." };
   const scope = { dollars: 0, searches: 0 };
   let tried = 0;
-  const id = await usageScope.run(scope, async () => {
+  // want: the editor's Find one asks for up to 3 choices; Find another stops at the first.
+  const ids: string[] = [];
+  const enough = () => ids.length >= want;
+  await usageScope.run(scope, async () => {
     const info: any = (await db().collection('guides').doc(key).get()).data() || {};
     const game = String(info.game || key);
     const src: any = (await SOURCES().doc(key).get()).data() || {};
@@ -462,7 +465,7 @@ export async function findAnother(key: string, target: ImageTarget): Promise<{ i
     const wiki = src.wiki?.domain ? String(src.wiki.domain) : '';
     if (wiki) {
       for (const w of (await wikiPageImages(wiki, target.name)).filter((x) => !have.refs.has(x.url)).slice(0, 8)) {
-        if (!fits(COST.check)) return null;
+        if (!fits(COST.check)) return;
         const buf = await download(w.url);
         const img = buf && (await forLook(buf));
         have.refs.add(w.url);
@@ -470,37 +473,39 @@ export async function findAnother(key: string, target: ImageTarget): Promise<{ i
         tried++;
         const c = await check(game, img.jpeg, t, target.name);
         if (!c.ok) continue;
-        return addImage({
+        ids.push(await addImage({
           game: key, target: stored, buf, ext: (w.url.match(/\.(png|jpe?g|webp)/i)?.[1] || 'jpg').replace('jpeg', 'jpg'), by: 'suggester', status: 'suggested',
           source: 'wiki', sourceUrl: w.url, sourceRef: w.url, sourceName: `Wiki (${wiki})`, confidence: 'high',
           why: `Another picture from the wiki page "${target.name}". ${c.what}`,
           credit: `Image: ${src.wiki?.name || wiki}, CC BY-SA`, terms: 'Fandom wikis: CC BY-SA, credit the wiki',
-        } as any);
+        } as any));
+        if (enough()) return;
       }
     }
     // Its Fextralife page's picture, checked like a wiki's.
     const fx = await fextralifeDomain(key, game, src);
     const f = fx ? await fextralifeImage(fx, target.name) : null;
     if (f && !have.refs.has(f.url)) {
-      if (!fits(COST.check)) return null;
+      if (!fits(COST.check)) return;
       const buf = await download(f.url);
       const img = buf && (await forLook(buf));
       have.refs.add(f.url);
       if (buf && img) {
         tried++;
         const c = await check(game, img.jpeg, t, f.title);
-        if (c.ok) return addImage({
+        if (c.ok) ids.push(await addImage({
           game: key, target: stored, buf, ext: (f.url.match(/\.(png|jpe?g|webp)/i)?.[1] || 'jpg').replace('jpeg', 'jpg'), by: 'suggester', status: 'suggested',
           source: 'wiki', sourceUrl: f.url, sourceRef: f.url, sourceName: `Fextralife (${fx})`, confidence: 'high',
           why: `The Fextralife page "${f.title}" uses this as its main picture. ${c.what}`,
           credit: null, terms: 'Fextralife (Valnet): its terms do not grant reuse; allowed by the owner (Oct 19, 2026)',
-        } as any);
+        } as any));
+        if (enough()) return;
       }
     }
     // The press kit's pictures, looked at for this page alone.
     for (const k of Array.isArray(src.press) ? src.press : []) {
       for (const u of (await pressImages(String(k.url))).filter((x) => !have.refs.has(x)).slice(0, 12)) {
-        if (!fits(COST.look)) return null;
+        if (!fits(COST.look)) return;
         const buf = await download(u);
         const img = buf && (await forLook(buf));
         have.refs.add(u);
@@ -508,16 +513,17 @@ export async function findAnother(key: string, target: ImageTarget): Promise<{ i
         tried++;
         const m = await look(game, img.jpeg, [t]);
         if (!m) continue;
-        return addImage({
+        ids.push(await addImage({
           game: key, target: stored, buf, ext: 'jpg', by: 'suggester', status: 'suggested', source: 'press', sourceUrl: u, sourceRef: u,
           sourceName: `Press kit (${new URL(String(k.url)).hostname})`, confidence: m.confidence, why: m.seen, credit: tidy(k.credit, 160) || null, terms: tidy(k.terms, 600) || 'Press kit: editorial use',
-        } as any);
+        } as any));
+        if (enough()) return;
       }
     }
-    return null;
   });
+  const id = ids[0] || null;
   await b.add(scope.dollars);
-  if (id) return { id, tried, spent: scope.dollars, message: `Found another picture (${tried} looked at, ${money(scope.dollars)}).` };
+  if (id) return { id, ids, tried, spent: scope.dollars, message: want > 1 ? `Found ${ids.length} picture(s) (${tried} looked at, ${money(scope.dollars)}).` : `Found another picture (${tried} looked at, ${money(scope.dollars)}).` };
   const ranOut = !(scope.dollars + COST.check <= cap) && tried > 0;
   if (!ranOut && (target.kind === 'area' || target.kind === 'entity')) {
     const st: any = (await STATE().get()).data() || {};
@@ -525,7 +531,7 @@ export async function findAnother(key: string, target: ImageTarget): Promise<{ i
     await STATE().set({ pages: { ...(st.pages || {}), [k]: { ...(st.pages?.[k] || {}), at: Date.now(), all: true, findAnother: 'none' } } }, { merge: true });
   }
   return {
-    id: null, tried, spent: scope.dollars,
+    id: null, ids, tried, spent: scope.dollars,
     message: ranOut ? `Nothing yet after ${tried} pictures (${money(scope.dollars)}, this click's limit). Try Find another again.` : 'No other picture found — needs your capture.',
   };
 }

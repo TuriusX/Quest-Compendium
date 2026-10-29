@@ -19,6 +19,12 @@
  *   GET  /api/admin/images/needs-capture    top pages no source has a picture for: only the owner's captures can fill them
  *   GET  /api/admin/images/games            the guides, for the page's game list
  *   GET  /api/admin/images/igdb?game=       the game's IGDB screenshots and artworks, to pick from
+ *   POST /api/admin/images/mine             the owner's editor's Add / Replace picture (owner, Oct 29 2026): an upload
+ *                                           (imageBase64), a link (url) or a Find one choice (found), with its crop and
+ *                                           focal point; approved at once and marked as his (owner: true, rank -1, so it
+ *                                           wins over every other picture of its place and nothing automatic replaces
+ *                                           it); replace: the picture it takes the place of; discard: the other choices
+ *   POST /api/admin/images/find             Find one: the picture finder for one page or entry now, up to 3 choices
  *
  * Images live in Firestore guideImages/{id}; the files in the private bucket gs://quest-compendium-guide-images: the
  * original as received (orig/{id}.{ext}) and the sizes the site and apps use (v/{id}/{size}), made once when the
@@ -251,6 +257,24 @@ async function fetchImage(url: string): Promise<{ buf: Buffer; ext: string }> {
   return { buf, ext: (type.split('/')[1] || 'jpg').replace(/[^a-z0-9]/gi, '').replace('jpeg', 'jpg') || 'jpg' };
 }
 
+/** A linked picture's kind of source, by its address (for the ranking among equals and the credit line). */
+export function sourceOfUrl(url: string): ImageSource {
+  const h = (() => { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } })();
+  if (/(^|\.)igdb\.com$/.test(h)) return 'igdb';
+  if (/steam(static|powered|community)?\.(com|net)$|steamcdn/.test(h)) return 'steam';
+  if (/fandom\.com$|wikia\.|fextralife\.com$|wiki/.test(h)) return 'wiki';
+  return 'other';
+}
+/** The credit line kept for a linked picture: its site. */
+export const linkCredit = (url: string) => {
+  try {
+    const u = new URL(url);
+    // Fandom's picture server names the wiki in the path: credit the wiki, not the server.
+    const fandom = u.hostname === 'static.wikia.nocookie.net' && u.pathname.split('/')[1];
+    return `Image: ${fandom ? `${fandom}.fandom.com` : u.hostname.replace(/^www\./, '')}`;
+  } catch { return null; }
+};
+
 /** Stores the original and its sizes, and adds the picture to the queue (waiting). */
 export async function addImage(input: {
   game: string; target: ImageTarget; source: ImageSource; buf: Buffer; ext: string; crop?: any; by: string;
@@ -383,6 +407,100 @@ export function registerGuideImages(app: Express, deps: Deps) {
     }
   });
 
+  // The owner's editor: Add / Replace picture. Approved at once, marked as his: it wins over every other picture of its
+  // place (rank -1) and nothing automatic replaces it (the suggester skips a place with an approved picture; the nightly
+  // improvements never touch pictures). Goes on the site with the next publish (markSiteDirty).
+  app.post('/api/admin/images/mine', deps.requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    const b = req.body || {};
+    try {
+      if (!gameOk(b.game)) return res.status(400).json({ error: 'Pick a game.' });
+      const game = String(b.game);
+      const target = await resolveTarget(game, b.target);
+      if (!target) return res.status(400).json({ error: 'That page or entry is not in the published guide.' });
+      const by = String((req as any).user?.email || '');
+      let buf: Buffer, ext = 'png', source: ImageSource = 'mine', sourceUrl: string | undefined, credit: string | null = null, terms: string | undefined, sourceName: string | undefined;
+      let found: any = null;
+      if (b.imageBase64) {
+        const m = String(b.imageBase64).match(/^data:image\/([a-z0-9+]+);base64,(.+)$/i);
+        buf = Buffer.from(m ? m[2] : String(b.imageBase64), 'base64');
+        ext = m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'png';
+        if (buf.length > MAX_BYTES) return res.status(413).json({ error: 'The picture is over 25 MB.' });
+      } else if (b.url) {
+        sourceUrl = String(b.url).trim();
+        ({ buf, ext } = await fetchImage(sourceUrl));
+        source = sourceOfUrl(sourceUrl);
+        credit = linkCredit(sourceUrl);
+      } else if (b.found && /^[A-Za-z0-9]{10,40}$/.test(String(b.found))) {
+        found = (await col().doc(String(b.found)).get()).data();
+        if (!found || found.game !== game || found.status !== 'suggested') return res.status(400).json({ error: 'That choice is no longer there; look again.' });
+        [buf] = await bucket().file(found.original.path).download();
+        ext = String(found.original.path).split('.').pop() || 'jpg';
+        source = (IMAGE_SOURCES as readonly string[]).includes(found.source) ? found.source : 'other';
+        sourceUrl = found.sourceUrl || undefined;
+        credit = found.credit || (found.sourceUrl ? linkCredit(found.sourceUrl) : null);
+        terms = found.terms || undefined;
+        sourceName = found.sourceName || undefined;
+      } else {
+        return res.status(400).json({ error: 'No picture was sent.' });
+      }
+      // The trim, as parts of the picture (the editor shows a smaller copy): in the original's pixels.
+      let crop: any = null;
+      if (b.crop && [b.crop.fx, b.crop.fy, b.crop.fw, b.crop.fh].every((n: any) => typeof n === 'number' && n >= 0 && n <= 1)) {
+        const m = await sharp(buf).metadata();
+        crop = { x: b.crop.fx * (m.width || 0), y: b.crop.fy * (m.height || 0), w: b.crop.fw * (m.width || 0), h: b.crop.fh * (m.height || 0) };
+      }
+      const id = await addImage({ game, target, source, buf, ext, crop, by, credit: credit || undefined, terms, sourceUrl, sourceName, why: 'Added by you in the editor' });
+      const f = b.focus ? asFocus(b.focus) : null;
+      const patch: Record<string, any> = {
+        status: 'approved', approvedBy: by, approvedAt: Date.now(), owner: true, rank: -1,
+        // On the page for a page; beside the step or under the entry for an entry (he added it there on purpose).
+        placement: { page: target.kind === 'area' || target.kind === 'entity', answer: true, step: target.kind === 'step' || target.kind === 'entry' },
+        ...(f ? { focus: { x: Math.round(f.x * 1000) / 1000, y: Math.round(f.y * 1000) / 1000 } } : {}),
+      };
+      await col().doc(id).set(patch, { merge: true });
+      const gone = { status: 'deleted', deletedBy: by, deletedAt: Date.now(), updatedAt: Date.now() };
+      // Replace: the picture it takes the place of leaves the page (still under Deleted on /admin/images).
+      if (b.replace && /^[A-Za-z0-9]{10,40}$/.test(String(b.replace))) {
+        const old = col().doc(String(b.replace));
+        const o: any = (await old.get()).data();
+        if (o && o.game === game && o.status !== 'deleted') await old.set({ ...gone, replacedBy: id }, { merge: true });
+      }
+      // Find one: the choice taken (now this new picture) and the ones not taken leave the suggestions.
+      const drop = [...(found ? [String(b.found)] : []), ...(Array.isArray(b.discard) ? b.discard.map(String) : [])].filter((x) => /^[A-Za-z0-9]{10,40}$/.test(x)).slice(0, 10);
+      for (const d of drop) {
+        const r = col().doc(d);
+        const x: any = (await r.get()).data();
+        if (x && x.game === game && x.status === 'suggested') await r.set({ ...gone, ...(d === String(b.found) ? { adoptedAs: id } : { notChosen: true }) }, { merge: true });
+      }
+      await markSiteDirty();
+      res.json({ ok: true, id, image: { id, ...((await col().doc(id).get()).data() as any) } });
+    } catch (e: any) {
+      console.error('[images] owner add failed:', e?.message);
+      res.status(500).json({ error: e?.message || 'Could not add the picture.' });
+    }
+  });
+
+  // Find one: the picture finder for this one page or entry now (the wiki, Fextralife, the press kit), up to 3 choices,
+  // within the pictures' night and month budget. They wait as suggestions until one is picked.
+  app.post('/api/admin/images/find', deps.requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    const b = req.body || {};
+    try {
+      if (!gameOk(b.game)) return res.status(400).json({ error: 'Pick a game.' });
+      const target = await resolveTarget(String(b.game), b.target);
+      if (!target) return res.status(400).json({ error: 'That page or entry is not in the published guide.' });
+      const { findAnother } = await import('./scripts/guides/suggestImages');
+      const r = await findAnother(String(b.game), target, 3);
+      const items = (await Promise.all(r.ids.map((id) => col().doc(id).get()))).filter((d) => d.exists).map((d) => {
+        const x: any = d.data();
+        return { id: d.id, source: x.source, sourceName: x.sourceName || null, sourceUrl: x.sourceUrl || null, credit: x.credit || null, why: x.why || '', width: x.width, height: x.height };
+      });
+      res.json({ items, tried: r.tried, spent: r.spent, message: r.message });
+    } catch (e: any) {
+      console.error('[images] find failed:', e?.message);
+      res.status(500).json({ error: e?.message || 'Could not look for a picture.' });
+    }
+  });
+
   // Find another: this picture is wrong for this page ("Not this", never suggested again), and the next best one is
   // looked for now, within the pictures' night and month budget. None: the page goes on "Needs your capture".
   app.post('/api/admin/images/:id/find-another', deps.requireAuth, requireAdmin, async (req: Request, res: Response) => {
@@ -412,7 +530,8 @@ export function registerGuideImages(app: Express, deps: Deps) {
       const patch: Record<string, any> = { updatedAt: Date.now() };
       if (b.action === 'approve') Object.assign(patch, { status: 'approved', approvedBy: by, approvedAt: Date.now(), lowMatch: false });
       else if (b.action === 'delete') Object.assign(patch, { status: 'deleted', deletedBy: by, deletedAt: Date.now() });
-      else if (b.action === 'restore') Object.assign(patch, { status: x.suggestedAt || x.confidence ? 'suggested' : 'waiting', notThis: false });
+      // Restored: one of the owner's own goes straight back on the page; anything else back to the queue.
+      else if (b.action === 'restore') Object.assign(patch, { status: x.owner ? 'approved' : x.suggestedAt || x.confidence ? 'suggested' : 'waiting', notThis: false });
       // Not this: a suggestion that's wrong. Gone, and never suggested again (the suggester skips every picture it has met).
       else if (b.action === 'notthis') Object.assign(patch, { status: 'deleted', notThis: true, deletedBy: by, deletedAt: Date.now() });
       else if (b.action !== 'update') return res.status(400).json({ error: 'Unknown action.' });
@@ -672,7 +791,7 @@ ${ADMIN_THEME_BUTTON}</header>
     const sw = (k, label, na) => '<label class="sw' + (na ? ' na' : '') + '"><input type="checkbox" data-pl="' + k + '" data-id="' + x.id + '"' + (p[k] ? ' checked' : '') + (na ? ' disabled' : '') + '>' + label + '</label>';
     const official = x.source !== 'mine';
     return '<div class="card" id="c-' + x.id + '"><img data-img="' + x.id + '" alt="' + esc(x.alt) + '">'
-      + '<div class="body"><div class="row"><span class="name">' + targetLine(x.target) + '</span><span class="chip ' + (x.source === 'mine' ? 'mine' : x.status === 'suggested' ? 'sug' : '') + '">' + esc(x.sourceName || SOURCE[x.source] || x.source) + (x.status === 'suggested' ? ' · suggested' : '') + '</span></div>'
+      + '<div class="body"><div class="row"><span class="name">' + targetLine(x.target) + '</span><span class="chip ' + (x.source === 'mine' ? 'mine' : x.status === 'suggested' ? 'sug' : '') + '">' + esc(x.sourceName || SOURCE[x.source] || x.source) + (x.status === 'suggested' ? ' · suggested' : '') + (x.owner ? ' · added by you' : '') + '</span></div>'
       + '<div class="small dim">' + esc(gameName(x.game)) + ' · ' + pageLink(x) + ' · ' + new Date(x.createdAt).toLocaleString() + ' · ' + esc(x.width) + '×' + esc(x.height) + (x.original ? ' (from ' + esc(x.original.width) + '×' + esc(x.original.height) + ')' : '') + '</div>'
       + (x.status === 'suggested' || x.confidence
         ? '<div class="why"><b>Why:</b> ' + esc(x.why || '') + (x.confidence ? '<br><span class="dim">Confidence:</span> <span class="' + (x.confidence === 'high' ? 'hi' : 'mid') + '">' + esc(x.confidence) + '</span>' : '') + (x.altGuess ? ' · <span class="dim">Also possible:</span> ' + esc(x.altGuess) : '') + '</div>'
