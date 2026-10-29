@@ -14,7 +14,8 @@
  *
  *   /stats [window: 24h | 7d | 30d] (the owner only, DISCORD_OWNER_ID; anyone else gets "Not allowed"): the owner's activity
  *     numbers (ownerStats.ts), in a reply only they see. /stats chart: 30d | 90d | all: questions per day as a chart
- *     (questionsChart.ts), freshly drawn, also only for them.
+ *     (questionsChart.ts), or signups: account sign-ups on a Standard Celeration Chart (signupsChart.ts), freshly drawn,
+ *     also only for them.
  * Settings: DISCORD_APP_ID, DISCORD_PUBLIC_KEY (request signatures), DISCORD_MOD_ROLE_ID, DISCORD_RESULTS_CHANNEL_ID,
  * and the secret DISCORD_BOT_TOKEN (for posting results and registering the command: scripts/discord/register.ts).
  */
@@ -25,6 +26,7 @@ import { guideList, guideAreasByKey, guideAreaEntries } from './guidesApi';
 import { saveCandidate, entryById, looksLikeSpam, REPORTER_WEIGHT } from './corrections';
 import { statsText } from './ownerStats';
 import { questionsChart, centralDay } from './questionsChart';
+import { signupsScc, celerationLabel } from './signupsChart';
 
 const PUBLIC_KEY = () => process.env.DISCORD_PUBLIC_KEY || '';
 const MOD_ROLE = () => process.env.DISCORD_MOD_ROLE_ID || '';
@@ -244,10 +246,17 @@ async function statsChart(i: any): Promise<void> {
   const days = range === '90d' ? 90 : range === 'all' ? 0 : 30;
   const form = new FormData();
   try {
+    if (range === 'signups') {
+      // Account sign-ups on a Standard Celeration Chart (signupsChart.ts).
+      const { png, data } = await signupsScc();
+      form.append('payload_json', JSON.stringify({ content: `${data.total} accounts in total${data.celeration ? `; sign-ups ${celerationLabel(data.celeration.perWeek)}` : ''} (real accounts only).`, attachments: [{ id: 0, filename: 'signups-scc.png' }], allowed_mentions: { parse: [] } }));
+      form.append('files[0]', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'signups-scc.png');
+    } else {
     const { png, days: rows } = await questionsChart({ from: days ? centralDay(Date.now() - (days - 1) * 86_400_000) : '', title: `Questions per day, ${days ? `last ${days} days` : 'all time'}` });
     const total = rows.reduce((n, d) => n + d.signedIn + d.guests, 0);
     form.append('payload_json', JSON.stringify({ content: `${total} questions in ${rows.length} days (without your accounts and test accounts).`, attachments: [{ id: 0, filename: 'questions-per-day.png' }], allowed_mentions: { parse: [] } }));
     form.append('files[0]', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'questions-per-day.png');
+    }
   } catch (e: any) {
     console.error('[discord] /stats chart', e?.message);
     form.append('payload_json', JSON.stringify({ content: `Couldn't draw the chart: ${String(e?.message || e).slice(0, 200)}` }));

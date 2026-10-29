@@ -7,15 +7,14 @@
  * days' owners) and test accounts (config/players.testUids; test guests and local servers are never counted):
  *   - from Oct 15 2026 each day keeps every player's question count (costs), so the owner's questions come out exactly;
  *   - before that only the day's totals were kept: guest questions are always counted (the owner asks signed in); a
- *     day when the owner was the only signed-in player has no signed-in questions; a day when others were signed in too
- *     has signed-in questions that can't be told apart from the owner's: drawn shaded as "may include yours", and left
- *     out of the average.
+ *     day when the owner was signed in counts only its guest questions (its signed-in ones can't be told apart from the
+ *     owner's).
  */
 import { getFirestore } from 'firebase-admin/firestore';
 import sharp from 'sharp';
 import { playerHash } from './ownerStats';
 
-export type QuestionDay = { day: string; signedIn: number; guests: number; unsure: number };
+export type QuestionDay = { day: string; signedIn: number; guests: number };
 export type Release = { tag: string; at: number };
 
 const DAY = 86_400_000;
@@ -43,14 +42,12 @@ export async function questionDays(from = ''): Promise<QuestionDay[]> {
         if (c.tier === 'guest') guests += Number(c.questions) || 0;
         else signedIn += Number(c.questions) || 0;
       }
-      out.push({ day, signedIn, guests, unsure: 0 });
+      out.push({ day, signedIn, guests });
       continue;
     }
     const players: string[] = s.players || [];
     const ownerIn = players.some((h) => left.has(h));
-    const others = players.filter((h) => !left.has(h)).length;
-    const pq = Number(s.playerQuestions) || 0;
-    out.push({ day, guests: Number(s.guestQuestions) || 0, signedIn: ownerIn ? 0 : pq, unsure: ownerIn && others ? pq : 0 });
+    out.push({ day, guests: Number(s.guestQuestions) || 0, signedIn: ownerIn ? 0 : Number(s.playerQuestions) || 0 });
   }
   return out;
 }
@@ -66,7 +63,7 @@ export async function appReleases(): Promise<Release[]> {
   }
 }
 
-/** The 7-day average (trailing; the first days average what there is), of the questions that are certain. */
+/** The 7-day average (trailing; the first days average what there is). */
 export const sevenDay = (days: QuestionDay[]) => days.map((_, i) => { const w = days.slice(Math.max(0, i - 6), i + 1); return w.reduce((n, d) => n + d.signedIn + d.guests, 0) / w.length; });
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
@@ -78,21 +75,20 @@ export function questionsChartSvg(days: QuestionDay[], releases: Release[], titl
   const W = 1200, H = 660, L = 64, R = 24, T = 116, B = 118;
   const pw = W - L - R, ph = H - T - B;
   const avg = sevenDay(days);
-  const top = Math.max(4, ...days.map((d) => d.signedIn + d.guests + d.unsure), ...avg);
+  const top = Math.max(4, ...days.map((d) => d.signedIn + d.guests), ...avg);
   const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500].find((s) => top / s <= 6) || 1000;
   const ymax = Math.ceil(top / step) * step;
   const y = (v: number) => T + ph - (v / ymax) * ph;
   const slot = pw / Math.max(1, days.length);
   const bw = Math.max(2, Math.min(28, slot * 0.72));
   const x = (i: number) => L + slot * i + slot / 2;
-  const C = { bg: '#0b0b10', grid: '#24242e', text: '#e4e4e7', dim: '#8b8b96', signed: '#a87ffb', guest: '#2dd4bf', unsure: '#a87ffb', avg: '#fbbf24', rel: '#71717a', relMajor: '#c4b0ff' };
+  const C = { bg: '#0b0b10', grid: '#24242e', text: '#e4e4e7', dim: '#8b8b96', signed: '#a87ffb', guest: '#2dd4bf', avg: '#fbbf24', rel: '#71717a', relMajor: '#c4b0ff' };
   const font = `font-family="DejaVu Sans, Segoe UI, Arial, sans-serif"`;
   const parts: string[] = [];
   parts.push(`<rect width="${W}" height="${H}" fill="${C.bg}"/>`);
-  parts.push(`<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="${C.unsure}" fill-opacity="0.18"/><line x1="0" y1="0" x2="0" y2="6" stroke="${C.unsure}" stroke-width="2" stroke-opacity="0.7"/></pattern></defs>`);
   parts.push(`<text x="${L}" y="40" ${font} font-size="22" font-weight="700" fill="${C.text}">${esc(title)}</text>`);
   // Legend.
-  const leg = [[C.signed, 'Signed in', ''], [C.guest, 'Guests', ''], ['url(#hatch)', 'Signed in, may include yours', ''], [C.avg, '7-day average', 'line']];
+  const leg = [[C.signed, 'Signed in', ''], [C.guest, 'Guests', ''], [C.avg, '7-day average', 'line']];
   let lx = L;
   for (const [c, t, kind] of leg) {
     if (kind === 'line') parts.push(`<line x1="${lx}" y1="66" x2="${lx + 22}" y2="66" stroke="${c}" stroke-width="3"/>`);
@@ -117,10 +113,10 @@ export function questionsChartSvg(days: QuestionDay[], releases: Release[], titl
       lastLabelX = x(i);
     }
   }
-  // Bars: signed in (bottom), guests, then the unsure part.
+  // Bars: signed in (bottom), then guests.
   days.forEach((d, i) => {
     let base = 0;
-    for (const [v, fill] of [[d.signedIn, C.signed], [d.guests, C.guest], [d.unsure, 'url(#hatch)']] as [number, string][]) {
+    for (const [v, fill] of [[d.signedIn, C.signed], [d.guests, C.guest]] as [number, string][]) {
       if (!v) continue;
       parts.push(`<rect x="${x(i) - bw / 2}" y="${y(base + v)}" width="${bw}" height="${y(base) - y(base + v)}" fill="${fill}"/>`);
       base += v;
@@ -134,7 +130,6 @@ export function questionsChartSvg(days: QuestionDay[], releases: Release[], titl
   parts.push(`<line x1="${L}" y1="${T + ph}" x2="${W - R}" y2="${T + ph}" stroke="${C.dim}" stroke-width="1"/>`);
   const total = days.reduce((n, d) => n + d.signedIn + d.guests, 0);
   parts.push(`<text x="${L}" y="${H - 52}" ${font} font-size="13" fill="${C.dim}">${esc(`${total} questions in ${days.length} days (Central time), without your accounts and test accounts. Dashed lines: app releases (named: x.y.0 and the newest).`)}</text>`);
-  if (days.some((d) => d.unsure)) parts.push(`<text x="${L}" y="${H - 30}" ${font} font-size="13" fill="${C.dim}">${esc('Before Oct 15 only day totals were kept: shaded = signed-in questions on days you also asked, which can\'t be told apart (left out of the average).')}</text>`);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join('')}</svg>`;
 }
 
@@ -146,7 +141,7 @@ export async function questionsChart(opts: { from?: string; title?: string } = {
   const png = await sharp(Buffer.from(svg), { density: 144 }).png().toBuffer();
   const rel = new Map<string, string[]>();
   for (const r of releases) { const d = centralDay(r.at); rel.set(d, [...(rel.get(d) || []), r.tag]); }
-  const csv = ['day,signed_in,guests,signed_in_may_include_owner,total_certain,seven_day_average,releases',
-    ...days.map((d, i) => `${d.day},${d.signedIn},${d.guests},${d.unsure},${d.signedIn + d.guests},${avg[i].toFixed(2)},${(rel.get(d.day) || []).sort().join(' ')}`)].join('\n') + '\n';
+  const csv = ['day,signed_in,guests,total,seven_day_average,releases',
+    ...days.map((d, i) => `${d.day},${d.signedIn},${d.guests},${d.signedIn + d.guests},${avg[i].toFixed(2)},${(rel.get(d.day) || []).sort().join(' ')}`)].join('\n') + '\n';
   return { png, csv, days };
 }
