@@ -3,7 +3,7 @@
  *   npx tsx scripts/discord/register.ts
  * 1. Points the app's Interactions Endpoint URL at the server (/api/discord/interactions). Discord pings it first, so the
  *    server must already be deployed with DISCORD_PUBLIC_KEY.
- * 2. Registers /correction in the server the results channel is in (a server command shows up at once).
+ * 2. Registers /correction and /stats in the server the results channel is in (a server command shows up at once).
  * The bot token comes from DISCORD_BOT_TOKEN, else from Secret Manager (gcloud). It's never printed.
  */
 import { execSync } from 'child_process';
@@ -31,6 +31,15 @@ export const CORRECTION_COMMAND = {
   ],
 };
 
+/** /stats: the owner's numbers (the server answers only DISCORD_OWNER_ID); hidden from members without Administrator. */
+export const STATS_COMMAND = {
+  name: 'stats',
+  description: 'Activity at a glance (owner only)',
+  dm_permission: false,
+  default_member_permissions: '8',
+  options: [{ type: 3, name: 'window', description: 'A longer window (default: last 24 hours and last 7 days)', required: false, choices: [{ name: 'Last 24 hours', value: '24h' }, { name: 'Last 7 days', value: '7d' }, { name: 'Last 30 days', value: '30d' }] }],
+};
+
 async function call(method: string, path: string, body?: unknown) {
   const r = await fetch(`${API}${path}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
   const text = await r.text();
@@ -44,8 +53,8 @@ async function call(method: string, path: string, body?: unknown) {
   console.log(`Interactions Endpoint URL set: ${endpoint}`);
   const channel = await call('GET', `/channels/${CHANNEL}`);
   const guild = channel.guild_id;
-  const cmd = await call('PUT', `/applications/${APP_ID}/guilds/${guild}/commands`, [CORRECTION_COMMAND]);
-  console.log(`/correction registered in server ${guild} (command id ${cmd[0]?.id}); results go to #${channel.name}.`);
+  const cmd = await call('PUT', `/applications/${APP_ID}/guilds/${guild}/commands`, [CORRECTION_COMMAND, STATS_COMMAND]);
+  console.log(`/correction and /stats registered in server ${guild} (command ids ${cmd.map((c: any) => c.id).join(', ')}); results go to #${channel.name}.`);
 })().catch((e) => {
   console.error('Discord setup failed:', e?.message || e);
   process.exit(1);

@@ -12,6 +12,8 @@
  *     opens a form (game, area, entry, what's correct); typed names are matched to the guides like /correction's.
  * Once the pipeline decides (applied, or dismissed), it posts the result in the results channel (scripts/guides/corrections.ts).
  *
+ *   /stats [window: 24h | 7d | 30d] (the owner only, DISCORD_OWNER_ID; anyone else gets "Not allowed"): the owner's activity
+ *     numbers (ownerStats.ts), in a reply only they see.
  * Settings: DISCORD_APP_ID, DISCORD_PUBLIC_KEY (request signatures), DISCORD_MOD_ROLE_ID, DISCORD_RESULTS_CHANNEL_ID,
  * and the secret DISCORD_BOT_TOKEN (for posting results and registering the command: scripts/discord/register.ts).
  */
@@ -20,6 +22,7 @@ import express, { type Express, type Request, type Response } from 'express';
 import { getFirestore } from 'firebase-admin/firestore';
 import { guideList, guideAreasByKey, guideAreaEntries } from './guidesApi';
 import { saveCandidate, entryById, looksLikeSpam, REPORTER_WEIGHT } from './corrections';
+import { statsText } from './ownerStats';
 
 const PUBLIC_KEY = () => process.env.DISCORD_PUBLIC_KEY || '';
 const MOD_ROLE = () => process.env.DISCORD_MOD_ROLE_ID || '';
@@ -224,6 +227,27 @@ async function confirmButtonPressed(i: any): Promise<any> {
   return { type: 7, data: { content: `${content}\n✅ Confirmed by a Guide Moderator: it skips the 3-reporter rule, but sources still check it.`, components: [], allowed_mentions: { parse: [] } } };
 }
 
+/**
+ * /stats: the numbers in a reply only the owner sees. Most come back well inside Discord's 3 seconds; if not, the reply
+ * is "thinking…" and the numbers replace it when ready.
+ */
+async function statsCommand(i: any): Promise<any> {
+  const userId = String(i.member?.user?.id || i.user?.id || '');
+  const owner = process.env.DISCORD_OWNER_ID || '';
+  if (!owner || userId !== owner) return reply('Not allowed.', { ephemeral: true });
+  const window = String(opt(i.data, 'window')?.value || '') as '24h' | '7d' | '30d' | '';
+  const text = statsText(window).then((t) => t.slice(0, 1990)).catch((e: any) => {
+    console.error('[discord] /stats', e?.message);
+    return `Couldn't read the numbers: ${String(e?.message || e).slice(0, 200)}`;
+  });
+  const quick = await Promise.race([text, new Promise<null>((r) => setTimeout(() => r(null), 2500))]);
+  if (quick !== null) return reply(quick, { ephemeral: true });
+  const app = process.env.DISCORD_APP_ID || '';
+  void text.then((content) => fetch(`${API}/webhooks/${app}/${i.token}/messages/@original`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content, allowed_mentions: { parse: [] } }) }))
+    .catch((e) => console.error('[discord] /stats reply', e?.message));
+  return { type: 5, data: { flags: 64 } };
+}
+
 export function registerDiscord(app: Express) {
   // Raw body: the signature is over the exact bytes Discord sent (so this is registered before express.json).
   app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '1mb', inflate: false }), async (req: Request, res: Response) => {
@@ -241,6 +265,7 @@ export function registerDiscord(app: Express) {
       if (i.type === 1) return res.json({ type: 1 }); // PING (Discord checks the endpoint)
       if (i.type === 4) return res.json({ type: 8, data: { choices: await autocomplete(i.data) } });
       if (i.type === 2 && i.data?.name === 'correction') return res.json(await correctionCommand(i));
+      if (i.type === 2 && i.data?.name === 'stats') return res.json(await statsCommand(i));
       if (i.type === 3 && String(i.data?.custom_id || '').startsWith('qc-confirm:')) return res.json(await confirmButtonPressed(i));
       if (i.type === 3 && i.data?.custom_id === 'qc-suggest') return res.json(suggestForm());
       if (i.type === 5 && i.data?.custom_id === 'qc-suggest-form') return res.json(await formSubmitted(i));

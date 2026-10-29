@@ -514,6 +514,12 @@ export function recordDailyActivity(userId: string, isGuest: boolean, userAgent:
   const who = crypto.createHash('sha256').update(`qc:${userId}`).digest('hex').slice(0, 12);
   const ua = String(userAgent || '');
   const app = /QuestCompendiumDeck/i.test(ua) ? 'deck' : appHeader === 'desktop' || /Electron/i.test(ua) ? 'desktop' : 'web';
+  // The same by the hour (statsHours/{UTC hour}), per anonymous player, for the owner's rolling /stats (ownerStats.ts).
+  const hour = new Date().toISOString().slice(0, 13);
+  d.collection('statsHours').doc(hour).set({
+    at: Date.parse(`${hour}:00:00Z`),
+    p: { [who]: { q: FieldValue.increment(1), g: isGuest, a: { [app]: FieldValue.increment(1) } } },
+  }, { merge: true }).catch(() => {});
   const ref = d.collection('stats').doc(statsDay());
   d.runTransaction(async (tx) => {
     const cur = (await tx.get(ref)).data() || {};
