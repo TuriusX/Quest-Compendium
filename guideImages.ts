@@ -233,7 +233,8 @@ export async function imagesWeekLine(): Promise<string> {
   const diff = prev && Number.isFinite(Number(prev.count)) ? count - Number(prev.count) : null;
   await ref.set({ pagePictures: { count, of: top.length, at: Date.now() } }, { merge: true });
   const wait = waiting.data().count;
-  return `🖼️ Top ${top.length} pages with a picture: ${count} / ${top.length}${diff == null || diff === 0 ? '' : ` (${diff > 0 ? '+' : ''}${diff} this week)`}${wait ? ` · waiting for review: ${wait}` : ''}.`;
+  // Pictures are never published by the nightly improvements: new ones always wait for the owner (owner, Oct 29 2026).
+  return `🖼️ Top ${top.length} pages with a picture: ${count} / ${top.length}${diff == null || diff === 0 ? '' : ` (${diff > 0 ? '+' : ''}${diff} this week)`}. Pictures waiting for your review on /admin/images: ${wait}.`;
 }
 
 // ---- Storing a picture --------------------------------------------------------------------------------------------

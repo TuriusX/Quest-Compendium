@@ -54,4 +54,27 @@ test("kept when the page already says it; stale when it was rewritten or is gone
   assert.equal(applyEdit(page(), { path: "items/#gone/where", before: "x", after: "y" }), "stale");
 });
 
+test("append adds a checked sentence once, then keeps it", () => {
+  const p: any = page();
+  assert.equal(applyEdit(p, { path: "overview", op: "append", before: "", after: "The tower has five floors." }), "applied");
+  assert.equal(p.overview, "Geralt travels to Fyke Isle. Using a magical lamp, he retraces the massacre. The tower has five floors.");
+  assert.equal(applyEdit(p, { path: "overview", op: "append", before: "", after: "The tower has five floors." }), "kept");
+  assert.equal(applyEdit(p, { path: "missing", op: "append", before: "", after: "x" }), "stale");
+});
+
+test("order puts named entries first, by id or heading, the rest after", () => {
+  const p: any = { items: [{ id: "a" }, { id: "b" }, { id: "c" }], gameplay: [{ heading: "H1" }, { heading: "H2" }] };
+  assert.equal(applyEdit(p, { path: "items", op: "order", before: "", after: "", ids: ["c", "a"] }), "applied");
+  assert.deepEqual(p.items.map((x: any) => x.id), ["c", "a", "b"]);
+  assert.equal(applyEdit(p, { path: "items", op: "order", before: "", after: "", ids: ["c", "a"] }), "kept");
+  assert.equal(applyEdit(p, { path: "gameplay", op: "order", before: "", after: "", ids: ["H2", "H1"] }), "applied");
+  assert.equal(applyEdit(p, { path: "items", op: "order", before: "", after: "", ids: ["gone", "nope"] }), "stale");
+});
+
+test("taking a sentence out leaves no stray space", () => {
+  const p: any = page();
+  assert.equal(applyEdit(p, { path: "overview", before: "Geralt travels to Fyke Isle.", after: "" }), "applied");
+  assert.equal(p.overview, "Using a magical lamp, he retraces the massacre.");
+});
+
 console.log(`\n${passed} passed`);

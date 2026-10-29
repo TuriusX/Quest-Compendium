@@ -79,6 +79,7 @@ import { suggestNightly } from '../guides/suggestImages';
 import { isCorePage } from '../guides/core';
 import { playerWeekLines } from './playerWeek';
 import { siteAskWeekLine } from '../../siteAskStats';
+import { autoWeekLines } from '../../autoChanges';
 import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
 import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY } from '../../searchGuard';
 import { FieldPath } from 'firebase-admin/firestore';
@@ -487,6 +488,15 @@ async function main() {
     if (sg.summary && !/^suggestions: 0 checked, 0 waiting for approval, 0 now/.test(sg.summary)) report.push(`${sg.ok ? '✍️' : '⚠️'} ${sg.summary || 'suggestions check failed (see the job log)'}`);
     // The owner's pipeline items that sources confirmed go on their pages now.
     if (/yours: [1-9]\d* applied/.test(sg.summary || '')) changed = true;
+  }
+  // ---- 3b'''. the guides improve themselves (scripts/guides/autoImprove.ts; owner, Oct 29 2026): players' questions (the
+  // site's and the app's) and the pipeline's own checks turned into checked changes, no approval; at most 20 a night (5
+  // deleting or replacing), each logged on /admin/asked with an undo; config/autoImprove.nightlyDollars of the budget ----
+  if (!DRY && room() >= 0.2) {
+    const ai = runScript(['scripts/guides/autoImprove.ts']);
+    await charge(ai, 'improvements');
+    if (ai.summary && !/^improvements: 0 change/.test(ai.summary)) report.push(`${ai.ok ? '🔧' : '⚠️'} ${ai.summary || 'improvements failed (see the job log)'}`);
+    if (/^improvements: [1-9]/.test(ai.summary || '')) changed = true;
   }
   let queueRoom = Math.min(QUEUE_DAILY, shareRoom) - correctionSearches;
   const waiting: QueueItem[] = [];
@@ -924,6 +934,12 @@ async function main() {
       report.push(await siteAskWeekLine());
     } catch (e: any) {
       console.warn(`Site questions line skipped: ${e?.message}`);
+    }
+    // The week's improvements (autoImprove.ts): pages improved, what was deleted, merged or replaced and why, the log.
+    try {
+      report.push(...(await autoWeekLines()));
+    } catch (e: any) {
+      console.warn(`Improvements line skipped: ${e?.message}`);
     }
   }
   // Mondays: how many live guide pages are still unchecked (written from memory, never verified against sources), and

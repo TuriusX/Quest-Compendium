@@ -2568,7 +2568,7 @@ percentages:
   <div class="container">
     <div class="badge">Official Legal Document</div>
     <h1>Privacy Policy for Quest Compendium</h1>
-    <div class="updated">Last updated: October 17, 2026</div>
+    <div class="updated">Last updated: October 29, 2026</div>
 
     <p>Welcome to <strong>Quest Compendium</strong> (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;the application&rdquo;). This Privacy Policy explains how personal information and application data are collected, used, and protected when you use our desktop application and web services.</p>
 
@@ -2592,6 +2592,7 @@ percentages:
       <li>Verifying subscription status and managing daily query quotas.</li>
       <li>Maintaining and improving app reliability and performance.</li>
       <li>Improving our game guides: when an answer corrects one of our guides (for example after you say a location is wrong), the correction may be saved anonymously and used to improve the guide. We keep only the text of the correction, the game and area it is about, and a one-way anonymised identifier (never your account, email or screenshots), and we check it against other sources or other players before changing a guide.</li>
+      <li>Improving our game guides from the questions players ask, in the app and in the &ldquo;Ask about this&rdquo; box on our guide pages: questions are used anonymously (no account, email or other identifier is kept with them) to find what a guide is missing or explains poorly. Guide changes are always checked against published sources, and a question is never published as it was written; a question many players ask may appear on a guide page reworded in neutral words.</li>
     </ul>
 
     <h2>3. Third-Party Services and Data Sharing</h2>

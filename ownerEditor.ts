@@ -130,7 +130,8 @@ export function registerOwnerEditor(app: Express, deps: Deps) {
   app.get('/api/editor/edits', auth, admin, async (req: Request, res: Response) => {
     const key = line(req.query.key, 80), slug = line(req.query.slug, 120);
     const q = key && slug ? EDITS().where('key', '==', key).where('slug', '==', slug) : EDITS().limit(400);
-    const rows = (await q.get()).docs.map((d) => ({ id: d.id, ...(d.data() as any) })).sort((a, b) => b.createdAt - a.createdAt).slice(0, 200);
+    // The owner's own edits; the nightly improvements' (auto) have their log on /admin/asked.
+    const rows = (await q.get()).docs.map((d) => ({ id: d.id, ...(d.data() as any) })).filter((x) => !x.auto).sort((a, b) => b.createdAt - a.createdAt).slice(0, 200);
     res.json({ edits: rows.map(({ tr, ...x }) => x) });
   });
 

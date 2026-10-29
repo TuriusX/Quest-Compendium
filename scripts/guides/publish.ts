@@ -2547,12 +2547,20 @@ async function main() {
   // A preview carries the game's flagship prototypes (guidePrototypes/{key}__{slug}) on their pages.
   const protos = new Map<string, any>();
   if (PREVIEW) for (const d of (await db().collection('guidePrototypes').get()).docs) protos.set(d.id, d.data());
+  // Pages the nightly improvements folded into another page (autoImprove.ts merges, live until undone on
+  // /admin/asked): left out, their old addresses redirecting to the page that has them now.
+  const merged = new Map<string, Map<string, string>>();
+  for (const d of (await db().collection('autoChanges').where('kind', '==', 'merge').where('status', '==', 'live').get().catch(() => null))?.docs || []) {
+    const m: any = d.data();
+    if (!m.merge?.from || !m.merge?.to || (ONLY && m.key !== ONLY)) continue;
+    merged.set(m.key, (merged.get(m.key) || new Map()).set(String(m.merge.from), String(m.merge.to)));
+  }
   // The compendium (scripts/guides/compendium.ts): each guide's published entity pages (a preview shows all of them).
   for (const cd of (await db().collection('guideCompendium').get()).docs) {
     if (ONLY && cd.id !== ONLY) continue;
     const c: any = cd.data();
     if (c?.index) IX_FACTS.set(cd.id, c.index);
-    const entities = (await cd.ref.collection('entities').get()).docs.map((d) => d.data() as any).filter((e) => PREVIEW || e.status === 'published') as CompEntity[];
+    const entities = (await cd.ref.collection('entities').get()).docs.map((d) => d.data() as any).filter((e) => (PREVIEW || e.status === 'published') && !merged.get(cd.id)?.has(String(e.slug))) as CompEntity[];
     const people = PREVIEW ? Object.fromEntries((await cd.ref.collection('people').get()).docs.map((d) => [d.id, d.data() as any])) : {};
     // The owner's edits (Fix now) on compendium pages, over the page's data.
     for (const e of entities as any[]) applyOwnerEdits(cd.id, String(e.slug), e);
@@ -2568,7 +2576,8 @@ async function main() {
   // Owner-approved pictures (roadmap 14, /admin/images): on their pages from this publish on.
   console.log(`Pictures: ${await loadSitePictures(OUT, ONLY)} on the site.`);
   const ownerEdits = await loadOwnerEdits(ONLY);
-  // "Players asked" entries the owner approved (siteAsk.ts, /admin/asked): inside the page they were asked on.
+  // "Players asked" entries (siteAsk.ts; reworded and checked against sources by the nightly improvements,
+  // autoImprove.ts, undone on /admin/asked): inside the page they were asked on.
   // (QC_PLAYERS_ASKED=test_playersAsked: a local server's test entries, for looking at a local build.)
   for (const d of (await db().collection(process.env.QC_PLAYERS_ASKED || 'playersAsked').where('status', '==', 'approved').get()).docs) {
     const x: any = d.data();
@@ -2594,12 +2603,13 @@ async function main() {
   const guideIndex: { key: string; game: string; areas: number; art?: string; checked: number; players: number; langs: string[] }[] = [];
   const restoredGuides: string[] = [];
   const moved: { key: string; from: string; to: string }[] = Object.entries(SITE_REDIRECTS).flatMap(([key, m]) => Object.entries(m).map(([from, to]) => ({ key, from, to })));
+  for (const [key, m] of merged) for (const [from, to] of m) moved.push({ key, from, to });
   // Translated guides are rebuilt from scratch too.
   for (const code of Object.keys(LANG_TAG)) if (code !== 'en') fs.rmSync(path.join(OUT, code, 'guides'), { recursive: true, force: true });
 
   for (const g of guides.docs) {
     const info = g.data();
-    const order: { slug: string; name: string }[] = info.areas || [];
+    const order: { slug: string; name: string }[] = (info.areas || []).filter((o: { slug: string }) => !merged.get(g.id)?.has(o.slug));
     const snap = await g.ref.collection('areas').get();
     const byslug = new Map(snap.docs.map((d) => {
       const pr = protos.get(`${g.id}__${d.id}`);

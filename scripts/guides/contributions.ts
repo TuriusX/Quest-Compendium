@@ -91,7 +91,9 @@ async function main() {
       checked++;
       const c: any = (await d.ref.get()).data();
       dollars += Number(c?.check?.dollars || 0);
-      if (c?.owner) {
+      // The ask box's items (source "site", "site-suggestion") go on their pages through the nightly improvements
+      // (autoImprove.ts: checked, placed in the page's text, logged with an undo), not as notes.
+      if (c?.owner && !['site', 'site-suggestion'].includes(String(c.source))) {
         // The owner asked for it: backed by sources, it goes on the page now; else it waits for him.
         if (c.check?.verdict === 'supported') { await d.ref.set({ status: 'approved', decided: { by: 'owner (sources agree)', at: Date.now(), text: String(c.check.proposal || c.text) } }, { merge: true }); applied++; }
         else held++;

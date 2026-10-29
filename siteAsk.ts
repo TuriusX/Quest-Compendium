@@ -15,12 +15,15 @@
  *   Kept (nothing that identifies the person): siteQuestions/{id} { key, slug, kind, lang, q, answer, covered, sources,
  *     dollars, searches, at, day }. Device and network counts are one-way hashes with a salt that changes every day, in
  *     siteAskDays/{day}, deleted after two days.
- *   From the questions:
+ *   From the questions (inputs for the guides' nightly improvements, scripts/guides/autoImprove.ts: no approval; every
+ *   change checked against sources and logged on /admin/asked with an undo, autoChanges.ts):
  *     - not covered by the guide (and answered with a search): a "missing" item for that page in contributions
- *       (source "site"), checked against sources by the nightly pipeline within its budget and decided by the owner, like
- *       the editor's "Send to pipeline"; at most config/siteAsk.fixesPerDay (10) a day, one per similar question a month;
- *     - the same question asked 3 times on a page (60 days): a "Players asked" suggestion (playersAsked/{id}) on
- *       /admin/asked (approve, edit, reject). Approved ones show inside that page (publish.ts).
+ *       (source "site"), checked against sources by the nightly pipeline within its budget; at most
+ *       config/siteAsk.fixesPerDay (10) a day, one per similar question a month;
+ *     - the same question asked 3 times on a page (60 days): a "Players asked" candidate (playersAsked/{id}), reworded
+ *       and answered from sources at night; approved ones show inside that page (publish.ts);
+ *     - an answer from other pages, or a question about the page's own subject: a page suggestion (pageSuggestions:
+ *       add the fact here, or a fuller opening).
  */
 import crypto from 'crypto';
 import { type Express, type Request, type Response } from 'express';
@@ -31,10 +34,8 @@ import { ThinkingLevel } from '@google/genai';
 import { requestCost, logUsage } from './usage';
 import { playerSearchesToday, monthlyBudgetOk, countSearches, recordPlayerSearches } from './searchGuard';
 import { clientIp } from './guestGuard';
-import { isAdmin } from './reviewQueue';
-import { markSiteDirty } from './ownerEditor';
 import { isLocalServer } from './testTraffic';
-import { ADMIN_THEME_HEAD, ADMIN_THEME_BUTTON } from './adminTheme';
+import { registerAutoChanges } from './autoChanges';
 
 const SITE = () => (process.env.QC_SITE_URL || 'https://questcompendium.com').replace(/\/$/, '');
 const MODEL = () => process.env.MAIN_MODEL || 'gemini-3.8-flash';
@@ -390,106 +391,6 @@ export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI;
     }
   });
 
-  // ---- /admin/asked: "Players asked" suggestions (approve, edit, reject) ----
-  const requireAdmin = (req: any, res: Response, next: () => void) => (isAdmin(req.user) ? next() : res.status(403).json({ error: 'Not an admin.' }));
-  // Kinds: "players" ("Players asked" entries, shown on the page once approved), "elsewhere" (add a fact or a link to
-  // the page) and "opening" (a fuller opening): those two go through "Send to pipeline" once approved.
-  const kindOf = (v: unknown) => (['elsewhere', 'opening'].includes(String(v)) ? String(v) : 'players');
-  app.get('/api/admin/asked', deps.requireAuth, requireAdmin, async (req: Request, res: Response) => {
-    const status = ['suggested', 'approved', 'rejected'].includes(String(req.query.status)) ? String(req.query.status) : 'suggested';
-    const kind = kindOf(req.query.kind);
-    const docs = (await (kind === 'players' ? col('playersAsked').where('status', '==', status) : col('pageSuggestions').where('status', '==', status)).get()).docs
-      .map((d) => ({ id: d.id, ...(d.data() as any) })).filter((d) => kind === 'players' || d.kind === kind);
-    res.json({ items: docs.sort((a, b) => (b.count || 0) - (a.count || 0) || (b.lastAt || 0) - (a.lastAt || 0)).slice(0, 200) });
-  });
-  app.post('/api/admin/asked/:id', deps.requireAuth, requireAdmin, async (req: any, res: Response) => {
-    const kind = kindOf(req.body?.kind);
-    const ref = (kind === 'players' ? col('playersAsked') : col('pageSuggestions')).doc(String(req.params.id));
-    const cur = (await ref.get()).data();
-    if (!cur) return res.status(404).json({ error: 'not found' });
-    const action = String(req.body?.action || '');
-    const q = req.body?.q !== undefined ? cut(req.body.q, 200) : cur.q, a = req.body?.a !== undefined ? cut(req.body.a, kind === 'players' ? 1200 : 2000) : cur.a;
-    if (!['approve', 'reject', 'update', 'reopen'].includes(action) || !q || !a) return res.status(400).json({ error: 'bad request' });
-    const status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'reopen' ? 'suggested' : cur.status;
-    if (kind !== 'players') {
-      // Approved: through "Send to pipeline" (the owner's item for that page, checked against sources by the nightly
-      // pipeline within its budget; the rebuild rules apply: no item dropped, unconfirmed facts marked).
-      let contribution = cur.contribution || '';
-      if (action === 'approve' && !contribution) {
-        contribution = (await col('contributions').add({
-          key: cur.key, slug: cur.slug, page: cur.pageKind === 'entity' ? 'entity' : 'area', anchor: '', label: cur.kind === 'opening' ? `A fuller opening (players asked: ${q})` : q,
-          kind: 'missing', text: cut(a, 2000), lang: cur.lang || 'en', credit: false, owner: true, uid: `owner:${String(req.user?.email || '')}`, source: 'site-suggestion', status: 'pending', at: Date.now(),
-        })).id;
-      }
-      await ref.set({ q, a, status, ...(contribution ? { contribution } : {}), decided: { by: String(req.user?.email || ''), at: Date.now() } }, { merge: true });
-      return res.json({ ok: true, status });
-    }
-    await ref.set({ q, a, status, decided: { by: String(req.user?.email || ''), at: Date.now() } }, { merge: true });
-    // On the site from the next publish (approved, or an approved one changed or taken back).
-    if (status === 'approved' || cur.status === 'approved') await markSiteDirty();
-    res.json({ ok: true, status });
-  });
-  app.get('/admin/asked', (_req: Request, res: Response) => res.type('html').send(adminPage(deps.firebaseWebConfig)));
-}
-
-function adminPage(firebaseConfig: Record<string, string>): string {
-  const cfg = JSON.stringify(firebaseConfig).replace(/</g, '\\u003c');
-  return `<!doctype html>
-<html lang="en"><head>${ADMIN_THEME_HEAD}<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
-<title>Players asked</title>
-<style>
-  :root { color-scheme: dark; --bg: #07070a; --card: #111118; --line: #24242e; --text: #e4e4e7; --dim: #a1a1aa; --accent: #a87ffb; --ok: #4ade80; --bad: #f87171; }
-  * { box-sizing: border-box; } body { margin: 0; font: 14px/1.5 Inter, system-ui, sans-serif; background: var(--bg); color: var(--text); }
-  header { position: sticky; top: 0; background: rgba(7,7,10,.92); border-bottom: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  h1 { font-size: 16px; margin: 0; flex: 1; } main { max-width: 900px; margin: 0 auto; padding: 16px; }
-  button { font: inherit; color: var(--text); background: #1b1b24; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
-  button:hover { border-color: var(--accent); } button.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
-  .tab.on, .kind.on { border-color: var(--accent); background: #2a2140; color: #fff; }
-  html.qc-light .kind.on { background: #ece6ff; color: var(--text); }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 0 0 12px; }
-  .dim { color: var(--dim); } a { color: var(--accent); } label { display: block; font-size: 12px; color: var(--dim); margin-top: 8px; }
-  input, textarea { width: 100%; font: inherit; color: var(--text); background: #0c0c12; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-  textarea { min-height: 90px; } .actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; } ul { margin: 6px 0; padding-left: 18px; }
-</style></head><body>
-<header><h1>Players asked</h1><button class="kind on" data-k="players">Players asked</button><button class="kind" data-k="elsewhere">Add to the page</button><button class="kind" data-k="opening">Fuller opening</button><span class="dim">|</span><button class="tab on" data-s="suggested">Suggested</button><button class="tab" data-s="approved">Approved</button><button class="tab" data-s="rejected">Rejected</button><span id="who" class="dim"></span>${ADMIN_THEME_BUTTON}</header>
-<main><p class="dim" id="kindNote"></p><div id="gateMsg" class="dim"></div><div id="list"></div></main>
-<script type="module">
-  let fb;
-  try { fb = { ...(await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js")), ...(await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js")) }; }
-  catch (e) { document.getElementById('gateMsg').textContent = 'Sign-in could not load: allow www.gstatic.com for this page.'; throw e; }
-  const { initializeApp, getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } = fb;
-  const auth = getAuth(initializeApp(${cfg}));
-  const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  let status = 'suggested', kind = 'players';
-  const KIND_NOTE = { players: 'Asked three or more times on the same page. Approved entries show inside that page, under "Players asked", from the next site publish.', elsewhere: 'Answers that came mostly from other pages: add the fact (or a link to the other page) to the page it was asked on. Approved, it goes through "Send to pipeline".', opening: 'Questions about the page’s own subject: its opening may be too thin. The answer is the starting point for a fuller one. Approved, it goes through "Send to pipeline".' };
-  async function api(path, body) {
-    const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + await auth.currentUser.getIdToken(), ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
-    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
-    return r.json();
-  }
-  async function load() {
-    $('list').innerHTML = '<p class="dim">Loading…</p>';
-    try {
-      $('kindNote').textContent = KIND_NOTE[kind];
-      const { items } = await api('/api/admin/asked?status=' + status + '&kind=' + kind);
-      $('list').innerHTML = items.length ? items.map((x) => '<div class="card" data-id="' + esc(x.id) + '"><div><b>' + esc(x.key) + (x.slug ? ' / ' + esc(x.slug) : '') + '</b> <span class="dim">· asked ' + esc(x.count) + ' times · ' + esc(x.lang) + (x.covered ? '' : ' · the guide did not cover it') + '</span> <a target="_blank" rel="noopener" href="https://questcompendium.com/' + (x.lang && x.lang !== 'en' && x.kind !== 'entity' ? esc(x.lang) + '/' : '') + 'guides/' + esc(x.key) + '/' + (x.slug ? esc(x.slug) + '/' : '') + '">open the page</a></div>'
-        + '<label>Question</label><input data-f="q" value="' + esc(x.q) + '">'
-        + (kind === 'players' ? '' : '<label>The answer that suggested it</label><blockquote class="dim" style="white-space:pre-wrap;margin:4px 0">' + esc(x.answer) + '</blockquote>')
-        + '<label>' + (kind === 'players' ? 'Answer' : kind === 'opening' ? 'Suggested fuller opening (edit before approving)' : 'Suggested addition (edit before approving)') + '</label><textarea data-f="a">' + esc(x.a) + '</textarea>'
-        + '<details><summary class="dim">How players asked it</summary><ul>' + (x.examples || []).map((e) => '<li>' + esc(e) + '</li>').join('') + '</ul></details>'
-        + '<div class="actions">' + (status === 'suggested' ? '<button class="primary" data-a="approve">' + (kind === 'players' ? 'Approve' : 'Approve: send to pipeline') + '</button><button data-a="reject">Reject</button>' : status === 'approved' ? (kind === 'players' ? '<button class="primary" data-a="update">Save changes</button><button data-a="reject">Take off the site</button>' : '<span class="dim">Sent to the pipeline.</span>') : '<button data-a="reopen">Back to suggested</button>') + '</div></div>').join('') : '<p class="dim">Nothing here.</p>';
-    } catch (e) { $('list').innerHTML = '<p class="dim">' + esc(e.message) + '</p>'; }
-  }
-  $('list').addEventListener('click', async (e) => {
-    const b = e.target.closest('button[data-a]'); if (!b) return;
-    const card = b.closest('.card');
-    b.disabled = true;
-    try { await api('/api/admin/asked/' + card.dataset.id, { kind, action: b.dataset.a, q: card.querySelector('[data-f=q]').value, a: card.querySelector('[data-f=a]').value }); card.remove(); }
-    catch (err) { alert(err.message); b.disabled = false; }
-  });
-  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => { document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === t)); status = t.dataset.s; load(); }));
-  document.querySelectorAll('.kind').forEach((t) => t.addEventListener('click', () => { document.querySelectorAll('.kind').forEach((x) => x.classList.toggle('on', x === t)); kind = t.dataset.k; load(); }));
-  onAuthStateChanged(auth, (u) => { if (u) { $('who').textContent = u.email; $('gateMsg').textContent = ''; load(); } else { $('gateMsg').innerHTML = '<button class="primary" id="in">Sign in with Google</button>'; $('in').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()); } });
-</script></body></html>`;
+  // ---- /admin/asked: the log of the guides' nightly improvements, with undo (autoChanges.ts) ----
+  registerAutoChanges(app, deps);
 }

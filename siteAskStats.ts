@@ -10,14 +10,12 @@ export async function siteAskWeekLine(now = Date.now()): Promise<string> {
   const from = now - 7 * 86_400_000;
   const qs = (await db.collection('siteQuestions').where('at', '>=', from).get()).docs.map((d) => d.data() as any).filter((q) => !q.test);
   const fixes = (await db.collection('contributions').where('source', '==', 'site').get()).docs.filter((d) => Number(d.data().at) >= from).length;
-  const [asked, page] = await Promise.all([db.collection('playersAsked').where('status', '==', 'suggested').count().get(), db.collection('pageSuggestions').where('status', '==', 'suggested').count().get()]);
-  const waiting = asked.data().count + page.data().count;
   const dollars = qs.reduce((n, q) => n + (Number(q.dollars) || 0), 0);
   // The five most-asked guide pages this week.
   const per = new Map<string, number>();
   for (const q of qs) { const k = `${q.key}/${q.slug || ''}`; per.set(k, (per.get(k) || 0) + 1); }
   const top = [...per.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${k.replace(/\/$/, ' (front page)')} ${n}`);
-  return `💬 Site questions this week: ${qs.length} asked on the guide pages, ${qs.filter((q) => !q.covered).length} the guides couldn't answer, ${fixes} fix(es) queued for the pipeline; $${dollars.toFixed(2)}.${top.length ? ` Most asked: ${top.join(', ')}.` : ''} Suggestions waiting on /admin/asked: ${waiting} (${asked.data().count} "Players asked", ${page.data().count} page improvements).`;
+  return `💬 Site questions this week: ${qs.length} asked on the guide pages, ${qs.filter((q) => !q.covered).length} the guides couldn't answer, ${fixes} fix(es) queued for the pipeline; $${dollars.toFixed(2)}.${top.length ? ` Most asked: ${top.join(', ')}.` : ''}`;
 }
 
 /** The site's questions and their cost in a window (ownerStats.ts /stats "Site"). */

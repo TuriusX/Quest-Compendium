@@ -43,6 +43,8 @@ export async function translateOwnerEdits(key: string, slug: string, en: any, tr
   if (!tr || !LANG_NAME[lang]) return;
   for (const e of EDITS) {
     if (e.key !== key || e.slug !== slug || (e.lang || 'en') !== 'en' || STATE.get(e.id) !== 'applied') continue;
+    // A new order is the same order in every language.
+    if (e.op === 'order') { applyEdit(tr, e); continue; }
     const src = getAt(en, e.path);
     if (src === undefined || getAt(tr, e.path) === undefined) continue;
     const h = fieldHash(src);
@@ -73,7 +75,8 @@ export async function saveOwnerEditStates(): Promise<{ applied: number; kept: nu
   for (const e of EDITS) {
     const s = STATE.get(e.id);
     if (!s) continue;
-    out[s]++;
+    // The nightly improvements' edits (auto) are counted on their own log (/admin/asked), not as the owner's.
+    if (!e.auto) out[s]++;
     const tr = TR.get(e.id);
     if (s === e.state && !tr) continue;
     batch.set(db().collection('guideEdits').doc(e.id), { state: s, stateAt: Date.now(), ...(tr ? { tr: { ...(e.tr || {}), ...tr } } : {}) }, { merge: true });

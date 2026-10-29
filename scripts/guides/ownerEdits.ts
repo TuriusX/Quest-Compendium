@@ -12,6 +12,12 @@
  *            (never put in the wrong place) and listed for the owner (the editor's "Your edits", the Discord summary).
  * An English edit reaches the translated pages as a translation of the edited field (made at publish, kept on the
  * edit; about $0.0003 a field and language). An edit made on a translated page changes that language only.
+ *
+ * The nightly improvements (autoImprove.ts, auto: the change's id) use the same overlay, with two more kinds:
+ *   op "append"  a checked sentence added at the end of a field ("after"); it stays through rebuilds as long as the field
+ *                is there, and is "kept" once the field says it anyway;
+ *   op "order"   a list's entries put in a better order ("ids": entry ids, or headings/names for lists without ids);
+ *                entries it doesn't name keep their place after the named ones.
  */
 import crypto from 'crypto';
 
@@ -25,6 +31,9 @@ export type OwnerEdit = {
   before: string;
   after: string;
   label?: string;
+  op?: 'replace' | 'append' | 'order';
+  ids?: string[];
+  auto?: string;
   status: 'live' | 'undone';
   state?: 'applied' | 'kept' | 'stale';
   tr?: Record<string, { src: string; text: string }>;
@@ -67,14 +76,44 @@ export function setAt(obj: any, path: string, value: string): boolean {
 /** Quotes and spaces as the pages print them, so an edit made from the page finds its text in the data. */
 export const norm = (s: string) => String(s ?? '').normalize('NFKC').replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();
 
+/** The list at a path (for op "order"), or undefined. */
+export function listAt(obj: any, path: string): any[] | undefined {
+  if (!EDIT_PATH.test(path)) return undefined;
+  let o = obj;
+  for (const s of path.split('/')) o = step(o, s);
+  return Array.isArray(o) ? o : undefined;
+}
+/** What an "order" edit calls an entry: its id, else its heading or name. */
+export const entryKey = (x: any) => String(x?.id ?? x?.heading ?? x?.name ?? x?.title ?? '');
+
 /** One edit on a page's data: replaced in place where its old text still is. */
-export function applyEdit(obj: any, e: Pick<OwnerEdit, 'path' | 'before' | 'after'>): 'applied' | 'kept' | 'stale' {
+export function applyEdit(obj: any, e: Pick<OwnerEdit, 'path' | 'before' | 'after'> & { op?: OwnerEdit['op']; ids?: string[] }): 'applied' | 'kept' | 'stale' {
+  if (e.op === 'order') {
+    const list = listAt(obj, e.path);
+    const ids = (e.ids || []).map(String);
+    if (!list || ids.length < 2) return 'stale';
+    const named = ids.map((id) => list.find((x) => entryKey(x) === id)).filter(Boolean);
+    if (named.length < 2) return 'stale';
+    const rest = list.filter((x) => !named.includes(x));
+    const next = [...named, ...rest];
+    if (next.every((x, i) => x === list[i])) return 'kept';
+    list.splice(0, list.length, ...next);
+    return 'applied';
+  }
+  if (e.op === 'append') {
+    const cur = getAt(obj, e.path);
+    if (cur === undefined || !e.after) return 'stale';
+    if (norm(cur).includes(norm(e.after))) return 'kept';
+    return setAt(obj, e.path, cur.trim() ? `${cur.trim()} ${e.after}` : e.after) ? 'applied' : 'stale';
+  }
   const cur = getAt(obj, e.path);
   if (cur === undefined) return 'stale';
-  if (cur.includes(e.before)) return setAt(obj, e.path, cur.replace(e.before, e.after)) ? 'applied' : 'stale';
+  // A sentence taken out (after: ''; a fact moved to the page it belongs on) leaves no doubled or trailing space.
+  const tidy = (t: string) => (e.after ? t : t.replace(/[ 	]{2,}/g, ' ').trim());
+  if (cur.includes(e.before)) return setAt(obj, e.path, tidy(cur.replace(e.before, e.after))) ? 'applied' : 'stale';
   // The page may print it with other quotes or spacing than the data has: match those loosely.
   const n = norm(cur), b = norm(e.before);
-  if (b && n.includes(b)) return setAt(obj, e.path, n.replace(b, e.after)) ? 'applied' : 'stale';
+  if (b && n.includes(b)) return setAt(obj, e.path, tidy(n.replace(b, e.after))) ? 'applied' : 'stale';
   if (e.after && n.includes(norm(e.after))) return 'kept';
   return 'stale';
 }

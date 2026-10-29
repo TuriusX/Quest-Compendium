@@ -10,7 +10,7 @@
  *   3. places      place pages for held RDR2 places people still search for, at their old addresses
  *   4. missions    RDR2 story missions get their own steps, gold medal and rewards (a failed rebuild keeps the page)
  *   5. glossary    official localised page names for translated guides (sourced only)
- *   6. conflicts   the consistency report's contradictions settled against stored evidence (listed for review)
+ *   6. conflicts   the consistency report's contradictions settled against stored evidence (corrected by autoImprove.ts)
  *
  *   npx tsx scripts/guides/novemberWork.ts --setup        write the queue and the allowance (no AI)
  *   npx tsx scripts/guides/novemberWork.ts --run [--max 5] do up to $max of the next work (only in November 2026)
@@ -114,12 +114,16 @@ export async function doOne(w: Work): Promise<{ status: string; dollars: number;
         const { resolveConflict } = await import('./resolveConflicts');
         const rep: any = await consistencyReport(w.key);
         const out: string[] = [];
+        // Each wrong statement with what the evidence backs instead: the nightly improvements (autoImprove.ts) correct them.
+        const items: { name: string; on: string; text: string; why: string; right: string[] }[] = [];
         for (const c of (rep.conflicts || []).slice(0, 25)) {
           const r: any = await resolveConflict(w.key, String(rep.game || w.key), c);
-          const wrong = r.verdicts.filter((v: any) => v.verdict === 'contradicted').map((v: any) => v.on);
-          if (wrong.length) out.push(`${c.name}: wrong on ${wrong.join(', ')}`);
+          const wrong = r.verdicts.filter((v: any) => v.verdict === 'contradicted');
+          const right = r.verdicts.filter((v: any) => v.verdict === 'supported').map((v: any) => String(v.text).slice(0, 400));
+          if (wrong.length) out.push(`${c.name}: wrong on ${wrong.map((v: any) => v.on).join(', ')}`);
+          for (const v of wrong) items.push({ name: String(c.name).slice(0, 120), on: String(v.on), text: String(v.text).slice(0, 400), why: String(v.why || '').slice(0, 300), right });
         }
-        await ref().set({ conflicts: { [w.key]: { at: Date.now(), wrong: out } } }, { merge: true });
+        await ref().set({ conflicts: { [w.key]: { at: Date.now(), wrong: out, items } } }, { merge: true });
         detail = `${out.length} contradiction(s) settled for review`;
       }
     });
