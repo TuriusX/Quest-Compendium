@@ -3,6 +3,7 @@ import { useT } from '../i18n';
 import { SPOT_EVENT } from '../utils/spotIt';
 import { GUIDE_DONE_EVENT, readDone, writeDone } from '../utils/guideProgress';
 import { SITE, guideTarget, absolutize, type GuideTarget } from '../utils/guideSite';
+import { compIndex } from '../utils/compIndex';
 
 export { SITE, type GuideTarget };
 
@@ -48,6 +49,9 @@ const STYLE = `
   .qc-acts button:hover, .qc-acts button:focus-visible { opacity: 1; background: rgba(255,255,255,.06); color: #c4b0ff; outline: none; }
   label:hover .qc-acts button { opacity: 1; }
   .qc-flash { box-shadow: 0 0 0 2px #a87ffb; background: rgba(255,255,255,.06); border-radius: 8px; }
+  /* A front page's section menu sticks to the top of the panel (the site's sits under its bar). */
+  .qc-ix-menu { top: 0 !important; }
+  .qc-ix { margin-left: 0 !important; margin-right: 0 !important; }
 `;
 const ASK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>';
 const SPOT = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="m16 16-1.9-1.9"/></svg>';
@@ -132,6 +136,8 @@ export function GuideFragment({
       if (acts.childElementCount) l.appendChild(acts);
     }
     paint();
+    // A game's front page: its index (mission ticks under "_missions", chapter counts, the filter), as on the site.
+    const ixPaint = slug ? null : compIndex(root, (s) => [...readDone(gameKey, s)], (s, ids) => writeDone(gameKey, s, new Set(ids)));
 
     const onClick = (e: Event) => {
       const target = e.target as HTMLElement;
@@ -187,6 +193,7 @@ export function GuideFragment({
     const onDone = (e: Event) => {
       const d = (e as CustomEvent).detail;
       if (d && ((d.key === gameKey && d.slug === slug) || d.key === '*')) paint(); // '*': the playthrough changed
+      if (ixPaint && d && (d.key === gameKey || d.key === '*')) ixPaint();
     };
     window.addEventListener(GUIDE_DONE_EVENT, onDone);
     return () => {

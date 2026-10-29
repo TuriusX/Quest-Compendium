@@ -14,7 +14,8 @@
 import fs from 'fs';
 import path from 'path';
 import { landscapeOf, wideSet, coverSet, ogImageOf, platformList, ttbShown, TTB_MIN_DEFAULT, type IgdbInfo } from './igdbArt';
-import { loadSitePictures, pagePicture, stepPicture, shareImage, heroHtml, stepHtml, entryHtml, picturesOf, pictureJson } from './sitePictures';
+import { loadSitePictures, pagePicture, stepPicture, shareImage, heroHtml, stepHtml, entryHtml, picturesOf, pictureJson, cardHtml } from './sitePictures';
+import { compIndex } from '../../src/utils/compIndex';
 import { loadOwnerEdits, applyOwnerEdits, translateOwnerEdits, saveOwnerEditStates } from './ownerEditsPublish';
 import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
@@ -1428,18 +1429,6 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   // "1 area" / "2 areas": the singular label when the number is 1.
   const one = (n: number, key: string) => ui(n === 1 ? `${key}One` : key);
   const stat = (v: number | string, label: string) => `<div class="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="text-xl font-bold text-white">${v}</div><div class="text-xs text-zinc-500">${esc(label)}</div></div>`;
-  let lastGroup = '';
-  const rows = links
-    .map((l) => {
-      const head = l.group && l.group !== lastGroup ? `<h3 data-head="${esc(l.group)}" class="flex items-center gap-3 pt-6 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500"><span>${esc(l.group)}</span><span class="h-px flex-1 bg-white/10"></span></h3>` : '';
-      lastGroup = l.group || lastGroup;
-      return `${head}<a data-search="${esc(`${l.name} ${l.story || ''} ${l.search || ''}`)}"${l.group ? ` data-group="${esc(l.group)}"` : ''} href="${esc(l.slug)}/index.html" data-area-link="${esc(l.slug)}" data-name="${esc(l.name)}" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-[#a87ffb]/40 mb-2">
-          <span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(l.name)}</span>${l.story ? `<span class="block text-sm text-zinc-500 truncate">${esc(l.story)}</span>` : ''}</span>
-          <span data-progress="${esc(key)}|${esc(l.slug)}|${l.total}"></span>
-          <svg class="w-4 h-4 text-zinc-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a>`;
-    })
-    .join('');
   fs.writeFileSync(
     path.join(dir, 'index.html'),
     page({
@@ -1464,13 +1453,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, one(links.length, 'statAreas'))}${stat(totalChecks, one(totalChecks, 'statThings'))}${stat(missables, one(missables, 'statMissables'))}${checked ? stat(checked === checkedTotal ? ui('statAll') : ui('statOf', { n: checked, total: checkedTotal }), one(checkedTotal, 'statChecked')) : ''}</div>
           ${achHere ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${esc(ui('achCount', { n: (achHere.list || []).length }))} · ${(achHere.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
           <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
-          ${guideSearchBox(key, '#qc-area-list')}
-          ${jumpBar(links.length, !!achHere)}
-          <div id="qc-area-list">
-          <section id="walkthrough" class="mt-10 scroll-mt-20">${sectionHead(ui('walkthrough'), ui('walkthroughSub'), `${links.length} ${one(links.length, 'statAreas')}`)}
-          <div id="qc-area-rows" class="mt-2">${rows}</div></section>
-          ${(COMP_MODEL = null, compSearch(key, visible, byslug))}
-          </div>
+          ${compIndexHtml(key, links, visible, byslug, !!achHere)}
           ${cta('../'.repeat(2 + extra), gameName)}
         </article>`,
       draft: visible.some((o) => byslug.get(o.slug)!.status !== 'published'),
@@ -1481,7 +1464,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   fs.writeFileSync(path.join(dir, 'search.json'), JSON.stringify(guideSearchIndex(key, visible, byslug)));
   if (LANG === 'en') fs.writeFileSync(path.join(dir, 'pictures.json'), JSON.stringify({ v: 1, pictures: picturesOf(key) }));
   // guide.json: the front page as data (the Deck's guide screens read it): its areas in order, the compendium's sections
-  // as compSearch made them (display names, links, what's coming soon), and whether it has an achievement guide.
+  // as compSections made them (display names, links, what's coming soon), and whether it has an achievement guide.
   fs.writeFileSync(path.join(dir, 'guide.json'), JSON.stringify({
     v: 1, key, game: gameName, lang: LANG,
     areas: links.map((l) => ({ slug: l.slug, name: l.name, ...(l.story ? { story: l.story } : {}), ...(l.group ? { group: l.group } : {}) })),
@@ -1594,93 +1577,299 @@ function guideSearchBox(key: string, listSel: string, cls = 'mt-6'): string {
   q.addEventListener('focus',load);q.addEventListener('input',run);})();</script>`;
 }
 
-/** The compendium as compSearch drew it last (guide.json): live sections first, then the ones only coming soon. */
+/** The compendium as compSections made it last (guide.json): live sections first, then the ones only coming soon. */
 let COMP_MODEL: any = null;
-function compSearch(key: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>): string {
-  if (!COMP?.entities.length) return '';
-  const chip = (href: string, text: string, title = '') => `<a href="${esc(href)}"${title ? ` title="${esc(title)}"` : ''} class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(text)}</a>`;
-  const soon = (text: string) => `<span class="qc-soon rounded-md border border-dashed border-white/10 px-2 py-0.5 text-sm text-zinc-500 cursor-help select-none" tabindex="0" aria-disabled="true" title="${esc(ui('comingSoon'))}" data-soon="${esc(ui('comingSoon'))}">${esc(text)}</span>`;
+type IxItem = { name: string; full?: string; href?: string };
+type IxModel = { title: string; items?: IxItem[]; soon?: string[]; groups?: { name: string; href?: string; items: IxItem[]; soon: string[] }[] };
+/** A compendium section: its type, its entries as data, and (quest types) its missions in play order by chapter. */
+type IxSec = { typeId: string; live: number; model: IxModel; quests?: { slug: string; name: string; items: { name: string; slug?: string; href: string }[] }[] };
+/** What compIndexPass.ts found for the index (guideCompendium/{key}.index): character roles, place regions, story chapters. */
+const IX_FACTS = new Map<string, { roles?: Record<string, { role: string; main: boolean }>; regions?: Record<string, string>; chapters?: { group: string; name: string; first: string }[] }>();
+
+/** The compendium's sections, from its taxonomy and pages; sets COMP_MODEL (guide.json). */
+function compSections(visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>): IxSec[] {
+  COMP_MODEL = null;
+  if (!COMP?.entities.length) return [];
   // An entry with no compendium page of its own links to the guide page or walkthrough step that covers it (a
   // place with a walkthrough page, a mission that is a step's title); only entries with nothing to link are greyed.
   const pages = visible.map((o) => ({ slug: o.slug, name: byslug.get(o.slug)?.name || o.name }));
   const steps = visible.flatMap((o) => (byslug.get(o.slug)!.walkthrough || []).filter((st: any) => st.id && st.title).map((st: any) => ({ slug: o.slug, id: String(st.id), title: String(st.title) })));
-  const norm = (x: string) => String(x || '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
   const covering = (name: string): string => {
-    const n = norm(name);
+    const n = ixNorm(name);
     if (n.length < 3) return '';
-    const page = pages.find((p) => norm(p.name) === n) || pages.find((p) => entitySegments(p.name, [{ name, slug: 'x' }]).some((sg) => sg.slug));
+    const page = pages.find((p) => ixNorm(p.name) === n) || pages.find((p) => entitySegments(p.name, [{ name, slug: 'x' }]).some((sg) => sg.slug));
     if (page) return `/guides/${COMP_KEY}/${page.slug}/`;
     // A compendium page of another type (a hideout listed under places, an NPC under quests).
-    const ent = COMP!.entities.find((e) => norm(e.name) === n || norm(e.displayName || '') === n);
+    const ent = COMP!.entities.find((e) => ixNorm(e.name) === n || ixNorm(e.displayName || '') === n);
     if (ent) return entHref(ent.slug);
-    const st = steps.find((x) => norm(x.title) === n) || steps.find((x) => entitySegments(x.title, [{ name, slug: 'x' }]).some((sg) => sg.slug));
+    const st = steps.find((x) => ixNorm(x.title) === n) || steps.find((x) => entitySegments(x.title, [{ name, slug: 'x' }]).some((sg) => sg.slug));
     return st ? `/guides/${COMP_KEY}/${st.slug}/#${st.id}` : '';
   };
   const named = (e: { name: string; displayName?: string }) => e.displayName || e.name;
-  // The same sections as data (guide.json): each entry's name as shown, its full name, where it links, or "soon".
-  type Item = { name: string; full?: string; href?: string };
-  type Model = { title: string; items?: Item[]; soon?: string[]; groups?: { name: string; href?: string; items: Item[]; soon: string[] }[] };
-  type Sec = { html: string; live: number; model: Model };
-  const out: Sec[] = [];
+  const out: IxSec[] = [];
   // Each page once: a built page shows in its own type's section, so another section's example that only links to it
   // is left out (Beaver Hollow under places, not again under gang hideouts).
   const builtHrefs = new Set(COMP.entities.map((e) => entHref(e.slug)));
-  // "Coming soon" names fold away behind a count, so the index shows what's there.
-  const soonFold = (names: string[]) => (names.length ? `<details class="qc-soonfold mt-1.5"><summary class="cursor-pointer list-none text-[11px] text-zinc-500 hover:text-zinc-300">${esc(ui('comingSoonMore', { n: names.length }))}</summary><div class="mt-1.5 flex flex-wrap gap-1.5">${names.map(soon).join('')}</div></details>` : '');
   for (const t of COMP.taxonomy || []) {
-    // Quest types (Stranger missions) are drawn once, below, grouped by chapter.
+    // Quest types (Stranger missions) are made once, below, by chapter.
     if (QUEST_TYPES[t.id] && questGroups(t.id, pages).length) continue;
     const built = COMP.entities.filter((e) => e.type === t.id);
     const more = ((t.examples || []) as string[]).filter((x) => !built.some((e) => e.name.toLowerCase() === x.toLowerCase())).slice(0, 6).map((x) => ({ x, href: covering(x) })).filter((m) => !(m.href && builtHrefs.has(m.href)));
-    const live = built.length + more.filter((m) => m.href).length;
-    const model: Model = { title: String(t.label), items: [...built.map((e) => ({ name: named(e), ...(e.displayName ? { full: e.name } : {}), href: entHref(e.slug) })), ...more.filter((m) => m.href).map((m) => ({ name: m.x, href: m.href }))], soon: more.filter((m) => !m.href).map((m) => m.x) };
-    out.push({ live, model, html: `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(t.label)}</div>
-      <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => chip(entHref(e.slug), named(e), e.displayName ? e.name : '')).join('')}${more.filter((m) => m.href).map((m) => chip(m.href, m.x)).join('')}</div>${live ? soonFold(more.filter((m) => !m.href).map((m) => m.x)) : `<div class="mt-2 flex flex-wrap gap-1.5">${more.filter((m) => !m.href).map((m) => soon(m.x)).join('')}</div>`}</div>` });
+    out.push({
+      typeId: String(t.id),
+      live: built.length + more.filter((m) => m.href).length,
+      model: { title: String(t.label), items: [...built.map((e) => ({ name: named(e), ...(e.displayName ? { full: e.name } : {}), href: entHref(e.slug) })), ...more.filter((m) => m.href).map((m) => ({ name: m.x, href: m.href }))], soon: more.filter((m) => !m.href).map((m) => m.x) },
+    });
   }
-  // Quest pages (story missions, Stranger strands): grouped by chapter in play order; a planned mission without its
-  // page links to the walkthrough step that covers it, else it's "coming soon" (failed ones are left out).
+  // Quest pages (story missions, Stranger strands): by chapter in play order; a planned mission without its page links
+  // to the walkthrough step that covers it, else it's "coming soon" (failed ones are left out).
   for (const ty of Object.keys(QUEST_TYPES)) {
     const groups = questGroups(ty, pages);
     if (!groups.length) continue;
     const items = groups.map((g) => ({ g, items: g.items.map((x) => ({ ...x, href: x.slug ? entHref(x.slug) : covering(x.name) })) }));
-    const live = items.reduce((n, g) => n + g.items.filter((x) => x.href).length, 0);
-    const model: Model = { title: QUEST_TYPES[ty].label, groups: items.map(({ g, items: xs }) => ({ name: g.name, ...(g.slug ? { href: `/guides/${COMP_KEY}/${g.slug}/` } : {}), items: xs.filter((x) => x.href).map((x) => ({ name: x.name, href: x.href })), soon: xs.filter((x) => !x.href).map((x) => x.name) })) };
-    out.push({ live, model, html: `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:col-span-2"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(QUEST_TYPES[ty].label)}</div>
-      ${items.map(({ g, items: xs }) => `<div class="mt-2.5">${g.slug ? `<a href="${esc(`/guides/${COMP_KEY}/${g.slug}/`)}" class="text-[11px] font-semibold text-zinc-400 hover:text-white">${esc(g.name)}</a>` : `<span class="text-[11px] font-semibold text-zinc-400">${esc(g.name)}</span>`}
-      <div class="mt-1 flex flex-wrap gap-1.5">${xs.filter((x) => x.href).map((x) => chip(x.href, x.name)).join('')}</div>${soonFold(xs.filter((x) => !x.href).map((x) => x.name))}</div>`).join('')}</div>` });
+    out.push({
+      typeId: ty,
+      live: items.reduce((n, g) => n + g.items.filter((x) => x.href).length, 0),
+      model: { title: QUEST_TYPES[ty].label, groups: items.map(({ g, items: xs }) => ({ name: g.name, ...(g.slug ? { href: `/guides/${COMP_KEY}/${g.slug}/` } : {}), items: xs.filter((x) => x.href).map((x) => ({ name: x.name, href: x.href })), soon: xs.filter((x) => !x.href).map((x) => x.name) })) },
+      quests: items.map(({ g, items: xs }) => ({ slug: g.slug, name: g.name, items: xs })),
+    });
   }
   // Built pages of other types outside the taxonomy: built ones only, never "coming soon".
   for (const ty of [...new Set(COMP.entities.map((e) => e.type))].filter((ty) => !QUEST_TYPES[ty] && !(COMP!.taxonomy || []).some((t: any) => t.id === ty))) {
     const built = COMP.entities.filter((e) => e.type === ty);
-    const model: Model = { title: built[0].typeLabel, items: built.map((e) => ({ name: named(e), ...(e.displayName ? { full: e.name } : {}), href: entHref(e.slug) })) };
-    out.push({ live: built.length, model, html: `<div class="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(built[0].typeLabel)}</div>
-      <div class="mt-2 flex flex-wrap gap-1.5">${built.map((e) => chip(entHref(e.slug), named(e), e.displayName ? e.name : '')).join('')}</div></div>` });
+    out.push({ typeId: ty, live: built.length, model: { title: built[0].typeLabel, items: built.map((e) => ({ name: named(e), ...(e.displayName ? { full: e.name } : {}), href: entHref(e.slug) })) } });
   }
   // Sections with live entries first (most first), sections with only "coming soon" after; the order otherwise kept.
   const sorted = out.map((x, i) => ({ ...x, i })).sort((a, b) => b.live - a.live || a.i - b.i);
   COMP_MODEL = { pages: COMP.entities.length, sections: sorted.filter((x) => x.live > 0).map((x) => x.model), comingSoon: sorted.filter((x) => x.live === 0).map((x) => x.model) };
-  const liveHtml = sorted.filter((x) => x.live > 0).map((x) => x.html).join('');
-  const soonOnly = sorted.filter((x) => x.live === 0);
-  // Sections with nothing written yet fold into one line at the end.
-  const types = liveHtml + (soonOnly.length ? `<details class="qc-soonfold sm:col-span-2 rounded-xl border border-dashed border-white/10 p-3"><summary class="cursor-pointer list-none text-xs font-semibold text-zinc-500 hover:text-zinc-300">${esc(ui('comingSoonSections', { n: soonOnly.length }))}</summary><div class="mt-3 grid gap-3 sm:grid-cols-2">${soonOnly.map((x) => x.html).join('')}</div></details>` : '');
-  return `<section id="compendium" class="mt-14 scroll-mt-20">${sectionHead(ui('compendium'), ui('compendiumSub'), ui('pagesCount', { n: COMP.entities.length }))}
-  ${types.includes('qc-soon') ? `<p class="mt-3 text-xs text-zinc-500">${esc(ui('comingSoonNote'))}</p>` : ''}
-  <div class="mt-4 grid gap-3 sm:grid-cols-2">${types}</div></section>
-  <script>document.querySelectorAll('.qc-soon').forEach(function(s){s.addEventListener('click',function(){var t=s.textContent;s.textContent=s.getAttribute('data-soon');setTimeout(function(){s.textContent=t;},1400);});});</script>`;
+  return sorted;
 }
 
-/** A guide front page's jump bar: its walkthrough, its compendium and its achievements (shown with two or more). */
-function jumpBar(areas: number, ach: boolean): string {
-  // Small enough to sit on one line on a phone; the counts show from tablet width up.
-  const jump = (href: string, label: string, n?: number) => `<a href="${href}" class="whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-zinc-300 hover:border-[#a87ffb]/50 hover:text-white">${esc(label)}${n != null ? ` <span class="hidden sm:inline text-zinc-500">${n}</span>` : ''}</a>`;
-  const parts = [jump('#walkthrough', ui('walkthrough'), areas), ...(COMP?.entities.length ? [jump('#compendium', ui('compendium'), COMP.entities.length)] : []), ...(ach ? [jump('achievements/index.html', ui('achShort'))] : [])];
-  return parts.length > 1 ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex flex-wrap items-center gap-1.5 text-[13px] sm:text-sm">${parts.join('')}</nav>` : '';
+const ixNorm = (x: string) => String(x || '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const ixSlug = (href?: string) => (String(href || '').match(/\/guides\/[^/]+\/([^/#]+)\//) || [])[1] || '';
+/** Who gives a mission, when it's a name ("none", "no one" and descriptions are left out). */
+const ixGiver = (g: unknown) => {
+  const s = String(g || '').replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  return !s || /^(none|no |there is no|n\/a|unknown|various)/i.test(s) || /^[a-z]/.test(s) || s.length >= 48 ? '' : s;
+};
+const IX_ROMAN = /\s*[-–—:]?\s*(?:Part\s+)?((?:X{0,3})(?:IX|IV|V?I{0,3}))\s*$/;
+// Kinds of section on the index, from the type's id and label (people and places as in compIndexPass.ts).
+const IX_PERSON = /character|companion|npc|notable|people|ally|allies|merchant|villain|cast/i;
+const IX_PLACE = /location|place|settlement|camp|hideout|landmark|town|cit(y|ies)|region|dungeon|area/i;
+const IX_ITEM = /\b(items?|weapons?|armou?r|gear|equipment|cards?|collectibles?|curiosit\w*|spells?|talismans?|rings?|relics?|accessor\w*|consumables?|materials?|upgrades?)\b/i;
+function ixKind(s: IxSec): 'story' | 'side' | 'characters' | 'places' | 'items' | 'more' {
+  const t = `${s.typeId} ${s.model.title}`.replace(/-/g, ' ');
+  if (s.typeId === 'story-missions') return 'story';
+  if (IX_ITEM.test(t)) return 'items';
+  if (QUEST_TYPES[s.typeId] || /quest|mission|contract|bount|errand|side|job/i.test(t)) return 'side';
+  if (IX_PERSON.test(t)) return 'characters';
+  if (IX_PLACE.test(t)) return 'places';
+  return 'more';
 }
 
-/** A guide front page's section header: accent bar, title, a line on what's in it, and its count. */
-const sectionHead = (title: string, sub: string, count?: string) => `<div class="flex items-end justify-between gap-3 border-b border-white/10 pb-3">
-    <div class="min-w-0"><h2 class="flex items-center gap-2.5 text-xl font-bold text-white"><span class="h-5 w-1 shrink-0 rounded-full bg-[#a87ffb]"></span>${esc(title)}</h2><p class="mt-1 text-sm text-zinc-500">${esc(sub)}</p></div>
-    ${count ? `<span class="shrink-0 text-sm text-zinc-500 tabular-nums">${esc(count)}</span>` : ''}</div>`;
+/**
+ * A guide's front page index (owner-approved Oct 28 2026), on the site and in the app's Guide tab (app.html; its
+ * behaviour is src/utils/compIndex.ts, run by an inline script here and by GuideFragment there):
+ * - a sticky menu (Story · Side · Characters · Places · Items, with counts) and a filter;
+ * - Story: the story missions numbered in play order under folding chapters (each with its walkthrough page), with a
+ *   tick, who gives it, Missable and Choice; a guide without mission pages gets its walkthrough pages, in chapters (the
+ *   walkthrough's groups, a long one split where the story moves on: compIndexPass.ts). The first unfinished chapter opens;
+ * - Side: side missions by who gives them, parts inline (A Test of Faith I → II → III);
+ * - Characters: cards with portrait, name and one-line role, main characters first;
+ * - Places: cards with a picture, by region;
+ * - Items and the rest: chips. Every link stays in the HTML, at the same address.
+ */
+function compIndexHtml(key: string, links: AreaLink[], visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, ach: boolean): string {
+  const secs = compSections(visible, byslug);
+  const facts = IX_FACTS.get(key) || {};
+  const of = (k: string) => secs.filter((s) => ixKind(s) === k);
+  const ent = (slug: string) => (slug ? COMP?.entities.find((e) => e.slug === slug) : undefined);
+  const pageHref = (slug: string) => `${slug}/index.html`;
+  const tick = (id: string, name: string) => `<label data-mtick="${esc(id)}" class="flex cursor-pointer items-center justify-center" title="${esc(ui('ixTick'))}"><input type="checkbox" class="h-4 w-4 cursor-pointer accent-[#a87ffb]" aria-label="${esc(`${ui('ixTick')}: ${name}`)}"></label>`;
+  const tagMiss = `<span class="whitespace-nowrap rounded border border-amber-300/30 bg-amber-300/10 px-1.5 text-[11px] font-semibold text-amber-300" title="${esc(ui('ixMissableTip'))}">${esc(ui('ixMissable'))}</span>`;
+  const tagChoice = `<span class="whitespace-nowrap rounded border border-sky-300/30 bg-sky-300/10 px-1.5 text-[11px] font-semibold text-sky-300" title="${esc(ui('ixChoiceTip'))}">${esc(ui('ixChoice'))}</span>`;
+  const chip = (href: string, text: string, title = '') => `<a data-f="${esc(`${text} ${title}`)}" href="${esc(href)}"${title ? ` title="${esc(title)}"` : ''} class="rounded-md border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-2 py-0.5 text-sm text-white hover:border-[#a87ffb]">${esc(text)}</a>`;
+  const soon = (text: string) => `<span data-f="${esc(text)}" class="qc-soon rounded-md border border-dashed border-white/10 px-2 py-0.5 text-sm text-zinc-500 cursor-help select-none" tabindex="0" aria-disabled="true" title="${esc(ui('comingSoon'))}" data-soon="${esc(ui('comingSoon'))}">${esc(text)}</span>`;
+  const soonFold = (names: string[]) => (names.length ? `<details class="qc-soonfold mt-2"><summary class="cursor-pointer text-[11px] text-zinc-500 hover:text-zinc-300">${esc(ui('comingSoonMore', { n: names.length }))}</summary><div class="mt-1.5 flex flex-wrap gap-1.5">${names.map(soon).join('')}</div></details>` : '');
+  const soonNote = (titles: string[]) => (titles.length ? `<p class="mt-2 rounded-xl border border-dashed border-white/10 px-3 py-2.5 text-xs text-zinc-500">${esc(ui('ixSoonNote', { list: titles.join(', ') }))}</p>` : '');
+  const sub = (text: string) => `<div class="mb-2 mt-4 text-xs font-semibold text-zinc-500">${esc(text)}</div>`;
+
+  // ---- Story ----
+  let n = 0;
+  const missionRow = (x: { name: string; slug?: string; href: string }) => {
+    const q = ent(x.slug || '')?.quest || {};
+    const giver = ixGiver(q.giver);
+    return `<li data-f="${esc(`${x.name} ${giver}`)}" class="grid grid-cols-[1.5rem_1.25rem_minmax(0,1fr)] items-center gap-x-2.5 gap-y-0.5 rounded-lg px-2 py-1.5 hover:bg-white/[0.04] sm:grid-cols-[2rem_1.25rem_minmax(0,1fr)_auto]">
+      <span class="text-right text-xs tabular-nums text-zinc-500">${++n}</span>${tick(`m:${x.slug || ixNorm(x.name)}`, x.name)}
+      ${x.href ? `<a class="qc-nm min-w-0 text-white hover:text-[#c4b0ff]" href="${esc(x.href)}">${esc(x.name)}</a>` : `<span class="qc-nm min-w-0 text-zinc-500" title="${esc(ui('comingSoon'))}">${esc(x.name)}</span>`}
+      <span class="col-start-3 flex flex-wrap items-center gap-1.5 sm:col-start-auto sm:justify-end">${giver ? `<span class="text-xs text-zinc-500">${esc(giver)}</span>` : ''}${q.missables?.length ? tagMiss : ''}${q.choices?.length ? tagChoice : ''}</span></li>`;
+  };
+  const pageRow = (l: AreaLink, num?: number) => `<li data-f="${esc(`${l.name} ${l.story || ''}`)}" class="grid ${num ? 'grid-cols-[1.5rem_minmax(0,1fr)_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto]' : 'grid-cols-[minmax(0,1fr)_auto]'} items-center gap-x-2.5 rounded-lg px-2 py-1.5 hover:bg-white/[0.04]">
+      ${num ? `<span class="text-right text-xs tabular-nums text-zinc-500">${num}</span>` : ''}<a class="min-w-0" href="${esc(pageHref(l.slug))}" data-area-link="${esc(l.slug)}" data-name="${esc(l.name)}"><span class="qc-nm block text-white hover:text-[#c4b0ff]">${esc(l.name)}</span>${l.story ? `<span class="block truncate text-xs text-zinc-500">${esc(l.story)}</span>` : ''}</a>
+      <span data-progress="${esc(key)}|${esc(l.slug)}|${l.total}"></span></li>`;
+  const chapter = (name: string, rows: string, foot = '', note = '') => `<details data-ch data-fgroup class="mb-2 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+    <summary class="grid cursor-pointer grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2.5 px-3.5 py-2.5 hover:bg-white/[0.03]"><span class="qc-caret text-zinc-500 transition-transform" aria-hidden="true">&#9656;</span><span class="min-w-0 font-semibold text-white">${esc(name)}${note ? ` <span class="text-xs font-normal text-zinc-500">${esc(note)}</span>` : ''}</span><span class="flex items-center gap-2 text-xs tabular-nums text-zinc-400"><span class="hidden h-1.5 w-16 overflow-hidden rounded-full bg-white/10 sm:block"><span data-chbar class="block h-full w-0 bg-[#a87ffb]"></span></span><span data-chcount></span></span></summary>
+    <ol class="border-t border-white/10 p-1.5">${rows}</ol>${foot}</details>`;
+  const story = of('story')[0];
+  let storyHtml = '', storyCount = '', storyN = 0;
+  if (story?.quests?.some((g) => g.items.length)) {
+    const bySlug = new Map(story.quests.map((g) => [g.slug, g]));
+    storyHtml = links.map((l) => {
+      const g = bySlug.get(l.slug);
+      const walk = `<a href="${esc(pageHref(l.slug))}" data-area-link="${esc(l.slug)}" data-name="${esc(l.name)}" class="flex items-center gap-2 border-t border-white/10 px-4 py-2 text-sm text-[#a87ffb] hover:text-white"><span class="flex-1">${esc(ui('ixChapterWalk', { name: l.name }))} &rarr;</span><span data-progress="${esc(key)}|${esc(l.slug)}|${l.total}"></span></a>`;
+      return g?.items.length ? chapter(l.name, g.items.map(missionRow).join(''), walk) : `<ol data-fgroup class="mb-2 rounded-xl border border-white/10 bg-white/[0.03] p-1.5">${pageRow(l)}</ol>`;
+    }).join('') + (bySlug.get('')?.items.length ? chapter(ui('ixOtherMissions'), bySlug.get('')!.items.map(missionRow).join('')) : '');
+    storyN = n;
+    storyCount = ui('ixMissionsOf', { n });
+  } else {
+    // The walkthrough's pages, in chapters: its groups, a long one split where the story moves on.
+    const splits = facts.chapters || [];
+    const chs: { group: string; name: string; note: string; items: AreaLink[] }[] = [];
+    for (const l of links) {
+      const g = l.group || '', split = splits.find((c) => c.first === l.slug && (c.group || '') === g);
+      const last = chs[chs.length - 1];
+      if (!last || last.group !== g || split) chs.push({ group: g, name: split ? split.name : g || ui('walkthrough'), note: split && g ? g : '', items: [] });
+      chs[chs.length - 1].items.push(l);
+    }
+    if (chs.length > 8 && links.length / chs.length < 3) {
+      // Many small groups (a page or two each: Octopath's travellers) are one list with the groups as headings.
+      let last = '';
+      storyHtml = chapter(ui('walkthrough'), links.map((l) => {
+        const head = l.group && l.group !== last ? `<li data-fhead class="px-2 pb-1 pt-3 text-[11px] font-bold uppercase tracking-wide text-zinc-500">${esc(l.group)}</li>` : '';
+        last = l.group || last;
+        return head + pageRow(l, ++n);
+      }).join(''));
+    } else storyHtml = chs.map((c) => chapter(c.name, c.items.map((l) => pageRow(l, ++n)).join(''), '', c.note)).join('');
+    storyN = links.length;
+    storyCount = ui('ixPagesOf', { n: links.length });
+  }
+  storyHtml = storyHtml.replace('<details data-ch', '<details open data-ch');
+
+  // ---- Side: side missions by who gives them; other side lists as chips ----
+  const sideSecs = of('side');
+  let sideN = 0;
+  const sideHtml = sideSecs.filter((s) => s.live).map((s) => {
+    if (!s.quests) { sideN += (s.model.items || []).length; return `<div data-fgroup>${sideSecs.length > 1 ? sub(s.model.title) : ''}<div class="flex flex-wrap gap-1.5">${(s.model.items || []).map((x) => chip(x.href!, x.name, x.full)).join('')}</div>${soonFold(s.model.soon || [])}</div>`; }
+    const chains = new Map<string, { who: string; from: string; rows: string[] }>();
+    for (const g of s.quests) for (const x of g.items) {
+      const q = ent(x.slug || '')?.quest || {};
+      const who = ixGiver(q.giver) || ui('ixWorld');
+      const parts = ((q.parts || []) as any[]).map((p) => (String(p.name).match(IX_ROMAN) || [])[1]).filter(Boolean);
+      const c = chains.get(who) || { who, from: g.slug ? g.name.split(':')[0] : '', rows: [] };
+      c.rows.push(`<li data-f="${esc(`${x.name} ${who}`)}" class="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-2 py-1">${tick(`m:${x.slug || ixNorm(x.name)}`, x.name)}${x.href ? `<a class="qc-nm min-w-0 text-white hover:text-[#c4b0ff]" href="${esc(x.href)}">` : `<span class="qc-nm min-w-0 text-zinc-500" title="${esc(ui('comingSoon'))}">`}${esc(x.name)}${parts.length > 1 ? ` <span class="text-xs text-zinc-400">${parts.map(esc).join(' <span class="text-zinc-600">&rarr;</span> ')}</span>` : ''}${x.href ? '</a>' : '</span>'}<span class="flex gap-1">${q.missables?.length ? tagMiss : ''}${q.choices?.length ? tagChoice : ''}</span></li>`);
+      chains.set(who, c);
+      sideN++;
+    }
+    const world = ui('ixWorld');
+    const list = [...chains.values()].sort((a, b) => (a.who === world ? 1 : 0) - (b.who === world ? 1 : 0) || b.rows.length - a.rows.length);
+    return `<div data-fgroup>${sideSecs.length > 1 ? sub(s.model.title) : ''}<div class="grid gap-2 sm:grid-cols-2">${list.map((c) => `<div data-fgroup class="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5"><div class="flex items-baseline justify-between gap-2"><span class="font-semibold text-white">${esc(c.who)}</span>${c.from && c.who !== world ? `<span class="whitespace-nowrap text-xs text-zinc-500">${esc(ui('ixFrom', { ch: c.from }))}</span>` : ''}</div><ul class="mt-1">${c.rows.join('')}</ul></div>`).join('')}</div></div>`;
+  }).join('') + soonNote(sideSecs.filter((s) => !s.live).map((s) => s.model.title));
+
+  // ---- Characters: cards, main characters first ----
+  const roles = facts.roles || {};
+  const personSecs = of('characters');
+  const livePeople = personSecs.filter((s) => s.live);
+  let peopleN = 0;
+  const initials = (nm: string) => nm.split(/\s+/).filter((w) => /^\p{Lu}/u.test(w)).slice(0, 2).map((w) => w[0]).join('') || nm.slice(0, 1);
+  const person = (x: IxItem, big: boolean) => {
+    const slug = ixSlug(x.href), pic = slug ? pagePicture(key, slug) : null, role = roles[slug]?.role || '';
+    const px = big ? 104 : 72;
+    return `<a data-f="${esc(`${x.name} ${x.full || ''} ${role}`)}" href="${esc(x.href!)}" class="grid ${big ? 'grid-cols-[3.25rem_minmax(0,1fr)] p-2' : 'grid-cols-[2.25rem_minmax(0,1fr)] px-2 py-1.5'} items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50">${pic ? cardHtml(pic, px, px, `${big ? 'h-13 w-13' : 'h-9 w-9'} rounded-lg object-cover`) : `<span class="${big ? 'h-13 w-13 text-lg' : 'h-9 w-9 text-sm'} grid place-items-center rounded-lg bg-[#1d1b26] font-bold text-[#c4b0ff]" aria-hidden="true">${esc(initials(x.name))}</span>`}<span class="min-w-0"><span class="block ${big ? '' : 'text-sm'} font-semibold leading-tight text-white">${esc(x.name)}</span>${role ? `<span class="mt-0.5 line-clamp-2 text-xs leading-snug text-zinc-400">${esc(role)}</span>` : ''}</span></a>`;
+  };
+  const bigGrid = (xs: string[]) => (xs.length ? `<div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">${xs.join('')}</div>` : '');
+  const smallGrid = (xs: string[]) => (xs.length ? `<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">${xs.join('')}</div>` : '');
+  const charsHtml = livePeople.map((s) => {
+    const xs = s.model.items || [];
+    peopleN += xs.length;
+    const isMain = (x: IxItem) => roles[ixSlug(x.href)]?.main === true;
+    const main = xs.filter(isMain), rest = xs.filter((x) => !isMain(x));
+    const head = livePeople.length > 1 ? sub(s.model.title) : '';
+    const body = main.length
+      ? (head ? `${bigGrid(main.map((x) => person(x, true)))}<div class="mt-2">${smallGrid(rest.map((x) => person(x, false)))}</div>` : `<div data-fgroup>${sub(ui('ixMain'))}${bigGrid(main.map((x) => person(x, true)))}</div>${rest.length ? `<div data-fgroup>${sub(ui('ixAlso'))}${smallGrid(rest.map((x) => person(x, false)))}</div>` : ''}`)
+      : xs.length > 12 ? smallGrid(xs.map((x) => person(x, false))) : bigGrid(xs.map((x) => person(x, true)));
+    return `<div data-fgroup>${head}${body}${soonFold(s.model.soon || [])}</div>`;
+  }).join('') + soonNote(personSecs.filter((s) => !s.live).map((s) => s.model.title));
+
+  // ---- Places: cards with pictures, by region ----
+  const placeSecs = of('places');
+  const regionsOf = facts.regions || {};
+  const places = new Map<string, { x: IxItem; tag: string; region: string; at: number }>();
+  const liveP = placeSecs.filter((s) => s.live);
+  for (const s of liveP) for (const x of s.model.items || []) {
+    const k = ixNorm(x.name), slug = ixSlug(x.href), tag = s === liveP[0] ? '' : singularLabel(s.model.title);
+    const prev = places.get(k);
+    if (prev) { if (tag && !prev.tag) prev.tag = tag; continue; }
+    const e = ent(slug), area: any = byslug.get(slug);
+    const region = regionsOf[k] || String(e?.summary?.region || area?.info?.region || '').split(/[,(/]/)[0].trim();
+    // Where the story reaches it: its walkthrough page ("Chapter 1: Colter" for Colter).
+    const at = links.findIndex((l) => l.slug === slug || ixNorm(l.name) === k || ixNorm(l.name).endsWith(` ${k}`));
+    places.set(k, { x, tag, region, at: at < 0 ? 1e4 + places.size : at });
+  }
+  const regions = new Map<string, { name: string; at: number; xs: { x: IxItem; tag: string }[] }>();
+  for (const p of places.values()) {
+    const name = p.region || ui('ixOtherPlaces');
+    const r = regions.get(name) || { name, at: 1e9, xs: [] };
+    if (p.region) r.at = Math.min(r.at, p.at);
+    r.xs.push(p);
+    regions.set(name, r);
+  }
+  const PIN = '<svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>';
+  const placeCard = ({ x, tag }: { x: IxItem; tag: string }) => {
+    const slug = ixSlug(x.href), pic = slug ? pagePicture(key, slug) : null;
+    return `<a data-f="${esc(`${x.name} ${tag}`)}" href="${esc(x.href!)}" class="block overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/50"><span class="grid aspect-video place-items-center bg-[#1d1b26] text-[#3f3b52]">${pic ? cardHtml(pic, 300, 169, 'h-full w-full object-cover') : PIN}</span><span class="block px-2.5 py-2"><span class="block text-sm font-semibold leading-tight text-white">${esc(x.name)}</span>${tag ? `<span class="mt-1 inline-block rounded border border-white/15 px-1.5 text-[11px] text-zinc-400">${esc(tag)}</span>` : ''}</span></a>`;
+  };
+  const regionList = [...regions.values()].sort((a, b) => a.at - b.at);
+  // Regions two side by side on wide screens when they're small, so a region of two places isn't a row of empty space.
+  const sideBySide = regionList.length > 1 && regionList.every((r) => r.xs.length <= 6);
+  const placesHtml = `<div class="${sideBySide ? 'grid gap-x-5 lg:grid-cols-2' : ''}">${regionList.map((r) => `<div data-fgroup class="mb-4">${regionList.length > 1 ? `<h3 class="mb-2 text-sm font-semibold text-white">${esc(r.name)} <span class="font-normal text-zinc-500">${r.xs.length}</span></h3>` : ''}<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 ${sideBySide ? '' : 'lg:grid-cols-5'}">${r.xs.map(placeCard).join('')}</div></div>`).join('')}</div>`
+    + soonFold(liveP.flatMap((s) => s.model.soon || [])) + soonNote(placeSecs.filter((s) => !s.live).map((s) => s.model.title));
+
+  // ---- Items and the rest: chips (short lists) ----
+  const chipsOf = (ss: IxSec[]) => ss.filter((s) => s.live).map((s) => `<div data-fgroup class="mb-3">${ss.filter((x) => x.live).length > 1 ? `<div class="mb-1.5 text-xs font-semibold text-zinc-500">${esc(s.model.title)}</div>` : ''}<div class="flex flex-wrap gap-1.5">${(s.model.items || []).map((x) => chip(x.href!, x.name, x.full)).join('')}</div>${soonFold(s.model.soon || [])}</div>`).join('') + soonNote(ss.filter((s) => !s.live).map((s) => s.model.title));
+  const count = (ss: IxSec[]) => ss.reduce((k, s) => k + (s.live ? (s.model.items || []).length : 0), 0);
+  const titleOf = (ss: IxSec[], fallback: string) => (ss.filter((s) => s.live).length === 1 && ss.length === 1 ? ss[0].model.title : fallback);
+  // Sections of other kinds with nothing written yet are listed with the items' "coming soon", not as a part of their own.
+  const moreSecs = of('more'), moreLive = moreSecs.some((s) => s.live);
+  const itemSecs = moreLive ? of('items') : [...of('items'), ...moreSecs];
+
+  type Part = { id: string; label: string; title: string; n: number; count: string; html: string };
+  const parts: Part[] = [
+    { id: 'walkthrough', label: ui('ixStory'), title: story?.quests ? ui('ixStoryMissions') : ui('ixStoryTitle'), n: storyN, count: storyCount, html: storyHtml },
+    ...(sideSecs.length ? [{ id: 'side', label: ui('ixSide'), title: titleOf(sideSecs, ui('ixSide')), n: sideN, count: '', html: sideHtml }] : []),
+    ...(personSecs.length ? [{ id: 'characters', label: ui('ixCharacters'), title: titleOf(personSecs, ui('ixCharacters')), n: peopleN, count: peopleN ? ui('ixPeopleN', { n: peopleN }) : '', html: charsHtml }] : []),
+    ...(placeSecs.length ? [{ id: 'places', label: ui('ixPlaces'), title: ui('ixPlaces'), n: places.size, count: regionList.length > 1 ? ui('ixRegionsN', { n: places.size, r: regionList.length }) : '', html: placesHtml }] : []),
+    ...(itemSecs.length ? [{ id: 'items', label: ui('ixItems'), title: titleOf(itemSecs, ui('ixItems')), n: count(itemSecs), count: '', html: chipsOf(itemSecs) }] : []),
+    ...(moreLive ? [{ id: 'more', label: ui('ixMore'), title: titleOf(moreSecs, ui('ixMore')), n: count(moreSecs), count: '', html: chipsOf(moreSecs) }] : []),
+  ];
+  const total = parts.reduce((k, p) => k + p.n, 0);
+  const menu = `<div class="qc-ix-menu sticky z-30 mt-6 flex flex-col gap-2 border-y border-white/10 bg-[#07070a]/95 py-2.5 backdrop-blur sm:flex-row sm:items-center">
+    <nav aria-label="${esc(ui('onThisPage'))}" class="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">${parts.map((p) => `<a href="#${p.id}" class="whitespace-nowrap rounded-full border ${p.n ? 'border-white/15 text-zinc-400' : 'border-dashed border-white/10 text-zinc-500'} px-3 py-1 text-[13px] hover:border-[#a87ffb]/50 hover:text-white"><b class="mr-1 font-semibold ${p.n ? 'text-white' : ''}">${esc(p.label)}</b><span class="tabular-nums">${p.n || esc(ui('ixSoon'))}</span></a>`).join('')}${ach ? `<a href="achievements/index.html" class="whitespace-nowrap rounded-full border border-amber-500/30 px-3 py-1 text-[13px] text-amber-300 hover:text-white">&#9733; ${esc(ui('achShort'))}</a>` : ''}</nav>
+    <input type="search" data-qc-filter id="qc-cfilter" autocomplete="off" placeholder="${esc(secs.length && total >= 40 ? ui('ixFilter') : ui('ixFilterSmall'))}" class="w-full shrink-0 rounded-xl border border-[#a87ffb]/40 bg-white/[0.04] px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:border-[#a87ffb] focus:outline-none sm:w-64"></div>`;
+  const part = (p: Part, i: number) => `${i === 1 ? '<span id="compendium"></span>' : ''}<section id="${p.id}" data-fsec class="scroll-mt-36 pt-7"><div class="mb-2.5 flex items-baseline justify-between gap-3"><h2 class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(p.title)}</h2>${p.count ? `<span class="text-xs tabular-nums text-zinc-500">${esc(p.count)}</span>` : ''}</div>${p.html}</section>`;
+  // Wider than the page's text from laptop width up, so cards sit four or five to a row.
+  return `<div data-qc-index class="qc-ix lg:-mx-16 xl:-mx-32">${menu}
+    <p data-fnone hidden class="mt-4 text-sm text-zinc-500">${esc(ui('ixNone'))}</p>
+    ${deepResults(key)}
+    ${parts.map(part).join('')}</div>
+  <script>(function(){var __name=function(f){return f;};var compIndex=${compIndex.toString()};var K=${JSON.stringify(key)};
+  function rd(s){try{var v=JSON.parse(localStorage.getItem('qcw:'+K+':'+s)||'[]');return Array.isArray(v)?v.map(String):[]}catch(e){return[]}}
+  function wr(s,v){try{localStorage.setItem('qcw:'+K+':'+s,JSON.stringify(v))}catch(e){}}
+  compIndex(document,rd,wr);
+  document.querySelectorAll('.qc-soon').forEach(function(s){s.addEventListener('click',function(){var t=s.textContent;s.textContent=s.getAttribute('data-soon');setTimeout(function(){s.textContent=t;},1400);});});})();</script>`;
+}
+
+/** Under the index's filter (the website): steps, items and secrets from the walkthrough that match (search.json). */
+function deepResults(key: string): string {
+  return `<div class="qc-site-only"><div id="qc-deep" hidden class="mt-4"><div class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">${esc(ui('ixDeep'))}</div><ul id="qc-gresults" class="space-y-1"></ul></div></div>
+  <script>(function(){var __name=function(f){return f;};var fuzzyScore=${fuzzyScore.toString()};
+  var q=document.getElementById('qc-cfilter'),box=document.getElementById('qc-deep'),out=document.getElementById('qc-gresults'),idx=null,busy=null;if(!q)return;
+  function e(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function load(){if(idx)return Promise.resolve(idx);if(!busy)busy=fetch(${JSON.stringify(`/${LP}guides/${key}/search.json`)}).then(function(r){return r.json();}).then(function(j){idx=j;return j;}).catch(function(){idx=[];return idx;});return busy;}
+  function run(){var v=q.value.trim();if(v.length<2){box.hidden=true;out.innerHTML='';return;}load().then(function(ix){if(q.value.trim()!==v)return;
+    var r=ix.filter(function(x){return !x.p;}).map(function(x){return{x:x,s:fuzzyScore(v,x.l)};}).filter(function(y){return y.s>0;}).sort(function(a,b){return b.s-a.s;}).slice(0,8);
+    box.hidden=!r.length;out.innerHTML=r.map(function(y){return '<li><a class="block rounded-lg px-3 py-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10" href="'+e(y.x.h)+'"><span class="font-semibold text-white">'+e(y.x.l)+'</span> <span class="text-xs text-[#c4b0ff]">· '+e(y.x.k)+'</span>'+(y.x.c?' <span class="text-xs text-zinc-500">· '+e(y.x.c)+'</span>':'')+'</a></li>';}).join('');});}
+  q.addEventListener('focus',load);q.addEventListener('input',run);})();</script>`;
+}
 
 /** The compendium's entity pages (previews only): a summary box made for search, linked back to the guide. */
 /**
@@ -1987,6 +2176,20 @@ async function buildSiteCss() {
   *, ::after, ::before, ::backdrop, ::file-selector-button { border-color: var(--color-gray-200, currentColor); }
   input::placeholder, textarea::placeholder { color: var(--color-gray-400); }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+}
+@layer components {
+  /* A guide front page's index (compIndexHtml), on the site and in the app's Guide tab. */
+  .qc-ix details > summary { list-style: none; }
+  .qc-ix details > summary::-webkit-details-marker { display: none; }
+  .qc-ix details[open] > summary .qc-caret { transform: rotate(90deg); }
+  .qc-ix .qc-mdone .qc-nm { color: #71717a; }
+  .qc-ix .qc-chdone [data-chbar] { background: #34d399; }
+  .qc-ix .qc-chdone [data-chcount] { color: #34d399; }
+  .qc-ix [data-progress] { font-size: 11px; font-weight: 700; color: #a87ffb; }
+  .qc-ix [data-progress].is-complete { color: #34d399; }
+  .qc-ix-menu { top: 4rem; }
+  .qc-ix-menu nav { scrollbar-width: none; }
+  .qc-ix-menu nav::-webkit-scrollbar { display: none; }
 }`;
   const scanner = new Scanner({ sources: [{ base: OUT, pattern: '**/*.html', negated: false }] });
   const compiler = await compile(input, { base: path.resolve('.'), onDependency: () => {} });
@@ -2050,6 +2253,7 @@ async function main() {
   for (const cd of (await db().collection('guideCompendium').get()).docs) {
     if (ONLY && cd.id !== ONLY) continue;
     const c: any = cd.data();
+    if (c?.index) IX_FACTS.set(cd.id, c.index);
     const entities = (await cd.ref.collection('entities').get()).docs.map((d) => d.data() as any).filter((e) => PREVIEW || e.status === 'published') as CompEntity[];
     const people = PREVIEW ? Object.fromEntries((await cd.ref.collection('people').get()).docs.map((d) => [d.id, d.data() as any])) : {};
     // The owner's edits (Fix now) on compendium pages, over the page's data.

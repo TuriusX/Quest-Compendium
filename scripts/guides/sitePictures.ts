@@ -184,3 +184,9 @@ export function stepHtml(p: SitePicture): string {
 export function entryHtml(p: SitePicture): string {
   return `<a href="${url(p.id, 'w1280.webp')}" class="mt-1.5 block w-24" aria-label="${esc(p.caption)}"><img src="${url(p.id, 'thumb.webp')}" width="96" height="54" loading="lazy" decoding="async" alt="${esc(p.alt)}" style="object-position:${coverPosition(p.width, p.height, p.focus, 96, 54)}" class="block w-24 aspect-video object-cover rounded-md border border-white/10"></a>${p.credit ? `<span class="block text-[11px] text-zinc-500">${esc(p.credit)}</span>` : ''}`;
 }
+
+/** A small picture on a guide front page's card (a portrait or a place's thumbnail), cut around its focal point, lazy. */
+export function cardHtml(p: SitePicture, w: number, h: number, cls: string): string {
+  // The 300-wide cut keeps the picture's own shape (the 160 thumbnail is already cut to 16:9).
+  return `<img src="${url(p.id, 'w300.webp')}" width="${w}" height="${h}" loading="lazy" decoding="async" alt="${esc(p.alt)}" style="object-position:${coverPosition(p.width, p.height, p.focus, w, h)}" class="${cls}">`;
+}
