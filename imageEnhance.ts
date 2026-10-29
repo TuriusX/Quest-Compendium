@@ -12,7 +12,8 @@
  * Files: the original's sizes stay at v/{id}/; the improved ones at e/{id}/{stamp}/ (a new stamp each time, so the site,
  * which copies a picture's files once, never keeps an old version), the upscaled master at up/{id}.png. The doc's
  * `enhance` says what was done; `useOriginal` is the switch. The owner's own pictures are left alone unless he asks
- * (force). Costs: the nightly ones count in the pictures' budget ($0.50 a night, $5 a month, pictureFocus.ts).
+ * (force). Costs: the nightly ones count in the pictures' budget ($0.50 a night, $5 a month, pictureFocus.ts), and
+ * the upscales have their own $2 a month inside it (upscaleBudget), so the picture finder always keeps $3.
  */
 import sharp from 'sharp';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -41,6 +42,25 @@ const SIZES: Record<string, { width: number; fmt: 'webp' | 'avif' }> = {
 export const isCharacter = (t: any) => t?.kind === 'entity' && /charac|person|people|npc|companion|ally|villain|gang|member|boss|human/i.test(String(t?.label || ''));
 
 export type Budget = { left: () => number; add: (d: number) => Promise<void> };
+
+/** Portrait upscales' own share of the pictures' $5 a month (owner, Oct 29 2026). */
+export const UPSCALE_MONTHLY = 2;
+/**
+ * The budget for upscales: what's left tonight and this month for pictures, and of the upscales' own $2 this month
+ * (system/pictureUpscale.month). Used up: waiting portraits keep their touched-up originals and are upscaled next month.
+ */
+export async function upscaleBudget(): Promise<Budget> {
+  const { pictureBudget } = await import('./scripts/guides/pictureFocus');
+  const pb = await pictureBudget();
+  const ref = getFirestore().collection('system').doc('pictureUpscale');
+  const month = new Date().toISOString().slice(0, 7);
+  const st: any = (await ref.get()).data() || {};
+  let used = st.month?.id === month ? Number(st.month.dollars) || 0 : 0;
+  return {
+    left: () => Math.min(pb.nightLeft, pb.monthLeft, Math.max(0, UPSCALE_MONTHLY - used)),
+    add: async (d) => { used += d; await pb.add(d); await ref.set({ month: { id: month, dollars: used } }, { merge: true }); },
+  };
+}
 export type UpscaleResult = { status: 'done' | 'failed' | 'skipped'; why: string; at: number; from?: [number, number]; to?: [number, number]; model?: string; dollars: number; check?: any };
 export type EnhanceResult = { id: string; ops: TouchupOp[]; upscale?: UpscaleResult; dollars: number; changed: boolean };
 

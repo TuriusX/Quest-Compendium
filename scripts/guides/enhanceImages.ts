@@ -6,12 +6,12 @@
  *       already on the site: $3, outside the pictures' monthly budget)
  *   --upscaled <id>=<file.png>   use an upscale made before for that picture (still checked like a new one)
  *   (nightly: enhanceNightly() from scripts/pipeline/run.ts, right after the picture finder: new pictures touched up,
- *    and character portraits upscaled within the pictures' budget, $0.50 a night and $5 a month)
+ *    and character portraits upscaled within the pictures' budget, $0.50 a night and $5 a month, of which the upscales
+ *    may use $2 a month)
  */
 import fs from 'fs';
 import { db, arg } from './common';
-import { enhanceImage, isCharacter, UPSCALE_COST, type Budget, type EnhanceResult } from '../../imageEnhance';
-import { pictureBudget } from './pictureFocus';
+import { enhanceImage, isCharacter, upscaleBudget, UPSCALE_COST, type Budget, type EnhanceResult } from '../../imageEnhance';
 
 /** What is still to do: pictures never measured, and character portraits whose upscale hasn't been tried. */
 async function todo(): Promise<{ id: string; upscale: boolean; measured: boolean }[]> {
@@ -55,8 +55,7 @@ async function run(budget: Budget, given: Record<string, Buffer> = {}, dryRun = 
 
 /** The nightly step: a line for the run's report, or null when there was nothing to do. */
 export async function enhanceNightly(): Promise<string | null> {
-  const pb = await pictureBudget();
-  const r = await run({ left: () => Math.min(pb.nightLeft, pb.monthLeft), add: pb.add }, {}, false, 60);
+  const r = await run(await upscaleBudget(), {}, false, 60);
   if (!r.looked) return null;
   return `✨ Pictures: ${r.touched} touched up, ${r.upscaled} upscaled${r.failed.length ? `, ${r.failed.length} failed the upscale check (kept as they were)` : ''} ($${r.dollars.toFixed(2)}).`;
 }

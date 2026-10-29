@@ -545,10 +545,8 @@ export function registerGuideImages(app: Express, deps: Deps) {
       // Touch up (the owner asked; his own pictures too): the touch-ups, and the upscale for a character portrait,
       // within the pictures' budget. The original stays; the "Original" switch turns it back.
       if (b.action === 'touchup') {
-        const { enhanceImage } = await import('./imageEnhance');
-        const { pictureBudget } = await import('./scripts/guides/pictureFocus');
-        const pb = await pictureBudget();
-        const r = await enhanceImage(String(req.params.id), { force: true, upscale: true, budget: { left: () => Math.min(pb.nightLeft, pb.monthLeft), add: pb.add } });
+        const { enhanceImage, upscaleBudget } = await import('./imageEnhance');
+        const r = await enhanceImage(String(req.params.id), { force: true, upscale: true, budget: await upscaleBudget() });
         const now: any = (await ref.get()).data();
         if (now?.status === 'approved') await markSiteDirty();
         return res.json({ ok: true, changed: !!r?.changed, image: { id: ref.id, ...now } });
