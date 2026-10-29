@@ -37,7 +37,10 @@ export const STATS_COMMAND = {
   description: 'Activity at a glance (owner only)',
   dm_permission: false,
   default_member_permissions: '8',
-  options: [{ type: 3, name: 'window', description: 'A longer window (default: last 24 hours and last 7 days)', required: false, choices: [{ name: 'Last 24 hours', value: '24h' }, { name: 'Last 7 days', value: '7d' }, { name: 'Last 30 days', value: '30d' }] }],
+  options: [
+    { type: 3, name: 'window', description: 'A longer window (default: last 24 hours and last 7 days)', required: false, choices: [{ name: 'Last 24 hours', value: '24h' }, { name: 'Last 7 days', value: '7d' }, { name: 'Last 30 days', value: '30d' }] },
+    { type: 3, name: 'chart', description: 'Questions per day as a chart instead', required: false, choices: [{ name: 'Last 30 days', value: '30d' }, { name: 'Last 90 days', value: '90d' }, { name: 'All time', value: 'all' }] },
+  ],
 };
 
 async function call(method: string, path: string, body?: unknown) {

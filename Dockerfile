@@ -12,6 +12,8 @@ RUN npm run build
 FROM node:22.23.4-slim
 WORKDIR /app
 ENV NODE_ENV=production
+# A font for the charts the server draws (/stats chart, questionsChart.ts): the slim image has none, so text would be blank.
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 # The Node.js release in the image, in the build log (pinned to the line's security release; Oct 2026: 22.23.4).

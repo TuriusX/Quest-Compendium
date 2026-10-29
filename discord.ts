@@ -13,7 +13,8 @@
  * Once the pipeline decides (applied, or dismissed), it posts the result in the results channel (scripts/guides/corrections.ts).
  *
  *   /stats [window: 24h | 7d | 30d] (the owner only, DISCORD_OWNER_ID; anyone else gets "Not allowed"): the owner's activity
- *     numbers (ownerStats.ts), in a reply only they see.
+ *     numbers (ownerStats.ts), in a reply only they see. /stats chart: 30d | 90d | all: questions per day as a chart
+ *     (questionsChart.ts), freshly drawn, also only for them.
  * Settings: DISCORD_APP_ID, DISCORD_PUBLIC_KEY (request signatures), DISCORD_MOD_ROLE_ID, DISCORD_RESULTS_CHANNEL_ID,
  * and the secret DISCORD_BOT_TOKEN (for posting results and registering the command: scripts/discord/register.ts).
  */
@@ -23,6 +24,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { guideList, guideAreasByKey, guideAreaEntries } from './guidesApi';
 import { saveCandidate, entryById, looksLikeSpam, REPORTER_WEIGHT } from './corrections';
 import { statsText } from './ownerStats';
+import { questionsChart, centralDay } from './questionsChart';
 
 const PUBLIC_KEY = () => process.env.DISCORD_PUBLIC_KEY || '';
 const MOD_ROLE = () => process.env.DISCORD_MOD_ROLE_ID || '';
@@ -227,6 +229,33 @@ async function confirmButtonPressed(i: any): Promise<any> {
   return { type: 7, data: { content: `${content}\n✅ Confirmed by a Guide Moderator: it skips the 3-reporter rule, but sources still check it.`, components: [], allowed_mentions: { parse: [] } } };
 }
 
+const isOwner = (i: any) => !!process.env.DISCORD_OWNER_ID && String(i.member?.user?.id || i.user?.id || '') === process.env.DISCORD_OWNER_ID;
+
+/**
+ * /stats chart: drawing takes a few seconds, so the reply is acknowledged first ("thinking…", only the owner sees it)
+ * through Discord's callback, and the request stays open while the chart is drawn and sent (the server keeps its CPU
+ * only while a request is open); the chart then replaces "thinking…".
+ */
+async function statsChart(i: any): Promise<void> {
+  const app = process.env.DISCORD_APP_ID || '';
+  const ack = await fetch(`${API}/interactions/${i.id}/${i.token}/callback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 5, data: { flags: 64 } }) });
+  if (!ack.ok) throw new Error(`acknowledge: ${ack.status}`);
+  const range = String(opt(i.data, 'chart')?.value || '30d');
+  const days = range === '90d' ? 90 : range === 'all' ? 0 : 30;
+  const form = new FormData();
+  try {
+    const { png, days: rows } = await questionsChart({ from: days ? centralDay(Date.now() - (days - 1) * 86_400_000) : '', title: `Questions per day, ${days ? `last ${days} days` : 'all time'}` });
+    const total = rows.reduce((n, d) => n + d.signedIn + d.guests, 0);
+    form.append('payload_json', JSON.stringify({ content: `${total} questions in ${rows.length} days (without your accounts and test accounts).`, attachments: [{ id: 0, filename: 'questions-per-day.png' }], allowed_mentions: { parse: [] } }));
+    form.append('files[0]', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'questions-per-day.png');
+  } catch (e: any) {
+    console.error('[discord] /stats chart', e?.message);
+    form.append('payload_json', JSON.stringify({ content: `Couldn't draw the chart: ${String(e?.message || e).slice(0, 200)}` }));
+  }
+  const r = await fetch(`${API}/webhooks/${app}/${i.token}/messages/@original`, { method: 'PATCH', body: form });
+  if (!r.ok) console.error('[discord] /stats chart reply', r.status, (await r.text()).slice(0, 200));
+}
+
 /**
  * /stats: the numbers in a reply only the owner sees. Most come back well inside Discord's 3 seconds; if not, the reply
  * is "thinking…" and the numbers replace it when ready.
@@ -265,6 +294,10 @@ export function registerDiscord(app: Express) {
       if (i.type === 1) return res.json({ type: 1 }); // PING (Discord checks the endpoint)
       if (i.type === 4) return res.json({ type: 8, data: { choices: await autocomplete(i.data) } });
       if (i.type === 2 && i.data?.name === 'correction') return res.json(await correctionCommand(i));
+      if (i.type === 2 && i.data?.name === 'stats' && opt(i.data, 'chart') && isOwner(i)) {
+        await statsChart(i);
+        return res.status(204).end();
+      }
       if (i.type === 2 && i.data?.name === 'stats') return res.json(await statsCommand(i));
       if (i.type === 3 && String(i.data?.custom_id || '').startsWith('qc-confirm:')) return res.json(await confirmButtonPressed(i));
       if (i.type === 3 && i.data?.custom_id === 'qc-suggest') return res.json(suggestForm());
