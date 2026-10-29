@@ -1163,6 +1163,28 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       openSignIn();
     } else setIsPaywallOpen(true);
   }, [isInitializing, user?.uid, user?.isGuest]);
+  // "Sign in for more" from the website's ask box (?ask=…, siteAsk.ts): sign-in first for a guest, then the question
+  // waits in the box (not sent), where the normal free / Premium limits apply.
+  useEffect(() => {
+    if (isInitializing || !user) return;
+    let text = '';
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const asked = q.get('ask');
+      if (asked) {
+        text = asked.slice(0, 500);
+        sessionStorage.setItem('qc-ask-pending', text);
+        q.delete('ask');
+        const rest = q.toString();
+        window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`);
+      } else text = sessionStorage.getItem('qc-ask-pending') || '';
+    } catch {}
+    if (!text) return;
+    if (user.isGuest) { openSignIn(); return; }
+    try { sessionStorage.removeItem('qc-ask-pending'); } catch {}
+    const t = setTimeout(() => window.dispatchEvent(new CustomEvent('qc-prefill-question', { detail: { text } })), 800);
+    return () => clearTimeout(t);
+  }, [isInitializing, user?.uid, user?.isGuest]);
   // Back from the web checkout or the portal: the plan again, past the server's cache.
   useEffect(() => {
     try {

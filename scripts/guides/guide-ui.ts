@@ -222,6 +222,22 @@ export const GUIDE_UI_EN: Record<string, string> = {
   ixOtherPlaces: 'Other places',
   ixSoonNote: 'Coming soon: {list}. Each gets its own page; this section fills in as they are written.',
   ixFrom: 'from {ch}',
+  askTitle: 'Stuck? Ask about this',
+  askPlaceholder: 'Ask about this page or the game…',
+  askButton: 'Ask',
+  askThinking: 'Looking through the guide…',
+  askFrom: 'From the guide:',
+  askNotCovered: "Our guide doesn't cover this yet, so treat this answer with care.",
+  askNotCoveredSearched: "Our guide doesn't cover this yet: this answer comes from a web search and hasn't been checked.",
+  askOverlay: 'The Quest Compendium overlay answers like this while you play, right beside your game.',
+  askGetApp: 'Get the app',
+  askLimit: "That's today's free questions here.",
+  askSignIn: 'Sign in for more',
+  askCapped: 'Free questions on the site are used up for today.',
+  askError: "That didn't work. Try again in a moment.",
+  askLeft: '{n} free questions left today',
+  askLeftOne: '1 free question left today',
+  playersAsked: 'Players asked',
 };
 export const SOURCE_STRINGS = GUIDE_UI_EN;
 export const HAND_WRITTEN = {};

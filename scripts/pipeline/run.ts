@@ -78,6 +78,7 @@ import { imagesWeekLine } from '../../guideImages';
 import { suggestNightly } from '../guides/suggestImages';
 import { isCorePage } from '../guides/core';
 import { playerWeekLines } from './playerWeek';
+import { siteAskWeekLine } from '../../siteAskStats';
 import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
 import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY } from '../../searchGuard';
 import { FieldPath } from 'firebase-admin/firestore';
@@ -915,6 +916,14 @@ async function main() {
       for (const l of lines) (l.startsWith('⚠️') ? RUN.head : report).push(l);
     } catch (e: any) {
       console.warn(`Player section skipped: ${e?.message}`);
+    }
+  }
+  // Mondays: the website's ask box (siteAsk.ts): questions, how many the guides couldn't answer, fixes queued.
+  if (MONDAY) {
+    try {
+      report.push(await siteAskWeekLine());
+    } catch (e: any) {
+      console.warn(`Site questions line skipped: ${e?.message}`);
     }
   }
   // Mondays: how many live guide pages are still unchecked (written from memory, never verified against sources), and

@@ -1060,6 +1060,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         const ov = a.overview ? `<p class="mt-5 text-zinc-300 leading-relaxed">${rich(a.overview)}</p>` : '';
         return pic ? `<div class="mt-5">${heroHtml(pic)}${ov.replace('class="mt-5 ', 'class="')}</div><div class="clear-both"></div>` : ov;
       })()}
+      ${askBox(gameKey, game, a.slug, 'area', a.name)}
       ${missionsHere(a.slug, areas)}
       ${infoBox}
       ${peopleCards(a.slug, (a as any).people)}
@@ -1068,6 +1069,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       ${quests.length ? `<p class="mt-3 text-sm text-zinc-400"><span class="text-zinc-500">${esc(ui('relatedQuests'))}:</span> ${quests.map((q) => `<span class="inline-block rounded-md bg-white/[0.05] px-2 py-0.5 text-zinc-200 mr-1 mb-1">${esc(q)}</span>`).join('')}</p>` : ''}
       ${walk}
       ${choices}
+      ${playersAsked(gameKey, a.slug)}
       ${walk ? `<h2 class="mt-10 text-xl font-bold text-white">${esc(ui('checklists'))}</h2>` : ''}
       ${dontMiss}
       ${otherSec
@@ -1450,10 +1452,12 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           ${igdbFacts(key, gameName)}
           ${ttbFront(key)}
           <p class="text-zinc-400 mt-2">${esc(ui('gameIntro'))}</p>
+          ${askBox(key, gameName, '', 'front', shortGame(gameName))}
           <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, one(links.length, 'statAreas'))}${stat(totalChecks, one(totalChecks, 'statThings'))}${stat(missables, one(missables, 'statMissables'))}${checked ? stat(checked === checkedTotal ? ui('statAll') : ui('statOf', { n: checked, total: checkedTotal }), one(checkedTotal, 'statChecked')) : ''}</div>
           ${achHere ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${esc(ui('achCount', { n: (achHere.list || []).length }))} · ${(achHere.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
           <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
           ${compIndexHtml(key, links, visible, byslug, !!achHere)}
+          ${playersAsked(key, '')}
           ${cta('../'.repeat(2 + extra), gameName)}
         </article>`,
       draft: visible.some((o) => byslug.get(o.slug)!.status !== 'published'),
@@ -1576,6 +1580,85 @@ function guideSearchBox(key: string, listSel: string, cls = 'mt-6'): string {
     out.innerHTML=r.length?r.map(function(y){return '<li><a class="block rounded-lg px-3 py-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10" href="'+e(y.x.h)+'"><span class="font-semibold text-white">'+e(y.x.l)+'</span> <span class="text-xs text-[#c4b0ff]">· '+e(y.x.k)+'</span>'+(y.x.c?' <span class="text-xs text-zinc-500">· '+e(y.x.c)+'</span>':'')+'</a></li>';}).join(''):'<li class="text-sm text-zinc-500 px-1">'+e(${JSON.stringify(ui('noMatches'))})+'</li>';});}
   q.addEventListener('focus',load);q.addEventListener('input',run);})();</script>`;
 }
+
+// ---- "Stuck? Ask about this" (siteAsk.ts on the server; owner, Oct 29 2026) ----
+/** Approved "Players asked" entries by guide page ("key/slug"; the front page's slug is ""). */
+const PLAYERS_ASKED = new Map<string, { q: string; a: string; lang: string }[]>();
+/**
+ * The box near the top of a guide page: hidden until the server says it's on (config/siteAsk.enabled, so it can be
+ * switched off at once), left out of the app (qc-site-only). Its behaviour is assets/ask.js (writeAskScript); its
+ * answer and message layouts are templates here, so the stylesheet has their classes.
+ */
+function askBox(key: string, game: string, slug: string, kind: 'area' | 'entity' | 'front', page: string): string {
+  const T = {
+    thinking: ui('askThinking'), from: ui('askFrom'), notCovered: ui('askNotCovered'), notCoveredSearched: ui('askNotCoveredSearched'), limit: ui('askLimit'), signIn: ui('askSignIn'),
+    capped: ui('askCapped'), getApp: ui('askGetApp'), error: ui('askError'), left: ui('askLeft'), leftOne: ui('askLeftOne'),
+  };
+  const download = `/${LP}index.html?from=guide#download`;
+  return `<div hidden data-qc-ask data-key="${esc(key)}" data-slug="${esc(slug)}" data-kind="${kind}" data-lang="${LANG}" data-game="${esc(game)}" data-page="${esc(page)}" data-api="${esc(SERVER_URL)}" data-app="${esc(`${SERVER_URL}/?from=guide`)}" data-download="${esc(download)}" data-t="${esc(JSON.stringify(T))}" class="qc-site-only mt-5 rounded-xl border border-[#a87ffb]/30 bg-[#a87ffb]/[0.06] px-3.5 py-2.5">
+        <form class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5"><label for="qc-ask-q" class="w-full text-sm font-semibold text-[#c4b0ff] sm:w-auto">${esc(ui('askTitle'))}</label><input id="qc-ask-q" name="q" maxlength="300" autocomplete="off" placeholder="${esc(ui('askPlaceholder'))}" class="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:border-[#a87ffb] focus:outline-none"><button class="rounded-lg bg-[#a87ffb] px-3 py-1.5 text-sm font-semibold text-black hover:bg-white disabled:opacity-50">${esc(ui('askButton'))}</button></form>
+        <div data-ask-out aria-live="polite"></div>
+        <template data-ask-answer><div class="mt-2.5 border-t border-white/10 pt-2.5"><p data-q class="text-xs text-zinc-500"></p><div data-a class="mt-1 whitespace-pre-line text-sm leading-relaxed text-zinc-200"></div><p data-note class="mt-1.5 text-xs text-amber-200/90"></p><p data-src class="mt-1.5 text-xs text-zinc-400"></p><p class="mt-1.5 text-xs text-zinc-500">${esc(ui('askOverlay'))} <a class="font-semibold text-[#a87ffb] hover:text-white" href="${esc(download)}">${esc(ui('askGetApp'))}</a></p></div></template>
+        <template data-ask-msg><p class="mt-2 text-xs text-zinc-400"></p></template>
+        <template data-ask-link><a class="font-semibold text-[#a87ffb] hover:text-white"></a></template>
+      </div><script src="/assets/ask.js" defer></script>`;
+}
+/** A page's approved "Players asked" entries, in its language, inside the page. */
+function playersAsked(key: string, slug: string): string {
+  const xs = (PLAYERS_ASKED.get(`${key}/${slug}`) || []).filter((x) => x.lang === LANG);
+  return xs.length ? `<section id="players-asked" class="mt-8 scroll-mt-20"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('playersAsked'))}</h2>${xs.map((x) => `<details class="mt-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5"><summary class="cursor-pointer font-semibold text-white">${esc(x.q)}</summary><p class="mt-1.5 whitespace-pre-line text-zinc-300 leading-relaxed">${esc(x.a)}</p></details>`).join('')}</section>` : '';
+}
+/** assets/ask.js: the box's behaviour (one file for every page, cached by the browser). */
+function writeAskScript() {
+  fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(OUT, 'assets', 'ask.js'), ASK_JS);
+}
+const ASK_JS = String.raw`// "Stuck? Ask about this" (scripts/guides/publish.ts askBox; the server's siteAsk.ts).
+(function(){
+  var box=document.querySelector('[data-qc-ask]'); if(!box) return;
+  var d=box.dataset, T=JSON.parse(d.t), api=d.api, cfg=null, ac=null;
+  var GS='https://www.gstatic.com/firebasejs/10.13.0/';
+  var dev='';
+  try{dev=localStorage.getItem('qc-ask-device')||'';}catch(e){}
+  if(!/^[a-f0-9]{24}$/.test(dev)){dev=Array.prototype.map.call(crypto.getRandomValues(new Uint8Array(12)),function(b){return('0'+b.toString(16)).slice(-2);}).join('');try{localStorage.setItem('qc-ask-device',dev);}catch(e){}}
+  fetch(api+'/api/site/ask/config').then(function(r){return r.json();}).then(function(c){cfg=c;if(c&&c.on)box.hidden=false;}).catch(function(){});
+  // App Check (reCAPTCHA Enterprise): loaded only when someone asks, so pages stay light.
+  function token(){
+    if(!cfg||!cfg.appCheck) return Promise.resolve('');
+    if(!ac) ac=Promise.all([import(GS+'firebase-app.js'),import(GS+'firebase-app-check.js')]).then(function(m){var app=m[0].initializeApp(cfg.appCheck.firebase,'qc-ask');return{m:m[1],a:m[1].initializeAppCheck(app,{provider:new m[1].ReCaptchaEnterpriseProvider(cfg.appCheck.key),isTokenAutoRefreshEnabled:false})};});
+    return ac.then(function(x){return x.m.getToken(x.a,false);}).then(function(t){return t.token;}).catch(function(){return'';});
+  }
+  var out=box.querySelector('[data-ask-out]'), form=box.querySelector('form'), input=form.querySelector('input'), btn=form.querySelector('button');
+  function tpl(name){return box.querySelector('template[data-ask-'+name+']').content.firstElementChild.cloneNode(true);}
+  function link(text,href){var a=tpl('link');a.textContent=text;a.href=href;return a;}
+  function msg(text,links){var p=tpl('msg');p.textContent=text;(links||[]).forEach(function(l,i){p.appendChild(document.createTextNode(i?' · ':' '));p.appendChild(l);});out.replaceChildren(p);}
+  // "Sign in for more": the web app, with the question (and where it was asked) in the box.
+  function signInHref(q){var t=d.game+(d.page&&d.page!==d.game?' ('+d.page+')':'')+': '+q;return d.app+'&ask='+encodeURIComponent(t);}
+  form.addEventListener('submit',function(ev){
+    ev.preventDefault();
+    var q=input.value.trim(); if(q.length<3) return;
+    btn.disabled=true; msg(T.thinking);
+    token().then(function(tk){
+      return fetch(api+'/api/site/ask',{method:'POST',headers:{'Content-Type':'application/json','X-Firebase-AppCheck':tk},body:JSON.stringify({key:d.key,slug:d.slug,kind:d.kind,lang:d.lang,q:q,device:dev})});
+    }).then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});}).then(function(x){
+      var j=x.j;
+      if(j.off){box.hidden=true;return;}
+      if(j.limit==='site'){msg(T.capped,[link(T.signIn,signInHref(q)),link(T.getApp,d.download)]);return;}
+      if(j.limit){msg(T.limit,[link(T.signIn,signInHref(q))]);return;}
+      if(!x.ok||!j.answer){msg(T.error);return;}
+      var el=tpl('answer');
+      el.querySelector('[data-q]').textContent=q;
+      el.querySelector('[data-a]').textContent=j.answer;
+      var note=el.querySelector('[data-note]');
+      if(j.covered) note.remove(); else note.textContent=j.searched?T.notCoveredSearched:T.notCovered;
+      var src=el.querySelector('[data-src]');
+      if(j.sources&&j.sources.length){src.textContent=T.from+' ';j.sources.forEach(function(s,i){if(i)src.appendChild(document.createTextNode(' · '));src.appendChild(link(s.label,s.href));});}else src.remove();
+      if(typeof j.left==='number'){var l=tpl('msg');l.textContent=(j.left===1?T.leftOne:T.left).replace('{n}',j.left);el.appendChild(l);}
+      out.replaceChildren(el); input.value='';
+    }).catch(function(){msg(T.error);}).then(function(){btn.disabled=false;});
+  });
+})();
+`;
 
 /** The compendium as compSections made it last (guide.json): live sections first, then the ones only coming soon. */
 let COMP_MODEL: any = null;
@@ -1961,6 +2044,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
         const p = ov || lead ? `<p class="${pic ? '' : 'mt-5 '}text-zinc-300 leading-relaxed">${lead}${rich(ov, '../', e.slug)}</p>` : '';
         return pic ? `<div class="mt-5">${heroHtml(pic)}${p}</div><div class="clear-both"></div>` : p;
       })()}
+      ${askBox(key, gameName, e.slug, 'entity', searchName(e))}
       ${(() => {
         // A place that is also a chapter of the walkthrough ("Colter" / "Chapter 1: Colter"): players searching the place
         // usually want that chapter, so it's linked straight under the opening line.
@@ -1977,6 +2061,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
         const asked = e.qaArrangedAt ? e.alsoAsked || [] : e.qa || [];
         return asked.length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui(e.qaArrangedAt ? 'entAlsoAsked' : 'entQuestions'))}</h2>${asked.map((x: any, i: number) => `<h3 id="q-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.q)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.a, '../', e.slug)}</p>`).join('')}</section>` : '';
       })()}
+      ${playersAsked(key, e.slug)}
       <dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm">
         ${row('Type', esc(label))}
         ${e.quest ? questRows(e.quest, row, list) : ''}
@@ -2022,6 +2107,8 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     fs.writeFileSync(path.join(dir, 'page.json'), JSON.stringify({
       v: 1, kind: 'entity', key, slug: e.slug, name: searchName(e), fullName: e.name, type: label, overview: e.overview || '',
       story: e.story || [], gameplay: e.gameplay || [], summary: e.summary || null,
+      // A mission's facts (giver, where it starts, missables, choices, its parts' steps), for the site's ask box.
+      ...(e.quest ? { quest: e.quest } : {}),
       picture: pagePicture(key, e.slug) ? pictureJson(pagePicture(key, e.slug)!) : undefined,
     }));
     if (!PREVIEW) {
@@ -2270,6 +2357,13 @@ async function main() {
   // Owner-approved pictures (roadmap 14, /admin/images): on their pages from this publish on.
   console.log(`Pictures: ${await loadSitePictures(OUT, ONLY)} on the site.`);
   const ownerEdits = await loadOwnerEdits(ONLY);
+  // "Players asked" entries the owner approved (siteAsk.ts, /admin/asked): inside the page they were asked on.
+  // (QC_PLAYERS_ASKED=test_playersAsked: a local server's test entries, for looking at a local build.)
+  for (const d of (await db().collection(process.env.QC_PLAYERS_ASKED || 'playersAsked').where('status', '==', 'approved').get()).docs) {
+    const x: any = d.data();
+    const k = `${x.key}/${x.slug || ''}`;
+    PLAYERS_ASKED.set(k, [...(PLAYERS_ASKED.get(k) || []), { q: String(x.q), a: String(x.a), lang: String(x.lang || 'en') }]);
+  }
   // Start clean, so pages from an earlier preview (drafts) never get uploaded by accident.
   fs.rmSync(path.join(OUT, 'guides'), { recursive: true, force: true });
   const sitemap: string[] = [`${SITE}/`, `${SITE}/guides/`];
@@ -2398,6 +2492,7 @@ async function main() {
   if (PREVIEW) {
     // A preview: the site's icons beside it, and its own stylesheet; the website files and the homepage are untouched.
     for (const f of ['icon.svg', 'favicon.ico', 'favicon-96.png', 'favicon-192.png']) if (fs.existsSync(path.resolve('Marketing_Website_Files', f))) fs.copyFileSync(path.resolve('Marketing_Website_Files', f), path.join(OUT, f));
+    writeAskScript();
     await buildSiteCss();
     writeAppFragments(OUT);
     console.log(`Preview: ${OUT}${protos.size ? ` (${protos.size} flagship prototype(s))` : ''}. Nothing published.`);
@@ -2433,6 +2528,7 @@ async function main() {
   console.log(`Links: final URLs in ${relinked} page(s).`);
   console.log(`App pages: ${writeAppFragments(OUT)} (app.html beside each guide page, for the apps' Guide tab).`);
   console.log(`Editor line added to ${editorEverywhere(OUT)} other page(s) (homepage and the site's own pages).`);
+  writeAskScript();
   await buildSiteCss();
   console.log(`Built ${games.reduce((n, g) => n + g.count, 0)} guide page(s) for ${games.length} game(s)${withDrafts ? ' (drafts included, marked DRAFT and hidden from search)' : ''}.`);
   console.log(`Open ${path.join(OUT, 'guides', 'index.html')} in your browser to look them over.`);

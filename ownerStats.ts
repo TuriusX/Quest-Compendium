@@ -6,12 +6,14 @@
  *     window falls back to the daily counts (stats/{day}, Central time) for the days it covers, and says so (≈).
  *   - Sign-ups from Firebase Auth (account creation time); accounts in total.
  *   - Premium subscribers (users.isPremium) and this month's player AI cost (playerCosts/{month}).
+ *   - "Site": the website's ask box (siteAsk.ts), its questions and their cost, apart from the players' numbers.
  * Left out everywhere: the owner's accounts (ADMIN_EMAILS, config/players.ownerHashes, stats/{day}.owners) and test
  * traffic (never recorded: testTraffic.ts) and test accounts (an e2e / test address, or config/players.testUids).
  */
 import crypto from 'crypto';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth, type UserRecord } from 'firebase-admin/auth';
+import { siteAskWindow } from './siteAskStats';
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 const DAY_TZ = 'America/Chicago';
@@ -127,6 +129,10 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
     const n = longMs / DAY;
     parts.push(block(`Last ${n} days (vs the ${n} before)`, long, signedUp(now - longMs, now), { a: prev, signups: signedUp(now - 2 * longMs, now - longMs) }));
   }
+  // The website's ask box, apart from the players' numbers above (siteAsk.ts).
+  const siteMs = window === '30d' ? 30 * DAY : window === '7d' ? 7 * DAY : DAY;
+  const site = await siteAskWindow(now - siteMs, now);
+  parts.push(`**Site** (${window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours'}): ${site.questions} question(s) in the guide pages' ask box, ${site.uncovered} the guide couldn't answer · $${site.dollars.toFixed(2)}`);
   // Premium subscribers (not the owner's accounts) and this month's player AI cost.
   const cost = costs.docs.filter((d) => !owners.has(playerHash(d.id))).reduce((n, d) => n + (Number((d.data() as any).dollars) || 0), 0);
   parts.push(`**Premium subscribers:** ${subs}\n**Player AI cost this month:** ${money(cost)}\n**Accounts:** ${created.length}`);

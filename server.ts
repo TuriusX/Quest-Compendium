@@ -40,6 +40,7 @@ import { registerContributions } from './contributions';
 import { registerAnswerReports } from './answerReports';
 import { registerAnswerFeedback, recordMarkerCheck } from './answerFeedback';
 import { registerDiscord } from './discord';
+import { registerSiteAsk } from './siteAsk';
 import { pingNewSignup } from './signupPing';
 import { STEPS_RULES, extractSteps } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
@@ -445,6 +446,18 @@ async function startServer() {
 
   // The owner's editor on questcompendium.com's guide pages (ownerEditor.ts): Fix now, pipeline items, picture tools.
   registerOwnerEditor(app, {
+    requireAuth,
+    firebaseWebConfig: {
+      apiKey: process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY',
+      authDomain: 'quest-compendium-1bccf.firebaseapp.com',
+      projectId: 'quest-compendium-1bccf',
+      appId: '1:890629309063:web:87293cf13f922fd3edee22',
+    },
+  });
+
+  // "Stuck? Ask about this" on the website's guide pages (siteAsk.ts), and /admin/asked for its "Players asked" suggestions.
+  registerSiteAsk(app, {
+    gemini: getGeminiClient,
     requireAuth,
     firebaseWebConfig: {
       apiKey: process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY',
