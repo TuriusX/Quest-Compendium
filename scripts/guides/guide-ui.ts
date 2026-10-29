@@ -238,6 +238,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   askLeft: '{n} free questions left today',
   askLeftOne: '1 free question left today',
   playersAsked: 'Players asked',
+  themeToggle: 'Light or dark mode',
 };
 export const SOURCE_STRINGS = GUIDE_UI_EN;
 export const HAND_WRITTEN = {};

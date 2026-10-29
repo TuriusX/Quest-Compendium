@@ -237,7 +237,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "askError": "Das hat nicht geklappt. Versuch es gleich noch einmal.",
     "askLeft": "Heute noch {n} kostenlose Fragen übrig",
     "askLeftOne": "Heute noch 1 kostenlose Frage übrig",
-    "playersAsked": "Spieler fragten"
+    "playersAsked": "Spieler fragten",
+    "themeToggle": "Heller oder dunkler Modus"
   },
   es: {
     "navGuides": "Guías",
@@ -472,7 +473,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "askError": "No funcionó. Inténtalo de nuevo en un momento.",
     "askLeft": "Te quedan {n} preguntas gratis hoy",
     "askLeftOne": "Te queda 1 pregunta gratis hoy",
-    "playersAsked": "Los jugadores preguntaron"
+    "playersAsked": "Los jugadores preguntaron",
+    "themeToggle": "Modo claro u oscuro"
   },
   fr: {
     "navGuides": "Guides",
@@ -707,7 +709,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "askError": "Une erreur est survenue. Réessayez dans un instant.",
     "askLeft": "{n} questions gratuites restantes aujourd'hui",
     "askLeftOne": "1 question gratuite restante aujourd'hui",
-    "playersAsked": "Questions des joueurs"
+    "playersAsked": "Questions des joueurs",
+    "themeToggle": "Mode clair ou sombre"
   },
   ja: {
     "navGuides": "攻略ガイド",
@@ -942,7 +945,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "askError": "うまくいきませんでした。少し待ってからやり直してください。",
     "askLeft": "今日の無料質問はあと{n}回",
     "askLeftOne": "今日の無料質問はあと1回",
-    "playersAsked": "プレイヤーの質問"
+    "playersAsked": "プレイヤーの質問",
+    "themeToggle": "ライト/ダークモード切替"
   },
   ko: {
     "navGuides": "공략",
@@ -1177,7 +1181,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "askError": "문제가 발생했어요. 잠시 후 다시 시도해 주세요.",
     "askLeft": "오늘 남은 무료 질문 {n}개",
     "askLeftOne": "오늘 남은 무료 질문 1개",
-    "playersAsked": "다른 플레이어들의 질문"
+    "playersAsked": "다른 플레이어들의 질문",
+    "themeToggle": "라이트/다크 모드 전환"
   },
   pt: {
     "navGuides": "Guias",
@@ -1412,7 +1417,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "askError": "Não deu certo. Tente de novo em instantes.",
     "askLeft": "Restam {n} perguntas grátis hoje",
     "askLeftOne": "Resta 1 pergunta grátis hoje",
-    "playersAsked": "Perguntas de outros jogadores"
+    "playersAsked": "Perguntas de outros jogadores",
+    "themeToggle": "Modo claro ou escuro"
   },
   ru: {
     "navGuides": "Гайды",
@@ -1647,7 +1653,8 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "askError": "Что-то пошло не так. Попробуйте чуть позже.",
     "askLeft": "Осталось бесплатных вопросов на сегодня: {n}",
     "askLeftOne": "Остался 1 бесплатный вопрос на сегодня",
-    "playersAsked": "Игроки спрашивали"
+    "playersAsked": "Игроки спрашивали",
+    "themeToggle": "Светлая или тёмная тема"
   },
   zh: {
     "navGuides": "攻略",
@@ -1882,6 +1889,7 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "askError": "出了点问题，请稍后重试。",
     "askLeft": "今天还剩 {n} 次免费提问",
     "askLeftOne": "今天还剩 1 次免费提问",
-    "playersAsked": "玩家提问"
+    "playersAsked": "玩家提问",
+    "themeToggle": "浅色或深色模式"
   },
 };

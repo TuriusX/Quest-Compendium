@@ -37,6 +37,7 @@ import { getStorage } from 'firebase-admin/storage';
 import { isAdmin } from './reviewQueue';
 import { asFocus } from './src/utils/focus';
 import { markSiteDirty } from './ownerEditor';
+import { ADMIN_THEME_HEAD, ADMIN_THEME_BUTTON } from './adminTheme';
 
 type Mw = (req: Request, res: Response, next: NextFunction) => any;
 type Deps = { requireAuth: Mw; firebaseWebConfig: Record<string, string> };
@@ -524,7 +525,7 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
   const cfg = JSON.stringify(firebaseConfig).replace(/</g, '\\u003c');
   return `<!doctype html>
 <html lang="en">
-<head>
+<head>${ADMIN_THEME_HEAD}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
@@ -588,7 +589,7 @@ function imagesPage(firebaseConfig: Record<string, string>): string {
   <span style="flex:1"></span>
   <button id="addBtn">Add a picture</button>
   <a href="/admin/reviews" class="small">Review queue</a>
-</header>
+${ADMIN_THEME_BUTTON}</header>
 <main>
   <div id="gate" class="panel"><b>Admin sign-in</b><p class="dim">This page is for Quest Compendium admins. Sign in with the Google account listed as an admin (ADMIN_EMAILS).</p><button id="signin" class="primary">Sign in with Google</button> <button id="signinRedirect">Sign in (if the popup is blocked)</button><p id="gateMsg" class="dim">Not signed in.</p><noscript><p style="color:var(--bad)">This page needs JavaScript to sign in. Turn JavaScript on for this site and reload.</p></noscript></div>
   <div id="denied" class="panel" hidden><b>Not allowed</b><p id="deniedMsg" class="dim"></p><button id="switchAcct" class="primary">Sign in with another account</button></div>

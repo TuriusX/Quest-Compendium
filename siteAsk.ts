@@ -33,6 +33,7 @@ import { clientIp } from './guestGuard';
 import { isAdmin } from './reviewQueue';
 import { markSiteDirty } from './ownerEditor';
 import { isLocalServer } from './testTraffic';
+import { ADMIN_THEME_HEAD, ADMIN_THEME_BUTTON } from './adminTheme';
 
 const SITE = () => (process.env.QC_SITE_URL || 'https://questcompendium.com').replace(/\/$/, '');
 const MODEL = () => process.env.MAIN_MODEL || 'gemini-3.8-flash';
@@ -318,7 +319,7 @@ export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI;
 function adminPage(firebaseConfig: Record<string, string>): string {
   const cfg = JSON.stringify(firebaseConfig).replace(/</g, '\\u003c');
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<html lang="en"><head>${ADMIN_THEME_HEAD}<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
 <title>Players asked</title>
 <style>
   :root { color-scheme: dark; --bg: #07070a; --card: #111118; --line: #24242e; --text: #e4e4e7; --dim: #a1a1aa; --accent: #a87ffb; --ok: #4ade80; --bad: #f87171; }
@@ -333,7 +334,7 @@ function adminPage(firebaseConfig: Record<string, string>): string {
   input, textarea { width: 100%; font: inherit; color: var(--text); background: #0c0c12; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
   textarea { min-height: 90px; } .actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; } ul { margin: 6px 0; padding-left: 18px; }
 </style></head><body>
-<header><h1>Players asked</h1><button class="tab on" data-s="suggested">Suggested</button><button class="tab" data-s="approved">Approved</button><button class="tab" data-s="rejected">Rejected</button><span id="who" class="dim"></span></header>
+<header><h1>Players asked</h1><button class="tab on" data-s="suggested">Suggested</button><button class="tab" data-s="approved">Approved</button><button class="tab" data-s="rejected">Rejected</button><span id="who" class="dim"></span>${ADMIN_THEME_BUTTON}</header>
 <main><p class="dim">Questions asked three or more times on the same guide page (the "Stuck? Ask about this" box). Approved entries show inside that page, under "Players asked", from the next site publish. Edit the question and answer first if needed.</p><div id="gateMsg" class="dim"></div><div id="list"></div></main>
 <script type="module">
   let fb;

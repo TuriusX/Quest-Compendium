@@ -564,6 +564,78 @@ function editorEverywhere(root: string): number {
   return n;
 }
 
+// ---- Light mode (owner, Oct 29 2026) ----
+// The site is drawn dark; light mode is the same pages with their colours mapped (lightCss, in the stylesheet), switched
+// on by html.qc-light: the device's setting by default, or the header's sun/moon button (remembered in the browser,
+// localStorage qc-theme). THEME_INIT sets it first thing in <head>, so a page never flashes the other theme. The apps'
+// guide pages (app.html, the app's Guide tab and the Deck) have no <html> of their own, so they stay dark.
+const THEME_INIT = `<script id="qc-theme-init">(function(){var d=document.documentElement,m=window.matchMedia&&matchMedia('(prefers-color-scheme: light)');function t(){try{return localStorage.getItem('qc-theme')}catch(e){return null}}function set(l){d.classList.toggle('qc-light',l);d.style.colorScheme=l?'light':'dark';}set(t()?t()==='light':!!(m&&m.matches));if(m&&m.addEventListener)m.addEventListener('change',function(e){if(!t())set(e.matches);});document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-qc-theme]');if(!b)return;var l=!d.classList.contains('qc-light');set(l);try{localStorage.setItem('qc-theme',l?'light':'dark')}catch(e){}});})();</script>`;
+const SUN = '<svg class="qc-sun h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const MOON = '<svg class="qc-moon h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+/** The header's sun/moon button (the sun in dark mode, the moon in light mode). */
+const themeButton = (label: string) => `<button type="button" data-qc-theme aria-label="${esc(label)}" title="${esc(label)}" class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-zinc-400 hover:bg-white/5 hover:text-white">${SUN}${MOON}</button>`;
+
+/** The light palette for the classes the pages use (dark values stay as they are). */
+function lightCss(): string {
+  const P = { bg: '#f6f5fa', panel: '#ffffff', panel2: '#f0eef6', panel3: '#e8e5f0', strong: '#17151d', t100: '#221f2a', t300: '#36323f', t400: '#4a4555', t500: '#5c5768', accent: '#5f33c4', accent2: '#4f2aa8', faint: '#a49eb6', amber: '#7c4306', emerald: '#05664a', sky: '#075985', rose: '#a8113a' };
+  const line = (a: number) => `rgba(23,21,29,${a})`;
+  const C = (v: string) => `color:${v}`, BG = (v: string) => `background-color:${v}`, BD = (v: string) => `border-color:${v}`;
+  const map: Record<string, string> = {
+    'text-white': C(P.strong), 'text-white/80': C('rgba(23,21,29,.8)'), 'text-zinc-100': C(P.t100), 'text-zinc-200': C(P.t100), 'text-zinc-300': C(P.t300),
+    'text-zinc-400': C(P.t400), 'text-zinc-500': C(P.t500), 'text-zinc-600': C(P.t500), 'text-[#a87ffb]': C(P.accent), 'text-[#c4b0ff]': C(P.accent2), 'text-[#3f3b52]': C(P.faint),
+    'text-amber-200': C(P.amber), 'text-amber-200/70': C(P.amber), 'text-amber-200/90': C(P.amber), 'text-amber-300': C(P.amber), 'text-amber-300/90': C(P.amber), 'text-amber-400': C(P.amber),
+    'text-emerald-200/90': C(P.emerald), 'text-emerald-300': C(P.emerald), 'text-sky-300': C(P.sky), 'text-rose-200': C(P.rose), 'text-rose-300/80': C(P.rose),
+    'bg-[#07070a]/85': BG('rgba(246,245,250,.88)'), 'bg-[#07070a]/95': BG('rgba(246,245,250,.96)'), 'bg-[#0c0d14]': BG(P.panel), 'bg-[#121218]': BG(P.panel), 'bg-[#12121b]': BG(P.panel),
+    'bg-[#1d1b26]': BG(P.panel3), 'bg-black/30': BG(P.panel), 'bg-black/40': BG(P.panel),
+    'bg-white/[0.02]': BG(P.panel), 'bg-white/[0.03]': BG(P.panel), 'bg-white/[0.04]': BG(P.panel2), 'bg-white/[0.05]': BG(P.panel2), 'bg-white/5': BG(P.panel2), 'bg-white/[0.06]': BG(P.panel3), 'bg-white/10': BG(P.panel3),
+    'border-white/5': BD(line(0.08)), 'border-white/10': BD(line(0.12)), 'border-white/15': BD(line(0.16)), 'border-white/20': BD(line(0.22)),
+    'via-[#1a1530]': '--tw-gradient-via:#efe9ff', 'to-[#0c0d14]': '--tw-gradient-to:#ffffff',
+  };
+  const variants: Record<string, string> = {
+    'hover:text-white': C(P.strong), 'hover:text-zinc-300': C(P.t300), 'hover:text-[#c4b0ff]': C(P.accent2), 'placeholder:text-zinc-500': C(P.t500),
+    'hover:bg-white/5': BG(P.panel3), 'hover:bg-white/[0.03]': BG(P.panel2), 'hover:bg-white/[0.04]': BG(P.panel3), 'hover:bg-white/[0.05]': BG(P.panel3), 'hover:bg-white/[0.06]': BG(P.panel3), 'hover:bg-white/[0.07]': BG(P.panel3), 'hover:bg-white/20': BG('#ddd8e8'),
+  };
+  const sel = (c: string) => `.${c.replace(/[/[\].:#%]/g, '\\$&')}`;
+  const pseudo = (c: string) => (c.startsWith('hover:') ? ':hover' : c.startsWith('focus:') ? ':focus' : c.startsWith('placeholder:') ? '::placeholder' : '');
+  return [
+    `html.qc-light body { background: ${P.bg}; color: ${P.t100}; }`,
+    `html.qc-light ::selection { background: rgba(95,51,196,.2); }`,
+    `.qc-sun { display: block; } .qc-moon { display: none; } html.qc-light .qc-sun { display: none; } html.qc-light .qc-moon { display: block; }`,
+    ...Object.entries(map).map(([c, d]) => `html.qc-light ${sel(c)} { ${d}; }`),
+    ...Object.entries(variants).map(([c, d]) => `html.qc-light ${sel(c)}${pseudo(c)} { ${d}; }`),
+    // Colours outside the classes: the pages' progress counts, the compendium index's ticks and bars, inline accents.
+    `html.qc-light [data-progress] { color: ${P.accent}; } html.qc-light [data-progress].is-complete, html.qc-light .qc-ix .qc-chdone [data-chcount] { color: ${P.emerald}; }`,
+    `html.qc-light .qc-ix .qc-mdone .qc-nm { color: ${P.t500}; }`,
+    `html.qc-light [style*="color:#a87ffb"] { color: ${P.accent} !important; }`,
+  ].join('\n');
+}
+
+/** Every page outside the guide template (the homepage and its translations, the site's own pages): the theme's first
+ * line in <head>, and the sun/moon button after the language menu. */
+function themeEverywhere(root: string): number {
+  let n = 0;
+  const codeOf = Object.fromEntries(Object.entries(LANG_TAG).map(([k, v]) => [v.toLowerCase(), k]));
+  const walk = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) { if (e.name !== 'img' && e.name !== 'assets') walk(p); continue; }
+      if (!e.name.endsWith('.html') || e.name === 'app.html') continue;
+      let s = fs.readFileSync(p, 'utf8');
+      if (!s.includes('<head>')) continue;
+      const before = s;
+      if (!s.includes('id="qc-theme-init"')) s = s.replace('<head>', `<head>\n  ${THEME_INIT}`);
+      if (!s.includes('data-qc-theme ') && s.includes('<!-- QC-LANGS:END -->')) {
+        const lang = codeOf[String((s.match(/<html[^>]*\slang="([^"]+)"/) || [])[1] || 'en').toLowerCase()] || 'en';
+        const label = (GUIDE_UI_GEN as any)[lang]?.themeToggle || GUIDE_UI_EN.themeToggle;
+        s = s.replace('<!-- QC-LANGS:END -->', `<!-- QC-LANGS:END -->\n      ${themeButton(label)}`);
+      }
+      if (s !== before) { fs.writeFileSync(p, s); n++; }
+    }
+  };
+  walk(root);
+  return n;
+}
+
 /** Netlify's _redirects: the moved pages' old URLs, 301 to the pages that replaced them. */
 function writeRedirects(moved: { key: string; from: string; to: string }[], live: Set<string>) {
   const lines = redirectLines(moved, live, Object.keys(LANG_TAG), SITE);
@@ -667,6 +739,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
         <a href="/${LP}#faq" class="hidden md:inline hover:text-white">${esc(ui('navFaq'))}</a>
         <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white font-semibold">${esc(ui('navGetApp'))}</a>
         ${menu}
+        ${themeButton(ui('themeToggle'))}
       </div>
     </div>
   </nav>
@@ -2277,7 +2350,8 @@ async function buildSiteCss() {
   .qc-ix-menu { top: 4rem; }
   .qc-ix-menu nav { scrollbar-width: none; }
   .qc-ix-menu nav::-webkit-scrollbar { display: none; }
-}`;
+}
+${lightCss()}`;
   const scanner = new Scanner({ sources: [{ base: OUT, pattern: '**/*.html', negated: false }] });
   const compiler = await compile(input, { base: path.resolve('.'), onDependency: () => {} });
   const css = optimize(compiler.build(scanner.scan()), { minify: true }).code;
@@ -2528,6 +2602,7 @@ async function main() {
   console.log(`Links: final URLs in ${relinked} page(s).`);
   console.log(`App pages: ${writeAppFragments(OUT)} (app.html beside each guide page, for the apps' Guide tab).`);
   console.log(`Editor line added to ${editorEverywhere(OUT)} other page(s) (homepage and the site's own pages).`);
+  console.log(`Light mode: the theme line in ${themeEverywhere(OUT)} page(s).`);
   writeAskScript();
   await buildSiteCss();
   console.log(`Built ${games.reduce((n, g) => n + g.count, 0)} guide page(s) for ${games.length} game(s)${withDrafts ? ' (drafts included, marked DRAFT and hidden from search)' : ''}.`);
