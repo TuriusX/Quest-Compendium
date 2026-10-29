@@ -39,7 +39,7 @@ export const STATS_COMMAND = {
   default_member_permissions: '8',
   options: [
     { type: 3, name: 'window', description: 'A longer window (default: last 24 hours and last 7 days)', required: false, choices: [{ name: 'Last 24 hours', value: '24h' }, { name: 'Last 7 days', value: '7d' }, { name: 'Last 30 days', value: '30d' }] },
-    { type: 3, name: 'chart', description: 'A chart instead: questions per day, or sign-ups', required: false, choices: [{ name: 'Last 30 days', value: '30d' }, { name: 'Last 90 days', value: '90d' }, { name: 'All time', value: 'all' }, { name: 'Sign-ups (Standard Celeration Chart)', value: 'signups' }] },
+    { type: 3, name: 'chart', description: 'A chart instead: questions per day, or accounts over time', required: false, choices: [{ name: 'Questions, last 30 days', value: '30d' }, { name: 'Questions, last 90 days', value: '90d' }, { name: 'Questions, all time', value: 'all' }, { name: 'Accounts, last 30 days', value: 'a30d' }, { name: 'Accounts, last 90 days', value: 'a90d' }, { name: 'Accounts, all time', value: 'aall' }] },
   ],
 };
 

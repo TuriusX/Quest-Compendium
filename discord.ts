@@ -14,8 +14,7 @@
  *
  *   /stats [window: 24h | 7d | 30d] (the owner only, DISCORD_OWNER_ID; anyone else gets "Not allowed"): the owner's activity
  *     numbers (ownerStats.ts), in a reply only they see. /stats chart: 30d | 90d | all: questions per day as a chart
- *     (questionsChart.ts), or signups: account sign-ups on a Standard Celeration Chart (signupsChart.ts), freshly drawn,
- *     also only for them.
+ *     (questionsChart.ts), or a30d | a90d | aall: accounts over time (accountsChart.ts), freshly drawn, also only for them.
  * Settings: DISCORD_APP_ID, DISCORD_PUBLIC_KEY (request signatures), DISCORD_MOD_ROLE_ID, DISCORD_RESULTS_CHANNEL_ID,
  * and the secret DISCORD_BOT_TOKEN (for posting results and registering the command: scripts/discord/register.ts).
  */
@@ -26,7 +25,7 @@ import { guideList, guideAreasByKey, guideAreaEntries } from './guidesApi';
 import { saveCandidate, entryById, looksLikeSpam, REPORTER_WEIGHT } from './corrections';
 import { statsText } from './ownerStats';
 import { questionsChart, centralDay } from './questionsChart';
-import { signupsScc, celerationLabel } from './signupsChart';
+import { accountsChart } from './accountsChart';
 
 const PUBLIC_KEY = () => process.env.DISCORD_PUBLIC_KEY || '';
 const MOD_ROLE = () => process.env.DISCORD_MOD_ROLE_ID || '';
@@ -246,11 +245,13 @@ async function statsChart(i: any): Promise<void> {
   const days = range === '90d' ? 90 : range === 'all' ? 0 : 30;
   const form = new FormData();
   try {
-    if (range === 'signups') {
-      // Account sign-ups on a Standard Celeration Chart (signupsChart.ts).
-      const { png, data } = await signupsScc();
-      form.append('payload_json', JSON.stringify({ content: `${data.total} accounts in total${data.celeration ? `; sign-ups ${celerationLabel(data.celeration.perWeek)}` : ''} (real accounts only).`, attachments: [{ id: 0, filename: 'signups-scc.png' }], allowed_mentions: { parse: [] } }));
-      form.append('files[0]', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'signups-scc.png');
+    if (range.startsWith('a')) {
+      // Accounts over time (accountsChart.ts).
+      const span = range === 'a90d' ? 90 : range === 'aall' ? 0 : 30;
+      const { png, days: rows } = await accountsChart({ days: span });
+      const total = rows[rows.length - 1]?.total ?? 0, added = rows.reduce((n, d) => n + d.added, 0);
+      form.append('payload_json', JSON.stringify({ content: `${total} accounts in total, ${added} new ${span ? `in the last ${span} days` : 'since the first'} (real accounts only).`, attachments: [{ id: 0, filename: 'accounts.png' }], allowed_mentions: { parse: [] } }));
+      form.append('files[0]', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'accounts.png');
     } else {
     const { png, days: rows } = await questionsChart({ from: days ? centralDay(Date.now() - (days - 1) * 86_400_000) : '', title: `Questions per day, ${days ? `last ${days} days` : 'all time'}` });
     const total = rows.reduce((n, d) => n + d.signedIn + d.guests, 0);
