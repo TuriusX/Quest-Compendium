@@ -996,7 +996,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // ---- The quest log (owner, Oct 30 2026; utils/questLogView.ts): Now / Next / Watch out, driven by questions ----
   // The current objective (an answer set as Now), pins and hidden warnings live with the playthrough (tab.questLog).
   const logView: LogView | null = activeTab
-    ? buildLogView({ ...activeTab, place: trackerPlace }, heldPayload?.data || null, { gameKey: trackerKeyOfGame, accent: trackerAccent, loaded: guideSteps.section, labels: trackerWords, beat: (trackerGame.guideArea?.story || trackerGame.guideArea?.page?.story || '').trim() })
+    ? buildLogView({ ...activeTab, place: trackerPlace }, heldPayload?.data || null, { gameKey: trackerKeyOfGame, accent: trackerAccent, loaded: guideSteps.section, labels: trackerWords, walk: trackerGame.guideArea && Array.isArray((trackerGame.guideArea.page as any)?.walkthrough)
+        ? { slug: trackerGame.guideArea.slug, steps: (trackerGame.guideArea.page as any).walkthrough, done: trackerGame.guideArea.done }
+        : null })
     : null;
   const logViewRef = useRef(logView);
   logViewRef.current = logView;

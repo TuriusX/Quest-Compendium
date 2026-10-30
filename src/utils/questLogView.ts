@@ -106,8 +106,8 @@ export function buildLogView(
   data: TrackerData | null | undefined,
   opts: {
     gameKey: string; accent: string; loaded?: { title: string; items: TrackerItem[]; warning?: string } | null; labels?: Record<string, string>;
-    /** The guide area's story beat for the fill-in's Now (not an answer's title); undefined: the log's quest line. */
-    beat?: string;
+    /** The guide area's walkthrough (its steps and which are ticked, walk:<id>): the fill-in's Now and Next. */
+    walk?: { slug: string; steps: { id: string; title: string; text?: string }[]; done: Set<string> } | null;
   },
 ): LogView | null {
   const msgs = tab?.messages || [];
@@ -155,18 +155,29 @@ export function buildLogView(
   for (const it of missable?.items || []) if (!it.done) watch.push({ id: it.id, text: it.label, why: it.detail?.missable || it.where });
   for (const it of noReturn?.items || []) watch.push({ id: it.id, text: it.label, why: it.where });
 
-  // 3. Nothing chosen: the guide fills in for where the player is (marked "From the guide"): the area's story beat as
-  // Now when there is one, then its first unticked entries.
-  if (!now && !done && data) {
-    const open = (more.find((x) => x.id === 'collect')?.items || []).filter((it) => !it.done && it.tick);
-    const beat = (opts.beat !== undefined ? opts.beat : data.quest || '').trim();
-    if (beat) {
-      now = { id: `q:${nameId(beat)}`, text: beat, sub: data.place?.name, done: false, tick: false, source: 'guide', goal: beat, doneCount: 0, total: 0 };
-      next = open.slice(0, NEXT_MAX - 1).map(itemStep);
-    } else if (open.length) {
-      const first = itemStep(open[0]);
-      now = { ...first, source: 'guide', goal: data.place?.name || '', doneCount: 0, total: 0 };
-      next = open.slice(1, NEXT_MAX).map(itemStep);
+  // 3. Nothing chosen: the guide fills in for where the player is (marked "From the guide"), always as tasks, never
+  // the area's description: its walkthrough's next unticked step ("Reach the Giant-Conquering Hero's Grave: cross the
+  // narrow rock bridge…", ticked like the walkthrough), else its first unticked entries ("Get the Rusty Key").
+  if (!now && !done && (data || opts.walk)) {
+    const walkOpen = (opts.walk?.steps || []).filter((st) => st.title && !opts.walk!.done.has(`walk:${st.id}`));
+    if (walkOpen.length) {
+      const steps = walkOpen.slice(0, 1 + NEXT_MAX).map((st): LogStep => {
+        const t = taskOf(st.title, st.text || '');
+        return { id: `w:${opts.walk!.slug}:${st.id}`, text: t.text, sub: t.sub, detail: st.text || undefined, done: false, tick: true };
+      });
+      now = { ...steps[0], source: 'guide', goal: data?.place?.name || '', doneCount: 0, total: 0 };
+      next = steps.slice(1);
+    } else {
+      const open = (more.find((x) => x.id === 'collect')?.items || []).filter((it) => !it.done && it.tick);
+      const get = (it: TrackerItem): LogStep => {
+        const st = itemStep(it);
+        // An item or a chest's contents: "Get the Rusty Key" (a secret or a checklist line is a task already).
+        return it.icon === 'item' || it.icon === 'chest' ? { ...st, text: (opts.labels?.logGetItem || 'Get {item}').replace('{item}', st.text) } : st;
+      };
+      if (open.length) {
+        now = { ...get(open[0]), source: 'guide', goal: data?.place?.name || '', doneCount: 0, total: 0 };
+        next = open.slice(1, NEXT_MAX).map(get);
+      }
     }
   }
 
@@ -195,6 +206,67 @@ export function buildLogView(
     bookmark,
     ...(opts.labels ? { labels: opts.labels } : {}),
   };
+}
+
+// Verbs a walkthrough step's title or sentence starts with when it's already a task ("Cross the Bridge and Claim the
+// Bat", "Head across the river bridge…").
+const TASK_VERBS = new Set(('reach find defeat beat kill fight battle cross head travel go walk run ride climb enter explore return talk speak '
+  + 'meet survive clear collect get grab loot open claim rescue save escape follow regroup chase use take unlock investigate search '
+  + 'ascend descend board leave visit help protect defend destroy solve complete finish confront activate rest light pull push jump '
+  + 'drop swim sail fly continue proceed make bring deliver give buy craft equip upgrade examine inspect check break hide sneak avoid '
+  + 'track hunt ask learn read pick choose decide kick ring play win join warn stop answer recover retrieve backtrack locate traverse '
+  + 'move advance step work exit hijack intercept inspect establish rob catch').split(' '));
+const startsWithVerb = (s: string) => TASK_VERBS.has((s.trim().split(/\s+/)[0] || '').toLowerCase());
+const ucFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const lcFirst = (s: string) => (/^[A-Z][a-z]/.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+/** Cut to about n characters at a word, without a dangling joiner. */
+const clip = (s: string, n: number) => {
+  const t = s.replace(/\s+/g, ' ').trim();
+  if (t.length <= n) return t;
+  const cut = t.slice(0, n - 1);
+  const sp = cut.lastIndexOf(' ');
+  return `${(sp > n * 0.5 ? cut.slice(0, sp) : cut).replace(/[\s,;:.-]+$/, '').replace(/\s+(and|or|to|the|a|an|of|in|on|at|with)$/i, '')}…`;
+};
+
+/**
+ * A walkthrough step as a task for the log's Now: "Goal: action" when the step names a goal ("…to reach X" in its
+ * first sentence, or a title that is itself a task), else the first sentence's main clause, with the step's title
+ * under it. English walkthroughs read best; in other languages the first sentence is used as it is.
+ */
+export function taskOf(title: string, text: string): { text: string; sub?: string } {
+  // The first sentence, without parentheses (map coordinates, asides).
+  let sentence = (String(text || '').replace(/\s*\([^)]*\)/g, '').split(/(?<=[.!?])\s+/)[0] || '').replace(/[.!?]+$/, '').trim();
+  // The main clause: "After beating Margit, the Fell Omen, you will reach X" → "reach X"; "When you arrive …, activate X"
+  // → "activate X"; "Returning to the castle, locate X" → "locate X"; "You can also give X" → "give X".
+  const you = sentence.match(/,\s+you(?:'ll| will| can| should| must| need to| have to)\s+(?:also\s+)?(\w.*)$/i);
+  if (you) sentence = you[1];
+  else {
+    sentence = sentence.replace(/^(?:when|after|once|as soon as|upon|before|while|if|immediately after|following|having|with|now that)\b[^,]{0,160},\s*/i, '');
+    // Any other opening ("Returning to the castle,", "From the crash site,") when a task follows it.
+    const opening = !startsWithVerb(sentence) ? sentence.match(/^[^,]{0,120},\s*(.+)$/) : null;
+    if (opening && startsWithVerb(opening[1])) sentence = opening[1];
+  }
+  sentence = sentence.replace(/^you(?:'ll| will| can| should| must| need to| have to)\s+(?:also\s+)?/i, '');
+  // Drop what follows the first clause (", where you can…", ", which…", "; …").
+  sentence = sentence.split(/,\s+(?:where|which|who|while|then|and then|but|so)\b|;\s/i)[0].trim();
+  const imperative = startsWithVerb(sentence);
+  // "Cross the narrow bridge to reach the Hero's Grave" → "Reach the Hero's Grave: cross the narrow bridge". The goal
+  // ends at ", then", ", and", ", snagging…", " while", " before" (a name with a comma, "D, Hunter of the Dead", stays).
+  const to = imperative ? sentence.match(/^(.+?)\s+to\s+(reach|get to|enter|breach|find|meet|access|arrive at|defeat|open|unlock|locate)\s+(.{3,})$/i) : null;
+  if (to && !startsWithVerb(title)) {
+    const target = to[3].split(/,\s+(?:then|and|or|but)\b|,\s+\w+ing\b|\s+(?:while|before|after|so that|in order to|if)\b/i)[0].trim();
+    // A long goal keeps its first part ("Reach the Whiteridge Road Site of Grace and clear the fort" → the grace).
+    const goal = target.length > 45 ? target.split(/\s+and\s+/)[0] : target;
+    return { text: `${ucFirst(to[2].toLowerCase())} ${clip(goal, 70)}: ${lcFirst(clip(to[1], 70))}`, sub: title };
+  }
+  const action = clip(sentence, 110);
+  if (startsWithVerb(title)) {
+    // The title is the task; the sentence says how, when it's an instruction too.
+    if (imperative && !action.toLowerCase().startsWith(title.toLowerCase())) return { text: `${title}: ${lcFirst(clip(sentence, 80))}` };
+    return { text: title, ...(action && action.toLowerCase() !== title.toLowerCase() ? { sub: ucFirst(action) } : {}) };
+  }
+  if (action) return { text: ucFirst(action), sub: title };
+  return { text: title };
 }
 
 /** A short stable id from a name. */

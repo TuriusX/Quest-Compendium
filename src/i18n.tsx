@@ -879,6 +879,7 @@ const en: Dict = {
   "tracker.putBack": "Put back in the overlay",
   "tracker.logProgress": "{n} of {total}",
   "tracker.logTick": "Tick",
+  "tracker.logGetItem": "Get {item}",
   "tracker.logQuick1": "What should I do next?",
   "tracker.logQuick2": "Anything missable here?",
   "tracker.logClearNow": "Stop following this objective",

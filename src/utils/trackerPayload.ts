@@ -109,7 +109,7 @@ const LABEL_KEYS = [
   'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt', 'look', 'shownOf', 'hintOpen', 'hintOpenNoKeys',
   'attach', 'popOut', 'attachOffer', 'attachYes', 'padHint', 'tuckIn', 'slideOut',
   'logNow', 'logNext', 'logWatch', 'logFromGuide', 'logFromQuestion', 'logShowMore', 'logShowLess', 'logPinned', 'logDone', 'logWhatsNext',
-  'logInvite', 'logInviteSub', 'logAsk', 'logUndo', 'logTicked', 'logHideWatch', 'putBack', 'logProgress', 'logTick', 'logTitle',
+  'logInvite', 'logInviteSub', 'logAsk', 'logUndo', 'logTicked', 'logHideWatch', 'putBack', 'logProgress', 'logTick', 'logTitle', 'logGetItem',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
   Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));

@@ -500,7 +500,7 @@ const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 
   'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt', 'look', 'shownOf', 'hintOpen', 'hintOpenNoKeys',
   'attach', 'popOut', 'attachOffer', 'attachYes', 'padHint', 'tuckIn', 'slideOut',
   'logNow', 'logNext', 'logWatch', 'logFromGuide', 'logFromQuestion', 'logShowMore', 'logShowLess', 'logPinned', 'logDone', 'logWhatsNext',
-  'logInvite', 'logInviteSub', 'logAsk', 'logUndo', 'logTicked', 'logHideWatch', 'putBack', 'logProgress', 'logTick', 'logTitle',
+  'logInvite', 'logInviteSub', 'logAsk', 'logUndo', 'logTicked', 'logHideWatch', 'putBack', 'logProgress', 'logTick', 'logTitle', 'logGetItem',
 ];
 function cleanLabels(labels) {
   const out = {};

@@ -1,7 +1,9 @@
 // Run: npm run test:sync   (or: npx tsx tests/questLogView.test.ts)
 import assert from "node:assert/strict";
-import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState } from "../src/utils/questLogView";
+import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState, taskOf } from "../src/utils/questLogView";
 import type { TrackerData } from "../src/utils/trackerPayload";
+import { mergeTabState, sanitizeTabsForCloud } from "../src/hooks/tabMerge";
+import { gameSpacesOn } from "../src/utils/learnedGames";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -30,18 +32,39 @@ const guide: TrackerData = {
     { id: "collect", title: "To collect", items: [
       { id: "g:sv:c1", label: "Liftside Chamber grace", tick: true, done: true },
       { id: "g:sv:c2", label: "Secluded Cell grace", tick: true },
-      { id: "g:sv:c3", label: "Golden Seed", tick: true },
+      { id: "g:sv:c3", label: "Golden Seed", tick: true, icon: "item" },
       { id: "g:sv:c4", label: "Smithing Stone", tick: true },
     ] },
   ],
 };
 
-test("nothing set as Now: the guide fills in (its story beat, then unticked entries), marked as the guide's", () => {
-  const v = buildLogView(tab(), guide, opts)!;
+const walk = {
+  slug: "stormveil-castle",
+  done: new Set(["walk:w1"]),
+  steps: [
+    { id: "w1", title: "Castle Approach", text: "After overcoming Margit, the Fell Omen at the castle entryway, you will reach the Stormveil Main Gate Site of Grace." },
+    { id: "w2", title: "Southwestern Cliffs and Tombs", text: "Cross the narrow rock bridge beyond Zamor Ruins past Shabriri to reach the Giant-Conquering Hero's Grave, where you can rest." },
+    { id: "w3", title: "Cross the Bridge and Claim the Bat", text: "Head across the river bridge west of Hello Work." },
+    { id: "w4", title: "The Secluded Cell", text: "Returning to the upper castle grounds, locate Nepheli Loux inside an interior room." },
+  ],
+};
+
+test("nothing set as Now: the guide fills in with its walkthrough's next step as a task (ticked like the walkthrough), never the area's description", () => {
+  const v = buildLogView(tab(), guide, { ...opts, walk })!;
   assert.equal(v.now?.source, "guide");
-  assert.equal(v.now?.text, "Reach Godrick at the top of the castle");
-  assert.equal(v.now?.tick, false);
-  assert.deepEqual(v.next.map((s) => s.text), ["Secluded Cell grace", "Golden Seed"]);
+  assert.equal(v.now?.id, "w:stormveil-castle:w2", "the walkthrough's own tick");
+  assert.equal(v.now?.tick, true);
+  assert.equal(v.now?.text, "Reach the Giant-Conquering Hero's Grave: cross the narrow rock bridge beyond Zamor Ruins past Shabriri");
+  assert.equal(v.now?.sub, "Southwestern Cliffs and Tombs");
+  assert.deepEqual(v.next.map((s) => s.text), ["Cross the Bridge and Claim the Bat: head across the river bridge west of Hello Work", "Locate Nepheli Loux inside an interior room"]);
+  assert.ok(![v.now?.text, ...v.next.map((s) => s.text)].includes(guide.quest), "not the story line");
+});
+
+test("without a walkthrough: the guide's unticked entries, items as \"Get …\"", () => {
+  const v = buildLogView(tab(), guide, { ...opts, labels: { logGetItem: "Get {item}" } })!;
+  assert.equal(v.now?.source, "guide");
+  assert.equal(v.now?.text, "Secluded Cell grace");
+  assert.deepEqual(v.next.map((s) => s.text), ["Get Golden Seed", "Smithing Stone"]);
   assert.equal(v.watch?.text, "Talk to Gostoc", "the area's missable is the Watch out");
   assert.equal(v.invite, false, "something was asked");
   assert.ok(!v.more.some((x) => x.id === "answer"), "the answer's old section is gone; the guide's lists are behind Show more");
@@ -100,6 +123,32 @@ test("what a newer question could tick: the objective's unticked steps", () => {
 test("the state stays small", () => {
   assert.equal(nextLogState({ now: "a1" }, { now: undefined }), undefined);
   assert.deepEqual(nextLogState(undefined, { pins: ["a1"] }), { pins: ["a1"] });
+});
+
+test("with the current tabs (game spaces off): Now, pins and hidden warnings live on the tab, go to the cloud with it, and the newer device wins", () => {
+  assert.equal(gameSpacesOn(), false, "game spaces are off here (no flag, no VITE_GAME_SPACES)");
+  const mine = { ...tab({ questLog: { now: "a1", pins: ["a1"], hidden: ["s:a1:2"] } }), notes: "", createdAt: 1, lastActive: 5000 };
+  const cloud = sanitizeTabsForCloud([mine])[0] as any;
+  assert.deepEqual(cloud.questLog, { now: "a1", pins: ["a1"], hidden: ["s:a1:2"] }, "kept in what's written to the account");
+  const other = { ...mine, questLog: { now: "a1" }, lastActive: 4000 }; // another device, older
+  const r = mergeTabState({ tabs: [mine], deleted: {} }, { tabs: [other], deleted: {} });
+  assert.deepEqual(r.merged.tabs[0].questLog, mine.questLog, "this device's newer log is kept");
+  assert.equal(r.cloudChanged, true, "and uploaded");
+  // Next session: the same tab, from storage, gives the same log.
+  const again = buildLogView(JSON.parse(JSON.stringify(r.merged.tabs[0])), null, opts)!;
+  assert.equal(again.now?.id, "s:a1:0");
+  assert.deepEqual(again.pins.map((p) => p.id), ["a1"]);
+});
+
+test("walkthrough steps as tasks (real guide sentences)", () => {
+  const t = (title: string, text: string) => { const r = taskOf(title, text); return r.sub ? `${r.text} [${r.sub}]` : r.text; };
+  assert.equal(t("Gatefront and Agheel Lake", "Rest at the Gatefront Site of Grace to meet Melina, who gives you Torrent."), "Meet Melina: rest at the Gatefront Site of Grace [Gatefront and Agheel Lake]");
+  assert.equal(t("Castle Approach", "After overcoming Margit, the Fell Omen at the castle entryway, you will reach the Stormveil Main Gate Site of Grace."), "Reach the Stormveil Main Gate Site of Grace [Castle Approach]");
+  assert.equal(t("East Limgrave", "Find D, Hunter of the Dead resting west of Summonwater Village, then search the ruins."), "Find D, Hunter of the Dead resting west of Summonwater Village [East Limgrave]");
+  assert.equal(t("Waking on the Riverbank", "From the crash site (X: 230, Y: 208), head north along the sand to find Shadowheart unconscious at the shore."), "Find Shadowheart unconscious at the shore: head north along the sand [Waking on the Riverbank]");
+  assert.equal(t("Coastal Cave", "You can also give the needle to Boc at the cave entrance."), "Give the needle to Boc at the cave entrance [Coastal Cave]");
+  assert.equal(t("Battle the Street Thugs", "Immediately after Kasuga draws the weapon, you are forced into combat on the bridge."), "Battle the Street Thugs [You are forced into combat on the bridge]");
+  assert.equal(t("Southern Peaks", "Head south to reach the Whiteridge Road Site of Grace and clear the Guardians' Garrison fort."), "Reach the Whiteridge Road Site of Grace: head south [Southern Peaks]");
 });
 
 console.log(`\n${passed} passed`);
