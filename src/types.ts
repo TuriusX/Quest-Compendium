@@ -337,6 +337,8 @@ export interface AppSettings {
   markerLifetime?: number;
   /** Hint mode: "Just a hint" among the quick questions (off by default). */
   hintMode?: boolean;
+  /** Desktop: switch to the running game's tab when a game starts (on by default; utils/runningGame.ts followRunning). */
+  autoSwitchGames?: boolean;
   /** Where the player is in each game (keyed by game name, lowercase), so a new compendium starts from it. */
   gameProgress?: Record<string, { name: string; confirmed: boolean; story?: string; storyConfirmed?: boolean }>;
   /** Per game (same key as gameProgress): what the player has already done, most recent first (utils/progressMemory). */

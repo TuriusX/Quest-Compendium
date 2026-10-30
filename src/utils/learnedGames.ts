@@ -1,11 +1,13 @@
 /**
- * Learned detection (games-not-tabs phase 2, owner Oct 27 2026; behind the qc-game-spaces flag). Detection beyond
- * Steam (electron/gameDetect.cjs) reports the focused program when it's a game; what it is comes from here:
- *   - the player's own answer for that program, remembered per player (settings.learnedPrograms, synced): never asked
- *     again; "Not a game" is remembered the same way
+ * Learned detection (games-not-tabs phase 2, owner Oct 27 2026; with the current tabs too since Oct 30). Detection
+ * beyond Steam (electron/gameDetect.cjs) reports the focused program when it's a game; what it is comes from here:
+ *   - the player's own answer for that program, remembered per player (settings.learnedPrograms, synced, under a
+ *     hashed key): never asked again; "Not a game" is remembered the same way
  *   - a launcher's game (Steam library, Epic, GOG, Xbox, Battle.net): used as detected
- *   - anything else (an emulator's game read from its title, another installer's name, a screen-filling program):
- *     asked once ("Playing X?" or "Which game is this?"), then learned
+ *   - an emulator's game read from its title or the file it loaded: used as detected (emulated, modded and unofficial
+ *     copies are games like any other); with no name, "Which game is this?" once for that file
+ *   - anything else (another installer's name, a screen-filling program): asked once ("Playing X?" or "Which game is
+ *     this?"), then learned
  * When nothing is recognized the app keeps working with the game last picked (nothing here blocks).
  */
 import type { SteamGameData } from '../types';
@@ -35,6 +37,10 @@ export type ProgramGame = {
   title?: string;
   storeId?: string;
   emulator?: string;
+  /** The key before hashing (this device only): answers remembered under it by earlier test builds still count. */
+  oldKey?: string;
+  /** The name came from the file the emulator loaded. */
+  fromFile?: boolean;
 };
 
 /** A program's game as the player said ({ name }), or { none: true } for "Not a game". */
@@ -53,9 +59,9 @@ const viaOf = (p: ProgramGame) => (p.source === 'emulator' ? p.emulator || 'emul
 
 export function resolveProgram(p: ProgramGame | null | undefined, learned: LearnedPrograms | undefined): ProgramVerdict {
   if (!p) return { state: 'ignore' };
-  const said = learned?.[p.key];
+  const said = learned?.[p.key] || (p.oldKey ? learned?.[p.oldKey] : undefined);
   if (said) return 'none' in said ? { state: 'ignore' } : { state: 'game', game: { name: said.name, appId: said.appId || 0, isAutoDetected: true, source: p.source } };
-  if (p.sure && p.name) {
+  if ((p.sure || p.source === 'emulator') && p.name) {
     const appId = p.source === 'steam' ? Number(p.storeId) || 0 : 0;
     return { state: 'game', game: { name: p.name, appId, isAutoDetected: true, source: p.source } };
   }

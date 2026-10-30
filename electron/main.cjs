@@ -1055,9 +1055,11 @@ setInterval(() => {
   }
 }, 3000);
 
-// Detection beyond Steam (games-not-tabs phase 2, electron/gameDetect.cjs): off until the app turns it on (its
-// qc-game-spaces flag). While Steam runs nothing, the focused program is looked at every 3 seconds; a game is reported
-// as 'program-detected' and stays the detected one until its program closes or another game takes the screen.
+// Detection beyond Steam (electron/gameDetect.cjs): the app turns it on at start (with the current tabs too, owner
+// Oct 30 2026). While Steam runs nothing, the focused program is looked at every 3 seconds; a game is reported as
+// 'program-detected' and stays the detected one until its program closes or another game takes the screen. An
+// emulator's game comes from its title, else the file it loaded (its command line, read once per process, or
+// RetroArch's content history). Only names and hashed keys reach the app; paths and command lines stay here.
 const gameDetect = require('./gameDetect.cjs');
 let detectBeyondSteam = false;
 let installedGames = [];
@@ -1070,8 +1072,38 @@ ipcMain.on('set-detect-beyond-steam', (event, on) => {
 });
 ipcMain.handle('get-program-game', () => (programGame ? { ...programGame, pid: undefined } : null));
 const alive = (pid) => { if (!pid) return true; try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+/** A process's command line and start time (ms), read once per process: { c, t } or null. */
+const procInfo = new Map();
+function processInfo(pid) {
+  if (!pid) return Promise.resolve(null);
+  if (!procInfo.has(pid)) {
+    if (procInfo.size > 50) procInfo.clear();
+    const script = `$p = Get-CimInstance Win32_Process -Filter 'ProcessId=${Number(pid)}'; if ($p) { [pscustomobject]@{ c = $p.CommandLine; t = ([DateTimeOffset]$p.CreationDate).ToUnixTimeMilliseconds() } | ConvertTo-Json -Compress }`;
+    procInfo.set(pid, new Promise((resolve) => require('child_process').execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 10000 }, (e, out) => {
+      try { resolve(e ? null : JSON.parse(String(out).trim())); } catch { resolve(null); }
+    })));
+  }
+  return procInfo.get(pid);
+}
+/** RetroArch's latest content when it was loaded after the process started (a game picked from its menu). */
+function retroarchRecent(exePath, startedAt) {
+  for (const f of [path.join(path.dirname(exePath), 'playlists', 'builtin', 'content_history.lpl'), path.join(process.env.APPDATA || '', 'RetroArch', 'playlists', 'builtin', 'content_history.lpl')]) {
+    try {
+      const st = fs.statSync(f);
+      if (startedAt && st.mtimeMs < startedAt - 2000) continue;
+      const it = gameDetect.lastHistoryItem(fs.readFileSync(f, 'utf8'));
+      if (it) return it;
+    } catch {}
+  }
+  return null;
+}
+let detectBusy = false;
 setInterval(async () => {
-  if (!detectBeyondSteam || process.platform !== 'win32') return;
+  if (!detectBeyondSteam || process.platform !== 'win32' || detectBusy) return;
+  detectBusy = true;
+  try { await detectProgram(); } finally { detectBusy = false; }
+}, 3000);
+async function detectProgram() {
   if (activeSteamGame) {
     if (programGame) { programGame = null; sendProgramGame(); }
     return;
@@ -1087,14 +1119,23 @@ setInterval(async () => {
   // Window rectangles are in physical pixels; displays in logical ones.
   const sf = screen.getPrimaryDisplay().scaleFactor || 1;
   const rect = { x: fg.rect.x / sf, y: fg.rect.y / sf, width: fg.rect.width / sf, height: fg.rect.height / sf };
-  const found = gameDetect.classify({ path: fg.path, title: fg.title, rect }, installedGames, displays);
+  let found = gameDetect.classify({ path: fg.path, title: fg.title, rect }, installedGames, displays);
   if (!found) return; // a browser, Discord, a small window: the game (if any) is still the one detected
-  if (programGame && programGame.key === found.key && programGame.name === found.name) return;
   const pid = focusHelper.pidOf ? focusHelper.pidOf(fg.hwnd) : 0;
+  if (found.source === 'emulator') {
+    const info = await processInfo(pid);
+    const rom = gameDetect.romFromCommandLine(info?.c);
+    const recent = !rom && found.emulatorId === 'retroarch' ? retroarchRecent(fg.path, info?.t) : null;
+    // In its own menus (no game in its title, no file loaded) an emulator isn't playing anything yet: nothing to ask.
+    if (!found.name && !rom && !recent) return;
+    found = gameDetect.withFile(found, rom || recent?.path, recent?.label);
+  }
+  found = { ...found, oldKey: found.key, key: gameDetect.hashKey(found.key) };
+  if (programGame && programGame.key === found.key && programGame.name === found.name) return;
   programGame = { ...found, pid };
-  console.log(`[detect] ${found.source}: ${found.name || '(no name)'} [${found.exe}]`);
+  console.log(`[detect] ${found.source}: ${found.name || '(no name)'} [${found.exe}]${found.fromFile ? ' (from its file)' : ''}`);
   sendProgramGame();
-}, 3000);
+}
 
 // The Microsoft Store package (MSIX/AppX): the Store updates the app, so it skips the app's own version check.
 // The installed version ("0.5.6"), for the app's one-time "What's new" after an update.

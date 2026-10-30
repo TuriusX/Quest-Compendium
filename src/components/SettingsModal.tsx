@@ -809,6 +809,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
+                {/* Following the game that starts (desktop): its tab opens by itself; off, the detection line's Switch stays. */}
+                {typeof window !== 'undefined' && (window as any).electronAPI && (
+                  <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
+                    <div>
+                      <div className="text-xs font-semibold text-white">{tr('set.autoSwitch')}</div>
+                      <div className="text-[11px] text-zinc-400">{tr('set.autoSwitchDesc')}</div>
+                    </div>
+                    <button
+                      role="switch"
+                      aria-checked={settings.autoSwitchGames !== false}
+                      aria-label={tr('set.autoSwitch')}
+                      onClick={() => {
+                        playBlipSound(soundEnabled);
+                        onUpdateSettings({ autoSwitchGames: settings.autoSwitchGames === false });
+                      }}
+                      className={`w-11 h-6 flex-shrink-0 rounded-full p-0.5 flex transition-colors cursor-pointer ${
+                        settings.autoSwitchGames !== false ? 'bg-[var(--accent-color)] justify-end' : 'bg-white/15 justify-start'
+                      }`}
+                    >
+                      <span className="w-5 h-5 rounded-full bg-[#16101f]" />
+                    </button>
+                  </div>
+                )}
+
                 {/* On-screen markers (experimental, on by default). Off: no markers anywhere and none asked for. */}
                 {(
                   <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">

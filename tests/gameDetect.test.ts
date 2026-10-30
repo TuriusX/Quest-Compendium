@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { classify, parseEmulatorTitle, EMULATORS, cleanTitle } = require("../electron/gameDetect.cjs");
+const { classify, parseEmulatorTitle, EMULATORS, cleanTitle, romFromCommandLine, nameFromFile, nameFromPath, withFile, lastHistoryItem, hashKey } = require("../electron/gameDetect.cjs");
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -66,6 +66,55 @@ test("never games: browsers, Discord, launchers, Windows, Quest Compendium", () 
   for (const p of ["C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Users/x/AppData/Local/Discord/app-1.0/Discord.exe", "C:/Program Files (x86)/Steam/steam.exe", "C:/Windows/explorer.exe", "C:/Windows/System32/notepad.exe", "C:/Users/x/AppData/Local/Programs/Quest Compendium/Quest Compendium.exe"]) {
     assert.equal(classify({ path: W(p), title: "x", rect: full }, [], screen), null, p);
   }
+});
+
+test("the file an emulator loaded, from its command line (cores, configs and options aren't the game)", () => {
+  assert.equal(romFromCommandLine(W(`"C:/RetroArch/retroarch.exe" -L "cores/snes9x_libretro.dll" "D:/ROMs/SNES/Super Metroid (Japan, USA) (En,Ja).sfc"`)), W("D:/ROMs/SNES/Super Metroid (Japan, USA) (En,Ja).sfc"));
+  assert.equal(romFromCommandLine(W(`"C:/Emu/Dolphin/Dolphin.exe" -b -e "E:/Games/GC/Metroid Prime (USA).rvz"`)), W("E:/Games/GC/Metroid Prime (USA).rvz"));
+  assert.equal(romFromCommandLine(W(`C:/Emu/pcsx2-qt.exe -fullscreen -- "D:/PS2/Shadow of the Colossus [SCUS-97472].chd"`)), W("D:/PS2/Shadow of the Colossus [SCUS-97472].chd"));
+  assert.equal(romFromCommandLine(W(`"C:/Emu/Ryujinx.exe" --fullscreen "D:/Switch/Hollow Knight [0100633007D48000][v0].nsp"`)), W("D:/Switch/Hollow Knight [0100633007D48000][v0].nsp"));
+  assert.equal(romFromCommandLine(W(`"C:/RetroArch/retroarch.exe" --config "C:/RetroArch/retroarch.cfg"`)), null);
+  assert.equal(romFromCommandLine(W(`"C:/Emu/Dolphin/Dolphin.exe"`)), null);
+  assert.equal(romFromCommandLine(W(`"C:/Emu/Ryujinx.exe" --title=Ryujinx 1.1.1376 v1.0.2`)), null, "versions aren't files");
+  assert.equal(romFromCommandLine(null), null);
+});
+
+test("a game's name from its file, else the folders above it; codes and generic names don't count", () => {
+  assert.equal(nameFromFile("Super Metroid (Japan, USA) (En,Ja).sfc"), "Super Metroid");
+  assert.equal(nameFromFile("Hollow Knight [0100633007D48000][v0].nsp"), "Hollow Knight");
+  assert.equal(nameFromFile("Pokemon_-_Emerald_Version_(USA,_Europe).gba"), "Pokemon - Emerald Version");
+  assert.equal(nameFromFile("SLUS-20946.iso"), null);
+  assert.equal(nameFromFile("EBOOT.BIN"), null);
+  assert.equal(nameFromFile("0100F2C0115B6000.xci"), null);
+  assert.equal(nameFromPath(W("D:/PS3/BLUS30443-[Demon's Souls]/PS3_GAME/USRDIR/EBOOT.BIN")), "Demon's Souls");
+  assert.equal(nameFromPath(W("E:/WiiU/The Legend of Zelda Breath of the Wild [ALZE01]/code/U-King.rpx")), "The Legend of Zelda Breath of the Wild");
+  assert.equal(nameFromPath(W("D:/ROMs/game.iso")), null, "a ROM's folder is often just a collection: asked instead");
+  assert.equal(nameFromPath(W("D:/Emulation/stuff/game.iso")), null);
+});
+
+test("an emulator with a file: the title's name first, the file's otherwise, and the key is the file's", () => {
+  const dol = classify({ path: W("C:/Emu/Dolphin-x64/Dolphin.exe"), title: "Dolphin 2407", rect: small }, [], screen);
+  const f = withFile(dol, W("E:/Games/GC/Metroid Prime (USA).rvz"));
+  assert.deepEqual([f.name, f.fromFile, f.key], ["Metroid Prime", true, "dolphin|f:metroidprimeusarvz"]);
+  const titled = withFile(classify({ path: W("C:/Emu/Dolphin-x64/Dolphin.exe"), title: "Dolphin 2407 | Super Mario Sunshine (GMSE01)", rect: small }, [], screen), W("E:/GC/sms.rvz"));
+  assert.deepEqual([titled.name, titled.fromFile], ["Super Mario Sunshine", false]);
+  const unnamed = withFile(classify({ path: W("C:/RetroArch/retroarch.exe"), title: "RetroArch", rect: full }, [], screen), W("D:/ROMs/game.iso"));
+  assert.deepEqual([unnamed.name, unnamed.key], [null, "retroarch|f:gameiso"], "asked once, remembered for that file");
+  assert.equal(withFile(dol, null), dol);
+});
+
+test("RetroArch's content history: its newest item and label", () => {
+  const lpl = JSON.stringify({ version: "1.5", items: [{ path: W("D:/ROMs/psx.zip") + "#Final Fantasy VII (USA) (Disc 1).cue", label: "Final Fantasy VII (USA) (Disc 1)", core_name: "Beetle PSX" }, { path: "D:/old.sfc", label: "Old" }] });
+  assert.deepEqual(lastHistoryItem(lpl), { path: W("D:/ROMs/psx.zip"), label: "Final Fantasy VII (USA) (Disc 1)" });
+  assert.equal(lastHistoryItem("{}"), null);
+  assert.equal(lastHistoryItem("not json"), null);
+});
+
+test("keys leave the detector hashed: no program or file names", () => {
+  const k = hashKey("retroarch|f:supermetroidjapanusaenjasfc");
+  assert.match(k, /^k[0-9a-f]{24}$/);
+  assert.equal(k, hashKey("retroarch|f:supermetroidjapanusaenjasfc"));
+  assert.notEqual(k, hashKey("retroarch|f:other"));
 });
 
 console.log(`\n${passed} passed`);

@@ -10,15 +10,19 @@
  *              Windows' list of installed programs): a name to confirm once
  *   battlenet  Blizzard's games by program name: sure
  *   emulator   RetroArch, Dolphin, Ryujinx and the yuzu forks, PCSX2, RPCS3, Cemu, DuckStation, PPSSPP, Xenia and
- *              more: the game read from the window title, to confirm once
+ *              more: the game read from the window title, else from the file it loaded (its command line, or
+ *              RetroArch's content history: withFile); with neither, "Which game is this?" once for that file
  *   unknown    any other program filling the screen (fullscreen or borderless): "Which game is this?" once
  * The app remembers each answer per player (learned detection): `key` names the program (an emulator's: the emulator
- * and the game in its title), so the same program is never asked about again.
+ * and the file it loaded, else the game in its title), so the same program is never asked about again. Keys leave
+ * this file hashed (hashKey): the remembered answers sync with the account, the program and file names don't.
+ * Emulated, modded and unofficial copies are games like any other: nothing here tells them apart.
  *
- * Pure parts (classify, parseEmulatorTitle, cleanTitle) are tested in tests/gameDetect.test.ts.
+ * Pure parts (classify, parseEmulatorTitle, cleanTitle, romFromCommandLine, nameFromFile, withFile) are tested in tests/gameDetect.test.ts.
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { exec } = require('child_process');
 
 const loose = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
@@ -128,11 +132,102 @@ function classify(win, installed, displays) {
   const emu = EMULATORS.find((e) => e.exe.test(exe));
   if (emu) {
     const name = parseEmulatorTitle(title, emu);
-    return { source: 'emulator', emulator: emu.name, name, sure: false, key: `${emu.id}|${loose(name)}`, exe, title };
+    return { source: 'emulator', emulator: emu.name, emulatorId: emu.id, name, sure: false, key: `${emu.id}|${loose(name)}`, exe, title };
   }
   if (!fillsScreen(win.rect, displays)) return null;
   return { source: 'unknown', name: cleanTitle(title) || null, sure: false, key, exe, title };
 }
+
+// ---- The file an emulator loaded -------------------------------------------------------------------------------
+
+/** A command line's arguments (Windows quoting: "a b" is one). */
+function splitArgs(cmd) {
+  const out = [];
+  for (const m of String(cmd || '').matchAll(/"([^"]*)"|(\S+)/g)) out.push(m[1] ?? m[2]);
+  return out;
+}
+
+/** Not a game's file: the program, cores, settings, logs. */
+const NOT_ROM = /\.(exe|dll|so|dylib|cfg|ini|json|xml|txt|log|bat|cmd|sh|lnk|toml|yml|yaml)$/i;
+/** Options followed by a value that isn't the game (RetroArch's core and config, a config/user folder elsewhere). */
+const VALUE_OPTS = /^(-L|--libretro|-c|--config|--appendconfig|-u|--user|--set|--subsystem|-f?b|--batch-config|--userdir|--config-dir)$/i;
+
+/** The file an emulator was started with (its last argument that's a file with an extension, not an option), or null. */
+function romFromCommandLine(cmd) {
+  const args = splitArgs(cmd).slice(1);
+  let found = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (VALUE_OPTS.test(a)) { i++; continue; }
+    if (/^--?[\w-]+=/.test(a)) {
+      const v = a.slice(a.indexOf('=') + 1);
+      if (/^--?(rom|game|disc|iso|boot|file|path)=/i.test(a) && /\.[\w]{1,5}$/.test(v) && !NOT_ROM.test(v)) found = v;
+      continue;
+    }
+    if (/^-/.test(a)) continue;
+    // A file's extension has a letter in it (.iso, .nsp, .7z): "1.1.1376" is a version, not a game.
+    const ext = /\.([a-z0-9]{1,5})$/i.exec(a)?.[1];
+    if (ext && /[a-z]/i.test(ext) && !NOT_ROM.test(a)) found = a;
+  }
+  return found;
+}
+
+/** File names that don't say the game ("game.iso", "rom", title ids): asked about once. */
+const GENERIC_FILE = /^(eboot|default|game|rom|main|boot|index|disc\s*\d*|disk\s*\d*|image|track\s*\d*|data|content|code|menu|app|launch|start|update)$/i;
+const TITLE_ID = /^(?:[A-Z]{4}[-_]?\d{5}|[0-9A-F]{16}|[0-9a-f]{8}-[0-9a-f]{8}|title\s*id.*)$/i;
+/**
+ * Files that never say the game, in folders that always do: a PS3 game's EBOOT.BIN (BLUS30443-[Demon's Souls]/PS3_GAME/
+ * USRDIR), a Wii U game's .rpx (its code folder), an Xbox game's default.xex, a PS4/PS Vita game's eboot. Any other file
+ * with no name in it ("D:/ROMs/game.iso") is asked about: the folder above a ROM is often just a collection.
+ */
+const FOLDER_GAME_FILE = /(^(eboot|default|main|boot)\.(bin|xex|elf|self)$)|\.rpx$/i;
+/** The game's own subfolders, skipped on the way up. */
+const GAME_SUBDIR = /^(ps3_game|usrdir|code|content|meta|host|sce_sys|app)$/i;
+
+/** A game's name from a file name (no extension, codes, regions and versions), or null when it doesn't say one. */
+function nameFromFile(base) {
+  const stem = String(base || '').replace(/\.[\w]{1,5}$/, '').replace(/_+/g, ' ');
+  const name = cleanTitle(stem.replace(/^\s*[A-Z]{4}[-_]?\d{5}\s*[-–]\s*/, '').replace(/\s*[-–]\s*[A-Z]{4}[-_]?\d{5}\s*$/, ''));
+  if (!name || name.length < 2 || !/\p{L}{2,}/u.test(name) || GENERIC_FILE.test(name) || TITLE_ID.test(name)) return null;
+  return name;
+}
+
+/** The game from a loaded file's path: its name, or (for EBOOT.BIN, .rpx, default.xex) the game's folder; else null. */
+function nameFromPath(file) {
+  const parts = String(file || '').split(/[\\/]+/).filter(Boolean);
+  const base = parts[parts.length - 1] || '';
+  if (!FOLDER_GAME_FILE.test(base)) return nameFromFile(base);
+  for (let i = parts.length - 2; i >= Math.max(0, parts.length - 4); i--) {
+    if (GAME_SUBDIR.test(parts[i])) continue;
+    return nameFromFile(parts[i].replace(/^[A-Z]{4}\d{5}-?\[(.*)\]$/, '$1'));
+  }
+  return null;
+}
+
+/**
+ * An emulator's game with the file it loaded: the name from its title stays first, the file's name otherwise; the key
+ * becomes the file's (an answer to "Which game is this?" is remembered for that file). `label` = RetroArch's own name
+ * for it (its content history). The file itself goes nowhere: only the name and a hash of the key.
+ */
+function withFile(found, file, label) {
+  if (!found || found.source !== 'emulator' || !file) return found;
+  const base = String(file).split(/[\\/]+/).filter(Boolean).pop() || '';
+  const fromFile = (label && nameFromFile(label)) || nameFromPath(file);
+  return { ...found, name: found.name || fromFile, key: `${found.emulatorId || loose(found.emulator)}|f:${loose(base)}`, fromFile: !found.name && !!fromFile };
+}
+
+/** RetroArch's most recent content (playlists/builtin/content_history.lpl, JSON): { path, label }, or null. */
+function lastHistoryItem(json) {
+  try {
+    const it = (typeof json === 'string' ? JSON.parse(json) : json)?.items?.[0];
+    return it?.path ? { path: String(it.path).split('#')[0], label: it.label && it.label !== 'N/A' ? String(it.label) : null } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A key as it leaves the detector: hashed (the program's and file's names stay on this computer). */
+const hashKey = (raw) => 'k' + crypto.createHash('sha256').update(String(raw)).digest('hex').slice(0, 24);
 
 // ---- What launchers installed (read from disk and the registry; refreshed every 10 minutes) ----------------------
 
@@ -254,4 +349,7 @@ async function scanInstalled() {
   return parts.flat();
 }
 
-module.exports = { EMULATORS, BATTLENET, classify, parseEmulatorTitle, cleanTitle, fillsScreen, scanInstalled, parseReg };
+module.exports = {
+  EMULATORS, BATTLENET, classify, parseEmulatorTitle, cleanTitle, fillsScreen, scanInstalled, parseReg,
+  splitArgs, romFromCommandLine, nameFromFile, nameFromPath, withFile, lastHistoryItem, hashKey,
+};

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { displayGameName } from '../utils/gameName';
 import { playBlipSound } from '../utils/audio';
@@ -20,6 +20,10 @@ export interface Detection {
    * guess = the game read from its title or installer (null: "Which game is this?"); onAnswer(null) = not a game.
    */
   confirm?: { guess: string | null; via: string; onAnswer: (name: string | null) => void };
+  /** A game started and has no compendium yet: "Open a tab for X?" (one click, Enter, or the controller's A). */
+  offer?: { onOpen: () => void; onDismiss: () => void };
+  /** A game started and its compendium was opened for it: "Switched to <the compendium's name>", for a few seconds. */
+  switched?: string;
 }
 
 /**
@@ -61,11 +65,55 @@ function ConfirmProgram({ c, soundEnabled }: { c: NonNullable<Detection['confirm
   );
 }
 
+/** "Open a tab for X?  Open tab · Not now": Open is the controller's first stop, and Enter says yes (outside a typed question). */
+function OfferTab({ name, o, soundEnabled }: { name: string; o: NonNullable<Detection['offer']>; soundEnabled: boolean }) {
+  const t = useT();
+  const openRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('qc-pad-focus', { detail: { el: openRef.current } }));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
+      const el = document.activeElement as HTMLElement | null;
+      const typing = !!el && (el.isContentEditable || ((el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && !!(el as HTMLInputElement).value.trim()));
+      const onButton = !!el && el.tagName === 'BUTTON' && el !== openRef.current;
+      if (typing || onButton) return;
+      e.preventDefault();
+      e.stopPropagation();
+      playBlipSound(soundEnabled);
+      o.onOpen();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [o, soundEnabled]);
+  const btn = 'h-5 px-2 rounded-md font-bold text-[11px] cursor-pointer whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-white';
+  return (
+    <div role="status" data-qc-offer-tab className="h-7 flex-shrink-0 flex items-center gap-2 px-3 border-b border-white/[0.06] text-[12px] bg-emerald-500/[0.12] text-emerald-100" style={{ WebkitAppRegion: 'no-drag' } as any}>
+      <span className="text-emerald-400 text-[10px]" aria-hidden="true">▶</span>
+      <span className="truncate min-w-0">{t('detect.offer', { game: name })}</span>
+      <span className="ml-auto flex-shrink-0 flex items-center gap-1">
+        <button ref={openRef} type="button" data-qc-offer-open onClick={() => { playBlipSound(soundEnabled); o.onOpen(); }} className={`${btn} bg-emerald-400 text-[#06140d] hover:brightness-110`}>
+          {t('detect.openTab')} <span className="font-normal opacity-70">↵</span>
+        </button>
+        <button type="button" onClick={() => { playBlipSound(soundEnabled); o.onDismiss(); }} className={`${btn} text-emerald-200/70 hover:text-white`}>{t('detect.notNow')}</button>
+      </span>
+    </div>
+  );
+}
+
 export function DetectionLine({ d, soundEnabled = true }: { d: Detection; soundEnabled?: boolean }) {
   const t = useT();
   if (!d.available) return null;
   if (!d.running && d.confirm) return <ConfirmProgram key={d.confirm.via + (d.confirm.guess || '')} c={d.confirm} soundEnabled={soundEnabled} />;
   const name = displayGameName(d.running);
+  if (d.running && d.offer && !d.open) return <OfferTab key={name} name={name} o={d.offer} soundEnabled={soundEnabled} />;
+  if (d.running && d.switched && d.open && !d.choose) {
+    return (
+      <div role="status" data-qc-switched className="h-7 flex-shrink-0 flex items-center gap-2 px-3 border-b border-white/[0.06] text-[12px] bg-emerald-500/[0.12] text-emerald-100 " style={{ WebkitAppRegion: 'no-drag' } as any}>
+        <span className="text-emerald-400 text-[11px]" aria-hidden="true">✓</span>
+        <span className="truncate min-w-0">{t('detect.switched', { game: displayGameName(d.switched) })}</span>
+      </div>
+    );
+  }
   const tone = !d.running ? 'bg-white/[0.02] text-zinc-500' : d.open ? 'bg-emerald-500/[0.06] text-emerald-200/90' : 'bg-emerald-500/[0.12] text-emerald-100';
   return (
     <div role="status" className={`h-7 flex-shrink-0 flex items-center gap-2 px-3 border-b border-white/[0.06] text-[12px] ${tone}`} style={{ WebkitAppRegion: 'no-drag' } as any}>

@@ -16,10 +16,20 @@ test("a launcher's game is used as detected; a Steam library game keeps its app 
   assert.equal(resolveProgram(prog({ source: "epic", name: "Hades", sure: true }), {}).state, "game");
 });
 
-test("an emulator's game, another installer's or an unknown program is asked once", () => {
+test("an emulator's game read from its title or file is used as detected; with no name, asked once", () => {
   const v = resolveProgram(prog({ source: "emulator", emulator: "Dolphin", name: "Super Mario Sunshine", key: "dolphin|supermariosunshine" }), {});
-  assert.deepEqual(v, { state: "ask", guess: "Super Mario Sunshine", via: "Dolphin" });
+  assert.equal(v.state === "game" && v.game.name, "Super Mario Sunshine");
+  assert.deepEqual(resolveProgram(prog({ source: "emulator", emulator: "RetroArch", name: null, key: "kabc" }), {}), { state: "ask", guess: null, via: "RetroArch" });
+});
+
+test("another installer's name or an unknown program is asked once", () => {
+  assert.deepEqual(resolveProgram(prog({ source: "installed", name: "Red Dead Redemption 2" }), {}), { state: "ask", guess: "Red Dead Redemption 2", via: "installed" });
   assert.deepEqual(resolveProgram(prog({}), {}), { state: "ask", guess: null, via: "game.exe" });
+});
+
+test("an answer kept under an earlier test build's plain key still counts", () => {
+  const v = resolveProgram(prog({ key: "khashed", oldKey: "game.exe|game" }), learn({}, "game.exe|game", "Celeste"));
+  assert.equal(v.state === "game" && v.game.name, "Celeste");
 });
 
 test("the player's answer is remembered: the game, or not a game; and it beats the launcher's name", () => {

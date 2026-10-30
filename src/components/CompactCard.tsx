@@ -117,7 +117,9 @@ export function CompactCard(p: {
       style={noDrag}
     />
   );
-  const line2 = d?.choose || (d?.confirm && !d.running) ? (
+  // The detection line takes line 2 when it has something to say: a collection's "Which game?", a program to confirm,
+  // "Open a tab for X?", or "Switched to X" for a few seconds.
+  const line2 = d?.choose || (d?.confirm && !d.running) || (d?.offer && d.running && !d.open) || (d?.switched && live) ? (
     <div className="min-w-0 [&>*]:!px-0 [&>*]:!py-0 [&>*]:!border-0 [&>*]:!bg-transparent" style={noDrag}>{p.detectionLine}</div>
   ) : lg && now ? (
     <div className="min-w-0 flex items-center gap-2 px-2 py-1 rounded border border-[var(--accent-border)] bg-[var(--accent-dim)]" style={noDrag}>
@@ -129,8 +131,6 @@ export function CompactCard(p: {
         title={`${t('tracker.logNext')} (${lg.keysLabel})`} aria-label={t('tracker.logNext')}
         className="flex-shrink-0 text-zinc-400 hover:text-white cursor-pointer">{lg.open ? '▾' : '▸'}</button>
     </div>
-  ) : p.objective ? (
-    <div className="min-w-0 [&>*]:!px-0 [&>*]:!py-0 [&>*]:!border-0 [&>*]:!bg-transparent" style={noDrag}>{p.detectionLine}</div>
   ) : p.objective ? (
     <button type="button" onClick={() => { playBlipSound(p.soundEnabled); (p.onObjective || p.onExpand)?.(); }} title={[p.objective.title, p.objective.step].filter(Boolean).join(' · ')} className="min-w-0 truncate text-left text-[12.5px] text-zinc-200 hover:text-white cursor-pointer" style={noDrag}>
       {p.objective.title && <span className="font-fantasy font-bold text-white">{p.objective.title}</span>}

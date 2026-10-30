@@ -59,7 +59,9 @@ import { useGameArt } from './utils/gameArt';
 import { sharpIgdb, steamHeader, useArt } from './utils/artCache';
 import { closeAppAfterSync } from './utils/closeApp';
 import { deviceId } from './utils/deviceId';
-import { tabForGame } from './utils/runningGame';
+import { followRunning, runningId, tabForGame, type FollowState, type ResolvedGame } from './utils/runningGame';
+import { guideApi } from './utils/guideApi';
+import { displayGameName } from './utils/gameName';
 import { DetectionLine, type Detection } from './components/DetectionLine';
 import { gameSpacesOn, learn, resolveProgram, type ProgramGame } from './utils/learnedGames';
 import { applyTabs, assignGame, emptySpaces, importPlan, newPlaythrough, playthroughsOf, readSpaces, renamePlaythrough, splitMerged, switchPlaythrough, toTabs, writeSpaces, type SpacesState } from './utils/spacesStore';
@@ -372,11 +374,14 @@ export default function App() {
   const [examinedImageUrl, setExaminedImageUrl] = useState<string | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [steamGame, setGlobalActiveGame] = useState<SteamGameData | null>(null);
-  // Detection beyond Steam (games-not-tabs, behind the qc-game-spaces flag; utils/learnedGames.ts): a launcher's game,
-  // an emulator's or a program the player named is the running game while Steam runs nothing. Unknown ones are asked
+  // Detection beyond Steam (utils/learnedGames.ts; with the current tabs too since Oct 30 2026): a launcher's game, an
+  // emulator's or a program the player named is the running game while Steam runs nothing. Unknown ones are asked
   // about once (the detection line) and remembered; until then the game last picked stays open.
   const [programGame, setProgramGame] = useState<ProgramGame | null>(null);
-  const programVerdict = useMemo(() => resolveProgram(spacesOn ? programGame : null, settings.learnedPrograms), [spacesOn, programGame, settings.learnedPrograms]);
+  /** The running game (runningId) offered "Open a tab for X?", and the one just switched to ("Switched to X", X its tab's name). */
+  const [offerFor, setOfferFor] = useState<string | null>(null);
+  const [switchedFor, setSwitchedFor] = useState<{ id: string; name: string } | null>(null);
+  const programVerdict = useMemo(() => resolveProgram(programGame, settings.learnedPrograms), [programGame, settings.learnedPrograms]);
   const globalActiveGame: SteamGameData | null = steamGame || (programVerdict.state === 'game' ? programVerdict.game : null);
 
   // --- Resizing States ---
@@ -540,9 +545,28 @@ export default function App() {
       }
     : undefined;
   
+  // The running game through the shared resolver (/api/guides/find, the answers' and game spaces' matching): its guide
+  // and that guide's name, so an edition or a collection finds the right compendium. Only the game's name (and Steam
+  // app) is sent; at most 4 seconds are waited for it, then the names alone decide.
+  const runId = runningId(globalActiveGame);
+  const [resolvedRun, setResolvedRun] = useState<(ResolvedGame & { id: string }) | null>(null);
+  useEffect(() => {
+    if (!runId || !globalActiveGame) { setResolvedRun(null); return; }
+    let alive = true;
+    const appId = Number(globalActiveGame.appId) || 0;
+    const q = new URLSearchParams({ game: globalActiveGame.name || '', ...(appId > 0 ? { appId: String(appId) } : {}) });
+    const timer = setTimeout(() => alive && setResolvedRun((cur) => (cur?.id === runId ? cur : { id: runId })), 4000);
+    guideApi(`/api/guides/find?${q}`)
+      .then((g: any) => alive && setResolvedRun({ id: runId, key: g?.key || null, game: g?.game || null }))
+      .catch(() => alive && setResolvedRun((cur) => (cur?.id === runId ? cur : { id: runId })))
+      .finally(() => clearTimeout(timer));
+    return () => { alive = false; clearTimeout(timer); };
+  }, [runId]);
+  const resolvedNow = resolvedRun && resolvedRun.id === runId ? resolvedRun : null;
+
   // The running game's compendium, and whether it's the open one. Questions are about the open compendium's game;
   // the running game's live data (achievements, news, "running now") joins in only on its own compendium.
-  const runningTab = tabForGame(tabs, globalActiveGame);
+  const runningTab = tabForGame(tabs, globalActiveGame, resolvedNow);
   const runningOpen = !!runningTab && runningTab.id === activeTab?.id;
   let activeGame = activeTab?.activeSteamGame?.isAutoDetected ? null : activeTab?.activeSteamGame || null;
   if (globalActiveGame && runningOpen) {
@@ -557,15 +581,21 @@ export default function App() {
   }
   // What the app sees on Steam, said plainly under the header: the running game (with Switch when another compendium
   // is open) or "No game detected".
+  const openRunningTab = () => {
+    if (!globalActiveGame) return;
+    setOfferFor(null);
+    if (runningTab) { handleSelectTab(runningTab.id); return; }
+    // A new compendium under the guide's own name and guide (the resolver's), so it opens on the right one.
+    const name = displayGameName(resolvedNow?.game || globalActiveGame.name);
+    handleCreateTab(name, { ...globalActiveGame, name: Number(globalActiveGame.appId) > 0 ? globalActiveGame.name : name, isAutoDetected: false }, resolvedNow?.key || undefined);
+  };
   const detection: Detection = {
     running: globalActiveGame?.name || '',
     open: runningOpen,
     available: typeof window !== 'undefined' && !!(window as any).electronAPI,
-    onSwitch: () => {
-      if (!globalActiveGame) return;
-      if (runningTab) handleSelectTab(runningTab.id);
-      else handleCreateTab(globalActiveGame.name, { ...globalActiveGame, isAutoDetected: false });
-    },
+    onSwitch: openRunningTab,
+    ...(offerFor && offerFor === runId && !runningOpen ? { offer: { onOpen: openRunningTab, onDismiss: () => setOfferFor(null) } } : {}),
+    ...(switchedFor && switchedFor.id === runId ? { switched: switchedFor.name } : {}),
     ...(programVerdict.state === 'ask' && !steamGame && programGame
       ? {
           confirm: {
@@ -635,11 +665,36 @@ export default function App() {
   }, []);
   useEffect(() => {
     const api = (window as any).electronAPI;
-    if (!spacesOn || !api?.setDetectBeyondSteam) return;
+    if (!api?.setDetectBeyondSteam) return;
     api.setDetectBeyondSteam(true);
     api.onProgramDetected?.((g: ProgramGame | null) => setProgramGame(g));
     api.getProgramGame?.().then((g: ProgramGame | null) => setProgramGame(g)).catch(() => {});
-  }, [spacesOn]);
+  }, []);
+
+  // Following the game that starts (utils/runningGame.ts followRunning): its compendium opens by itself ("Switched to
+  // X" for a few seconds, beside the book too when the panel is hidden), or "Open a tab for X?" when it has none. Once
+  // the resolver has answered (or given up) and the tabs are loaded, and only when a game starts (or is running when
+  // the app opens): a compendium picked by hand stays.
+  const followRef = useRef<FollowState>({ id: null, goneAt: 0 });
+  useEffect(() => {
+    if (isInitializing || !tabs.length || (runId && !resolvedNow)) return;
+    const r = followRunning(followRef.current, runId, Date.now(), { matchTabId: runningTab?.id || null, activeTabId: activeTab?.id || null, auto: settings.autoSwitchGames !== false });
+    followRef.current = r.state;
+    const action = r.action;
+    if (action.kind === 'switch') {
+      const name = tabs.find((t) => t.id === action.tabId)?.name || globalActiveGame?.name || '';
+      handleSelectTab(action.tabId);
+      setSwitchedFor({ id: runId!, name });
+      (window as any).electronAPI?.trackerHeads?.(`✓ ${tr('detect.switched', { game: displayGameName(name) })}`);
+    } else if (action.kind === 'offer') {
+      setOfferFor(runId);
+    }
+  }, [runId, resolvedNow, isInitializing, tabs.length > 0]);
+  useEffect(() => {
+    if (!switchedFor) return;
+    const t = setTimeout(() => setSwitchedFor(null), 4000);
+    return () => clearTimeout(t);
+  }, [switchedFor]);
 
 
   // Sync Dock Position to Electron
@@ -2619,12 +2674,13 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     setIsRenameModalOpen(false);
   };
 
-  const handleCreateTab = (name: string, steamGame?: SteamGameData) => {
+  const handleCreateTab = (name: string, steamGame?: SteamGameData, guideKey?: string) => {
     const newId = `tab-${Date.now()}`;
     const newTab: GameTab = {
       id: newId,
       name,
       activeSteamGame: steamGame || null,
+      ...(guideKey ? { guideKey } : {}),
       messages: [
         {
           id: `msg-${Date.now()}`,
@@ -2722,15 +2778,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // The compact view: a small resting state (where you are, the current objective, the question box) over the game.
   const runningKey = globalActiveGame ? String(globalActiveGame.appId || globalActiveGame.name || '') : '';
   useEffect(() => setViewNow(null), [runningKey]);
-  // A game starting (or already running when the app opens) brings its compendium up, once: after that the player's
-  // own choice of compendium stands until the game closes.
-  const autoOpenedFor = useRef('');
-  useEffect(() => {
-    if (!runningKey) { autoOpenedFor.current = ''; return; }
-    if (isInitializing || !tabs.length || autoOpenedFor.current === runningKey) return;
-    autoOpenedFor.current = runningKey;
-    if (runningTab && runningTab.id !== activeTab?.id) setActiveTabId(runningTab.id);
-  }, [runningKey, isInitializing, tabs.length, runningTab?.id]);
+  // A game starting brings its compendium up once (followRunning, near the detection line above).
   const view = viewNow ?? (runningKey ? viewByGame[runningKey] ?? 'compact' : 'full');
   const compact = isDesktop && !!activeTab && !isBrowserMode && view === 'compact';
   // The compact card, or in the bottom corners the ribbon (two rows: it covers the least of the game there).
@@ -2985,7 +3033,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 ) : undefined}
               />
             )}
-            {((detection.running && (!detection.open || detection.choose)) || (!detection.running && detection.confirm)) && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
+            {((detection.running && (!detection.open || detection.choose || detection.switched)) || (!detection.running && detection.confirm)) && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
             <MigrationNotice
               spaces={spaces}
               soundEnabled={settings.soundEnabled}

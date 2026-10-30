@@ -310,9 +310,12 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
       if (!padMode) {
         setPadMode(true);
         if (e.type === 'button' && !panel) {
-          // The first press just wakes controller mode and puts focus somewhere sensible.
+          // The first press just wakes controller mode and puts focus somewhere sensible: "Open a tab for X?" when
+          // it's showing (and A on it says yes right away), else the question box.
+          const offer = document.querySelector<HTMLElement>('[data-qc-offer-open]');
+          if (offer && e.button === 'a') { offer.click(); return; }
           const box = document.querySelector<HTMLElement>('[data-qc-ask-input]');
-          setFocus(box && isVisible(box) ? box : focusables(topScope())[0] ?? null);
+          setFocus(offer || (box && isVisible(box) ? box : focusables(topScope())[0] ?? null));
           return;
         }
       }
@@ -400,7 +403,10 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
         setFocus(nextInDirection(current, b, items));
       } else if (b === 'a') {
         const el = (document.activeElement as HTMLElement) || focusedRef.current;
-        if (el?.matches('[data-qc-ask-input]')) openKeyboard();
+        // "Open a tab for X?" (DetectionLine): A says yes unless the controller is on another button.
+        const offer = document.querySelector<HTMLElement>('[data-qc-offer-open]');
+        if (offer && (!el || el === document.body || el.matches('[data-qc-ask-input]'))) offer.click();
+        else if (el?.matches('[data-qc-ask-input]')) openKeyboard();
         else if (el && el !== document.body) el.click();
       } else if (b === 'b') {
         if (!closeTopDialog()) electronAPI()?.toggleSlide?.();
