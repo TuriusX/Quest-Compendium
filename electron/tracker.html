@@ -264,29 +264,32 @@
   .sl svg { width: 1em; height: 1em; opacity: .8; }
   input[type=range] { width: 5.5em; accent-color: var(--accent); cursor: pointer; margin: 0; }
 
-  /* Sent away: a ribbon bookmark in the accent colour sticking out of the screen edge, with a swallowtail notch at its
-     free end, the logo and the uncollected count. It's anchored to the edge, so hovering lengthens it (it slides a
-     little further out, in steps); the window keeps room for that. Pixel look: hard 2 px light and shade lines. */
+  /* Put away: a slim ribbon bookmark in the accent colour sticking out of the panel's edge (attached) or the screen
+     edge (popped out), the way a book's ribbon marker sticks out from between its pages: a narrow strip with a
+     swallowtail notch at its free end, a darker fold where it goes under the edge, and the uncollected count in small
+     type when there is one. Pixel look: hard 1 px light and shade lines. The whole window is the click target (a press
+     anywhere in it brings the log back, see the away handler below), so the notch and the window's few spare pixels
+     count too; hovering nudges it 2 px further out, into that spare room on its free side, so the window never resizes. */
   #tab { position: absolute; top: 3px; right: 0; display: none; cursor: pointer; opacity: var(--alpha);
-    filter: drop-shadow(0 2px 0 rgba(0,0,0,.6)) drop-shadow(0 3px 5px rgba(0,0,0,.45)); }
+    filter: drop-shadow(0 1px 0 rgba(0,0,0,.65)) drop-shadow(0 2px 3px rgba(0,0,0,.45)); transition: transform .1s steps(2); }
   #tab.left { right: auto; left: 0; }
   body.away #tab { display: block; }
-  #tab .rib { position: relative; display: flex; align-items: center; gap: .35em; height: 1.9em; box-sizing: border-box;
-    padding: 0 .5em 0 1.2em; background: var(--accent); image-rendering: pixelated;
-    box-shadow: inset 0 2px 0 rgba(255,255,255,.3), inset 0 -2px 0 rgba(0,0,0,.32);
-    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, .65em 50%); transition: padding .12s steps(2); }
-  #tab.left .rib { flex-direction: row-reverse; padding: 0 1.2em 0 .5em;
-    clip-path: polygon(0 0, 100% 0, calc(100% - .65em) 50%, 100% 100%, 0 100%); }
-  #tab.right:hover .rib { padding-left: 1.75em; }
-  #tab.left:hover .rib { padding-right: 1.75em; }
-  /* Stitching along the ribbon, one pixel in from the light and shade lines. */
-  #tab .rib::before { content: ''; position: absolute; left: .95em; right: .2em; top: 4px; bottom: 4px;
-    border-top: 1px dashed rgba(22,16,31,.35); border-bottom: 1px dashed rgba(22,16,31,.35); pointer-events: none; }
-  #tab.left .rib::before { left: .2em; right: .95em; }
-  #tab svg.logo { width: 16px; height: 16px; image-rendering: pixelated; flex-shrink: 0; position: relative; }
-  #tab .n { position: relative; min-width: 1.35em; height: 1.35em; padding: 0 .25em; box-sizing: border-box; border-radius: 2px;
-    background: #16101f; color: var(--ink); font-size: .72em; font-weight: 800; display: flex; align-items: center;
-    justify-content: center; text-shadow: none; }
+  body.away { cursor: pointer; }
+  #tab .rib { position: relative; display: flex; align-items: center; justify-content: flex-end; box-sizing: border-box;
+    height: calc(14px * var(--scale)); min-width: calc(26px * var(--scale)); padding: 0 calc(4px * var(--scale)) 0 calc(8px * var(--scale));
+    background: var(--accent); image-rendering: pixelated;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.35), inset 0 -1px 0 rgba(0,0,0,.35), inset -3px 0 0 rgba(0,0,0,.28);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, calc(5px * var(--scale)) 50%); }
+  #tab.left .rib { justify-content: flex-start; padding: 0 calc(8px * var(--scale)) 0 calc(4px * var(--scale));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.35), inset 0 -1px 0 rgba(0,0,0,.35), inset 3px 0 0 rgba(0,0,0,.28);
+    clip-path: polygon(0 0, 100% 0, calc(100% - 5px * var(--scale)) 50%, 100% 100%, 0 100%); }
+  #tab.right:hover, body.away:hover #tab.right, body.bmfocus #tab.right { transform: translateX(-2px); }
+  #tab.left:hover, body.away:hover #tab.left, body.bmfocus #tab.left { transform: translateX(2px); }
+  body.away:hover #tab .rib, body.bmfocus #tab .rib { filter: brightness(1.15); }
+  /* Reached with the keyboard (the panel's quest log stop) or the controller: a ring around the ribbon. */
+  body.bmfocus #tab { filter: drop-shadow(0 0 0 #fff) drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff) drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff); }
+  #tab .n { position: relative; color: #16101f; font-size: calc(9px * var(--scale)); line-height: 1; font-weight: 900;
+    letter-spacing: -.02em; text-shadow: none; font-variant-numeric: tabular-nums; }
 
   /* Attached to the panel: a solid card against the panel's inner side (no gap), square on that side, flush with the
      window's edges. It isn't dragged or sent to the edge, and the hint lines are for the popped-out log only. */
@@ -365,7 +368,7 @@
 </div>
 
 <div id="tab" class="right" title="Bring the objectives back">
-  <div class="rib"><svg class="logo" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><g> <rect x="1" y="1" width="12" height="1" fill="#0b0916" /> <rect x="1" y="2" width="1" height="1" fill="#0b0916" /> <rect x="2" y="2" width="1" height="1" fill="#1c1635" /> <rect x="3" y="2" width="7" height="1" fill="#16112c" /> <rect x="10" y="2" width="2" height="1" fill="#f4c535" /> <rect x="12" y="2" width="1" height="1" fill="#0b0916" /> <rect x="13" y="2" width="1" height="1" fill="#d6cda4" /> <rect x="0" y="3" width="2" height="1" fill="#f4c535" /> <rect x="2" y="3" width="1" height="1" fill="#1c1635" /> <rect x="3" y="3" width="8" height="1" fill="#16112c" /> <rect x="11" y="3" width="1" height="1" fill="#f4c535" /> <rect x="12" y="3" width="1" height="1" fill="#0b0916" /> <rect x="13" y="3" width="1" height="1" fill="#a49a71" /> <rect x="1" y="4" width="1" height="1" fill="#0b0916" /> <rect x="2" y="4" width="1" height="1" fill="#1c1635" /> <rect x="3" y="4" width="9" height="1" fill="#16112c" /> <rect x="12" y="4" width="1" height="1" fill="#0b0916" /> <rect x="13" y="4" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="5" width="1" height="1" fill="#0b0916" /> <rect x="2" y="5" width="1" height="1" fill="#1c1635" /> <rect x="3" y="5" width="9" height="1" fill="#16112c" /> <rect x="12" y="5" width="1" height="1" fill="#0b0916" /> <rect x="13" y="5" width="1" height="1" fill="#a49a71" /> <rect x="1" y="6" width="1" height="1" fill="#0b0916" /> <rect x="2" y="6" width="1" height="1" fill="#1c1635" /> <rect x="3" y="6" width="3" height="1" fill="#16112c" /> <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="9" y="6" width="3" height="1" fill="#16112c" /> <rect x="12" y="6" width="1" height="1" fill="#0b0916" /> <rect x="13" y="6" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="7" width="1" height="1" fill="#0b0916" /> <rect x="2" y="7" width="1" height="1" fill="#1c1635" /> <rect x="3" y="7" width="2" height="1" fill="#16112c" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill="#16112c" /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="10" y="7" width="2" height="1" fill="#16112c" /> <rect x="12" y="7" width="1" height="1" fill="#0b0916" /> <rect x="13" y="7" width="1" height="1" fill="#a49a71" /> <rect x="1" y="8" width="1" height="1" fill="#0b0916" /> <rect x="2" y="8" width="1" height="1" fill="#1c1635" /> <rect x="3" y="8" width="2" height="1" fill="#16112c" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="3" height="1" fill="#16112c" /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="10" y="8" width="2" height="1" fill="#16112c" /> <rect x="12" y="8" width="1" height="1" fill="#0b0916" /> <rect x="13" y="8" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="9" width="1" height="1" fill="#0b0916" /> <rect x="2" y="9" width="1" height="1" fill="#1c1635" /> <rect x="3" y="9" width="2" height="1" fill="#16112c" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill="#16112c" /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="10" y="9" width="2" height="1" fill="#16112c" /> <rect x="12" y="9" width="1" height="1" fill="#0b0916" /> <rect x="13" y="9" width="1" height="1" fill="#a49a71" /> <rect x="1" y="10" width="1" height="1" fill="#0b0916" /> <rect x="2" y="10" width="1" height="1" fill="#1c1635" /> <rect x="3" y="10" width="3" height="1" fill="#16112c" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> <rect x="9" y="10" width="3" height="1" fill="#16112c" /> <rect x="12" y="10" width="1" height="1" fill="#0b0916" /> <rect x="13" y="10" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="11" width="1" height="1" fill="#0b0916" /> <rect x="2" y="11" width="1" height="1" fill="#1c1635" /> <rect x="3" y="11" width="9" height="1" fill="#16112c" /> <rect x="12" y="11" width="1" height="1" fill="#0b0916" /> <rect x="13" y="11" width="1" height="1" fill="#a49a71" /> <rect x="0" y="12" width="2" height="1" fill="#f4c535" /> <rect x="2" y="12" width="1" height="1" fill="#1c1635" /> <rect x="3" y="12" width="9" height="1" fill="#16112c" /> <rect x="12" y="12" width="1" height="1" fill="#0b0916" /> <rect x="13" y="12" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="13" width="1" height="1" fill="#0b0916" /> <rect x="2" y="13" width="1" height="1" fill="#1c1635" /> <rect x="3" y="13" width="8" height="1" fill="#16112c" /> <rect x="11" y="13" width="1" height="1" fill="#f4c535" /> <rect x="12" y="13" width="1" height="1" fill="#0b0916" /> <rect x="13" y="13" width="1" height="1" fill="#a49a71" /> <rect x="1" y="14" width="1" height="1" fill="#0b0916" /> <rect x="2" y="14" width="1" height="1" fill="#1c1635" /> <rect x="3" y="14" width="7" height="1" fill="#16112c" /> <rect x="10" y="14" width="2" height="1" fill="#f4c535" /> <rect x="12" y="14" width="1" height="1" fill="#0b0916" /> <rect x="13" y="14" width="1" height="1" fill="#d6cda4" /> <rect x="1" y="15" width="13" height="1" fill="#0b0916" /> </g> <g > <rect x="6" y="6" width="3" height="1" fill="#0b0916" /> <rect x="5" y="7" width="1" height="1" fill="#0b0916" /> <rect x="6" y="7" width="3" height="1" fill=var(--accent) /> <rect x="9" y="7" width="1" height="1" fill="#0b0916" /> <rect x="5" y="8" width="1" height="1" fill="#0b0916" /> <rect x="6" y="8" width="1" height="1" fill=var(--accent) /> <rect x="7" y="8" width="1" height="1" fill=#ffffff /> <rect x="8" y="8" width="1" height="1" fill=var(--accent) /> <rect x="9" y="8" width="1" height="1" fill="#0b0916" /> <rect x="5" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="9" width="3" height="1" fill=var(--accent) /> <rect x="9" y="9" width="1" height="1" fill="#0b0916" /> <rect x="6" y="10" width="3" height="1" fill="#0b0916" /> </g></svg><span class="n" id="tabN"></span></div>
+  <div class="rib"><span class="n" id="tabN"></span></div>
 </div>
 
 <div id="demo">demo: <b>1/2/3</b> state · <b>G</b> peek · <b>L</b> locating · drag the header to move · <b>B</b> backdrop · <b>T</b> text size · <b>Enter</b> tick · <b>N</b> next · click items/place</div>
@@ -655,6 +658,8 @@
     tracker.classList.toggle('collapsed', state.view === 'collapsed');
     tracker.classList.toggle('away', state.view === 'away');
     document.body.classList.toggle('away', state.view === 'away');
+    if (state.view !== 'away') state.bmFocus = false; // out: the panel's stop for the bookmark is gone with it
+    document.body.classList.toggle('bmfocus', state.view === 'away' && !!state.bmFocus);
     tab.className = state.edge === 'left' ? 'left' : 'right';
     document.body.classList.toggle('edge-left', state.edge === 'left');
     $('headChev').textContent = state.view === 'collapsed' ? '▸' : '▾';
@@ -667,13 +672,11 @@
     requestAnimationFrame(() => {
       let w, h;
       if (state.view === 'away') {
-        // The ribbon sits flush against the screen edge (the app puts the window there); the window keeps room for it
-        // to lengthen on hover (.55em), measured from its resting length so hovering never resizes the window.
-        const em = parseFloat(getComputedStyle(tab).fontSize) || 16;
-        const grow = Math.ceil(em * 0.55);
-        const rest = tab.offsetWidth - (tab.matches(':hover') ? grow : 0);
-        w = rest + grow + 2;
-        h = Math.ceil(tab.getBoundingClientRect().bottom + 6);
+        // The ribbon sits flush against the edge it sticks out of (the app puts the window there), with 3 px spare on
+        // its free side and below: room for the hover nudge and a little more to click. Measured without transforms
+        // (offset*), so hovering never resizes the window.
+        w = tab.offsetWidth + 3;
+        h = tab.offsetTop + tab.offsetHeight + 3;
       } else {
         const r = tracker.getBoundingClientRect();
         const pad = state.attached ? 0 : 6;
@@ -881,7 +884,17 @@
     send('confirm-place', { id: state.data.id, name: p.name, story: p.story || '' });
   };
   $('placeConfirm').addEventListener('click', confirmPlace);
-  tab.addEventListener('click', () => setView('full'));
+  // Put away, the whole window is the bookmark: a press and release anywhere in it brings the log back. (A click on
+  // the ribbon itself wasn't enough: Windows' mouse-enter flicker as clicks turn on could move what's under the
+  // pointer between the press and the release, and the notch at its tip isn't part of the ribbon.)
+  let awayPress = false;
+  document.addEventListener('pointerdown', (e) => { awayPress = state.view === 'away' && e.button === 0; }, true);
+  document.addEventListener('pointerup', (e) => {
+    if (!awayPress || state.view !== 'away' || e.button !== 0) { awayPress = false; return; }
+    awayPress = false;
+    state.bmFocus = false;
+    setView('full');
+  }, true);
   $('bSize').addEventListener('click', () => {
     state.size = state.size === 'small' ? 'medium' : state.size === 'medium' ? 'large' : 'small';
     applyView(); send('settings', { size: state.size });

@@ -142,6 +142,15 @@ async function test(name, fn) {
     assert.equal(await handlers['tracker-key'](null, 'next'), false, 'next is only next: it does not bring the log back');
     assert.equal(await tracker.toggle(null), 'shown', 'the quest log shortcut (and the bookmark, the menu) brings it out');
     assert.equal(tracker.isLogVisible(), true, 'out again');
+    // The panel's keyboard stop and the controller reach the bookmark.
+    await tracker.toggle(null);
+    assert.ok(env.told.some((p) => p.type === 'visibility' && p.tucked === true), 'the panel is told it is tucked in (its keyboard stop shows)');
+    assert.equal(await handlers['tracker-key'](null, 'bookmark-focus'), true);
+    assert.ok(win.js.some((c) => c.includes('"bmFocus":true')), 'a ring on the bookmark');
+    assert.equal(await handlers['tracker-key'](null, 'focus'), true, 'RB from Ask reaches a tucked-in log');
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(tracker.isLogVisible(), true, 'slid out for the controller');
+    assert.ok(win.js.some((c) => c.includes("qcTrackerKey('focus')")), 'and the controller is in it');
     tracker.hide();
   });
 

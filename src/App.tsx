@@ -1094,6 +1094,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const [questLogVisible, setQuestLogVisible] = useState(false);
   // The quest log is attached to the panel (0.6.0): it moves and hides with it, and the controller's RB reaches it.
   const [questLogAttached, setQuestLogAttached] = useState(false);
+  // Tucked in as the bookmark on the panel's edge: the panel keeps a keyboard / controller stop for it.
+  const [questLogTucked, setQuestLogTucked] = useState(false);
   const toggleQuestLog = () => {
     const p = trackerPayloadRef.current;
     (window as any).electronAPI?.toggleQuestLog?.(p?.data, p?.gameKey);
@@ -1228,6 +1230,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     if (e.type === 'visibility') {
       setQuestLogVisible(!!e.visible);
       setQuestLogAttached(!!e.attached);
+      setQuestLogTucked(!!e.tucked);
       return;
     }
     if (e.type === 'tick' && typeof e.item === 'string') {
@@ -2739,6 +2742,20 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           playthroughs={playthroughMenu}
           runningTabId={spacesOn && spaces ? runningTab?.id : undefined}
         />}
+        {/* The tucked-in quest log's bookmark is its own window just outside the panel's edge, which keyboard focus
+            can't reach: this invisible stop sits under it on the panel's inner edge. Focused (Tab, or the controller's
+            d-pad toward the edge), it rings the bookmark; Enter, Space or A slides the log out. */}
+        {isDesktop && questLogTucked && !isBrowserMode && (
+          <button
+            type="button"
+            onClick={toggleQuestLog}
+            onFocus={() => (window as any).electronAPI?.trackerKey?.('bookmark-focus')}
+            onBlur={() => (window as any).electronAPI?.trackerKey?.('bookmark-blur')}
+            aria-label={`${tr('tracker.slideOut')} (${formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L')})`}
+            className={`absolute top-2 ${tuckSide === 'right' ? 'left-0' : 'right-0'} z-[90] w-1 h-3.5 opacity-0 outline-none`}
+            style={{ WebkitAppRegion: 'no-drag' } as any}
+          />
+        )}
         {/* With one space per game (flag on): the game's full name on its own line (or "Which game is this?"), the
             detection line only when it has something to do, and the one-time migration notice. */}
         {!compact && (spacesOn && spaces ? (
@@ -2951,7 +2968,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 missablesHere={missablesHere}
                 // "Next here" is the attached quest log's list too: the compact view leaves it out while that shows.
                 nearYou={compact && questLogVisible && questLogAttached ? null : nearYou}
-                logAttached={questLogVisible && questLogAttached}
+                logAttached={questLogAttached && (questLogVisible || questLogTucked)}
                 nextKeys={formatShortcut(settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down')}
                 immersiveReadAloud={settings.immersiveReadAloud !== false}
                 soundEnabled={settings.soundEnabled}
@@ -3126,7 +3143,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       )}
 
       {/* Controller support: focus navigation, quick questions, on-screen keyboard, button hints */}
-      <ControllerLayer enabled={settings.controllerEnabled !== false} talkButton={settings.controllerTalk || 'y'} hintMode={settings.hintMode === true} logAttached={questLogVisible && questLogAttached && !isBrowserMode} />
+      <ControllerLayer enabled={settings.controllerEnabled !== false} talkButton={settings.controllerTalk || 'y'} hintMode={settings.hintMode === true} logAttached={questLogAttached && (questLogVisible || questLogTucked) && !isBrowserMode} />
 
       {/* Quick Game Search & Switcher Modal */}
       <QuickGameSearchModal

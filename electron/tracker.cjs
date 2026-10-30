@@ -512,9 +512,11 @@ function hide() {
 
 /** Visible as the full or folded log (not away as the ribbon, not closed). */
 const logVisible = () => !!current && alive() && settingsFor(current.gameKey).shown && settingsFor(current.gameKey).view !== 'away' && !(isAttached() && !anchor());
-/** The panel header's toggle shows whether the quest log is out. */
+/** Attached and tucked in as the bookmark on the open panel's edge. */
+const tuckedOnPanel = () => !!current && alive() && isAttached() && settingsFor(current.gameKey).shown && settingsFor(current.gameKey).view === 'away' && !!anchor() && anchor().kind === 'panel';
+/** The panel header's toggle shows whether the quest log is out; tucked: the panel offers its keyboard stop. */
 function sendVisibility() {
-  tell({ type: 'visibility', visible: logVisible(), hasData: !!current, attached: isAttached() });
+  tell({ type: 'visibility', visible: logVisible(), hasData: !!current, attached: isAttached(), tucked: tuckedOnPanel() });
   // The tick / cycle shortcuts are registered only while the log is on screen (main.cjs).
   if (deps && deps.onLogVisible) deps.onLogVisible(logVisible());
 }
@@ -525,9 +527,19 @@ function sendVisibility() {
  * opens for a moment to show it). Returns whether there was a log to act on.
  */
 function key(action) {
-  // tick / next / prev; focus and blur: the controller is in the log (RB from the conversation, attached).
-  if (!['tick', 'next', 'prev', 'focus', 'blur'].includes(action) || !alive()) return false;
+  // tick / next / prev; focus and blur: the controller is in the log (RB from the conversation, attached);
+  // bookmark-focus / bookmark-blur: the panel's keyboard stop for the tucked-in log is focused (a ring on the bookmark).
+  if (!['tick', 'next', 'prev', 'focus', 'blur', 'bookmark-focus', 'bookmark-blur'].includes(action) || !alive()) return false;
   if (action === 'blur') { js(`window.qcTrackerKey('blur')`); return true; }
+  if (action === 'bookmark-focus' || action === 'bookmark-blur') {
+    js(`window.qcTrackerSettings(${JSON.stringify({ bmFocus: action === 'bookmark-focus' })})`);
+    return tuckedOnPanel();
+  }
+  // The controller reaching a tucked-in log (RB from Ask): slide it out, then go in.
+  if (action === 'focus' && tuckedOnPanel() && !captureHidden) {
+    toggle(null).then((r) => { if (r === 'shown') js(`window.qcTrackerKey('focus')`); }).catch(() => {});
+    return true;
+  }
   if (!logVisible() || captureHidden) return false;
   js(`window.qcTrackerKey(${JSON.stringify(action)})`);
   return true;
@@ -713,8 +725,9 @@ function onMessage(event, msg) {
   const gameKey = current && current.gameKey;
   switch (msg.type) {
     case 'size': {
-      const w = Math.max(60, Math.min(900, Math.round(msg.width || 0)));
-      const h = Math.max(40, Math.min(maxHeight() + 12, Math.round(msg.height || 0)));
+      // (Small minimums: put away, the window is just the slim bookmark, every pixel of it clickable.)
+      const w = Math.max(16, Math.min(900, Math.round(msg.width || 0)));
+      const h = Math.max(12, Math.min(maxHeight() + 12, Math.round(msg.height || 0)));
       const b = win.getBounds();
       lastSize = { w, h };
       if (w !== b.width || h !== b.height) win.setBounds({ x: b.x, y: b.y, width: w, height: h });
