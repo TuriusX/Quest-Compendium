@@ -1,6 +1,8 @@
 // Run: npm run test:sync   (or: node tests/trackerAttach.test.cjs)
 // The attached quest log (electron/tracker.cjs) against fake Electron windows: where it goes for each dock and screen,
-// hiding with the panel, the compact height limit, popping out, and who starts attached.
+// hiding with the panel, the compact height limit, popping out, and who starts attached. Since the quest log redesign
+// (Oct 30 2026), docked and out it's the column inside the panel (src/components/QuestLog.tsx): this window is then
+// invisible and shows only as the bookmark, the popped-out log, or a heads-up beside the spine.
 const assert = require('node:assert/strict');
 const Module = require('module');
 const fs = require('fs');
@@ -58,9 +60,11 @@ async function setup({ existing }) {
     getDock: () => env.dock,
     isCompact: () => env.compact,
     getSpineAnchor: () => env.spine,
+    onOpenPanel: () => env.onOpenPanel && env.onOpenPanel(),
     onLogVisible: (visible, available) => { env.keys = { visible, available }; },
   });
-  const data = { id: 'a', quest: 'Find the seed', sections: [{ id: 'answer', title: 'x', items: [{ id: 's:1:0', label: 'Go north', tick: true }] }] };
+  const data = { id: 'a', quest: 'Find the seed', sections: [{ id: 'answer', title: 'x', items: [{ id: 's:1:0', label: 'Go north', tick: true }] }],
+    log: { now: { id: 's:1:0', text: 'Go north', tick: true, source: 'question', goal: 'Find the seed', doneCount: 0, total: 2 }, next: [{ id: 's:1:1', text: 'Dig', tick: true }], bookmark: 2 } };
   await tracker.show(data, 'g1');
   const win = wins[wins.length - 1];
   // The page reports its size (300 x 400): the window shows.
@@ -76,13 +80,26 @@ async function test(name, fn) {
 }
 
 (async () => {
-  await test('a new install starts attached, left of a panel docked right, top-aligned', async () => {
+  await test('docked by default: out, it is the column inside the panel, so this window is invisible beside it', async () => {
     const { tracker, win, env } = await setup({ existing: false });
     env.panel = { x: 1370, y: 0, width: 550, height: 800 };
     tracker.panelShown();
-    assert.deepEqual(win.getBounds(), { x: 1070, y: 0, width: 300, height: 400 });
-    assert.equal(win.opacity, 1);
-    assert.ok(win.js.some((c) => c.includes('"side":"left"') || c.includes('"attached":true')));
+    assert.deepEqual(win.getBounds(), { x: 1070, y: 0, width: 300, height: 400 }, 'still kept beside the panel (for the bookmark)');
+    assert.equal(win.opacity, 0, 'the panel shows the log');
+    assert.ok(env.told.some((p) => p.type === 'visibility' && p.visible === true && p.attached === true), 'the app is told to show its column');
+    assert.ok(win.js.some((c) => c.includes('"attached":true')));
+    tracker.hide();
+  });
+
+  await test('existing players docked too (no offer); a game popped out keeps its choice', async () => {
+    const { tracker, win, env, handlers, dir } = await setup({ existing: true });
+    env.panel = { x: 1370, y: 0, width: 550, height: 800 };
+    tracker.panelShown();
+    assert.ok(win.js.some((c) => c.includes('"attached":true') && c.includes('"attachOffer":false')));
+    handlers['tracker-msg']({ sender: win.webContents }, { type: 'attach', on: false });
+    await new Promise((r) => setTimeout(r, 450)); // the store saves after 400 ms
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'tracker.json'), 'utf8')).g1.attach, false);
+    assert.equal(win.opacity, 1, 'popped out: its own window over the game');
     tracker.hide();
   });
 
@@ -94,9 +111,12 @@ async function test(name, fn) {
     env.panel = null; tracker.panelHidden();
     assert.equal(win.opacity, 0, 'invisible with the panel away');
     assert.equal(tracker.getBounds(), null, 'not an obstacle for the markers while invisible');
-    assert.equal(tracker.isLogVisible(), false, 'tick shortcuts off while hidden');
+    assert.equal(env.keys.visible, true, 'the tick / next keys stay on while there is a log (a tick out of sight gets a heads-up)');
     env.panel = { x: 0, y: 0, width: 550, height: 800 }; tracker.panelShown();
-    assert.equal(win.opacity, 1);
+    assert.equal(win.opacity, 0, 'out: the column inside the panel');
+    // Tucked in: the bookmark on the panel's edge.
+    assert.equal(await tracker.toggle(null), 'away');
+    assert.equal(win.opacity, 1, 'the bookmark');
     tracker.hide();
   });
 
@@ -137,9 +157,10 @@ async function test(name, fn) {
     assert.deepEqual(win.getBounds(), { x: 1298, y: 8, width: 72, height: 40 }, 'flush with the panel, 8 px down');
     assert.equal(win.opacity, 1, 'the bookmark shows');
     assert.ok(win.js.some((c) => c.includes('"edge":"right"')), 'anchored on the side facing the panel');
-    assert.equal(env.keys.visible, false, 'the tick / next keys are off while it is tucked in');
     assert.equal(tracker.getBounds(), null, 'the spine does not step around an attached log');
-    assert.equal(await handlers['tracker-key'](null, 'next'), false, 'next is only next: it does not bring the log back');
+    assert.equal(await handlers['tracker-key'](null, 'next'), true, 'next goes to the app (it moves the pick, or shows it as a heads-up)');
+    assert.ok(env.told.some((p) => p.type === 'log-key' && p.action === 'next' && p.onScreen === false), 'tucked in: not on screen');
+    assert.equal(tracker.isLogVisible(), false, 'next does not bring the log back');
     assert.equal(await tracker.toggle(null), 'shown', 'the quest log shortcut (and the bookmark, the menu) brings it out');
     assert.equal(tracker.isLogVisible(), true, 'out again');
     // The panel's keyboard stop and the controller reach the bookmark.
@@ -154,26 +175,32 @@ async function test(name, fn) {
     tracker.hide();
   });
 
-  await test('the panel tucked away: the log out beside the book, or tucked in as a count on the book', async () => {
+  await test('the panel tucked away: the docked log goes with it; the shortcut opens the panel with it; a heads-up by the book', async () => {
     const { tracker, win, env } = await setup({ existing: false });
+    let opened = 0;
+    env.onOpenPanel = () => { opened++; };
     env.panel = { x: 1370, y: 0, width: 550, height: 800 };
     tracker.panelShown();
     env.panel = null; tracker.panelHidden();
     assert.equal(win.opacity, 0, 'nothing to stick to while the panel slides away');
     env.spine = { rect: { x: 1894, y: 344, width: 26, height: 112 }, right: true };
     tracker.anchorChanged();
+    assert.equal(win.opacity, 0, 'docked: the log is in the panel, nothing beside the book');
+    // Tucked in (with the panel open), then the panel away: the count on the book (steps left on Now's goal).
+    env.spine = null; env.panel = { x: 1370, y: 0, width: 550, height: 800 }; tracker.panelShown();
+    assert.equal(await tracker.toggle(null), 'away');
+    env.panel = null; tracker.panelHidden();
+    env.spine = { rect: { x: 1894, y: 344, width: 26, height: 112 }, right: true }; tracker.anchorChanged();
+    assert.equal(win.opacity, 0, 'no bookmark beside the book');
+    assert.equal(tracker.badgeCount(), 2, "the log's number for the book");
+    // A tick with the log out of sight: the new Now beside the spine for a few seconds.
+    assert.equal(tracker.heads('Dig'), true);
     assert.equal(win.opacity, 1);
     assert.deepEqual([win.getBounds().x, win.getBounds().y], [1594, 344], 'on the inner side of the spine, level with its top');
-    assert.equal(tracker.isLogVisible(), true);
-    assert.ok(win.js.some((c) => c.includes('"maxHeight":728')), '70% of the screen beside the spine');
-    assert.equal(tracker.badgeCount(), 0, 'slid out: no badge on the book');
-    // Tucked in with the panel away: no bookmark beside the book, the count on the book instead.
-    assert.equal(await tracker.toggle(null), 'away');
-    assert.equal(win.opacity, 0, 'no bookmark beside the book');
-    assert.equal(tracker.badgeCount(), 1, 'the uncollected count for the book');
-    // The quest log shortcut slides just the log out beside the book.
+    assert.ok(win.js.some((c) => c.includes('qcTrackerHeads("Dig"')));
+    // The quest log shortcut: the panel opens with the log out.
     assert.equal(await tracker.toggle(null), 'shown');
-    assert.equal(win.opacity, 1);
+    assert.equal(opened, 1, 'the panel opens');
     assert.equal(tracker.badgeCount(), 0);
     // Tucked in again, then the panel opens: the bookmark is back on the panel's edge and the book's badge goes.
     await tracker.toggle(null);
@@ -184,31 +211,32 @@ async function test(name, fn) {
     tracker.hide();
   });
 
-  await test('an existing player keeps popped out with the offer; popping out and attaching are remembered', async () => {
-    const { tracker, win, env, handlers, dir } = await setup({ existing: true });
+  await test('pop out and put back (from the app or the window); popped out it stays over the game', async () => {
+    const { tracker, win, env, handlers, dir } = await setup({ existing: false });
     env.panel = { x: 1370, y: 0, width: 550, height: 800 };
-    assert.ok(win.js.some((c) => c.includes('"attached":false') && c.includes('"attachOffer":true')));
-    assert.ok(env.told.some((p) => p.type === 'visibility' && p.attached === false));
-    handlers['tracker-msg']({ sender: win.webContents }, { type: 'attach', on: true });
-    assert.equal(win.getBounds().x, 1070);
-    await new Promise((r) => setTimeout(r, 450)); // the store saves after 400 ms
-    const saved = JSON.parse(fs.readFileSync(path.join(dir, 'tracker.json'), 'utf8'));
-    assert.equal(saved.g1.attach, true);
-    assert.equal(saved._meta.offer, false);
-    handlers['tracker-msg']({ sender: win.webContents }, { type: 'attach', on: false });
+    tracker.panelShown();
+    assert.equal(await handlers['tracker-attach'](null, false), true, "the docked log's ⇱");
+    assert.equal(win.opacity, 1);
     env.panel = null; tracker.panelHidden();
     assert.equal(win.opacity, 1, 'popped out: stays over the game');
+    handlers['tracker-msg']({ sender: win.webContents }, { type: 'attach', on: true }); // its ⤓
+    await new Promise((r) => setTimeout(r, 450));
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'tracker.json'), 'utf8')).g1.attach, true);
+    assert.ok(env.told.some((p) => p.type === 'visibility' && p.attached === true && p.visible === true), 'back in the overlay, out');
     tracker.hide();
   });
 
-  await test('the controller keys: focus, move both ways, tick only while the log shows', async () => {
+  await test('the tick and next keys go to the app, which owns the log, with or without it on screen', async () => {
     const { tracker, win, env, handlers } = await setup({ existing: false });
     env.panel = { x: 1370, y: 0, width: 550, height: 800 };
     tracker.panelShown();
-    for (const k of ['focus', 'next', 'prev', 'tick', 'blur']) assert.equal(await handlers['tracker-key'](null, k), true, k);
+    for (const k of ['next', 'prev', 'tick']) assert.equal(await handlers['tracker-key'](null, k), true, k);
+    assert.ok(env.told.some((p) => p.type === 'log-key' && p.action === 'tick' && p.onScreen === true), 'docked with the panel open: on screen');
     assert.equal(await handlers['tracker-key'](null, 'nonsense'), false);
     env.panel = null; tracker.panelHidden();
-    assert.equal(await handlers['tracker-key'](null, 'tick'), false, 'hidden with the panel');
+    env.told.length = 0;
+    assert.equal(await handlers['tracker-key'](null, 'tick'), true, 'still ticks with the panel away');
+    assert.ok(env.told.some((p) => p.type === 'log-key' && p.onScreen === false), 'out of sight: the app sends a heads-up');
     tracker.hide();
   });
 

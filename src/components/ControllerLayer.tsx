@@ -210,9 +210,23 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
   const [logFocus, setLogFocus] = useState(false);
   const logKey = (action: string) => (window as any).electronAPI?.trackerKey?.(action);
   useEffect(() => {
-    const on = () => { setLogFocus(true); logKey('focus'); };
+    // Docked, the log is part of this page (components/QuestLog.tsx): the controller just moves into it (Now's box), and
+    // the d-pad, A and B work there like anywhere else. Popped out (or tucked in), it's driven through the app.
+    const on = () => {
+      const docked = document.querySelector<HTMLElement>('[data-qc-log] [data-qc-log-now]:not([disabled])')
+        || document.querySelector<HTMLElement>('[data-qc-log] button:not([disabled])');
+      if (docked) { setFocusRef.current(docked); return; }
+      setLogFocus(true);
+      logKey('focus');
+    };
+    // Somewhere asked for the controller's focus (a new answer's "Set as Now").
+    const focusEl = (e: Event) => {
+      const el = (e as CustomEvent).detail?.el;
+      if (el instanceof HTMLElement && document.documentElement.classList.contains('qc-pad')) setFocusRef.current(el);
+    };
     window.addEventListener('qc-log-focus', on);
-    return () => window.removeEventListener('qc-log-focus', on);
+    window.addEventListener('qc-pad-focus', focusEl);
+    return () => { window.removeEventListener('qc-log-focus', on); window.removeEventListener('qc-pad-focus', focusEl); };
   }, []);
   // Out of the log when controller mode ends or the log goes (detached, put away, the panel hidden).
   useEffect(() => {
@@ -257,6 +271,8 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
     el.focus({ preventScroll: true });
     el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, []);
+  const setFocusRef = useRef(setFocus);
+  setFocusRef.current = setFocus;
 
   const openKeyboard = useCallback(() => {
     const box = document.querySelector<HTMLTextAreaElement>('[data-qc-ask-input]');
@@ -371,6 +387,13 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
 
       // --- Normal navigation
       const scope = topScope();
+      // In the docked quest log: B back to the question box; RB on to the Guide, LB back to Ask.
+      const inLog = !!(document.activeElement as HTMLElement | null)?.closest?.('[data-qc-log]');
+      if (inLog && (b === 'b' || b === 'lb' || b === 'rb')) {
+        setFocus(document.querySelector<HTMLElement>('[data-qc-ask-input]'));
+        if (b === 'rb') emit('qc-pad-mode', { dir: 1, fromLog: true });
+        return;
+      }
       if (b === 'up' || b === 'down' || b === 'left' || b === 'right') {
         const items = focusables(scope);
         const current = document.activeElement instanceof HTMLElement ? document.activeElement : focusedRef.current;
@@ -389,6 +412,9 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
       } else if (b === 'start') {
         openKeyboard();
       } else if (b === 'back') {
+        // View: the quest log opens or closes (owner, Oct 30 2026). Screenshot and ask moved to L3.
+        emit('qc-toggle-log');
+      } else if (b === 'ls') {
         if (electronAPI()) emit('trigger-auto-screenshot-submit');
       } else if (b === 'lb' || b === 'rb') {
         // Ask -> Guide -> the next game (RB), and back (LB). Inside a dialog: nothing.
@@ -541,6 +567,8 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
             <Hint b="menu" label={t('pad.keyboard')} />
             <Hint b="lb" label={t(logAttached ? 'pad.askLogGuide' : 'pad.askGuide')} />
             <Hint b="rt" label={t('pad.page')} />
+            <Hint b="view" label={t('pad.questLog')} />
+            <Hint b="ls" label={t('pad.shotAsk')} />
           </>
         )}
       </div>

@@ -34,6 +34,7 @@ import {
   Flag,
   ThumbsUp,
   ThumbsDown,
+  Pin,
 } from './icons';
 import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions, unmarkedLine } from './ScreenPointers';
 import { areaFindsFor, markersActiveFor } from './pointerStore';
@@ -58,6 +59,7 @@ import { quickChips, quickLabelKey, type QuickId } from '../utils/quickQuestions
 import { displayGameName } from '../utils/gameName';
 import { showFirstRunHints } from '../utils/sessions';
 import { ENTRY_ICON_PATHS, ENTRY_COLORS, type EntryKind } from '../utils/entryKind';
+import { isGoalAnswer } from '../utils/questLogView';
 import { TtsPlayer } from '../utils/ttsPlayer';
 import { CompactCard, type CompactLayout } from './CompactCard';
 import type { Detection } from './DetectionLine';
@@ -104,6 +106,16 @@ interface ChatAreaProps {
   onOpenPremium?: () => void;
   /** The quest log is attached and showing: the controller's LB / RB reach it between Ask and Guide. */
   logAttached?: boolean;
+  /**
+   * The quest log (owner, Oct 30 2026): the answer set as Now, the pinned answers and closed offers (tab.questLog).
+   * The latest answer about a goal offers "Set as Now" with its steps; any answer can be pinned.
+   */
+  questLog?: { now?: string; pins?: string[]; hidden?: string[] };
+  onSetNow?: (msgId: string) => void;
+  onPinAnswer?: (msgId: string) => void;
+  onDismissOffer?: (msgId: string) => void;
+  /** The compact card's quest log (its Now line and fold). */
+  compactLog?: { view: import('../utils/questLogView').LogView; open: boolean; onTick: (id: string) => void; onToggle: () => void; keysLabel: string } | null;
   /** The player picked where they are (one tap or voice): remember it for this game. */
   onSetPlace?: (name: string) => void;
   /** "Locate me" in the PlaceBar (desktop, games with a guide). */
@@ -264,6 +276,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   hintMode = false,
   onOpenPremium,
   logAttached = false,
+  questLog,
+  onSetNow,
+  onPinAnswer,
+  onDismissOffer,
+  compactLog,
   onSetPlace,
   onLocate,
   locating,
@@ -271,6 +288,31 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onSetStory,
 }) => {
   const t = useT();
+  // The latest finished answer: only it offers "Set as Now" (older answers keep 📌 Pin).
+  const latestAnswerId = (() => {
+    const ms = activeTab?.messages || [];
+    for (let i = ms.length - 1; i >= 0; i--) if (ms[i].role === 'assistant' && !ms[i].isStreaming) return ms[i].id;
+    return '';
+  })();
+  // A new answer offering "Set as Now" with the controller in use: the controller's focus goes there (one press of A).
+  useEffect(() => {
+    if (!latestAnswerId || !document.documentElement.classList.contains('qc-pad')) return;
+    const id = setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-qc-offer="${CSS.escape(latestAnswerId)}"] [data-qc-set-now]`);
+      if (el) window.dispatchEvent(new CustomEvent('qc-pad-focus', { detail: { el } }));
+    }, 150);
+    return () => clearTimeout(id);
+  }, [latestAnswerId]);
+  // A pinned answer picked on the quest log: the conversation scrolls to it.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const id = String((e as CustomEvent).detail?.id || '');
+      const el = id ? document.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(id)}"]`) : null;
+      if (el) { el.scrollIntoView({ block: 'start', behavior: 'smooth' }); el.classList.add('qc-flash'); setTimeout(() => el.classList.remove('qc-flash'), 1600); }
+    };
+    window.addEventListener('qc-scroll-to-msg', on);
+    return () => window.removeEventListener('qc-scroll-to-msg', on);
+  }, []);
   // The question box's text lives in AskTextarea (typing never re-renders the conversation); this reads and sets it.
   const askRef = useRef<AskTextareaHandle>(null);
   // Enter in the box submits with the latest handleSubmit (updated every render).
@@ -1466,6 +1508,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         onExpand={onExpand}
         onObjective={onShowQuestLog}
         onClose={onCloseApp}
+        log={compactLog}
         // Near you: the next thing the guide lists here, unticked (missables first). Opens it in the guide. Free.
         onNear={nearYou ? () => {
           const [, slug, ...rest] = nearYou.id.split(':');
@@ -1642,6 +1685,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             return (
               <div
                 key={msg.id}
+                data-msg-id={msg.id}
                 className={`group/msg flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-full`}
               >
                 {/* User or AI Message Header Tag */}
@@ -1802,6 +1846,43 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     />
                   </div>
                   {isDesktopApp && markerCard(true)}
+                  {!isUser && onSetNow && (() => {
+                    // The quest log: this answer is the current objective (its progress), or the latest answer about a goal
+                    // offers to become it.
+                    const steps = (msg.steps || []).map((st, i) => ({ st, i })).filter((x) => x.st.kind !== 'warning');
+                    if (questLog?.now === msg.id && steps.length) {
+                      const done = steps.filter((x) => (msg.doneSteps || []).includes(x.i)).length;
+                      return (
+                        <div className="mt-2 flex items-center gap-1.5 text-[12px] font-mono text-zinc-500">
+                          <span className="w-2 h-2 rounded-full border border-[var(--accent-color)] bg-[var(--accent-dim)]" />
+                          {t('tracker.logCurrent', { n: done, total: steps.length })}
+                        </div>
+                      );
+                    }
+                    if (msg.id !== latestAnswerId || !isGoalAnswer(msg) || questLog?.hidden?.includes(`offer:${msg.id}`)) return null;
+                    return (
+                      <div data-qc-offer={msg.id} className="mt-3 -mx-1 flex flex-wrap items-center gap-2 rounded-md border border-[var(--accent-border)] bg-gradient-to-r from-[rgba(168,127,251,.16)] to-[rgba(168,127,251,.05)] px-3 py-2">
+                        <span className="flex-1 min-w-[10rem] text-[12.5px] font-semibold text-zinc-100 font-sans">
+                          {t('tracker.logOfferTitle')}
+                          <span className="block font-medium text-[11.5px] text-zinc-400">{t('tracker.logOfferSub', { n: steps.length })}</span>
+                        </span>
+                        <button type="button" data-qc-set-now="" onClick={() => { playBlipSound(soundEnabled); onSetNow(msg.id); }}
+                          className="px-2.5 py-1 rounded bg-[var(--accent-color)] text-black text-[12px] font-mono font-bold outline-none focus-visible:ring-2 focus-visible:ring-white">
+                          {t('tracker.logSetNow')}
+                        </button>
+                        {onPinAnswer && (
+                          <button type="button" onClick={() => onPinAnswer(msg.id)} aria-pressed={!!questLog?.pins?.includes(msg.id)}
+                            className="px-2.5 py-1 rounded border border-white/15 bg-[#1b1a24] text-[12px] font-mono font-bold text-zinc-200 flex items-center gap-1 outline-none focus-visible:ring-2 focus-visible:ring-white">
+                            <Pin className="w-3 h-3" />{questLog?.pins?.includes(msg.id) ? t('tracker.logPinnedAnswer') : t('tracker.logPin')}
+                          </button>
+                        )}
+                        {onDismissOffer && (
+                          <button type="button" onClick={() => onDismissOffer(msg.id)} title={t('tracker.logOfferClose')} aria-label={t('tracker.logOfferClose')}
+                            className="text-zinc-500 hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white rounded"><X className="w-3.5 h-3.5" /></button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Answer actions: a small bar on the answer's bottom edge, shown on hover or keyboard / controller
                       focus (always on touch screens), and kept while reading aloud, just copied or saved, or asking
@@ -1870,6 +1951,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             </button>
                           );
                         })}
+
+                        {/* 📌 Pin to the quest log */}
+                        {onPinAnswer && (
+                          <button
+                            type="button"
+                            onClick={() => { playBlipSound(soundEnabled); onPinAnswer(msg.id); }}
+                            title={questLog?.pins?.includes(msg.id) ? t('tracker.logUnpin') : t('tracker.logPin')}
+                            aria-label={questLog?.pins?.includes(msg.id) ? t('tracker.logUnpin') : t('tracker.logPin')}
+                            aria-pressed={!!questLog?.pins?.includes(msg.id)}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer hover:bg-white/10 ${questLog?.pins?.includes(msg.id) ? 'text-[var(--accent-color)]' : 'text-zinc-400 hover:text-white'}`}
+                          >
+                            <Pin className="w-3.5 h-3.5" />
+                          </button>
+                        )}
 
                         {/* ⋯: save to notes, copy, report */}
                         <div className="relative">

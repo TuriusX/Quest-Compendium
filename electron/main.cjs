@@ -118,7 +118,11 @@ let baseLogicalHeight = 800;
 const COMPACT_SIZES = { card: { width: 460, height: 104 }, ribbon: { width: 560, height: 64 } };
 let compactMode = false;
 let compactLayout = 'card';
-const compactSize = () => COMPACT_SIZES[compactLayout] || COMPACT_SIZES.card;
+let compactExtra = 0; // the quest log's fold under the compact card (logical px)
+const compactSize = () => {
+  const s = COMPACT_SIZES[compactLayout] || COMPACT_SIZES.card;
+  return { width: s.width, height: s.height + compactExtra };
+};
 const logicalWidth = () => (compactMode ? compactSize().width : baseLogicalWidth);
 const logicalHeight = () => (compactMode ? compactSize().height : baseLogicalHeight);
 
@@ -1197,12 +1201,14 @@ ipcMain.on('set-ui-scale', (event, scale) => {
 
 // Compact view on / off (and its layout): the window keeps its dock corner (a right corner its right edge, a bottom
 // corner its bottom edge); floating, it keeps its top-left and stays on screen.
-ipcMain.on('set-compact', (event, on, layout) => {
+ipcMain.on('set-compact', (event, on, layout, extra) => {
   on = !!on;
   const nextLayout = layout === 'ribbon' ? 'ribbon' : 'card';
-  if (!mainWindow || (on === compactMode && (!on || nextLayout === compactLayout))) return;
+  const nextExtra = on ? Math.max(0, Math.min(240, Math.round(Number(extra) || 0))) : 0;
+  if (!mainWindow || (on === compactMode && (!on || (nextLayout === compactLayout && nextExtra === compactExtra)))) return;
   compactMode = on;
   compactLayout = nextLayout;
+  compactExtra = nextExtra;
   const bounds = mainWindow.getBounds();
   const { width: sWidth, height: sHeight } = screen.getPrimaryDisplay().workAreaSize;
   const width = Math.round(logicalWidth() * currentUiScale);

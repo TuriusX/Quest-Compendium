@@ -5,6 +5,13 @@
  * mouse is over the text, so the game keeps playing underneath. Position, view (full / collapsed / away), text size,
  * transparency and backdrop are remembered per game in userData/tracker.json.
  *
+ * The quest log redesign (owner, Oct 30 2026; src/utils/questLogView.ts): docked is the default for every game without
+ * its own choice. Docked and out, the log is a column inside the panel (src/components/QuestLog.tsx), so this window is
+ * invisible then; it shows only as the bookmark (tucked in, panel open) or, popped out, as the log over the game. The
+ * page draws the log's Now / Next / Watch out (data.log) with the guide's lists behind "Show more". The tick and next
+ * keys go to the app (log-key), which owns the log; after a tick with the log out of sight the app sends a heads-up
+ * (heads()): the new Now for 4 seconds beside the book spine or the ribbon.
+ *
  * Two modes, per game (the 📌 / ⇱ button in its header):
  * - Attached (new players' default, from 0.6.0): it sticks out of the panel's inner side (left of a panel docked right,
  *   right of one docked left; undocked, the side with more room), top-aligned with it, and moves, docks and goes compact
@@ -44,6 +51,7 @@ let creating = null; // the window being created (its page load), shared by show
 let revealPending = false, revealTimer = null; // a new window shows once its page has reported its size
 let captureHidden = false; // invisible (opacity 0) for a moment while the app takes a screenshot for the AI
 let attachHidden = false; // attached and the panel is away (or the log is put away): invisible like captureHidden
+let headsUntil = 0, headsTimer = null; // a heads-up is showing (heads()): the window shows just that, beside the spine or ribbon
 let side = 'left'; // attached: which side of the panel the log is on
 let lastSize = null; // the size the page last reported (kept exact when the log moves to a screen with another scale)
 let lastMax = 0; // the height limit last sent to the page
@@ -110,7 +118,8 @@ function meta() {
 function settingsFor(gameKey) {
   const saved = loadStore()[gameKey || '_default'];
   const s = { ...DEFAULTS, ...(saved || {}) };
-  s.attach = saved && typeof saved.attach === 'boolean' ? saved.attach : !!meta().attachDefault;
+  // Docked in the overlay unless the player popped this game's log out (owner, Oct 30 2026).
+  s.attach = saved && typeof saved.attach === 'boolean' ? saved.attach : true;
   // Games with settings from before the toggle had their quest log shown already.
   if (saved && typeof saved.shown !== 'boolean') s.shown = true;
   // Saved before the backdrop slider: on was the old fixed shade (45%), off is 0.
@@ -322,13 +331,16 @@ function reveal() {
 /** The page's attach state: attached, its side, and the one-time offer (existing players, while popped out). */
 function attachSettings() {
   const on = isAttached();
-  return { attached: on, side, attachOffer: !on && !!meta().offer };
+  return { attached: on, side, attachOffer: false };
 }
 const shouldHideAttached = () => {
   if (!isAttached()) return false;
   const a = anchor();
-  // Nothing to stick to, or tucked in while the panel is away (the spine's badge stands in for the bookmark).
-  return !a || (a.kind === 'spine' && settingsFor(current.gameKey).view === 'away');
+  if (!a) return true; // nothing to stick to
+  if (headsUntil > Date.now()) return false; // a heads-up beside the spine
+  // Out: the log is the column inside the panel. Tucked in with the panel away: the spine's badge stands in for the
+  // bookmark. So only the bookmark on the open panel shows.
+  return settingsFor(current.gameKey).view !== 'away' || a.kind === 'spine';
 };
 
 /**
@@ -340,6 +352,7 @@ function badgeCount() {
   const s = settingsFor(current.gameKey);
   const a = anchor();
   if (!s.shown || s.view !== 'away' || !a || a.kind !== 'spine') return 0;
+  if (current.data.log) return current.data.log.bookmark;
   const hidden = new Set(s.hidden || []);
   return current.data.sections.flatMap((x) => x.items).filter((o) => o.tick && !o.done && !hidden.has(o.id)).length;
 }
@@ -448,6 +461,27 @@ function cleanData(data) {
     offer: data && data.offer && data.offer.name ? { name: clip(data.offer.name, 90), n: Math.max(0, Math.min(999, Math.round(Number(data.offer.n) || 0))) } : null,
     source: clip(data && data.source, 160), // "From the guide: <area> (closest match)" when the place isn't an area by name
     labels: cleanLabels(data && data.labels),
+    log: cleanLog(data && data.log),
+  };
+}
+
+/** The quest log's view (src/utils/questLogView.ts) for the page: only known fields, trimmed. */
+function cleanLog(lg) {
+  if (!lg || typeof lg !== 'object') return null;
+  const str = (v, n) => String(v || '').slice(0, n);
+  const step = (x) => (x && x.id ? { id: str(x.id, 200), text: clip(x.text, 200), sub: clip(x.sub, 140), tick: !!x.tick } : null);
+  const now = lg.now ? { ...step(lg.now), source: ['question', 'loaded', 'guide'].includes(lg.now.source) ? lg.now.source : 'guide', goal: clip(lg.now.goal, 120),
+    doneCount: Math.max(0, Math.min(99, Number(lg.now.doneCount) || 0)), total: Math.max(0, Math.min(99, Number(lg.now.total) || 0)) } : null;
+  return {
+    now: now && now.id ? now : null,
+    next: (Array.isArray(lg.next) ? lg.next : []).slice(0, 3).map(step).filter(Boolean),
+    watch: lg.watch && lg.watch.id ? { id: str(lg.watch.id, 200), text: clip(lg.watch.text, 200), why: clip(lg.watch.why, 300) } : null,
+    done: lg.done && lg.done.goal ? { goal: clip(lg.done.goal, 120) } : null,
+    pins: Math.max(0, Math.min(99, Number(lg.pins) || 0)),
+    more: !!lg.more,
+    invite: !!lg.invite,
+    sel: str(lg.sel, 200),
+    bookmark: Math.max(0, Math.min(999, Number(lg.bookmark) || 0)),
   };
 }
 
@@ -464,7 +498,10 @@ const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
   'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt', 'look', 'shownOf', 'hintOpen', 'hintOpenNoKeys',
-  'attach', 'popOut', 'attachOffer', 'attachYes', 'padHint', 'tuckIn', 'slideOut'];
+  'attach', 'popOut', 'attachOffer', 'attachYes', 'padHint', 'tuckIn', 'slideOut',
+  'logNow', 'logNext', 'logWatch', 'logFromGuide', 'logFromQuestion', 'logShowMore', 'logShowLess', 'logPinned', 'logDone', 'logWhatsNext',
+  'logInvite', 'logInviteSub', 'logAsk', 'logUndo', 'logTicked', 'logHideWatch', 'putBack', 'logProgress', 'logTick', 'logTitle',
+];
 function cleanLabels(labels) {
   const out = {};
   if (!labels || typeof labels !== 'object') return out;
@@ -482,7 +519,7 @@ function onScreen(s, wa) {
  * data: { id, quest, place?: {name, story, sure}, sections: [{id, title, tone?, icon?, items: [{id, label, where?, done?,
  *         missable?, badge?, tick?, icon?}]}], next?: {name}, warning?, accent, labels }
  */
-const hasContent = (d) => !!d && (d.sections.length || !!d.quest || !!d.place);
+const hasContent = (d) => !!d && (d.sections.length || !!d.quest || !!d.place || !!d.log);
 
 /**
  * The app's data for the active game (a new place, ticks, a newer answer): replaces what's shown entirely, so nothing
@@ -511,14 +548,16 @@ function hide() {
 }
 
 /** Visible as the full or folded log (not away as the ribbon, not closed). */
-const logVisible = () => !!current && alive() && settingsFor(current.gameKey).shown && settingsFor(current.gameKey).view !== 'away' && !(isAttached() && !anchor());
+const logVisible = () => !!current && alive() && settingsFor(current.gameKey).shown && settingsFor(current.gameKey).view !== 'away';
+/** On screen right now: the docked column with the panel open, or the popped-out log out over the game. */
+const onScreenNow = () => logVisible() && (!isAttached() || (!!anchor() && anchor().kind === 'panel'));
 /** Attached and tucked in as the bookmark on the open panel's edge. */
 const tuckedOnPanel = () => !!current && alive() && isAttached() && settingsFor(current.gameKey).shown && settingsFor(current.gameKey).view === 'away' && !!anchor() && anchor().kind === 'panel';
 /** The panel header's toggle shows whether the quest log is out; tucked: the panel offers its keyboard stop. */
 function sendVisibility() {
   tell({ type: 'visibility', visible: logVisible(), hasData: !!current, attached: isAttached(), tucked: tuckedOnPanel() });
-  // The tick / cycle shortcuts are registered only while the log is on screen (main.cjs).
-  if (deps && deps.onLogVisible) deps.onLogVisible(logVisible());
+  // The tick / cycle shortcuts are registered while there's a log (a tick with it out of sight gets a heads-up).
+  if (deps && deps.onLogVisible) deps.onLogVisible(!!current && alive());
 }
 
 /**
@@ -534,6 +573,11 @@ function key(action) {
   if (action === 'bookmark-focus' || action === 'bookmark-blur') {
     js(`window.qcTrackerSettings(${JSON.stringify({ bmFocus: action === 'bookmark-focus' })})`);
     return tuckedOnPanel();
+  }
+  // The tick and next keys: the app owns the log (it ticks Now, or the step picked with next / prev).
+  if ((action === 'tick' || action === 'next' || action === 'prev') && current && current.data.log) {
+    tell({ type: 'log-key', action, onScreen: onScreenNow() });
+    return true;
   }
   // The controller reaching a tucked-in log (RB from Ask): slide it out, then go in.
   if (action === 'focus' && tuckedOnPanel() && !captureHidden) {
@@ -557,6 +601,16 @@ async function toggle(data, gameKey) {
   if (!current) return 'empty';
   const key = current.gameKey;
   const s = settingsFor(key);
+  // Docked with the panel away: the shortcut opens the panel with the log out.
+  if (isAttached() && !(anchor() && anchor().kind === 'panel')) {
+    patchSettings(key, { shown: true, view: 'full' });
+    if (alive()) js(`window.qcTrackerSettings(${JSON.stringify({ view: 'full' })})`);
+    else await open(null);
+    openPanel();
+    syncAttach();
+    sendVisibility();
+    return 'shown';
+  }
   if (logVisible()) {
     patchSettings(key, { view: 'away' });
     js(`window.qcTrackerSettings(${JSON.stringify({ view: 'away' })})`);
@@ -641,6 +695,32 @@ function panelHidden() {
   const view = current ? settingsFor(current.gameKey).view : 'full';
   if (view === 'away') placeWindow('away');
   else backToSpot();
+}
+
+/**
+ * A heads-up over the game: text (the new Now) for a few seconds, when the log is out of sight (docked with the panel
+ * away: beside the book spine; popped out and put away: beside the ribbon). Nothing when the log is on screen.
+ */
+function heads(text) {
+  if (!alive() || !current || captureHidden || !text || onScreenNow()) return false;
+  const docked = isAttached();
+  const a = docked ? anchor() : null;
+  if (docked && (!a || a.kind !== 'spine')) return false; // docked with the panel open: the panel shows it
+  const MS = 4000;
+  headsUntil = Date.now() + MS;
+  clearTimeout(headsTimer);
+  headsTimer = setTimeout(() => { headsUntil = 0; if (docked) syncAttach(); }, MS + 80);
+  js(`window.qcTrackerHeads(${JSON.stringify(String(text).slice(0, 160))}, ${MS})`);
+  if (docked) syncAttach();
+  if (!win.isVisible()) { win.showInactive(); afterShow(); }
+  return true;
+}
+
+/** Docked (put back) or popped out, from the app's docked log (⇱) or the popped-out log (⤓): as the page's attach. */
+function setAttach(on) {
+  if (!alive() || !current) return false;
+  onMessage({ sender: win.webContents }, { type: 'attach', on: !!on });
+  return true;
 }
 
 /** The book icon (or an entry's buttons): open the panel at its dock; the quest log stays where it is. */
@@ -783,7 +863,11 @@ function onMessage(event, msg) {
     case 'tick': {
       // A guide entry or an answer marker ticked on the tracker: the app saves it where the guide page and the
       // checklist keep theirs, and sends the rebuilt tracker back.
+      const lg = current && current.data.log;
+      const step = lg && [lg.now, ...(lg.next || [])].find((o) => o && o.id === msg.item && o.tick);
       const item = current && current.data.sections.flatMap((x) => x.items).find((o) => o.id === msg.item && o.tick);
+      // A step ticked from the log (or its Undo): the app saves it and sends the log back.
+      if (step || (lg && typeof msg.item === 'string' && /^[sgq]:|^quest:|^walk:/.test(msg.item))) { tell({ type: 'tick', item: String(msg.item).slice(0, 200), done: !!msg.done }); break; }
       if (!item) break;
       item.done = !!msg.done;
       tell({ type: 'tick', item: item.id, done: item.done });
@@ -849,6 +933,10 @@ function onMessage(event, msg) {
       meta().offer = false;
       saveStore();
       if (on) {
+        // Put back: the log is the column inside the panel again, so the panel opens to show it.
+        patchSettings(gameKey, { view: 'full', shown: true });
+        js(`window.qcTrackerSettings(${JSON.stringify({ view: 'full' })})`);
+        openPanel();
         syncAttach();
       } else {
         // Popped out: back to its own spot (or the default spot on the panel's screen), visible over the game.
@@ -875,6 +963,14 @@ function onMessage(event, msg) {
     case 'open-panel':
       openPanel();
       break;
+    case 'log-action': {
+      // The log's controls: hide a Watch out, Ask / What's next? / the pinned line (the panel opens for those).
+      const action = String(msg.action || '');
+      if (!['hide', 'ask', 'whats-next', 'pins'].includes(action)) break;
+      if (action !== 'hide') openPanel();
+      tell({ type: 'log-action', action, id: typeof msg.id === 'string' ? msg.id.slice(0, 200) : '' });
+      break;
+    }
     case 'open-entry':
     case 'ask-about': {
       // An expanded entry's buttons: the panel opens (at its dock), then the app shows the entry in the guide, or puts a
@@ -911,11 +1007,14 @@ function init(d) {
   d.ipcMain.handle('tracker-toggle', (e, p) => toggle(p && p.data, p && p.gameKey).catch((err) => { console.warn('[tracker]', err && err.message); return 'empty'; }));
   d.ipcMain.handle('tracker-show-log', (e, p) => showLog(p && p.data, p && p.gameKey).catch((err) => { console.warn('[tracker]', err && err.message); return 'empty'; }));
   d.ipcMain.on('tracker-peek', () => js('window.qcTrackerPeek()'));
+  // The app's quest log: a heads-up after a tick, and docking or popping out from the docked log.
+  d.ipcMain.handle('tracker-heads', (e, text) => heads(typeof text === 'string' ? text : ''));
+  d.ipcMain.handle('tracker-attach', (e, on) => setAttach(!!on));
   d.app.on('will-quit', hide);
 }
 
 module.exports = {
-  init, show, update, hide, toggle, showLog, panelShown, panelHidden, follow,
+  init, show, update, hide, toggle, showLog, panelShown, panelHidden, follow, heads, setAttach,
   /** The spine appeared or went: an attached log moves to (or from) it. */
   anchorChanged: () => syncAttach(),
   badgeCount, setKeys, setMouseTip, getTipLabels, hideForCapture, showAfterCapture, getBounds,

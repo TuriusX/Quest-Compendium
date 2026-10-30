@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Plus, Trash2, MapPin, Flag, Gem, CheckSquare, FileText } from './icons';
+import { X, Plus, Trash2, MapPin, Flag, Gem, CheckSquare, FileText, Target } from './icons';
 import { useT } from '../i18n';
 import type { Playthrough, PlayKind } from '../utils/playthrough';
 import type { DoneItem } from '../utils/progressMemory';
@@ -29,6 +29,9 @@ type Props = {
   onOpenNotes: () => void;
   onClear: () => void;
   onOpenSettings: () => void;
+  /** The quest log's current objective (owner, Oct 30 2026): kept with the playthrough; × stops following it. */
+  objective?: { goal: string; done: number; total: number } | null;
+  onClearObjective?: () => void;
 };
 
 /** One line: edited in place (saved when it loses focus or on Enter), deleted with the ×. */
@@ -121,6 +124,12 @@ export function PlaythroughPanel(p: Props) {
                 className="h-8 px-2 rounded-md bg-black/20 border border-white/10 focus:border-[var(--accent-border)] text-[13px] text-zinc-200 placeholder:text-zinc-500 outline-none" />
               <input value={story} onChange={(e) => setStory(e.target.value)} onBlur={savePlace} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} placeholder={t('play.storyPh')} aria-label={t('play.storyPh')} maxLength={100}
                 className="h-8 px-2 rounded-md bg-black/20 border border-white/10 focus:border-[var(--accent-border)] text-[13px] text-zinc-200 placeholder:text-zinc-500 outline-none" />
+            </div>)}
+          {p.objective && section(<Target className="w-3.5 h-3.5 text-[var(--accent-color)]" />, t('play.objective'), t('play.objectiveHint'),
+            <div className="flex items-center gap-2 text-[13px] text-zinc-200">
+              <span className="flex-1 min-w-0 truncate">{p.objective.goal}</span>
+              <span className="font-mono text-[11px] text-zinc-500">{t('tracker.logProgress', { n: p.objective.done, total: p.objective.total })}</span>
+              {p.onClearObjective && <button type="button" onClick={p.onClearObjective} aria-label={t('tracker.logClearNow')} title={t('tracker.logClearNow')} className="text-zinc-500 hover:text-white cursor-pointer"><X className="w-3.5 h-3.5" /></button>}
             </div>)}
           {section(<Flag className="w-3.5 h-3.5 text-[var(--accent-color)]" />, t('play.choices'), t('play.choicesHint'),
             <>

@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/steps.test.ts)
 import assert from "node:assert/strict";
-import { extractSteps, STEPS_RULES } from "../steps";
+import { extractSteps, STEPS_RULES, cleanObjective, objectiveRules, extractTicked } from "../steps";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -57,6 +57,17 @@ test("a short label and a where line for the quest log; older lines without them
   assert.equal(labelOnly.steps[0].text, "Pick the lock");
   assert.match(STEPS_RULES, /"label"/);
   assert.match(STEPS_RULES, /2 to 6 words/);
+});
+
+test("ticks from the conversation: <qc-ticked> keeps only the objective's unticked steps and is always removed", () => {
+  const o = cleanObjective({ title: "Reach the Haligtree", steps: [{ i: 1, text: "Right half at Castle Sol" }, { i: 3, text: "Use both halves" }, { i: 99, text: "x" }, { text: "no index" }] })!;
+  assert.deepEqual(o.steps.map((s) => s.i), [1, 3]);
+  assert.match(objectiveRules(o), /1: Right half at Castle Sol/);
+  const r = extractTicked("Great, now ride the lift.\n<qc-ticked>[1, 2, 1]</qc-ticked>", o);
+  assert.deepEqual(r.done, [1]);
+  assert.equal(r.text, "Great, now ride the lift.");
+  assert.deepEqual(extractTicked("x <qc-ticked>oops</qc-ticked>", o), { text: "x", done: [] });
+  assert.equal(cleanObjective({ steps: [] }), null);
 });
 
 console.log(`\n${passed} tests passed`);

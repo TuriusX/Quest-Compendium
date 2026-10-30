@@ -76,3 +76,51 @@ export function extractSteps(text: string, opts: { combat?: boolean } = {}): { t
   });
   return { text: cleaned.replace(/\n{3,}/g, '\n\n').trimEnd(), steps };
 }
+
+/**
+ * Ticks from the conversation (owner, Oct 30 2026): the player's current objective on their quest log (the app sends
+ * its unticked steps, numbered with their indexes). When the question says some are done already ("I've got both
+ * halves"), the answer adds <qc-ticked>[indexes]</qc-ticked> and the app ticks them, with Undo. No extra call: it rides on
+ * the answer.
+ */
+export type ObjectiveForAnswer = { title: string; steps: { i: number; text: string }[] };
+
+/** The objective as the app sent it, cleaned (null when there's nothing usable). */
+export function cleanObjective(raw: unknown): ObjectiveForAnswer | null {
+  const o: any = raw;
+  if (!o || typeof o !== 'object' || !Array.isArray(o.steps)) return null;
+  const steps = o.steps
+    .filter((s: any) => s && Number.isInteger(s.i) && s.i >= 0 && s.i < 20 && typeof s.text === 'string' && s.text.trim())
+    .slice(0, 8)
+    .map((s: any) => ({ i: s.i, text: String(s.text).replace(/\s+/g, ' ').trim().slice(0, 140) }));
+  return steps.length ? { title: String(o.title || '').replace(/\s+/g, ' ').trim().slice(0, 80), steps } : null;
+}
+
+export function objectiveRules(o: ObjectiveForAnswer): string {
+  return `
+
+[THE PLAYER'S CURRENT OBJECTIVE]
+On their quest log the player is working on "${o.title || 'their objective'}". Steps not ticked yet:
+${o.steps.map((s) => `${s.i}: ${s.text}`).join('\n')}
+Only when the player's question clearly says they have already done one or more of these (for example "I've got both
+halves", "done with the castle, what now?"), add one line with those numbers:
+<qc-ticked>[${o.steps[0].i}]</qc-ticked>
+Never for steps they're only asking about, about to do, or might have done. Leave the line out otherwise, and never
+mention it in your answer text.`;
+}
+
+/** Pull the <qc-ticked> line out of an answer (always removed): the indexes, only ones the app sent. */
+export function extractTicked(text: string, o: ObjectiveForAnswer | null): { text: string; done: number[] } {
+  let done: number[] = [];
+  const cleaned = String(text || '').replace(/(?:```[a-z]*\s*)?<qc-ticked>([\s\S]*?)<\/qc-ticked>(?:\s*```)?/gi, (_m, body) => {
+    try {
+      const raw = JSON.parse(String(body).trim());
+      const allowed = new Set((o?.steps || []).map((s) => s.i));
+      done = [...new Set((Array.isArray(raw) ? raw : []).filter((n: unknown) => Number.isInteger(n) && allowed.has(n as number)))] as number[];
+    } catch {
+      /* a broken line is dropped */
+    }
+    return '';
+  });
+  return { text: cleaned.replace(/\n{3,}/g, '\n\n').trimEnd(), done };
+}

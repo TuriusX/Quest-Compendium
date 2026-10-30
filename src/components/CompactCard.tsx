@@ -5,6 +5,7 @@ import { GameCover } from './GameCover';
 import { playBlipSound } from '../utils/audio';
 import { QuestionsPill } from './QuestionsPill';
 import type { Detection } from './DetectionLine';
+import type { LogStep, LogView } from '../utils/questLogView';
 
 /**
  * The compact view (owner, Oct 27 2026): the game's box art, then one line for the game and where you are, one for the
@@ -37,6 +38,11 @@ export function CompactCard(p: {
   onObjective?: () => void;
   /** Close the app (desktop): syncs first, like the full view's ✕. */
   onClose?: () => void;
+  /**
+   * The quest log (owner, Oct 30 2026): its Now is the objective line (tick box, progress, ⚠ when there's a Watch out);
+   * open (Ctrl+Shift+L, View, or the chevron) folds Next and Watch out out under the card.
+   */
+  log?: { view: LogView; open: boolean; onTick: (id: string) => void; onToggle: () => void; keysLabel: string } | null;
 }) {
   const t = useT();
   const d = p.detection;
@@ -99,7 +105,31 @@ export function CompactCard(p: {
     </span>
   );
   // Line 2: the objective and its next step, else "Next here", else one hint (a collection's "Which game?" first).
+  const lg = p.log && p.log.view.now ? p.log : null;
+  const now = lg?.view.now || null;
+  const box = (s: LogStep, small = false) => (
+    <button
+      type="button"
+      disabled={!s.tick}
+      onClick={() => { playBlipSound(p.soundEnabled); p.log?.onTick(s.id); }}
+      aria-label={`${t('tracker.logTick')}: ${s.text}`}
+      className={`flex-shrink-0 ${small ? 'w-[13px] h-[13px] border' : 'w-[15px] h-[15px] border-2'} rounded-[3px] bg-black/30 ${s.tick ? 'border-[var(--accent-color)] hover:bg-[var(--accent-dim)] cursor-pointer' : 'border-zinc-500 opacity-60'}`}
+      style={noDrag}
+    />
+  );
   const line2 = d?.choose || (d?.confirm && !d.running) ? (
+    <div className="min-w-0 [&>*]:!px-0 [&>*]:!py-0 [&>*]:!border-0 [&>*]:!bg-transparent" style={noDrag}>{p.detectionLine}</div>
+  ) : lg && now ? (
+    <div className="min-w-0 flex items-center gap-2 px-2 py-1 rounded border border-[var(--accent-border)] bg-[var(--accent-dim)]" style={noDrag}>
+      {box(now)}
+      <span className="flex-1 min-w-0 truncate text-[13px] font-bold text-white" title={[now.text, now.sub].filter(Boolean).join(' · ')}>{now.text}</span>
+      {now.total > 0 && <span className="flex-shrink-0 font-mono text-[11px] font-bold text-zinc-400">{now.doneCount}/{now.total}</span>}
+      {lg.view.watch && <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-300" aria-label={t('tracker.logWatch')} />}
+      <button type="button" onClick={() => { playBlipSound(p.soundEnabled); lg.onToggle(); }} aria-expanded={lg.open}
+        title={`${t('tracker.logNext')} (${lg.keysLabel})`} aria-label={t('tracker.logNext')}
+        className="flex-shrink-0 text-zinc-400 hover:text-white cursor-pointer">{lg.open ? '▾' : '▸'}</button>
+    </div>
+  ) : p.objective ? (
     <div className="min-w-0 [&>*]:!px-0 [&>*]:!py-0 [&>*]:!border-0 [&>*]:!bg-transparent" style={noDrag}>{p.detectionLine}</div>
   ) : p.objective ? (
     <button type="button" onClick={() => { playBlipSound(p.soundEnabled); (p.onObjective || p.onExpand)?.(); }} title={[p.objective.title, p.objective.step].filter(Boolean).join(' · ')} className="min-w-0 truncate text-left text-[12.5px] text-zinc-200 hover:text-white cursor-pointer" style={noDrag}>
@@ -117,7 +147,38 @@ export function CompactCard(p: {
     <span className="min-w-0 truncate text-[12px] text-zinc-500">{t('compact.hint')}</span>
   );
 
+  // Open: Next (2-3) and Watch out under the card, nothing from the guide's lists.
+  const fold = lg && lg.open ? (
+    <div className="flex-1 min-h-0 overflow-y-auto border-t border-white/[0.07] bg-[#101016] px-3 py-2 flex flex-col gap-1.5" style={noDrag}>
+      {lg.view.next.length > 0 && <div className="text-[10px] font-mono font-extrabold uppercase tracking-[0.14em] text-zinc-500">{t('tracker.logNext')}</div>}
+      {lg.view.next.map((s) => (
+        <div key={s.id} className="flex items-start gap-2 text-[12.5px] leading-snug text-zinc-200">
+          <span className="mt-[2px]">{box(s, true)}</span>
+          <span className="min-w-0">{s.text}{s.sub && <span className="block text-[11.5px] text-zinc-500">{s.sub}</span>}</span>
+        </div>
+      ))}
+      {lg.view.watch && (
+        <div className="flex gap-2 rounded border border-amber-300/35 bg-amber-300/[0.09] px-2 py-1.5 text-[12px] leading-snug text-[#f3e6c8]">
+          <AlertTriangle className="w-3.5 h-3.5 mt-px flex-shrink-0 text-amber-300" aria-hidden="true" />
+          <span className="min-w-0"><b className="text-amber-300">{lg.view.watch.text}</b>{lg.view.watch.why && lg.view.watch.why !== lg.view.watch.text ? ` · ${lg.view.watch.why}` : ''}</span>
+        </div>
+      )}
+    </div>
+  ) : null;
+
   if (ribbon) {
+    if (fold) return (
+      <div className="flex-1 h-full flex flex-col overflow-hidden">
+        <div className="h-16 flex-shrink-0 flex items-center gap-2.5 px-2.5 bg-gradient-to-b from-[#0d0e14] to-[#07070b]">
+          <button type="button" onClick={expand} title={tip} className="cursor-pointer" style={noDrag}>
+            <GameCover appId={p.appId} name={p.gameName} fallback={p.fallbackArt} live={live} className="w-8 h-12" />
+          </button>
+          <div className="flex-1 min-w-0 flex flex-col gap-0.5">{where}{line2}</div>
+          <div className="w-[48%] min-w-0 flex flex-col gap-1"><div className="flex justify-end">{controls}</div>{p.askForm}</div>
+        </div>
+        {fold}
+      </div>
+    );
     return (
       <div className="flex-1 h-full flex items-center gap-2.5 px-2.5 overflow-hidden bg-gradient-to-b from-[#0d0e14] to-[#07070b]">
         <button type="button" onClick={expand} title={tip} className="cursor-pointer" style={noDrag}>
@@ -134,8 +195,8 @@ export function CompactCard(p: {
       </div>
     );
   }
-  return (
-    <div className="flex-1 h-full flex gap-2.5 p-2.5 overflow-hidden bg-gradient-to-b from-[#0d0e14] to-[#07070b]">
+  const card = (
+    <div className={`${fold ? 'h-[104px] flex-shrink-0' : 'flex-1 h-full'} flex gap-2.5 p-2.5 overflow-hidden bg-gradient-to-b from-[#0d0e14] to-[#07070b]`}>
       <button type="button" onClick={expand} title={tip} className="self-stretch cursor-pointer" style={noDrag}>
         <GameCover appId={p.appId} name={p.gameName} fallback={p.fallbackArt} live={live} className="w-14 h-full" />
       </button>
@@ -149,4 +210,5 @@ export function CompactCard(p: {
       </div>
     </div>
   );
+  return fold ? <div className="flex-1 h-full flex flex-col overflow-hidden">{card}{fold}</div> : card;
 }

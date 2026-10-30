@@ -141,6 +141,7 @@ function build(id: string, name: string, kind: GameSpace['kind'], tabs: GameTab[
     personalQuests: mergeQuests(tabs),
     place: pick('place') as GamePlaythrough['place'],
     guideSteps: pick('guideSteps') as GamePlaythrough['guideSteps'],
+    questLog: pick('questLog') as GamePlaythrough['questLog'],
     legacyGames: [...new Set(tabs.map(legacyGameOf).filter(Boolean))],
     createdAt, lastActive,
   };
@@ -148,6 +149,7 @@ function build(id: string, name: string, kind: GameSpace['kind'], tabs: GameTab[
   if (!game.icon) delete game.icon;
   if (!pt.place) delete pt.place;
   if (!pt.guideSteps) delete pt.guideSteps;
+  if (!pt.questLog) delete pt.questLog;
   return { game, pt };
 }
 

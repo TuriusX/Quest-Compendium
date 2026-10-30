@@ -160,6 +160,18 @@ export interface PersonalQuest {
   createdAt: number;
 }
 
+/**
+ * The quest log's own state for a playthrough (utils/questLogView.ts): kept with it, so it's there next session.
+ *   now     the answer whose steps are the current objective ("Set as Now"); its ticks are the answer's doneSteps
+ *   pins    answers pinned to the log, newest first
+ *   hidden  Watch out warnings hidden with their ✕, and answers whose "Set as Now" offer was closed (offer:<id>)
+ */
+export interface QuestLogState {
+  now?: string;
+  pins?: string[];
+  hidden?: string[];
+}
+
 export interface GameTab {
   id: string;
   name: string;
@@ -175,6 +187,8 @@ export interface GameTab {
    * answer's objectives, until a newer answer (answerId: the answer they were loaded with) or the player unloads them.
    */
   guideSteps?: { kind: 'quest' | 'walk'; key: string; slug: string; name: string; from?: string; answerId?: string };
+  /** The quest log (owner, Oct 30 2026; utils/questLogView.ts): the current objective, pins and hidden warnings. */
+  questLog?: QuestLogState;
   /** The guide the player picked for a Steam app that holds several games (Mass Effect Legendary Edition: ME1 or ME2). */
   guideKey?: string;
   /**
@@ -218,6 +232,7 @@ export interface GamePlaythrough {
   personalQuests: PersonalQuest[];
   place?: GameTab['place'];
   guideSteps?: GameTab['guideSteps'];
+  questLog?: GameTab['questLog'];
   /**
    * The game names its playthrough memory (users/{uid}/playthrough/{playKey(name)}) and progress (settings.gameDone,
    * lower case) were kept under before: read from all of them, so nothing a merged tab remembered is left behind.

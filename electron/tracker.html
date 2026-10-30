@@ -319,6 +319,64 @@
   .padhint { font-size: .74em; color: var(--dim); margin-top: .35em; }
   .padhint.off { display: none; }
 
+  /* The quest log (owner, Oct 30 2026; src/utils/questLogView.ts): Now, Next and Watch out, nothing else by default; the
+     guide's lists (the sections below) wait behind "Show more from the guide". The same view as the docked log. */
+  #log { display: flex; flex-direction: column; gap: .55em; margin: .15em 0 .2em 0; min-width: 15em; }
+  #log:empty { display: none; }
+  #tracker.collapsed #log .lnext, #tracker.collapsed #log .lwatch, #tracker.collapsed #log .lmore, #tracker.collapsed #log .lpins,
+  #tracker.collapsed #log .linvite, #tracker.collapsed #moreWrap { display: none; }
+  .llab { display: flex; align-items: baseline; gap: .5em; font-size: .68em; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin-bottom: .25em; }
+  .llab .src { margin-left: auto; letter-spacing: .02em; text-transform: none; font-weight: 600; font-size: 1.1em; }
+  .llab .src.mine { color: var(--accent); }
+  .llab.w { color: var(--warn); }
+  .lnow { display: flex; gap: .55em; align-items: flex-start; padding: .45em .55em; border-radius: .35em;
+    background: color-mix(in srgb, var(--accent) 16%, rgba(10,8,18,.55)); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+    box-shadow: inset 3px 0 0 var(--accent); text-shadow: 0 1px 2px rgba(0,0,0,.8); }
+  .lnow.guide { background: rgba(10,8,18,.45); border-color: rgba(255,255,255,.14); box-shadow: inset 3px 0 0 rgba(243,238,252,.35); }
+  .lnow .lt { font-weight: 700; font-size: 1.06em; line-height: 1.28; color: #fff; }
+  .lnow .ls, .lst .ls { display: block; font-size: .8em; color: var(--dim); font-weight: 500; margin-top: .1em; }
+  .lbox { flex-shrink: 0; width: .95em; height: .95em; margin-top: .2em; border: 2px solid var(--accent); border-radius: 2px; background: rgba(0,0,0,.35);
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: .75em; font-weight: 900; color: #16101f; }
+  .lbox:hover { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .lnow.guide .lbox { border-color: rgba(243,238,252,.55); }
+  .lbox.no { visibility: hidden; }
+  .lprog { display: flex; align-items: center; gap: .45em; margin-top: .35em; font-size: .72em; font-weight: 700; color: var(--dim); white-space: nowrap; }
+  .lprog i { display: inline-block; width: 1.3em; height: .3em; background: rgba(255,255,255,.18); margin-right: .15em; }
+  .lprog i.d { background: var(--accent); }
+  .lprog .g { margin-left: auto; font-weight: 600; overflow: hidden; text-overflow: ellipsis; max-width: 14em; }
+  .lnext { display: flex; flex-direction: column; gap: .15em; }
+  .lst { display: flex; gap: .55em; align-items: flex-start; padding: .15em .3em; border-radius: 3px; font-size: .92em; line-height: 1.3; }
+  .lst.sel { background: rgba(255,255,255,.08); outline: 1px solid rgba(255,255,255,.16); }
+  .lst .lbox { border-width: 1px; border-color: rgba(243,238,252,.5); }
+  .lcleared { font-size: .78em; color: var(--dim); }
+  .lcleared .u { color: var(--accent); font-weight: 700; cursor: pointer; margin-left: .3em; }
+  .lwatch .wb { display: flex; gap: .5em; padding: .4em .55em; border-radius: .35em; background: rgba(40,28,6,.6); border: 1px solid rgba(255,193,77,.45);
+    font-size: .88em; line-height: 1.32; color: #f6e7c4; }
+  .lwatch .wb b { color: var(--warn); }
+  .lwatch .wi { color: var(--warn); font-weight: 900; }
+  .lwatch .wx { margin-left: auto; color: rgba(255,193,77,.75); font-weight: 800; cursor: pointer; padding-left: .3em; }
+  .lwatch .wx:hover { color: #fff; }
+  .ldone { padding: .45em .55em; border-radius: .35em; border: 1px solid color-mix(in srgb, var(--ok) 50%, transparent); background: rgba(10,30,16,.55); }
+  .ldone .lt { font-weight: 700; color: #fff; }
+  .lbtn { display: inline-block; margin-top: .35em; cursor: pointer; color: var(--accent); font-weight: 700; font-size: .85em;
+    border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 3px; padding: .05em .5em; background: rgba(16,12,28,.6); text-shadow: none; }
+  .lbtn:hover { background: var(--accent); color: #16101f; }
+  .linvite { padding: .45em .55em; border-radius: .35em; border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); background: rgba(10,8,18,.45); }
+  .linvite .lt { font-weight: 700; color: #fff; }
+  .linvite .ls { font-size: .8em; color: var(--dim); }
+  .lrow { display: flex; align-items: center; gap: .4em; font-size: .82em; color: var(--dim); font-weight: 600; cursor: pointer; padding: .2em 0;
+    border-top: 1px solid rgba(255,255,255,.1); }
+  .lrow:hover { color: #fff; }
+  .lrow .c { margin-left: auto; font-size: .9em; }
+  #moreWrap.off { display: none; }
+  /* A heads-up over the game after a tick with the log out of sight: the new Now for a few seconds, then gone. */
+  #heads { display: none; position: absolute; top: 3px; left: 0; max-width: 24em; padding: .35em .65em; border-radius: .35em;
+    background: rgba(13,12,20,.94); border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 0 14px rgba(0,0,0,.6);
+    font-size: .88em; line-height: 1.3; color: #fff; text-shadow: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #heads b { color: var(--accent); font-size: .78em; letter-spacing: .12em; text-transform: uppercase; margin-right: .5em; }
+  body.heads #heads { display: block; }
+  body.heads #tracker, body.heads #tab { display: none !important; }
+
   @keyframes pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: var(--alpha); transform: none; } }
   #tracker.in { animation: pop .25s steps(3) both; }
   body.demo #demo { position: fixed; right: 12px; bottom: 12px; font: 12px/1.4 'Segoe UI', system-ui; color: #fff; background: rgba(0,0,0,.6); padding: 8px 10px; border-radius: 6px; }
@@ -331,12 +389,12 @@
     <span class="tg" id="fold" title="Click: fold or open. Drag: move."><span class="title" id="title">Objectives</span><span class="count" id="count"></span><span class="chev" id="headChev">▾</span></span>
     <span class="hbs">
       <span class="book aa" id="bLook" title="Text size and look">Aa</span>
-      <span class="book" id="bAttach" title="Attach to the panel"><svg class="pin" viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="currentColor" d="M3 0h6v1H8v4h2v2H7v5H5V7H2V5h2V1H3z"/></svg><svg class="pop" viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="currentColor" d="M6 0h6v6h-2V3.4L5.7 7.7 4.3 6.3 8.6 2H6zM0 2h4v2H2v6h6V8h2v4H0z"/></svg></span>
+      <span class="book" id="bAttach" title="Attach to the panel"><svg class="pin" viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="currentColor" d="M5 0h2v5h2v1H8v1H7v1H5V7H4V6H3V5h2zM0 8h2v2h8V8h2v4H0z"/></svg><svg class="pop" viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="currentColor" d="M6 0h6v6h-2V3.4L5.7 7.7 4.3 6.3 8.6 2H6zM0 2h4v2H2v6h6V8h2v4H0z"/></svg></span>
       <span class="book hb" id="bAway" title="Send to the edge"><svg class="bm" viewBox="0 0 10 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 0h8v12L5 9l-4 3z"/></svg><svg class="to" viewBox="0 0 16 12" shape-rendering="crispEdges"><path fill="currentColor" d="M1 5h8V3h1v1h1v1h1v1h1v1h-1v1h-1v1h-1v1H9V7H1zM14 0h2v12h-2z"/></svg></span>
     </span>
   </div>
   <div class="look off" id="look">
-    <div class="lr"><span class="lk" id="lkSize">Text size</span><span class="btn aa" id="bSize">Aa</span></div>
+    <div class="lr" hidden><span class="lk" id="lkSize">Text size</span><span class="btn aa" id="bSize">Aa</span></div>
     <div class="lr"><span class="lk" id="lkAlpha">Transparency</span><span class="sl" id="alphaWrap"><input type="range" id="alpha" min="30" max="100" value="100"></span></div>
     <div class="lr" id="bdRow"><span class="lk" id="lkBd">Backdrop</span><span class="sl" id="bdWrap"><input type="range" id="bd" min="0" max="95" value="45"></span></div>
   </div>
@@ -353,6 +411,8 @@
   </div>
   <div class="arealist off" id="areaList"></div>
   <div class="source" id="source"></div>
+  <div id="log"></div>
+  <div id="moreWrap">
   <div class="quest" id="quest"></div>
   <div class="offer off" id="offer"></div>
   <div class="body" id="body">
@@ -360,13 +420,15 @@
     <div class="none" id="none"></div>
   </div>
   <div class="next off" id="next"><span id="nextLbl"></span></div>
-  <div class="notice" id="notice"></div>
   <div class="warn off" id="warn"></div>
+  </div>
+  <div class="notice" id="notice"></div>
   <div class="padhint off" id="padHint"></div>
   <div class="hint" id="hint"><kbd>Ctrl+G</kbd> or click the title: open the Compendium</div>
 
 </div>
 
+<div id="heads"></div>
 <div id="tab" class="right" title="Bring the objectives back">
   <div class="rib"><span class="n" id="tabN"></span></div>
 </div>
@@ -431,6 +493,11 @@
     openInGuide: 'Open in guide', askAbout: 'Ask about this', spotIt: 'Spot it (landmarks, NPCs, chests)', expandHint: 'Click for details', missableTip: 'Can be missed for good',
     loadSteps: "Load the guide's steps", loadStepsHint: "The guide covers this quest: its steps become your objectives (no question used)",
     unloadSteps: "Back to your answer's objectives", dismissOffer: 'Not now', part: 'Part {n} of {total}',
+    logNow: 'Now', logNext: 'Next', logWatch: 'Watch out', logFromGuide: 'From the guide', logFromQuestion: 'Your question',
+    logShowMore: 'Show more from the guide', logShowLess: 'Show less', logPinned: 'Pinned', logDone: 'Done: {goal}',
+    logWhatsNext: "What's next?", logInvite: 'What are you trying to do?', logInviteSub: "Ask, and the answer's steps become your checklist here.",
+    logAsk: 'Ask', logUndo: 'Undo', logTicked: 'Ticked: {step}', logHideWatch: 'Hide this warning for this save', putBack: 'Put back in the overlay',
+    logProgress: '{n} of {total}', logTick: 'Tick', logTitle: 'Quest log',
   };
   const L = (k, vars) => {
     const own = state.data && state.data.labels && state.data.labels[k];
@@ -439,10 +506,10 @@
     return s;
   };
   function applyLabels() {
-    $('title').textContent = L('title');
+    $('title').textContent = state.data && state.data.log ? L('logTitle') : L('title');
     $('fold').title = L('headFold');
     $('bLook').title = L('look');
-    $('bAttach').title = state.attached ? L('popOut') : L('attach');
+    $('bAttach').title = state.attached ? L('popOut') : L('putBack');
     $('aoText').textContent = L('attachOffer');
     $('aoYes').textContent = L('attachYes');
     $('aoNo').title = L('dismissOffer');
@@ -529,9 +596,39 @@
     return `<div class="det">${full}${row('detWhere', where)}${row('detHow', d.how)}${miss}${row('detNotes', d.notes)}${acts}</div>`;
   }
 
+  /**
+   * The log (d.log, from src/utils/questLogView.ts): Now, Next (2-3), Watch out (one), Done, the pinned line and "Show
+   * more from the guide". Ticking a step shows it as ticked for a few seconds with Undo (state.cleared).
+   */
+  function logHtml(lg) {
+    const box = (s) => `<span class="lbox${s.tick ? '' : ' no'}" data-tick="${esc(s.id)}" title="${esc(L('logTick'))}"></span>`;
+    const sub = (s) => (s.sub ? `<span class="ls">${esc(s.sub)}</span>` : '');
+    let h = '';
+    if (lg.invite && !lg.now && !lg.done) h += `<div class="linvite"><div class="lt">${esc(L('logInvite'))}</div><div class="ls">${esc(L('logInviteSub'))}</div><span class="lbtn" data-act="ask">${esc(L('logAsk'))}</span></div>`;
+    if (lg.done) h += `<div class="ldone"><div class="lt">✓ ${esc(L('logDone', { goal: lg.done.goal }))}</div><span class="lbtn" data-act="whats-next">${esc(L('logWhatsNext'))}</span></div>`;
+    if (lg.now) {
+      const n = lg.now;
+      const mine = n.source === 'question';
+      const prog = n.total ? `<div class="lprog">${Array.from({ length: Math.min(n.total, 12) }, (_, i) => `<i${i < n.doneCount ? ' class="d"' : ''}></i>`).join('')}${esc(L('logProgress', { n: n.doneCount, total: n.total }))}<span class="g">${esc(n.goal)}</span></div>` : '';
+      h += `<div><div class="llab">${esc(L('logNow'))}<span class="src${mine ? ' mine' : ''}">${esc(mine ? L('logFromQuestion') : L('logFromGuide'))}</span></div>
+        <div class="lnow${mine ? '' : ' guide'}">${box(n)}<div><span class="lt">${esc(n.text)}</span>${sub(n)}${prog}</div></div></div>`;
+    }
+    const cleared = state.cleared && state.cleared.until > Date.now() ? state.cleared : null;
+    if (cleared) h += `<div class="lcleared">✓ ${esc(L('logTicked', { step: cleared.text }))}<span class="u" data-act="undo">${esc(L('logUndo'))}</span></div>`;
+    if (lg.next && lg.next.length) h += `<div class="lnext"><div class="llab">${esc(L('logNext'))}</div>${lg.next.map((s) => `<div class="lst${lg.sel === s.id ? ' sel' : ''}">${box(s)}<div>${esc(s.text)}${sub(s)}</div></div>`).join('')}</div>`;
+    if (lg.watch) h += `<div class="lwatch"><div class="llab w">${esc(L('logWatch'))}</div><div class="wb"><span class="wi">⚠</span><div><b>${esc(lg.watch.text)}</b>${lg.watch.why && lg.watch.why !== lg.watch.text ? ` · ${esc(lg.watch.why)}` : ''}</div><span class="wx" data-hide="${esc(lg.watch.id)}" title="${esc(L('logHideWatch'))}">✕</span></div></div>`;
+    if (lg.pins) h += `<div class="lrow lpins" data-act="pins">📌 ${esc(L('logPinned'))}<span class="c">${lg.pins}</span></div>`;
+    if (lg.more) h += `<div class="lrow lmore" data-act="more">${esc(state.showMore ? L('logShowLess') : L('logShowMore'))}<span class="c">${state.showMore ? '▾' : '▸'}</span></div>`;
+    return h;
+  }
+
   function render() {
     const d = state.data; if (!d) return;
     applyLabels();
+    // The quest log on top; the guide's lists (the sections) behind "Show more from the guide".
+    const lg = d.log || null;
+    $('log').innerHTML = lg ? logHtml(lg) : '';
+    $('moreWrap').classList.toggle('off', !!lg && !state.showMore);
     document.documentElement.style.setProperty('--accent', /^#[0-9a-f]{3,8}$/i.test(d.accent || '') ? d.accent : '#a87ffb');
     if (state.maxHeight > 0) document.documentElement.style.setProperty('--maxh', `${state.maxHeight}px`);
     // Hidden entries (their ×) leave the lists and the counts; each section can bring its own back.
@@ -555,8 +652,11 @@
     const ticks = sections.flatMap((x) => x.items).filter((o) => o.tick);
     const done = ticks.filter((o) => o.done).length;
     $('count').textContent = ticks.length ? `${done}/${ticks.length}` : '';
-    $('tabN').textContent = ticks.length ? `${ticks.length - done}` : '';
-    $('tabN').style.display = ticks.length - done > 0 ? '' : 'none';
+    // The bookmark's number: steps left on Now's goal (the log's), else what's left to tick here.
+    const left = lg ? lg.bookmark : ticks.length - done;
+    $('tabN').textContent = left > 0 ? `${left}` : '';
+    $('tabN').style.display = left > 0 ? '' : 'none';
+    if (lg) $('count').textContent = lg.now && lg.now.total ? `${lg.now.doneCount}/${lg.now.total}` : '';
     // The guide area is the closest match for the place (not one of its areas by name): say so under the place.
     $('source').textContent = d.source || '';
     $('approx').textContent = d.source ? '≈' : '';
@@ -644,7 +744,7 @@
     document.body.classList.toggle('attached', !!state.attached);
     document.body.classList.toggle('side-left', state.side !== 'right');
     document.body.classList.toggle('side-right', state.side === 'right');
-    $('bAttach').title = state.attached ? L('popOut') : L('attach');
+    $('bAttach').title = state.attached ? L('popOut') : L('putBack');
     $('bAway').title = state.attached ? L('tuckIn') : L('awayEdge');
     tab.title = state.attached ? L('slideOut') : L('tabHint');
     $('attachOffer').classList.toggle('off', !(state.attachOffer && !state.attached));
@@ -671,7 +771,10 @@
   function reportSize() {
     requestAnimationFrame(() => {
       let w, h;
-      if (state.view === 'away') {
+      if (document.body.classList.contains('heads')) {
+        const r = $('heads').getBoundingClientRect();
+        w = Math.ceil(r.right + 3); h = Math.ceil(r.bottom + 3);
+      } else if (state.view === 'away') {
         // The ribbon sits flush against the edge it sticks out of (the app puts the window there), with 3 px spare on
         // its free side and below: room for the hover nudge and a little more to click. Measured without transforms
         // (offset*), so hovering never resizes the window.
@@ -682,10 +785,10 @@
         const pad = state.attached ? 0 : 6;
         w = Math.ceil(r.right + pad); h = Math.ceil(r.bottom + pad);
       }
-      const key = `${w}x${h}:${state.view}`;
+      const key = `${w}x${h}:${state.view}:${document.body.classList.contains('heads')}`;
       if (key === lastSize) return;
       lastSize = key;
-      send('size', { width: w, height: h, view: state.view, hasData: !!state.data });
+      send('size', { width: w, height: h, view: state.view, hasData: !!state.data, heads: document.body.classList.contains('heads') });
     });
   }
 
@@ -849,6 +952,45 @@
       render();
     }
   });
+  // The log's controls: a step's box ticks it (Undo for a few seconds), Watch out's ✕ hides it for this save, Done's
+  // "What's next?" and the invite's Ask go to the panel, the pinned line opens the panel, "Show more" opens the guide's lists.
+  let clearedTimer = null;
+  $('log').addEventListener('click', (e) => {
+    const lg = state.data && state.data.log; if (!lg) return;
+    const t = e.target.closest('[data-tick]');
+    if (t) {
+      const id = t.dataset.tick;
+      const st = [lg.now, ...(lg.next || [])].find((x) => x && x.id === id && x.tick);
+      if (!st) return;
+      state.cleared = { id, text: st.text, until: Date.now() + 5000 };
+      clearTimeout(clearedTimer);
+      clearedTimer = setTimeout(() => { state.cleared = null; render(); }, 5100);
+      send('tick', { item: id, done: true });
+      render();
+      return;
+    }
+    const hide = e.target.closest('[data-hide]');
+    if (hide) { send('log-action', { action: 'hide', id: hide.dataset.hide }); return; }
+    const act = e.target.closest('[data-act]');
+    if (!act) return;
+    const a = act.dataset.act;
+    if (a === 'undo' && state.cleared) { send('tick', { item: state.cleared.id, done: false }); state.cleared = null; render(); return; }
+    if (a === 'more') { state.showMore = !state.showMore; render(); return; }
+    if (a === 'ask' || a === 'whats-next' || a === 'pins') send('log-action', { action: a });
+  });
+  // A heads-up over the game (the app, after a tick with the log out of sight): the new Now for a few seconds.
+  let headsTimer = null;
+  window.qcTrackerHeads = (text, ms) => {
+    clearTimeout(headsTimer);
+    const on = !!text;
+    // "Now: <the next step>", or the goal done ("✓ Done: …", no label).
+    $('heads').innerHTML = on ? `${/^✓/.test(text) ? '' : `<b>${esc(L('logNow'))}</b>`}${esc(text)}` : '';
+    document.body.classList.toggle('heads', on);
+    if (on) headsTimer = setTimeout(() => window.qcTrackerHeads(''), ms || 4000);
+    lastSize = '';
+    reportSize();
+  };
+
   // Area navigation: ‹ ›, and the name opens the guide's area list (current one highlighted).
   const gotoArea = (i) => {
     const ar = state.data && state.data.areas;

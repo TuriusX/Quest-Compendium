@@ -65,6 +65,7 @@ export function toTabs(s: SpacesState, unknownName = 'Which game is this?'): Gam
         personalQuests: p?.personalQuests || [],
         ...(p?.place ? { place: p.place } : {}),
         ...(p?.guideSteps ? { guideSteps: p.guideSteps } : {}),
+        ...(p?.questLog ? { questLog: p.questLog } : {}),
         ...(g.collectionPick ? { guideKey: g.collectionPick } : {}),
         memoryKey: memoryKeyOf(g, p),
         playthrough: p ? { id: p.id, name: p.name, count: playthroughsOf(s, g.id).length } : undefined,
@@ -117,6 +118,7 @@ export function applyTabs(s: SpacesState, tabs: GameTab[], now = Date.now()): Sp
       if (!same(t.personalQuests || [], p.personalQuests)) { np.personalQuests = t.personalQuests || []; ptChanged = true; }
       if (!same(t.place, p.place)) { np.place = t.place; ptChanged = true; }
       if (!same(t.guideSteps, p.guideSteps)) { np.guideSteps = t.guideSteps; ptChanged = true; }
+      if (!same(t.questLog, p.questLog)) { np.questLog = t.questLog; ptChanged = true; }
       if (ptChanged || (t.lastActive || 0) > p.lastActive) np.lastActive = Math.max(p.lastActive, t.lastActive || now);
       if (ptChanged || np.lastActive !== p.lastActive) pts[i] = np;
     }
@@ -144,6 +146,7 @@ export function applyTabs(s: SpacesState, tabs: GameTab[], now = Date.now()): Sp
     pts.push({
       id: FIRST_PLAYTHROUGH, gameId: id, name: 'Playthrough 1', messages: t.messages || [], personalQuests: t.personalQuests || [],
       ...(t.place ? { place: t.place } : {}), ...(t.guideSteps ? { guideSteps: t.guideSteps } : {}),
+      ...(t.questLog ? { questLog: t.questLog } : {}),
       legacyGames: [(t.activeSteamGame?.name || t.name || '').trim()].filter(Boolean), createdAt: t.createdAt || now, lastActive: t.lastActive || now,
     });
   }

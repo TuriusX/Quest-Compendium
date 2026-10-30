@@ -309,7 +309,7 @@ html.qc-pad * { cursor: none !important; }
 .qc-glyph-b { background: #e5484d; color: #fff; }
 .qc-glyph-x { background: #3e8ef7; color: #fff; }
 .qc-glyph-y { background: #f5c518; }
-.qc-glyph-menu, .qc-glyph-lb, .qc-glyph-l3 { border-radius: 5px; background: #3f3f46; color: #f4f4f5; }
+.qc-glyph-menu, .qc-glyph-lb, .qc-glyph-l3, .qc-glyph-view, .qc-glyph-ls, .qc-glyph-rt { border-radius: 5px; background: #3f3f46; color: #f4f4f5; }
 html[data-ui="lofi"] .qc-glyph { border-radius: 0; font-family: 'Silkscreen', monospace; }
 .qc-caret {
   display: inline-block;
@@ -357,3 +357,9 @@ html[data-ui="lofi"] .qc-pt-dot, html[data-ui="lofi"] .qc-pt-num, html[data-ui="
 .qc-inline-badge:hover { filter: brightness(1.15); }
 .qc-inline-badge-done { background: rgba(52, 211, 153, 0.9); }
 html[data-ui="lofi"] .qc-inline-badge { border-radius: 0; font-family: 'Silkscreen', monospace; }
+
+/* The quest log's key caps (components/QuestLog.tsx). */
+.qc-log-kbd { display: inline-block; font: 700 10px var(--qc-mono, 'JetBrains Mono', monospace); padding: 0 4px; border-radius: 3px;
+  border: 1px solid rgba(255,255,255,.14); border-bottom-width: 2px; color: #e4e4e7; background: #1a1922; }
+/* A pinned answer picked on the quest log: a brief ring as the conversation scrolls to it. */
+.qc-flash { outline: 2px solid var(--accent-color); outline-offset: 4px; border-radius: 8px; transition: outline-color 1.2s steps(4); }

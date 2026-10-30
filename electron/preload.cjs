@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setUiScale: (scale) => ipcRenderer.send('set-ui-scale', scale),
   resizeWindow: (width) => ipcRenderer.send('resize-window', width),
   /** The compact view: the window shrinks to its small resting height (true) or back to full height (false). */
-  setCompact: (on, layout) => ipcRenderer.send('set-compact', !!on, layout === 'ribbon' ? 'ribbon' : 'card'),
+  setCompact: (on, layout, extra) => ipcRenderer.send('set-compact', !!on, layout === 'ribbon' ? 'ribbon' : 'card', Number(extra) || 0),
   setDockPosition: (pos) => ipcRenderer.send('set-dock-position', pos),
   toggleSlide: () => ipcRenderer.send('toggle-slide'),
   // Hold to talk: after sending, the panel slides away and the answer is read aloud.
@@ -74,6 +74,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   peekObjectivesTracker: () => ipcRenderer.send('tracker-peek'),
   // The controller in the attached quest log: 'focus' / 'blur', 'next' / 'prev' (the highlight), 'tick'.
   trackerKey: (action) => ipcRenderer.invoke('tracker-key', action),
+  // The quest log (owner, Oct 30 2026): a heads-up over the game after a tick, and docking / popping out the log.
+  trackerHeads: (text) => ipcRenderer.invoke('tracker-heads', text),
+  trackerAttach: (on) => ipcRenderer.invoke('tracker-attach', !!on),
   // The panel was hidden (any route): the app shows the objectives tracker for the latest answer.
   onPanelHidden: (callback) => { ipcRenderer.removeAllListeners('panel-hidden'); ipcRenderer.on('panel-hidden', () => callback()); },
   onTrackerEvent: (callback) => { ipcRenderer.removeAllListeners('tracker-event'); ipcRenderer.on('tracker-event', (event, p) => callback(p)); },

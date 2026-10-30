@@ -71,6 +71,8 @@ import { setTickScope } from './utils/guideProgress';
 import { readTombstones } from './hooks/tabMerge';
 import { MigrationNotice, WhichGamePrompt } from './components/SpacesNotice';
 import { GameLine } from './components/GameLine';
+import { QuestLog } from './components/QuestLog';
+import { buildLogView, objectiveForRequest, nextLogState, answerTitle, type LogView } from './utils/questLogView';
 
 /**
  * The running game's picture, sharp at any screen scale (utils/artCache.ts): IGDB's key art at 720p when its guide has
@@ -639,16 +641,6 @@ export default function App() {
     api.getProgramGame?.().then((g: ProgramGame | null) => setProgramGame(g)).catch(() => {});
   }, [spacesOn]);
 
-  useEffect(() => {
-    if ((window as any).electronAPI?.resizeWindow) {
-      const baseWidth = 550;
-      
-      let totalWidth = baseWidth;
-      if (isAchDrawerOpen) totalWidth += achDrawerWidth;
-
-      (window as any).electronAPI.resizeWindow(totalWidth);
-    }
-  }, [isAchDrawerOpen, achDrawerWidth]);
 
   // Sync Dock Position to Electron
   useEffect(() => {
@@ -996,10 +988,49 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     trackerPlace?.name === hold.target &&
     (!trackerGame.guideKey || (!!trackerGame.guideArea && !!trackerGame.guideArea.page));
   if (hold && holdDone) locateHold.current = null;
-  const trackerPayload =
+  const heldPayload =
     hold && !holdDone && builtTrackerPayload
       ? { ...builtTrackerPayload, data: { ...hold.data, locating: true, labels: builtTrackerPayload.data.labels } }
       : builtTrackerPayload;
+
+  // ---- The quest log (owner, Oct 30 2026; utils/questLogView.ts): Now / Next / Watch out, driven by questions ----
+  // The current objective (an answer set as Now), pins and hidden warnings live with the playthrough (tab.questLog).
+  const logView: LogView | null = activeTab
+    ? buildLogView({ ...activeTab, place: trackerPlace }, heldPayload?.data || null, { gameKey: trackerKeyOfGame, accent: trackerAccent, loaded: guideSteps.section, labels: trackerWords, beat: (trackerGame.guideArea?.story || trackerGame.guideArea?.page?.story || '').trim() })
+    : null;
+  const logViewRef = useRef(logView);
+  logViewRef.current = logView;
+  // The step the tick key acts on (next / prev move it): Now unless another step was picked.
+  const [logSelPick, setLogSel] = useState<string | null>(null);
+  const logSteps = logView ? [logView.now, ...logView.next].filter((x): x is NonNullable<typeof x> => !!x && x.tick) : [];
+  const logSel = logSteps.some((x) => x.id === logSelPick) ? logSelPick : logSteps[0]?.id || null;
+  const logSelRef = useRef(logSel);
+  logSelRef.current = logSel;
+  // The last tick, shown for a few seconds with Undo (from the log, the tick key, or a question that said it was done).
+  const [logCleared, setLogCleared] = useState<{ ids: string[]; text: string; from?: 'question' } | null>(null);
+  const logClearedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showCleared = (c: { ids: string[]; text: string; from?: 'question' } | null) => {
+    if (logClearedTimer.current) clearTimeout(logClearedTimer.current);
+    setLogCleared(c);
+    if (c) logClearedTimer.current = setTimeout(() => setLogCleared(null), 6000);
+  };
+  const patchLog = (fn: (s: NonNullable<GameTab['questLog']>) => Partial<NonNullable<GameTab['questLog']>>) => {
+    const t = activeTab;
+    if (!t) return;
+    setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, questLog: nextLogState(x.questLog, fn(x.questLog || {})), lastActive: Date.now() } : x)));
+  };
+  // The tracker gets the log too (the popped-out window draws it; the bookmark and the spine show its number).
+  const trackerPayload = heldPayload || logView
+    ? {
+        gameKey: heldPayload?.gameKey || trackerKeyOfGame,
+        data: {
+          ...(heldPayload?.data || { id: '', accent: trackerAccent, quest: '', sections: [], labels: trackerWords }),
+          log: logView
+            ? { now: logView.now, next: logView.next, watch: logView.watch, done: logView.done, pins: logView.pins.length, more: logView.more.length > 0, invite: logView.invite, sel: logSel || '', bookmark: logView.bookmark }
+            : null,
+        } as TrackerData,
+      }
+    : null;
   const trackerPayloadRef = useRef(trackerPayload);
   trackerPayloadRef.current = trackerPayload;
   // What the guide marks missable where the player is and they haven't ticked yet (the quest log's "Missable here"):
@@ -1100,6 +1131,14 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     const p = trackerPayloadRef.current;
     (window as any).electronAPI?.toggleQuestLog?.(p?.data, p?.gameKey);
   };
+  // The controller's View button (ControllerLayer): the same toggle as Ctrl+Shift+L.
+  const toggleQuestLogRef = useRef(toggleQuestLog);
+  toggleQuestLogRef.current = toggleQuestLog;
+  useEffect(() => {
+    const on = () => toggleQuestLogRef.current();
+    window.addEventListener('qc-toggle-log', on);
+    return () => window.removeEventListener('qc-toggle-log', on);
+  }, []);
   // Kept current: a new place, ticks anywhere (the guide page, the checklist, the tracker), a new answer.
   const trackerJson = trackerPayload ? JSON.stringify(trackerPayload.data) : '';
   useEffect(() => {
@@ -1227,6 +1266,17 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       handleMouseTip(e);
       return;
     }
+    if (e.type === 'log-key') {
+      logKeyRef.current(String(e.action || ''), !!e.onScreen);
+      return;
+    }
+    if (e.type === 'log-action') {
+      const a = String(e.action || '');
+      if (a === 'hide' && typeof e.id === 'string' && e.id) hideWatchRef.current(e.id);
+      else if (a === 'whats-next') window.dispatchEvent(new CustomEvent('qc-ask', { detail: { text: tr('tracker.logWhatsNext') } }));
+      else if (a === 'ask') setTimeout(() => document.querySelector<HTMLElement>('[data-qc-ask-input]')?.focus(), 250);
+      return;
+    }
     if (e.type === 'visibility') {
       setQuestLogVisible(!!e.visible);
       setQuestLogAttached(!!e.attached);
@@ -1329,9 +1379,82 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   useEffect(() => {
     (window as any).electronAPI?.onTrackerEvent?.((e: any) => trackerEventRef.current(e));
   }, []);
+  // The quest log's actions (the docked log, the popped-out window, the tick keys, the answers' Set as Now and Pin).
+  const tickLog = (id: string, done: boolean) => {
+    trackerEventRef.current({ type: 'tick', item: id, done });
+    const st = logSteps.find((x) => x.id === id);
+    if (done && st) showCleared({ ids: [id], text: st.text });
+  };
+  const undoLog = () => {
+    const c = logCleared;
+    if (!c) return;
+    for (const id of c.ids) trackerEventRef.current({ type: 'tick', item: id, done: false });
+    showCleared(null);
+  };
+  const setLogNow = (msgId: string) => {
+    patchLog(() => ({ now: msgId }));
+    setLogSel(null);
+    // The log comes out (docked: the column) so the player sees it took.
+    setTimeout(() => {
+      const p = trackerPayloadRef.current;
+      (window as any).electronAPI?.showQuestLog?.(p?.data, p?.gameKey);
+    }, 0);
+  };
+  const togglePin = (msgId: string) => patchLog((st) => ({ pins: (st.pins || []).includes(msgId) ? (st.pins || []).filter((x) => x !== msgId) : [msgId, ...(st.pins || [])].slice(0, 20) }));
+  const hideWatch = (id: string) => patchLog((st) => ({ hidden: [...new Set([...(st.hidden || []), id])] }));
+  const hideWatchRef = useRef(hideWatch);
+  hideWatchRef.current = hideWatch;
+  /**
+   * The tick and next keys (global shortcuts, and the popped-out window's controller): tick the picked step (Now unless
+   * another was picked), or move the pick. With the log out of sight, a heads-up shows the new Now over the game.
+   */
+  const handleLogKey = (action: string, onScreen: boolean) => {
+    const v = logViewRef.current;
+    if (!v) return;
+    const steps = [v.now, ...v.next].filter((x): x is NonNullable<typeof x> => !!x && x.tick);
+    const sel = logSelRef.current;
+    const api = (window as any).electronAPI;
+    if (action === 'tick') {
+      const st = steps.find((x) => x.id === sel) || steps[0];
+      if (!st) return;
+      tickLog(st.id, true);
+      setLogSel(null);
+      if (!onScreen) {
+        const rest = steps.filter((x) => x.id !== st.id);
+        api?.trackerHeads?.(rest[0]?.text || (v.now?.goal ? `✓ ${tr('tracker.logDone', { goal: v.now.goal })}` : ''));
+      }
+    } else if (action === 'next' || action === 'prev') {
+      if (!steps.length) return;
+      const i = Math.max(0, steps.findIndex((x) => x.id === sel));
+      const to = steps[(i + (action === 'next' ? 1 : steps.length - 1)) % steps.length];
+      setLogSel(to.id);
+      if (!onScreen) api?.trackerHeads?.(to.text);
+    }
+  };
+  const logKeyRef = useRef(handleLogKey);
+  logKeyRef.current = handleLogKey;
+  // Ctrl+Z while the log's Undo shows (anywhere in the panel but a text box): the last tick is undone.
+  const undoLogRef = useRef(undoLog);
+  undoLogRef.current = undoLog;
+  const hasCleared = !!logCleared;
+  useEffect(() => {
+    if (!hasCleared) return;
+    const on = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      e.preventDefault();
+      undoLogRef.current();
+    };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, [hasCleared]);
+
   /** "Track on screen" under an answer: that answer goes on the quest log (shown if it was away) and the panel hides. */
   const handleTrackOnScreen = (msgId: string) => {
     pickTracked(msgId);
+    // An answer with steps becomes the current objective (the quest log's Now).
+    if (activeTab?.messages.some((m) => m.id === msgId && m.steps?.some((st) => st.kind !== 'warning'))) patchLog(() => ({ now: msgId }));
     // Once the tracker data has been rebuilt for the picked answer (the next render).
     setTimeout(() => {
       const p = trackerPayloadRef.current;
@@ -2178,6 +2301,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           done: memoryOn ? doneForRequest(settings.gameDone?.[gameProgressKey(activeTab)]) : [],
           // Playthrough memory: choices made, key items and (if the player wants) their Notes. Off: nothing is sent.
           ...(memoryOn ? { playthrough: playthroughForRequest(play, activeTab.notes) || { choices: [], found: [], notes: '' } } : {}),
+          // The quest log's current objective (its unticked steps): the answer ticks the ones the question says are done.
+          ...(objectiveForRequest(activeTab) ? { objective: objectiveForRequest(activeTab) } : {}),
           // The guide area's ticked entries: the answer only marks guide entries the player hasn't ticked.
           ...(trackerGameRef.current.guideArea ? { guideDone: { slug: trackerGameRef.current.guideArea.slug, ids: [...trackerGameRef.current.guideArea.done].slice(0, 300) } } : {}),
         }),
@@ -2288,7 +2413,12 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
               steps: data.steps
                 .filter((x: any) => x && typeof x.text === 'string' && x.text.trim())
                 .slice(0, 4)
-                .map((x: any) => ({ kind: ['step', 'choice', 'warning'].includes(x.kind) ? x.kind : 'step', text: String(x.text).slice(0, 200), ...(typeof x.detail === 'string' && x.detail.trim() ? { detail: String(x.detail).slice(0, 500) } : {}) })),
+                .map((x: any) => ({
+                  kind: ['step', 'choice', 'warning'].includes(x.kind) ? x.kind : 'step', text: String(x.text).slice(0, 200),
+                  ...(typeof x.label === 'string' && x.label.trim() ? { label: String(x.label).slice(0, 60) } : {}),
+                  ...(typeof x.where === 'string' && x.where.trim() ? { where: String(x.where).slice(0, 120) } : {}),
+                  ...(typeof x.detail === 'string' && x.detail.trim() ? { detail: String(x.detail).slice(0, 500) } : {}),
+                })),
             }
           : {}),
         ...(typeof data.factsSaved === 'number' && data.factsSaved > 0 ? { factsSaved: data.factsSaved } : {}),
@@ -2384,10 +2514,23 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           // On-screen place wins: a place name read on screen that names a guide area is where the player is, confirmed
           // (as Locate me does), whatever was stored.
           if (readArea) place = placeAfterMove(place, readArea, readStory, true);
-          return { ...t, messages: [...t.messages, aiMessage], lastActive: nowAi, ...(place ? { place } : {}) };
+          // Ticks from the conversation: steps of the current objective the question said are done (Undo on the log).
+          const objId = t.questLog?.now;
+          const ticked: number[] = objId && Array.isArray(data.objectiveDone) ? data.objectiveDone.filter((n: unknown) => Number.isInteger(n)) : [];
+          const msgs = ticked.length
+            ? t.messages.map((m) => (m.id === objId ? { ...m, doneSteps: [...new Set([...(m.doneSteps || []), ...ticked])].sort((a, b) => a - b) } : m))
+            : t.messages;
+          return { ...t, messages: [...msgs, aiMessage], lastActive: nowAi, ...(place ? { place } : {}) };
         });
         return nextTabs;
       });
+      // The question said steps of the objective are done: they're ticked, and the log says so with Undo.
+      {
+        const objId = activeTab.questLog?.now;
+        const obj = objId ? activeTab.messages.find((m) => m.id === objId) : undefined;
+        const ticked: number[] = obj && Array.isArray(data.objectiveDone) ? data.objectiveDone.filter((n: unknown) => Number.isInteger(n) && !!obj.steps?.[n as number]) : [];
+        if (obj && ticked.length) showCleared({ ids: ticked.map((i) => `s:${obj.id}:${i}`), text: ticked.map((i) => obj.steps![i].label || obj.steps![i].text).join(', '), from: 'question' });
+      }
     } catch (err: any) {
       console.error('Chat error:', err);
       let errorMsg = err?.message || 'Network error';
@@ -2602,13 +2745,17 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       return next;
     });
   };
+  // The compact card's quest log fold: the docked log's open state (the same toggle), with its window room.
+  const compactFold = compact && questLogAttached && questLogVisible && !!logView?.now;
+  // Its room: Next's heading and steps (two lines each), and Watch out.
+  const compactFoldHeight = Math.min(220, 18 + (logView?.next.length ? 18 + logView.next.length * 40 : 0) + (logView?.watch ? 58 : 0));
   useEffect(() => {
-    (window as any).electronAPI?.setCompact?.(compact, compactLayout);
+    (window as any).electronAPI?.setCompact?.(compact, compactLayout, compactFold ? compactFoldHeight : 0);
     // The side panels close (the compact view has its own size).
     if (compact) {
       setIsAchDrawerOpen(false);
     }
-  }, [compact, compactLayout]);
+  }, [compact, compactLayout, compactFold, compactFoldHeight]);
   // A question asked from anywhere (the screenshot shortcut too) opens the full view, where its answer appears.
   useEffect(() => {
     if (isLoadingAi && compact) setViewNow('full');
@@ -2659,6 +2806,60 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       </div>
     ) : null;
 
+  // The docked quest log (owner, Oct 30 2026): a column inside the panel, on its inner side, out while the log is
+  // (Ctrl+Shift+L, the controller's View, the bookmark); the compact view shows it on the card instead.
+  const logSide: 'left' | 'right' = settings.dockPosition !== 'undocked' && tuckSide === 'left' ? 'right' : 'left';
+  const dockedLogOpen = isDesktop && !compact && questLogAttached && questLogVisible && !!logView;
+  const logKeys = formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L');
+  const logColumn = (side: 'left' | 'right') =>
+    dockedLogOpen && logView && logSide === side ? (
+      <div className={`w-[300px] flex-shrink-0 h-full min-h-0 ${side === 'left' ? 'border-r' : 'border-l'} border-white/[0.1]`} style={{ WebkitAppRegion: 'no-drag' } as any}>
+        <QuestLog
+          view={logView}
+          sel={logSel}
+          cleared={logCleared ? { id: logCleared.ids[0], text: logCleared.text, from: logCleared.from } : null}
+          keysLabel={logKeys}
+          onTick={tickLog}
+          onUndo={undoLog}
+          onSelect={setLogSel}
+          onHideWatch={hideWatch}
+          onClose={() => { toggleQuestLog(); setTimeout(() => document.querySelector<HTMLElement>('[data-qc-ask-input]')?.focus(), 50); }}
+          onPopOut={() => (window as any).electronAPI?.trackerAttach?.(false)}
+          onAsk={(text) => {
+            if (text) window.dispatchEvent(new CustomEvent('qc-ask', { detail: { text } }));
+            else document.querySelector<HTMLElement>('[data-qc-ask-input]')?.focus();
+          }}
+          onOpenPin={(id) => window.dispatchEvent(new CustomEvent('qc-scroll-to-msg', { detail: { id } }))}
+          onUnpin={togglePin}
+          onClearNow={() => patchLog(() => ({ now: undefined }))}
+          onLoadSteps={() => trackerEventRef.current({ type: 'load-steps' })}
+          onDismissOffer={() => trackerEventRef.current({ type: 'dismiss-offer' })}
+          onGotoArea={moveToArea}
+          onLocate={runLocate}
+          onConfirmPlace={() => { const n = logView.place?.name; if (n) trackerEventRef.current({ type: 'confirm-place', name: n }); }}
+          onOpenEntry={(id) => trackerEventRef.current({ type: 'open-entry', item: id })}
+        />
+      </div>
+    ) : null;
+
+  // The window's width: the panel, plus the achievements drawer and the docked quest log when they're open.
+  useEffect(() => {
+    if ((window as any).electronAPI?.resizeWindow) {
+      let totalWidth = 550;
+      if (isAchDrawerOpen) totalWidth += achDrawerWidth;
+      if (dockedLogOpen) totalWidth += 300;
+      (window as any).electronAPI.resizeWindow(totalWidth);
+    }
+  }, [isAchDrawerOpen, achDrawerWidth, dockedLogOpen]);
+  // The log opened with the panel focused (Ctrl+Shift+L, View, the bookmark): the keyboard goes to Now.
+  const wasLogOpen = useRef(false);
+  useEffect(() => {
+    if (dockedLogOpen && !wasLogOpen.current && document.hasFocus()) {
+      setTimeout(() => document.querySelector<HTMLElement>('[data-qc-log] [data-qc-log-now]:not([disabled])')?.focus({ preventScroll: true }), 80);
+    }
+    wasLogOpen.current = dockedLogOpen;
+  }, [dockedLogOpen]);
+
   const getDockClasses = (dock: DockPosition) => {
     if (!isDesktop) {
       return 'w-full h-full rounded-none border-none shadow-none';
@@ -2690,6 +2891,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         }}
       >
         {tuckStrip('left')}
+        {logColumn('left')}
         <div className="flex-1 min-w-0 min-h-0 flex flex-col relative">
         {/* "Mouse unlocked": the panel opened with the show/hide shortcut (the first 10 times) */}
         {mouseToast && (
@@ -2969,6 +3171,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 // "Next here" is the attached quest log's list too: the compact view leaves it out while that shows.
                 nearYou={compact && questLogVisible && questLogAttached ? null : nearYou}
                 logAttached={questLogAttached && (questLogVisible || questLogTucked)}
+                questLog={activeTab?.questLog}
+                compactLog={compact && logView?.now ? { view: logView, open: compactFold, onTick: (id) => tickLog(id, true), onToggle: toggleQuestLog, keysLabel: formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L') } : null}
+                onSetNow={isDesktop ? setLogNow : undefined}
+                onPinAnswer={isDesktop ? togglePin : undefined}
+                onDismissOffer={(id) => patchLog((st) => ({ hidden: [...new Set([...(st.hidden || []), `offer:${id}`])] }))}
                 nextKeys={formatShortcut(settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down')}
                 immersiveReadAloud={settings.immersiveReadAloud !== false}
                 soundEnabled={settings.soundEnabled}
@@ -3014,6 +3221,12 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
             {/* Your playthrough (roadmap item 8) */}
             {activeTab && (
               <PlaythroughPanel
+                objective={(() => {
+                  const m = activeTab.questLog?.now ? activeTab.messages.find((x) => x.id === activeTab.questLog!.now) : undefined;
+                  const steps = (m?.steps || []).map((st, i) => ({ st, i })).filter((x) => x.st.kind !== 'warning');
+                  return m && steps.length ? { goal: answerTitle(m), done: steps.filter((x) => (m.doneSteps || []).includes(x.i)).length, total: steps.length } : null;
+                })()}
+                onClearObjective={() => patchLog(() => ({ now: undefined }))}
                 open={playOpen}
                 onClose={() => setPlayOpen(false)}
                 game={playGame}
@@ -3085,6 +3298,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           />}
         </div>
         </div>
+        {logColumn('right')}
         {tuckStrip('right')}
       </div>
 

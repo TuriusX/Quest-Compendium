@@ -43,7 +43,7 @@ import { registerDiscord } from './discord';
 import { registerSiteAsk } from './siteAsk';
 import { registerSiteAccount } from './siteAccount';
 import { pingNewSignup } from './signupPing';
-import { STEPS_RULES, extractSteps } from './steps';
+import { STEPS_RULES, extractSteps, cleanObjective, objectiveRules, extractTicked } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { saveMissingFight } from './missingFights';
@@ -1147,6 +1147,9 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
         // On-screen markers on in the app (Settings). Older apps don't send it: on.
         markers: markersRaw,
       } = req.body;
+      // The player's current objective on the quest log (its unticked steps): the answer says which ones the question
+      // reports as done (<qc-ticked>). Older apps don't send it.
+      const objective = cleanObjective(req.body?.objective);
       const wantMarkers = markersRaw !== false;
       // Only languages the apps offer (the name goes into the AI's instructions, so nothing else is let through).
       const language = ['English', 'Spanish', 'Brazilian Portuguese', 'German', 'French', 'Russian', 'Japanese', 'Korean', 'Simplified Chinese'].includes(String(languageRaw))
@@ -1295,6 +1298,7 @@ End every answer with one line naming what the player is doing right now, like a
 - Never mention the title line in your answer text.`;
         // The quest log's steps: what the player should keep in front of them (src/utils/trackerPayload.ts).
         systemInstruction += STEPS_RULES;
+        if (objective) systemInstruction += objectiveRules(objective);
         // A fight on screen: a battle plan, enemy and position markers, the steps as the plan (answerBar.ts).
         if (imageBase64) systemInstruction += combatRules(wantMarkers);
       }
@@ -1901,6 +1905,9 @@ percentages:
       // The quest log's steps (1-4 takeaways), always removed from the text.
       const stepsParsed = extractSteps(responseText, { combat: combatParsed.combat });
       responseText = stepsParsed.text;
+      // Steps of the player's objective the question says are done (always removed from the text).
+      const tickedParsed = extractTicked(responseText, objective);
+      responseText = tickedParsed.text;
       // Where the AI thinks the player is: pull the <qc-place> line out of the answer.
       const placeParsed = extractPlace(responseText);
       responseText = placeParsed.text;
@@ -2004,6 +2011,7 @@ percentages:
         ...(points.length ? { points } : {}),
         ...(title ? { title } : {}),
         ...(stepsParsed.steps.length ? { steps: stepsParsed.steps } : {}),
+        ...(tickedParsed.done.length ? { objectiveDone: tickedParsed.done } : {}),
         ...(combatParsed.combat ? { combat: true } : {}),
         // A screenshot with no fight on it: a fight the player was in is over (the app clears its combat markers and plan).
         ...(imageBase64 && !combatParsed.combat ? { noFight: true } : {}),
