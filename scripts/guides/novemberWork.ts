@@ -36,9 +36,17 @@ const ref = () => db().collection('system').doc('auditWork');
 const month = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }).slice(0, 7);
 const day = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
 
-export type Work = { kind: 'reverify' | 'walkthrough' | 'stepPlaces' | 'epilogue' | 'place' | 'mission' | 'glossary' | 'conflicts'; key: string; ref: string; impressions?: number };
+export type Work = { kind: 'reverify' | 'walkthrough' | 'stepPlaces' | 'epilogue' | 'place' | 'mission' | 'glossary' | 'conflicts'; key: string; ref: string; impressions?: number; since?: number };
 /** Walkthrough pages: this many guides a night, this many pages each, taking turns among this many most in demand. */
 const WALK_GUIDES = 3, WALK_PAGES = 3, WALK_POOL = 12;
+/**
+ * Upkeep (owner, Oct 31 2026): about 20% of the pipeline's November budget ($60) is kept for contradictions, fixes and
+ * re-verification, so existing pages don't go stale: each night it goes first, up to that share of the night's room,
+ * and never past its month's reserve. What it doesn't use goes to the walkthroughs. Its list: system/auditWork.upkeep.
+ */
+const UPKEEP_SHARE = 0.2, UPKEEP_MONTH = Number(process.env.AUDIT_UPKEEP_MONTH || 12);
+/** A page verified longer ago than this is stale: re-verified as upkeep, the most visited first. */
+const STALE_DAYS = 45;
 const hasWalkthrough = (a: any) => (a?.walkthrough || []).some((s: any) => s?.title);
 
 /**
@@ -154,6 +162,9 @@ export async function doOne(w: Work): Promise<{ status: string; dollars: number;
         status = r.status;
         detail = r.detail.slice(0, 160);
       } else if (w.kind === 'reverify' || w.kind === 'walkthrough') {
+        // A new walkthrough page researches lean (claimCheck.ts lean: three searches a call, stored evidence before a
+        // gap search); a re-verification keeps the full research.
+        process.env.EVIDENCE_LEAN = w.kind === 'walkthrough' ? '1' : '';
         // A walkthrough page is built the same way as a re-verification (owner, Oct 31 2026): from evidence, every claim
         // checked against sources, live only when the review passes and the rebuild guard keeps its entries.
         const { buildPageEvidenceForCore, writePageForCore } = await import('./flagship');
@@ -165,6 +176,7 @@ export async function doOne(w: Work): Promise<{ status: string; dollars: number;
           if (live) await db().collection('guides').doc(w.key).set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(w.ref) } }, { merge: true });
         } else status = `not live (${r?.review?.status || 'not built'})`;
         detail = String(r?.review?.reason || '').slice(0, 160);
+        process.env.EVIDENCE_LEAN = '';
       } else if (w.kind === 'epilogue' || w.kind === 'mission') {
         const { buildQuest } = await import('./quests');
         process.env.QUEST_STORY_STEPS = w.kind === 'mission' ? 'on' : '';
@@ -202,6 +214,7 @@ export async function doOne(w: Work): Promise<{ status: string; dollars: number;
     status = 'error';
     detail = String(e?.message || e).slice(0, 160);
   } finally {
+    process.env.EVIDENCE_LEAN = '';
     await lk.release().catch(() => {});
   }
   return { status, dollars: scope.dollars, detail, searches: scope.searches };
@@ -222,28 +235,44 @@ export async function runAuditWork(max = AUDIT_DAILY): Promise<{ lines: string[]
   const lines: string[] = [];
   let next = Number(st.next || 0), spent = Number(st.spent || 0), today = spentToday, guess = 0.25;
   let reverifySpent = Number(st.reverifySpent || 0);
-  while (room > guess && next < st.queue.length) {
-    const w: Work = st.queue[next];
-    // Already checked since the queue was made (the October fund, the core programme): skipped, free. So is a
-    // walkthrough page that has one by now (the core programme built it).
-    if (w.kind === 'reverify' || w.kind === 'walkthrough') {
-      const a: any = (await db().collection('guides').doc(w.key).collection('areas').doc(w.ref).get()).data();
-      if (!a || a.status !== 'published' || (w.kind === 'reverify' ? a.verified === true : hasWalkthrough(a))) { next++; continue; }
-    }
+  const upkeep: Work[] = st.upkeep || [];
+  let upNext = Number(st.upkeepNext || 0), upSpent = Number(st.upkeepSpent || 0), upToday = 0;
+  // Upkeep first each night (owner, Oct 31 2026): about a fifth of the night's room, within its month's reserve.
+  const upRoom = Math.max(0, Math.min(room * UPKEEP_SHARE, UPKEEP_MONTH - upSpent));
+  let stop = false;
+  // Already checked since it was queued (the October fund, the core programme): skipped, free. So is a walkthrough
+  // page that has one by now (the core programme built it), and a stale page rebuilt since.
+  const done = async (w: Work) => {
+    if (w.kind !== 'reverify' && w.kind !== 'walkthrough') return false;
+    const a: any = (await db().collection('guides').doc(w.key).collection('areas').doc(w.ref).get()).data();
+    if (!a || a.status !== 'published') return true;
+    if (w.kind === 'walkthrough') return hasWalkthrough(a);
+    return w.since ? Number(a.flagship?.at || 0) > w.since : a.verified === true;
+  };
+  const one = async (w: Work, lane: 'upkeep' | 'main') => {
     const r = await doOne(w);
-    if (r.status === 'busy') break;
+    if (r.status === 'busy') { stop = true; return 0; }
     spent += r.dollars; today += r.dollars; room -= r.dollars; searches += r.searches; guess = Math.max(guess * 0.8, r.dollars);
     if (w.kind === 'reverify') reverifySpent += r.dollars;
-    next++;
-    lines.push(`${w.kind} ${w.key}/${w.ref}: ${r.status}, $${r.dollars.toFixed(3)}${r.detail ? ` (${r.detail})` : ''}`);
-    await ref().set({ next, spent, reverifySpent, day: day(), spentToday: today, log: FieldValue.arrayUnion({ at: Date.now(), kind: w.kind, key: w.key, ref: w.ref, status: r.status, dollars: Math.round(r.dollars * 1000) / 1000 }) }, { merge: true });
+    if (lane === 'upkeep') { upSpent += r.dollars; upToday += r.dollars; upNext++; } else next++;
+    lines.push(`${lane === 'upkeep' ? 'upkeep: ' : ''}${w.kind} ${w.key}/${w.ref}: ${r.status}, $${r.dollars.toFixed(3)}${r.detail ? ` (${r.detail})` : ''}`);
+    await ref().set({ next, upkeepNext: upNext, upkeepSpent: upSpent, spent, reverifySpent, day: day(), spentToday: today, log: FieldValue.arrayUnion({ at: Date.now(), kind: w.kind, key: w.key, ref: w.ref, status: r.status, dollars: Math.round(r.dollars * 1000) / 1000, ...(lane === 'upkeep' ? { upkeep: true } : {}) }) }, { merge: true });
     // The walkthroughs' checkpoint: every 10 pages, fewer than 7 live pauses the work until the owner looks.
     if (w.kind === 'walkthrough') {
       const cp = await walkCheckpoint();
-      if (cp) { lines.push(`⚠️ ${cp}`); break; }
+      if (cp) { lines.push(`⚠️ ${cp}`); stop = true; }
     }
+    return r.dollars;
+  };
+  while (!stop && upRoom - upToday > 0.05 && room > 0.05 && upNext < upkeep.length) {
+    if (await done(upkeep[upNext])) { upNext++; continue; }
+    await one(upkeep[upNext], 'upkeep');
   }
-  if (lines.length) lines.unshift(`🧭 November site work (roadmap 22, from the pipeline's November cap): ${lines.length} item(s) today, $${(today - spentToday).toFixed(2)}; $${spent.toFixed(2)} so far this month, ${st.queue.length - next} item(s) left.`);
+  while (!stop && room > guess && next < st.queue.length) {
+    if (await done(st.queue[next])) { next++; continue; }
+    await one(st.queue[next], 'main');
+  }
+  if (lines.length) lines.unshift(`🧭 November site work (roadmap 22, from the pipeline's November cap): ${lines.length} item(s) today, $${(today - spentToday).toFixed(2)} ($${upToday.toFixed(2)} upkeep); $${spent.toFixed(2)} so far this month ($${upSpent.toFixed(2)} of the $${UPKEEP_MONTH} upkeep reserve), ${st.queue.length - next} item(s) left.`);
   return { lines, dollars: today - spentToday, searches };
 }
 
@@ -279,17 +308,62 @@ export async function walkthroughWeekLines(): Promise<string[]> {
   const chapters = log.filter((x) => x.kind === 'stepPlaces' && x.status === 'done').length;
   const left = queue.slice(Number(st.next || 0)).filter((w) => w.kind === 'walkthrough').length;
   const dollars = log.reduce((s, x) => s + Number(x.dollars || 0), 0);
+  const pageDollars = pages.reduce((s, x) => s + Number(x.dollars || 0), 0);
+  const up = ((st.log || []) as any[]).filter((x) => Number(x.at) > week && x.upkeep);
   const out = [
     `🗺️ Area walkthroughs this week: ${live.length} page(s) live in ${guides.length} guide(s)${guides.length ? ` (${guides.slice(0, 8).join(', ')}${guides.length > 8 ? ', …' : ''})` : ''}, ` +
       `${held} held by the rebuild guard, ${pages.length - live.length - held} not live; ${chapters ? `RDR2 place names on ${chapters} chapter(s); ` : ''}` +
-      `$${dollars.toFixed(2)}. ${left} page(s) without a walkthrough still queued.`,
+      `$${dollars.toFixed(2)}${pages.length ? ` (about $${(pageDollars / pages.length).toFixed(2)} a page)` : ''}. ${left} page(s) without a walkthrough still queued.`,
+    `🧰 Upkeep this week (contradictions and re-verification, about 20% of the budget): ${up.length} item(s), ${up.filter((x) => x.status === 'live').length} page(s) re-verified live, $${up.reduce((s, x) => s + Number(x.dollars || 0), 0).toFixed(2)}; $${Number(st.upkeepSpent || 0).toFixed(2)} of the month's $${UPKEEP_MONTH} reserve used.`,
   ];
   if (st.paused?.why) out.push(`⚠️ ${st.paused.why}`);
   return out;
 }
 
+/**
+ * The upkeep list (owner, Oct 31 2026): the contradictions game by game, then re-verification of live walkthrough pages
+ * not checked yet and of pages checked more than STALE_DAYS ago, the most searched first, then the official names.
+ */
+export async function upkeepQueue(old: Work[]): Promise<Work[]> {
+  const sc: any = (await db().collection('system').doc('searchConsole').get()).data() || {};
+  const impr = new Map<string, number>();
+  for (const p of sc.topPages || []) impr.set(`${p.key}/${p.slug}`, (impr.get(`${p.key}/${p.slug}`) || 0) + Number(p.impressions || 0));
+  const stale = Date.now() - STALE_DAYS * 86_400_000;
+  const pages: (Work & { score: number })[] = [];
+  for (const g of (await db().collection('guides').get()).docs) {
+    if (g.id.includes('--')) continue;
+    for (const d of (await g.ref.collection('areas').get()).docs) {
+      const a: any = d.data();
+      if (a.status !== 'published' || !hasWalkthrough(a)) continue;
+      const at = Number(a.flagship?.at || 0);
+      const n = impr.get(`${g.id}/${d.id}`) || 0;
+      if (a.verified !== true) pages.push({ kind: 'reverify', key: g.id, ref: d.id, ...(n ? { impressions: n } : {}), score: n + 1e6 });
+      else if (at && at < stale && n) pages.push({ kind: 'reverify', key: g.id, ref: d.id, impressions: n, since: at, score: n });
+    }
+  }
+  pages.sort((a, b) => b.score - a.score);
+  return [
+    ...old.filter((w) => w.kind === 'conflicts'),
+    ...pages.slice(0, 150).map(({ score, ...w }) => w),
+    ...old.filter((w) => w.kind === 'glossary'),
+  ];
+}
+
 async function main() {
-  if (arg('queue-walkthroughs') === 'true') {
+  if (arg('queue-upkeep') === 'true') {
+    // The upkeep lane (owner, Oct 31 2026): its kinds leave the main queue (what's done stays as it was).
+    const st: any = (await ref().get()).data() || {};
+    const next = Number(st.next || 0);
+    const old: Work[] = st.queue || [];
+    const UPKEEP = new Set(['conflicts', 'reverify', 'glossary']);
+    const upkeep = await upkeepQueue(old.slice(next));
+    const queue = [...old.slice(0, next), ...old.slice(next).filter((w) => !UPKEEP.has(w.kind))];
+    const counts = upkeep.reduce((m: Record<string, number>, w) => ((m[w.kind + (w.since ? ' (stale)' : '')] = (m[w.kind + (w.since ? ' (stale)' : '')] || 0) + 1), m), {});
+    const dry = arg('dry') === 'true';
+    if (!dry) await ref().set({ queue, upkeep, upkeepNext: 0, upkeepSpent: Number(st.upkeepSpent || 0) }, { merge: true });
+    console.log(`${dry ? '(dry run) ' : ''}Upkeep: ${upkeep.length} item(s) ${JSON.stringify(counts)}; main queue from item ${next}: ${queue.length - next} item(s). Reserve $${UPKEEP_MONTH}, at most ${UPKEEP_SHARE * 100}% of a night.`);
+    console.log(`  first: ${upkeep.slice(0, 10).map((w) => `${w.kind} ${w.key}/${w.ref}`).join(', ')}`);
+  } else if (arg('queue-walkthroughs') === 'true') {
     // The area walkthroughs go first (owner, Oct 31 2026): the work done stays as it was and the rest follows them. A
     // re-verification of a page that gets a walkthrough is the same build, so it isn't queued twice.
     const st: any = (await ref().get()).data() || {};

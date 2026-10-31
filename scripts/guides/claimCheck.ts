@@ -82,6 +82,13 @@ const GAME_TOPICS: { topic: string; ask: (game: string, areas: string) => string
   { topic: 'missables', ask: (g, a) => `In the video game "${g}", for each of these areas: ${a}. List what can be permanently missed there, and exactly what locks it out, only where a source says so.` },
 ];
 const GAME_GROUP = 6;
+/**
+ * Lean research (owner, Oct 31 2026: the November walkthroughs cost less per page): EVIDENCE_LEAN=1 holds each research
+ * call to three searches (searches are about 70% of a page's cost), and the gap step reuses stored evidence before it
+ * searches (flagship.ts). Set by novemberWork.ts for its walkthrough pages.
+ */
+export const lean = () => process.env.EVIDENCE_LEAN === '1';
+const searchAsk = () => (lean() ? "Use at most three searches (the game's wikis and guides)." : "Run several searches (the game's wikis and guides).");
 
 export type GameEvidence = { key: string; game: string; evidence: (Evidence & { area: string })[]; areas: string[]; searches: number; at: number };
 const normArea = (s: string) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -101,7 +108,7 @@ export async function buildGameEvidence(key: string, game: string, areas: string
     for (const t of GAME_TOPICS) {
       const res: any = await gemini().models.generateContent({
         model: MODEL,
-        contents: [{ role: 'user', parts: [{ text: `${t.ask(game, group.join('; '))}\nRun several searches (the game's wikis and guides).${gameNote(game)} One fact per line, only what the sources say, and START EVERY LINE with the area's name in square brackets, exactly as written above, e.g. "[${group[0]}] ...". Leave out anything that is in none of these areas.` }] }],
+        contents: [{ role: 'user', parts: [{ text: `${t.ask(game, group.join('; '))}\n${searchAsk()}${gameNote(game)} One fact per line, only what the sources say, and START EVERY LINE with the area's name in square brackets, exactly as written above, e.g. "[${group[0]}] ...". Leave out anything that is in none of these areas.` }] }],
         config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 6000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
       });
       have.searches += searchesIn(res);
@@ -120,6 +127,46 @@ export async function buildGameEvidence(key: string, game: string, areas: string
     console.log(`  game evidence: ${group.length} area(s) researched (${have.evidence.length} lines, ${have.searches} searches in all)`);
   }
   return have;
+}
+
+/**
+ * Stored evidence for claims a review couldn't support (lean research, owner, Oct 31 2026): sourced lines already kept
+ * for this game (its game evidence for every area, and other pages' evidence packs) that name what a claim names (a
+ * capitalised name, or a long word of it), not yet in the pack. Free: no search. At most 40 lines, the most matching first.
+ */
+export async function storedEvidenceFor(key: string, claims: string[], ev: EvidencePack): Promise<Evidence[]> {
+  const STOP = new Set(['the', 'this', 'that', 'there', 'then', 'when', 'after', 'before', 'from', 'with', 'your', 'you']);
+  const names = new Set<string>();
+  for (const c of claims) {
+    for (const m of String(c).matchAll(/\p{Lu}[\p{L}'’-]{2,}(?:\s+(?:of|the|de)?\s*\p{Lu}[\p{L}'’-]+)*/gu)) {
+      const n = normArea(m[0]);
+      if (n.length >= 4 && !STOP.has(n)) names.add(n);
+    }
+  }
+  if (!names.size) return [];
+  const have = new Set(ev.evidence.map((e) => e.text));
+  const pool: Evidence[] = [];
+  const g = (await db().collection('gameEvidence').doc(key).get()).data() as GameEvidence | undefined;
+  for (const e of g?.evidence || []) pool.push({ id: e.id, text: e.area ? `(in ${e.area}) ${e.text}` : e.text, sources: e.sources, topic: e.topic });
+  for (const d of (await db().collection('evidencePacks').where('key', '==', key).get()).docs) {
+    const p = d.data() as EvidencePack;
+    if (p.slug === ev.slug) continue;
+    for (const e of p.evidence || []) pool.push({ id: `s${p.slug.slice(0, 12)}-${e.id}`, text: `(in ${p.area}) ${e.text}`, sources: e.sources, topic: e.topic });
+  }
+  const scored = pool
+    .filter((e) => e.sources?.length && !have.has(e.text) && !have.has(e.text.replace(/^\(in [^)]*\)\s*/, '')))
+    .map((e) => ({ e, n: [...names].filter((n) => ` ${normArea(e.text)} `.includes(` ${n} `)).length }))
+    .filter((x) => x.n > 0)
+    .sort((a, b) => b.n - a.n);
+  const seen = new Set<string>();
+  const out: Evidence[] = [];
+  for (const { e } of scored) {
+    if (seen.has(e.text) || out.length >= 40) continue;
+    seen.add(e.text);
+    // Ids the pack doesn't use yet (the writer and the checkers cite them).
+    out.push({ ...e, id: `x${out.length + 1}` });
+  }
+  return out;
 }
 
 /** The game evidence that belongs to one page: its area's lines, and lines naming one of its entries. */
@@ -157,12 +204,12 @@ export async function buildEvidencePack(key: string, slug: string, game: string,
   // With the game's evidence, the page researches only what's its own: the order of play and its entries (merchants,
   // NPCs, bosses, key items and missables come from the game's evidence). A cached pack only needs the entries topic added.
   // One call for both, held to a few searches (searches are most of the cost).
-  const pageTopic = { topic: 'order', ask: (g: string, a: string, n: string) => `${TOPICS[0].ask(g, a, n)}${names.length ? ` Then, for each of these, where exactly it is found (and whether it is really in ${a} at all), how to get it, and only if a source says so whether it can be permanently missed and why: ${names.join('; ')}.` : ''} Use at most five searches.` };
+  const pageTopic = { topic: 'order', ask: (g: string, a: string, n: string) => `${TOPICS[0].ask(g, a, n)}${names.length ? ` Then, for each of these, where exactly it is found (and whether it is really in ${a} at all), how to get it, and only if a source says so whether it can be permanently missed and why: ${names.join('; ')}.` : ''} Use at most ${lean() ? 'three' : 'five'} searches.` };
   const topics = opts.gameEvidence ? (have?.evidence?.length && have.evidence.some((e) => e.topic === 'order') ? [] : [pageTopic]) : have?.evidence?.length ? entryTopic : [...TOPICS, ...entryTopic];
   for (const t of topics) {
     const res: any = await gemini().models.generateContent({
       model: MODEL,
-      contents: [{ role: 'user', parts: [{ text: `${t.ask(game, area, neighbours.join(', ') || 'unknown')}\nRun several searches (the game's wikis and guides).${gameNote(game)} Answer in short factual sentences, one fact per line, only what the sources say; name the place each thing is in.` }] }],
+      contents: [{ role: 'user', parts: [{ text: `${t.ask(game, area, neighbours.join(', ') || 'unknown')}\n${searchAsk()}${gameNote(game)} Answer in short factual sentences, one fact per line, only what the sources say; name the place each thing is in.` }] }],
       config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     searches += searchesIn(res);

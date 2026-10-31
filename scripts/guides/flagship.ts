@@ -43,7 +43,7 @@ import { sourcePack, packNotes, WIKIS, type SourcePack } from './sourcePack';
 /** Wikis we fetch directly (a page written from one counts as checked). */
 const WIKI_HOSTS = new Set(Object.values(WIKIS).map((w) => w.name));
 import { structuredPeople } from './compendium';
-import { isTransient, buildEvidencePack, buildGameEvidence, evidenceText, claimCheck, claimReview, claimSlots, sentencesOf, pageRules, type ClaimVerdict, type ClaimPage } from './claimCheck';
+import { isTransient, buildEvidencePack, buildGameEvidence, lean, storedEvidenceFor, evidenceText, claimCheck, claimReview, claimSlots, sentencesOf, pageRules, type ClaimVerdict, type ClaimPage } from './claimCheck';
 import { ProQuotaWait } from './reviewerQuota';
 import { apiLimits, searchesToday, pipelineRoom, SearchDayWait } from '../../apiLimits';
 import { promote, stageCopy, discard } from './promote';
@@ -678,7 +678,23 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   // more than 2 claims are contradicted and at least GAP_KEEP of its specific claims are supported.
   const gapFill = { tried: false, searches: 0, added: 0, before: review.score };
   if (review.status === 'failed' && review.total) {
-    const weak = [...review.contradicted, ...review.unsupported].slice(0, 15);
+    let weak = [...review.contradicted, ...review.unsupported].slice(0, 15);
+    const passes = () => review.contradicted.length <= 2 && (review.total ? review.supported / review.total : 0) >= GAP_KEEP;
+    // Lean research (the November walkthroughs): the evidence already stored for the game first (its other areas' lines
+    // and other pages' packs that name the same things), free; a search only for what that still leaves.
+    if (weak.length && lean()) {
+      const stored = await storedEvidenceFor(key, weak.map((c) => c.text), ev);
+      if (stored.length) {
+        ev.evidence.push(...stored);
+        ev.sites = [...new Set([...ev.sites, ...stored.flatMap((e) => e.sources)])];
+        review = await claimReview(game, p.name, pageClaimPage(proto), ev);
+        console.log(`  stored evidence: ${stored.length} sentence(s); review again: ${review.supported}/${review.total} supported, ${review.contradicted.length} contradicted`);
+        if (passes()) {
+          review = { ...review, status: 'passed', reason: undefined };
+          weak = [];
+        } else weak = [...review.contradicted, ...review.unsupported].slice(0, 15);
+      }
+    }
     if (weak.length) {
       gapFill.tried = true;
       const { searchedEvidence } = await import('./entityV2');
