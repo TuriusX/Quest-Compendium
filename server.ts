@@ -45,6 +45,7 @@ import { registerSiteAccount } from './siteAccount';
 import { pingNewSignup } from './signupPing';
 import { STEPS_RULES, extractSteps, cleanObjective, objectiveRules, extractTicked } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
+import { disagreeingEntries } from './src/utils/guideAgree';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
@@ -1295,9 +1296,10 @@ If the player is asking about items, secrets or things to find, and you know of 
 End every answer with one line naming what the player is doing right now, like a quest title in an RPG quest log:
 <qc-title now="yes">Short quest name</qc-title>
 - 2 to 6 words, at most 60 characters, in the player's language, title-style (for example "Loot the Sunken Crypt", "Find Duncan's Cabin"). No quotes, no ending punctuation, never a sentence about the answer itself.
-- now="yes" when the question is about what the player is trying to do right now in their game (getting somewhere,
+- now="yes" when the question is about what the player is doing or should do now, where they are: getting somewhere,
   finishing a quest or a step of one, beating what's in front of them, solving the puzzle they're at, finding something
-  they need now): their quest log then shows your steps as what they're doing. now="no" when it's curiosity or general
+  they need now, and general ones too ("what should I do here?", "what's next?", "walk me through this", "I just
+  arrived in X"). Their quest log then shows your steps as what they're doing. now="no" only for curiosity or general
   advice (lore, story, characters, builds and stats, what an item or skill does, settings, whether something is worth it).
 - Never mention the title line in your answer text.`;
         // The quest log's steps: what the player should keep in front of them (src/utils/trackerPayload.ts).
@@ -1938,9 +1940,20 @@ percentages:
       // candidates to be verified (corrections.ts), never applied from one player.
       const correctionsParsed = extractCorrections(responseText);
       responseText = correctionsParsed.text;
+      // The answer wins over the guide (owner, Oct 31 2026): guide entries its steps advise against ("Do not open the
+      // outdoor barrels and crates" against "Potion: barrel left of the stables") are hidden from the quest log, and go
+      // to the nightly corrections check with the answer's advice as the claim, to be settled against sources.
+      const disagree = guidePage ? disagreeingEntries(guidePage.items || [], stepsParsed.steps) : [];
+      const corrections = [
+        ...correctionsParsed.corrections,
+        ...disagree
+          .filter((d) => !correctionsParsed.corrections.some((c) => c.entry === d.entry.name))
+          .map((d) => ({ entry: String(d.entry.name), guide: String(d.entry.where || ''), claim: `Leave it for now: ${d.advice}`.slice(0, 300), field: 'notes' as const })),
+      ];
       const correctionIds = await saveCorrectionCandidates({
-        page: guidePage, corrections: correctionsParsed.corrections, question: String(question || ''), uid: userId, isGuest, game: String(effectiveGame?.name || ''),
+        page: guidePage, corrections, question: String(question || ''), uid: userId, isGuest, game: String(effectiveGame?.name || ''),
       });
+      const guideConflicts = guidePage && disagree.length ? { slug: guidePage.slug, ids: disagree.map((d) => String(d.entry.id)).slice(0, 20) } : null;
       // A fight on screen that the area's guide page doesn't cover: a missing-fight candidate (the fight, its enemies
       // and the battle plan's steps; no conversation text). In the background: the answer doesn't wait for it.
       if (combatParsed.combat && guidePage) {
@@ -2032,6 +2045,8 @@ percentages:
         ...(combatParsed.combat && combatParsed.fight ? { fight: combatParsed.fight } : {}),
         ...(factsSaved ? { factsSaved } : {}),
         ...(correctionIds.length ? { correctionIds } : {}),
+        // Guide entries the answer advises against: the quest log hides them (owner, Oct 31 2026).
+        ...(guideConflicts ? { guideConflicts } : {}),
         // The kind of question (for the player's feedback and the Quality numbers), the guide entries the answer used,
         // and who placed the markers when that wasn't the answer's model.
         qtype,

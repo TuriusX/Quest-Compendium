@@ -36,6 +36,9 @@ next, never filler:
   For example "Jump (Z) up the rock ledge right of the burning wreck to skip the Intellect Devourers", not "Climb the
   cliff path on the right".
 - In a fight, the steps are the battle plan instead (see [COMBAT]): the priority targets in order, then the key tactics.
+- A question about what to do here or next ("what should I do here?", "what's next?", "walk me through this"):
+  always the steps, the likely next ones from what you know of where they are, even when you also ask for a
+  screenshot or more detail.
 - Only what your answer actually says. Leave the line out for questions that aren't about playing (settings, lore
   chat, a game's release date). Never mention the line in your answer text.`;
 

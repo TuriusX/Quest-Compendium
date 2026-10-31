@@ -75,7 +75,7 @@ import { readTombstones } from './hooks/tabMerge';
 import { MigrationNotice, WhichGamePrompt } from './components/SpacesNotice';
 import { GameLine } from './components/GameLine';
 import { QuestLog } from './components/QuestLog';
-import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, doSteps, isNowQuestion, type LogView, type Foe } from './utils/questLogView';
+import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, doSteps, isNowQuestion, isCuriosityQuestion, type LogView, type Foe } from './utils/questLogView';
 import { missablesThin } from './utils/missablesCheck';
 
 /**
@@ -1220,14 +1220,17 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // shown under the latest answer about this place too.
   const missSection = builtTrackerPayload?.data.sections.find((x) => x.id === 'missable');
   const missablesHere = trackerGame.guideArea && missSection
-    ? { area: trackerGame.guideArea.name, items: missSection.items.filter((it) => !it.done).map((it) => ({ id: it.id, label: it.label, why: it.detail?.missable, where: it.where })) }
+    ? { area: trackerGame.guideArea.name, items: missSection.items.filter((it) => !it.done && !(activeTab?.questLog?.hidden || []).includes(it.id)).map((it) => ({ id: it.id, label: it.label, why: it.detail?.missable, where: it.where })) }
     : null;
   // "Near you" on the compact view (roadmap item 7): the next thing the guide lists here that isn't ticked, missables
   // first, in the guide's order. The guides have no map positions, so it's "next in this area", not a distance.
   const nearYou = (() => {
     const secs = builtTrackerPayload?.data.sections || [];
+    // Not what an answer advised against, and never a plain pickup ("Potion") as if it were an objective (owner, Oct 31
+    // 2026): those stay in Show more.
+    const hiddenLog = new Set(activeTab?.questLog?.hidden || []);
     for (const id of ['missable', 'collect'] as const) {
-      const it = secs.find((x) => x.id === id)?.items.find((i) => !i.done && i.id.startsWith('g:'));
+      const it = secs.find((x) => x.id === id)?.items.find((i) => !i.done && i.id.startsWith('g:') && !hiddenLog.has(i.id) && (id === 'missable' || (i.icon !== 'item' && i.icon !== 'chest')));
       if (it) return { id: it.id, label: it.label, where: it.where, missable: id === 'missable' };
     }
     return null;
@@ -2684,11 +2687,20 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         .slice(0, 3)
         .map((x: any) => ({ kind: x.kind as PlayKind, text: x.text, source: 'answer' as const })));
 
-      // The question is about what the player is doing right now (the answer says so; else the question reads that way),
-      // and the answer has things to do: it becomes the quest log's Now by itself, its steps the Next, with a few
-      // seconds of Undo (owner, Oct 31 2026). Curiosity (lore, builds, what an item does) leaves Now as it is.
-      const autoNow = isDesktop && !aiMessage.combat && doSteps(aiMessage).length > 0 && (aiMessage.nowGoal ?? isNowQuestion(text));
+      // The answer wins (owner, Oct 31 2026): a question about what the player is doing or should do where they are, and
+      // an answer with things to do, makes it the quest log's Now by itself, its steps the Next, with a few seconds of
+      // Undo. Any of: the answer says so (now="yes"), the question reads that way ("what should I do here?", "walk me
+      // through this"), or the answer is about the place the player is in (the model's now="no" isn't trusted alone: it
+      // missed "I just arrived in South Figaro… walk me through this"). Curiosity (lore, builds, what an item does) never.
+      const aboutHere = !!aiMessage.place?.name && !!activeTab.place?.name && samePlace(aiMessage.place.name, activeTab.place.name);
+      const autoNow = isDesktop && !aiMessage.combat && doSteps(aiMessage).length > 0 && !isCuriosityQuestion(text)
+        && (aiMessage.nowGoal === true || isNowQuestion(text) || aboutHere);
       const nowBefore = activeTab.questLog?.now;
+      // Guide entries the answer advises against ("Do not open the barrels"): hidden from the quest log; the server sent
+      // them to the corrections check.
+      const conflicts: string[] = data.guideConflicts && typeof data.guideConflicts.slug === 'string' && Array.isArray(data.guideConflicts.ids)
+        ? data.guideConflicts.ids.filter((x: unknown) => typeof x === 'string').slice(0, 20).map((id: string) => `g:${data.guideConflicts.slug}:${id}`)
+        : [];
       setTabs(prev => {
         const nextTabs = prev.map(t => {
           if (t.id !== activeTab.id) return t;
@@ -2719,7 +2731,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           const msgs = ticked.length
             ? t.messages.map((m) => (m.id === objId ? { ...m, doneSteps: [...new Set([...(m.doneSteps || []), ...ticked])].sort((a, b) => a - b) } : m))
             : t.messages;
-          return { ...t, messages: [...msgs, aiMessage], lastActive: nowAi, ...(place ? { place } : {}), ...(autoNow ? { questLog: nextLogState(t.questLog, { now: aiMessage.id }) } : {}) };
+          return { ...t, messages: [...msgs, aiMessage], lastActive: nowAi, ...(place ? { place } : {}), ...(autoNow || conflicts.length ? { questLog: nextLogState(t.questLog, { ...(autoNow ? { now: aiMessage.id } : {}), ...(conflicts.length ? { hidden: [...new Set([...(t.questLog?.hidden || []), ...conflicts])] } : {}) }) } : {}) };
         });
         return nextTabs;
       });

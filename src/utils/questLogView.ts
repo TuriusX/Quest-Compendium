@@ -13,6 +13,7 @@
  */
 import type { ChatMessage, GameTab, PlaceDoing, QuestStep } from '../types';
 import type { TrackerData, TrackerItem, TrackerSection } from './trackerPayload';
+import { samePlace } from './placeName';
 
 export type LogStep = {
   id: string;
@@ -189,7 +190,11 @@ export function buildLogView(
   }
 
   // The guide's lists for this place (the old quest log's sections, without the answer's and the loaded steps).
-  const more = (data?.sections || []).filter((x) => x.id !== 'answer' && x.id !== 'guide');
+  // Guide entries an answer advised against are hidden (owner, Oct 31 2026: the answer wins; guideAgree.ts).
+  const more = (data?.sections || [])
+    .filter((x) => x.id !== 'answer' && x.id !== 'guide')
+    .map((x) => ({ ...x, items: x.items.filter((it) => !hidden.has(it.id)) }))
+    .filter((x) => x.items.length);
   const missable = more.find((x) => x.id === 'missable');
   const noReturn = more.find((x) => x.id === 'noreturn');
   for (const it of missable?.items || []) if (!it.done) watch.push({ id: it.id, text: it.label, why: it.detail?.missable || it.where, fromGuide: true });
@@ -203,14 +208,15 @@ export function buildLogView(
   if (now?.source === 'question' && obj && opts.walk) {
     const walkSteps = opts.walk.steps.filter((st) => st.title);
     const others = data?.areas?.names;
-    const at = matchDoing(walkSteps, questionDoing(questionOf(msgs, obj.id), obj), placeName, others) || matchDoing(walkSteps, opts.doing, placeName, others);
+    const focus = Number(now.id.split(':').pop());
+    const at = matchDoing(walkSteps, questionDoing(questionOf(msgs, obj.id), obj, Number.isInteger(focus) ? focus : undefined), placeName, others) || matchDoing(walkSteps, opts.doing, placeName, others);
     if (at) {
       const st = walkSteps[at.index];
       const id = `w:${opts.walk.slug}:${st.id}`;
       now = { ...now, guide: { id, title: st.title, ...(st.text ? { detail: st.text } : {}) } };
       const own: LogWatch[] = [];
       // The step's warning as it is (once: not shortened with the whole of it repeated under it).
-      if (st.warn) own.push({ id: `${id}:warn`, text: clip(st.warn, 220), fromGuide: true });
+      if (st.warn) own.push({ id: `${id}:warn`, text: clip(st.warn.replace(/\*+/g, ''), 220), fromGuide: true });
       for (const e of st.entries || []) {
         const it = missable?.items.find((x) => !x.done && x.id.endsWith(`:${e}`));
         if (it && !own.some((w) => w.id === it.id)) own.push({ id: it.id, text: it.label, why: it.detail?.missable || it.where, fromGuide: true });
@@ -250,17 +256,16 @@ export function buildLogView(
         source: 'guide', goal: placeName, doneCount: 0, total: 0, seen: foe.name,
       };
     }
-    if (!now) {
+    // After a question about this place, the answer is what to do here: the guide's list for it waits behind "Show more
+    // from the guide" (owner, Oct 31 2026).
+    const askedHere = msgs.some((m) => m.role === 'assistant' && !m.combat && !!placeName && (samePlace(m.place?.name, placeName) || samePlace(m.placeChosen, placeName)));
+    if (!now && !askedHere) {
       const walkOpen = walkSteps.filter(isOpen);
-      const get = (it: TrackerItem): LogStep => {
-        const st = itemStep(it);
-        // An item or a chest's contents: "Get the Rusty Key" (a secret or a checklist line is a task already).
-        return it.icon === 'item' || it.icon === 'chest' ? { ...st, text: (opts.labels?.logGetItem || 'Get {item}').replace('{item}', st.text) } : st;
-      };
-      // What's here: the walkthrough's parts by their titles ("Circus of the Last Days"), else the first entries.
+      // What's here: the walkthrough's parts by their titles ("Circus of the Last Days"), else the area's tasks (secrets
+      // and checklist lines). Item pickups ("Get Potion") are never objectives on their own: they're in Show more.
       const items: LogStep[] = walkOpen.length
         ? walkOpen.slice(0, HERE_MAX).map((st) => ({ id: `w:${opts.walk!.slug}:${st.id}`, text: clip(st.title, 70), detail: st.text || undefined, done: false, tick: true }))
-        : (more.find((x) => x.id === 'collect')?.items || []).filter((it) => !it.done && it.tick).slice(0, HERE_MAX).map(get);
+        : (more.find((x) => x.id === 'collect')?.items || []).filter((it) => !it.done && it.tick && it.icon !== 'item' && it.icon !== 'chest').slice(0, HERE_MAX).map(itemStep);
       const missables = watch.filter((w) => w.fromGuide && !hidden.has(w.id)).slice(0, 3);
       if (items.length || missables.length) here = { place: placeName, items, missables };
     }
@@ -518,11 +523,13 @@ export function properNames(text: string): string[] {
 
 /**
  * What a question and its answer say the player is doing (owner, Oct 31 2026), for picking the guide step the way the
- * screen reading does (matchDoing): the answer's title and the question as the objective, the answer's steps as the
+ * screen reading does (matchDoing): the answer's title and the question as the objective, its step that is Now (else all its steps) as the
  * activity, and the names in the question and the steps.
  */
-export function questionDoing(question: string, answer: ChatMessage): PlaceDoing {
-  const steps = doSteps(answer).map(({ st }) => st);
+export function questionDoing(question: string, answer: ChatMessage, focus?: number): PlaceDoing {
+  // The step that is Now, when there is one: the guide step follows it as the player ticks their way through.
+  const all = doSteps(answer);
+  const steps = (focus !== undefined && all.some((x) => x.i === focus) ? all.filter((x) => x.i === focus) : all).map(({ st }) => st);
   const names = properNames([question, ...steps.map((s) => `${s.text}. ${s.where || ''}`)].join('. ')).slice(0, 8);
   return {
     objective: [answer.title, question].filter(Boolean).join(' · ').slice(0, 240),
@@ -531,15 +538,21 @@ export function questionDoing(question: string, answer: ChatMessage): PlaceDoing
   };
 }
 
+const norm = (q: string) => ` ${String(q || '').toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim()} `;
+
+/** Curiosity, not what the player is doing: "What does … do", lore, builds, "Is … any good / worth it", settings. */
+export function isCuriosityQuestion(q: string): boolean {
+  return /\b(what does|what do(es)? .{1,40} do\b|lore|backstory|story behind|who is|who was|who are|why (is|did|does)|best build|build for|worth it|is it worth|any good|is it good|should i (spec|respec)|settings?|graphics|fps|controls?|difficulty|how long is|how many hours|release|dlc price)\b/.test(norm(q));
+}
+
 /**
- * Is the question about what the player is trying to do right now (owner, Oct 31 2026)? For answers from a server that
- * doesn't say (its now="yes|no"): "How do I get into…", "Where do I find…", "I'm stuck…", "How do I beat…", and not
- * curiosity ("What does … do", lore, builds, "Is … worth it", settings).
+ * Is the question about what the player is doing or should do now (owner, Oct 31 2026)? "How do I get into…", "Where
+ * do I find…", "I'm stuck…", and the general ones: "What should I do here?", "What's next?", "Walk me through this",
+ * "I just arrived in…". Not curiosity (isCuriosityQuestion).
  */
 export function isNowQuestion(q: string): boolean {
-  const s = ` ${String(q || '').toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim()} `;
-  if (/\b(what does|what do(es)? .{1,40} do\b|lore|backstory|story behind|who is|who was|why (is|did|does)|best build|build for|worth it|is it worth|should i (spec|respec)|settings?|graphics|fps|controls?|difficulty|how long is|how many hours|release|dlc price)\b/.test(s)) return false;
-  return /\b(how do i|how can i|how to|where do i|where can i|where is|where are|what do i do|what now|what next|i'm stuck|im stuck|i am stuck|stuck (on|at|in)|can't (find|get|reach|beat|open|figure)|cannot (find|get|reach|beat|open)|how do (we|you) (get|reach|beat|open|solve|find)|help me (get|find|beat|solve)|way (in|into|out|to)|get (past|into|to|through))\b/.test(s);
+  if (isCuriosityQuestion(q)) return false;
+  return /\b(how do i|how can i|how to|where do i|where can i|where is|where are|what do i do|what (should|can|do) i do|what to do|what now|what next|what's next|whats next|what is next|next step|walk me through|guide me|just (arrived|got|reached|entered|escaped)|i'm (here|in|at)|now what|i'm stuck|im stuck|i am stuck|stuck (on|at|in)|can't (find|get|reach|beat|open|figure)|cannot (find|get|reach|beat|open)|how do (we|you) (get|reach|beat|open|solve|find)|help me (get|find|beat|solve)|way (in|into|out|to)|get (past|into|to|through))\b/.test(norm(q));
 }
 
 /**

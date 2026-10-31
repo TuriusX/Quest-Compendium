@@ -1,6 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/questLogView.test.ts)
 import assert from "node:assert/strict";
-import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState, taskOf, placeIsCurrent, matchDoing, matchFoe, areaFromDoing, isNowQuestion, properNames, questionDoing } from "../src/utils/questLogView";
+import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState, taskOf, placeIsCurrent, matchDoing, matchFoe, areaFromDoing, isNowQuestion, isCuriosityQuestion, properNames, questionDoing } from "../src/utils/questLogView";
+import { disagreeingEntries } from "../src/utils/guideAgree";
 import { missablesThin, missableCount } from "../src/utils/missablesCheck";
 import type { TrackerData } from "../src/utils/trackerPayload";
 import { mergeTabState, sanitizeTabsForCloud } from "../src/hooks/tabMerge";
@@ -133,10 +134,11 @@ test("a fight on screen (guides without a walkthrough): Now is \"Defeat X\", onl
   assert.equal(v.here, undefined);
 });
 
-test("without a walkthrough, nothing seen: what's here is the guide's unticked entries, items as \"Get …\"", () => {
+test("without a walkthrough, nothing seen: what's here is the guide's unticked tasks, never a pickup on its own (those are in Show more)", () => {
   const v = buildLogView(tab(), guide, { ...opts, labels: { logGetItem: "Get {item}" } })!;
   assert.equal(v.now, null);
-  assert.deepEqual(v.here?.items.map((s) => s.text), ["Secluded Cell grace", "Get Golden Seed", "Smithing Stone"]);
+  assert.deepEqual(v.here?.items.map((s) => s.text), ["Secluded Cell grace", "Smithing Stone"]);
+  assert.ok(v.more.some((x) => x.items.some((it) => it.label === "Golden Seed")), "the Golden Seed is in Show more");
   assert.equal(v.here?.missables[0]?.text, "Talk to Gostoc", "the area's missable is listed with it");
   assert.equal(v.invite, false, "something was asked");
   assert.ok(!v.more.some((x) => x.id === "answer"), "the answer's old section is gone; the guide's lists are behind Show more");
@@ -322,6 +324,38 @@ test("a step's places (RDR2's chapters): a place seen picks the step, and the on
   assert.equal(areaFromDoing([{ slug: "c2", name: "Chapter 2" }, { slug: "c3", name: "Chapter 3" }], pages, { names: ["Valentine"] }), "Chapter 2");
   const both = { ...pages, c3: { walkthrough: [{ title: "Back in town", text: "Buy supplies.", places: ["Valentine"] }] } };
   assert.equal(areaFromDoing([{ slug: "c2", name: "Chapter 2" }, { slug: "c3", name: "Chapter 3" }], both, { names: ["Valentine"] }), null, "a place in two chapters: ask");
+});
+
+test("the answer wins: a general question about here is about now; a guide entry the answer advises against is found; the guide list waits after a question here; pickups are never objectives", () => {
+  assert.equal(isNowQuestion("I just arrived in south figaro after escaping kefka torching figaro castle. Walk me through this"), true);
+  for (const q of ["What should I do in town?", "what's next?", "What should I do here?", "now what"]) assert.equal(isNowQuestion(q), true, q);
+  assert.equal(isCuriosityQuestion("Is the Clown Hammer any good?"), true);
+  const steps = [
+    { kind: "warning", text: "Do not open outdoor barrels and crates; they upgrade to better items later in the game.", label: "Leave outdoor containers" },
+    { kind: "step", text: "Purchase Sprint Shoes to double your walking speed.", label: "Buy Sprint Shoes", where: "Relic Shop" },
+    { kind: "step", text: "Don't miss the Cafe scene with Shadow", label: "Meet Shadow" },
+  ] as any;
+  const entries = [
+    { id: "x1", name: "Potion", where: "upper barrel directly to the left of the Chocobo Stables near the entrance" },
+    { id: "x2", name: "Green Cherry", where: "top wooden crate situated to the right of the Chocobo Stables" },
+    { id: "x9", name: "Elixir", where: "grandfather clock inside the storeroom behind the mansion" },
+    { id: "x10", name: "Shadow's dog", where: "Cafe" },
+  ];
+  assert.deepEqual(disagreeingEntries(entries, steps).map((d) => d.entry.id), ["x1", "x2"], "barrels and crates; not the clock, and \"don't miss\" isn't advice against");
+  const town: TrackerData = { id: "", accent: "#a87ffb", quest: "", place: { name: "South Figaro", sure: true }, sections: [
+    { id: "collect", title: "To collect", items: [
+      { id: "g:sf:x1", label: "Potion", tick: true, icon: "item" }, { id: "g:sf:x2", label: "Green Cherry", tick: true, icon: "item" },
+      { id: "g:sf:s1", label: "Talk to the old man in the mansion basement", tick: true },
+    ] },
+  ] } as any;
+  const t0 = { id: "t", name: "FF6", messages: [{ id: "q", role: "user", text: "hi", timestamp: 0 }] } as any;
+  const v0 = buildLogView(t0, town, opts)!;
+  assert.deepEqual(v0.here?.items.map((s) => s.text), ["Talk to the old man in the mansion basement"], "no \"Get Potion\" as an objective");
+  assert.ok(v0.more.some((x) => x.items.some((it) => it.label === "Potion")), "pickups stay in Show more");
+  const answered = { ...t0, questLog: { hidden: ["g:sf:x1", "g:sf:x2"] }, messages: [...t0.messages, { id: "a", role: "assistant", text: "Leave the barrels.", timestamp: 1, place: { name: "South Figaro", sure: true } }] };
+  const v1 = buildLogView(answered, town, opts)!;
+  assert.equal(v1.here, undefined, "after a question here, the guide's list is behind Show more");
+  assert.ok(!v1.more.some((x) => x.items.some((it) => it.id === "g:sf:x1" || it.id === "g:sf:x2")), "the entries the answer advised against are hidden");
 });
 
 console.log(`\n${passed} passed`);
