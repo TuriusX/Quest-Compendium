@@ -209,7 +209,8 @@ export function buildLogView(
       const id = `w:${opts.walk.slug}:${st.id}`;
       now = { ...now, guide: { id, title: st.title, ...(st.text ? { detail: st.text } : {}) } };
       const own: LogWatch[] = [];
-      if (st.warn) own.push({ id: `${id}:warn`, text: clip(st.warn, 110), why: st.warn, fromGuide: true });
+      // The step's warning as it is (once: not shortened with the whole of it repeated under it).
+      if (st.warn) own.push({ id: `${id}:warn`, text: clip(st.warn, 220), fromGuide: true });
       for (const e of st.entries || []) {
         const it = missable?.items.find((x) => !x.done && x.id.endsWith(`:${e}`));
         if (it && !own.some((w) => w.id === it.id)) own.push({ id: it.id, text: it.label, why: it.detail?.missable || it.where, fromGuide: true });
