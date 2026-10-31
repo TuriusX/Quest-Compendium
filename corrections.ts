@@ -280,6 +280,18 @@ export async function verifiedCorrectionsForPrompt(gameKey: string, slug: string
 export function registerCorrections(app: Express, deps: { requireAuth: Mw; isAdmin: (user: any) => boolean }) {
   const db = () => getFirestore();
 
+  // Where the corrections check stands on guide entries an answer advised against (owner, Oct 31 2026): the app hides
+  // them only until it decides ("applied": the guide entry now says it; "dismissed": the guide was right). Statuses only.
+  app.post('/api/corrections/status', deps.requireAuth, async (req: Request, res: Response) => {
+    const groups: string[] = (Array.isArray(req.body?.groups) ? req.body.groups : []).filter((x: unknown) => typeof x === 'string' && /^[a-z0-9-]+__[a-z0-9-]+__[A-Za-z0-9_+-]+$/.test(x)).slice(0, 40);
+    const out: Record<string, string> = {};
+    for (const id of groups) {
+      const g = (await db().collection('correctionGroups').doc(id).get()).data();
+      out[id] = g ? String(g.status || 'pending') : 'none';
+    }
+    res.json({ status: out });
+  });
+
   // "That's right" on the answer that made these candidates: the player confirmed the area they're about.
   app.post('/api/corrections/confirm-place', deps.requireAuth, async (req: Request, res: Response) => {
     const ids: string[] = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter((x: unknown) => typeof x === 'string' && /^[A-Za-z0-9]{10,40}$/.test(x)).slice(0, 5);

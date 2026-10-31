@@ -170,11 +170,14 @@ export interface PersonalQuest {
  *   now     the answer whose steps are the current objective ("Set as Now"); its ticks are the answer's doneSteps
  *   pins    answers pinned to the log, newest first
  *   hidden  Watch out warnings hidden with their ✕, and answers whose "Set as Now" offer was closed (offer:<id>)
+ *   held    guide entries an answer advised against (g:<area>:<id>), hidden only until the corrections check decides
+ *           (group: correctionGroups id) and for at most HELD_DAYS: never for good on an answer's word alone
  */
 export interface QuestLogState {
   now?: string;
   pins?: string[];
   hidden?: string[];
+  held?: { id: string; group?: string; at: number }[];
 }
 
 /** What Locate me saw the player doing (locateMe.ts parseDoing). */

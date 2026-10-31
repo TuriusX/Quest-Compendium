@@ -89,6 +89,14 @@ export type LogView = {
 export type WalkLogStep = { id: string; title: string; text?: string; warn?: string; tip?: string; entries?: string[]; places?: string[] };
 
 const NEXT_MAX = 3;
+/**
+ * Guide entries an answer advised against are held back at most this long (owner, Oct 31 2026): the corrections check
+ * decides sooner (App.tsx asks /api/corrections/status); they're never hidden for good on an answer's word alone.
+ */
+export const HELD_DAYS = 14;
+/** The guide entries held back now (questLog.held, younger than HELD_DAYS). */
+export const heldIds = (s: GameTab['questLog'] | null | undefined, now = Date.now()): string[] =>
+  (s?.held || []).filter((h) => now - Number(h.at || 0) < HELD_DAYS * 86_400_000).map((h) => h.id);
 /** "In <place> (from the guide)": how many of the area's parts it lists. */
 const HERE_MAX = 4;
 
@@ -153,7 +161,7 @@ export function buildLogView(
   }
   const msgs = tab?.messages || [];
   const state = tab?.questLog || {};
-  const hidden = new Set(state.hidden || []);
+  const hidden = new Set([...(state.hidden || []), ...heldIds(state)]);
   const byId = (id?: string) => (id ? msgs.find((m) => m.id === id && m.role === 'assistant') : undefined);
 
   let now: LogNow | null = null;
@@ -582,5 +590,7 @@ export function nextLogState(s: GameTab['questLog'], patch: Partial<NonNullable<
   if (!out.pins?.length) delete out.pins;
   if (!out.hidden?.length) delete out.hidden;
   else out.hidden = out.hidden.slice(-200);
+  if (!out.held?.length) delete out.held;
+  else out.held = out.held.slice(-60);
   return Object.keys(out).length ? out : undefined;
 }

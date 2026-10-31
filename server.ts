@@ -1953,7 +1953,7 @@ percentages:
       const correctionIds = await saveCorrectionCandidates({
         page: guidePage, corrections, question: String(question || ''), uid: userId, isGuest, game: String(effectiveGame?.name || ''),
       });
-      const guideConflicts = guidePage && disagree.length ? { slug: guidePage.slug, ids: disagree.map((d) => String(d.entry.id)).slice(0, 20) } : null;
+      const guideConflicts = guidePage && disagree.length ? { key: guidePage.key, slug: guidePage.slug, ids: disagree.map((d) => String(d.entry.id)).slice(0, 20) } : null;
       // A fight on screen that the area's guide page doesn't cover: a missing-fight candidate (the fight, its enemies
       // and the battle plan's steps; no conversation text). In the background: the answer doesn't wait for it.
       if (combatParsed.combat && guidePage) {

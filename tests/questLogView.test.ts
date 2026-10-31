@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/questLogView.test.ts)
 import assert from "node:assert/strict";
-import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState, taskOf, placeIsCurrent, matchDoing, matchFoe, areaFromDoing, isNowQuestion, isCuriosityQuestion, properNames, questionDoing } from "../src/utils/questLogView";
+import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState, taskOf, placeIsCurrent, matchDoing, matchFoe, areaFromDoing, isNowQuestion, isCuriosityQuestion, properNames, questionDoing, heldIds } from "../src/utils/questLogView";
 import { disagreeingEntries } from "../src/utils/guideAgree";
 import { missablesThin, missableCount } from "../src/utils/missablesCheck";
 import type { TrackerData } from "../src/utils/trackerPayload";
@@ -356,6 +356,13 @@ test("the answer wins: a general question about here is about now; a guide entry
   const v1 = buildLogView(answered, town, opts)!;
   assert.equal(v1.here, undefined, "after a question here, the guide's list is behind Show more");
   assert.ok(!v1.more.some((x) => x.items.some((it) => it.id === "g:sf:x1" || it.id === "g:sf:x2")), "the entries the answer advised against are hidden");
+});
+
+test("an entry an answer advised against is held back only for a while, never for good on the answer's word", () => {
+  const day = 86_400_000, now = Date.now();
+  const st = { held: [{ id: "g:sf:x1", group: "ff6__sf__x1", at: now - day }, { id: "g:sf:x2", group: "ff6__sf__x2", at: now - 15 * day }] } as any;
+  assert.deepEqual(heldIds(st, now), ["g:sf:x1"], "older than 14 days: back");
+  assert.equal(nextLogState({ held: [] } as any, {}), undefined, "an empty list isn't kept");
 });
 
 console.log(`\n${passed} passed`);

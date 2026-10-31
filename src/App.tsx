@@ -75,7 +75,7 @@ import { readTombstones } from './hooks/tabMerge';
 import { MigrationNotice, WhichGamePrompt } from './components/SpacesNotice';
 import { GameLine } from './components/GameLine';
 import { QuestLog } from './components/QuestLog';
-import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, doSteps, isNowQuestion, isCuriosityQuestion, type LogView, type Foe } from './utils/questLogView';
+import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, doSteps, isNowQuestion, isCuriosityQuestion, heldIds, HELD_DAYS, type LogView, type Foe } from './utils/questLogView';
 import { missablesThin } from './utils/missablesCheck';
 
 /**
@@ -1200,6 +1200,41 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     if (!t) return;
     setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, questLog: nextLogState(x.questLog, fn(x.questLog || {})), lastActive: Date.now() } : x)));
   };
+  // Guide entries an answer advised against come back once the corrections check decides (owner, Oct 31 2026):
+  // "applied" (the guide entry now says it, e.g. leave it until the World of Ruin), "dismissed" (the guide was right), or
+  // no check at all; and after HELD_DAYS whatever happens. Checked when the tab is opened and every 30 minutes.
+  const heldTabId = activeTab?.id;
+  const heldKey = (activeTab?.questLog?.held || []).map((h) => h.id).join(',');
+  useEffect(() => {
+    if (!heldTabId || !heldKey) return;
+    let stop = false;
+    const check = async () => {
+      const t = tabsRef.current.find((x) => x.id === heldTabId);
+      const held = t?.questLog?.held || [];
+      if (!held.length) return;
+      const groups = held.map((h) => h.group).filter((g): g is string => !!g);
+      let status: Record<string, string> = {};
+      if (groups.length) {
+        try {
+          const token = user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken() : null;
+          const res = await fetch(`${getApiBaseUrl()}/api/corrections/status`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ groups }),
+          });
+          if (res.ok) status = (await res.json())?.status || {};
+          else return;
+        } catch {
+          return;
+        }
+      }
+      if (stop) return;
+      const now = Date.now();
+      const keep = held.filter((h) => now - h.at < HELD_DAYS * 86_400_000 && !!h.group && !['applied', 'dismissed', 'none'].includes(status[h.group] || 'pending'));
+      if (keep.length !== held.length) setTabs((prev) => prev.map((x) => (x.id === heldTabId ? { ...x, questLog: nextLogState(x.questLog, { held: keep }) } : x)));
+    };
+    void check();
+    const timer = setInterval(check, 30 * 60_000);
+    return () => { stop = true; clearInterval(timer); };
+  }, [heldTabId, heldKey]);
   // The tracker gets the log too (the popped-out window draws it; the bookmark and the spine show its number).
   const trackerPayload = heldPayload || logView
     ? {
@@ -1220,7 +1255,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // shown under the latest answer about this place too.
   const missSection = builtTrackerPayload?.data.sections.find((x) => x.id === 'missable');
   const missablesHere = trackerGame.guideArea && missSection
-    ? { area: trackerGame.guideArea.name, items: missSection.items.filter((it) => !it.done && !(activeTab?.questLog?.hidden || []).includes(it.id)).map((it) => ({ id: it.id, label: it.label, why: it.detail?.missable, where: it.where })) }
+    ? { area: trackerGame.guideArea.name, items: missSection.items.filter((it) => !it.done && ![...(activeTab?.questLog?.hidden || []), ...heldIds(activeTab?.questLog)].includes(it.id)).map((it) => ({ id: it.id, label: it.label, why: it.detail?.missable, where: it.where })) }
     : null;
   // "Near you" on the compact view (roadmap item 7): the next thing the guide lists here that isn't ticked, missables
   // first, in the guide's order. The guides have no map positions, so it's "next in this area", not a distance.
@@ -1228,7 +1263,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     const secs = builtTrackerPayload?.data.sections || [];
     // Not what an answer advised against, and never a plain pickup ("Potion") as if it were an objective (owner, Oct 31
     // 2026): those stay in Show more.
-    const hiddenLog = new Set(activeTab?.questLog?.hidden || []);
+    const hiddenLog = new Set([...(activeTab?.questLog?.hidden || []), ...heldIds(activeTab?.questLog)]);
     for (const id of ['missable', 'collect'] as const) {
       const it = secs.find((x) => x.id === id)?.items.find((i) => !i.done && i.id.startsWith('g:') && !hiddenLog.has(i.id) && (id === 'missable' || (i.icon !== 'item' && i.icon !== 'chest')));
       if (it) return { id: it.id, label: it.label, where: it.where, missable: id === 'missable' };
@@ -2696,10 +2731,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       const autoNow = isDesktop && !aiMessage.combat && doSteps(aiMessage).length > 0 && !isCuriosityQuestion(text)
         && (aiMessage.nowGoal === true || isNowQuestion(text) || aboutHere);
       const nowBefore = activeTab.questLog?.now;
-      // Guide entries the answer advises against ("Do not open the barrels"): hidden from the quest log; the server sent
-      // them to the corrections check.
-      const conflicts: string[] = data.guideConflicts && typeof data.guideConflicts.slug === 'string' && Array.isArray(data.guideConflicts.ids)
-        ? data.guideConflicts.ids.filter((x: unknown) => typeof x === 'string').slice(0, 20).map((id: string) => `g:${data.guideConflicts.slug}:${id}`)
+      // Guide entries the answer advises against ("Do not open the barrels"): held back from the quest log while the
+      // corrections check (where the server sent them) decides, never for good on the answer's word alone.
+      const gc = data.guideConflicts;
+      const conflicts: { id: string; group?: string; at: number }[] = gc && typeof gc.slug === 'string' && Array.isArray(gc.ids)
+        ? gc.ids.filter((x: unknown) => typeof x === 'string').slice(0, 20).map((id: string) => ({ id: `g:${gc.slug}:${id}`, ...(typeof gc.key === 'string' ? { group: `${gc.key}__${gc.slug}__${id}` } : {}), at: Date.now() }))
         : [];
       setTabs(prev => {
         const nextTabs = prev.map(t => {
@@ -2731,7 +2767,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           const msgs = ticked.length
             ? t.messages.map((m) => (m.id === objId ? { ...m, doneSteps: [...new Set([...(m.doneSteps || []), ...ticked])].sort((a, b) => a - b) } : m))
             : t.messages;
-          return { ...t, messages: [...msgs, aiMessage], lastActive: nowAi, ...(place ? { place } : {}), ...(autoNow || conflicts.length ? { questLog: nextLogState(t.questLog, { ...(autoNow ? { now: aiMessage.id } : {}), ...(conflicts.length ? { hidden: [...new Set([...(t.questLog?.hidden || []), ...conflicts])] } : {}) }) } : {}) };
+          return { ...t, messages: [...msgs, aiMessage], lastActive: nowAi, ...(place ? { place } : {}), ...(autoNow || conflicts.length ? { questLog: nextLogState(t.questLog, { ...(autoNow ? { now: aiMessage.id } : {}), ...(conflicts.length ? { held: [...(t.questLog?.held || []).filter((h) => !conflicts.some((c) => c.id === h.id)), ...conflicts] } : {}) }) } : {}) };
         });
         return nextTabs;
       });

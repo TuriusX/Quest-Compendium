@@ -99,7 +99,7 @@ async function sourceCheck(game: string, area: string, kind: string, entry: any,
       `AGREE: the numbers of the reports that say the same thing as what you found (or, if unclear, as each other), e.g. 1, 3`,
       `WHERE: the entry's location, rewritten to be clear and specific (landmarks, directions, how to get there); empty if unclear`,
       `HOW: what it takes or how to do it (checks, keys, steps), if relevant; else empty`,
-      `NOTES: anything else a player needs, if any; else empty`,
+      `NOTES: anything else a player needs, if any; else empty. When a report says to leave it for now (it gets better later, as South Figaro's outdoor barrels and crates in Final Fantasy VI do in the World of Ruin) and sources confirm it: when to come back for it and what it becomes then, e.g. "Leave it unopened until the World of Ruin, when it holds an X-Potion instead"`,
       ...(kind === 'item' ? [] : [`TEXT: the whole entry rewritten as one clear line that first names what it is (as the guide's entry does), then where and how; empty if unclear`]),
       `EVIDENCE: two to four sentences: each fact in WHERE / HOW / NOTES and which site showed it`,
       `Only use facts your searches showed: no character names, numbers, checks or contents that you didn't find. Leave a
