@@ -60,6 +60,15 @@ export function storyPhrase(story: string | null | undefined): string {
 }
 
 /**
+ * The place without what Locate me saw the player doing (its doing) when the new place is somewhere else: that was
+ * about the old place.
+ */
+export function dropDoingIfMoved<P extends { name?: string; doing?: unknown }>(prev: P | null | undefined, name: string): Omit<P, 'doing'> & { doing?: P['doing'] } {
+  const { doing, ...rest } = (prev || {}) as P;
+  return (doing && prev?.name && samePlace(prev.name, name) ? { ...rest, doing } : rest) as Omit<P, 'doing'> & { doing?: P['doing'] };
+}
+
+/**
  * The place after moving to an area (the tracker's arrows or area list, Locate me): the new area's story beat, or none.
  * The old area's beat never carries over to a different area; staying in the same area keeps it unless there's a new one.
  */
@@ -70,6 +79,6 @@ export function placeAfterMove<P extends { name?: string; story?: string; storyC
   confirmed: boolean,
 ): P & { name: string; confirmed: boolean } {
   const same = !!prev?.name && samePlace(prev.name, name);
-  const { story: _oldStory, storyConfirmed: _oldStoryConfirmed, ...rest } = (prev || {}) as P;
+  const { story: _oldStory, storyConfirmed: _oldStoryConfirmed, doing: _oldDoing, ...rest } = (prev || {}) as P & { doing?: unknown };
   return { ...(same ? prev : rest), name, confirmed, ...(story ? { story, storyConfirmed: confirmed } : {}) } as P & { name: string; confirmed: boolean };
 }

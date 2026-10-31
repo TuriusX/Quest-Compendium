@@ -101,6 +101,15 @@ test("Locate me is used only when confident: a read, or high confidence (the map
   const prompt = locateMePrompt("Baldur's Gate 3", areas);
   assert.ok(/Never assume the start of the game/.test(prompt) && !/last known/i.test(prompt));
 });
+test("Locate me also reads what the player is doing: only what's on screen, tidied, left out when empty", () => {
+  const names = areas.map((a) => a.name);
+  const r = (j: string) => parseLocateMeReply(j, names);
+  assert.deepEqual(r('{"area":"Ravaged Beach","doing":{"objective":"  Save Duke  Ravengard ","talkingTo":"none","activity":"reading the journal","names":["Wyrm\'s Rock",""," "]}}').doing,
+    { objective: "Save Duke Ravengard", activity: "reading the journal", names: ["Wyrm's Rock"] });
+  assert.equal(r('{"area":"Ravaged Beach","doing":{"objective":"","talkingTo":"","activity":"","names":[]}}').doing, undefined);
+  assert.equal("doing" in r('{"area":"Ravaged Beach"}'), false, "older replies stay as they were");
+  assert.ok(/"objective"/.test(locateMePrompt("Baldur's Gate 3", areas)) && /rather than guess/.test(locateMePrompt("Baldur's Gate 3", areas)));
+});
 test("Locate me's read check: the seen text must name that area, or one of its sub-locations in the guide", () => {
   const guideAreas = [
     { slug: "ravaged-beach", name: "Ravaged Beach", story: "" },

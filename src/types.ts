@@ -172,6 +172,9 @@ export interface QuestLogState {
   hidden?: string[];
 }
 
+/** What Locate me saw the player doing (locateMe.ts parseDoing). */
+export type PlaceDoing = { objective?: string; talkingTo?: string; activity?: string; names?: string[] };
+
 export interface GameTab {
   id: string;
   name: string;
@@ -185,8 +188,10 @@ export interface GameTab {
    * Where the player is in this playthrough. confirmed: the player said so (or the name was read on screen); sure: an
    * answer or Locate me was sure of it. checkedAt: when it was last set or checked (owner, Oct 31 2026: the quest log
    * shows the guide only for a place known since the game started or the tab was opened: utils/questLogView placeIsCurrent).
+   * doing: what Locate me saw the player doing there (the objective on screen, who they talk to, names on screen): it
+   * picks the guide steps for Now (utils/questLogView matchDoing). Dropped when the place changes.
    */
-  place?: { name: string; confirmed: boolean; sure?: boolean; checkedAt?: number; story?: string; storyConfirmed?: boolean };
+  place?: { name: string; confirmed: boolean; sure?: boolean; checkedAt?: number; story?: string; storyConfirmed?: boolean; doing?: PlaceDoing };
   /**
    * Guide steps loaded on the quest log (utils/guideSteps): a quest page's steps or a walkthrough's, in place of the
    * answer's objectives, until a newer answer (answerId: the answer they were loaded with) or the player unloads them.

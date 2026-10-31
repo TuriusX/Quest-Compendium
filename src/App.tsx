@@ -8,7 +8,8 @@ import {
   ChatMessage, 
   ScreenPoint,
   ColorTheme,
-  DockPosition
+  DockPosition,
+  PlaceDoing
 } from './types';
 import { POPULAR_STEAM_GAMES } from './data/mockGames';
 import { HeaderBar } from './components/HeaderBar';
@@ -30,7 +31,7 @@ import { db } from './lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
 import { playBlipSound } from './utils/audio';
-import { samePlace, placeAfterMove, singleArea } from './utils/placeName';
+import { samePlace, placeAfterMove, singleArea, dropDoingIfMoved } from './utils/placeName';
 import { addDone, doneForRequest, areaMovedPast, endedFight, type DoneKind } from './utils/progressMemory';
 import { watchPlan, stopWatchingPlan } from './utils/billing';
 import { useCloudSync } from './hooks/useCloudSync';
@@ -74,7 +75,7 @@ import { readTombstones } from './hooks/tabMerge';
 import { MigrationNotice, WhichGamePrompt } from './components/SpacesNotice';
 import { GameLine } from './components/GameLine';
 import { QuestLog } from './components/QuestLog';
-import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, type LogView } from './utils/questLogView';
+import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, type LogView, type Foe } from './utils/questLogView';
 import { missablesThin } from './utils/missablesCheck';
 
 /**
@@ -782,7 +783,9 @@ export default function App() {
   /** The player picked or confirmed where they are (under an answer, or on the objectives tracker). */
   const handleSetPlace = (name: string) => {
     if (!activeTab) return;
-    const next = { ...(activeTab.place || {}), name, confirmed: true, checkedAt: Date.now() };
+    // "Yes" to an unsure check's suggestion: what it saw the player doing comes with it.
+    const seen = whereFor?.tabId === activeTab.id && whereFor.doing && samePlace(whereFor.suggestion, name) ? whereFor.doing : null;
+    const next = { ...dropDoingIfMoved(activeTab.place, name), name, confirmed: true, checkedAt: Date.now(), ...(seen ? { doing: seen } : {}) };
     setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));
     rememberGameProgress(activeTab, next);
     noteAreaChange(activeTab, activeTab.place?.name, name);
@@ -817,7 +820,8 @@ export default function App() {
   const placeCurrent = placeIsCurrent(activeTab?.place, dueAt);
   const logPlace = placeCurrent ? trackerPlace : undefined;
   // What an unsure Locate me thought ("Looks like Rivington?"), for the active tab.
-  const [whereFor, setWhereFor] = useState<{ tabId: string; suggestion: string } | null>(null);
+  // doing: what the unsure check saw the player doing, kept when the player says "Yes" to the suggestion.
+  const [whereFor, setWhereFor] = useState<{ tabId: string; suggestion: string; doing?: PlaceDoing } | null>(null);
   const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, logPlace?.name, logPlace?.story, useLocale(), Number(activeTab?.activeSteamGame?.appId || activeGame?.appId) || 0, activeTab?.name, activeTab?.guideKey);
   const trackerGameRef = useRef(trackerGame);
   trackerGameRef.current = trackerGame;
@@ -850,7 +854,9 @@ export default function App() {
     if (!activeTab) return;
     const area = (trackerGameRef.current.guideArea?.areas || []).find((a) => a.name === name);
     const story = area?.story?.trim() || '';
-    const place = { ...placeAfterMove(activeTab.place, name, story, true), checkedAt: Date.now() };
+    // "Yes" to an unsure check's suggestion: what it saw the player doing comes with it.
+    const seen = whereFor?.tabId === activeTab.id && whereFor.doing && samePlace(whereFor.suggestion, name) ? whereFor.doing : null;
+    const place = { ...placeAfterMove(activeTab.place, name, story, true), checkedAt: Date.now(), ...(seen ? { doing: seen } : {}) };
     setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place, lastActive: Date.now() } : t)));
     rememberGameProgress(activeTab, place);
     noteAreaChange(activeTab, activeTab.place?.name, name);
@@ -942,6 +948,7 @@ export default function App() {
           guideKey: trackerGameRef.current.guideKey || '',
           areas: guideAreas.map((a) => ({ name: a.name, story: a.story })),
           ...(auto ? { auto: true } : {}),
+          doing: true,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -957,11 +964,14 @@ export default function App() {
       // Older servers don't say "confident": a read was.
       const confident = data.confident === true || (data.confident === undefined && data.evidence === 'read');
       if (!confident) {
-        setWhereFor({ tabId: tab.id, suggestion: String(data.area) });
+        setWhereFor({ tabId: tab.id, suggestion: String(data.area), ...(data.doing && typeof data.doing === 'object' ? { doing: data.doing } : {}) });
         return;
       }
       const story = typeof data.story === 'string' ? data.story.trim() : '';
-      const place = { ...placeAfterMove(tab.place, String(data.area), story, data.evidence === 'read'), sure: true, checkedAt: Date.now() };
+      // What the player is doing, as the screen showed it (or nothing: an older "doing" in the same area is dropped).
+      const { doing: _oldDoing, ...moved } = placeAfterMove(tab.place, String(data.area), story, data.evidence === 'read');
+      const doing = data.doing && typeof data.doing === 'object' ? data.doing : null;
+      const place = { ...moved, sure: true, checkedAt: Date.now(), ...(doing ? { doing } : {}) };
       setWhereFor(null);
       setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, place, lastActive: Date.now() } : t)));
       rememberGameProgress(tab, place);
@@ -1095,6 +1105,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     ? buildLogView({ ...activeTab, place: logPlace }, heldPayload?.data || null, { gameKey: trackerKeyOfGame, accent: trackerAccent, loaded: guideSteps.section, labels: trackerWords, walk: trackerGame.guideArea && Array.isArray((trackerGame.guideArea.page as any)?.walkthrough)
         ? { slug: trackerGame.guideArea.slug, steps: (trackerGame.guideArea.page as any).walkthrough, done: trackerGame.guideArea.done }
         : null,
+        // What Locate me saw the player doing there: only that makes a guide step "Now".
+        doing: logPlace?.doing || null,
+        foes: trackerGame.guideArea?.page
+          ? { slug: trackerGame.guideArea.slug, list: [...(((trackerGame.guideArea.page as any).fights as Foe[]) || []), ...(((trackerGame.guideArea.page as any).enemies as Foe[]) || [])] }
+          : null,
         // The place isn't known (a game with a guide): "Where are you?", with what an unsure check or answer thought,
         // and where this playthrough was last time.
         where: !placeCurrent && trackerGame.areas.length
@@ -1166,7 +1181,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   }, [thinArea]);
   // The step the tick key acts on (next / prev move it): Now unless another step was picked.
   const [logSelPick, setLogSel] = useState<string | null>(null);
-  const logSteps = logView ? [logView.now, ...logView.next].filter((x): x is NonNullable<typeof x> => !!x && x.tick) : [];
+  const logSteps = logView ? [logView.now, ...logView.next, ...(logView.here?.items || [])].filter((x): x is NonNullable<typeof x> => !!x && x.tick) : [];
   const logSel = logSteps.some((x) => x.id === logSelPick) ? logSelPick : logSteps[0]?.id || null;
   const logSelRef = useRef(logSel);
   logSelRef.current = logSel;
@@ -1192,7 +1207,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           // The place isn't known: no place line and no guide lists, only the log's "Where are you?".
           ...(logView?.where ? { place: undefined, areas: undefined, sections: [] } : {}),
           log: logView
-            ? { now: logView.now, next: logView.next, watch: logView.watch, done: logView.done, pins: logView.pins.length, more: logView.more.length > 0, invite: logView.invite, sel: logSel || '', bookmark: logView.bookmark, ...(logView.where ? { where: logView.where } : {}) }
+            ? { now: logView.now, next: logView.next, watch: logView.watch, done: logView.done, pins: logView.pins.length, more: logView.more.length > 0, invite: logView.invite, sel: logSel || '', bookmark: logView.bookmark, ...(logView.where ? { where: logView.where } : {}), ...(logView.here ? { here: logView.here } : {}) }
             : null,
         } as TrackerData,
       }
@@ -2674,11 +2689,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           // (sure, checked now); an unsure one is only a suggestion ("Looks like X?").
           const answered = (name: string) => ({ name, confirmed: false, sure: !!g?.sure, ...(g?.sure ? { checkedAt: Date.now() } : {}) });
           // Same place with more or less detail ("South Figaro" vs "South Figaro, Relic Shop") counts as the same.
-          if (g && !place?.confirmed) place = { ...place, ...answered(g.name) };
+          if (g && !place?.confirmed) place = { ...dropDoingIfMoved(place, g.name), ...answered(g.name) };
           // The player moved on (the answer is about a different place than the confirmed one): switch to the new place,
           // unconfirmed, so "Known here" follows them and new facts aren't filed under the old place. The story point
           // usually carries over.
-          else if (g && place?.confirmed && !samePlace(g.name, place.name)) place = { ...place, ...answered(g.name) };
+          else if (g && place?.confirmed && !samePlace(g.name, place.name)) place = { ...dropDoingIfMoved(place, g.name), ...answered(g.name) };
           // The same confirmed place, said again by a sure answer: it's still where they are.
           else if (g?.sure && place?.confirmed) place = { ...place, checkedAt: Date.now() };
           if (g?.story && place && !place.storyConfirmed) place = { ...place, story: g.story, storyConfirmed: false };
@@ -3338,7 +3353,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 nearYou={compact && questLogVisible && questLogAttached ? null : nearYou}
                 logAttached={questLogAttached && (questLogVisible || questLogTucked)}
                 questLog={activeTab?.questLog}
-                compactLog={compact && (logView?.now || logView?.where) ? { view: logView, open: compactFold, onTick: (id) => tickLog(id, true), onToggle: toggleQuestLog, keysLabel: formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L'), onLocate: isDesktop ? () => runLocate(false) : undefined, onPickPlace: moveToArea, locateKeys: formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K') } : null}
+                compactLog={compact && (logView?.now || logView?.where || logView?.here) ? { view: logView, open: compactFold, onTick: (id) => tickLog(id, true), onToggle: toggleQuestLog, keysLabel: formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L'), onLocate: isDesktop ? () => runLocate(false) : undefined, onPickPlace: moveToArea, locateKeys: formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K') } : null}
                 onSetNow={isDesktop ? setLogNow : undefined}
                 onPinAnswer={isDesktop ? togglePin : undefined}
                 onDismissOffer={(id) => patchLog((st) => ({ hidden: [...new Set([...(st.hidden || []), `offer:${id}`])] }))}
@@ -3400,7 +3415,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 place={activeTab.place?.name || ''}
                 story={activeTab.place?.story || ''}
                 onPlace={(name, story) => {
-                  const next = { ...(activeTab.place || {}), name, confirmed: !!name, checkedAt: Date.now(), ...(story ? { story, storyConfirmed: true } : { story: undefined, storyConfirmed: false }) };
+                  const next = { ...dropDoingIfMoved(activeTab.place, name), name, confirmed: !!name, checkedAt: Date.now(), ...(story ? { story, storyConfirmed: true } : { story: undefined, storyConfirmed: false }) };
                   setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));
                   if (name) rememberGameProgress(activeTab, next);
                 }}

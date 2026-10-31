@@ -121,6 +121,7 @@ export function CompactCard(p: {
   // The place isn't known: "Where are you?" with Locate me (and "Looks like X?" when a check was unsure).
   const ask = p.log?.view.where && !now ? p.log.view.where : null;
   const whereLog = ask ? p.log! : null;
+  const here = !now && !ask ? p.log?.view.here || null : null;
   const box = (s: LogStep, small = false) => (
     <button
       type="button"
@@ -164,6 +165,15 @@ export function CompactCard(p: {
         title={`${t('tracker.logNext')} (${lg.keysLabel})`} aria-label={t('tracker.logNext')}
         className="flex-shrink-0 text-zinc-400 hover:text-white cursor-pointer">{lg.open ? '▾' : '▸'}</button>
     </div>
+  ) : here ? (
+    // The place is known but not what the player is doing: what's here, from the guide (no Now).
+    <button type="button" data-qc-log-here="" onClick={() => { playBlipSound(p.soundEnabled); (p.onNear || p.onExpand)?.(); }}
+      title={[t('tracker.inPlace', { place: here.place }), ...here.items.map((s) => s.text)].join('\n')}
+      className="min-w-0 flex items-center gap-1.5 text-left text-[12px] text-zinc-400 hover:text-zinc-200 cursor-pointer" style={noDrag}>
+      {here.missables.length ? <AlertTriangle className="w-3 h-3 text-amber-300 flex-shrink-0" aria-label={t('tracker.secMissable')} /> : <BookOpen className="w-3 h-3 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />}
+      <span className="flex-shrink-0 font-semibold text-zinc-300">{t('tracker.inPlace', { place: here.place })}</span>
+      {here.items[0] && <span className="truncate">{here.items[0].text}</span>}
+    </button>
   ) : p.objective ? (
     <button type="button" onClick={() => { playBlipSound(p.soundEnabled); (p.onObjective || p.onExpand)?.(); }} title={[p.objective.title, p.objective.step].filter(Boolean).join(' · ')} className="min-w-0 truncate text-left text-[12.5px] text-zinc-200 hover:text-white cursor-pointer" style={noDrag}>
       {p.objective.title && <span className="font-fantasy font-bold text-white">{p.objective.title}</span>}

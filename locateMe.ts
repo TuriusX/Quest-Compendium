@@ -1,8 +1,9 @@
 /**
  * "Locate me": POST /api/locate-me
- *   { imageBase64: "data:image/jpeg;base64,...", game: string, guideKey?: string, areas: [{ name, story }], auto?: boolean }
+ *   { imageBase64: "data:image/jpeg;base64,...", game: string, guideKey?: string, areas: [{ name, story }], auto?: boolean,
+ *     doing?: true (the app takes a suggestion from what the player is doing) }
  *   -> { area: string | "unknown", story: string, evidence: "read" | "guessed", seenText: string, confident: boolean,
- *        locatesLeft: number }
+ *        doing?: { objective, talkingTo, activity, names }, locatesLeft: number }
  *
  * The objectives tracker and the PlaceBar send a screenshot with the game's guide areas; the cheapest model picks the
  * area the player is in (only from that list) and a one-line story beat, and says whether it READ the place name on
@@ -15,6 +16,13 @@
  * journal, the surroundings. It says how sure it is: confident is a read the server checked, or "high" confidence. The
  * app uses only a confident answer and asks the player otherwise (never a guess: the quest log shows nothing from the
  * guide for a place the player may not be in). Low thinking and short area lines keep it to a fraction of a cent.
+ *
+ * The same check reads what the player is doing (owner, Oct 31 2026): the active quest or objective as written on screen
+ * (the journal's selected quest, an on-screen objective), who they're talking to, what's happening, and the names on
+ * screen (signs, characters, landmarks). The app matches them to the area's guide steps (questLogView.ts matchDoing):
+ * only a match makes a guide step "Now". Nothing is guessed: left out when the screen doesn't show it. When the place
+ * can't be told but what the player is doing fits one area only (a boss fought only there), that area comes back as an
+ * unsure suggestion (fromDoing) for the player to confirm.
  *
  * Automatic locates (auto: the app checks when a game starts, a tab is opened or switched to, and the player comes back
  * to the game) use the same allowance but stop at LOCATE_AUTO_DAILY (15) / LOCATE_AUTO_PREMIUM_DAILY (60), so the
@@ -34,6 +42,7 @@ import { logUsage, billedUsage } from './usage';
 import { isTestTraffic } from './testTraffic';
 import { matchGuideArea } from './src/utils/guideMatch';
 import { nameKey, samePlace, storyPhrase } from './src/utils/placeName';
+import { areaFromDoing } from './src/utils/questLogView';
 
 type GuideWithPages = { areas: { slug: string; name: string; story: string }[]; pages: Record<string, any> } | null;
 type Deps = {
@@ -66,7 +75,30 @@ export type LocateMeReply = {
   confidence: 'high' | 'medium' | 'low';
   /** What it went by: a place name read on screen, the map's marker, the quest journal, or the surroundings. */
   how: 'read' | 'map' | 'journal' | 'surroundings';
+  /** What the player is doing, as the screen shows it (left out when it shows nothing). */
+  doing?: LocateDoing;
 };
+export type LocateDoing = { objective?: string; talkingTo?: string; activity?: string; names?: string[] };
+
+/** The reply's "doing", tidied: short texts, empty parts left out, undefined when nothing was seen. */
+export function parseDoing(d: any): LocateDoing | undefined {
+  if (!d || typeof d !== 'object') return undefined;
+  const txt = (v: unknown, n: number) => {
+    // Lines on screen (a quest's name over its goal) stay apart: "Count Reuven's Treasure · Meet Sigi Reuven…".
+    const s = String(v ?? '').trim().replace(/\s*[\r\n]+\s*/g, ' · ').replace(/\s+/g, ' ');
+    return s && !/^(none|unknown|n\/a|empty|nothing|-)$/i.test(s) ? s.slice(0, n) : '';
+  };
+  const out: LocateDoing = {};
+  const objective = txt(d.objective, 140);
+  const talkingTo = txt(d.talkingTo, 60);
+  const activity = txt(d.activity, 80);
+  const names = (Array.isArray(d.names) ? d.names : []).map((x: unknown) => txt(x, 50)).filter(Boolean).slice(0, 8);
+  if (objective) out.objective = objective;
+  if (talkingTo) out.talkingTo = talkingTo;
+  if (activity) out.activity = activity;
+  if (names.length) out.names = names;
+  return Object.keys(out).length ? out : undefined;
+}
 
 /** The model's reply, checked against the list: an area name from it (exactly as listed), or "unknown". */
 export function parseLocateMeReply(text: string, areaNames: string[]): LocateMeReply {
@@ -81,6 +113,7 @@ export function parseLocateMeReply(text: string, areaNames: string[]): LocateMeR
   const seenText = String(parsed?.seenText ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
   const c = String(parsed?.confidence ?? '').toLowerCase();
   const how = String(parsed?.how ?? '').toLowerCase();
+  const doing = parseDoing(parsed?.doing);
   return {
     area,
     story: area === 'unknown' ? '' : String(parsed?.story ?? '').replace(/\s+/g, ' ').trim().slice(0, 100),
@@ -88,6 +121,7 @@ export function parseLocateMeReply(text: string, areaNames: string[]): LocateMeR
     seenText: area === 'unknown' ? '' : seenText,
     confidence: area !== 'unknown' && (c === 'high' || c === 'medium') ? c : 'low',
     how: how === 'read' || how === 'map' || how === 'journal' ? how : 'surroundings',
+    ...(doing ? { doing } : {}),
   };
 }
 
@@ -112,9 +146,16 @@ export function locateMePrompt(game: string, areas: { name: string; story: strin
     `"how": "read" when a place name is visibly written on screen (put that exact text in seenText), "map" for the map's ` +
     `player marker, "journal" for the quest journal, "surroundings" otherwise. "confidence": "high" only when the screen ` +
     `clearly shows this area and no other listed area fits; else "medium" or "low".\n` +
+    `Also say what the player is doing, only from what the screen shows (leave a part empty rather than guess): ` +
+    `"objective": the active quest or objective exactly as written on screen (the journal's selected quest and its ` +
+    `current goal, an on-screen objective or quest tracker); "talkingTo": the character in a dialogue, by the name shown; ` +
+    `"activity": what is happening, under 10 words ("in dialogue", "fighting a troll", "reading the map", "exploring a ` +
+    `market"); "names": up to 6 names on screen of what the player is dealing with (the character or boss in front of ` +
+    `them, a sign they're at, the active quest), not a map screen's labels or a list of other quests.\n` +
     `Reply with JSON only: {"area": "<a name from the list, or unknown>", "how": "read" | "map" | "journal" | ` +
     `"surroundings", "confidence": "high" | "medium" | "low", "evidence": "read" | "guessed", "seenText": "<the place ` +
-    `name as written on screen, or empty>", "story": "<where they are in the story, under 12 words>"}`
+    `name as written on screen, or empty>", "story": "<where they are in the story, under 12 words>", "doing": ` +
+    `{"objective": "", "talkingTo": "", "activity": "", "names": []}}`
   );
 }
 
@@ -225,6 +266,8 @@ export function registerLocateMe(app: Express, deps: Deps) {
       .filter((a: { name: string }) => a.name);
     if (!game || !areas.length) return res.status(400).json({ error: 'The game and its guide areas are required.' });
     const auto = req.body?.auto === true;
+    // Apps from 0.6.9 handle a suggestion from what the player is doing (older ones would take it as a guess).
+    const wantsDoing = req.body?.doing === true;
 
     // Today's allowance: its own, separate from questions.
     const user = (req as any).user || {};
@@ -278,12 +321,23 @@ export function registerLocateMe(app: Express, deps: Deps) {
           result.evidence = 'guessed';
         }
       }
+      // The place couldn't be told, but what the player is doing fits one area of the guide (a boss only fought there):
+      // offered as a suggestion ("Looks like Stormveil Castle?"), never set by itself.
+      let fromDoing = false;
+      if (wantsDoing && result.area === 'unknown' && result.doing) {
+        const guide = await deps.loadGuide(guideKey || game).catch(() => null);
+        const named = guide ? areaFromDoing(guide.areas, guide.pages, result.doing) : null;
+        if (named && areas.some((a) => a.name === named)) {
+          Object.assign(result, { area: named, confidence: 'medium', how: 'surroundings', evidence: 'guessed', seenText: '' });
+          fromDoing = true;
+        }
+      }
       // Counted once the check ran (an unreadable screenshot still costs a model call).
-      const confident = isConfident(result);
+      const confident = !fromDoing && isConfident(result);
       if (isGuest) guestCounts.set(uid, { day: today, used: used + 1 });
       else await deps.updateUserDoc(idToken, uid, { locateDate: today, locatesUsed: used + 1 }).catch(() => {});
       countForStats(uid, auto, confident, billedUsage(MODEL, response).tokenDollars);
-      return res.json({ ...result, confident, locatesLeft: Math.max(0, limit - used - 1) });
+      return res.json({ ...result, confident, ...(fromDoing ? { fromDoing: true } : {}), locatesLeft: Math.max(0, limit - used - 1) });
     } catch (err: any) {
       console.warn('[locate-me] failed:', err?.message);
       return res.status(502).json({ error: "Couldn't check the screenshot. Try again in a moment." });

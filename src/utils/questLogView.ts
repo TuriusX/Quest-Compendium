@@ -11,7 +11,7 @@
  * g:<area>:<id>. The docked log (components/QuestLog.tsx), the popped-out window (electron/tracker.html), the compact
  * card and the bookmark all draw this one view.
  */
-import type { ChatMessage, GameTab, QuestStep } from '../types';
+import type { ChatMessage, GameTab, PlaceDoing, QuestStep } from '../types';
 import type { TrackerData, TrackerItem, TrackerSection } from './trackerPayload';
 
 export type LogStep = {
@@ -34,7 +34,14 @@ export type LogNow = LogStep & {
   total: number;
   /** The answer it comes from (a question's objective). */
   msgId?: string;
+  /** A guide step picked by what Locate me saw the player doing: what matched ("Save Duke Ravengard", "Lucretious"). */
+  seen?: string;
 };
+/**
+ * "In <place> (from the guide)" (owner, Oct 31 2026): the place is known but not what the player is doing there, so no
+ * guide step is "Now": a short list of what's here and the area's missables (the guide's: never presented as complete).
+ */
+export type LogHere = { place: string; items: LogStep[]; missables: LogWatch[] };
 /** fromGuide: the guide's missable list (never presented as complete: "Missable here (from the guide)"). */
 export type LogWatch = { id: string; text: string; why?: string; fromGuide?: boolean };
 /**
@@ -51,6 +58,8 @@ export type LogView = {
   areas?: TrackerData['areas'];
   /** The place isn't known: the log asks instead of showing the guide. */
   where?: LogWhere;
+  /** The place is known but not what the player is doing: the guide's list for it, no Now. */
+  here?: LogHere;
   locating?: boolean;
   notice?: string;
   now: LogNow | null;
@@ -71,6 +80,8 @@ export type LogView = {
 };
 
 const NEXT_MAX = 3;
+/** "In <place> (from the guide)": how many of the area's parts it lists. */
+const HERE_MAX = 4;
 
 /** A short name for an answer: its quest title, else its first real line. */
 export function answerTitle(m: ChatMessage | undefined | null): string {
@@ -120,6 +131,10 @@ export function buildLogView(
     walk?: { slug: string; steps: { id: string; title: string; text?: string }[]; done: Set<string> } | null;
     /** The place isn't known (placeIsCurrent): no Now, Next or Watch out from the guide, only "Where are you?". */
     where?: LogWhere | null;
+    /** What Locate me saw the player doing (the place's doing): picks the walkthrough step for Now (matchDoing). */
+    doing?: PlaceDoing | null;
+    /** The area's fights and enemies (its page's fights and enemies): a fight on screen is Now (matchFoe). */
+    foes?: { slug: string; list: Foe[] } | null;
   },
 ): LogView | null {
   // Not knowing where the player is, nothing from the guide: never its start, never the last place of another save.
@@ -173,28 +188,48 @@ export function buildLogView(
   for (const it of noReturn?.items || []) watch.push({ id: it.id, text: it.label, why: it.where, fromGuide: true });
 
   // 3. Nothing chosen: the guide fills in for where the player is (marked "From the guide"), always as tasks, never
-  // the area's description: its walkthrough's next unticked step ("Reach the Giant-Conquering Hero's Grave: cross the
-  // narrow rock bridge…", ticked like the walkthrough), else its first unticked entries ("Get the Rusty Key").
+  // the area's description. Only what the player is seen doing makes a guide step "Now" (owner, Oct 31 2026: the area's
+  // first unticked step is often far behind them): the walkthrough step that matches the objective on screen, who
+  // they're talking to or the names on screen (matchDoing), from there on; the steps before it are behind them. Not
+  // knowing what they're doing: "In <place> (from the guide)", a short list of what's here and its missables, no Now.
+  let here: LogHere | undefined;
   if (!now && !done && (data || opts.walk)) {
-    const walkOpen = (opts.walk?.steps || []).filter((st) => st.title && !opts.walk!.done.has(`walk:${st.id}`));
-    if (walkOpen.length) {
-      const steps = walkOpen.slice(0, 1 + NEXT_MAX).map((st): LogStep => {
+    const placeName = data?.place?.name || '';
+    const walkSteps = (opts.walk?.steps || []).filter((st) => st.title);
+    const isOpen = (st: { id: string }) => !opts.walk!.done.has(`walk:${st.id}`);
+    const at = matchDoing(walkSteps, opts.doing, placeName, data?.areas?.names);
+    const from = at ? walkSteps.slice(at.index).filter(isOpen) : [];
+    if (at && from.length) {
+      const steps = from.slice(0, 1 + NEXT_MAX).map((st): LogStep => {
         const t = taskOf(st.title, st.text || '');
         return { id: `w:${opts.walk!.slug}:${st.id}`, text: t.text, sub: t.sub, detail: st.text || undefined, done: false, tick: true };
       });
-      now = { ...steps[0], source: 'guide', goal: data?.place?.name || '', doneCount: 0, total: 0 };
+      now = { ...steps[0], source: 'guide', goal: placeName, doneCount: 0, total: 0, seen: at.matched };
       next = steps.slice(1);
-    } else {
-      const open = (more.find((x) => x.id === 'collect')?.items || []).filter((it) => !it.done && it.tick);
+    }
+    // A fight on screen (most guides list each area's bosses and enemies, few have a walkthrough): "Defeat X".
+    const foe = now ? null : matchFoe(opts.foes?.list || [], opts.doing);
+    if (foe) {
+      const how = foe.tactics || foe.notes || foe.weaknesses || '';
+      now = {
+        id: `f:${opts.foes!.slug}:${foe.id}`, text: (opts.labels?.logDefeat || 'Defeat {name}').replace('{name}', foe.name),
+        ...(how ? { sub: clip(how, 110), detail: how } : {}), done: false, tick: false,
+        source: 'guide', goal: placeName, doneCount: 0, total: 0, seen: foe.name,
+      };
+    }
+    if (!now) {
+      const walkOpen = walkSteps.filter(isOpen);
       const get = (it: TrackerItem): LogStep => {
         const st = itemStep(it);
         // An item or a chest's contents: "Get the Rusty Key" (a secret or a checklist line is a task already).
         return it.icon === 'item' || it.icon === 'chest' ? { ...st, text: (opts.labels?.logGetItem || 'Get {item}').replace('{item}', st.text) } : st;
       };
-      if (open.length) {
-        now = { ...get(open[0]), source: 'guide', goal: data?.place?.name || '', doneCount: 0, total: 0 };
-        next = open.slice(1, NEXT_MAX).map(get);
-      }
+      // What's here: the walkthrough's parts by their titles ("Circus of the Last Days"), else the first entries.
+      const items: LogStep[] = walkOpen.length
+        ? walkOpen.slice(0, HERE_MAX).map((st) => ({ id: `w:${opts.walk!.slug}:${st.id}`, text: clip(st.title, 70), detail: st.text || undefined, done: false, tick: true }))
+        : (more.find((x) => x.id === 'collect')?.items || []).filter((it) => !it.done && it.tick).slice(0, HERE_MAX).map(get);
+      const missables = watch.filter((w) => w.fromGuide && !hidden.has(w.id)).slice(0, 3);
+      if (items.length || missables.length) here = { place: placeName, items, missables };
     }
   }
 
@@ -216,7 +251,9 @@ export function buildLogView(
     ...(data?.notice ? { notice: data.notice } : {}),
     now,
     next,
-    watch: watch.find((w) => !hidden.has(w.id)) || null,
+    // In the guide's list for the place, its missables are listed there.
+    watch: (here ? null : watch.find((w) => !hidden.has(w.id))) || null,
+    ...(here ? { here } : {}),
     pins,
     more,
     invite,
@@ -291,6 +328,133 @@ export function taskOf(title: string, text: string): { text: string; sub?: strin
 /** A short stable id from a name. */
 function nameId(s: string): string {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+}
+
+// Words that say nothing about which step it is ("Find a way into the prison" → prison).
+const FILLER = new Set(('the and for with from into onto your you his her their its this that these those there here then than '
+  + 'are was were has have had will can not but all any some one two out off over under way about what when where who how why '
+  + 'them they she our quest quests objective optional main side part chapter act').split(' '));
+/** A name as read off the screen, for showing: a game's all-capitals name in ordinary capitals ("LUCRETIOUS" → "Lucretious"). */
+const shownName = (s: string) => (/\p{Ll}/u.test(s) || s.length < 4 ? s : s.toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (_m, a: string, c: string) => a + c.toUpperCase()));
+
+/**
+ * The one area of the guide where what the player is doing fits (a walkthrough step or a fight there), for when Locate
+ * me couldn't tell the place from the screen (a boss fight in a hall that looks like many): a suggestion the player
+ * confirms ("Looks like Stormveil Castle?"), never the place by itself. Null when no area or several fit.
+ */
+export function areaFromDoing(
+  areas: { slug: string; name: string }[],
+  pages: Record<string, { walkthrough?: { title: string; text?: string }[]; fights?: Foe[]; enemies?: Foe[] } | null | undefined>,
+  doing: PlaceDoing | null | undefined,
+): string | null {
+  if (!doing) return null;
+  const names = areas.map((a) => a.name);
+  const hits = areas.filter((a) => {
+    const page = pages[a.slug];
+    if (!page) return false;
+    const steps = (page.walkthrough || []).filter((st) => st?.title);
+    return !!matchDoing(steps, doing, a.name, names) || !!matchFoe([...(page.fights || []), ...(page.enemies || [])], doing);
+  });
+  return hits.length === 1 ? hits[0].name : null;
+}
+
+/** Lower case, letters and digits only, single spaces (quotes dropped: "Arfur's" → "arfurs"). */
+const normWords = (s: string) =>
+  String(s || '').toLowerCase().replace(/['’‘`]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+const words = (s: string) => {
+  const out = new Set<string>();
+  for (const w of normWords(s).split(' ')) if (w.length >= 3 && !FILLER.has(w) && !TASK_VERBS.has(w)) out.add(w);
+  return out;
+};
+
+/** An area's fight or enemy in the guide (its page's fights and enemies). */
+export type Foe = { id: string; name: string; notes?: string; tactics?: string; weaknesses?: string };
+
+/**
+ * The fight on screen, from what Locate me saw (owner, Oct 31 2026): an enemy or fight of the area named in the
+ * activity ("fighting Margit, the Fell Omen"), or named on screen or as the one in front of the player while the
+ * activity or objective is a fight ("fighting a boss", "Defeat …"). Names of 4 letters or more, whole words.
+ */
+export function matchFoe(foes: Foe[], doing: PlaceDoing | null | undefined): Foe | null {
+  if (!doing || !foes.length) return null;
+  const activity = ` ${normWords(doing.activity || '')} `;
+  const fighting = /\b(fight|fighting|battle|battling|boss|combat|duel|duelling|dueling|attacking|attacked)\b/.test(activity) || /\b(defeat|kill|slay|beat)\b/i.test(doing.objective || '');
+  const seen = ` ${[doing.talkingTo, ...(doing.names || []), doing.objective].map((x) => normWords(x || '')).join(' | ')} `;
+  // Longest name first: "Margit, the Fell Omen" before "Margit".
+  const sorted = foes.filter((f) => f?.name && normWords(f.name).length >= 4).sort((a, b) => b.name.length - a.name.length);
+  for (const f of sorted) {
+    const n = ` ${normWords(f.name)} `;
+    if (activity.includes(n) || (fighting && seen.includes(n))) return f;
+  }
+  return null;
+}
+
+/**
+ * Which walkthrough step the player is at, from what Locate me saw them doing (owner, Oct 31 2026): the objective on
+ * screen (its words, 2 each), who they're talking to (4; their first or last name alone, 2), the names on screen (signs,
+ * characters, landmarks: 3, or 2 for a short one) and the activity's words (1). A clue counts fully in one step, less in
+ * two, half in up to half the steps, and not at all in more (the area's own name is in most of them). The best step
+ * needs 3 or more (on a tie, the earlier one: never skip steps on a guess). matched: what it shows as the reason ("On
+ * your screen: …"): the objective when it matched, else who they're talking to, else the name. Null when nothing fits well enough: then no guide step is "Now".
+ */
+export function matchDoing(
+  steps: { title: string; text?: string }[],
+  doing: PlaceDoing | null | undefined,
+  place = '',
+  /** The guide's other areas: a place name says where, not what the player is doing. */
+  otherPlaces: string[] = [],
+): { index: number; matched: string } | null {
+  if (!doing || !steps.length) return null;
+  const hay = steps.map((st) => ` ${normWords(`${st.title} ${st.text || ''}`)} `);
+  const placeWords = words(place);
+  const placeKey = normWords(place);
+  const places = new Set(otherPlaces.map(normWords));
+  // A map screen's labels are where things are, not what the player is doing.
+  const onMap = /\b(map|maps)\b/.test(normWords(doing.activity || ''));
+  const rarity = (phrase: string) => {
+    const n = hay.filter((h) => h.includes(` ${phrase} `)).length;
+    return n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 0.75 : n <= steps.length / 2 ? 0.5 : 0;
+  };
+  // Each clue: the phrase looked for, its weight, and the text shown for it.
+  const clues: { phrase: string; weight: number; label: string; rank: number }[] = [];
+  const objective = doing.objective || '';
+  for (const w of words(objective)) if (!placeWords.has(w)) clues.push({ phrase: w, weight: 2, label: objective, rank: 3 });
+  const who = normWords(doing.talkingTo || '');
+  if (who && who !== placeKey) {
+    clues.push({ phrase: who, weight: 4, label: doing.talkingTo!, rank: 2 });
+    const parts = who.split(' ').filter((w) => w.length >= 4 && !FILLER.has(w));
+    if (parts.length > 1) for (const w of parts) clues.push({ phrase: w, weight: 2, label: doing.talkingTo!, rank: 2 });
+  }
+  for (const name of onMap ? [] : doing.names || []) {
+    const n = normWords(name);
+    if (!n || n === placeKey || placeWords.has(n) || places.has(n) || clues.some((c) => c.phrase === n)) continue;
+    clues.push({ phrase: n, weight: n.includes(' ') || n.length >= 6 ? 3 : 2, label: name, rank: 1 });
+  }
+  for (const w of words(doing.activity || '')) if (!placeWords.has(w) && !clues.some((c) => c.phrase === w)) clues.push({ phrase: w, weight: 1, label: '', rank: 0 });
+  if (!clues.length) return null;
+  const weights = clues.map((c) => c.weight * rarity(c.phrase));
+  let best = -1;
+  let bestScore = 0;
+  let bestLabel = '';
+  hay.forEach((h, i) => {
+    let score = 0;
+    let top = 0;
+    let label = '';
+    clues.forEach((c, j) => {
+      if (!weights[j] || !h.includes(` ${c.phrase} `)) return;
+      score += weights[j];
+      if (c.label && c.rank > top) {
+        top = c.rank;
+        label = c.label;
+      }
+    });
+    if (score > bestScore) {
+      best = i;
+      bestScore = score;
+      bestLabel = label;
+    }
+  });
+  return best >= 0 && bestScore >= 3 ? { index: best, matched: shownName(bestLabel) } : null;
 }
 
 /**

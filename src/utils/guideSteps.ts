@@ -11,7 +11,8 @@ import type { ChatMessage, GameTab } from '../types';
  * (utils/guideProgress, synced with the account): a quest page's under "quest:<slug>", a walkthrough's under its area as
  * "walk:<step id>".
  *
- * Matching (no AI): the quest's name in the tracked answer's title or text, or the player's story point (whole
+ * Matching (no AI): the quest's name in the tracked answer's title or text, the player's story point or the objective
+ * Locate me saw on screen (whole
  * words, longest name first); otherwise a step title of the current area's walkthrough in the answer's title.
  */
 
@@ -41,6 +42,8 @@ export function questTexts(tab: GameTab | null | undefined, msg: ChatMessage | n
     for (let j = i - 1; j >= 0 && tab; j--) if (tab.messages[j].role === 'user') { out.push(tab.messages[j].text || ''); break; }
   }
   if (tab?.place?.story) out.push(tab.place.story);
+  // The objective Locate me saw on screen (the journal's quest, an on-screen objective).
+  if (tab?.place?.doing?.objective) out.push(tab.place.doing.objective);
   return out.filter(Boolean);
 }
 

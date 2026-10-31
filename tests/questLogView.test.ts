@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/questLogView.test.ts)
 import assert from "node:assert/strict";
-import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState, taskOf, placeIsCurrent } from "../src/utils/questLogView";
+import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState, taskOf, placeIsCurrent, matchDoing, matchFoe, areaFromDoing } from "../src/utils/questLogView";
 import { missablesThin, missableCount } from "../src/utils/missablesCheck";
 import type { TrackerData } from "../src/utils/trackerPayload";
 import { mergeTabState, sanitizeTabsForCloud } from "../src/hooks/tabMerge";
@@ -50,8 +50,10 @@ const walk = {
   ],
 };
 
-test("nothing set as Now: the guide fills in with its walkthrough's next step as a task (ticked like the walkthrough), never the area's description", () => {
-  const v = buildLogView(tab(), guide, { ...opts, walk })!;
+test("nothing set as Now, the player seen at a walkthrough step: Now is that step as a task (ticked like the walkthrough), never the area's description", () => {
+  const v = buildLogView(tab(), guide, { ...opts, walk, doing: { names: ["Zamor Ruins"], activity: "crossing a rock bridge" } })!;
+  assert.equal(v.now?.seen, "Zamor Ruins", "what on screen picked it");
+  assert.equal(v.here, undefined);
   assert.equal(v.now?.source, "guide");
   assert.equal(v.now?.id, "w:stormveil-castle:w2", "the walkthrough's own tick");
   assert.equal(v.now?.tick, true);
@@ -61,12 +63,81 @@ test("nothing set as Now: the guide fills in with its walkthrough's next step as
   assert.ok(![v.now?.text, ...v.next.map((s) => s.text)].includes(guide.quest), "not the story line");
 });
 
-test("without a walkthrough: the guide's unticked entries, items as \"Get …\"", () => {
+test("not knowing what the player is doing: no Now from the guide, \"In <place> (from the guide)\": what's here and its missables", () => {
+  const v = buildLogView(tab(), guide, { ...opts, walk })!;
+  assert.equal(v.now, null, "never the area's first unticked step");
+  assert.deepEqual(v.next, []);
+  assert.equal(v.here?.place, "Stormveil Castle");
+  assert.deepEqual(v.here?.items.map((s) => s.text), ["Southwestern Cliffs and Tombs", "Cross the Bridge and Claim the Bat", "The Secluded Cell"], "the walkthrough's parts not ticked yet, by title");
+  assert.equal(v.here?.items[0].id, "w:stormveil-castle:w2", "ticked like the walkthrough");
+  assert.deepEqual(v.here?.missables.map((m) => m.text), ["Talk to Gostoc"]);
+  assert.equal(v.watch, null, "the missable is in the list, not twice");
+  // Doing seen, but nothing in the guide fits: the same.
+  assert.equal(buildLogView(tab(), guide, { ...opts, walk, doing: { activity: "in dialogue" } })!.now, null);
+});
+
+test("the matched step is ticked already: Now is the next open one after it, never one behind", () => {
+  const w = { ...walk, done: new Set(["walk:w1", "walk:w2"]) };
+  const v = buildLogView(tab(), guide, { ...opts, walk: w, doing: { names: ["Zamor Ruins"] } })!;
+  assert.equal(v.now?.id, "w:stormveil-castle:w3");
+  const n = buildLogView(tab(), guide, { ...opts, walk, doing: { talkingTo: "Nepheli Loux" } })!;
+  assert.equal(n.now?.id, "w:stormveil-castle:w4", "the steps before it are behind the player");
+  assert.deepEqual(n.next, []);
+});
+
+test("which step: the objective on screen, who they're talking to, names on screen; weak or common clues don't count", () => {
+  const steps = [
+    { title: "Arrival and Refugee Camp", text: "As you journey north from Reithwin Town into Rivington, inspect the small camp near your initial descent." },
+    { title: "Arfur's Mansion", text: "Follow the road north to Arfur's Mansion in Rivington, where Arfur Gregorio argues with Ben Golewits." },
+    { title: "Circus of the Last Days", text: "Make your way to the Circus of the Last Days in Rivington, where the necromancer Lucretious manages a troupe." },
+    { title: "Rivington General and Angleiron's Cellar", text: "Visit Rivington General to browse wares, then seek out the blacksmith Gyldro Angleiron." },
+  ];
+  assert.deepEqual(matchDoing(steps, { talkingTo: "Lucretious", activity: "in dialogue" }, "Rivington"), { index: 2, matched: "Lucretious" });
+  assert.deepEqual(matchDoing(steps, { names: ["Rivington General"] }, "Rivington"), { index: 3, matched: "Rivington General" });
+  assert.deepEqual(matchDoing(steps, { objective: "Help Arfur Gregorio reclaim his mansion" }, "Rivington")?.index, 1);
+  assert.equal(matchDoing(steps, { names: ["Rivington"], activity: "walking down a street" }, "Rivington"), null, "the area's own name is in every step");
+  assert.equal(matchDoing(steps, { activity: "in dialogue" }, "Rivington"), null);
+  assert.equal(matchDoing(steps, { objective: "Find the camp" }, "Rivington"), null, "one common word isn't enough");
+  assert.equal(matchDoing(steps, null), null);
+});
+
+test("a place name or a map screen's labels aren't what the player is doing; a boss fought in one area only suggests it", () => {
+  const steps = [
+    { title: "Gaining Entry at the Main Gate", text: "Approach from Rivington to the circus gate, where Lucretious greets you." },
+    { title: "The Fortune Teller", text: "Inside, visit Mystic Carrion's tent and the fortune teller." },
+    { title: "The Hall of Wonders", text: "Head on to the Hall of Wonders past the stage." },
+  ];
+  assert.equal(matchDoing(steps, { names: ["Rivington"] }, "Circus of the Last Days", ["Rivington", "Circus of the Last Days"]), null, "another area's name");
+  assert.equal(matchDoing(steps, { activity: "reading the map", names: ["Hall of Wonders"] }, "Circus of the Last Days"), null, "a label on the map");
+  assert.equal(matchDoing(steps, { activity: "exploring", names: ["Hall of Wonders"] }, "Circus of the Last Days")?.index, 2);
+  const areas = [{ slug: "limgrave", name: "Limgrave" }, { slug: "stormveil", name: "Stormveil Castle" }, { slug: "liurnia", name: "Liurnia" }];
+  const pages = {
+    limgrave: { enemies: [{ id: "e1", name: "Tree Sentinel" }] },
+    stormveil: { enemies: [{ id: "e2", name: "Grafted Scion" }], walkthrough: [{ title: "The Scion's Dining Hall", text: "Defeat the Grafted Scion in the banquet hall." }] },
+    liurnia: null,
+  };
+  assert.equal(areaFromDoing(areas, pages, { activity: "fighting Grafted Scion", names: ["Grafted Scion"] }), "Stormveil Castle");
+  assert.equal(areaFromDoing(areas, { ...pages, liurnia: { enemies: [{ id: "e3", name: "Grafted Scion" }] } }, { activity: "fighting Grafted Scion" }), null, "fought in two areas: no suggestion");
+  assert.equal(areaFromDoing(areas, pages, { activity: "in a menu" }), null);
+});
+
+test("a fight on screen (guides without a walkthrough): Now is \"Defeat X\", only when it's a fight", () => {
+  const foes = [{ id: "e1", name: "Margit, the Fell Omen", tactics: "Roll into his delayed swings." }, { id: "e2", name: "Margit" }, { id: "e3", name: "Godrick Soldier" }];
+  assert.equal(matchFoe(foes, { activity: "fighting Margit, the Fell Omen" })?.id, "e1", "the longest name first");
+  assert.equal(matchFoe(foes, { activity: "boss fight", names: ["Margit, the Fell Omen"] })?.id, "e1");
+  assert.equal(matchFoe(foes, { activity: "talking", names: ["Margit, the Fell Omen"] }), null, "a name on screen isn't a fight");
+  const v = buildLogView(tab(), guide, { ...opts, labels: { logDefeat: "Defeat {name}" }, foes: { slug: "limgrave", list: foes }, doing: { activity: "fighting Margit, the Fell Omen" } })!;
+  assert.equal(v.now?.text, "Defeat Margit, the Fell Omen");
+  assert.equal(v.now?.sub, "Roll into his delayed swings.");
+  assert.equal(v.now?.tick, false);
+  assert.equal(v.here, undefined);
+});
+
+test("without a walkthrough, nothing seen: what's here is the guide's unticked entries, items as \"Get …\"", () => {
   const v = buildLogView(tab(), guide, { ...opts, labels: { logGetItem: "Get {item}" } })!;
-  assert.equal(v.now?.source, "guide");
-  assert.equal(v.now?.text, "Secluded Cell grace");
-  assert.deepEqual(v.next.map((s) => s.text), ["Get Golden Seed", "Smithing Stone"]);
-  assert.equal(v.watch?.text, "Talk to Gostoc", "the area's missable is the Watch out");
+  assert.equal(v.now, null);
+  assert.deepEqual(v.here?.items.map((s) => s.text), ["Secluded Cell grace", "Get Golden Seed", "Smithing Stone"]);
+  assert.equal(v.here?.missables[0]?.text, "Talk to Gostoc", "the area's missable is listed with it");
   assert.equal(v.invite, false, "something was asked");
   assert.ok(!v.more.some((x) => x.id === "answer"), "the answer's old section is gone; the guide's lists are behind Show more");
   assert.equal(v.bookmark, 4, "unticked entries here");
@@ -183,8 +254,10 @@ test("place unknown: no Now, Next or Watch out from the guide (never its start),
 
 test("the guide's missables are labelled as the guide's (never a complete list)", () => {
   const v = buildLogView({ id: "t", name: "Elden Ring", messages: [] } as any, guide, { ...opts })!;
-  assert.equal(v.watch?.text, "Talk to Gostoc");
-  assert.equal(v.watch?.fromGuide, true);
+  assert.equal(v.here?.missables[0]?.text, "Talk to Gostoc");
+  assert.equal(v.here?.missables[0]?.fromGuide, true);
+  const q = buildLogView({ id: "t", name: "Elden Ring", messages: [answer()], questLog: { now: "a1" } } as any, guide, { ...opts })!;
+  assert.ok(q.watch, "with the player's objective: one Watch out");
 });
 
 test("a thin missable list: none in 5+ things, one in 10+, under 12% in 20+; a small area isn't", () => {

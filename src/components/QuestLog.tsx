@@ -271,6 +271,12 @@ export function QuestLog(p: QuestLogProps) {
                   {details(n)}
                 </button>
               </div>
+              {n.seen && (
+                <div data-qc-log-seen="" className="mt-2 flex items-center gap-1.5 text-[11.5px] text-zinc-500 min-w-0">
+                  <Crosshair className="w-3 h-3 flex-shrink-0 text-[var(--accent-color)]" />
+                  <span className="truncate">{t('tracker.seenOnScreen', { what: n.seen })}</span>
+                </div>
+              )}
               {n.total > 0 && (
                 <div className="flex items-center gap-2 mt-2.5 text-[11px] font-mono font-bold text-zinc-400 whitespace-nowrap">
                   <span className="flex gap-[3px]">
@@ -311,6 +317,49 @@ export function QuestLog(p: QuestLogProps) {
           </div>
         )}
 
+        {/* The place is known but not what the player is doing: what's here, from the guide, and no Now. */}
+        {v.here && !n && (
+          <div data-qc-log-here="">
+            {label(t('tracker.inPlace', { place: v.here.place }))}
+            <p className="-mt-0.5 mb-2 text-[12px] text-zinc-500 leading-snug">{t('tracker.hereSub')}</p>
+            {v.here.items.length > 0 && (
+              <div className="flex flex-col gap-0.5">
+                {v.here.items.map((s) => (
+                  <div key={s.id} className={`flex gap-2.5 items-start px-2 py-1 rounded ${p.sel === s.id ? 'bg-white/[0.04] outline outline-1 outline-white/[0.14]' : ''}`}>
+                    {tickBtn(s)}
+                    <button type="button" onClick={() => setOpenId((o) => (o === s.id ? null : s.id))} className="text-left min-w-0 outline-none focus-visible:underline">
+                      <div className="text-[13.5px] leading-snug text-zinc-200">{s.text}</div>
+                      {s.sub && <div className="text-[12px] text-zinc-500 mt-px">{s.sub}</div>}
+                      {details(s)}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {v.here.missables.length > 0 && (
+              <div className="mt-2 rounded-md border border-amber-300/35 bg-amber-300/[0.07] px-3 py-2">
+                <div className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] font-mono text-amber-300/90">{t('tracker.secMissable')}</div>
+                <ul className="flex flex-col gap-1">
+                  {v.here.missables.map((m) => (
+                    <li key={m.id} className="flex gap-2 items-start text-[12.5px] leading-snug text-[#f3e6c8] min-w-0">
+                      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-amber-300" />
+                      <span className="min-w-0"><b className="text-amber-300 font-semibold">{m.text}</b>{m.why && m.why !== m.text ? <> · {m.why}</> : null}</span>
+                      <button type="button" onClick={() => p.onHideWatch(m.id)} title={t('tracker.logHideWatch')} aria-label={t('tracker.logHideWatch')}
+                        className="ml-auto self-start text-amber-300/70 hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white rounded"><X className="w-3 h-3" /></button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
+              {[t('tracker.logQuick1'), t('tracker.logQuick2')].map((q) => (
+                <button key={q} type="button" onClick={() => p.onAsk(q)}
+                  className="px-2 py-1 rounded border border-white/15 bg-[#121119] text-[12px] font-mono text-zinc-300 hover:border-[var(--accent-border)] hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white">{q}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {v.watch && (
           <div>
             {label(t('tracker.logWatch'), v.watch.fromGuide ? <span className="ml-auto normal-case tracking-normal font-sans font-semibold text-[11px] text-amber-300/70">{t('tracker.secMissable')}</span> : undefined, true)}
@@ -326,7 +375,7 @@ export function QuestLog(p: QuestLogProps) {
           </div>
         )}
 
-        {!n && !v.done && !v.invite && !w && !v.next.length && !v.watch && <div className="text-[12.5px] text-zinc-500">{t('tracker.logEmpty')}</div>}
+        {!n && !v.done && !v.invite && !w && !v.here && !v.next.length && !v.watch && <div className="text-[12.5px] text-zinc-500">{t('tracker.logEmpty')}</div>}
 
         {/* Pins and the guide: folded until asked for. */}
         <div className="mt-auto flex flex-col">

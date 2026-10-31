@@ -103,14 +103,14 @@ export type TrackerGuideArea = {
 const LABEL_KEYS = [
   'title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'awayEdge', 'size',
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
-  'locatingBig', 'whereTitle', 'whereSub', 'whereLooksLike', 'whereYes', 'whereNo', 'whereLast', 'whereStill', 'wherePick', 'youreIn', 'change',
+  'locatingBig', 'whereTitle', 'whereSub', 'whereLooksLike', 'whereYes', 'whereNo', 'whereLast', 'whereStill', 'wherePick', 'youreIn', 'change', 'inPlace', 'hereSub', 'seenOnScreen',
   'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'secBattle', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
   'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt', 'look', 'shownOf', 'hintOpen', 'hintOpenNoKeys',
   'attach', 'popOut', 'attachOffer', 'attachYes', 'padHint', 'tuckIn', 'slideOut',
   'logNow', 'logNext', 'logWatch', 'logFromGuide', 'logFromQuestion', 'logShowMore', 'logShowLess', 'logPinned', 'logDone', 'logWhatsNext',
-  'logInvite', 'logInviteSub', 'logAsk', 'logUndo', 'logTicked', 'logHideWatch', 'putBack', 'logProgress', 'logTick', 'logTitle', 'logGetItem',
+  'logInvite', 'logInviteSub', 'logAsk', 'logUndo', 'logTicked', 'logHideWatch', 'putBack', 'logProgress', 'logTick', 'logTitle', 'logGetItem', 'logDefeat',
 ] as const;
 export const trackerLabels = (t: (key: string) => string): Record<string, string> =>
   Object.fromEntries(LABEL_KEYS.map((k) => [k, t(`tracker.${k}`)]));

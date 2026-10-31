@@ -471,11 +471,18 @@ function cleanLog(lg) {
   const str = (v, n) => String(v || '').slice(0, n);
   const step = (x) => (x && x.id ? { id: str(x.id, 200), text: clip(x.text, 200), sub: clip(x.sub, 140), tick: !!x.tick } : null);
   const now = lg.now ? { ...step(lg.now), source: ['question', 'loaded', 'guide'].includes(lg.now.source) ? lg.now.source : 'guide', goal: clip(lg.now.goal, 120),
-    doneCount: Math.max(0, Math.min(99, Number(lg.now.doneCount) || 0)), total: Math.max(0, Math.min(99, Number(lg.now.total) || 0)) } : null;
+    doneCount: Math.max(0, Math.min(99, Number(lg.now.doneCount) || 0)), total: Math.max(0, Math.min(99, Number(lg.now.total) || 0)),
+    ...(lg.now.seen ? { seen: clip(lg.now.seen, 140) } : {}) } : null;
+  const watchOf = (x) => (x && x.id ? { id: str(x.id, 200), text: clip(x.text, 200), why: clip(x.why, 300), fromGuide: !!x.fromGuide } : null);
   return {
     now: now && now.id ? now : null,
     next: (Array.isArray(lg.next) ? lg.next : []).slice(0, 3).map(step).filter(Boolean),
-    watch: lg.watch && lg.watch.id ? { id: str(lg.watch.id, 200), text: clip(lg.watch.text, 200), why: clip(lg.watch.why, 300), fromGuide: !!lg.watch.fromGuide } : null,
+    watch: watchOf(lg.watch),
+    // "In <place> (from the guide)" (the place is known, not what the player is doing): what's here and its missables.
+    here: lg.here && typeof lg.here === 'object'
+      ? { place: clip(lg.here.place, 80), items: (Array.isArray(lg.here.items) ? lg.here.items : []).slice(0, 6).map(step).filter(Boolean),
+        missables: (Array.isArray(lg.here.missables) ? lg.here.missables : []).slice(0, 3).map(watchOf).filter(Boolean) }
+      : null,
     // "Where are you?" (the place isn't known): Locate me, an unsure check's suggestion, last time's place, the areas.
     where: lg.where && typeof lg.where === 'object'
       ? { locating: !!lg.where.locating, suggestion: clip(lg.where.suggestion, 80), last: clip(lg.where.last, 80), areas: (Array.isArray(lg.where.areas) ? lg.where.areas : []).slice(0, 200).map((a) => clip(a, 80)).filter(Boolean) }
@@ -499,13 +506,13 @@ function cleanDetail(d) {
 
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
 const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
-  'locatingBig', 'whereTitle', 'whereSub', 'whereLooksLike', 'whereYes', 'whereNo', 'whereLast', 'whereStill', 'wherePick', 'youreIn', 'change',
+  'locatingBig', 'whereTitle', 'whereSub', 'whereLooksLike', 'whereYes', 'whereNo', 'whereLast', 'whereStill', 'wherePick', 'youreIn', 'change', 'inPlace', 'hereSub', 'seenOnScreen',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
   'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt', 'look', 'shownOf', 'hintOpen', 'hintOpenNoKeys',
   'attach', 'popOut', 'attachOffer', 'attachYes', 'padHint', 'tuckIn', 'slideOut',
   'logNow', 'logNext', 'logWatch', 'logFromGuide', 'logFromQuestion', 'logShowMore', 'logShowLess', 'logPinned', 'logDone', 'logWhatsNext',
-  'logInvite', 'logInviteSub', 'logAsk', 'logUndo', 'logTicked', 'logHideWatch', 'putBack', 'logProgress', 'logTick', 'logTitle', 'logGetItem',
+  'logInvite', 'logInviteSub', 'logAsk', 'logUndo', 'logTicked', 'logHideWatch', 'putBack', 'logProgress', 'logTick', 'logTitle', 'logGetItem', 'logDefeat',
 ];
 function cleanLabels(labels) {
   const out = {};
