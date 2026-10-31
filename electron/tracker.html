@@ -494,7 +494,7 @@
     empty: 'Nothing to track here yet', secAnswer: 'From your last answer', secMissable: 'Missable here (from the guide)',
     locatingBig: 'Looking at your screen…', whereTitle: 'Where are you?', whereSub: 'Locate me looks at your screen (the map, your journal, place names) to find where you are in the guide.',
     whereLooksLike: 'Looks like {place}?', whereYes: 'Yes', whereNo: 'No', whereLast: 'Last time: {place}', whereStill: 'Still here', wherePick: "Pick from the guide's areas",
-    inPlace: 'In {place} (from the guide)', hereSub: "What you're doing here isn't clear yet. Ask a question, or press Locate me with your journal or objective on screen.", seenOnScreen: 'On your screen: {what}',
+    inPlace: 'In {place} (from the guide)', hereSub: "What you're doing here isn't clear yet. Ask a question, or press Locate me with your journal or objective on screen.", seenOnScreen: 'On your screen: {what}', fromGuideStep: 'From the guide: {step}',
     secNoReturn: 'Point of no return', secCollect: 'To collect', secAch: 'Achievements here', more: '+{n} more',
     next: 'Next: {area}', closest: 'From the guide: {area} (closest match)', showHidden: 'Show {n} hidden', hideEntry: 'Hide',
     limitHint: 'Click: show 3, 6 or all', prevArea: 'Previous area', nextArea: 'Next area', areaList: 'All areas in the guide',
@@ -642,7 +642,7 @@
       const mine = n.source === 'question';
       const prog = n.total ? `<div class="lprog">${Array.from({ length: Math.min(n.total, 12) }, (_, i) => `<i${i < n.doneCount ? ' class="d"' : ''}></i>`).join('')}${esc(L('logProgress', { n: n.doneCount, total: n.total }))}<span class="g">${esc(n.goal)}</span></div>` : '';
       h += `<div><div class="llab">${esc(L('logNow'))}<span class="src${mine ? ' mine' : ''}">${esc(mine ? L('logFromQuestion') : L('logFromGuide'))}</span></div>
-        <div class="lnow${mine ? '' : ' guide'}">${box(n)}<div><span class="lt">${esc(n.text)}</span>${sub(n)}${prog}${n.seen ? `<span class="lseen">⌖ ${esc(L('seenOnScreen').replace('{what}', n.seen))}</span>` : ''}</div></div></div>`;
+        <div class="lnow${mine ? '' : ' guide'}">${box(n)}<div><span class="lt">${esc(n.text)}</span>${sub(n)}${prog}${n.seen ? `<span class="lseen">⌖ ${esc(L('seenOnScreen').replace('{what}', n.seen))}</span>` : ''}${n.guide ? `<span class="lseen" title="${esc(n.guide.detail || '')}">📖 ${esc(L('fromGuideStep').replace('{step}', n.guide.title))}</span>` : ''}</div></div></div>`;
     }
     const cleared = state.cleared && state.cleared.until > Date.now() ? state.cleared : null;
     if (cleared) h += `<div class="lcleared">✓ ${esc(L('logTicked', { step: cleared.text }))}<span class="u" data-act="undo">${esc(L('logUndo'))}</span></div>`;

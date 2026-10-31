@@ -36,6 +36,11 @@ export type LogNow = LogStep & {
   msgId?: string;
   /** A guide step picked by what Locate me saw the player doing: what matched ("Save Duke Ravengard", "Lucretious"). */
   seen?: string;
+  /**
+   * A question's objective: the guide's walkthrough step it is about (owner, Oct 31 2026), matched from the question,
+   * the answer or the screen, never guessed: its title and whole text ("From the guide: …").
+   */
+  guide?: { id: string; title: string; detail?: string };
 };
 /**
  * "In <place> (from the guide)" (owner, Oct 31 2026): the place is known but not what the player is doing there, so no
@@ -78,6 +83,9 @@ export type LogView = {
   bookmark: number;
   labels?: Record<string, string>;
 };
+
+/** A walkthrough step as the log reads it: entries are the ids of the guide entries met in it (some missable). */
+export type WalkLogStep = { id: string; title: string; text?: string; warn?: string; tip?: string; entries?: string[]; places?: string[] };
 
 const NEXT_MAX = 3;
 /** "In <place> (from the guide)": how many of the area's parts it lists. */
@@ -128,7 +136,7 @@ export function buildLogView(
   opts: {
     gameKey: string; accent: string; loaded?: { title: string; items: TrackerItem[]; warning?: string } | null; labels?: Record<string, string>;
     /** The guide area's walkthrough (its steps and which are ticked, walk:<id>): the fill-in's Now and Next. */
-    walk?: { slug: string; steps: { id: string; title: string; text?: string }[]; done: Set<string> } | null;
+    walk?: { slug: string; steps: WalkLogStep[]; done: Set<string> } | null;
     /** The place isn't known (placeIsCurrent): no Now, Next or Watch out from the guide, only "Where are you?". */
     where?: LogWhere | null;
     /** What Locate me saw the player doing (the place's doing): picks the walkthrough step for Now (matchDoing). */
@@ -186,6 +194,31 @@ export function buildLogView(
   const noReturn = more.find((x) => x.id === 'noreturn');
   for (const it of missable?.items || []) if (!it.done) watch.push({ id: it.id, text: it.label, why: it.detail?.missable || it.where, fromGuide: true });
   for (const it of noReturn?.items || []) watch.push({ id: it.id, text: it.label, why: it.where, fromGuide: true });
+  const placeName = data?.place?.name || '';
+
+  // A question's objective: the guide's walkthrough step it is about (owner, Oct 31 2026), picked the way the screen
+  // reading picks one (matchDoing): from the question and the answer (their words and names), else from what Locate me
+  // saw. Only a step that matches, never the area's first: its text as the details, its missables first under Watch out
+  // (after the answer's own warnings).
+  if (now?.source === 'question' && obj && opts.walk) {
+    const walkSteps = opts.walk.steps.filter((st) => st.title);
+    const others = data?.areas?.names;
+    const at = matchDoing(walkSteps, questionDoing(questionOf(msgs, obj.id), obj), placeName, others) || matchDoing(walkSteps, opts.doing, placeName, others);
+    if (at) {
+      const st = walkSteps[at.index];
+      const id = `w:${opts.walk.slug}:${st.id}`;
+      now = { ...now, guide: { id, title: st.title, ...(st.text ? { detail: st.text } : {}) } };
+      const own: LogWatch[] = [];
+      if (st.warn) own.push({ id: `${id}:warn`, text: clip(st.warn, 110), why: st.warn, fromGuide: true });
+      for (const e of st.entries || []) {
+        const it = missable?.items.find((x) => !x.done && x.id.endsWith(`:${e}`));
+        if (it && !own.some((w) => w.id === it.id)) own.push({ id: it.id, text: it.label, why: it.detail?.missable || it.where, fromGuide: true });
+      }
+      const at0 = watch.findIndex((w) => w.fromGuide);
+      const rest = watch.splice(at0 < 0 ? watch.length : at0).filter((w) => !own.some((o) => o.id === w.id));
+      watch.push(...own, ...rest);
+    }
+  }
 
   // 3. Nothing chosen: the guide fills in for where the player is (marked "From the guide"), always as tasks, never
   // the area's description. Only what the player is seen doing makes a guide step "Now" (owner, Oct 31 2026: the area's
@@ -194,7 +227,6 @@ export function buildLogView(
   // knowing what they're doing: "In <place> (from the guide)", a short list of what's here and its missables, no Now.
   let here: LogHere | undefined;
   if (!now && !done && (data || opts.walk)) {
-    const placeName = data?.place?.name || '';
     const walkSteps = (opts.walk?.steps || []).filter((st) => st.title);
     const isOpen = (st: { id: string }) => !opts.walk!.done.has(`walk:${st.id}`);
     const at = matchDoing(walkSteps, opts.doing, placeName, data?.areas?.names);
@@ -344,7 +376,7 @@ const shownName = (s: string) => (/\p{Ll}/u.test(s) || s.length < 4 ? s : s.toLo
  */
 export function areaFromDoing(
   areas: { slug: string; name: string }[],
-  pages: Record<string, { walkthrough?: { title: string; text?: string }[]; fights?: Foe[]; enemies?: Foe[] } | null | undefined>,
+  pages: Record<string, { walkthrough?: { title: string; text?: string; places?: string[] }[]; fights?: Foe[]; enemies?: Foe[] } | null | undefined>,
   doing: PlaceDoing | null | undefined,
 ): string | null {
   if (!doing) return null;
@@ -398,14 +430,14 @@ export function matchFoe(foes: Foe[], doing: PlaceDoing | null | undefined): Foe
  * your screen: …"): the objective when it matched, else who they're talking to, else the name. Null when nothing fits well enough: then no guide step is "Now".
  */
 export function matchDoing(
-  steps: { title: string; text?: string }[],
+  steps: { title: string; text?: string; places?: string[] }[],
   doing: PlaceDoing | null | undefined,
   place = '',
   /** The guide's other areas: a place name says where, not what the player is doing. */
   otherPlaces: string[] = [],
 ): { index: number; matched: string } | null {
   if (!doing || !steps.length) return null;
-  const hay = steps.map((st) => ` ${normWords(`${st.title} ${st.text || ''}`)} `);
+  const hay = steps.map((st) => ` ${normWords(`${st.title} ${st.text || ''} ${(st.places || []).join(' ')}`)} `);
   const placeWords = words(place);
   const placeKey = normWords(place);
   const places = new Set(otherPlaces.map(normWords));
@@ -455,6 +487,58 @@ export function matchDoing(
     }
   });
   return best >= 0 && bestScore >= 3 ? { index: best, matched: shownName(bestLabel) } : null;
+}
+
+/** The player's question an answer replies to (the last question before it). */
+export function questionOf(msgs: ChatMessage[], answerId: string): string {
+  const i = msgs.findIndex((m) => m.id === answerId);
+  for (let j = i - 1; j >= 0; j--) if (msgs[j].role === 'user') return String(msgs[j].text || '');
+  return '';
+}
+
+/**
+ * Names in a text: capitalised words and runs of them ("Lower City", "Gate of Divinity"), not a sentence's first word
+ * on its own ("Talk", "The") or "I".
+ */
+export function properNames(text: string): string[] {
+  const out: string[] = [];
+  const re = /\p{Lu}[\p{L}'’-]+(?:\s+(?:of the|of|the|de|du|von|van)\s+\p{Lu}[\p{L}'’-]+|\s+\p{Lu}[\p{L}'’-]+)*/gu;
+  for (const m of String(text || '').matchAll(re)) {
+    const before = text.slice(0, m.index).trimEnd();
+    const starts = !before || /[.!?:;"“(\n·-]$/.test(before);
+    if (starts && !/\s/.test(m[0])) continue;
+    // A sentence's first word before a name ("Enter the Circus of the Last Days") isn't part of it.
+    const name = (starts ? m[0].replace(/^\S+\s+(?:(?:of the|of|the|de|du|von|van)\s+)?/, '') : m[0]).trim();
+    if (!/^\p{Lu}/u.test(name)) continue;
+    if (name.length >= 3 && !out.some((x) => x.toLowerCase() === name.toLowerCase())) out.push(name);
+  }
+  return out;
+}
+
+/**
+ * What a question and its answer say the player is doing (owner, Oct 31 2026), for picking the guide step the way the
+ * screen reading does (matchDoing): the answer's title and the question as the objective, the answer's steps as the
+ * activity, and the names in the question and the steps.
+ */
+export function questionDoing(question: string, answer: ChatMessage): PlaceDoing {
+  const steps = doSteps(answer).map(({ st }) => st);
+  const names = properNames([question, ...steps.map((s) => `${s.text}. ${s.where || ''}`)].join('. ')).slice(0, 8);
+  return {
+    objective: [answer.title, question].filter(Boolean).join(' · ').slice(0, 240),
+    activity: steps.map((s) => s.label || s.text).join(' · ').slice(0, 300),
+    ...(names.length ? { names } : {}),
+  };
+}
+
+/**
+ * Is the question about what the player is trying to do right now (owner, Oct 31 2026)? For answers from a server that
+ * doesn't say (its now="yes|no"): "How do I get into…", "Where do I find…", "I'm stuck…", "How do I beat…", and not
+ * curiosity ("What does … do", lore, builds, "Is … worth it", settings).
+ */
+export function isNowQuestion(q: string): boolean {
+  const s = ` ${String(q || '').toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim()} `;
+  if (/\b(what does|what do(es)? .{1,40} do\b|lore|backstory|story behind|who is|who was|why (is|did|does)|best build|build for|worth it|is it worth|should i (spec|respec)|settings?|graphics|fps|controls?|difficulty|how long is|how many hours|release|dlc price)\b/.test(s)) return false;
+  return /\b(how do i|how can i|how to|where do i|where can i|where is|where are|what do i do|what now|what next|i'm stuck|im stuck|i am stuck|stuck (on|at|in)|can't (find|get|reach|beat|open|figure)|cannot (find|get|reach|beat|open)|how do (we|you) (get|reach|beat|open|solve|find)|help me (get|find|beat|solve)|way (in|into|out|to)|get (past|into|to|through))\b/.test(s);
 }
 
 /**

@@ -112,6 +112,8 @@ interface ChatAreaProps {
    */
   questLog?: { now?: string; pins?: string[]; hidden?: string[] };
   onSetNow?: (msgId: string) => void;
+  /** A question just set this answer as the quest log's Now by itself: Undo, for a few seconds. */
+  nowUndo?: { msgId?: string; onUndo: () => void } | null;
   onPinAnswer?: (msgId: string) => void;
   onDismissOffer?: (msgId: string) => void;
   /** The compact card's quest log (its Now line and fold). */
@@ -278,6 +280,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   logAttached = false,
   questLog,
   onSetNow,
+  nowUndo,
   onPinAnswer,
   onDismissOffer,
   compactLog,
@@ -1856,6 +1859,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         <div className="mt-2 flex items-center gap-1.5 text-[12px] font-mono text-zinc-500">
                           <span className="w-2 h-2 rounded-full border border-[var(--accent-color)] bg-[var(--accent-dim)]" />
                           {t('tracker.logCurrent', { n: done, total: steps.length })}
+                          {nowUndo?.msgId === msg.id && (
+                            <button type="button" data-qc-now-undo="" onClick={nowUndo.onUndo}
+                              className="ml-1 font-bold text-[var(--accent-color)] hover:underline outline-none focus-visible:ring-2 focus-visible:ring-white rounded">
+                              {t('tracker.logUndo')}
+                            </button>
+                          )}
                         </div>
                       );
                     }

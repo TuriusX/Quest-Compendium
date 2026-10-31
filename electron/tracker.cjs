@@ -472,7 +472,8 @@ function cleanLog(lg) {
   const step = (x) => (x && x.id ? { id: str(x.id, 200), text: clip(x.text, 200), sub: clip(x.sub, 140), tick: !!x.tick } : null);
   const now = lg.now ? { ...step(lg.now), source: ['question', 'loaded', 'guide'].includes(lg.now.source) ? lg.now.source : 'guide', goal: clip(lg.now.goal, 120),
     doneCount: Math.max(0, Math.min(99, Number(lg.now.doneCount) || 0)), total: Math.max(0, Math.min(99, Number(lg.now.total) || 0)),
-    ...(lg.now.seen ? { seen: clip(lg.now.seen, 140) } : {}) } : null;
+    ...(lg.now.seen ? { seen: clip(lg.now.seen, 140) } : {}),
+    ...(lg.now.guide && lg.now.guide.id ? { guide: { id: str(lg.now.guide.id, 200), title: clip(lg.now.guide.title, 140), detail: clip(lg.now.guide.detail, 600) } } : {}) } : null;
   const watchOf = (x) => (x && x.id ? { id: str(x.id, 200), text: clip(x.text, 200), why: clip(x.why, 300), fromGuide: !!x.fromGuide } : null);
   return {
     now: now && now.id ? now : null,
@@ -506,7 +507,7 @@ function cleanDetail(d) {
 
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
 const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
-  'locatingBig', 'whereTitle', 'whereSub', 'whereLooksLike', 'whereYes', 'whereNo', 'whereLast', 'whereStill', 'wherePick', 'youreIn', 'change', 'inPlace', 'hereSub', 'seenOnScreen',
+  'locatingBig', 'whereTitle', 'whereSub', 'whereLooksLike', 'whereYes', 'whereNo', 'whereLast', 'whereStill', 'wherePick', 'youreIn', 'change', 'inPlace', 'hereSub', 'seenOnScreen', 'fromGuideStep',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
   'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt', 'look', 'shownOf', 'hintOpen', 'hintOpenNoKeys',

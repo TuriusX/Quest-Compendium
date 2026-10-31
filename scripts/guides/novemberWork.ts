@@ -12,7 +12,15 @@
  *   5. glossary    official localised page names for translated guides (sourced only)
  *   6. conflicts   the consistency report's contradictions settled against stored evidence (corrected by autoImprove.ts)
  *
+ * Since Oct 31 2026 (owner) area walkthroughs come first, so the quest log can match what the player is doing on every
+ * game: RDR2's chapter steps get their place names (stepPlaces.ts), then every page without a walkthrough is rebuilt
+ * with one by the same evidence method as re-verification (checked against sources; the rebuild guard keeps its
+ * entries), the guides with the most questions and search traffic first (system/demand), a few guides a night: three
+ * pages each of three guides, in turn among the twelve most in demand (walkthroughQueue). The queue's other work follows.
+ * Every 10 walkthrough pages, fewer than 7 going live pauses it (system/auditWork.paused) until the owner looks.
+ *
  *   npx tsx scripts/guides/novemberWork.ts --setup        write the queue and the allowance (no AI)
+ *   npx tsx scripts/guides/novemberWork.ts --queue-walkthroughs [--dry]   put the area walkthroughs first (no AI)
  *   npx tsx scripts/guides/novemberWork.ts --run [--max 5] do up to $max of the next work (only in November 2026)
  *   npx tsx scripts/guides/novemberWork.ts --status       what's done, spent and left
  * Each step is charged to system/auditWork.spent (and shows in the pipeline's cost lines like any run).
@@ -28,7 +36,63 @@ const ref = () => db().collection('system').doc('auditWork');
 const month = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }).slice(0, 7);
 const day = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
 
-export type Work = { kind: 'reverify' | 'epilogue' | 'place' | 'mission' | 'glossary' | 'conflicts'; key: string; ref: string; impressions?: number };
+export type Work = { kind: 'reverify' | 'walkthrough' | 'stepPlaces' | 'epilogue' | 'place' | 'mission' | 'glossary' | 'conflicts'; key: string; ref: string; impressions?: number };
+/** Walkthrough pages: this many guides a night, this many pages each, taking turns among this many most in demand. */
+const WALK_GUIDES = 3, WALK_PAGES = 3, WALK_POOL = 12;
+const hasWalkthrough = (a: any) => (a?.walkthrough || []).some((s: any) => s?.title);
+
+/**
+ * The area walkthroughs to build (owner, Oct 31 2026): RDR2's chapters' place names first, then live pages without a
+ * walkthrough, the guides with the most demand first (system/demand: search impressions and players' questions), each
+ * guide's most-searched pages first (system/searchConsole), then its own order. Three guides a night, three pages each,
+ * in turn among the twelve most in demand; a guide that runs out makes room for the next one.
+ */
+export async function walkthroughQueue(): Promise<Work[]> {
+  const { demandScore } = await import('../pipeline/demandReport');
+  const dem: any = (await db().collection('system').doc('demand').get()).data() || {};
+  const sc: any = (await db().collection('system').doc('searchConsole').get()).data() || {};
+  const impr = new Map<string, number>();
+  for (const p of sc.topPages || []) impr.set(`${p.key}/${p.slug}`, (impr.get(`${p.key}/${p.slug}`) || 0) + Number(p.impressions || 0));
+  const out: Work[] = [];
+  const rdrInfo: any = (await db().collection('guides').doc('red-dead-redemption-2').get()).data() || {};
+  const rdrAt = (s: string) => { const i = (rdrInfo.areas || []).findIndex((o: any) => o.slug === s); return i < 0 ? 999 : i; };
+  const chapters = (await db().collection('guides').doc('red-dead-redemption-2').collection('areas').get()).docs
+    .filter((d) => { const a: any = d.data(); return a.status === 'published' && hasWalkthrough(a) && /^(chapter|epilogue)/i.test(String(a.name || '')); })
+    .sort((a, b) => rdrAt(a.id) - rdrAt(b.id));
+  for (const d of chapters) out.push({ kind: 'stepPlaces', key: 'red-dead-redemption-2', ref: d.id });
+  // Each guide's pages without a walkthrough, most searched first.
+  const lists: { key: string; score: number; pages: Work[] }[] = [];
+  for (const g of (await db().collection('guides').get()).docs) {
+    if (g.id.includes('--')) continue;
+    const order: any[] = (g.data() as any).areas || [];
+    const pos = (s: string) => { const i = order.findIndex((o) => o.slug === s); return i < 0 ? 9999 : i; };
+    const pages = (await g.ref.collection('areas').get()).docs
+      .map((d) => ({ slug: d.id, a: d.data() as any }))
+      .filter((x) => x.a.status === 'published' && !hasWalkthrough(x.a))
+      .sort((x, y) => (impr.get(`${g.id}/${y.slug}`) || 0) - (impr.get(`${g.id}/${x.slug}`) || 0) || pos(x.slug) - pos(y.slug))
+      .map((x): Work => ({ kind: 'walkthrough', key: g.id, ref: x.slug, ...(impr.get(`${g.id}/${x.slug}`) ? { impressions: impr.get(`${g.id}/${x.slug}`) } : {}) }));
+    if (pages.length) lists.push({ key: g.id, score: demandScore(dem.guides?.[g.id]), pages });
+  }
+  lists.sort((a, b) => b.score - a.score);
+  const waiting = lists.slice(WALK_POOL);
+  const pool = lists.slice(0, WALK_POOL);
+  let turn = 0;
+  while (pool.length) {
+    // A night: the next three guides in turn, three pages each.
+    const night = pool.slice(turn, turn + WALK_GUIDES);
+    if (night.length < WALK_GUIDES) night.push(...pool.slice(0, Math.min(WALK_GUIDES - night.length, turn)));
+    for (const g of night) out.push(...g.pages.splice(0, WALK_PAGES));
+    turn += WALK_GUIDES;
+    // Guides with nothing left make room for the next in demand (in their place in the turn).
+    for (let i = 0; i < pool.length; i++) if (!pool[i].pages.length) {
+      const nextG = waiting.shift();
+      if (nextG) pool[i] = nextG;
+      else { pool.splice(i, 1); if (i < turn) turn--; i--; }
+    }
+    if (pool.length) turn %= pool.length;
+  }
+  return out;
+}
 
 /** The queue, in the owner's order (re-verification first, highest impressions first). */
 export async function buildQueue(gscPages: [string, number, number, number][]): Promise<Work[]> {
@@ -84,7 +148,14 @@ export async function doOne(w: Work): Promise<{ status: string; dollars: number;
   if (isRefusal(lk)) return { status: 'busy', dollars: 0, detail: `${w.key} is in use`, searches: 0 };
   try {
     await usageScope.run(scope, async () => {
-      if (w.kind === 'reverify') {
+      if (w.kind === 'stepPlaces') {
+        const { stepPlaces } = await import('./stepPlaces');
+        const r = await stepPlaces(w.key, w.ref);
+        status = r.status;
+        detail = r.detail.slice(0, 160);
+      } else if (w.kind === 'reverify' || w.kind === 'walkthrough') {
+        // A walkthrough page is built the same way as a re-verification (owner, Oct 31 2026): from evidence, every claim
+        // checked against sources, live only when the review passes and the rebuild guard keeps its entries.
         const { buildPageEvidenceForCore, writePageForCore } = await import('./flagship');
         const info: any = (await db().collection('guides').doc(w.key).get()).data();
         const r: any = await buildPageEvidenceForCore(w.key, String(info.game || w.key), w.ref, info.areas || [], w.key);
@@ -153,10 +224,11 @@ export async function runAuditWork(max = AUDIT_DAILY): Promise<{ lines: string[]
   let reverifySpent = Number(st.reverifySpent || 0);
   while (room > guess && next < st.queue.length) {
     const w: Work = st.queue[next];
-    // Already checked since the queue was made (the October fund, the core programme): skipped, free.
-    if (w.kind === 'reverify') {
+    // Already checked since the queue was made (the October fund, the core programme): skipped, free. So is a
+    // walkthrough page that has one by now (the core programme built it).
+    if (w.kind === 'reverify' || w.kind === 'walkthrough') {
       const a: any = (await db().collection('guides').doc(w.key).collection('areas').doc(w.ref).get()).data();
-      if (!a || a.status !== 'published' || a.verified === true) { next++; continue; }
+      if (!a || a.status !== 'published' || (w.kind === 'reverify' ? a.verified === true : hasWalkthrough(a))) { next++; continue; }
     }
     const r = await doOne(w);
     if (r.status === 'busy') break;
@@ -165,13 +237,75 @@ export async function runAuditWork(max = AUDIT_DAILY): Promise<{ lines: string[]
     next++;
     lines.push(`${w.kind} ${w.key}/${w.ref}: ${r.status}, $${r.dollars.toFixed(3)}${r.detail ? ` (${r.detail})` : ''}`);
     await ref().set({ next, spent, reverifySpent, day: day(), spentToday: today, log: FieldValue.arrayUnion({ at: Date.now(), kind: w.kind, key: w.key, ref: w.ref, status: r.status, dollars: Math.round(r.dollars * 1000) / 1000 }) }, { merge: true });
+    // The walkthroughs' checkpoint: every 10 pages, fewer than 7 live pauses the work until the owner looks.
+    if (w.kind === 'walkthrough') {
+      const cp = await walkCheckpoint();
+      if (cp) { lines.push(`⚠️ ${cp}`); break; }
+    }
   }
   if (lines.length) lines.unshift(`🧭 November site work (roadmap 22, from the pipeline's November cap): ${lines.length} item(s) today, $${(today - spentToday).toFixed(2)}; $${spent.toFixed(2)} so far this month, ${st.queue.length - next} item(s) left.`);
   return { lines, dollars: today - spentToday, searches };
 }
 
+/** Every 10 walkthrough pages since the last check: fewer than 7 live pauses the November work. The reason, or null. */
+async function walkCheckpoint(): Promise<string | null> {
+  const st: any = (await ref().get()).data() || {};
+  const since = Number(st.walkCheckAt || 0);
+  const runs = ((st.log || []) as any[]).filter((x) => x.kind === 'walkthrough' && Number(x.at) > since).sort((a, b) => a.at - b.at);
+  if (runs.length < 10) return null;
+  const ten = runs.slice(0, 10);
+  const live = ten.filter((x) => x.status === 'live').length;
+  await ref().set({ walkCheckAt: ten[9].at }, { merge: true });
+  if (live >= 7) return null;
+  const why = `Area walkthroughs paused: ${live} of the last 10 pages went live (under 7). Nothing more is built until the owner looks (system/auditWork.paused).`;
+  await ref().set({ paused: { why, at: Date.now() } }, { merge: true });
+  return why;
+}
+
+/**
+ * Monday's Discord summary (owner, Oct 31 2026): the area walkthroughs' week (pages live, held or not live, the guides,
+ * what it cost) and what's left.
+ */
+export async function walkthroughWeekLines(): Promise<string[]> {
+  const st: any = (await ref().get()).data() || {};
+  const queue: Work[] = st.queue || [];
+  if (!queue.some((w) => w.kind === 'walkthrough' || w.kind === 'stepPlaces')) return [];
+  const week = Date.now() - 7 * 86_400_000;
+  const log = ((st.log || []) as any[]).filter((x) => Number(x.at) > week && (x.kind === 'walkthrough' || x.kind === 'stepPlaces'));
+  const pages = log.filter((x) => x.kind === 'walkthrough');
+  const live = pages.filter((x) => x.status === 'live');
+  const held = pages.filter((x) => x.status === 'held by the rebuild guard').length;
+  const guides = [...new Set(live.map((x) => String(x.key)))];
+  const chapters = log.filter((x) => x.kind === 'stepPlaces' && x.status === 'done').length;
+  const left = queue.slice(Number(st.next || 0)).filter((w) => w.kind === 'walkthrough').length;
+  const dollars = log.reduce((s, x) => s + Number(x.dollars || 0), 0);
+  const out = [
+    `🗺️ Area walkthroughs this week: ${live.length} page(s) live in ${guides.length} guide(s)${guides.length ? ` (${guides.slice(0, 8).join(', ')}${guides.length > 8 ? ', …' : ''})` : ''}, ` +
+      `${held} held by the rebuild guard, ${pages.length - live.length - held} not live; ${chapters ? `RDR2 place names on ${chapters} chapter(s); ` : ''}` +
+      `$${dollars.toFixed(2)}. ${left} page(s) without a walkthrough still queued.`,
+  ];
+  if (st.paused?.why) out.push(`⚠️ ${st.paused.why}`);
+  return out;
+}
+
 async function main() {
-  if (arg('setup') === 'true') {
+  if (arg('queue-walkthroughs') === 'true') {
+    // The area walkthroughs go first (owner, Oct 31 2026): the work done stays as it was and the rest follows them. A
+    // re-verification of a page that gets a walkthrough is the same build, so it isn't queued twice.
+    const st: any = (await ref().get()).data() || {};
+    const next = Number(st.next || 0);
+    const old: Work[] = st.queue || [];
+    const walks = await walkthroughQueue();
+    const covered = new Set(walks.map((w) => `${w.key}/${w.ref}`));
+    const rest = old.slice(next).filter((w) => w.kind !== 'walkthrough' && w.kind !== 'stepPlaces' && !(w.kind === 'reverify' && covered.has(`${w.key}/${w.ref}`)));
+    const queue = [...old.slice(0, next), ...walks, ...rest];
+    const counts = queue.slice(next).reduce((m: Record<string, number>, w) => ((m[w.kind] = (m[w.kind] || 0) + 1), m), {});
+    const dry = arg('dry') === 'true';
+    if (!dry) await ref().set({ queue, walkQueued: { by: 'owner', at: Date.now(), note: 'area walkthroughs first, within the pipeline budget and caps' } }, { merge: true });
+    console.log(`${dry ? '(dry run) ' : ''}Queue from item ${next}: ${queue.length - next} item(s) ${JSON.stringify(counts)}.`);
+    const pages = walks.filter((w) => w.kind === 'walkthrough');
+    for (let n = 0; n < 4; n++) console.log(`  night ${n + 1}: ${pages.slice(n * 9, n * 9 + 9).map((w) => `${w.key}/${w.ref}`).join(', ')}`);
+  } else if (arg('setup') === 'true') {
     const gsc = JSON.parse(fs.readFileSync(String(arg('gsc') || 'C:/Users/Noah/Desktop/QC-site-audit/notes/gsc.json'), 'utf8'));
     const queue = await buildQueue(gsc.pages);
     const counts = queue.reduce((m: Record<string, number>, w) => ((m[w.kind] = (m[w.kind] || 0) + 1), m), {});

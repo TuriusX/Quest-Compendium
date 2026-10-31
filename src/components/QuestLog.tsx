@@ -16,8 +16,8 @@ export type QuestLogProps = {
   view: LogView;
   /** The step the tick key acts on (the tracker's next / prev keys move it): highlighted. */
   sel: string | null;
-  /** The last tick, shown for a few seconds with Undo. */
-  cleared: { id: string; text: string; from?: 'question' } | null;
+  /** The last tick, shown for a few seconds with Undo (from 'now': a question set its answer as Now by itself). */
+  cleared: { id?: string; text: string; from?: 'question' | 'now' } | null;
   keysLabel: string;
   onTick: (id: string, done: boolean) => void;
   onUndo: () => void;
@@ -277,6 +277,12 @@ export function QuestLog(p: QuestLogProps) {
                   <span className="truncate">{t('tracker.seenOnScreen', { what: n.seen })}</span>
                 </div>
               )}
+              {n.guide && (
+                <details data-qc-log-guide={n.guide.id} className="mt-2 text-[11.5px] text-zinc-500 min-w-0">
+                  <summary className="cursor-pointer truncate outline-none focus-visible:ring-2 focus-visible:ring-white rounded">{t('tracker.fromGuideStep', { step: n.guide.title })}</summary>
+                  {n.guide.detail && <p className="mt-1 text-zinc-400 leading-snug">{n.guide.detail}</p>}
+                </details>
+              )}
               {n.total > 0 && (
                 <div className="flex items-center gap-2 mt-2.5 text-[11px] font-mono font-bold text-zinc-400 whitespace-nowrap">
                   <span className="flex gap-[3px]">
@@ -294,7 +300,7 @@ export function QuestLog(p: QuestLogProps) {
         {p.cleared && (
           <div className="-mt-2 flex items-center gap-1.5 text-[12px] text-zinc-500" role="status">
             <Check className="w-3 h-3 text-emerald-400" />
-            <span className="truncate">{p.cleared.from === 'question' ? t('tracker.logTickedFromQuestion', { step: p.cleared.text }) : t('tracker.logTicked', { step: p.cleared.text })}</span>
+            <span className="truncate" data-qc-log-undo={p.cleared.from || 'tick'}>{p.cleared.from === 'now' ? t('tracker.logNowFromQuestion', { goal: p.cleared.text }) : p.cleared.from === 'question' ? t('tracker.logTickedFromQuestion', { step: p.cleared.text }) : t('tracker.logTicked', { step: p.cleared.text })}</span>
             <button type="button" onClick={p.onUndo} className="ml-1 font-bold text-[var(--accent-color)] hover:underline outline-none focus-visible:ring-2 focus-visible:ring-white rounded">{t('tracker.logUndo')}</button>
           </div>
         )}

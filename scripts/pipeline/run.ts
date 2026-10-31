@@ -910,6 +910,15 @@ async function main() {
   } catch (e: any) {
     console.warn(`November site work skipped: ${e?.message}`);
   }
+  // Mondays: the area walkthroughs' week (owner, Oct 31 2026; novemberWork.ts): pages live, guides, cost, what's left.
+  if (MONDAY) {
+    try {
+      const { walkthroughWeekLines } = await import('../guides/novemberWork');
+      for (const l of await walkthroughWeekLines()) (l.startsWith('⚠️') ? RUN.head : report).push(l);
+    } catch (e: any) {
+      console.warn(`Area walkthroughs' week skipped: ${e?.message}`);
+    }
+  }
   // Mondays: do re-verified pages gain search traffic? Against similar untouched pages (reverifyStudy.ts), read only.
   if (MONDAY) {
     try {

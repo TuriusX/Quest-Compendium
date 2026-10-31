@@ -1293,8 +1293,12 @@ If the player is asking about items, secrets or things to find, and you know of 
 
 [QUEST TITLE]
 End every answer with one line naming what the player is doing right now, like a quest title in an RPG quest log:
-<qc-title>Short quest name</qc-title>
+<qc-title now="yes">Short quest name</qc-title>
 - 2 to 6 words, at most 60 characters, in the player's language, title-style (for example "Loot the Sunken Crypt", "Find Duncan's Cabin"). No quotes, no ending punctuation, never a sentence about the answer itself.
+- now="yes" when the question is about what the player is trying to do right now in their game (getting somewhere,
+  finishing a quest or a step of one, beating what's in front of them, solving the puzzle they're at, finding something
+  they need now): their quest log then shows your steps as what they're doing. now="no" when it's curiosity or general
+  advice (lore, story, characters, builds and stats, what an item or skill does, settings, whether something is worth it).
 - Never mention the title line in your answer text.`;
         // The quest log's steps: what the player should keep in front of them (src/utils/trackerPayload.ts).
         systemInstruction += STEPS_RULES;
@@ -2010,6 +2014,8 @@ percentages:
         bannerImageUrl,
         ...(points.length ? { points } : {}),
         ...(title ? { title } : {}),
+        // The question is about what the player is doing right now (or isn't): the app sets the answer as Now, with Undo.
+        ...(titleParsed.now !== undefined ? { nowGoal: titleParsed.now } : {}),
         ...(stepsParsed.steps.length ? { steps: stepsParsed.steps } : {}),
         ...(tickedParsed.done.length ? { objectiveDone: tickedParsed.done } : {}),
         ...(combatParsed.combat ? { combat: true } : {}),
@@ -2099,15 +2105,24 @@ percentages:
   const MARKER_CATEGORIES = new Set(['weapon', 'armor', 'consumable', 'key', 'quest', 'lore', 'secret', 'character', 'enemy', 'danger', 'action', 'place']);
   type ParsedPoint = { x: number; y: number; label: string; where?: string; category?: string; note?: string; detail?: string; missable?: boolean; rank?: number; guideId?: string; guideKey?: string; guideSlug?: string };
 
-  /** The model's <qc-title> line (a short quest-log name for the objectives tracker), always removed from the answer. */
-  function extractTitle(text: string): { text: string; title: string } {
+  /**
+   * The model's <qc-title> line (a short quest-log name for the objectives tracker), always removed from the answer.
+   * now: its now="yes|no" (owner, Oct 31 2026): the question is about what the player is doing right now, so the app
+   * sets the answer as the quest log's Now; undefined when the model left it out.
+   */
+  function extractTitle(text: string): { text: string; title: string; now?: boolean } {
     let title = '';
-    const cleaned = text.replace(/(?:```[a-z]*\s*)?<qc-title>([\s\S]*?)<\/qc-title>(?:\s*```)?/gi, (_m, inner) => {
-      if (!title) title = String(inner).replace(/\s+/g, ' ').replace(/^["'“”‘’]+|["'“”‘’.!:;]+$/g, '').trim();
+    let now: boolean | undefined;
+    const cleaned = text.replace(/(?:```[a-z]*\s*)?<qc-title(\s[^>]*)?>([\s\S]*?)<\/qc-title>(?:\s*```)?/gi, (_m, attrs, inner) => {
+      if (!title) {
+        title = String(inner).replace(/\s+/g, ' ').replace(/^["'“”‘’]+|["'“”‘’.!:;]+$/g, '').trim();
+        const flag = String(attrs || '').match(/now\s*=\s*["']?(yes|no|true|false)/i);
+        if (flag) now = /^(yes|true)$/i.test(flag[1]);
+      }
       return '';
     }).replace(/\n{3,}/g, '\n\n').trim();
     if (title.length > 60) title = title.slice(0, 60).replace(/\s+\S*$/, '').trim();
-    return { text: cleaned || text, title };
+    return { text: cleaned || text, title, ...(now !== undefined ? { now } : {}) };
   }
   function extractScreenPoints(
     text: string, hadImage: boolean, combat = false,

@@ -75,7 +75,7 @@ import { readTombstones } from './hooks/tabMerge';
 import { MigrationNotice, WhichGamePrompt } from './components/SpacesNotice';
 import { GameLine } from './components/GameLine';
 import { QuestLog } from './components/QuestLog';
-import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, type LogView, type Foe } from './utils/questLogView';
+import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, doSteps, isNowQuestion, type LogView, type Foe } from './utils/questLogView';
 import { missablesThin } from './utils/missablesCheck';
 
 /**
@@ -1186,9 +1186,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const logSelRef = useRef(logSel);
   logSelRef.current = logSel;
   // The last tick, shown for a few seconds with Undo (from the log, the tick key, or a question that said it was done).
-  const [logCleared, setLogCleared] = useState<{ ids: string[]; text: string; from?: 'question' } | null>(null);
+  // from 'now': a question set its answer as Now by itself (owner, Oct 31 2026); Undo puts back what Now was (prev).
+  type LogCleared = { ids: string[]; text: string; from?: 'question' | 'now'; msgId?: string; prev?: string };
+  const [logCleared, setLogCleared] = useState<LogCleared | null>(null);
   const logClearedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showCleared = (c: { ids: string[]; text: string; from?: 'question' } | null) => {
+  const showCleared = (c: LogCleared | null) => {
     if (logClearedTimer.current) clearTimeout(logClearedTimer.current);
     setLogCleared(c);
     if (c) logClearedTimer.current = setTimeout(() => setLogCleared(null), 6000);
@@ -1569,6 +1571,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const undoLog = () => {
     const c = logCleared;
     if (!c) return;
+    if (c.from === 'now') {
+      patchLog((st) => (st.now === c.msgId ? { now: c.prev } : {}));
+      showCleared(null);
+      return;
+    }
     for (const id of c.ids) trackerEventRef.current({ type: 'tick', item: id, done: false });
     showCleared(null);
   };
@@ -2583,6 +2590,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         ...(data.signInNudge === true ? { signInNudge: true } : {}),
         ...(Array.isArray(data.points) && data.points.length ? { points: data.points } : {}),
         ...(typeof data.title === 'string' && data.title.trim() ? { title: data.title.trim().slice(0, 60) } : {}),
+        ...(typeof data.nowGoal === 'boolean' ? { nowGoal: data.nowGoal } : {}),
         // A fight on screen: the steps are the battle plan.
         ...(data.combat === true ? { combat: true } : {}),
         // No fight on the screenshot: a fight is over (its markers go, the quest log shows normal steps).
@@ -2676,6 +2684,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         .slice(0, 3)
         .map((x: any) => ({ kind: x.kind as PlayKind, text: x.text, source: 'answer' as const })));
 
+      // The question is about what the player is doing right now (the answer says so; else the question reads that way),
+      // and the answer has things to do: it becomes the quest log's Now by itself, its steps the Next, with a few
+      // seconds of Undo (owner, Oct 31 2026). Curiosity (lore, builds, what an item does) leaves Now as it is.
+      const autoNow = isDesktop && !aiMessage.combat && doSteps(aiMessage).length > 0 && (aiMessage.nowGoal ?? isNowQuestion(text));
+      const nowBefore = activeTab.questLog?.now;
       setTabs(prev => {
         const nextTabs = prev.map(t => {
           if (t.id !== activeTab.id) return t;
@@ -2706,7 +2719,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           const msgs = ticked.length
             ? t.messages.map((m) => (m.id === objId ? { ...m, doneSteps: [...new Set([...(m.doneSteps || []), ...ticked])].sort((a, b) => a - b) } : m))
             : t.messages;
-          return { ...t, messages: [...msgs, aiMessage], lastActive: nowAi, ...(place ? { place } : {}) };
+          return { ...t, messages: [...msgs, aiMessage], lastActive: nowAi, ...(place ? { place } : {}), ...(autoNow ? { questLog: nextLogState(t.questLog, { now: aiMessage.id }) } : {}) };
         });
         return nextTabs;
       });
@@ -2716,6 +2729,10 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         const obj = objId ? activeTab.messages.find((m) => m.id === objId) : undefined;
         const ticked: number[] = obj && Array.isArray(data.objectiveDone) ? data.objectiveDone.filter((n: unknown) => Number.isInteger(n) && !!obj.steps?.[n as number]) : [];
         if (obj && ticked.length) showCleared({ ids: ticked.map((i) => `s:${obj.id}:${i}`), text: ticked.map((i) => obj.steps![i].label || obj.steps![i].text).join(', '), from: 'question' });
+        else if (autoNow) {
+          showCleared({ ids: [], text: answerTitle(aiMessage), from: 'now', msgId: aiMessage.id, prev: nowBefore });
+          setLogSel(null);
+        }
       }
     } catch (err: any) {
       console.error('Chat error:', err);
@@ -3355,6 +3372,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 questLog={activeTab?.questLog}
                 compactLog={compact && (logView?.now || logView?.where || logView?.here) ? { view: logView, open: compactFold, onTick: (id) => tickLog(id, true), onToggle: toggleQuestLog, keysLabel: formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L'), onLocate: isDesktop ? () => runLocate(false) : undefined, onPickPlace: moveToArea, locateKeys: formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K') } : null}
                 onSetNow={isDesktop ? setLogNow : undefined}
+                nowUndo={logCleared?.from === 'now' ? { msgId: logCleared.msgId, onUndo: undoLog } : null}
                 onPinAnswer={isDesktop ? togglePin : undefined}
                 onDismissOffer={(id) => patchLog((st) => ({ hidden: [...new Set([...(st.hidden || []), `offer:${id}`])] }))}
                 nextKeys={formatShortcut(settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down')}

@@ -101,6 +101,11 @@ export interface ChatMessage {
   points?: ScreenPoint[];
   /** A short quest-log name for what the player is doing (the objectives tracker's title). */
   title?: string;
+  /**
+   * The question was about what the player is doing right now (the model's now="yes"), not curiosity: the answer
+   * became the quest log's Now by itself, with Undo. false: it wasn't. Unset: the server didn't say.
+   */
+  nowGoal?: boolean;
   /** The 1-4 things to keep in front of the player (the quest log's "From your last answer"), most important first. */
   steps?: QuestStep[];
   /** Steps the player ticked on the quest log, by index. */

@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/questLogView.test.ts)
 import assert from "node:assert/strict";
-import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState, taskOf, placeIsCurrent, matchDoing, matchFoe, areaFromDoing } from "../src/utils/questLogView";
+import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState, taskOf, placeIsCurrent, matchDoing, matchFoe, areaFromDoing, isNowQuestion, properNames, questionDoing } from "../src/utils/questLogView";
 import { missablesThin, missableCount } from "../src/utils/missablesCheck";
 import type { TrackerData } from "../src/utils/trackerPayload";
 import { mergeTabState, sanitizeTabsForCloud } from "../src/hooks/tabMerge";
@@ -270,6 +270,58 @@ test("a thin missable list: none in 5+ things, one in 10+, under 12% in 20+; a s
   const page = { items: items(10, 1), sections: [{ title: "Don't miss", check: true, entries: [1, 2] }], walkthrough: [{ warn: "Point of no return" }] };
   assert.equal(missableCount(page), 4);
   assert.equal(missablesThin(page), false);
+});
+
+test("a question's objective: the guide step it is about (question, answer, else the screen) with its details and missables; nothing when none matches", () => {
+  const w = {
+    slug: "stormveil-castle", done: new Set<string>(),
+    steps: [
+      { id: "w1", title: "Castle Approach", text: "After overcoming Margit, you will reach the Stormveil Main Gate Site of Grace." },
+      { id: "w2", title: "Gostoc and the Side Path", text: "Talk to Gostoc by the gate to take the side path through the Rampart Tower.", entries: ["m1"], warn: "Gostoc leaves after Godrick." },
+      { id: "w3", title: "The Secluded Cell", text: "Locate Nepheli Loux inside an interior room." },
+    ],
+  };
+  const ans = { id: "a2", role: "assistant", text: "Go round.", timestamp: 3, title: "Take the Side Path", steps: [
+    { kind: "step", text: "Talk to Gostoc by the main gate", label: "Talk to Gostoc" },
+    { kind: "step", text: "Go through the Rampart Tower", label: "Through the Rampart Tower" },
+  ] } as any;
+  const t = (now = "a2") => ({ id: "t", name: "Elden Ring", questLog: { now }, messages: [{ id: "q2", role: "user", text: "How do I get past the gate without fighting?", timestamp: 2 }, ans] }) as any;
+  const v = buildLogView(t(), guide, { ...opts, walk: w })!;
+  assert.equal(v.now?.source, "question", "the question's steps stay Now");
+  assert.equal(v.now?.text, "Talk to Gostoc");
+  assert.deepEqual(v.next.map((s) => s.text), ["Through the Rampart Tower"], "the answer's steps are Next");
+  assert.equal(v.now?.guide?.id, "w:stormveil-castle:w2", "the step the question is about");
+  assert.match(v.now?.guide?.detail || "", /Rampart Tower/);
+  assert.equal(v.watch?.text, "Gostoc leaves after Godrick.", "the step's own warning first");
+  assert.equal(v.here, undefined);
+  // A question that matches no step: no guide step, the area's missables as before.
+  const other = { ...ans, title: "Upgrade Your Flask", steps: [{ kind: "step", text: "Bring Golden Seeds to a grace" }, { kind: "step", text: "Rest" }] };
+  const v2 = buildLogView({ ...t(), messages: [{ id: "q2", role: "user", text: "How do I upgrade my flask?", timestamp: 2 }, other] } as any, guide, { ...opts, walk: w })!;
+  assert.equal(v2.now?.guide, undefined, "never the area's first step");
+  // Nothing in the question, but the screen shows the step: that one.
+  const v3 = buildLogView({ ...t(), messages: [{ id: "q2", role: "user", text: "What now?", timestamp: 2 }, other] } as any, guide, { ...opts, walk: w, doing: { talkingTo: "Nepheli Loux" } })!;
+  assert.equal(v3.now?.guide?.id, "w:stormveil-castle:w3");
+  // The place isn't known: nothing from the guide.
+  const v4 = buildLogView(t(), guide, { ...opts, walk: w, where: { locating: false, areas: [] } })!;
+  assert.equal(v4.now?.guide, undefined);
+});
+
+test("which questions are about what the player is doing now (when the server doesn't say), and names in a question", () => {
+  for (const q of ["How do I get into the Lower City?", "where do i find the key to the cellar", "I'm stuck at the gate", "how do I beat Margit", "Can't find the way into the castle"]) assert.equal(isNowQuestion(q), true, q);
+  for (const q of ["What does the Rusty Key do?", "Who is Ranni?", "What's the best build for a mage?", "Is the DLC worth it?", "Tell me the lore of the Erdtree", "How long is the game?"]) assert.equal(isNowQuestion(q), false, q);
+  assert.deepEqual(properNames("How do I get into the Lower City? Talk to Gostoc at the Gate of Divinity."), ["Lower City", "Gostoc", "Gate of Divinity"]);
+  const d = questionDoing("How do I find Lucretious?", { id: "a", role: "assistant", text: "", timestamp: 0, title: "Find Lucretious", steps: [{ kind: "step", text: "Enter the Circus of the Last Days", label: "Enter the circus" }] } as any);
+  assert.match(d.objective || "", /Find Lucretious · How do I find Lucretious/);
+  assert.deepEqual(d.names, ["Lucretious", "Circus of the Last Days"]);
+});
+
+test("a step's places (RDR2's chapters): a place seen picks the step, and the one chapter it is in", () => {
+  const steps = [{ title: "Rob the Doctor's Backroom", text: "Go to the back of the doctor's office.", places: ["Valentine"] }, { title: "Hunt", text: "Track a deer.", places: ["Big Valley"] }];
+  assert.equal(matchDoing(steps, { names: ["Valentine"] })?.index, 0);
+  const pages = { c2: { walkthrough: steps }, c3: { walkthrough: [{ title: "Meet Strauss", text: "Collect a debt.", places: ["Rhodes"] }] } };
+  assert.equal(areaFromDoing([{ slug: "c2", name: "Chapter 2" }, { slug: "c3", name: "Chapter 3" }], pages, { names: ["Valentine"] }), "Chapter 2");
+  const both = { ...pages, c3: { walkthrough: [{ title: "Back in town", text: "Buy supplies.", places: ["Valentine"] }] } };
+  assert.equal(areaFromDoing([{ slug: "c2", name: "Chapter 2" }, { slug: "c3", name: "Chapter 3" }], both, { names: ["Valentine"] }), null, "a place in two chapters: ask");
 });
 
 console.log(`\n${passed} passed`);

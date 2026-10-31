@@ -103,7 +103,7 @@ export type TrackerGuideArea = {
 const LABEL_KEYS = [
   'title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'awayEdge', 'size',
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
-  'locatingBig', 'whereTitle', 'whereSub', 'whereLooksLike', 'whereYes', 'whereNo', 'whereLast', 'whereStill', 'wherePick', 'youreIn', 'change', 'inPlace', 'hereSub', 'seenOnScreen',
+  'locatingBig', 'whereTitle', 'whereSub', 'whereLooksLike', 'whereYes', 'whereNo', 'whereLast', 'whereStill', 'wherePick', 'youreIn', 'change', 'inPlace', 'hereSub', 'seenOnScreen', 'fromGuideStep',
   'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'secBattle', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
