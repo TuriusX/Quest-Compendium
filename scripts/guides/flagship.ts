@@ -43,7 +43,7 @@ import { sourcePack, packNotes, WIKIS, type SourcePack } from './sourcePack';
 /** Wikis we fetch directly (a page written from one counts as checked). */
 const WIKI_HOSTS = new Set(Object.values(WIKIS).map((w) => w.name));
 import { structuredPeople } from './compendium';
-import { isTransient, buildEvidencePack, buildGameEvidence, lean, storedEvidenceFor, evidenceText, claimCheck, claimReview, claimSlots, sentencesOf, pageRules, type ClaimVerdict, type ClaimPage } from './claimCheck';
+import { isTransient, buildEvidencePack, buildGameEvidence, lean, storedEvidenceFor, evidenceText, claimCheck, claimReview, claimSlots, sentencesOf, pageRules, type ClaimVerdict, type ClaimPage, type Evidence, type EvidencePack } from './claimCheck';
 import { ProQuotaWait } from './reviewerQuota';
 import { apiLimits, searchesToday, pipelineRoom, SearchDayWait } from '../../apiLimits';
 import { promote, stageCopy, discard } from './promote';
@@ -606,7 +606,15 @@ export function pageClaimPage(a: any): ClaimPage {
 /** Gap filling (buildPageEvidence 5b): the share of a page's specific claims that must be verified for it to pass. */
 export const GAP_KEEP = 0.75;
 
-async function buildPageEvidence(key: string, game: string, slug: string, order: { slug: string; name: string }[], from = key, opts: { rebuild?: boolean } = {}) {
+/**
+ * Evidence and a draft written outside the pipeline (owner, Oct 31 2026: a batch by Claude Code instead of the paid
+ * research and writing): sourced sentences (each with the page it came from) and the walkthrough and choices in the
+ * writer's line formats. They replace steps 1 (research) and 2 (writing) only: the claim check, the review, the gap
+ * search, the rules and the rebuild guard run as for every page, so the same rules apply.
+ */
+export type SuppliedPage = { evidence: Evidence[]; walk: string; choices: string; by: string };
+
+async function buildPageEvidence(key: string, game: string, slug: string, order: { slug: string; name: string }[], from = key, opts: { rebuild?: boolean; supplied?: SuppliedPage } = {}) {
   const scope = usageScope.getStore();
   const before = scope ? { ...scope } : { searches: ledger.searches, dollars: ledgerDollars() };
   const p: any = (await db().collection('guides').doc(from).collection('areas').doc(slug).get()).data();
@@ -619,8 +627,11 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   // The game's evidence (merchants, NPCs, bosses, key items, missables) for this page's group of 6 areas in guide order,
   // researched once and shared by those pages; the page itself only researches its order of play and its own entries.
   const g0 = Math.floor(Math.max(0, i) / 6) * 6;
-  const gameEv = await buildGameEvidence(key, game, order.slice(g0, g0 + 6).map((o) => o.name));
-  const ev = await buildEvidencePack(key, slug, game, p.name, neighbours, { rebuild: !!opts.rebuild || arg('rebuild') === 'true', gameEvidence: gameEv, entries: [...(p.items || []).map((e: any) => e.name), ...(p.secrets || []).map((e: any) => cut(e.text, 60))] });
+  const sup = opts.supplied;
+  const ev: EvidencePack = sup
+    ? { key, slug, game, area: p.name, evidence: sup.evidence.map((e) => ({ ...e })), sites: [...new Set(sup.evidence.flatMap((e) => e.sources))], servicesComplete: false, searches: 0, at: Date.now() }
+    : await buildEvidencePack(key, slug, game, p.name, neighbours, { rebuild: !!opts.rebuild || arg('rebuild') === 'true', gameEvidence: await buildGameEvidence(key, game, order.slice(g0, g0 + 6).map((o) => o.name)), entries: [...(p.items || []).map((e: any) => e.name), ...(p.secrets || []).map((e: any) => cut(e.text, 60))] });
+  if (sup) console.log(`  supplied by ${sup.by}: evidence and draft (no research or writing calls)`);
   // Approved player suggestions for this page (contributions.ts): owner-approved evidence, so a rebuild keeps them.
   const { contributionEvidence } = await import('./contribEvidence');
   const pc = await contributionEvidence(key, slug);
@@ -633,12 +644,12 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   // 2. Write from the evidence (the page's own entries are offered, and checked like everything else).
   const entries = entryList(p);
   const fights0: GuideFight[] = (p.fights || []).length ? p.fights : [];
-  const w = await plain(walkPrompt(game, p, entries, fights0, neighbours, evText).replace(/Write from the research notes below;[^\n]*/, EVIDENCE_RULE).replace('Research notes:', 'EVIDENCE:'), 'walkthrough');
+  const w = sup ? sup.walk : await plain(walkPrompt(game, p, entries, fights0, neighbours, evText).replace(/Write from the research notes below;[^\n]*/, EVIDENCE_RULE).replace('Research notes:', 'EVIDENCE:'), 'walkthrough');
   const draft: Draft = {
     steps: parseSteps(w, new Set(entries.map((e) => e.id)), new Set(fights0.map((f) => f.id))),
     news: parseNew(w, ev.sites.slice(0, 5)),
     advice: parseAdvice(w),
-    choices: parseChoices(await plain(choicePrompt(game, p, evText).replace(/Search guides and wikis to confirm each choice and its outcomes, and write only what the sources say\./, EVIDENCE_RULE), 'choices')),
+    choices: parseChoices(sup ? sup.choices : await plain(choicePrompt(game, p, evText).replace(/Search guides and wikis to confirm each choice and its outcomes, and write only what the sources say\./, EVIDENCE_RULE), 'choices')),
     old: [...(p.items || []).map((e: GuideEntry) => ({ entry: { ...e }, kind: 'item' as const })), ...(p.secrets || []).map((e: GuideEntry) => ({ entry: { ...e }, kind: 'secret' as const }))],
   };
   for (const n of draft.news) {
@@ -731,7 +742,7 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   if (second.removed.length) console.log(`  review removed ${second.removed.length} more claim(s)`);
   const spent = scope ? { searches: scope.searches - before.searches, dollars: scope.dollars - before.dollars } : { searches: ledger.searches - before.searches, dollars: ledgerDollars() - before.dollars };
   const out = tidyProto({
-    ...proto, mode: 'evidence', sources: ev.sites.slice(0, 12), cost: spent, model: MODEL, at: Date.now(),
+    ...proto, mode: 'evidence', sources: ev.sites.slice(0, 12), cost: spent, model: sup ? `${sup.by} (draft and evidence), ${MODEL} (checks)` : MODEL, at: Date.now(),
     status: review.status, score: review.score, ...(review.reason ? { reason: review.reason } : {}),
     claims: { checked: verdicts.length, removed: applied.removed, rules: rules.removed, cleaned: rules.cleaned, review: { supported: review.supported, total: review.total, contradicted: review.contradicted, unsupported: review.unsupported } },
     ...(gapFill.tried ? { gapFill } : {}),

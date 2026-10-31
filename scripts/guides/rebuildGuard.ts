@@ -53,19 +53,23 @@ function pageText(p: any): string {
  * Whether an old entry is still on the new page: the same name in the same list, or its name anywhere in the new
  * page's text. A secret has no name, so most of its words have to be there.
  */
-function kept(name: string, kind: Lost['kind'], newNames: string[], text: string): boolean {
+function kept(name: string, kind: Lost['kind'], newNames: string[], text: string, listText = text): boolean {
   const n = normName(name);
   if (!n) return true;
+  // Items and secrets are checklist rows (ticked on the site, the app's quest log, the Deck): one is kept only while it's
+  // still in its own list, never because the walkthrough's text mentions it (owner, Oct 31 2026: New Londo Ruins lost
+  // its Transient Curse and Cursebite Ring rows that way). Fights, shops and choices may move into the walkthrough.
   if (kind === 'secret') {
     const w = words(name);
     if (!w.length) return true;
-    return w.filter((x) => text.includes(` ${x} `)).length / w.length >= 0.6;
+    return w.filter((x) => listText.includes(` ${x} `)).length / w.length >= 0.6;
   }
   if (newNames.some((m) => m === n || (n.length >= 4 && m.length >= 4 && (m.includes(n) || n.includes(m))))) return true;
   // Renamed in the same list ("Baron fistfight" → "Fistfight with the Bloody Baron"): every word of the old name is in
   // one new name.
   const w = words(name);
   if (w.length >= 2 && newNames.some((m) => w.every((x) => ` ${m} `.includes(` ${x} `)))) return true;
+  if (kind === 'item') return false;
   return text.includes(` ${n} `);
 }
 
@@ -89,12 +93,14 @@ export function rebuildVerdict(oldPage: any, newPage: any, impressions = 0, cont
   // own: evidence pages keep their sources on the page, not on each entry.
   const pageSourced = oldPage.verified === true && trusted(oldPage.sources).length > 0;
   const text = pageText(newPage);
+  // The checklist's own rows (items, secrets, the page's sections): what an item or secret must still be in.
+  const listText = pageText({ items: newPage?.items, secrets: newPage?.secrets, sections: newPage?.sections });
   const lost: Lost[] = [];
   for (const l of LISTS) {
     const newNames = (Array.isArray(newPage?.[l.field]) ? newPage[l.field] : []).map((e: any) => normName(l.name(e))).filter(Boolean);
     for (const e of Array.isArray(oldPage[l.field]) ? oldPage[l.field] : []) {
       const name = String(l.name(e) || '').trim();
-      if (!name || kept(name, l.kind, newNames, text)) continue;
+      if (!name || kept(name, l.kind, newNames, text, listText)) continue;
       const own = Array.isArray(e?.sources) && e.sources.length ? trusted(e.sources).length > 0 : pageSourced;
       lost.push({ kind: l.kind, name: name.slice(0, 120), sourced: own });
     }
@@ -102,7 +108,7 @@ export function rebuildVerdict(oldPage: any, newPage: any, impressions = 0, cont
   // Checklist rows: still there if their words are (like a secret, they have no name of their own).
   for (const e of sectionEntries(oldPage)) {
     const name = String(e?.text || '').trim();
-    if (!name || kept(name, 'secret', [], text)) continue;
+    if (!name || kept(name, 'secret', [], text, listText)) continue;
     lost.push({ kind: 'checklist', name: name.slice(0, 120), sourced: Array.isArray(e?.sources) && e.sources.length ? trusted(e.sources).length > 0 : pageSourced });
   }
   // A walkthrough cut to less than two thirds of its steps lost content, even when each step's name moved.

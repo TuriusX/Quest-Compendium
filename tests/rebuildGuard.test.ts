@@ -47,6 +47,18 @@ test("the same content reworded, reordered or moved into the walkthrough isn't a
   assert.deepEqual(v.lost, []);
 });
 
+test("an item or secret mentioned only in the walkthrough text is lost: checklist rows stay in their lists (Oct 31 2026)", () => {
+  const old = { name: "New Londo Ruins", status: "published", verified: false, items: [{ id: "x1", name: "Transient Curse" }, { id: "x5", name: "Cursebite Ring" }], secrets: [{ id: "x10", text: "An illusory wall in the lower ruins hides a Titanite Chunk" }] };
+  const rebuilt = {
+    ...old, items: [{ id: "x5", name: "Cursebite Ring" }], secrets: [],
+    walkthrough: [{ id: "w1", title: "Into the ruins", text: "Two Transient Curse sit in a pot before the bridges. An illusory wall in the lower ruins hides a Titanite Chunk." }],
+  };
+  const v = rebuildVerdict(old, rebuilt, 0);
+  assert.deepEqual(v.lost.map((x) => `${x.kind}:${x.name}`), ["item:Transient Curse", "secret:An illusory wall in the lower ruins hides a Titanite Chunk"]);
+  const c = carryOver(old, rebuilt);
+  assert.deepEqual(c.fields.items.map((e: any) => [e.name, !!e.unconfirmed]), [["Cursebite Ring", false], ["Transient Curse", true]]);
+});
+
 test("any named entry lost holds the rebuild (owner, Oct 22 2026): unsourced or not, checked page or not, traffic or not", () => {
   const quick = { name: "New Londo Ruins", status: "published", verified: false, items: [{ name: "Invented Ring" }, { name: "Transient Curse" }], secrets: [{ text: "An illusory wall behind the third bell hides a chest" }] };
   const rebuilt = { ...quick, items: [{ name: "Transient Curse" }], secrets: [] };
