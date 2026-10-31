@@ -37,10 +37,10 @@ export const normName = (s: unknown) =>
   String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[’'`]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/^(the|a|an) /, '').trim();
 
 const STOP = new Set(['the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'and', 'or', 'for', 'with', 'from', 'by', 'is', 'it', 'its', 'you', 'your', 'this', 'that', 'can', 'be', 'are', 'here', 'there', 'into', 'near']);
-const words = (s: unknown) => normName(s).split(' ').filter((w) => w.length > 2 && !STOP.has(w));
+export const words = (s: unknown) => normName(s).split(' ').filter((w) => w.length > 2 && !STOP.has(w));
 
 /** Everything a page says, for "is this still on the page somewhere?" (an entry can move into a walkthrough step). */
-function pageText(p: any): string {
+export function pageText(p: any): string {
   const parts: unknown[] = [p?.overview];
   for (const k of ['items', 'secrets', 'shops', 'fights', 'enemies']) for (const e of Array.isArray(p?.[k]) ? p[k] : []) parts.push(e?.name, e?.text, e?.where, e?.how, e?.sells, e?.rewards, e?.tactics, e?.notes);
   for (const s of Array.isArray(p?.walkthrough) ? p.walkthrough : []) parts.push(s?.title, s?.text, s?.tip, s?.warn);
