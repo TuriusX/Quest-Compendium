@@ -1,7 +1,8 @@
 /**
  * "Locate me": POST /api/locate-me
- *   { imageBase64: "data:image/jpeg;base64,...", game: string, guideKey?: string, areas: [{ name, story }], place?: string }
- *   -> { area: string | "unknown", story: string, evidence: "read" | "guessed", seenText: string, locatesLeft: number }
+ *   { imageBase64: "data:image/jpeg;base64,...", game: string, guideKey?: string, areas: [{ name, story }], auto?: boolean }
+ *   -> { area: string | "unknown", story: string, evidence: "read" | "guessed", seenText: string, confident: boolean,
+ *        locatesLeft: number }
  *
  * The objectives tracker and the PlaceBar send a screenshot with the game's guide areas; the cheapest model picks the
  * area the player is in (only from that list) and a one-line story beat, and says whether it READ the place name on
@@ -9,13 +10,28 @@
  * counts when seenText really names the chosen area or one of its sub-locations (the guide's own matching: see
  * src/utils/guideMatch.ts); otherwise it's a guess. The app confirms the place only for a read.
  *
+ * The Fast model (owner, Oct 31 2026: LOCATE_ME_MODEL, else MAIN_MODEL) looks at everything on screen that says where
+ * the player is: a place name (an area banner, a minimap label), a map screen with the player's marker, the quest
+ * journal, the surroundings. It says how sure it is: confident is a read the server checked, or "high" confidence. The
+ * app uses only a confident answer and asks the player otherwise (never a guess: the quest log shows nothing from the
+ * guide for a place the player may not be in). Low thinking and short area lines keep it to a fraction of a cent.
+ *
+ * Automatic locates (auto: the app checks when a game starts, a tab is opened or switched to, and the player comes back
+ * to the game) use the same allowance but stop at LOCATE_AUTO_DAILY (15) / LOCATE_AUTO_PREMIUM_DAILY (60), so the
+ * player's own Locate me always has some left.
+ *
  * It never uses the player's daily questions. Its own limit instead, per player per day (UTC, like questions):
- * LOCATE_ME_DAILY (20), LOCATE_ME_PREMIUM_DAILY (100). Signed-in players are counted on their user record (locateDate,
- * locatesUsed: server-only fields, see firestore.rules); guests in memory.
+ * LOCATE_ME_DAILY (30), LOCATE_ME_PREMIUM_DAILY (100). Signed-in players are counted on their user record (locateDate,
+ * locatesUsed: server-only fields, see firestore.rules); guests in memory. Every check is counted for the owner's
+ * /stats (statsHours/{hour}.loc, per anonymous player: ownerStats.ts).
  */
 import type { Express, NextFunction, Request, Response } from 'express';
 import type { GoogleGenAI } from '@google/genai';
-import { logUsage } from './usage';
+import crypto from 'crypto';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { ThinkingLevel } from '@google/genai';
+import { logUsage, billedUsage } from './usage';
+import { isTestTraffic } from './testTraffic';
 import { matchGuideArea } from './src/utils/guideMatch';
 import { nameKey, samePlace, storyPhrase } from './src/utils/placeName';
 
@@ -30,9 +46,14 @@ type Deps = {
 };
 
 const envInt = (v: string | undefined, d: number) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : d);
-const DAILY = envInt(process.env.LOCATE_ME_DAILY, 20);
+const DAILY = envInt(process.env.LOCATE_ME_DAILY, 30);
 const PREMIUM_DAILY = envInt(process.env.LOCATE_ME_PREMIUM_DAILY, 100);
-const MODEL = process.env.LOCATE_ME_MODEL || 'gemini-3.1-flash-lite'; // the cheapest model the app uses
+const AUTO_DAILY = envInt(process.env.LOCATE_AUTO_DAILY, 15);
+const AUTO_PREMIUM_DAILY = envInt(process.env.LOCATE_AUTO_PREMIUM_DAILY, 60);
+/** Locate me: the Fast model (the answers' own). */
+const MODEL = process.env.LOCATE_ME_MODEL || process.env.MAIN_MODEL || 'gemini-3.8-flash';
+/** An answer's screenshot read for its place (readPlaceOnScreen): the cheapest model the app uses. */
+const PLACE_READ_MODEL = process.env.PLACE_READ_MODEL || 'gemini-3.1-flash-lite';
 const MAX_IMAGE_CHARS = 4_000_000;
 const DATA_URL_RE = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
 const MAX_AREAS = 150;
@@ -40,7 +61,12 @@ const MAX_AREAS = 150;
 /** Guests (guest_… tokens): today's count per guest, in memory. */
 const guestCounts = new Map<string, { day: string; used: number }>();
 
-export type LocateMeReply = { area: string; story: string; evidence: 'read' | 'guessed'; seenText: string };
+export type LocateMeReply = {
+  area: string; story: string; evidence: 'read' | 'guessed'; seenText: string;
+  confidence: 'high' | 'medium' | 'low';
+  /** What it went by: a place name read on screen, the map's marker, the quest journal, or the surroundings. */
+  how: 'read' | 'map' | 'journal' | 'surroundings';
+};
 
 /** The model's reply, checked against the list: an area name from it (exactly as listed), or "unknown". */
 export function parseLocateMeReply(text: string, areaNames: string[]): LocateMeReply {
@@ -53,12 +79,43 @@ export function parseLocateMeReply(text: string, areaNames: string[]): LocateMeR
   const wanted = String(parsed?.area ?? '').trim().toLowerCase();
   const area = areaNames.find((n) => n.toLowerCase() === wanted) || 'unknown';
   const seenText = String(parsed?.seenText ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const c = String(parsed?.confidence ?? '').toLowerCase();
+  const how = String(parsed?.how ?? '').toLowerCase();
   return {
     area,
     story: area === 'unknown' ? '' : String(parsed?.story ?? '').replace(/\s+/g, ' ').trim().slice(0, 100),
     evidence: area !== 'unknown' && String(parsed?.evidence ?? '').toLowerCase() === 'read' && !!seenText ? 'read' : 'guessed',
     seenText: area === 'unknown' ? '' : seenText,
+    confidence: area !== 'unknown' && (c === 'high' || c === 'medium') ? c : 'low',
+    how: how === 'read' || how === 'map' || how === 'journal' ? how : 'surroundings',
   };
+}
+
+/**
+ * Good enough to set the place without asking: a place name read on screen that the server checked names the area, or
+ * "high" confidence (the map's marker, the journal's current location, unmistakable surroundings). Anything less: the
+ * app asks "Where are you?".
+ */
+export const isConfident = (r: LocateMeReply): boolean => r.area !== 'unknown' && (r.evidence === 'read' || r.confidence === 'high');
+
+/** Locate me's question to the Fast model: which listed area, from everything on screen, and how sure. */
+export function locateMePrompt(game: string, areas: { name: string; story: string }[]): string {
+  // Short area lines keep the prompt small (a 60-area guide is about 1,500 tokens).
+  const list = areas.map((a) => `- ${a.name}${a.story ? `: ${a.story.replace(/\s+/g, ' ').slice(0, 70)}` : ''}`).join('\n');
+  return (
+    `This is a screenshot of the video game "${game}". Which of these areas is the player in right now? Use everything ` +
+    `on screen: a place name (an area title or banner, a minimap or compass label, a waypoint), a map screen with the ` +
+    `player's marker, the quest journal's current location or quest, and the surroundings (landmarks, buildings, ` +
+    `characters). Pick one name exactly as written, or "unknown" when the screen doesn't show enough (a menu, a loading ` +
+    `screen, a dialogue close-up, a map with no marker, somewhere not in the list). Never assume the start of the game.\n` +
+    `Areas (name: story beat):\n${list}\n` +
+    `"how": "read" when a place name is visibly written on screen (put that exact text in seenText), "map" for the map's ` +
+    `player marker, "journal" for the quest journal, "surroundings" otherwise. "confidence": "high" only when the screen ` +
+    `clearly shows this area and no other listed area fits; else "medium" or "low".\n` +
+    `Reply with JSON only: {"area": "<a name from the list, or unknown>", "how": "read" | "map" | "journal" | ` +
+    `"surroundings", "confidence": "high" | "medium" | "low", "evidence": "read" | "guessed", "seenText": "<the place ` +
+    `name as written on screen, or empty>", "story": "<where they are in the story, under 12 words>"}`
+  );
 }
 
 /**
@@ -81,7 +138,7 @@ export function seenTextNamesArea(
   return !!m && m.via !== 'story' && areas[m.index]?.name === area;
 }
 
-/** Locate me's question to the model: which listed area, and the place name read on screen (if any). */
+/** The answers' place check (readPlaceOnScreen): which listed area, and the place name read on screen (if any). */
 function locatePrompt(game: string, areas: { name: string; story: string }[], place: string): string {
   const list = areas.map((a) => `- ${a.name}${a.story ? `: ${a.story}` : ''}`).join('\n');
   return (
@@ -117,11 +174,11 @@ export async function readPlaceOnScreen(
   const areas = guide.areas.slice(0, MAX_AREAS);
   try {
     const response: any = await client.models.generateContent({
-      model: MODEL,
+      model: PLACE_READ_MODEL,
       contents: [{ role: 'user', parts: [{ inlineData: { mimeType: m[1], data: m[2] } }, { text: locatePrompt(game, areas, place) }] }],
       config: { responseMimeType: 'application/json', temperature: 0.1, maxOutputTokens: 120 },
     });
-    logUsage('place-read', MODEL, response);
+    logUsage('place-read', PLACE_READ_MODEL, response);
     const r = parseLocateMeReply(response?.text ?? '', areas.map((a) => a.name));
     if (r.evidence !== 'read' || !seenTextNamesArea(r.seenText, r.area, areas, guide.pages)) return null;
     // Story beats are quest-log phrases ("Exploring the inner sanctum"), never notes about "the player".
@@ -140,6 +197,21 @@ export function areaForSeenText(seenText: string, guide: GuideAreasPages): strin
   return named ? named.name : null;
 }
 
+/** One Locate me check for the owner's /stats: per anonymous player and UTC hour (never test traffic). */
+function countForStats(uid: string, auto: boolean, found: boolean, dollars: number): void {
+  if (!uid || isTestTraffic(uid)) return;
+  try {
+    const who = crypto.createHash('sha256').update(`qc:${uid}`).digest('hex').slice(0, 12);
+    const hour = new Date().toISOString().slice(0, 13);
+    getFirestore().collection('statsHours').doc(hour).set({
+      at: Date.parse(`${hour}:00:00Z`),
+      loc: { [who]: { n: FieldValue.increment(1), ...(auto ? { a: FieldValue.increment(1) } : {}), ...(found ? { f: FieldValue.increment(1) } : {}), c: FieldValue.increment(Math.round(dollars * 1e6)) } },
+    }, { merge: true }).catch(() => {});
+  } catch {
+    // no database (local dev): not counted
+  }
+}
+
 export function registerLocateMe(app: Express, deps: Deps) {
   app.post('/api/locate-me', deps.requireAuth as any, async (req: Request, res: Response) => {
     const image = String(req.body?.imageBase64 ?? '');
@@ -152,7 +224,7 @@ export function registerLocateMe(app: Express, deps: Deps) {
       .map((a: any) => ({ name: String(a?.name ?? '').trim().slice(0, 80), story: String(a?.story ?? '').trim().slice(0, 160) }))
       .filter((a: { name: string }) => a.name);
     if (!game || !areas.length) return res.status(400).json({ error: 'The game and its guide areas are required.' });
-    const place = String(req.body?.place ?? '').trim().slice(0, 80);
+    const auto = req.body?.auto === true;
 
     // Today's allowance: its own, separate from questions.
     const user = (req as any).user || {};
@@ -162,13 +234,21 @@ export function registerLocateMe(app: Express, deps: Deps) {
     const today = new Date().toISOString().split('T')[0];
     let used = 0;
     let limit = DAILY;
+    let autoLimit = AUTO_DAILY;
     if (isGuest) {
       const g = guestCounts.get(uid);
       used = g && g.day === today ? g.used : 0;
     } else {
       const userDoc = (await deps.getUserDoc(idToken, uid).catch(() => null)) || {};
-      if (userDoc.isPremium === true) limit = PREMIUM_DAILY;
+      if (userDoc.isPremium === true) {
+        limit = PREMIUM_DAILY;
+        autoLimit = AUTO_PREMIUM_DAILY;
+      }
       used = userDoc.locateDate === today ? Number(userDoc.locatesUsed) || 0 : 0;
+    }
+    // An automatic check stops early, so the player's own Locate me always has some left (the app then asks).
+    if (auto && used >= Math.min(autoLimit, limit)) {
+      return res.status(429).json({ error: 'Automatic checks are used up for today.', autoLimitReached: true, locatesLeft: Math.max(0, limit - used) });
     }
     if (used >= limit) {
       return res.status(429).json({
@@ -179,14 +259,15 @@ export function registerLocateMe(app: Express, deps: Deps) {
       });
     }
 
-    const prompt = locatePrompt(game, areas, place);
+    // No "last known place" in the question: it would pull the answer toward it (a resumed save is often elsewhere).
+    const prompt = locateMePrompt(game, areas);
     try {
       const response: any = await deps.getGeminiClient().models.generateContent({
         model: MODEL,
         contents: [{ role: 'user', parts: [{ inlineData: { mimeType: m[1], data: m[2] } }, { text: prompt }] }],
-        config: { responseMimeType: 'application/json', temperature: 0.1, maxOutputTokens: 120 },
+        config: { responseMimeType: 'application/json', temperature: 0.1, maxOutputTokens: 2000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
       });
-      logUsage('locate-me', MODEL, response);
+      logUsage(auto ? 'locate-auto' : 'locate-me', MODEL, response);
       const result = parseLocateMeReply(response?.text ?? '', areas.map((a) => a.name));
       // A read only counts if the text really names that area (or one of its sub-locations in the guide).
       if (result.evidence === 'read') {
@@ -198,9 +279,11 @@ export function registerLocateMe(app: Express, deps: Deps) {
         }
       }
       // Counted once the check ran (an unreadable screenshot still costs a model call).
+      const confident = isConfident(result);
       if (isGuest) guestCounts.set(uid, { day: today, used: used + 1 });
       else await deps.updateUserDoc(idToken, uid, { locateDate: today, locatesUsed: used + 1 }).catch(() => {});
-      return res.json({ ...result, locatesLeft: Math.max(0, limit - used - 1) });
+      countForStats(uid, auto, confident, billedUsage(MODEL, response).tokenDollars);
+      return res.json({ ...result, confident, locatesLeft: Math.max(0, limit - used - 1) });
     } catch (err: any) {
       console.warn('[locate-me] failed:', err?.message);
       return res.status(502).json({ error: "Couldn't check the screenshot. Try again in a moment." });

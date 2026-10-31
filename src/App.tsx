@@ -74,7 +74,8 @@ import { readTombstones } from './hooks/tabMerge';
 import { MigrationNotice, WhichGamePrompt } from './components/SpacesNotice';
 import { GameLine } from './components/GameLine';
 import { QuestLog } from './components/QuestLog';
-import { buildLogView, objectiveForRequest, nextLogState, answerTitle, type LogView } from './utils/questLogView';
+import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, type LogView } from './utils/questLogView';
+import { missablesThin } from './utils/missablesCheck';
 
 /**
  * The running game's picture, sharp at any screen scale (utils/artCache.ts): IGDB's key art at 720p when its guide has
@@ -721,6 +722,7 @@ export default function App() {
         trackerTickShortcut: settings.trackerTickShortcut || 'CmdOrCtrl+Shift+Enter',
         trackerNextShortcut: settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down',
         questLogShortcut: settings.questLogShortcut || 'CmdOrCtrl+Shift+L',
+        locateShortcut: settings.locateShortcut || 'CmdOrCtrl+Shift+K',
         // The owner's picture capture for the guides (admins only).
         ownerCaptureShortcut: userData?.isAdmin ? 'CmdOrCtrl+Shift+P' : '',
       });
@@ -732,6 +734,7 @@ export default function App() {
     settings.trackerTickShortcut,
     settings.trackerNextShortcut,
     settings.questLogShortcut,
+    settings.locateShortcut,
     userData?.isAdmin,
   ]);
 
@@ -744,8 +747,9 @@ export default function App() {
       talk: settings.controllerTalk || 'y',
       trackerTick: settings.controllerTick || 'off',
       trackerNext: settings.controllerNext || 'off',
+      trackerLocate: settings.controllerLocate || 'down',
     });
-  }, [settings.controllerEnabled, settings.controllerToggle, settings.controllerCustom, settings.controllerTalk, settings.controllerTick, settings.controllerNext]);
+  }, [settings.controllerEnabled, settings.controllerToggle, settings.controllerCustom, settings.controllerTalk, settings.controllerTick, settings.controllerNext, settings.controllerLocate]);
 
   // Snapshot on open (desktop): capture the game before the overlay takes focus.
   useEffect(() => {
@@ -778,10 +782,11 @@ export default function App() {
   /** The player picked or confirmed where they are (under an answer, or on the objectives tracker). */
   const handleSetPlace = (name: string) => {
     if (!activeTab) return;
-    const next = { ...(activeTab.place || {}), name, confirmed: true };
+    const next = { ...(activeTab.place || {}), name, confirmed: true, checkedAt: Date.now() };
     setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));
     rememberGameProgress(activeTab, next);
     noteAreaChange(activeTab, activeTab.place?.name, name);
+    setWhereFor(null);
   };
 
   // ---- The objectives tracker: the panel's minimized state (desktop, electron/tracker.cjs) ----
@@ -798,12 +803,22 @@ export default function App() {
   const trackerAccent = (THEME_STYLES[settings.theme] || THEME_STYLES.purple).color;
   const trackerKeyOfGame = trackerGameKey(activeTab, activeTab?.activeSteamGame || (runningOpen ? globalActiveGame : null));
   const trackerWords = trackerLabels(tr); // the tracker's words follow the app language
-  // Where the player is: the tab's place, else the place saved for this game.
-  // (The same key as gameProgressKey below, which is declared later in this component.)
-  const trackerPlace = activeTab
-    ? activeTab.place || settings.gameProgress?.[(activeTab.memoryKey || activeTab.activeSteamGame?.name || activeTab.name || '').trim().toLowerCase()]
-    : undefined;
-  const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, trackerPlace?.name, trackerPlace?.story, useLocale(), Number(activeTab?.activeSteamGame?.appId || activeGame?.appId) || 0, activeTab?.name, activeTab?.guideKey);
+  // Where the player is: this playthrough's own place. Never the place saved for the game from another tab (owner, Oct
+  // 31 2026: a new tab for a save in Act 3 showed the start of the guide's Emerald Grove from an older playthrough).
+  const trackerPlace = activeTab ? activeTab.place : undefined;
+  // The place is checked again when a game starts, a tab is opened or switched to while its game runs, and when the
+  // player comes back to the game after a while (locateDue: when, per tab). Until it's known since then
+  // (utils/questLogView placeIsCurrent), the quest log shows nothing from the guide, only "Where are you?".
+  const [locateDue, setLocateDue] = useState<Record<string, number>>({});
+  const markLocateDue = (tabId: string | null | undefined) => {
+    if (tabId) setLocateDue((d) => ({ ...d, [tabId]: Date.now() }));
+  };
+  const dueAt = activeTab ? locateDue[activeTab.id] || 0 : 0;
+  const placeCurrent = placeIsCurrent(activeTab?.place, dueAt);
+  const logPlace = placeCurrent ? trackerPlace : undefined;
+  // What an unsure Locate me thought ("Looks like Rivington?"), for the active tab.
+  const [whereFor, setWhereFor] = useState<{ tabId: string; suggestion: string } | null>(null);
+  const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, logPlace?.name, logPlace?.story, useLocale(), Number(activeTab?.activeSteamGame?.appId || activeGame?.appId) || 0, activeTab?.name, activeTab?.guideKey);
   const trackerGameRef = useRef(trackerGame);
   trackerGameRef.current = trackerGame;
   // "Which game?": only while this compendium is the running collection's, and neither its pick nor its name says which.
@@ -835,14 +850,18 @@ export default function App() {
     if (!activeTab) return;
     const area = (trackerGameRef.current.guideArea?.areas || []).find((a) => a.name === name);
     const story = area?.story?.trim() || '';
-    const place = placeAfterMove(activeTab.place, name, story, true);
+    const place = { ...placeAfterMove(activeTab.place, name, story, true), checkedAt: Date.now() };
     setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place, lastActive: Date.now() } : t)));
     rememberGameProgress(activeTab, place);
     noteAreaChange(activeTab, activeTab.place?.name, name);
+    setWhereFor(null);
   };
-  // "Locate me" (the tracker's crosshair, the PlaceBar): a screenshot of the game and the guide's areas go to
-  // /api/locate-me (its own daily limit, never the player's questions). The place is confirmed only when its name was
-  // read on screen (and the server checked it names that area); a guess is set unconfirmed, so the confirm button shows.
+  // "Locate me" (the quest log's button, Ctrl+Shift+K, the controller, the tracker's crosshair, the PlaceBar): a
+  // screenshot of the game and the guide's areas go to /api/locate-me (the Fast model; its own daily limit, never the
+  // player's questions). Only a confident answer sets the place ("You're in Rivington · Change"); an unsure one is a
+  // suggestion the player confirms ("Looks like Rivington?"), and nothing found asks "Where are you?". Automatic
+  // checks (auto) take the screenshot quietly: never sliding an open panel away (its snapshot from opening is used,
+  // else the check waits until the game is back in view), never a window that isn't the game.
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState('');
   const locatingRef = useRef(false);
@@ -878,15 +897,30 @@ export default function App() {
       img.onerror = () => resolve(dataUrl);
       img.src = dataUrl;
     });
-  const runLocate = async () => {
+  const pendingAutoLocate = useRef<string | null>(null);
+  const runLocate = async (autoArg?: unknown) => {
+    // A click passes its event: only an explicit true is an automatic check.
+    const auto = autoArg === true;
     const api = (window as any).electronAPI;
     const tab = activeTab;
-    const guideAreas = trackerGameRef.current.guideArea?.areas || [];
+    const guideAreas = trackerGameRef.current.areas || [];
     if (locatingRef.current || !tab) return;
     if (!api?.captureFresh || !guideAreas.length) {
-      showLocateNote(tr('place.locateNoGuide'));
+      if (!auto) showLocateNote(tr('place.locateNoGuide'));
       return;
     }
+    // The quiet capture for an automatic check: null means not now (the game isn't in view, or the panel is open
+    // without a snapshot of the game): it runs when the game is back in view.
+    let quiet: string | null = null;
+    if (auto) {
+      const r = api.locateCapture ? await api.locateCapture().catch(() => null) : null;
+      if (!r?.image) {
+        pendingAutoLocate.current = tab.id;
+        return;
+      }
+      quiet = r.image;
+    }
+    pendingAutoLocate.current = null;
     locatingRef.current = true;
     // The tracker holds what it shows now (only its place line says "Locating…") until the result is in and the new
     // area's guide page has loaded: then it updates once, never through a half-loaded place in between.
@@ -895,7 +929,7 @@ export default function App() {
     showLocateNote('');
     try {
       // A fresh capture of the game (an open panel slides away for it), never the panel or the snapshot from opening it.
-      const captured: string | null = await api.captureFresh();
+      const captured: string | null = quiet || (await api.captureFresh());
       if (!captured) throw new Error('no screenshot');
       const image = await shrinkForLocate(captured);
       const token = user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken() : null;
@@ -907,21 +941,28 @@ export default function App() {
           game: tab.activeSteamGame?.name || activeGame?.name || tab.name,
           guideKey: trackerGameRef.current.guideKey || '',
           areas: guideAreas.map((a) => ({ name: a.name, story: a.story })),
-          place: trackerPlaceRef.current?.name || '',
+          ...(auto ? { auto: true } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        showLocateNote(data?.locateLimitReached ? tr('place.locateLimit', { n: data?.limit ?? '' }) : tr('place.locateFail'));
+        // An automatic check that couldn't run says nothing: the log is already asking "Where are you?".
+        if (!auto) showLocateNote(data?.locateLimitReached ? tr('place.locateLimit', { n: data?.limit ?? '' }) : tr('place.locateFail'));
         return;
       }
       if (!data?.area || data.area === 'unknown') {
-        showLocateNote(tr('place.locateUnknown'));
+        if (!auto) showLocateNote(tr('place.locateUnknown'));
         return;
       }
-      const sure = data.evidence === 'read';
+      // Older servers don't say "confident": a read was.
+      const confident = data.confident === true || (data.confident === undefined && data.evidence === 'read');
+      if (!confident) {
+        setWhereFor({ tabId: tab.id, suggestion: String(data.area) });
+        return;
+      }
       const story = typeof data.story === 'string' ? data.story.trim() : '';
-      const place = placeAfterMove(tab.place, String(data.area), story, sure);
+      const place = { ...placeAfterMove(tab.place, String(data.area), story, data.evidence === 'read'), sure: true, checkedAt: Date.now() };
+      setWhereFor(null);
       setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, place, lastActive: Date.now() } : t)));
       rememberGameProgress(tab, place);
       noteAreaChange(tab, tab.place?.name, place.name);
@@ -1023,7 +1064,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // The guide's approved pictures (the site's pictures.json): quest log thumbnails where "Quest log / step" is on.
   const guidePics = useGuidePictures(trackerGame.guideKey);
   const builtTrackerPayload = withPictures(activeTab
-    ? buildTrackerPayload({ ...activeTab, place: trackerPlace }, trackerMsg, trackerGame.guideArea, trackerGame.achievementGuide, trackerWords, {
+    ? buildTrackerPayload({ ...activeTab, place: logPlace }, trackerMsg, trackerGame.guideArea, trackerGame.achievementGuide, trackerWords, {
         accent: trackerAccent,
         gameKey: trackerKeyOfGame,
         pinned: !!trackerPickId && trackerMsg?.id === trackerPickId,
@@ -1051,12 +1092,78 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // ---- The quest log (owner, Oct 30 2026; utils/questLogView.ts): Now / Next / Watch out, driven by questions ----
   // The current objective (an answer set as Now), pins and hidden warnings live with the playthrough (tab.questLog).
   const logView: LogView | null = activeTab
-    ? buildLogView({ ...activeTab, place: trackerPlace }, heldPayload?.data || null, { gameKey: trackerKeyOfGame, accent: trackerAccent, loaded: guideSteps.section, labels: trackerWords, walk: trackerGame.guideArea && Array.isArray((trackerGame.guideArea.page as any)?.walkthrough)
+    ? buildLogView({ ...activeTab, place: logPlace }, heldPayload?.data || null, { gameKey: trackerKeyOfGame, accent: trackerAccent, loaded: guideSteps.section, labels: trackerWords, walk: trackerGame.guideArea && Array.isArray((trackerGame.guideArea.page as any)?.walkthrough)
         ? { slug: trackerGame.guideArea.slug, steps: (trackerGame.guideArea.page as any).walkthrough, done: trackerGame.guideArea.done }
-        : null })
+        : null,
+        // The place isn't known (a game with a guide): "Where are you?", with what an unsure check or answer thought,
+        // and where this playthrough was last time.
+        where: !placeCurrent && trackerGame.areas.length
+          ? {
+              locating,
+              suggestion: (whereFor?.tabId === activeTab.id ? whereFor.suggestion : '') || (activeTab.place?.name && !activeTab.place.confirmed && !activeTab.place.sure ? activeTab.place.name : undefined) || undefined,
+              last: activeTab.place?.name && (activeTab.place.confirmed || activeTab.place.sure) ? activeTab.place.name : undefined,
+              areas: trackerGame.areas.map((a) => a.name),
+            }
+          : null })
     : null;
   const logViewRef = useRef(logView);
   logViewRef.current = logView;
+  // The conversation's place strip and the guide follow the same rule: a place that isn't known now isn't shown as
+  // where the player is (the log asks "Where are you?").
+  const chatTab = useMemo(() => (activeTab && logView?.where && activeTab.place ? { ...activeTab, place: undefined } : null), [activeTab, !!logView?.where]);
+
+  // Checking where the player is (owner, Oct 31 2026): due when a game starts, when a tab is opened or switched to
+  // while its game runs, and when the player comes back to the game after a while (electron: game-in-view). The check
+  // runs by itself once per due moment (runLocate(true): a quiet screenshot, the Fast model, its own daily allowance).
+  useEffect(() => {
+    if (runId && runningTab) markLocateDue(runningTab.id);
+  }, [runId]);
+  useEffect(() => {
+    // A tab switched to whose place was checked in the last few minutes (a quick look at another tab) isn't checked again.
+    const checked = activeTab?.place?.checkedAt || 0;
+    if (activeTab && runningOpen && Date.now() - checked > 5 * 60_000) markLocateDue(activeTab.id);
+  }, [activeTab?.id, runningOpen]);
+  const autoTried = useRef<Record<string, number>>({});
+  const runLocateRef = useRef(runLocate);
+  runLocateRef.current = runLocate;
+  useEffect(() => {
+    if (!activeTab || !runningOpen || !dueAt || placeCurrent || !trackerGame.areas.length) return;
+    if ((autoTried.current[activeTab.id] || 0) >= dueAt) return;
+    autoTried.current[activeTab.id] = dueAt;
+    // A moment for a game that just started (or a tab just switched to) to settle.
+    const t = setTimeout(() => void runLocateRef.current(true), 1500);
+    return () => clearTimeout(t);
+  }, [activeTab?.id, runningOpen, dueAt, placeCurrent, trackerGame.areas.length]);
+  const runningTabRef = useRef(runningTab);
+  runningTabRef.current = runningTab;
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    // The game is in view again: after a while away (returned), the place is checked again; a check that waited for the
+    // game (pendingAutoLocate) runs now.
+    api?.onGameInView?.((e: { returned?: boolean }) => {
+      const tab = activeTabRef.current;
+      const running = runningTabRef.current;
+      if (e?.returned && running) markLocateDue(running.id);
+      else if (tab && pendingAutoLocate.current === tab.id) setTimeout(() => void runLocateRef.current(true), 800);
+    });
+    // Locate me from anywhere: its shortcut (Ctrl+Shift+K) and the controller's button.
+    api?.onLocateKey?.(() => void runLocateRef.current(false));
+  }, []);
+  // The guide's missable list for where the player is looks thin: the area is flagged for the nightly improver to check
+  // against sources (guidesApi.ts missables-thin; once a week per area from this device). Only the area is sent.
+  const thinArea = placeCurrent && trackerGame.guideKey && trackerGame.guideArea?.page && missablesThin(trackerGame.guideArea.page as any)
+    ? `${trackerGame.guideKey}/${trackerGame.guideArea.slug}` : '';
+  useEffect(() => {
+    if (!thinArea) return;
+    const k = `qc-missables-thin:${thinArea}`;
+    try {
+      if (Date.now() - Number(localStorage.getItem(k) || 0) < 7 * 86_400_000) return;
+      localStorage.setItem(k, String(Date.now()));
+    } catch {}
+    fetch(`${getApiBaseUrl()}/api/guides/${thinArea.split('/').map(encodeURIComponent).join('/')}/missables-thin`, { method: 'POST' }).catch(() => {});
+  }, [thinArea]);
   // The step the tick key acts on (next / prev move it): Now unless another step was picked.
   const [logSelPick, setLogSel] = useState<string | null>(null);
   const logSteps = logView ? [logView.now, ...logView.next].filter((x): x is NonNullable<typeof x> => !!x && x.tick) : [];
@@ -1082,8 +1189,10 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         gameKey: heldPayload?.gameKey || trackerKeyOfGame,
         data: {
           ...(heldPayload?.data || { id: '', accent: trackerAccent, quest: '', sections: [], labels: trackerWords }),
+          // The place isn't known: no place line and no guide lists, only the log's "Where are you?".
+          ...(logView?.where ? { place: undefined, areas: undefined, sections: [] } : {}),
           log: logView
-            ? { now: logView.now, next: logView.next, watch: logView.watch, done: logView.done, pins: logView.pins.length, more: logView.more.length > 0, invite: logView.invite, sel: logSel || '', bookmark: logView.bookmark }
+            ? { now: logView.now, next: logView.next, watch: logView.watch, done: logView.done, pins: logView.pins.length, more: logView.more.length > 0, invite: logView.invite, sel: logSel || '', bookmark: logView.bookmark, ...(logView.where ? { where: logView.where } : {}) }
             : null,
         } as TrackerData,
       }
@@ -1410,7 +1519,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       const o = stepsOfferRef.current;
       if (o) setOfferDismissed(`${o.kind}:${o.slug}`);
     } else if (e.type === 'locate') {
-      runLocate();
+      runLocate(false);
     } else if (e.type === 'next-turn') {
       runNextTurn();
     } else if (e.type === 'open-entry' && typeof e.item === 'string') {
@@ -2351,9 +2460,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           language: aiLanguageName(settings.language),
           // On-screen markers (Settings): off, the answer doesn't spend tokens on markers nobody would see.
           markers: settings.showPointersOnScreen !== false,
-          // Where the player is in this game (confirmed by them, or the AI's last guess). A new compendium for the same
-          // game starts from what the player's other compendiums for it already know.
-          place: activeTab.place || settings.gameProgress?.[gameProgressKey(activeTab)] || null,
+          // Where the player is in this playthrough (confirmed by them, or the AI's last guess), unless it has to be
+          // checked again (the game started, the tab was switched to): then nothing, rather than an old place.
+          place: !dueAt || (activeTab.place?.checkedAt || 0) >= dueAt ? activeTab.place || null : null,
           // Progress memory: what the player has already done in this game, so answers never send them back.
           done: memoryOn ? doneForRequest(settings.gameDone?.[gameProgressKey(activeTab)]) : [],
           // Playthrough memory: choices made, key items and (if the player wants) their Notes. Off: nothing is sent.
@@ -2533,7 +2642,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
 
       const readArea: string = data.placeRead && typeof data.placeRead.area === 'string' ? data.placeRead.area.trim().slice(0, 80) : '';
       const readStory: string = readArea && typeof data.placeRead.story === 'string' ? data.placeRead.story.trim().slice(0, 100) : '';
-      const placeBefore = activeTab.place || settings.gameProgress?.[gameProgressKey(activeTab)];
+      const placeBefore = activeTab.place;
       if (readArea) {
         const moved = placeAfterMove(placeBefore, readArea, readStory, true);
         rememberGameProgress(activeTab, moved);
@@ -2559,18 +2668,23 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           // an unsure guess never replaces a place the player confirmed.
           // Only the player confirms a place or story point (a tap or saying it). The AI's guesses, sure or not, are kept
           // as unconfirmed and never overwrite what the player confirmed.
-          let place = t.place || settings.gameProgress?.[gameProgressKey(t)];
+          let place = t.place;
           const g = aiMessage.place;
+          // A sure answer (a sign on screen, or the player said where they are) makes the place known for the quest log
+          // (sure, checked now); an unsure one is only a suggestion ("Looks like X?").
+          const answered = (name: string) => ({ name, confirmed: false, sure: !!g?.sure, ...(g?.sure ? { checkedAt: Date.now() } : {}) });
           // Same place with more or less detail ("South Figaro" vs "South Figaro, Relic Shop") counts as the same.
-          if (g && !place?.confirmed) place = { ...place, name: g.name, confirmed: false };
+          if (g && !place?.confirmed) place = { ...place, ...answered(g.name) };
           // The player moved on (the answer is about a different place than the confirmed one): switch to the new place,
           // unconfirmed, so "Known here" follows them and new facts aren't filed under the old place. The story point
           // usually carries over.
-          else if (g && place?.confirmed && !samePlace(g.name, place.name)) place = { ...place, name: g.name, confirmed: false };
+          else if (g && place?.confirmed && !samePlace(g.name, place.name)) place = { ...place, ...answered(g.name) };
+          // The same confirmed place, said again by a sure answer: it's still where they are.
+          else if (g?.sure && place?.confirmed) place = { ...place, checkedAt: Date.now() };
           if (g?.story && place && !place.storyConfirmed) place = { ...place, story: g.story, storyConfirmed: false };
           // On-screen place wins: a place name read on screen that names a guide area is where the player is, confirmed
           // (as Locate me does), whatever was stored.
-          if (readArea) place = placeAfterMove(place, readArea, readStory, true);
+          if (readArea) place = { ...placeAfterMove(place, readArea, readStory, true), checkedAt: Date.now() };
           // Ticks from the conversation: steps of the current objective the question said are done (Undo on the log).
           const objId = t.questLog?.now;
           const ticked: number[] = objId && Array.isArray(data.objectiveDone) ? data.objectiveDone.filter((n: unknown) => Number.isInteger(n)) : [];
@@ -2885,7 +2999,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           onLoadSteps={() => trackerEventRef.current({ type: 'load-steps' })}
           onDismissOffer={() => trackerEventRef.current({ type: 'dismiss-offer' })}
           onGotoArea={moveToArea}
-          onLocate={runLocate}
+          onLocate={() => runLocate(false)}
+          onPickPlace={moveToArea}
+          locateKeys={formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K')}
           onConfirmPlace={() => { const n = logView.place?.name; if (n) trackerEventRef.current({ type: 'confirm-place', name: n }); }}
           onOpenEntry={(id) => trackerEventRef.current({ type: 'open-entry', item: id })}
         />
@@ -3203,7 +3319,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
               </div>
             ) : (
               <ChatArea
-                activeTab={activeTab}
+                activeTab={chatTab || activeTab}
                 quota={userData}
                 isGuest={!!user?.isGuest}
                 onSignIn={openSignIn}
@@ -3222,7 +3338,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 nearYou={compact && questLogVisible && questLogAttached ? null : nearYou}
                 logAttached={questLogAttached && (questLogVisible || questLogTucked)}
                 questLog={activeTab?.questLog}
-                compactLog={compact && logView?.now ? { view: logView, open: compactFold, onTick: (id) => tickLog(id, true), onToggle: toggleQuestLog, keysLabel: formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L') } : null}
+                compactLog={compact && (logView?.now || logView?.where) ? { view: logView, open: compactFold, onTick: (id) => tickLog(id, true), onToggle: toggleQuestLog, keysLabel: formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L'), onLocate: isDesktop ? () => runLocate(false) : undefined, onPickPlace: moveToArea, locateKeys: formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K') } : null}
                 onSetNow={isDesktop ? setLogNow : undefined}
                 onPinAnswer={isDesktop ? togglePin : undefined}
                 onDismissOffer={(id) => patchLog((st) => ({ hidden: [...new Set([...(st.hidden || []), `offer:${id}`])] }))}
@@ -3235,7 +3351,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 onOpenPremium={() => setIsPaywallOpen(true)}
                 onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
                 onSetPlace={handleSetPlace}
-                onLocate={isDesktop && trackerGame.guideArea?.areas?.length ? runLocate : undefined}
+                onLocate={isDesktop && trackerGame.areas.length ? () => runLocate(false) : undefined}
                 locating={locating}
                 locateNote={locateNote}
                 onTrackOnScreen={isDesktop ? handleTrackOnScreen : undefined}
@@ -3284,7 +3400,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 place={activeTab.place?.name || ''}
                 story={activeTab.place?.story || ''}
                 onPlace={(name, story) => {
-                  const next = { ...(activeTab.place || {}), name, confirmed: !!name, ...(story ? { story, storyConfirmed: true } : { story: undefined, storyConfirmed: false }) };
+                  const next = { ...(activeTab.place || {}), name, confirmed: !!name, checkedAt: Date.now(), ...(story ? { story, storyConfirmed: true } : { story: undefined, storyConfirmed: false }) };
                   setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, place: next, lastActive: Date.now() } : t)));
                   if (name) rememberGameProgress(activeTab, next);
                 }}

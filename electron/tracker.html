@@ -361,6 +361,16 @@
   .lbtn { display: inline-block; margin-top: .35em; cursor: pointer; color: var(--accent); font-weight: 700; font-size: .85em;
     border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 3px; padding: .05em .5em; background: rgba(16,12,28,.6); text-shadow: none; }
   .lbtn:hover { background: var(--accent); color: #16101f; }
+  .lwhere { padding: .6em .65em; border-radius: .4em; border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); background: rgba(10,8,18,.6); display: flex; flex-direction: column; gap: .45em; }
+  .lwhere .lt { font-weight: 800; color: #fff; font-size: 1.12em; }
+  .lwhere .ls { font-size: .82em; color: var(--dim); }
+  .lwhere .lq { font-size: .88em; color: #e4e4e7; }
+  .lbig { display: block; text-align: center; padding: .55em; border-radius: .35em; background: var(--accent); color: #000; font-weight: 800; cursor: pointer; text-shadow: none; }
+  .lbig.busy { opacity: .7; cursor: default; }
+  .lbtn.ghost { background: transparent; border: 1px solid rgba(255,255,255,.2); color: #e4e4e7; }
+  .lareas { max-height: 12em; overflow-y: auto; border: 1px solid rgba(255,255,255,.1); border-radius: .3em; }
+  .lareas div { padding: .2em .5em; cursor: pointer; font-size: .88em; }
+  .lareas div:hover { background: rgba(255,255,255,.08); color: #fff; }
   .linvite { padding: .45em .55em; border-radius: .35em; border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); background: rgba(10,8,18,.45); }
   .linvite .lt { font-weight: 700; color: #fff; }
   .linvite .ls { font-size: .8em; color: var(--dim); }
@@ -475,7 +485,9 @@
     confirmHint: 'Confirm where you are', away: 'Send to the screen edge', awayEdge: 'Send to the edge',
     size: 'Text size', alpha: 'Transparency', backdrop: 'Soft dark backdrop', tabHint: 'Bring the objectives back',
     itemTodo: 'Click: collected', itemDone: 'Click: not collected yet',
-    empty: 'Nothing to track here yet', secAnswer: 'From your last answer', secMissable: 'Missable here',
+    empty: 'Nothing to track here yet', secAnswer: 'From your last answer', secMissable: 'Missable here (from the guide)',
+    locatingBig: 'Looking at your screen…', whereTitle: 'Where are you?', whereSub: 'Locate me looks at your screen (the map, your journal, place names) to find where you are in the guide.',
+    whereLooksLike: 'Looks like {place}?', whereYes: 'Yes', whereNo: 'No', whereLast: 'Last time: {place}', whereStill: 'Still here', wherePick: "Pick from the guide's areas",
     secNoReturn: 'Point of no return', secCollect: 'To collect', secAch: 'Achievements here', more: '+{n} more',
     next: 'Next: {area}', closest: 'From the guide: {area} (closest match)', showHidden: 'Show {n} hidden', hideEntry: 'Hide',
     limitHint: 'Click: show 3, 6 or all', prevArea: 'Previous area', nextArea: 'Next area', areaList: 'All areas in the guide',
@@ -604,7 +616,19 @@
     const box = (s) => `<span class="lbox${s.tick ? '' : ' no'}" data-tick="${esc(s.id)}" title="${esc(L('logTick'))}"></span>`;
     const sub = (s) => (s.sub ? `<span class="ls">${esc(s.sub)}</span>` : '');
     let h = '';
-    if (lg.invite && !lg.now && !lg.done) h += `<div class="linvite"><div class="lt">${esc(L('logInvite'))}</div><div class="ls">${esc(L('logInviteSub'))}</div><span class="lbtn" data-act="ask">${esc(L('logAsk'))}</span></div>`;
+    // The place isn't known: "Where are you?" with a big Locate me (never the start of the guide).
+    const w = lg.where;
+    if (w) {
+      const sug = w.suggestion && w.suggestion !== state.noSuggestion ? w.suggestion : '';
+      h += `<div class="lwhere"><div class="lt">📍 ${esc(L('whereTitle'))}</div><div class="ls">${esc(L('whereSub'))}</div>
+        <span class="lbig${w.locating ? ' busy' : ''}" data-act="locate">⌖ ${esc(w.locating ? L('locatingBig') : L('locate'))}</span>`;
+      if (sug && !w.locating) h += `<div class="lq">${esc(L('whereLooksLike').replace('{place}', sug))} <span class="lbtn" data-pick="${esc(sug)}">${esc(L('whereYes'))}</span> <span class="lbtn ghost" data-act="where-no" data-name="${esc(sug)}">${esc(L('whereNo'))}</span></div>`;
+      if (w.last && w.last !== sug && !w.locating) h += `<div class="lq">${esc(L('whereLast').replace('{place}', w.last))} <span class="lbtn ghost" data-pick="${esc(w.last)}">${esc(L('whereStill'))}</span></div>`;
+      if (w.areas && w.areas.length) h += `<div class="lrow" data-act="where-list">${esc(L('wherePick'))}<span class="c">${state.whereOpen ? '▾' : '▸'}</span></div>`;
+      if (state.whereOpen) h += `<div class="lareas">${w.areas.map((a) => `<div data-pick="${esc(a)}">${esc(a)}</div>`).join('')}</div>`;
+      h += `</div>`;
+    }
+    if (lg.invite && !lg.now && !lg.done && !w) h += `<div class="linvite"><div class="lt">${esc(L('logInvite'))}</div><div class="ls">${esc(L('logInviteSub'))}</div><span class="lbtn" data-act="ask">${esc(L('logAsk'))}</span></div>`;
     if (lg.done) h += `<div class="ldone"><div class="lt">✓ ${esc(L('logDone', { goal: lg.done.goal }))}</div><span class="lbtn" data-act="whats-next">${esc(L('logWhatsNext'))}</span></div>`;
     if (lg.now) {
       const n = lg.now;
@@ -616,7 +640,7 @@
     const cleared = state.cleared && state.cleared.until > Date.now() ? state.cleared : null;
     if (cleared) h += `<div class="lcleared">✓ ${esc(L('logTicked', { step: cleared.text }))}<span class="u" data-act="undo">${esc(L('logUndo'))}</span></div>`;
     if (lg.next && lg.next.length) h += `<div class="lnext"><div class="llab">${esc(L('logNext'))}</div>${lg.next.map((s) => `<div class="lst${lg.sel === s.id ? ' sel' : ''}">${box(s)}<div>${esc(s.text)}${sub(s)}</div></div>`).join('')}</div>`;
-    if (lg.watch) h += `<div class="lwatch"><div class="llab w">${esc(L('logWatch'))}</div><div class="wb"><span class="wi">⚠</span><div><b>${esc(lg.watch.text)}</b>${lg.watch.why && lg.watch.why !== lg.watch.text ? ` · ${esc(lg.watch.why)}` : ''}</div><span class="wx" data-hide="${esc(lg.watch.id)}" title="${esc(L('logHideWatch'))}">✕</span></div></div>`;
+    if (lg.watch) h += `<div class="lwatch"><div class="llab w">${esc(L('logWatch'))}${lg.watch.fromGuide ? `<span class="src">${esc(L('secMissable'))}</span>` : ''}</div><div class="wb"><span class="wi">⚠</span><div><b>${esc(lg.watch.text)}</b>${lg.watch.why && lg.watch.why !== lg.watch.text ? ` · ${esc(lg.watch.why)}` : ''}</div><span class="wx" data-hide="${esc(lg.watch.id)}" title="${esc(L('logHideWatch'))}">✕</span></div></div>`;
     if (lg.pins) h += `<div class="lrow lpins" data-act="pins">📌 ${esc(L('logPinned'))}<span class="c">${lg.pins}</span></div>`;
     if (lg.more) h += `<div class="lrow lmore" data-act="more">${esc(state.showMore ? L('logShowLess') : L('logShowMore'))}<span class="c">${state.showMore ? '▾' : '▸'}</span></div>`;
     return h;
@@ -971,9 +995,14 @@
     }
     const hide = e.target.closest('[data-hide]');
     if (hide) { send('log-action', { action: 'hide', id: hide.dataset.hide }); return; }
+    const pick = e.target.closest('[data-pick]');
+    if (pick) { state.whereOpen = false; send('place-pick', { name: pick.dataset.pick }); return; }
     const act = e.target.closest('[data-act]');
     if (!act) return;
     const a = act.dataset.act;
+    if (a === 'locate') { const lw = state.data && state.data.log && state.data.log.where; if (!lw || !lw.locating) send('locate', {}); return; }
+    if (a === 'where-list') { state.whereOpen = !state.whereOpen; render(); return; }
+    if (a === 'where-no') { state.noSuggestion = act.dataset.name || ''; state.whereOpen = true; render(); return; }
     if (a === 'undo' && state.cleared) { send('tick', { item: state.cleared.id, done: false }); state.cleared = null; render(); return; }
     if (a === 'more') { state.showMore = !state.showMore; render(); return; }
     if (a === 'ask' || a === 'whats-next' || a === 'pins') send('log-action', { action: a });

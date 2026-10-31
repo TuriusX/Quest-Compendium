@@ -103,6 +103,7 @@ export type TrackerGuideArea = {
 const LABEL_KEYS = [
   'title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'awayEdge', 'size',
   'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch',
+  'locatingBig', 'whereTitle', 'whereSub', 'whereLooksLike', 'whereYes', 'whereNo', 'whereLast', 'whereStill', 'wherePick', 'youreIn', 'change',
   'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'secBattle', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
@@ -118,7 +119,7 @@ export const trackerLabels = (t: (key: string) => string): Record<string, string
 const SECTION_EN: Record<TrackerSectionId, string> = {
   guide: 'From the guide',
   answer: 'From your last answer',
-  missable: 'Missable here',
+  missable: 'Missable here (from the guide)',
   noreturn: 'Point of no return',
   collect: 'To collect',
   ach: 'Achievements here',

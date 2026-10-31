@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   // "Next turn" and "Locate me": a fresh screenshot of the game now (an open panel slides away for it), never the snapshot on open.
   captureFresh: () => ipcRenderer.invoke('capture-fresh'),
+  // An automatic Locate me's quiet screenshot ({ image } or null: not now).
+  locateCapture: () => ipcRenderer.invoke('locate-capture'),
+  onGameInView: (callback) => { ipcRenderer.removeAllListeners('game-in-view'); ipcRenderer.on('game-in-view', (event, e) => callback(e)); },
+  onLocateKey: (callback) => { ipcRenderer.removeAllListeners('locate-key'); ipcRenderer.on('locate-key', () => callback()); },
   closeApp: () => ipcRenderer.send('close-app'),
   openSettingsWindow: () => ipcRenderer.send('open-settings-window'),
   closeSettingsWindow: () => ipcRenderer.send('close-settings-window'),

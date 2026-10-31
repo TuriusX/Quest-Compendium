@@ -35,12 +35,22 @@ export type LogNow = LogStep & {
   /** The answer it comes from (a question's objective). */
   msgId?: string;
 };
-export type LogWatch = { id: string; text: string; why?: string };
+/** fromGuide: the guide's missable list (never presented as complete: "Missable here (from the guide)"). */
+export type LogWatch = { id: string; text: string; why?: string; fromGuide?: boolean };
+/**
+ * "Where are you?" (owner, Oct 31 2026): the place isn't known yet (a new tab, a resumed save, the game just started),
+ * so nothing from the guide shows. locating: a Locate me check is running. suggestion: what an unsure check or answer
+ * thought ("Looks like Rivington?"). last: where this playthrough was last time ("Still in Emerald Grove?"). areas: the
+ * guide's areas to pick from.
+ */
+export type LogWhere = { locating: boolean; suggestion?: string; last?: string; areas: string[] };
 export type LogView = {
   gameKey: string;
   accent: string;
   place?: TrackerData['place'];
   areas?: TrackerData['areas'];
+  /** The place isn't known: the log asks instead of showing the guide. */
+  where?: LogWhere;
   locating?: boolean;
   notice?: string;
   now: LogNow | null;
@@ -108,8 +118,15 @@ export function buildLogView(
     gameKey: string; accent: string; loaded?: { title: string; items: TrackerItem[]; warning?: string } | null; labels?: Record<string, string>;
     /** The guide area's walkthrough (its steps and which are ticked, walk:<id>): the fill-in's Now and Next. */
     walk?: { slug: string; steps: { id: string; title: string; text?: string }[]; done: Set<string> } | null;
+    /** The place isn't known (placeIsCurrent): no Now, Next or Watch out from the guide, only "Where are you?". */
+    where?: LogWhere | null;
   },
 ): LogView | null {
+  // Not knowing where the player is, nothing from the guide: never its start, never the last place of another save.
+  if (opts.where) {
+    data = null;
+    opts = { ...opts, walk: null };
+  }
   const msgs = tab?.messages || [];
   const state = tab?.questLog || {};
   const hidden = new Set(state.hidden || []);
@@ -152,8 +169,8 @@ export function buildLogView(
   const more = (data?.sections || []).filter((x) => x.id !== 'answer' && x.id !== 'guide');
   const missable = more.find((x) => x.id === 'missable');
   const noReturn = more.find((x) => x.id === 'noreturn');
-  for (const it of missable?.items || []) if (!it.done) watch.push({ id: it.id, text: it.label, why: it.detail?.missable || it.where });
-  for (const it of noReturn?.items || []) watch.push({ id: it.id, text: it.label, why: it.where });
+  for (const it of missable?.items || []) if (!it.done) watch.push({ id: it.id, text: it.label, why: it.detail?.missable || it.where, fromGuide: true });
+  for (const it of noReturn?.items || []) watch.push({ id: it.id, text: it.label, why: it.where, fromGuide: true });
 
   // 3. Nothing chosen: the guide fills in for where the player is (marked "From the guide"), always as tasks, never
   // the area's description: its walkthrough's next unticked step ("Reach the Giant-Conquering Hero's Grave: cross the
@@ -186,13 +203,15 @@ export function buildLogView(
   const uncollected = more.filter((x) => x.id === 'missable' || x.id === 'collect').flatMap((x) => x.items).filter((it) => it.tick && !it.done).length;
   const bookmark = now && now.total ? now.total - now.doneCount : uncollected;
 
-  // Nothing at all (an answered game with no place and nothing chosen): no log. A new game has its invitation.
-  if (!now && !done && !pins.length && !data && !watch.length && !invite) return null;
+  // Nothing at all (an answered game with no place and nothing chosen): no log. A new game has its invitation; a game
+  // whose place isn't known asks where the player is.
+  if (!now && !done && !pins.length && !data && !watch.length && !invite && !opts.where) return null;
   return {
     gameKey: opts.gameKey,
     accent: opts.accent,
     place: data?.place,
     areas: data?.areas,
+    ...(opts.where ? { where: opts.where } : {}),
     ...(data?.locating ? { locating: true } : {}),
     ...(data?.notice ? { notice: data.notice } : {}),
     now,
@@ -272,6 +291,17 @@ export function taskOf(title: string, text: string): { text: string; sub?: strin
 /** A short stable id from a name. */
 function nameId(s: string): string {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+}
+
+/**
+ * Is the playthrough's place known now? (owner, Oct 31 2026: the log never shows the guide for a place the player
+ * may not be in.) Known: the player set or confirmed it, or an answer or Locate me was sure of it; and when the place
+ * has to be checked again (the game started, the tab was opened or switched to, the player came back to the game:
+ * dueAt), it was set or checked since. A guess, or a place from before, is a suggestion at most.
+ */
+export function placeIsCurrent(place: GameTab['place'] | null | undefined, dueAt = 0): boolean {
+  if (!place?.name || !(place.confirmed || place.sure)) return false;
+  return !dueAt || (place.checkedAt || 0) >= dueAt;
 }
 
 /** The steps of the objective a newer question could tick (for the answer's <qc-done>): not ticked yet, with indexes. */

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAchievementGuideByKey, type AchievementGuide } from './achievementGuide';
 import { guideApi, type GuideAreaInfo, type GuidePage } from './guideApi';
 import { matchGuideArea } from './guideMatch';
@@ -16,6 +16,8 @@ export function useTrackerGuide(gameName: string | undefined, placeName: string 
   guideKey: string | null;
   guideArea: TrackerGuideArea | null;
   achievementGuide: AchievementGuide | null;
+  /** The guide's areas in order, known before the place is (Locate me picks from them). */
+  areas: { name: string; story: string }[];
 } {
   const [guide, setGuide] = useState<{ key: string; areas: GuideAreaInfo[] } | null>(null);
   const [page, setPage] = useState<{ slug: string; page: GuidePage } | null>(null);
@@ -103,5 +105,6 @@ export function useTrackerGuide(gameName: string | undefined, placeName: string 
           index,
         }
       : null;
-  return { guideKey: guide?.key || null, guideArea, achievementGuide };
+  const areas = useMemo(() => (guide?.areas || []).map((a) => ({ name: a.name, story: a.story || '' })), [guide]);
+  return { guideKey: guide?.key || null, guideArea, achievementGuide, areas };
 }

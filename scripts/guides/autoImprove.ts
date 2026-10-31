@@ -6,6 +6,8 @@
  *   - the site's ask box (siteAsk.ts): "missing" items (contributions, source "site", checked by contributions.ts),
  *     "Players asked" (the same question 3+ times on a page) and page suggestions ("add to the page", "fuller opening");
  *   - the app's questions (answerFeedback, answerReports: anonymous, with the question and the game), clustered by page;
+ *   - areas players are in whose missable list looked thin (the app flags them: missablesFlags), checked against
+ *     sources for what can be missed there (config/autoImprove.missablePages, 2 a night);
  *   - the pipeline's own checks: cross-page contradictions settled against stored evidence (novemberWork.ts conflicts),
  *     and the guides' own pages (duplicates, thin pages, facts on the wrong page, lists in a poor order).
  *
@@ -51,8 +53,8 @@ const DAY = 86_400_000;
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const sha = (s: string) => crypto.createHash('sha1').update(s).digest('hex').slice(0, 20);
 
-type Cfg = { enabled: boolean; maxChanges: number; maxDestructive: number; nightlyDollars: number; monthlyDollars: number; minAsks: number; impressionsKeep: number; reviewPages: number; appClusters: number };
-const DEFAULTS: Cfg = { enabled: true, maxChanges: 20, maxDestructive: 5, nightlyDollars: 1.5, monthlyDollars: 10, minAsks: 3, impressionsKeep: 10, reviewPages: 3, appClusters: 3 };
+type Cfg = { enabled: boolean; maxChanges: number; maxDestructive: number; nightlyDollars: number; monthlyDollars: number; minAsks: number; impressionsKeep: number; reviewPages: number; appClusters: number; missablePages: number };
+const DEFAULTS: Cfg = { enabled: true, maxChanges: 20, maxDestructive: 5, nightlyDollars: 1.5, monthlyDollars: 10, minAsks: 3, impressionsKeep: 10, reviewPages: 3, appClusters: 3, missablePages: 2 };
 
 type Kind = 'add' | 'opening' | 'asked' | 'correct' | 'merge' | 'move' | 'order';
 const DESTRUCTIVE = new Set<Kind>(['correct', 'merge', 'move']);
@@ -478,6 +480,49 @@ async function appQuestions() {
   }
 }
 
+// ---- 5b. missables: areas players are in whose missable list looked thin (the app flags them: missablesFlags, ----
+// guidesApi.ts; owner, Oct 31 2026). Sources are asked what can be missed there; what they back is added.
+async function missables() {
+  const flags = (await db().collection('missablesFlags').where('status', '==', 'flagged').get()).docs
+    .sort((a, b) => (Number(b.data().seen) || 0) - (Number(a.data().seen) || 0))
+    .slice(0, CFG.missablePages);
+  const done = async (ref: FirebaseFirestore.DocumentReference, result: string) => {
+    if (!DRY) await ref.set({ status: 'checked', checkedAt: Date.now(), result }, { merge: true });
+  };
+  for (const d of flags) {
+    if (!can('add')) return;
+    const x: any = d.data();
+    const p = await loadPage(x.key, x.slug, 'area');
+    if (!p) { await done(d.ref, 'page gone'); continue; }
+    const listed = [
+      ...(p.data.items || []).filter((e: any) => e?.missable).map((e: any) => String(e.name || e.text || '')),
+      ...(p.data.sections || []).filter((s: any) => s?.check && /miss/i.test(String(s.title || ''))).flatMap((s: any) => (s.entries || []).map((e: any) => String(e?.text || e || ''))),
+      ...(p.data.walkthrough || []).filter((w: any) => w?.warn).map((w: any) => String(w.warn)),
+    ].map((s) => cut(s, 120)).filter(Boolean);
+    let found: { evidence: Evidence[] } = { evidence: [] };
+    if (searchesLeft) {
+      found = await searchedEvidence(
+        `In the video game "${p.game}", in or around "${p.name}": what can be permanently missed there (items, quests, companions, choices, NPCs, or places that become unreachable), and what makes each one missable?`,
+        'm', 'missables check',
+      ).catch((e) => { if (/search day limit/i.test(String(e?.message))) searchesLeft = false; return { evidence: [] as Evidence[], searches: 0 }; });
+    }
+    const ev = pack(p.key, p.slug, p.game, p.name, [...found.evidence, ...(await storedEvidence([p]))]);
+    if (!ev.evidence.length) { await done(d.ref, 'no sources'); continue; }
+    const j = await ask([
+      `The guide page for "${p.name}" in "${p.game}" lists these missables: ${listed.length ? listed.join('; ') : '(none)'}.`,
+      'Evidence from sources (id: text):', ...ev.evidence.slice(0, 40).map((e) => `${e.id}: ${cut(e.text, 300)}`), '',
+      'Write up to 5 short sentences, each about one thing that can be permanently missed at this place and that the page doesn\'t list, saying what makes it missable. Only what the evidence says; nothing about other places. Reply with JSON only: {"sentences": ["..."]}',
+    ].join('\n'), 900);
+    const sents = (Array.isArray(j.sentences) ? j.sentences : []).map((s: unknown) => cut(s, 300)).filter(Boolean).slice(0, 5);
+    if (!sents.length) { await done(d.ref, 'nothing missing found'); continue; }
+    const c = await checked(p, sents, found.evidence);
+    const added = c.ok.length
+      ? await addFacts(p, c, 'add', `Players are in ${p.name} and its missable list looked thin (${x.missables ?? listed.length} for ${x.size ?? '?'} things to find there); added the missables sources back.`, 'missable check')
+      : false;
+    await done(d.ref, added ? 'added' : 'not confirmed by sources');
+  }
+}
+
 // ---- 6. merges: duplicate compendium pages, and thin ones that are part of another page's subject ----
 async function pictures(): Promise<Set<string>> {
   const out = new Set<string>();
@@ -645,7 +690,7 @@ async function main() {
     setTimeout(() => process.exit(0), 300);
     return;
   }
-  const steps: [string, () => Promise<void>][] = [['corrections', corrections], ['missing facts', missingFacts], ['players asked', playersAsked], ['page suggestions', pageSuggestions], ['app questions', appQuestions], ['merges', merges], ['structure', structure]];
+  const steps: [string, () => Promise<void>][] = [['corrections', corrections], ['missing facts', missingFacts], ['players asked', playersAsked], ['page suggestions', pageSuggestions], ['app questions', appQuestions], ['missables', missables], ['merges', merges], ['structure', structure]];
   for (const [name, fn] of steps) {
     if (full() || room() < 0.05) break;
     try { await fn(); } catch (e: any) { console.log(`  ${name}: stopped (${cut(e?.message || e, 160)})`); }

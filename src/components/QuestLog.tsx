@@ -34,6 +34,10 @@ export type QuestLogProps = {
   onGotoArea?: (name: string) => void;
   onLocate?: () => void;
   onConfirmPlace?: () => void;
+  /** The player says where they are (the guide's areas, "Yes" to a suggestion, "Still here"). */
+  onPickPlace?: (name: string) => void;
+  /** Locate me's shortcut, shown on its button. */
+  locateKeys?: string;
   /** Open an entry's guide page ("Open in guide"). */
   onOpenEntry?: (id: string) => void;
 };
@@ -46,10 +50,12 @@ export function QuestLog(p: QuestLogProps) {
   const [showPins, setShowPins] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [noSuggestion, setNoSuggestion] = useState('');
   const root = useRef<HTMLDivElement>(null);
 
   // A new place: the guide's lists and details fold again.
-  useEffect(() => { setShowMore(false); setOpenId(null); }, [v.place?.name]);
+  useEffect(() => { setShowMore(false); setOpenId(null); setPicking(false); }, [v.place?.name]);
   // The last step ticked from the keyboard or controller: its box is gone, so the focus goes to "What's next?".
   useEffect(() => {
     if (!v.done || (document.activeElement && document.activeElement !== document.body)) return;
@@ -101,8 +107,34 @@ export function QuestLog(p: QuestLogProps) {
   const n = v.now;
   const mine = n?.source === 'question';
   const pinsN = v.pins.length;
-  const place = v.place;
+  const place = v.where ? undefined : v.place;
   const ar = v.areas && v.areas.names.length ? v.areas : null;
+  const w = v.where;
+  const suggestion = w?.suggestion && w.suggestion !== noSuggestion ? w.suggestion : '';
+  const pickNames = w ? w.areas : ar ? ar.names : [];
+  const pick = (name: string) => { setPicking(false); p.onPickPlace?.(name); };
+  // Locate me (owner, Oct 31 2026): big and obvious, on its shortcut and the controller too. It looks at the screen.
+  const locateBtn = (big: boolean) => p.onLocate ? (
+    <button type="button" data-qc-locate="" onClick={p.onLocate} disabled={!!(w?.locating || v.locating)}
+      title={`${t('tracker.locate')}${p.locateKeys ? ` (${p.locateKeys})` : ''}`}
+      className={`flex items-center justify-center gap-2 rounded-md font-bold outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-70 ${
+        big ? 'w-full h-11 text-[15px] bg-[var(--accent-color)] text-black hover:brightness-110' : 'flex-shrink-0 h-7 px-2.5 text-[12px] border border-[var(--accent-border)] text-[var(--accent-color)] hover:bg-[var(--accent-color)] hover:text-black'
+      }`}>
+      <Crosshair className={`${big ? 'w-5 h-5' : 'w-3.5 h-3.5'} ${w?.locating || v.locating ? 'animate-spin' : ''}`} />
+      {w?.locating || v.locating ? t('tracker.locatingBig') : t('tracker.locate')}
+      {big && p.locateKeys && !w?.locating && <kbd className="qc-log-kbd !text-black/70 !border-black/30 !bg-black/10">{p.locateKeys}</kbd>}
+    </button>
+  ) : null;
+  const picker = picking && pickNames.length > 0 && p.onPickPlace ? (
+    <ul className="mt-2 max-h-[180px] overflow-y-auto rounded border border-white/10 bg-black/30 py-1" style={{ scrollbarWidth: 'thin' }}>
+      {pickNames.map((name) => (
+        <li key={name} ref={name === place?.name ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}>
+          <button type="button" onClick={() => pick(name)}
+            className={`w-full text-left px-2.5 py-1 text-[12.5px] hover:bg-white/[0.06] hover:text-white outline-none focus-visible:bg-white/[0.08] ${name === place?.name ? 'text-[var(--accent-color)] font-semibold' : 'text-zinc-300'}`}>{name}</button>
+        </li>
+      ))}
+    </ul>
+  ) : null;
 
   return (
     <div
@@ -127,34 +159,64 @@ export function QuestLog(p: QuestLogProps) {
         </button>
       </div>
 
-      {/* Where the player is: ‹ › through the guide's areas, Locate me, confirm. */}
+      {/* Where the player is, at the top: "You're in Rivington · Change" and Locate me (owner, Oct 31 2026). */}
       {place?.name && (
-        <div className="group/pl flex items-center gap-1 px-3.5 pt-2 text-[12px] text-zinc-400 min-w-0">
-          <MapPin className="w-3 h-3 flex-shrink-0 text-zinc-500" />
-          {ar && (
-            <button type="button" disabled={ar.index <= 0} onClick={() => p.onGotoArea?.(ar.names[ar.index - 1])} aria-label={t('tracker.prevArea')}
-              className="text-zinc-500 hover:text-white disabled:opacity-20 outline-none focus-visible:ring-2 focus-visible:ring-white rounded"><ChevronLeft className="w-3.5 h-3.5" /></button>
-          )}
-          <span className={`truncate ${place.sure ? 'text-zinc-300' : 'text-zinc-400 italic'}`}>{v.locating ? t('tracker.locating') : place.name}</span>
-          {ar && (
-            <button type="button" disabled={ar.index >= ar.names.length - 1} onClick={() => p.onGotoArea?.(ar.names[ar.index + 1])} aria-label={t('tracker.nextArea')}
-              className="text-zinc-500 hover:text-white disabled:opacity-20 outline-none focus-visible:ring-2 focus-visible:ring-white rounded"><ChevronRight className="w-3.5 h-3.5" /></button>
-          )}
-          {p.onLocate && (
-            <button type="button" onClick={p.onLocate} title={t('tracker.locate')} aria-label={t('tracker.locate')}
-              className={`ml-0.5 text-[var(--accent-color)] opacity-60 hover:opacity-100 outline-none focus-visible:ring-2 focus-visible:ring-white rounded ${v.locating ? 'animate-spin' : ''}`}><Crosshair className="w-3.5 h-3.5" /></button>
-          )}
-          {!place.sure && p.onConfirmPlace && (
-            <button type="button" onClick={p.onConfirmPlace} title={t('tracker.confirmHint')} aria-label={t('tracker.confirmHint')}
-              className="text-emerald-400/80 hover:text-emerald-300 outline-none focus-visible:ring-2 focus-visible:ring-white rounded"><Check className="w-3.5 h-3.5" /></button>
-          )}
+        <div className="px-3.5 pt-2.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <MapPin className="w-4 h-4 flex-shrink-0 text-[var(--accent-color)]" />
+            <div className="flex-1 min-w-0 text-[13px] leading-tight">
+              <span className="text-zinc-400">{t('tracker.youreIn')} </span>
+              <span className={`font-bold ${place.sure ? 'text-white' : 'text-zinc-300'}`}>{v.locating ? t('tracker.locating') : place.name}</span>
+              {p.onPickPlace && pickNames.length > 0 && (
+                <> <span className="text-zinc-600">·</span> <button type="button" onClick={() => setPicking((x) => !x)} aria-expanded={picking}
+                  className="text-[12px] font-semibold text-[var(--accent-color)] hover:underline outline-none focus-visible:underline">{t('tracker.change')}</button></>
+              )}
+            </div>
+            {locateBtn(false)}
+          </div>
+          {picker}
         </div>
       )}
       {v.notice && <div className="px-3.5 pt-1 text-[11.5px] text-amber-300">{v.notice}</div>}
 
       <div className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-3 pb-2 flex flex-col gap-4" style={{ scrollbarWidth: 'thin' }}>
+        {/* The place isn't known: nothing from the guide, only "Where are you?" (never the start of the guide). */}
+        {w && (
+          <div data-qc-log-where="" className="rounded-md border border-[var(--accent-border)] bg-[var(--accent-dim)]/50 p-3.5 flex flex-col gap-2.5">
+            <div>
+              <div className="font-bold text-[17px] text-white flex items-center gap-1.5"><MapPin className="w-4 h-4 text-[var(--accent-color)]" />{t('tracker.whereTitle')}</div>
+              <p className="mt-1 text-[12.5px] text-zinc-400 leading-snug">{t('tracker.whereSub')}</p>
+            </div>
+            {locateBtn(true)}
+            {suggestion && p.onPickPlace && !w.locating && (
+              <div className="flex items-center gap-1.5 flex-wrap text-[13px] text-zinc-200">
+                <span>{t('tracker.whereLooksLike', { place: suggestion })}</span>
+                <button type="button" onClick={() => pick(suggestion)} className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-[12px] font-bold hover:bg-emerald-500/30 outline-none focus-visible:ring-2 focus-visible:ring-white">{t('tracker.whereYes')}</button>
+                <button type="button" onClick={() => { setNoSuggestion(suggestion); setPicking(true); }} className="px-2 py-0.5 rounded border border-white/15 text-zinc-300 text-[12px] font-bold hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white">{t('tracker.whereNo')}</button>
+              </div>
+            )}
+            {w.last && w.last !== suggestion && p.onPickPlace && !w.locating && (
+              <div className="flex items-center gap-1.5 flex-wrap text-[12.5px] text-zinc-400">
+                <span>{t('tracker.whereLast', { place: w.last })}</span>
+                <button type="button" onClick={() => pick(w.last!)} className="px-2 py-0.5 rounded border border-white/15 text-zinc-200 text-[12px] font-semibold hover:text-white hover:border-[var(--accent-border)] outline-none focus-visible:ring-2 focus-visible:ring-white">{t('tracker.whereStill')}</button>
+              </div>
+            )}
+            {p.onPickPlace && pickNames.length > 0 && (
+              <button type="button" onClick={() => setPicking((x) => !x)} aria-expanded={picking}
+                className="self-start text-[12.5px] font-semibold text-[var(--accent-color)] hover:underline outline-none focus-visible:underline">{t('tracker.wherePick')}</button>
+            )}
+            {picker}
+            <div className="flex flex-wrap gap-1.5 pt-1 border-t border-white/[0.07]">
+              {[t('tracker.logQuick1'), t('tracker.logQuick2')].map((q) => (
+                <button key={q} type="button" onClick={() => p.onAsk(q)}
+                  className="mt-1.5 px-2 py-1 rounded border border-white/15 bg-[#121119] text-[12px] font-mono text-zinc-300 hover:border-[var(--accent-border)] hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white">{q}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Nothing asked yet: an invitation. */}
-        {v.invite && !v.done && (
+        {v.invite && !v.done && !w && (
           <div className="rounded-md border border-dashed border-[var(--accent-border)] bg-[var(--accent-dim)]/40 p-3">
             <div className="font-bold text-[14px]">{t('tracker.logInvite')}</div>
             <p className="mt-0.5 mb-2 text-[12.5px] text-zinc-400 leading-snug">{t('tracker.logInviteSub')}</p>
@@ -251,7 +313,7 @@ export function QuestLog(p: QuestLogProps) {
 
         {v.watch && (
           <div>
-            {label(t('tracker.logWatch'), undefined, true)}
+            {label(t('tracker.logWatch'), v.watch.fromGuide ? <span className="ml-auto normal-case tracking-normal font-sans font-semibold text-[11px] text-amber-300/70">{t('tracker.secMissable')}</span> : undefined, true)}
             <div className="flex gap-2.5 rounded-md border border-amber-300/35 bg-amber-300/[0.09] px-3 py-2.5">
               <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-300" />
               <div className="text-[13px] leading-snug text-[#f3e6c8] min-w-0">
@@ -264,7 +326,7 @@ export function QuestLog(p: QuestLogProps) {
           </div>
         )}
 
-        {!n && !v.done && !v.invite && !v.next.length && !v.watch && <div className="text-[12.5px] text-zinc-500">{t('tracker.logEmpty')}</div>}
+        {!n && !v.done && !v.invite && !w && !v.next.length && !v.watch && <div className="text-[12.5px] text-zinc-500">{t('tracker.logEmpty')}</div>}
 
         {/* Pins and the guide: folded until asked for. */}
         <div className="mt-auto flex flex-col">

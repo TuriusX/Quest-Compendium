@@ -96,6 +96,7 @@ function createControllerService(opts) {
   // whether or not the overlay is visible.
   let tickChord = createChord(null);
   let nextChord = createChord(null);
+  let locateChord = createChord(null); // Locate me (default: the modifier + the d-pad's down)
   let talk = null; // hold-to-talk on one button (only while the overlay is visible)
   let talkBit = 0;
   let timer = null;
@@ -146,7 +147,7 @@ function createControllerService(opts) {
     if ((buttons & combo.mask) === 0 && !combo.pendingUntil()) firedDuringPress = false;
 
     // The quest log's tick / cycle chords. The modifier press that starts one isn't also reported as its own press.
-    for (const [chord, action] of [[tickChord, 'tick'], [nextChord, 'next']]) {
+    for (const [chord, action] of [[tickChord, 'tick'], [nextChord, 'next'], [locateChord, 'locate']]) {
       if (chord.step(buttons) && opts.onTrackerKey) {
         opts.onTrackerKey(action);
         const mod = SIMPLE.find(([, bit]) => bit === chord.modBit);
@@ -258,6 +259,7 @@ function createControllerService(opts) {
     combo = createComboDetector(toggleCombo);
     tickChord = createChord(chordFor(n.trackerTick || 'off', toggleCombo));
     nextChord = createChord(chordFor(n.trackerNext || 'off', toggleCombo));
+    locateChord = createChord(chordFor(n.trackerLocate || 'down', toggleCombo));
     const tb = n.talk === undefined ? 'y' : n.talk;
     talkBit = tb && tb !== 'off' && BITS[tb] ? BITS[tb] : 0;
     talk = talkBit ? createHoldToTalk(talkBit) : null;

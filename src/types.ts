@@ -181,7 +181,12 @@ export interface GameTab {
   notes: string;
   personalQuests?: PersonalQuest[];
   /** Where the player is in this game. confirmed = the player picked or said it, not just the AI's guess. */
-  place?: { name: string; confirmed: boolean; story?: string; storyConfirmed?: boolean };
+  /**
+   * Where the player is in this playthrough. confirmed: the player said so (or the name was read on screen); sure: an
+   * answer or Locate me was sure of it. checkedAt: when it was last set or checked (owner, Oct 31 2026: the quest log
+   * shows the guide only for a place known since the game started or the tab was opened: utils/questLogView placeIsCurrent).
+   */
+  place?: { name: string; confirmed: boolean; sure?: boolean; checkedAt?: number; story?: string; storyConfirmed?: boolean };
   /**
    * Guide steps loaded on the quest log (utils/guideSteps): a quest page's steps or a walkthrough's, in place of the
    * answer's objectives, until a newer answer (answerId: the answer they were loaded with) or the player unloads them.
@@ -292,6 +297,8 @@ export interface AppSettings {
   trackerNextShortcut?: string;
   /** Show or put away the quest log (default Ctrl+Shift+L). */
   questLogShortcut?: string;
+  /** Locate me from anywhere (default Ctrl+Shift+K). */
+  locateShortcut?: string;
   enableThematicBanners?: boolean;
   /** Interface style: 'lofi' (pixel art, default) or 'classic' (the original look). */
   uiStyle?: UiStyle;
@@ -314,6 +321,8 @@ export interface AppSettings {
    */
   controllerTick?: 'up' | 'a' | 'off';
   controllerNext?: 'right' | 'rb' | 'off';
+  /** Locate me on the controller: the same modifier and this button (default the d-pad's down). */
+  controllerLocate?: 'down' | 'x' | 'off';
   /** Immersive mode: after a hold-to-talk question the panel steps aside and the answer is read aloud (default on). */
   immersiveReadAloud?: boolean;
   /** Desktop: screenshot the game just before the overlay opens (for games that pause when they lose focus). */

@@ -91,7 +91,7 @@ async function fetchFullAchievementDetails(appId, steamId) {
   }
 }
 
-const { app, BrowserWindow, ipcMain, shell, globalShortcut, screen, desktopCapturer, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, globalShortcut, screen, desktopCapturer, Tray, Menu, nativeImage, powerMonitor } = require('electron');
 app.setName('Quest Compendium');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -294,7 +294,7 @@ let snapshotOnOpen = true;
 let stickyPointers = true; // markers follow what they point at as the game scrolls
 let markersInRecordings = true; // markers show up in screenshots / OBS / Game Bar
 let overlaySession = 0;
-let openSnapshot = null; // { image: dataUrl, session }
+let openSnapshot = null; // { image: dataUrl, session, at }
 let openingInProgress = false;
 let lastSlideInAt = 0;
 // On-screen pointers: markers drawn over the game on the monitor the screenshot came from.
@@ -383,7 +383,7 @@ async function slideIn(opts = {}) {
   // The quest log (tracker.cjs) is independent: opening the panel never hides it; it steps off the panel instead.
   if (!isAppVisible) {
     if (opts.snapshot) {
-      openSnapshot = { image: opts.snapshot, session: overlaySession + 1 };
+      openSnapshot = { image: opts.snapshot, session: overlaySession + 1, at: Date.now() };
     } else if (snapshotOnOpen && !openingInProgress) {
       // Capture the game while it's still focused and running (a fraction of a second, capped at 700 ms).
       openingInProgress = true;
@@ -392,7 +392,7 @@ async function slideIn(opts = {}) {
           captureScreenImage(),
           new Promise((resolve) => setTimeout(() => resolve(null), 700)),
         ]);
-        openSnapshot = image ? { image, session: overlaySession + 1 } : null;
+        openSnapshot = image ? { image, session: overlaySession + 1, at: Date.now() } : null;
       } catch (err) {
         openSnapshot = null;
       } finally {
@@ -472,6 +472,8 @@ function slideOut() {
   tracker.panelHidden();
   if (!mainWindow.isDestroyed()) {
     mainWindow.webContents.send('panel-hidden');
+    // The game is in view: an automatic Locate me that waited for it runs now.
+    mainWindow.webContents.send('game-in-view', { returned: false });
     console.log('[panel] hidden: sent panel-hidden to the app');
   }
 }
@@ -699,7 +701,11 @@ app.whenReady().then(() => {
   controllerService = createControllerService({
     isVisible: () => !!mainWindow && !mainWindow.isDestroyed() && isAppVisible && mainWindow.isVisible(),
     // The quest log's tick / cycle buttons (Settings), while a game is focused: no mouse needed.
-    onTrackerKey: (action) => tracker.key(action),
+    // Locate me's button goes to the app; the tick and cycle buttons to the quest log.
+    onTrackerKey: (action) => {
+      if (action === 'locate') { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('locate-key'); }
+      else tracker.key(action);
+    },
     onToggle: () => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       if (isAppVisible) {
@@ -743,7 +749,7 @@ app.whenReady().then(() => {
       tick: shortcuts.trackerTickShortcut || 'CommandOrControl+Shift+Enter',
       next: shortcuts.trackerNextShortcut || 'CommandOrControl+Shift+Down',
     };
-    appKeys = [shortcuts.hideAppShortcut, shortcuts.voiceInputShortcut, shortcuts.autoScreenshotShortcut, shortcuts.questLogShortcut].filter(Boolean);
+    appKeys = [shortcuts.hideAppShortcut, shortcuts.voiceInputShortcut, shortcuts.autoScreenshotShortcut, shortcuts.questLogShortcut, shortcuts.locateShortcut || 'CommandOrControl+Shift+K'].filter(Boolean);
 
     // Always ensure a show/hide shortcut exists: the player's, else Ctrl+Space.
     const hideAppCmd = shortcuts.hideAppShortcut || 'CommandOrControl+Space';
@@ -778,6 +784,13 @@ app.whenReady().then(() => {
       if (!globalShortcut.register(questLogCmd, () => { tracker.toggle(null).catch(() => {}); })) console.warn(`[tracker] ${questLogCmd} is taken; the quest log shortcut isn't set`);
     } catch (err) {
       console.error('Failed to register questLogShortcut', err);
+    }
+    // Locate me from anywhere (Settings: locateShortcut, default Ctrl+Shift+K): the app finds where the player is.
+    const locateCmd = shortcuts.locateShortcut || 'CommandOrControl+Shift+K';
+    try {
+      if (!globalShortcut.register(locateCmd, () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('locate-key'); })) console.warn(`[locate] ${locateCmd} is taken; the Locate me shortcut isn't set`);
+    } catch (err) {
+      console.error('Failed to register locateShortcut', err);
     }
     // The owner's picture capture (Ctrl+Shift+P): sent only when the signed-in account is an admin.
     if (shortcuts.ownerCaptureShortcut) {
@@ -1793,11 +1806,72 @@ ipcMain.on('capture-done', (event, saved) => {
   if (saved && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('owner-capture-saved');
 });
 
+// ---- Where the player is (owner, Oct 31 2026): the app's automatic Locate me ------------------------------------------
+// Checked when a game starts, a tab is opened or switched to while its game runs, and when the player comes back to the
+// game after a while. The screenshot is quiet: an open panel never slides away for it (the snapshot from when it opened
+// is used, else nothing until the game is back in view), and only the game itself is ever captured.
+/** Is the window in front the running game? */
+function gameInFront() {
+  if (!activeSteamGame && !programGame) return false;
+  try {
+    const fg = focusHelper.foregroundInfo();
+    if (!fg) return false; // ours, or nothing in front
+    if (programGame) {
+      const pid = focusHelper.pidOf ? focusHelper.pidOf(fg.hwnd) : 0;
+      return !!pid && pid === programGame.pid;
+    }
+    // A Steam game: a window from its install folder, else one that fills most of a screen.
+    const dir = gameInstallDir(lastRunningAppId);
+    if (dir && fg.path && String(fg.path).toLowerCase().startsWith(String(dir).toLowerCase())) return true;
+    const sf = screen.getPrimaryDisplay().scaleFactor || 1;
+    const w = fg.rect.width / sf, h = fg.rect.height / sf;
+    return screen.getAllDisplays().some((d) => w >= d.bounds.width * 0.8 && h >= d.bounds.height * 0.8);
+  } catch (_) {
+    return false;
+  }
+}
+ipcMain.handle('locate-capture', async () => {
+  if (isAppVisible) {
+    // Only a recent one: the game may have moved on (or restarted) behind a panel left open.
+    if (openSnapshot && openSnapshot.session === overlaySession && Date.now() - (openSnapshot.at || 0) < 3 * 60 * 1000) return { image: openSnapshot.image };
+    console.log('[locate] automatic check waits: the panel is open without a recent snapshot of the game');
+    return null;
+  }
+  if (!gameInFront()) {
+    console.log('[locate] automatic check waits: the game is not in front');
+    return null;
+  }
+  try {
+    const image = await captureScreenImage();
+    return image ? { image } : null;
+  } catch (_) {
+    return null;
+  }
+});
+// Back to the game after 10 minutes away (another window in front, or the computer idle): checked again.
+const AWAY_MS = 10 * 60 * 1000;
+let awaySince = 0;
+setInterval(() => {
+  if (!mainWindow || mainWindow.isDestroyed() || (!activeSteamGame && !programGame)) { awaySince = 0; return; }
+  let idleMs = 0;
+  try { idleMs = (powerMonitor.getSystemIdleTime() || 0) * 1000; } catch (_) {}
+  const front = !isAppVisible && gameInFront();
+  if (!front || idleMs >= AWAY_MS) {
+    if (!awaySince) awaySince = Date.now() - (front ? idleMs : 0);
+    return;
+  }
+  if (awaySince && Date.now() - awaySince >= AWAY_MS) mainWindow.webContents.send('game-in-view', { returned: true });
+  awaySince = 0;
+}, 5000);
+
 ipcMain.handle('capture-fresh', async () => {
   const wasVisible = isAppVisible;
   if (wasVisible) await hidePanelForCapture();
   try {
-    return await captureScreenImage();
+    const image = await captureScreenImage();
+    // The game as it is now replaces this visit's snapshot from opening (an automatic Locate me never goes back to it).
+    if (image && wasVisible) openSnapshot = { image, session: overlaySession, at: Date.now() };
+    return image;
   } catch (err) {
     console.warn('[next-turn] capture failed:', err && err.message);
     return null;

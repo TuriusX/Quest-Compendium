@@ -8,6 +8,8 @@
  *   - Premium subscribers (users.isPremium) and this month's player AI cost (playerCosts/{month}).
  *   - "Site": the website's ask box (siteAsk.ts), its questions and their cost, apart from the players' numbers.
  *   - The nightly guide improver's spending this month against its own cap (autoChanges.ts improverMonth).
+ *   - "Locate me": the app's checks (by hand and automatic), how many found the place, and their cost
+ *     (statsHours/{UTC hour}.loc, locateMe.ts).
  * Left out everywhere: the owner's accounts (ADMIN_EMAILS, config/players.ownerHashes, stats/{day}.owners) and test
  * traffic (never recorded: testTraffic.ts) and test accounts (an e2e / test address, or config/players.testUids).
  */
@@ -96,7 +98,23 @@ async function activity(from: number, to: number, w: Who, owners: Set<string>): 
   return { questions, players: players.size, guests: guests.size, apps, approx };
 }
 
-const APP_NAMES: [string, string][] = [['desktop', 'desktop'], ['deck', 'Deck'], ['web', 'web']];
+/** Locate me checks in [from, to) (locateMe.ts statsHours.loc): all, automatic, the ones that found the place, cost. */
+async function locates(from: number, to: number, owners: Set<string>): Promise<{ n: number; auto: number; found: number; dollars: number }> {
+  const out = { n: 0, auto: 0, found: 0, dollars: 0 };
+  const hours = (await getFirestore().collection('statsHours').where('at', '>=', from - HOUR + 1).get()).docs.map((d) => d.data() as any).filter((h) => h.at < to);
+  for (const h of hours) {
+    for (const [who, l] of Object.entries((h.loc || {}) as Record<string, any>)) {
+      if (owners.has(who)) continue;
+      out.n += Number(l.n) || 0;
+      out.auto += Number(l.a) || 0;
+      out.found += Number(l.f) || 0;
+      out.dollars += (Number(l.c) || 0) / 1e6;
+    }
+  }
+  return out;
+}
+
+const APP_NAMES: [string, string][] =[['desktop', 'desktop'], ['deck', 'Deck'], ['web', 'web']];
 const change = (now: number, before: number) => (before ? ` (${now >= before ? '+' : ''}${Math.round(((now - before) / before) * 100)}%)` : now ? ' (new)' : '');
 const money = (n: number) => `$${n.toFixed(2)}`;
 
@@ -147,6 +165,9 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   // The website's ask box, apart from the players' numbers above (siteAsk.ts).
   const siteMs = window === '30d' ? 30 * DAY : window === '7d' ? 7 * DAY : DAY;
   const site = await siteAskWindow(now - siteMs, now);
+  // Locate me in the app (by hand and automatic: locateMe.ts), counted since Oct 31 2026.
+  const loc = await locates(now - siteMs, now, owners);
+  parts.push(`**Locate me** (${window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours'}): ${loc.n} check(s), ${loc.auto} automatic, ${loc.found} found the place · $${loc.dollars.toFixed(2)}${loc.n ? ` ($${(loc.dollars / loc.n).toFixed(4)} each)` : ''}`);
   parts.push(`**Site** (${window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours'}): ${site.questions} question(s) in the guide pages' ask box, ${site.uncovered} the guide couldn't answer · $${site.dollars.toFixed(2)}`);
   // The nightly guide improver (autoImprove.ts): month to date against its own cap.
   const imp = await improverMonth(now);

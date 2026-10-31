@@ -12,7 +12,8 @@
  */
 import type { Express } from 'express';
 import { singularLabel, entityKind } from './scripts/guides/siteText';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { missablesThin, missableCount, areaSize } from './src/utils/missablesCheck';
 import { placeKey } from './src/utils/placeName';
 import { entryKind, type EntryKind } from './src/utils/entryKind';
 import { landscapeOf, wideSet, coverSet } from './scripts/guides/igdbArt';
@@ -430,6 +431,32 @@ export function registerGuidesApi(app: Express): void {
       const person = entityKind(e.typeLabel || e.type) === 'person';
       const summary = person ? { ...(e.summary || {}), region: '', where: '', gettingThere: '', places: [], collectibles: [] } : e.summary;
       send(res, { key, slug: e.slug, name: e.name, type: singularLabel(e.typeLabel), title: e.title, overview: e.overview, summary, ...(e.story?.length ? { story: e.story } : {}), ...(e.gameplay?.length ? { gameplay: e.gameplay } : {}), ...((e.qaArrangedAt ? e.alsoAsked : e.qa)?.length ? { alsoAsked: e.qaArrangedAt ? e.alsoAsked : e.qa } : {}), ...(questOf(e) ? { quest: questOf(e) } : {}) });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
+  // A player is in this area and its missable list looked thin to the app (src/utils/missablesCheck.ts): checked again
+  // here on the stored page, then flagged for the nightly improver (missablesFlags/{key__slug}; autoImprove.ts
+  // missables()). Nothing about the player is kept: the area, how many times it was seen, and when.
+  app.post('/api/guides/:key/:slug/missables-thin', async (req, res) => {
+    try {
+      const key = gameKey(String(req.params.key));
+      const slug = String(req.params.slug).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 120);
+      const db = getFirestore();
+      const a: any = (await db.collection('guides').doc(key).collection('areas').doc(slug).get()).data();
+      if (!a || a.status !== 'published') return res.status(404).json({ ok: false });
+      if (!missablesThin(a)) return res.json({ ok: true, thin: false });
+      const ref = db.collection('missablesFlags').doc(`${key}__${slug}`);
+      const cur: any = (await ref.get()).data();
+      // Checked in the last 30 days: not again yet (the sources won't have changed much).
+      const recent = cur?.status === 'checked' && Number(cur.checkedAt || 0) > Date.now() - 30 * 86_400_000;
+      await ref.set({
+        key, slug, name: String(a.name || slug), seen: FieldValue.increment(1), lastSeen: Date.now(),
+        missables: missableCount(a), size: areaSize(a),
+        ...(cur && recent ? {} : { status: 'flagged', ...(cur?.firstSeen ? {} : { firstSeen: Date.now() }) }),
+      }, { merge: true });
+      res.json({ ok: true, thin: true });
     } catch (e) {
       fail(res, e);
     }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, BookOpen, Maximize2, Play, X } from './icons';
+import { AlertTriangle, BookOpen, Crosshair, MapPin, Maximize2, Play, X } from './icons';
 import { useT } from '../i18n';
 import { GameCover } from './GameCover';
 import { playBlipSound } from '../utils/audio';
@@ -42,7 +42,11 @@ export function CompactCard(p: {
    * The quest log (owner, Oct 30 2026): its Now is the objective line (tick box, progress, ⚠ when there's a Watch out);
    * open (Ctrl+Shift+L, View, or the chevron) folds Next and Watch out out under the card.
    */
-  log?: { view: LogView; open: boolean; onTick: (id: string) => void; onToggle: () => void; keysLabel: string } | null;
+  log?: {
+    view: LogView; open: boolean; onTick: (id: string) => void; onToggle: () => void; keysLabel: string;
+    /** Locate me (owner, Oct 31 2026): on the card too, big while the place isn't known. */
+    onLocate?: () => void; onPickPlace?: (name: string) => void; locateKeys?: string;
+  } | null;
 }) {
   const t = useT();
   const d = p.detection;
@@ -61,8 +65,15 @@ export function CompactCard(p: {
   const where = (
     <div className="flex items-center gap-1.5 min-w-0 text-[11.5px] text-zinc-400">
       <span className="font-bold text-zinc-100 truncate flex-shrink-0 max-w-[60%]">{p.gameName}</span>
-      {p.place && <span className="text-zinc-600">·</span>}
-      {p.place && <span className="truncate">{p.place}</span>}
+      {p.place && !p.log?.view.where && <span className="text-zinc-600">·</span>}
+      {p.place && !p.log?.view.where && <span className="truncate">{p.place}</span>}
+      {p.place && !p.log?.view.where && p.log?.onLocate && (
+        <button type="button" onClick={() => { playBlipSound(p.soundEnabled); p.log?.onLocate?.(); }}
+          title={`${t('tracker.locate')}${p.log.locateKeys ? ` (${p.log.locateKeys})` : ''}`} aria-label={t('tracker.locate')}
+          className={`flex-shrink-0 text-[var(--accent-color)] opacity-70 hover:opacity-100 cursor-pointer ${p.log.view.locating ? 'animate-spin' : ''}`} style={noDrag}>
+          <Crosshair className="w-3.5 h-3.5" />
+        </button>
+      )}
       {other && (
         <button
           type="button"
@@ -107,6 +118,9 @@ export function CompactCard(p: {
   // Line 2: the objective and its next step, else "Next here", else one hint (a collection's "Which game?" first).
   const lg = p.log && p.log.view.now ? p.log : null;
   const now = lg?.view.now || null;
+  // The place isn't known: "Where are you?" with Locate me (and "Looks like X?" when a check was unsure).
+  const ask = p.log?.view.where && !now ? p.log.view.where : null;
+  const whereLog = ask ? p.log! : null;
   const box = (s: LogStep, small = false) => (
     <button
       type="button"
@@ -121,6 +135,25 @@ export function CompactCard(p: {
   // "Open a tab for X?", or "Switched to X" for a few seconds.
   const line2 = d?.choose || (d?.confirm && !d.running) || (d?.offer && d.running && !d.open) || (d?.switched && live) ? (
     <div className="min-w-0 [&>*]:!px-0 [&>*]:!py-0 [&>*]:!border-0 [&>*]:!bg-transparent" style={noDrag}>{p.detectionLine}</div>
+  ) : ask && whereLog ? (
+    <div data-qc-log-where="" className="min-w-0 flex items-center gap-2 px-2 py-1 rounded border border-[var(--accent-border)] bg-[var(--accent-dim)]" style={noDrag}>
+      <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-color)]" />
+      <span className="flex-1 min-w-0 truncate text-[13px] font-bold text-white">
+        {ask.suggestion && !ask.locating ? t('tracker.whereLooksLike', { place: ask.suggestion }) : t('tracker.whereTitle')}
+      </span>
+      {ask.suggestion && !ask.locating && whereLog.onPickPlace && (
+        <button type="button" onClick={() => { playBlipSound(p.soundEnabled); whereLog.onPickPlace?.(ask.suggestion!); }}
+          className="flex-shrink-0 px-1.5 rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-[11.5px] font-bold cursor-pointer">{t('tracker.whereYes')}</button>
+      )}
+      {whereLog.onLocate && (
+        <button type="button" data-qc-locate="" disabled={ask.locating} onClick={() => { playBlipSound(p.soundEnabled); whereLog.onLocate?.(); }}
+          title={`${t('tracker.locate')}${whereLog.locateKeys ? ` (${whereLog.locateKeys})` : ''}`}
+          className="flex-shrink-0 flex items-center gap-1 h-6 px-2 rounded bg-[var(--accent-color)] text-black text-[12px] font-bold cursor-pointer disabled:opacity-70">
+          <Crosshair className={`w-3.5 h-3.5 ${ask.locating ? 'animate-spin' : ''}`} />
+          {ask.locating ? t('tracker.locatingBig') : t('tracker.locate')}
+        </button>
+      )}
+    </div>
   ) : lg && now ? (
     <div className="min-w-0 flex items-center gap-2 px-2 py-1 rounded border border-[var(--accent-border)] bg-[var(--accent-dim)]" style={noDrag}>
       {box(now)}

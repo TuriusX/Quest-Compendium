@@ -125,9 +125,10 @@ function createHoldToTalk(bit, ms = TALK_HOLD_MS) {
  * they already chose it as safe for their game. Pressing the other button alone keeps its normal action; only the
  * pair counts, and never while other buttons are down.
  *   tick: 'up' | 'a' | 'off' (default)      cycle: 'right' | 'rb' | 'off' (default)
+ *   Locate me: 'down' (default) | 'x' | 'off'
  * Older values name View: 'view-up', 'view-a', 'view-right', 'view-rb'.
  */
-const CHORD_KEYS = ['up', 'a', 'right', 'rb'];
+const CHORD_KEYS = ['up', 'a', 'right', 'rb', 'down', 'x'];
 /** The modifier of the show / hide combo (a button name). */
 function chordModifier(toggleCombo) {
   return toggleCombo && toggleCombo.buttons && toggleCombo.buttons[0] && BITS[toggleCombo.buttons[0]] !== undefined ? toggleCombo.buttons[0] : 'back';

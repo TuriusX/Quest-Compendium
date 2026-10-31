@@ -115,7 +115,7 @@ interface ChatAreaProps {
   onPinAnswer?: (msgId: string) => void;
   onDismissOffer?: (msgId: string) => void;
   /** The compact card's quest log (its Now line and fold). */
-  compactLog?: { view: import('../utils/questLogView').LogView; open: boolean; onTick: (id: string) => void; onToggle: () => void; keysLabel: string } | null;
+  compactLog?: { view: import('../utils/questLogView').LogView; open: boolean; onTick: (id: string) => void; onToggle: () => void; keysLabel: string; onLocate?: () => void; onPickPlace?: (name: string) => void; locateKeys?: string } | null;
   /** The player picked where they are (one tap or voice): remember it for this game. */
   onSetPlace?: (name: string) => void;
   /** "Locate me" in the PlaceBar (desktop, games with a guide). */

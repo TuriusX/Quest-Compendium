@@ -475,7 +475,11 @@ function cleanLog(lg) {
   return {
     now: now && now.id ? now : null,
     next: (Array.isArray(lg.next) ? lg.next : []).slice(0, 3).map(step).filter(Boolean),
-    watch: lg.watch && lg.watch.id ? { id: str(lg.watch.id, 200), text: clip(lg.watch.text, 200), why: clip(lg.watch.why, 300) } : null,
+    watch: lg.watch && lg.watch.id ? { id: str(lg.watch.id, 200), text: clip(lg.watch.text, 200), why: clip(lg.watch.why, 300), fromGuide: !!lg.watch.fromGuide } : null,
+    // "Where are you?" (the place isn't known): Locate me, an unsure check's suggestion, last time's place, the areas.
+    where: lg.where && typeof lg.where === 'object'
+      ? { locating: !!lg.where.locating, suggestion: clip(lg.where.suggestion, 80), last: clip(lg.where.last, 80), areas: (Array.isArray(lg.where.areas) ? lg.where.areas : []).slice(0, 200).map((a) => clip(a, 80)).filter(Boolean) }
+      : null,
     done: lg.done && lg.done.goal ? { goal: clip(lg.done.goal, 120) } : null,
     pins: Math.max(0, Math.min(99, Number(lg.pins) || 0)),
     more: !!lg.more,
@@ -495,6 +499,7 @@ function cleanDetail(d) {
 
 /** The page's words in the app's language: short strings only, for the keys the page knows. */
 const LABEL_KEYS = ['title', 'confirm', 'missable', 'placeHint', 'confirmHint', 'away', 'size', 'alpha', 'backdrop', 'tabHint', 'itemTodo', 'itemDone', 'empty', 'secAnswer', 'secMissable', 'secNoReturn', 'secCollect', 'secAch', 'more', 'next', 'closest', 'showHidden', 'hideEntry', 'limitHint', 'prevArea', 'nextArea', 'areaList', 'locate', 'locating',
+  'locatingBig', 'whereTitle', 'whereSub', 'whereLooksLike', 'whereYes', 'whereNo', 'whereLast', 'whereStill', 'wherePick', 'youreIn', 'change',
   'hintPanel', 'hintPanelNoKeys', 'headFold', 'openBook', 'foldHint', 'detWhere', 'detHow', 'detMissable', 'detNotes', 'openInGuide', 'askAbout',
   'expandHint', 'spine', 'choice', 'nextTurn', 'nextTurnHint', 'mouseHint', 'mouseHintClose', 'missableTip',
   'loadSteps', 'loadStepsHint', 'unloadSteps', 'dismissOffer', 'part', 'spotIt', 'look', 'shownOf', 'hintOpen', 'hintOpenNoKeys',
@@ -901,6 +906,12 @@ function onMessage(event, msg) {
     case 'locate':
       // "Locate me": the app takes a screenshot (the tracker made invisible for it) and asks which area this is.
       tell({ type: 'locate' });
+      break;
+    case 'place-pick':
+      // "Where are you?": the player picked an area (or said Yes to a suggestion, or Still here): only the log's own areas.
+      if (typeof msg.name === 'string' && current && current.data.log && current.data.log.where && current.data.log.where.areas.includes(msg.name)) {
+        tell({ type: 'goto-area', name: msg.name });
+      }
       break;
     case 'hide-item': {
       // An entry's ×, or "Show N hidden" (hidden: false): remembered for this game (ids carry the area).

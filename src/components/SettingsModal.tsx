@@ -62,6 +62,7 @@ const DEFAULT_SHORTCUTS = {
   trackerTickShortcut: 'CmdOrCtrl+Shift+Enter',
   trackerNextShortcut: 'CmdOrCtrl+Shift+Down',
   questLogShortcut: 'CmdOrCtrl+Shift+L',
+  locateShortcut: 'CmdOrCtrl+Shift+K',
 };
 /** Electron's names for keys the browser reports differently (ArrowDown is "Down"). */
 const NAMED_KEYS: Record<string, string> = {
@@ -755,6 +756,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         { key: 'trackerTickShortcut', label: tr('set.sc.trackerTick'), keys: settings.trackerTickShortcut || DEFAULT_SHORTCUTS.trackerTickShortcut, hint: tr('set.sc.trackerHint') },
                         { key: 'trackerNextShortcut', label: tr('set.sc.trackerNext'), keys: settings.trackerNextShortcut || DEFAULT_SHORTCUTS.trackerNextShortcut, hint: tr('set.sc.trackerHint') },
                         { key: 'questLogShortcut', label: tr('set.sc.questLog'), keys: settings.questLogShortcut || DEFAULT_SHORTCUTS.questLogShortcut },
+                        { key: 'locateShortcut', label: tr('set.locateKey'), keys: settings.locateShortcut || DEFAULT_SHORTCUTS.locateShortcut, hint: tr('set.locateKeyDesc') },
                       ] as const;
                       return all.map((sc) => (
                         <ShortcutInput
@@ -1034,7 +1036,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         const toggle = padPreset(settings.controllerToggle);
                         const toggleButtons: string[] = toggle === 'custom' ? (settings.controllerCustom?.buttons || []) : toggle === 'hold-ls-rs' ? ['ls', 'rs'] : toggle === 'off' ? [] : ['back', 'start'];
                         const mod = toggleButtons[0] || 'back';
-                        const keyLabelOf = (k: string) => (k === 'up' ? tr('set.pad.dpadUp') : k === 'right' ? tr('set.pad.dpadRight') : tr(`set.pad.btn.${k}`));
+                        const keyLabelOf = (k: string) => (k === 'up' ? tr('set.pad.dpadUp') : k === 'right' ? tr('set.pad.dpadRight') : k === 'down' ? tr('set.pad.dpadDown') : tr(`set.pad.btn.${k}`));
                         // The same rules as the desktop app (padCombo chordFor): never the modifier itself or a button of
                         // the show / hide combo; and a note when it's the hold-to-talk button.
                         const clashOf = (k: string) => {
@@ -1046,6 +1048,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         const rows = [
                           { key: 'controllerTick', label: tr('set.pad.trackerTick'), value: String(settings.controllerTick || 'off').replace(/^view-/, ''), options: ['off', 'up', 'a'] },
                           { key: 'controllerNext', label: tr('set.pad.trackerNext'), value: String(settings.controllerNext || 'off').replace(/^view-/, ''), options: ['off', 'right', 'rb'] },
+                          { key: 'controllerLocate', label: tr('set.controllerLocate'), value: String(settings.controllerLocate || 'down'), options: ['off', 'down', 'x'] },
                         ] as const;
                         return (
                           <div className="space-y-2">

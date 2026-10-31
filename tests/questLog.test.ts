@@ -1,7 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/questLog.test.ts)
 import assert from "node:assert/strict";
 import { buildTrackerPayload, type TrackerGuideArea } from "../src/utils/trackerPayload";
-import { parseLocateMeReply, seenTextNamesArea } from "../locateMe";
+import { parseLocateMeReply, seenTextNamesArea, isConfident, locateMePrompt } from "../locateMe";
 import type { AchievementGuide } from "../src/utils/achievementGuide";
 
 let passed = 0;
@@ -78,15 +78,28 @@ test("an entry's details carry the full guide text (not the trimmed line); hidde
 test("Locate me's reply: only an area from the list (exactly as listed), else unknown; read needs the text", () => {
   const names = areas.map((a) => a.name);
   assert.deepEqual(parseLocateMeReply('{"area":"emerald grove","story":"At the druid camp gates","evidence":"read","seenText":"Emerald Grove"}', names),
-    { area: "Emerald Grove", story: "At the druid camp gates", evidence: "read", seenText: "Emerald Grove" });
+    { area: "Emerald Grove", story: "At the druid camp gates", evidence: "read", seenText: "Emerald Grove", confidence: "low", how: "surroundings" });
   // "read" without any quoted text is a guess.
   assert.equal(parseLocateMeReply('{"area":"Emerald Grove","story":"x","evidence":"read","seenText":""}', names).evidence, "guessed");
   assert.deepEqual(parseLocateMeReply('{"area":"Baldur\'s Gate","story":"x","evidence":"read","seenText":"Baldur\'s Gate"}', names),
-    { area: "unknown", story: "", evidence: "guessed", seenText: "" });
+    { area: "unknown", story: "", evidence: "guessed", seenText: "", confidence: "low", how: "surroundings" });
   // A fenced reply, an odd evidence word.
   assert.deepEqual(parseLocateMeReply('```json\n{"area":"Ravaged Beach","story":"","evidence":"certain","seenText":"Ravaged Beach"}\n```', names),
-    { area: "Ravaged Beach", story: "", evidence: "guessed", seenText: "Ravaged Beach" });
-  assert.deepEqual(parseLocateMeReply("not json", names), { area: "unknown", story: "", evidence: "guessed", seenText: "" });
+    { area: "Ravaged Beach", story: "", evidence: "guessed", seenText: "Ravaged Beach", confidence: "low", how: "surroundings" });
+  assert.deepEqual(parseLocateMeReply("not json", names), { area: "unknown", story: "", evidence: "guessed", seenText: "", confidence: "low", how: "surroundings" });
+});
+test("Locate me is used only when confident: a read, or high confidence (the map, the journal); else the player is asked", () => {
+  const names = areas.map((a) => a.name);
+  const r = (j: string) => parseLocateMeReply(j, names);
+  assert.equal(isConfident(r('{"area":"Ravaged Beach","how":"map","confidence":"high","evidence":"guessed","seenText":""}')), true);
+  assert.equal(isConfident(r('{"area":"Ravaged Beach","how":"surroundings","confidence":"medium","evidence":"guessed","seenText":""}')), false);
+  assert.equal(isConfident(r('{"area":"Emerald Grove","how":"read","confidence":"low","evidence":"read","seenText":"Emerald Grove"}')), true);
+  // "unknown" is never confident, whatever it says.
+  assert.equal(isConfident(r('{"area":"unknown","confidence":"high"}')), false);
+  assert.equal(r('{"area":"Ravaged Beach","how":"journal","confidence":"high"}').how, "journal");
+  // The prompt never names a last known place, and says not to assume the start of the game.
+  const prompt = locateMePrompt("Baldur's Gate 3", areas);
+  assert.ok(/Never assume the start of the game/.test(prompt) && !/last known/i.test(prompt));
 });
 test("Locate me's read check: the seen text must name that area, or one of its sub-locations in the guide", () => {
   const guideAreas = [

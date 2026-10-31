@@ -1,6 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/questLogView.test.ts)
 import assert from "node:assert/strict";
-import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState, taskOf } from "../src/utils/questLogView";
+import { buildLogView, isGoalAnswer, objectiveForRequest, nextLogState, taskOf, placeIsCurrent } from "../src/utils/questLogView";
+import { missablesThin, missableCount } from "../src/utils/missablesCheck";
 import type { TrackerData } from "../src/utils/trackerPayload";
 import { mergeTabState, sanitizeTabsForCloud } from "../src/hooks/tabMerge";
 import { gameSpacesOn } from "../src/utils/learnedGames";
@@ -149,6 +150,53 @@ test("walkthrough steps as tasks (real guide sentences)", () => {
   assert.equal(t("Coastal Cave", "You can also give the needle to Boc at the cave entrance."), "Give the needle to Boc at the cave entrance [Coastal Cave]");
   assert.equal(t("Battle the Street Thugs", "Immediately after Kasuga draws the weapon, you are forced into combat on the bridge."), "Battle the Street Thugs [You are forced into combat on the bridge]");
   assert.equal(t("Southern Peaks", "Head south to reach the Whiteridge Road Site of Grace and clear the Guardians' Garrison fort."), "Reach the Whiteridge Road Site of Grace: head south [Southern Peaks]");
+});
+
+// ---- Where the player is (owner, Oct 31 2026): never the guide for a place the player may not be in ----
+test("the place is known only when set or confirmed, or a sure answer or Locate me found it, since it was last due", () => {
+  assert.equal(placeIsCurrent(undefined), false);
+  assert.equal(placeIsCurrent({ name: "Emerald Grove", confirmed: false }), false, "a guess is a suggestion at most");
+  assert.equal(placeIsCurrent({ name: "Rivington", confirmed: false, sure: true, checkedAt: 100 }), true);
+  assert.equal(placeIsCurrent({ name: "Emerald Grove", confirmed: true }), true, "no game running: the playthrough's own place");
+  // The game started (or the tab was opened or switched to): an older place has to be checked again.
+  assert.equal(placeIsCurrent({ name: "Emerald Grove", confirmed: true, checkedAt: 50 }, 100), false, "a resumed save");
+  assert.equal(placeIsCurrent({ name: "Emerald Grove", confirmed: true }, 100), false, "a place from before checks were kept");
+  assert.equal(placeIsCurrent({ name: "Rivington", confirmed: false, sure: true, checkedAt: 150 }, 100), true);
+});
+
+test("place unknown: no Now, Next or Watch out from the guide (never its start), only Where are you?", () => {
+  const where = { locating: false, suggestion: "Rivington", last: "Emerald Grove", areas: ["Emerald Grove", "Rivington"] };
+  const fresh = { id: "t", name: "Baldur's Gate 3", messages: [] } as any;
+  const v = buildLogView(fresh, guide, { ...opts, walk, where })!;
+  assert.equal(v.now, null);
+  assert.deepEqual(v.next, []);
+  assert.equal(v.watch, null);
+  assert.deepEqual(v.more, []);
+  assert.equal(v.place, undefined);
+  assert.deepEqual(v.where, where);
+  // A resumed tab with its own objective still shows it: the player's question isn't the guide.
+  const t = tab({ questLog: { now: "a1" } });
+  const r = buildLogView(t, guide, { ...opts, walk, where })!;
+  assert.equal(r.now?.source, "question");
+  assert.ok(r.where);
+});
+
+test("the guide's missables are labelled as the guide's (never a complete list)", () => {
+  const v = buildLogView({ id: "t", name: "Elden Ring", messages: [] } as any, guide, { ...opts })!;
+  assert.equal(v.watch?.text, "Talk to Gostoc");
+  assert.equal(v.watch?.fromGuide, true);
+});
+
+test("a thin missable list: none in 5+ things, one in 10+, under 12% in 20+; a small area isn't", () => {
+  const items = (n: number, miss = 0) => Array.from({ length: n }, (_, i) => ({ missable: i < miss }));
+  assert.equal(missablesThin({ items: items(12, 1) }), true);
+  assert.equal(missablesThin({ items: items(12, 3) }), false);
+  assert.equal(missablesThin({ items: items(4, 0) }), false, "a small area");
+  assert.equal(missablesThin({ items: items(6, 0) }), true, "none at all in six things");
+  assert.equal(missablesThin({ items: items(30, 3) }), true, "a big area with three");
+  const page = { items: items(10, 1), sections: [{ title: "Don't miss", check: true, entries: [1, 2] }], walkthrough: [{ warn: "Point of no return" }] };
+  assert.equal(missableCount(page), 4);
+  assert.equal(missablesThin(page), false);
 });
 
 console.log(`\n${passed} passed`);
