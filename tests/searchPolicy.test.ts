@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/searchPolicy.test.ts)
 import assert from "node:assert/strict";
-import { asksForSearch, isNewRelease, searchMode, EXISTENCE_RULES } from "../searchPolicy";
+import { asksForSearch, isNewRelease, searchMode, isBlankAnswer, wantsSpecifics, EXISTENCE_RULES } from "../searchPolicy";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -36,6 +36,23 @@ test("the model asking to search is recognised only when that's the whole reply"
 test("the prompt never lets the model deny that something exists", () => {
   assert.match(EXISTENCE_RULES, /Never say that a game, place, item, character or event doesn't exist/);
   assert.match(EXISTENCE_RULES, /ask the\s+player for a screenshot or a detail/);
+});
+
+test("with a screenshot, a question about specifics gets the search tool, covered by the guide or not", () => {
+  const base = { newRelease: false, dated: true, type: "general" as const, covered: true };
+  assert.equal(searchMode({ ...base, screenshot: true, specifics: wantsSpecifics("What are the hidden items in the mansion?") }), "offer");
+  assert.equal(searchMode({ ...base, screenshot: true, specifics: wantsSpecifics("How do I open this door?") }), "offer");
+  assert.equal(searchMode({ ...base, screenshot: true, specifics: wantsSpecifics("¿Dónde está la llave?") }), "offer");
+  assert.equal(searchMode({ ...base, screenshot: false, specifics: wantsSpecifics("What are the hidden items in the mansion?") }), "ask");
+  assert.equal(searchMode({ ...base, screenshot: true, specifics: wantsSpecifics("Who is Kefka?") }), "ask");
+});
+
+test("a blank answer: nothing readable once our tags are out; a short real answer isn't blank", () => {
+  assert.equal(isBlankAnswer(""), true);
+  assert.equal(isBlankAnswer("<qc-search/>"), true);
+  assert.equal(isBlankAnswer('<qc-title now="no">Mansion</qc-title>\n```\n<qc-steps>[]</qc-steps>\n```'), true);
+  assert.equal(isBlankAnswer("Yes."), false);
+  assert.equal(isBlankAnswer("<qc-title>Mansion</qc-title>Go behind the bookcase."), false);
 });
 
 console.log(`\n${passed} tests passed`);

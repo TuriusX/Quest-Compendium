@@ -4,8 +4,11 @@
  *     first-release override on guides/{key}.firstReleased; an unreleased or "coming soon" game, or one our guide
  *     pipeline built as a new release, counts as new). Search is always on for it, even past the player's own daily
  *     search allowance (the app-wide caps still apply), and our guide pages for it come along.
- *   - offer: the model gets the search tool for this question: a game we can't date (unfamiliar), or a question about
- *     exact data (where something is, a fight, a puzzle) that no checked guide page or saved fact covers.
+ *   - offer: the model gets the search tool for this question: a game we can't date (unfamiliar), a question about
+ *     exact data (where something is, a fight, a puzzle) that no checked guide page or saved fact covers, or a
+ *     screenshot with a question about specifics ("what items are here", "where is", "how do I": wantsSpecifics),
+ *     covered or not (owner, Oct 31 2026: with a screenshot the model rarely asked for a search, and FF6's "hidden
+ *     items in the mansion" got "several more chests").
  *   - ask: no search by default. The model is told to reply with only <qc-search/> when it doesn't recognise
  *     something or needs a detail it isn't sure of; then the question runs again with search.
  * Cutoffs per model, in Firestore config/searchRules { cutoffs: { flash: "2025-01-01", pro: "2025-01-01" } }.
@@ -81,13 +84,29 @@ export function isNewRelease(r: Release, cutoff: string): boolean {
   return r.source !== 'unknown' || r.newRelease === true ? true : false;
 }
 
+/** A question about specifics: what items or loot there are, where something is, how to do or get something. */
+const SPECIFICS = /\b(?:items?|loot|treasures?|chests?|hidden|secrets?|collectibles?|rewards?|drops?|where(?:'s| is| are| can| do| does)?|find|locat(?:e|ion|ed)|how (?:do|can|to|should) (?:i |you |we )?(?:get|find|reach|open|unlock|beat|solve|do|make|use|obtain|craft)|how to)\b|objet|tesoro|cofre|escondid|d[oó]nde|c[oó]mo (?:consigo|llego|abro|consigo)|ba[uú]|onde|como (?:pego|chego|abro)|gegenst|truhe|versteck|\bwo\b|wie (?:komme|bekomme|finde)|coffre|tr[ée]sor|cach[ée]|o[uù] (?:est|sont|trouver)|comment (?:obtenir|trouver|ouvrir)|предмет|сундук|тайн|где|как (?:получить|найти|открыть)|アイテム|宝箱|隠し|どこ|どうやって|아이템|상자|숨겨진|어디|어떻게|物品|宝箱|隐藏|哪里|在哪|怎么/i;
+export const wantsSpecifics = (text: string) => SPECIFICS.test(String(text || ''));
+
 /** How this question uses search (see the top of the file). */
-export function searchMode(o: { newRelease: boolean; dated: boolean; type: QuestionType; covered: boolean }): SearchMode {
+export function searchMode(o: { newRelease: boolean; dated: boolean; type: QuestionType; covered: boolean; screenshot?: boolean; specifics?: boolean }): SearchMode {
   if (o.newRelease) return 'force';
   if (!o.dated) return 'offer';
+  if (o.screenshot && o.specifics) return 'offer';
   if ((o.type === 'location' || o.type === 'fight' || o.type === 'puzzle' || o.type === 'missable') && !o.covered) return 'offer';
   return 'ask';
 }
+
+/**
+ * Nothing the player could read (not one letter or digit; a short "Yes." is an answer): empty, or only our tags (<qc-search/>, <qc-title>, …) once they're taken out. Gemini
+ * returns no text when it tries to call a search tool it wasn't given (finishReason MALFORMED_FUNCTION_CALL).
+ */
+export const isBlankAnswer = (text: string) =>
+  String(text || '').replace(/(?:```[a-z]*\s*)?<qc-[a-z-]+(?:\s[^>]*)?>[\s\S]*?<\/qc-[a-z-]+>(?:\s*```)?/gi, '').replace(/<qc-[a-z-]+[^>]*\/?>/gi, '').replace(/```[a-z]*/gi, '').search(/[\p{L}\p{N}]/u) < 0;
+
+/** Added to the retry after a blank answer. */
+export const NOT_BLANK = `[ANSWER NOW]
+Your previous attempt returned nothing. Answer the player's question now, in plain text.`;
 
 /** True when the model's first reply only asks for a search. */
 export const asksForSearch = (text: string) => /^\s*<qc-search\s*\/?>\s*(<\/qc-search>)?\s*$/i.test(String(text || ''));
@@ -100,9 +119,10 @@ with Google Search when you have it. If you can't find it, say there isn't enoug
 player for a screenshot or a detail (what's on screen, the chapter, where they are).`;
 
 export const ASK_RULES = `[GOOGLE SEARCH]
-Answer from the guide notes, the verified facts above and what you know. If you don't recognise the game, a place, an
-item or a character in the question, or you need a specific detail you aren't sure of (where something is, an enemy's
-weakness, exact numbers), reply with only this line and nothing else: <qc-search/>
+Answer from what you know, with the guide notes and the verified facts above as reference. If you don't recognise the
+game, a place, an item or a character in the question, you need a specific detail you aren't sure of (where something
+is, an enemy's weakness, exact numbers), or the guide notes and what you know disagree and you aren't sure which is
+right, reply with only this line and nothing else: <qc-search/>
 You'll then be able to search before answering. Don't use it for things you already know well.`;
 
 export const FORCE_RULES = (game: string, when: string) => `[NEW RELEASE: ${game} (released ${when})]

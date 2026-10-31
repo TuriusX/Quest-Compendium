@@ -6,6 +6,8 @@
  *     window falls back to the daily counts (stats/{day}, Central time) for the days it covers, and says so (≈).
  *   - Sign-ups from Firebase Auth (account creation time); accounts in total.
  *   - Premium subscribers (users.isPremium) and this month's player AI cost (playerCosts/{month}).
+ *   - Answer cost: the players' average cost per question, day by day for the last 7 days (stats/{day}.costs), and how
+ *     many of those questions searched (counted from Nov 1 2026: the answers' new guide and search rules, Oct 31).
  *   - "Site": the website's ask box (siteAsk.ts), its questions and their cost, apart from the players' numbers.
  *   - The nightly guide improver's spending this month against its own cap (autoChanges.ts improverMonth).
  *   - "Locate me": the app's checks (by hand and automatic), how many found the place, and their cost
@@ -98,6 +100,32 @@ async function activity(from: number, to: number, w: Who, owners: Set<string>): 
   return { questions, players: players.size, guests: guests.size, apps, approx };
 }
 
+/** The players' answer cost by day (Central days, the last `days`): questions, dollars, and how many searched. */
+export async function answerCostDays(now: number, owners: Set<string>, days = 7): Promise<{ day: string; q: number; dollars: number; searched: number | null }[]> {
+  const ids = Array.from({ length: days }, (_, i) => dayOf(now - (days - 1 - i) * DAY));
+  const docs = await Promise.all(ids.map((id) => getFirestore().collection('stats').doc(id).get()));
+  return ids.map((day, i) => {
+    const st: any = docs[i].data() || {};
+    const own = new Set<string>([...owners, ...(st.owners || [])]);
+    let q = 0, dollars = 0, searched = 0, counted = false;
+    for (const [h, c] of Object.entries((st.costs || {}) as Record<string, any>)) {
+      if (own.has(h)) continue;
+      q += Number(c.questions) || 0;
+      dollars += Number(c.dollars) || 0;
+      if (c.searched !== undefined || c.shots !== undefined) counted = true;
+      searched += Number(c.searched) || 0;
+    }
+    // Searches counted from Nov 1 2026 on; before, unknown.
+    return { day, q, dollars, searched: counted || day >= '2026-11-01' ? searched : null };
+  });
+}
+export function answerCostLine(rows: { day: string; q: number; dollars: number; searched: number | null }[]): string {
+  const per = (r: { q: number; dollars: number }) => (r.q ? `$${(r.dollars / r.q).toFixed(3)}` : '–');
+  const all = rows.reduce((a, r) => ({ q: a.q + r.q, dollars: a.dollars + r.dollars }), { q: 0, dollars: 0 });
+  const days = rows.map((r) => `${r.day.slice(5)} ${per(r)} (${r.q}q${r.searched !== null && r.q ? `, ${Math.round((100 * r.searched) / r.q)}% searched` : ''})`).join(' · ');
+  return `**Answer cost per question** (last ${rows.length} days, new answer rules from Nov 1): ${per(all)} on average\n${days}`;
+}
+
 /** Locate me checks in [from, to) (locateMe.ts statsHours.loc): all, automatic, the ones that found the place, cost. */
 async function locates(from: number, to: number, owners: Set<string>): Promise<{ n: number; auto: number; found: number; dollars: number }> {
   const out = { n: 0, auto: 0, found: 0, dollars: 0 };
@@ -169,6 +197,8 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   const loc = await locates(now - siteMs, now, owners);
   parts.push(`**Locate me** (${window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours'}): ${loc.n} check(s), ${loc.auto} automatic, ${loc.found} found the place · $${loc.dollars.toFixed(2)}${loc.n ? ` ($${(loc.dollars / loc.n).toFixed(4)} each)` : ''}`);
   parts.push(`**Site** (${window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours'}): ${site.questions} question(s) in the guide pages' ask box, ${site.uncovered} the guide couldn't answer · $${site.dollars.toFixed(2)}`);
+  // What an answer costs, day by day (the effect of the Oct 31 answer rules: guide as reference, search with screenshots).
+  parts.push(answerCostLine(await answerCostDays(now, owners)));
   // The nightly guide improver (autoImprove.ts): month to date against its own cap.
   const imp = await improverMonth(now);
   parts.push(`**Guide improvements this month:** $${imp.dollars.toFixed(2)} of the $${imp.cap} cap${imp.capAt ? ' (reached: stopped until the 1st)' : ''}`);

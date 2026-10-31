@@ -309,11 +309,12 @@ async function corrections() {
   }
 }
 
-// ---- 2. missing facts: the ask box's "missing" items, checked by contributions.ts ----
+// ---- 2. missing facts: the ask box's and the app's "missing" items (missingFacts.ts), checked by contributions.ts ----
+const ASKED_SOURCES = ['site', 'site-suggestion', 'app'];
 async function missingFacts() {
-  const docs = (await db().collection('contributions').where('status', '==', 'checked').get()).docs.filter((d) => ['site', 'site-suggestion'].includes(String(d.data().source)));
+  const docs = (await db().collection('contributions').where('status', '==', 'checked').get()).docs.filter((d) => ASKED_SOURCES.includes(String(d.data().source)));
   // Also the ones set aside a month ago (sources may have filled in).
-  const retry = (await db().collection('contributions').where('status', '==', 'unconfirmed').get()).docs.filter((d) => ['site', 'site-suggestion'].includes(String(d.data().source)) && Number(d.data().unconfirmed?.at || 0) < Date.now() - 30 * DAY);
+  const retry = (await db().collection('contributions').where('status', '==', 'unconfirmed').get()).docs.filter((d) => ASKED_SOURCES.includes(String(d.data().source)) && Number(d.data().unconfirmed?.at || 0) < Date.now() - 30 * DAY);
   for (const d of [...docs, ...retry]) {
     if (!can('add')) return;
     const x: any = d.data();
@@ -325,7 +326,8 @@ async function missingFacts() {
     const seed: Evidence[] = (x.check?.evidence || []).map((e: any, i: number) => ({ id: `c${i}`, text: e.text, sources: e.sources || [], topic: 'check' }));
     const c = await checked(p, sentencesOf(proposal).slice(0, 6), seed, [], x.label);
     if (!c.ok.length) { await setAside('contributions', d.id, `${p.name}: "${cut(x.label, 80)}" (sources didn't confirm)`); continue; }
-    await addFacts(p, c, 'add', `Players asked "${cut(x.label, 100)}" and the page didn't say; added what sources back.`, 'site questions', { col: 'contributions', id: d.id });
+    const app = x.source === 'app';
+    await addFacts(p, c, 'add', app ? `An app answer named ${cut(x.name || x.label, 100)} here and the page didn't have it; added what sources back.` : `Players asked "${cut(x.label, 100)}" and the page didn't say; added what sources back.`, app ? 'app answers' : 'site questions', { col: 'contributions', id: d.id });
   }
 }
 

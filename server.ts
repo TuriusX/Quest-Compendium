@@ -28,7 +28,7 @@ import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
-import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode } from './searchPolicy';
+import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
 import { questionType } from './src/utils/questionType';
@@ -47,6 +47,7 @@ import { STEPS_RULES, extractSteps, cleanObjective, objectiveRules, extractTicke
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
 import { disagreeingEntries } from './src/utils/guideAgree';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
+import { MISSING_RULES, extractMissing, saveMissingFacts } from './missingFacts';
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
@@ -1504,7 +1505,7 @@ percentages:
         // Player corrections to these notes that were verified: used right away, before the page is republished.
         const corrected = await verifiedCorrectionsForPrompt(guidePage.key, guidePage.slug);
         if (corrected) systemInstruction += `\n\n${corrected}`;
-        systemInstruction += `\n${CORRECTION_RULES}`;
+        systemInstruction += `\n${CORRECTION_RULES}${MISSING_RULES}`;
       }
       // Guide-backed markers (roadmap item 7): with a screenshot and markers on, the area's guide entries the player
       // hasn't ticked (the app sends its ticks for the area), so the answer can mark any that are visible. No extra call.
@@ -1528,7 +1529,7 @@ percentages:
       const newRelease = !!release && isNewRelease(release, usePro ? cut.pro : cut.flash);
       const searchMode: SearchMode = !effectiveGame?.name
         ? 'ask'
-        : searchModeFor({ newRelease, dated: release?.source !== 'unknown', type: qtype, covered: Boolean(guidePage?.verified) });
+        : searchModeFor({ newRelease, dated: release?.source !== 'unknown', type: qtype, covered: Boolean(guidePage?.verified), screenshot: !!imageBase64, specifics: wantsSpecifics(String(question || '')) });
       const searchOk = evalCapture ? true : searchMode === 'force'
         ? (await playerSearchesToday()) && (await monthlyBudgetOk())
         : await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
@@ -1778,16 +1779,30 @@ percentages:
             response = await withTimeout(answerCall(systemInstruction, searchOk), usePro ? (searchOk ? Math.max(routingCfg.proTimeoutMs, 45000) : routingCfg.proTimeoutMs) : 25000, 'Answer after asking to search') as any;
             logUsage(usePro ? 'chat-pro-searched' : 'chat-searched', answerModel, response);
           }
+          // A player never gets a blank answer: nothing readable (the model tried a search it wasn't given, or only
+          // asked for one) is asked once more, with search when it's allowed.
+          if (isBlankAnswer(response?.text || '')) {
+            const blank = response;
+            console.log(`[chat-blank] ${response?.candidates?.[0]?.finishReason || 'empty'}: retrying${searchOk ? ' with search' : ''}`);
+            try {
+              response = await withTimeout(answerCall(`${systemInstruction}\n\n${NOT_BLANK}`, searchOk), usePro ? Math.max(routingCfg.proTimeoutMs, 45000) : 25000, 'Answer after a blank one') as any;
+              logUsage(usePro ? 'chat-pro-blank' : 'chat-blank', answerModel, response);
+              if (isBlankAnswer(response?.text || '')) response = blank;
+            } catch {
+              response = blank;
+            }
+          }
           searchesUsed += countSearches(response);
           searchSourcesSeen = searchSources(response);
           groundedSeen = groundedText(response);
           responseText = response.text || '';
 
-          if (responseText && responseText.trim().length > 0) {
+          if (!isBlankAnswer(responseText)) {
             charge(usePro);
           } else {
-            console.log('Answer returned empty text. Not deducting a question.');
-            responseText = 'No response received. Please try asking again.';
+            // Still nothing after the retry: thrown to the Flash fallback below, which answers instead.
+            console.log('Answer returned empty text twice. Not deducting a question; trying the fallback.');
+            throw new Error('blank answer');
           }
         }
         await saveBalances();
@@ -1820,10 +1835,8 @@ percentages:
           responseText = retryResponse.text || '';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
 
-          if (!responseText || responseText.trim().length === 0) {
-             console.log('Emergency Flash Lite fallback returned empty text.');
-             responseText = 'No response received. Please try asking again.';
-          }
+          // Blank here too: on to the emergency model (never a blank answer, never a charge for one).
+          if (isBlankAnswer(responseText)) throw new Error('blank fallback answer');
           
           charge(false);
           await saveBalances();
@@ -1846,8 +1859,9 @@ percentages:
             });
             const emergencyResponse = await withTimeout(emergencyPromise, 15000, 'Flash Lite Emergency query') as any;
             logUsage('chat-emergency', 'gemini-3.1-flash-lite', emergencyResponse);
-            responseText = emergencyResponse.text || 'No response received.';
+            responseText = emergencyResponse.text || '';
             modelUsed = 'Gemini 3.1 Flash Lite (Emergency Fallback)';
+            if (isBlankAnswer(responseText)) throw new Error('blank emergency answer');
             
             charge(false);
             await saveBalances();
@@ -1864,7 +1878,7 @@ percentages:
         }
       }
 
-      if (!responseText || responseText.trim().length === 0) {
+      if (isBlankAnswer(responseText)) {
         responseText = 'The Compendium received a blank response from the AI. Please try again.';
       }
 
@@ -1940,6 +1954,11 @@ percentages:
       // candidates to be verified (corrections.ts), never applied from one player.
       const correctionsParsed = extractCorrections(responseText);
       responseText = correctionsParsed.text;
+      // Things the answer names that the guide page doesn't have: "missing" items for the nightly improver (checked
+      // against sources there, as the site's ask box's are). In the background: the answer doesn't wait for it.
+      const missingParsed = extractMissing(responseText);
+      responseText = missingParsed.text;
+      if (guidePage && missingParsed.missing.length) void saveMissingFacts({ page: guidePage, missing: missingParsed.missing, uid: userId, language });
       // The answer wins over the guide (owner, Oct 31 2026): guide entries its steps advise against ("Do not open the
       // outdoor barrels and crates" against "Potion: barrel left of the stables") are hidden from the quest log, and go
       // to the nightly corrections check with the answer's advice as the claim, to be settled against sources.
@@ -1962,7 +1981,7 @@ percentages:
       if (searchesUsed > 0) recordSearches(searchCtx, searchesUsed);
       if (chargedBucket) recordPlayerCost({ uid: userId, premium: isPremium, guest: isGuest, dollars: costScope.dollars, searches: costScope.searches });
       // The same cost by day, for the weekly player report (free, Premium or guest).
-      if (chargedBucket) recordDailyCost(userId, isGuest ? 'guest' : isPremium ? 'premium' : 'free', costScope.dollars, (req as any).user?.email);
+      if (chargedBucket) recordDailyCost(userId, isGuest ? 'guest' : isPremium ? 'premium' : 'free', costScope.dollars, (req as any).user?.email, { searched: searchesUsed > 0, shot: !!imageBase64 });
       // One line per answer, for the search rate per question (searchPolicy.ts).
       console.log(`[chat-search] mode=${searchMode} allowed=${searchOk} asked=${searchAsked} searches=${searchesUsed} model=${chargedBucket || '-'}${newRelease ? ' new-release' : ''}`);
       // Only file a fact under a place or story point that's actually known: confirmed by the player, or settled on

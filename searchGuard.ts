@@ -485,13 +485,14 @@ export type PlayerTier = 'free' | 'premium' | 'guest';
  * { dollars, questions, tier }, by the same anonymous id as the daily activity. An owner's account (ADMIN_EMAILS) is
  * also listed in stats/{day}.owners, so reports can leave it out. Test traffic isn't counted.
  */
-export function recordDailyCost(userId: string, tier: PlayerTier, dollars: number, email?: string): void {
+/** Also counted per player (for /stats' answer cost, ownerStats.ts): questions that searched, and ones with a screenshot. */
+export function recordDailyCost(userId: string, tier: PlayerTier, dollars: number, email?: string, o: { searched?: boolean; shot?: boolean } = {}): void {
   const d = db();
   if (!d || !userId || isTestTraffic(userId)) return;
   const who = playerHashOf(userId);
   const owner = !!email && ownerEmails().includes(String(email).toLowerCase());
   d.collection('stats').doc(statsDay()).set({
-    costs: { [who]: { dollars: FieldValue.increment(Math.max(0, Number(dollars) || 0)), questions: FieldValue.increment(1), tier } },
+    costs: { [who]: { dollars: FieldValue.increment(Math.max(0, Number(dollars) || 0)), questions: FieldValue.increment(1), tier, ...(o.searched ? { searched: FieldValue.increment(1) } : {}), ...(o.shot ? { shots: FieldValue.increment(1) } : {}) } },
     ...(owner ? { owners: FieldValue.arrayUnion(who) } : {}),
   }, { merge: true }).catch(() => {});
 }

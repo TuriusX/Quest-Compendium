@@ -720,6 +720,22 @@ const blankish = (v: unknown) =>
   !String(v ?? '').trim() ||
   /^(none|nothing|no|n\/?a|-+|—|unknown|not applicable|nothing to steal|cannot be stolen|can't be stolen|not stealable|no weakness(es)?|none known)$/.test(String(v).trim().toLowerCase().replace(/[.!]+$/, ''));
 
+/**
+ * How answers use the guide (owner, Oct 31 2026): the best possible answer, never a smaller one. The model answers from
+ * everything it knows (searching when unsure, as before); the guide is optional reference for exact locations,
+ * coordinates and checked details, never a limit (FF6's "hidden items in the mansion" got "several more chests" where
+ * the model knew the Hyper Wrist and Hermes Sandals).
+ */
+export const GUIDE_REFERENCE =
+  'Answer from everything you know about this game first, as fully as you would without these notes, and search when ' +
+  "you're unsure, as usual. These notes are optional reference: use them for exact locations, coordinates and checked " +
+  "details. They are not a complete list of what's here: never limit the answer to what they list and never let their " +
+  'gaps shape it (no "several more chests" or "other items" when you know what they are: name them). If a note and what ' +
+  "you know disagree, say what you're confident about; if you aren't sure which is right, search before answering. Be " +
+  "exact only where you're sure: name only things you're sure are in this game (by their name in this version), and for " +
+  "directions the notes don't give (which room, which side, which wall), search, or if you can't, say the area without " +
+  'guessing the exact path.';
+
 /** The page as short notes for the AI, kept to a sensible size. */
 export function guideNotesForPrompt(pg: GuidePageForPlace): string {
   const lines: string[] = [];
@@ -738,10 +754,10 @@ export function guideNotesForPrompt(pg: GuidePageForPlace): string {
   if (pg.info?.quests?.length) lines.push(`Quests here: ${pg.info.quests.join('; ')}`);
   const body = lines.map((l) => `- ${l}`).join('\n').slice(0, 2400);
   return pg.verified
-    ? `[GUIDE NOTES FOR ${pg.name} (from the Quest Compendium guide, checked against sources): use these]\n${body}`
-    : `[GUIDE NOTES FOR ${pg.name} (from the Quest Compendium guide, written from general knowledge and not independently checked): ` +
-        'use them for general guidance about this place (what is here, what is easy to miss), but verify exact numbers ' +
-        '(weaknesses, stats, prices) before stating them, and trust what is actually on screen over these notes]\n' + body;
+    ? `[GUIDE NOTES FOR ${pg.name} (from the Quest Compendium guide, checked against sources)]\n${GUIDE_REFERENCE}\n${body}`
+    : `[GUIDE NOTES FOR ${pg.name} (from the Quest Compendium guide, written from general knowledge and not independently checked)]\n` +
+        `${GUIDE_REFERENCE} Verify exact numbers in these notes (weaknesses, stats, prices) before stating them, and trust ` +
+        'what is actually on screen over them.\n' + body;
 }
 
 /**
@@ -751,8 +767,8 @@ export function guideNotesForPrompt(pg: GuidePageForPlace): string {
 export type GuideRef = { key: string; slug: string; area: string; entry?: string; name: string; kind?: EntryKind | 'step' | 'area' };
 
 /**
- * Grounding in a checked or flagship page: its verified entries first, each with a short tag, and the model told to
- * prefer them over its own knowledge and to list the tags it used (<qc-guide>). The same size as the plain notes
+ * Grounding in a checked or flagship page: its verified entries, each with a short tag, as reference for exact details
+ * (GUIDE_REFERENCE: never a limit on the answer), and the model told to list the tags it used (<qc-guide>). The same size as the plain notes
  * (2,400 characters), so a question costs the same. Returns the prompt text and what each tag stands for.
  */
 export function guideGroundingForPrompt(pg: GuidePageForPlace): { text: string; refs: Record<string, GuideRef> } {
@@ -783,8 +799,7 @@ export function guideGroundingForPrompt(pg: GuidePageForPlace): { text: string; 
   for (const t of Object.keys(refs)) if (!body.includes(`[${t}]`)) delete refs[t];
   const text =
     `[VERIFIED GUIDE ENTRIES FOR ${pg.name} (the Quest Compendium guide, ${pg.flagship ? 'a flagship page written from sources and reviewed' : 'checked against sources'})]\n` +
-    'Prefer these over your own knowledge. When one of them answers the question, base the answer on it (its location, ' +
-    'its steps, its warnings) and do not contradict it unless the screenshot clearly shows otherwise. Each line starts with its tag.\n' +
+    `${GUIDE_REFERENCE} Each line starts with its tag.\n` +
     body +
     'If your answer uses any of these entries, end it with one line listing the tags you used, like <qc-guide>["g1","g3"]</qc-guide>. ' +
     'Never mention the tags or this block in the answer text.';

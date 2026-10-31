@@ -47,11 +47,14 @@ test("grounding: tagged verified entries, the same size as the plain notes", () 
   const g = guideGroundingForPrompt(page);
   assert.match(g.text, /VERIFIED GUIDE ENTRIES FOR Ravaged Beach/);
   assert.match(g.text, /\[g1\] Item: Harper's Map; where: Ornate chest/);
-  assert.match(g.text, /Prefer these over your own knowledge/);
+  // Reference for exact details, never a limit on the answer (owner, Oct 31 2026).
+  assert.match(g.text, /optional reference/);
+  assert.doesNotMatch(g.text, /Prefer these over your own knowledge/);
   assert.equal(g.refs.g1.entry, "i1");
   const big = { ...page, items: Array.from({ length: 60 }, (_, i) => ({ id: "x" + i, name: "Item " + i, where: "a long description of where it is ".repeat(4) })) };
   const gb = guideGroundingForPrompt(big);
-  assert.ok(gb.text.length < 2400 + 900, "body kept within the budget");
+  // The entries keep their 2,400 characters; the instructions around them (GUIDE_REFERENCE) are about 1,300.
+  assert.ok(gb.text.length < 2400 + 1400, "body kept within the budget");
   assert.ok(Object.keys(gb.refs).every((t) => gb.text.includes(`[${t}]`)), "only tags that made it in");
 });
 
