@@ -919,6 +919,16 @@ async function main() {
       console.warn(`Area walkthroughs' week skipped: ${e?.message}`);
     }
   }
+  // Mondays: the 10 most-asked games' answers: how many needed a search, and the missing facts they sent to the
+  // improver, against the week before (answerWeek.ts; owner, Oct 31 2026). Both should fall as the guides fill in.
+  if (MONDAY) {
+    try {
+      const { answerWeekLines } = await import('./answerWeek');
+      for (const l of await answerWeekLines()) report.push(l);
+    } catch (e: any) {
+      console.warn(`Answers by game skipped: ${e?.message}`);
+    }
+  }
   // Mondays: do re-verified pages gain search traffic? Against similar untouched pages (reverifyStudy.ts), read only.
   if (MONDAY) {
     try {

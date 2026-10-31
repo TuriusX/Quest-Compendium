@@ -497,6 +497,26 @@ export function recordDailyCost(userId: string, tier: PlayerTier, dollars: numbe
   }, { merge: true }).catch(() => {});
 }
 
+/**
+ * Answers by game (answerGames/{day}, Central time; owner, Oct 31 2026): questions, how many searched, and how many
+ * missing facts the answers sent to the nightly improver (missingFacts.ts), for the Monday summary's "Answers by game"
+ * (scripts/pipeline/answerWeek.ts). Both should fall as the guides fill in. Not the owner's accounts, not test traffic.
+ */
+export function recordAnswerGame(game: string | undefined, userId: string, email: string | undefined, o: { question?: boolean; searched?: boolean; missing?: number }): void {
+  const d = db();
+  const key = game ? gameKey(game) : '';
+  if (!d || !key || !userId || isTestTraffic(userId)) return;
+  if (email && ownerEmails().includes(String(email).toLowerCase())) return;
+  d.collection('answerGames').doc(statsDay()).set({
+    [key]: {
+      name: String(game).slice(0, 120),
+      ...(o.question ? { q: FieldValue.increment(1) } : {}),
+      ...(o.searched ? { s: FieldValue.increment(1) } : {}),
+      ...(o.missing ? { m: FieldValue.increment(o.missing) } : {}),
+    },
+  }, { merge: true }).catch(() => {});
+}
+
 /** A player who asked with no questions left today ("You've used today's…"): stats/{day}.limitHit.{player} = tier. */
 export function recordLimitHit(userId: string, tier: PlayerTier, email?: string): void {
   const d = db();

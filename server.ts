@@ -52,7 +52,7 @@ import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
 import { decidePremium, stripeViewFor, cachedStripeView, forgetStripeView } from './premium';
-import { recordDailyCost, recordLimitHit } from './searchGuard';
+import { recordDailyCost, recordLimitHit, recordAnswerGame } from './searchGuard';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, playerSearchesToday, recordPlayerSearches, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
 /**
  * User records (users/{uid}) are read and written by the server with its own trusted access (Admin SDK), which the
@@ -1958,7 +1958,10 @@ percentages:
       // against sources there, as the site's ask box's are). In the background: the answer doesn't wait for it.
       const missingParsed = extractMissing(responseText);
       responseText = missingParsed.text;
-      if (guidePage && missingParsed.missing.length) void saveMissingFacts({ page: guidePage, missing: missingParsed.missing, uid: userId, language });
+      if (guidePage && missingParsed.missing.length) {
+        void saveMissingFacts({ page: guidePage, missing: missingParsed.missing, uid: userId, language })
+          .then((n) => { if (n) recordAnswerGame(effectiveGame?.name, userId, (req as any).user?.email, { missing: n }); });
+      }
       // The answer wins over the guide (owner, Oct 31 2026): guide entries its steps advise against ("Do not open the
       // outdoor barrels and crates" against "Potion: barrel left of the stables") are hidden from the quest log, and go
       // to the nightly corrections check with the answer's advice as the claim, to be settled against sources.
@@ -1982,6 +1985,8 @@ percentages:
       if (chargedBucket) recordPlayerCost({ uid: userId, premium: isPremium, guest: isGuest, dollars: costScope.dollars, searches: costScope.searches });
       // The same cost by day, for the weekly player report (free, Premium or guest).
       if (chargedBucket) recordDailyCost(userId, isGuest ? 'guest' : isPremium ? 'premium' : 'free', costScope.dollars, (req as any).user?.email, { searched: searchesUsed > 0, shot: !!imageBase64 });
+      // By game, for the Monday summary: how many answers needed a search.
+      if (chargedBucket) recordAnswerGame(effectiveGame?.name, userId, (req as any).user?.email, { question: true, searched: searchesUsed > 0 });
       // One line per answer, for the search rate per question (searchPolicy.ts).
       console.log(`[chat-search] mode=${searchMode} allowed=${searchOk} asked=${searchAsked} searches=${searchesUsed} model=${chargedBucket || '-'}${newRelease ? ' new-release' : ''}`);
       // Only file a fact under a place or story point that's actually known: confirmed by the player, or settled on
