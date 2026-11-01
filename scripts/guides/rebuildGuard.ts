@@ -7,22 +7,21 @@
  * "fill gaps" step drops what the reviewer can't support (Crow's Perch lost its Oswin and Baron fights that way; the
  * October 2026 re-verification dropped bobbleheads, skill books and missables from 31 pages that way). So, since
  * Oct 22 2026 (owner): existing entries are kept unless sources contradict them. A rebuild carries the old page's
- * entries it lost over, marked "not yet confirmed" (flagship.ts writePage, carryOver), and a rebuild that still drops
- * any named entry (an item, missable, secret, service, fight, checklist row or choice) is held for the owner, whatever
- * the page's check, sources or traffic. Only an entry the rebuild's own claim check found contradicted may go.
+ * entries it lost over, marked "not yet confirmed" (flagship.ts writePage, promote.ts, carryOver). Only an entry the
+ * rebuild's own claim check found contradicted may go. Since Nov 1 2026 (owner) nothing is held for review: the rebuild
+ * goes live with what it lost carried over, and a walkthrough it cut too far stays as it was.
  * Restructures (promote.ts) never retire a page with impressions unless the new outline has a page with its name.
- * A held rebuild is saved in the page's history (role "held") and flagged on the live page (rebuildHeld: reasons and
- * what it would drop), with a line in Discord. The owner puts it live after reading it:
+ *
+ * Rebuilds held before that rule (rebuildHeld on the live page, the rebuild in its history, role "held") go live the
+ * same way:
  *
  *   npx tsx scripts/guides/rebuildGuard.ts --key elden-ring --slug limgrave --release
  *
  * Code only: nothing here calls a model or searches.
  */
 import { FieldValue } from 'firebase-admin/firestore';
-import { db, liveKey, isStageKey, arg } from './common';
+import { db, liveKey, stageKey, isStageKey, arg } from './common';
 import { trustedSites } from './claimCheck';
-import { pageImpressions } from './pageStats';
-import { notifyOwner } from '../pipeline/summary';
 
 export type Lost = { kind: 'item' | 'secret' | 'shop' | 'fight' | 'choice' | 'checklist' | 'walkthrough'; name: string; sourced: boolean };
 export type RebuildVerdict = { hold: boolean; reasons: string[]; lost: Lost[] };
@@ -132,15 +131,17 @@ export function rebuildVerdict(oldPage: any, newPage: any, impressions = 0, cont
  * Existing entries are kept unless sources contradict them (owner, Oct 22 2026): the old page's entries the rebuilt
  * fields no longer have (by the same comparison as the guard), added back marked `unconfirmed` ("Not yet confirmed" on
  * the page) with their own sources. Items, secrets, services, fights and choices go back in their lists; checklist rows
- * into the section of the same title (a new section when the rebuild has none). Returns the fields with them, and what
- * was carried over.
+ * into the section of the same title (a new section when the rebuild has none). A walkthrough cut to under two thirds
+ * of its steps stays as it was: steps can't be merged row by row. Returns the fields with them, and what was carried
+ * over.
  */
 export function carryOver(oldPage: any, fields: any, contradicted: Set<string> = new Set()): { fields: any; carried: Lost[] } {
   if (!oldPage) return { fields, carried: [] };
   const merged = { ...oldPage, ...fields };
   const v = rebuildVerdict(oldPage, merged, 0, contradicted);
   const want = new Set(v.lost.filter((x) => x.kind !== 'walkthrough' && !contradicted.has(normName(x.name))).map((x) => `${x.kind}|${x.name}`));
-  if (!want.size) return { fields, carried: [] };
+  const steps = v.lost.find((x) => x.kind === 'walkthrough');
+  if (!want.size && !steps) return { fields, carried: [] };
   const out = { ...fields };
   const ids = new Set<string>();
   for (const k of ['items', 'secrets', 'shops', 'fights']) for (const e of Array.isArray(merged[k]) ? merged[k] : []) if (e?.id) ids.add(String(e.id));
@@ -152,6 +153,7 @@ export function carryOver(oldPage: any, fields: any, contradicted: Set<string> =
     return n;
   };
   const carried: Lost[] = [];
+  if (steps) { out.walkthrough = oldPage.walkthrough; carried.push({ ...steps, sourced: false }); }
   for (const l of LISTS) {
     for (const e of Array.isArray(oldPage[l.field]) ? oldPage[l.field] : []) {
       const name = String(l.name(e) || '').trim().slice(0, 120);
@@ -189,6 +191,17 @@ export function contradictedNames(pr: any, oldPage: any): Set<string> {
   return out;
 }
 
+/** The names the page's last claim checks found contradicted (guidePrototypes, the live and the staged key). */
+export async function contradictedFor(key: string, slug: string, oldPage: any): Promise<Set<string>> {
+  const ids = [liveKey(key), stageKey(liveKey(key))].flatMap((k) => [`${k}__${slug}__evidence`, `${k}__${slug}`]);
+  const out = new Set<string>();
+  for (const p of await Promise.all(ids.map((id) => db().collection('guidePrototypes').doc(id).get()))) if (p.exists) for (const n of contradictedNames(p.data(), oldPage)) out.add(n);
+  return out;
+}
+
+/** A staged page replaces the live one whole, so a list it doesn't have is a list it lost (carryOver merges the two). */
+export const wholePage = (p: any) => ({ items: [], secrets: [], shops: [], fights: [], choices: [], sections: [], ...p });
+
 /**
  * A page of the old outline that a restructure would retire: kept live when people find it in Google and the new
  * outline has no page with its name (a redirect to "the nearest page" loses them: Lakay went to Guarma).
@@ -213,50 +226,48 @@ const hasContent = (p: any) => ['items', 'secrets', 'shops', 'fights', 'choices'
 
 
 /**
- * Before a rebuild's fields are merged onto a live page: true to go ahead (the live version saved to the history
- * first), false when the rebuild is held (the live page keeps its content and gets the rebuildHeld flag). A staged
- * build isn't live, so it always goes ahead; promote.ts checks it when it goes live.
+ * Before a rebuild's fields are merged onto a live page: the live version is saved to the history. Always true (nothing
+ * is held since Nov 1 2026); a staged build isn't live, so there's nothing to save.
  */
-export async function guardRebuild(target: string, slug: string, ref: FirebaseFirestore.DocumentReference, fields: any, contradicted: Set<string> = new Set()): Promise<boolean> {
+export async function guardRebuild(target: string, slug: string, ref: FirebaseFirestore.DocumentReference): Promise<boolean> {
   if (isStageKey(target)) return true;
   const old: any = (await ref.get()).data();
-  if (!old || !hasContent(old)) return true;
-  const impressions = await pageImpressions(target, slug);
-  // Only a published page can lose readers; a held or draft page is saved to the history and replaced.
-  const v = old.status === 'published' ? rebuildVerdict(old, { ...old, ...fields }, impressions, contradicted) : { hold: false, reasons: [], lost: [] };
-  if (v.hold) {
-    const id = await saveHistory(target, slug, fields, 'held', { reasons: v.reasons, lost: v.lost, impressions });
-    await ref.set({ rebuildHeld: JSON.parse(JSON.stringify({ at: Date.now(), reasons: v.reasons, lost: v.lost.slice(0, 40), history: id, impressions })) }, { merge: true });
-    await notifyOwner(`Rebuild held for review: ${liveKey(target)}/${slug} (${old.name || slug}): ${v.reasons.join('; ')}. The live page is unchanged; the rebuild is in areaHistory (${id}).`);
-    return false;
-  }
-  await saveHistory(target, slug, old, 'replaced');
+  if (old && hasContent(old)) await saveHistory(target, slug, old, 'replaced');
   return true;
 }
 
-/** The owner's decision on a held rebuild: put it live (the current live version is saved to the history first). */
-export async function releaseHeld(key: string, slug: string): Promise<boolean> {
+/** A rebuild held before Nov 1 2026, as it would go live: with what it lost carried over. */
+export async function heldRelease(key: string, slug: string, live: any): Promise<{ fields: any; carried: Lost[] } | null> {
+  const id = live?.rebuildHeld?.history;
+  if (!id) return null;
+  const held: any = (await historyRef(key, slug, Number(id)).get()).data();
+  if (!held?.page) return null;
+  // promote.ts saved the whole page (with its status); flagship.ts only the fields a rebuild writes.
+  return carryOver(live, held.page.status ? wholePage(held.page) : held.page, await contradictedFor(key, slug, live));
+}
+
+/** Put it live (the live version saved to the history first). */
+export async function releaseHeld(key: string, slug: string): Promise<Lost[] | null> {
   const ref = db().collection('guides').doc(liveKey(key)).collection('areas').doc(slug);
   const live: any = (await ref.get()).data();
-  const id = live?.rebuildHeld?.history;
-  if (!id) return false;
-  const held: any = (await historyRef(key, slug, Number(id)).get()).data();
-  if (!held?.page) return false;
+  const r = await heldRelease(key, slug, live);
+  if (!r) return null;
   await saveHistory(key, slug, live, 'replaced');
-  await ref.set({ ...held.page, rebuildHeld: null, updatedAt: Date.now() }, { merge: true });
+  await ref.set(JSON.parse(JSON.stringify({ ...r.fields, status: live.status, order: live.order, rebuildHeld: null, updatedAt: Date.now() })), { merge: true });
   // Its translations follow, as for any rebuild that goes live.
   await db().collection('guides').doc(liveKey(key)).set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(slug) } }, { merge: true });
-  return true;
+  return r.carried;
 }
 
 if (/rebuildGuard\.ts$/.test(process.argv[1] || '')) {
   (async () => {
     const key = arg('key'), slug = arg('slug');
     if (!key || !slug || arg('release') !== 'true') {
-      console.log('Usage: npx tsx scripts/guides/rebuildGuard.ts --key key --slug slug --release   (put a held rebuild live)');
+      console.log('Usage: npx tsx scripts/guides/rebuildGuard.ts --key key --slug slug --release   (put a rebuild held before Nov 1 2026 live)');
       process.exit(1);
     }
-    console.log((await releaseHeld(key, slug)) ? `Released the held rebuild of ${key}/${slug}; republish the website (and its translations follow).` : `No held rebuild for ${key}/${slug}.`);
+    const carried = await releaseHeld(key, slug);
+    console.log(carried ? `Released the held rebuild of ${key}/${slug} with ${carried.length} entries carried over; republish the website (and its translations follow).` : `No held rebuild for ${key}/${slug}.`);
     setTimeout(() => process.exit(0), 300);
   })().catch((e) => {
     console.error(e?.message || e);

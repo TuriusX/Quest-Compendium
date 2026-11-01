@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/rebuildGuard.test.ts)
 import assert from "node:assert/strict";
-import { rebuildVerdict, keepOnRestructure, normName, carryOver, contradictedNames } from "../scripts/guides/rebuildGuard";
+import { rebuildVerdict, keepOnRestructure, normName, carryOver, contradictedNames, wholePage } from "../scripts/guides/rebuildGuard";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -105,6 +105,16 @@ test("carryOver: lost entries come back marked not yet confirmed; the rebuild's 
   assert.equal(out.fights[0].unconfirmed, true);
   assert.equal(out.walkthrough.length, 1);
   assert.equal(rebuildVerdict(old, { ...old, ...out }, 0).hold, false);
+});
+
+test("nothing is held (owner, Nov 1 2026): a whole staged page without a list carries the list back, and a cut walkthrough stays as it was", () => {
+  const old = { status: "published", shops: [{ id: "s1", name: "Lavaridge Herb Shop" }], walkthrough: Array.from({ length: 9 }, (_, i) => ({ title: `Step ${i}` })) };
+  const staged = { status: "published", walkthrough: old.walkthrough.slice(0, 4) };
+  const { fields, carried } = carryOver(old, wholePage(staged));
+  assert.deepEqual(carried.map((c) => c.kind).sort(), ["shop", "walkthrough"]);
+  assert.equal(fields.shops[0].unconfirmed, true);
+  assert.equal(fields.walkthrough.length, 9);
+  assert.equal(rebuildVerdict(old, fields, 0).hold, false);
 });
 
 test("an entry's own sources decide; banned and low-trust sites and our own site don't count", () => {

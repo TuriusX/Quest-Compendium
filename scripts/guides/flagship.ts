@@ -826,13 +826,12 @@ async function writePage(target: string, slug: string, pr: any): Promise<boolean
   }));
   const ref = db().collection('guides').doc(target).collection('areas').doc(slug);
   // Existing entries are kept unless sources contradict them (owner, Oct 22 2026): what the rebuild lost comes back,
-  // marked "not yet confirmed". Then the live version is saved, and a rebuild that would still lose a named entry is
-  // held (a staged build goes through the same check when promote.ts puts it live).
+  // marked "not yet confirmed", and the live version is saved (a staged build gets the same when promote.ts puts it live).
   const old: any = (await ref.get()).data();
   const contradicted = contradictedNames(pr, old);
   const { fields: kept, carried } = carryOver(old, fields, contradicted);
   if (carried.length) console.log(`  kept ${carried.length} entr${carried.length === 1 ? 'y' : 'ies'} from the old page, marked not yet confirmed: ${carried.map((c) => c.name).slice(0, 8).join('; ')}`);
-  if (!(await guardRebuild(target, slug, ref, kept, contradicted))) return false;
+  await guardRebuild(target, slug, ref);
   await ref.set({ ...kept, rebuildHeld: null }, { merge: true });
   return true;
 }
