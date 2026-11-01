@@ -14,7 +14,8 @@
  * show them automatically.
  */
 import { ThinkingLevel } from '@google/genai';
-import { db, gemini, MODEL, gameKey, arg, steamAchievements, type GuideArea } from './common';
+import { lookUpNames, namesToLookUp } from './officialNames';
+import { db, gemini, MODEL, gameKey, arg, steamAchievements, type GuideArea, ledgerDollars } from './common';
 import { estimateCost } from '../../usage';
 import { acquireGuideLock, isRefusal, lockedLine, releaseGuideLocks } from './guideLock';
 import { untranslated, UNTRANSLATED_LIMIT } from './translateCheck';
@@ -28,8 +29,12 @@ const LANGS: Record<string, string> = {
 const game = arg('game');
 const langs = (arg('lang') || '').split(',').map((s) => s.trim()).filter((l) => LANGS[l]);
 const redo = arg('redo') === 'true';
+/** The nightly backfill (translateBackfill.ts): stop here and carry on next time; the language shows once every page has it. */
+const maxDollars = Number(arg('max-dollars')) || 0;
+/** Look up the guide's official names in sources first (once per guide and language). */
+const lookUpOfficial = arg('official') === 'true';
 if (!game || !langs.length) {
-  console.log('Usage: npx tsx scripts/guides/translate-guide.ts --game "Game" --lang pt[,es,…] [--redo]');
+  console.log('Usage: npx tsx scripts/guides/translate-guide.ts --game "Game" --lang pt[,es,…] [--redo] [--max-dollars N] [--official]');
   process.exit(1);
 }
 
@@ -161,23 +166,37 @@ async function main() {
       }
     }
     console.log(`  glossary: ${Object.keys(glossary).length} place names`);
+    // Official names from sources (places, items, characters, enemies): exact wherever they appear, over any guess.
+    let officialFound: Record<string, string> = { ...(existing.officialNames || {}) };
+    let officialAt = existing.officialNamesAt;
+    if (lookUpOfficial && !officialAt) {
+      try {
+        officialFound = { ...officialFound, ...(await lookUpNames(String(info.game || game), lang, namesToLookUp(pages))) };
+        officialAt = Date.now();
+        console.log(`  official names from sources: ${Object.keys(officialFound).length}`);
+      } catch (e: any) {
+        console.warn(`  official names not looked up: ${e?.message}`);
+      }
+    }
+    const known: Record<string, string> = { ...glossary, ...officialFound };
     /** Places this page mentions (other than itself) whose glossary name is missing from the translation. */
     const nameMisses = (p: GuideArea, tr: any) => {
       const { name: _n, ...enRest } = source(p);
       const { name: _t, ...trRest } = tr;
       const en = JSON.stringify(enRest), out = JSON.stringify(trRest);
-      return Object.entries(glossary).filter(([e, t]) => e !== p.name && e !== t && en.includes(e) && !out.includes(t)).map(([e]) => e);
+      return Object.entries(known).filter(([e, t]) => e !== p.name && e !== t && en.includes(e) && !out.includes(t)).map(([e]) => e);
     };
 
     let done = 0, failed = 0, inconsistent = 0;
     // Pages whose translation is more than UNTRANSLATED_LIMIT English (slug → share), kept from earlier runs until redone.
     const incomplete: Record<string, number> = { ...(existing.incomplete || {}) };
-    translatedPages += todo.length;
+    let cutShort = false;
     for (const p of todo) {
+      if (maxDollars && ledgerDollars() >= maxDollars) { cutShort = true; break; }
       const src = source(p);
-      const used = Object.fromEntries(Object.entries(glossary).filter(([e]) => e === p.name || JSON.stringify(src).includes(e)));
+      const used = Object.fromEntries(Object.entries(known).filter(([e]) => e === p.name || JSON.stringify(src).includes(e)));
       const names = Object.keys(used).length
-        ? ` Use exactly these ${LANGS[lang]} names for the guide's places, wherever they appear: ${JSON.stringify(used)}.`
+        ? ` Use exactly these ${LANGS[lang]} names, wherever they appear: ${JSON.stringify(used)}.`
         : '';
       let ok = false;
       for (let attempt = 0; attempt < 2 && !ok; attempt++) {
@@ -192,7 +211,7 @@ async function main() {
             console.warn(`  ${p.name}: doesn't use the glossary name for ${misses.join(', ')}`);
           }
           const page = fit(src, tr);
-          areas[p.slug] = { ...page, name: glossary[p.name] || page.name, src: p.updatedAt || Date.now() };
+          areas[p.slug] = { ...page, name: known[p.name] || page.name, src: p.updatedAt || Date.now() };
           ok = true;
           // How much of it is still English (fields the reply left empty or mis-shaped keep the original): reported,
           // not retried (a retry is new spend; the owner decides with --redo).
@@ -212,6 +231,7 @@ async function main() {
       }
       if ((done + failed) % 10 === 0) console.log(`  ${done + failed}/${todo.length}`);
     }
+    translatedPages += done;
     if (inconsistent) console.log(`  ${inconsistent} page(s) kept with a place name that differs from the glossary (listed above).`);
     // Section headings (an expansion, a character, "Calendar").
     let groupNames: Record<string, string> = { ...(existing.groups || {}) };
@@ -236,12 +256,14 @@ async function main() {
     // The achievement guide, if the game has one: official names and descriptions from Steam in this language,
     // tips and roadmap translated (place names from the glossary). Redone only when the achievement guide changed.
     let achievements = existing.achievements || null;
-    if (info.hasAchievements) {
+    if (info.hasAchievements && !cutShort) {
       try {
         const ach = (await ref.collection('achievements').doc('main').get()).data();
         if (ach?.list?.length && (redo || !achievements || (achievements.src || 0) < (ach.updatedAt || 0))) {
           const official: { name: string; desc: string; icon: string }[] = await steamAchievements(Number(ach.appId), lang).catch(() => []);
-          const byIcon = new Map<string, { name: string; desc: string }>(official.map((o) => [o.icon, o] as [string, { name: string; desc: string }]));
+          // By the icon's file: the address in front of it changes with Steam's pages.
+          const iconFile = (u: unknown) => String(u || '').split('/').pop() || '';
+          const byIcon = new Map<string, { name: string; desc: string }>(official.map((o) => [iconFile(o.icon), o] as [string, { name: string; desc: string }]));
           const items: Record<string, { name?: string; desc?: string; how?: string; areaName?: string }> = {};
           // The guide's place names (from the glossary) that the text mentions, so tips use the same names as the guide.
           const placeNames = (text: string) => {
@@ -269,7 +291,7 @@ async function main() {
           const missed = withTips.filter((a) => !items[a.name]?.how);
           if (missed.length) await tipBatch(missed);
           for (const a of ach.list as any[]) {
-            const o = byIcon.get(a.icon);
+            const o = byIcon.get(iconFile(a.icon));
             const areaName = a.area ? areas[a.area]?.name : undefined;
             if (o || areaName) items[a.name] = { ...(items[a.name] || {}), ...(o ? { name: o.name, desc: o.desc } : {}), ...(areaName ? { areaName } : {}) };
           }
@@ -290,7 +312,8 @@ async function main() {
         console.warn(`  achievement guide not translated: ${e?.message}`);
       }
     }
-    await trRef.set({ lang, areas, groups: groupNames, glossary, incomplete, ...(achievements ? { achievements } : {}), updatedAt: Date.now() });
+    await trRef.set({ lang, areas, groups: groupNames, glossary, incomplete, ...(achievements ? { achievements } : {}), ...(Object.keys(officialFound).length ? { officialNames: officialFound } : {}), ...(officialAt ? { officialNamesAt: officialAt } : {}), updatedAt: Date.now() });
+    if (cutShort) { console.log(`${lang}: ${Object.keys(areas).length} of ${pages.length} pages so far; it carries on next time and shows once they're all done.`); continue; }
     await ref.set({ languages: [...new Set([...(info.languages || []), lang])] }, { merge: true });
     console.log(`${lang}: ${done} translated, ${failed} left in English, ${Object.keys(areas).length} pages available in this language.`);
   }

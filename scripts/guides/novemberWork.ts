@@ -25,6 +25,7 @@
  *   npx tsx scripts/guides/novemberWork.ts --status       what's done, spent and left
  * Each step is charged to system/auditWork.spent (and shows in the pipeline's cost lines like any run).
  */
+import { worstCost } from '../pipeline/budgetRules';
 import fs from 'fs';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db, arg, usageScope } from './common';
@@ -207,7 +208,7 @@ export async function doOne(w: Work): Promise<{ status: string; dollars: number;
           for (const v of wrong) items.push({ name: String(c.name).slice(0, 120), on: String(v.on), text: String(v.text).slice(0, 400), why: String(v.why || '').slice(0, 300), right });
         }
         await ref().set({ conflicts: { [w.key]: { at: Date.now(), wrong: out, items } } }, { merge: true });
-        detail = `${out.length} contradiction(s) settled for review`;
+        detail = `${out.length} contradiction(s) settled: tonight's improvements apply what sources confirm`;
       }
     });
   } catch (e: any) {
@@ -233,7 +234,7 @@ export async function runAuditWork(max = AUDIT_DAILY): Promise<{ lines: string[]
   let room = Math.min(max, AUDIT_DAILY - spentToday);
   let searches = 0;
   const lines: string[] = [];
-  let next = Number(st.next || 0), spent = Number(st.spent || 0), today = spentToday, guess = 0.25;
+  let next = Number(st.next || 0), spent = Number(st.spent || 0), today = spentToday;
   let reverifySpent = Number(st.reverifySpent || 0);
   const upkeep: Work[] = st.upkeep || [];
   let upNext = Number(st.upkeepNext || 0), upSpent = Number(st.upkeepSpent || 0), upToday = 0;
@@ -252,7 +253,7 @@ export async function runAuditWork(max = AUDIT_DAILY): Promise<{ lines: string[]
   const one = async (w: Work, lane: 'upkeep' | 'main') => {
     const r = await doOne(w);
     if (r.status === 'busy') { stop = true; return 0; }
-    spent += r.dollars; today += r.dollars; room -= r.dollars; searches += r.searches; guess = Math.max(guess * 0.8, r.dollars);
+    spent += r.dollars; today += r.dollars; room -= r.dollars; searches += r.searches;
     if (w.kind === 'reverify') reverifySpent += r.dollars;
     if (lane === 'upkeep') { upSpent += r.dollars; upToday += r.dollars; upNext++; } else next++;
     lines.push(`${lane === 'upkeep' ? 'upkeep: ' : ''}${w.kind} ${w.key}/${w.ref}: ${r.status}, $${r.dollars.toFixed(3)}${r.detail ? ` (${r.detail})` : ''}`);
@@ -264,12 +265,15 @@ export async function runAuditWork(max = AUDIT_DAILY): Promise<{ lines: string[]
     }
     return r.dollars;
   };
-  while (!stop && upRoom - upToday > 0.05 && room > 0.05 && upNext < upkeep.length) {
+  // The daily cap is hard (owner, Nov 1 2026): nothing starts unless its worst case fits what's left.
+  while (!stop && upRoom - upToday > 0.05 && upNext < upkeep.length) {
     if (await done(upkeep[upNext])) { upNext++; continue; }
+    if (room < worstCost(upkeep[upNext].kind)) break;
     await one(upkeep[upNext], 'upkeep');
   }
-  while (!stop && room > guess && next < st.queue.length) {
+  while (!stop && next < st.queue.length) {
     if (await done(st.queue[next])) { next++; continue; }
+    if (room < worstCost(st.queue[next].kind)) break;
     await one(st.queue[next], 'main');
   }
   if (lines.length) lines.unshift(`🧭 November site work (roadmap 22, from the pipeline's November cap): ${lines.length} item(s) today, $${(today - spentToday).toFixed(2)} ($${upToday.toFixed(2)} upkeep); $${spent.toFixed(2)} so far this month ($${upSpent.toFixed(2)} of the $${UPKEEP_MONTH} upkeep reserve), ${st.queue.length - next} item(s) left.`);

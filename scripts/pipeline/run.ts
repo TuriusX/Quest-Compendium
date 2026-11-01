@@ -64,6 +64,7 @@
  * wait. Existing guides keep improving (repairs, corrections, translations, revisits). system/pipeline.newGuides = true
  * (or PIPELINE_NEW_GUIDES=on) turns new guides back on. The core guides (scripts/guides/core.ts) get the depth.
  */
+import { TRANSLATE_SHARE, WALK_RESERVE, STEP_MARGIN, BIG_STEP_MIN, RETRY_DAYS, MAX_TRIES, afterFailedTry } from './budgetRules';
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -126,7 +127,7 @@ const QUEUE_MIN = 150;
 /** A quick guide needs at least this many pages to be published (build.ts does the same). */
 const QUICK_MIN = 5;
 /** The repair queue's items: careful builds, fixes and outline rebuilds (scripts/guides/repair.ts). 'quick' = outline. */
-type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade' | 'fights' | 'missables' | 'queries' | 'info'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; addedAt?: number; why?: string; report?: string;
+type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' | 'extend' | 'upgrade' | 'fights' | 'missables' | 'queries' | 'info'; areas?: number; restructure?: boolean; newRelease?: boolean; tries?: number; retryAfter?: number; addedAt?: number; why?: string; report?: string;
   /** Page passes: gate the finished staged pass again (repair.ts --regate), without writing anything. */
   regate?: boolean;
   /** Approved by the owner: the only items that run while the queue is on hold (system/pipeline.queueHold). */
@@ -180,7 +181,7 @@ const searchDayHit = (r: { out: string }) => /search day limit/.test(r.out);
 function runScript(args: string[]): { ok: boolean; searches: number; dollars: number; summary: string; out: string } {
   console.log(`$ npx tsx ${args.join(' ')}`);
   const limit = spendLeft();
-  const env = { ...process.env, ...(Number.isFinite(limit) ? { PIPELINE_STEP_DOLLARS: Math.max(0.01, limit).toFixed(2) } : {}) };
+  const env = { ...process.env, ...(Number.isFinite(limit) ? { PIPELINE_STEP_DOLLARS: Math.max(0.01, limit - STEP_MARGIN).toFixed(2) } : {}) };
   const r = spawnSync('npx', ['tsx', ...args], { encoding: 'utf8', timeout: 45 * 60_000, maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32', env });
   const out = `${r.stdout || ''}\n${r.stderr || ''}`;
   process.stdout.write(out.slice(-4000));
@@ -193,7 +194,9 @@ function runScript(args: string[]): { ok: boolean; searches: number; dollars: nu
   const dollars = usage ? Number(usage[2]) : tokenGuess + reported * SEARCH_DOLLARS;
   // The script's "Done" line, without the "Done." prefix and its "Next: …" hint.
   for (const m of out.matchAll(/Skipped \(locked\): ([^\n]*)/g)) LOCKED.add(m[1].replace(/\s*\(lock until[^)]*\)/, '').replace(/;\s*tried again next run\.?\s*$/, '').trim());
-  const summary = (out.match(/^Done[^\n]*$/m) || [''])[0].replace(/^Done[.:]?\s*/, '').replace(/\s*Next:.*$/, '').slice(0, 300);
+  const timedOut = (r.error as any)?.code === 'ETIMEDOUT';
+  if (timedOut) console.warn(`${args[0]} was stopped at its 45 minutes; what it spent isn't counted (no Usage line).`);
+  const summary = (out.match(/^Done[^\n]*$/m) || [timedOut ? `${args[0].split('/').pop()} ran past its 45 minutes and was stopped; what it spent isn't counted` : ''])[0].replace(/^Done[.:]?\s*/, '').replace(/\s*Next:.*$/, '').slice(0, 300);
   return { ok: r.status === 0, searches, dollars, summary, out };
 }
 
@@ -358,9 +361,17 @@ async function main() {
   let runDollars = 0, alerted = false;
   RUN.spent = () => runDollars;
   const dayRoom = () => DAILY_CAP - state.spend.dollars;
-  const room = () => Math.min(aiRoom, dayRoom());
+  // Part of the day's room is kept for the walkthrough pages until the November work has had its turn, and a small share
+  // for the translation backfill, which goes last (owner, Nov 1 2026).
+  let walkReserve = TRANSLATE_SHARE;
+  try {
+    const { AUDIT_MONTH } = await import('../guides/novemberWork');
+    const aw: any = (await db().collection('system').doc('auditWork').get()).data() || {};
+    if (month === AUDIT_MONTH && aw.approved && !aw.paused) walkReserve += WALK_RESERVE;
+  } catch { /* no reserve then */ }
+  const room = () => Math.min(aiRoom, dayRoom()) - walkReserve;
   spendLeft = room;
-  const capReached = () => (dayRoom() <= aiRoom ? `today's $${DAILY_CAP} spending cap is reached` : 'the monthly AI budget is used up');
+  const capReached = () => (walkReserve && Math.min(aiRoom, dayRoom()) > 0.25 ? `what's left today ($${Math.min(aiRoom, dayRoom()).toFixed(2)}) is kept for the walkthrough pages and translations` : dayRoom() <= aiRoom ? `today's $${DAILY_CAP} spending cap is reached` : 'the monthly AI budget is used up');
   // Google's daily search limit (config/apiLimits): the pipeline's share of today's searches, read before each step.
   let searchDay = Infinity;
   const refreshSearchDay = async () => {
@@ -398,6 +409,12 @@ async function main() {
   // Publish and unpublish happen now; fixes and rebuilds go to the front of the repair queue below.
   const queue: QueueItem[] = Array.isArray(state.carefulQueue) ? state.carefulQueue : [];
   if (!DRY) {
+    // Players' mistake reports go to the nightly check (contributions.ts), and on the page if sources confirm them.
+    for (const d of (await db().collection('reviewQueue').where('status', '==', 'open').where('kind', '==', 'report').get()).docs) {
+      const it: any = d.data();
+      if (it.key && it.page) await db().collection('contributions').add({ key: it.key, slug: it.page, page: 'area', label: String(it.pageName || it.page).slice(0, 200), kind: 'correction', text: String(it.text || '').slice(0, 1000), lang: 'en', source: 'report', status: 'pending', at: Date.now() });
+      await d.ref.set({ status: 'done', resolution: it.key && it.page ? 'sent to the nightly source check' : 'names no page to check', updatedAt: Date.now() }, { merge: true });
+    }
     const decided = await db().collection('reviewQueue').where('status', '==', 'queued').get();
     for (const d of decided.docs) {
       const it: any = d.data();
@@ -588,8 +605,20 @@ async function main() {
   const approvedBudget = Number(state.queueHold?.approvedDollars);
   const approvedLeft = () => (Number.isFinite(approvedBudget) ? approvedBudget - Number(state.queueHold?.approvedSpent || 0) : Infinity);
   let approvedStopNoted = false;
+  /** A failed repair: the old content stays, it comes back in a week, and a second failure stops it (listed on Mondays). */
+  const failedTry = (item: QueueItem, action: string, why: string) => {
+    const r = afterFailedTry(item);
+    if (r.stopped) state.repairStopped = [...(state.repairStopped || []), { game: item.game, mode: action, at: Date.now(), why: why.slice(0, 200) }];
+    else waiting.push(r.item);
+    report.push(`⚠️ queue ${action} **${item.game}**: ${why}${r.stopped ? `; failed ${r.item.tries} times, stopped (listed on Mondays)` : `; tried again in ${RETRY_DAYS} days`}.`);
+  };
+  if ((state.repairStopped || []).length && new Date().getUTCDay() === 1) {
+    report.push(`🛑 Repairs stopped after ${MAX_TRIES} failed tries, old content kept: ${state.repairStopped.map((x: any) => `${x.game} (${x.mode})`).join(', ')}.`);
+  }
   while (queue.length && !DRY && !paused) {
     const item = queue.shift()!;
+    // Failed recently: tried again later (owner, Nov 1 2026).
+    if (Number(item.retryAfter || 0) > Date.now()) { waiting.push(item); continue; }
     if (item.approved && approvedLeft() < 0.25) {
       waiting.push(item);
       if (!approvedStopNoted) report.push(`⏸️ Approved repairs stopped at the owner's $${approvedBudget.toFixed(2)} ($${Number(state.queueHold?.approvedSpent || 0).toFixed(2)} spent); the rest wait for a new approval.`);
@@ -601,8 +630,8 @@ async function main() {
     // rebuilds search little (spot-checks, careful pages of new games).
     const big = action === 'careful' || action === 'extend' || action === 'upgrade' || !!item.newRelease;
     const need = big ? QUEUE_MIN : 60;
-    if (room() < 0.25 || Date.now() - queueStart > QUEUE_MINUTES * 60_000) {
-      if (room() < 0.25) { report.push(`⏸️ Repair queue stopped: ${capReached()}.`); RUN.stoppedBy = capReached(); }
+    if (room() < (big ? BIG_STEP_MIN : 0.25) || Date.now() - queueStart > QUEUE_MINUTES * 60_000) {
+      if (room() < (big ? BIG_STEP_MIN : 0.25)) { report.push(`⏸️ Repair queue stopped: ${room() < 0.25 ? capReached() : `a rebuild could go over what's left today ($${room().toFixed(2)} for repairs)`}.`); RUN.stoppedBy = capReached(); }
       waiting.push(item, ...queue);
       queue.length = 0;
       break;
@@ -665,13 +694,11 @@ async function main() {
       waiting.push(item);
       report.push(`⏳ queue ${action} **${item.game}**: built up to its search cap; continues next run.`);
     } else if (/^Gate: failed/.test(gate)) {
-      report.push(`⚠️ queue ${action} **${item.game}**: ${gate.replace(/^Gate: /, '')} (decide on /admin/reviews)`);
+      failedTry(item, action, gate.replace(/^Gate: /, ''));
     } else if (/^Gate: skipped/.test(gate)) {
       report.push(`➖ queue ${action} **${item.game}**: ${gate.replace(/^Gate: /, '')}`);
     } else {
-      item.tries = (item.tries || 0) + 1;
-      if (item.tries < 2) waiting.push(item);
-      report.push(`⚠️ queue ${action} **${item.game}**: the repair failed${item.tries < 2 ? '; trying again next run' : ' twice; dropped'} (see the job log).`);
+      failedTry(item, action, 'the repair failed (see the job log)');
     }
   }
   state.carefulQueue = [...waiting, ...queue, ...held];
@@ -901,6 +928,7 @@ async function main() {
   // Re-verification of the most-searched unchecked pages first. Does nothing outside November 2026.
   try {
     const { runAuditWork, AUDIT_DAILY } = await import('../guides/novemberWork');
+    walkReserve = TRANSLATE_SHARE;
     const left = room();
     if (left >= 0.5) {
       const aw = await runAuditWork(Math.min(AUDIT_DAILY, left));
@@ -909,6 +937,34 @@ async function main() {
     }
   } catch (e: any) {
     console.warn(`November site work skipped: ${e?.message}`);
+  }
+  // The translation gaps, a little each night (owner, Nov 1 2026; translateBackfill.ts): shows with the next publish.
+  walkReserve = 0;
+  if (!DRY) {
+    try {
+      const { translationGaps } = await import('../guides/translateBackfill');
+      const { gaps } = await translationGaps();
+      let share = Math.min(TRANSLATE_SHARE, room()), spentOn = 0, pages = 0;
+      const did: string[] = [];
+      const before = spendLeft;
+      for (const g of gaps.slice(0, 4)) {
+        if (share < 0.1) break;
+        const left = share;
+        spendLeft = () => Math.min(room(), left + STEP_MARGIN);
+        const r = runScript(['scripts/guides/translate-guide.ts', '--game', g.game, '--lang', g.lang, '--max-dollars', left.toFixed(2), '--official']);
+        spendLeft = before;
+        await charge(r, `translation backfill ${g.game} → ${g.lang}`);
+        share -= r.dollars;
+        spentOn += r.dollars;
+        const n = Number((r.summary.match(/(\d+) page translation/) || [])[1] || 0);
+        pages += n;
+        if (n) did.push(`${shortName(g.game)} → ${g.lang}`);
+      }
+      if (pages) await db().collection('system').doc('editor').set({ dirtyAt: Date.now() }, { merge: true });
+      report.push(`🌐 Translations: ${pages} page(s), $${spentOn.toFixed(2)} (${did.join(', ') || 'nothing done'}); ${gaps.length} guide and language pair(s) still to finish.`);
+    } catch (e: any) {
+      console.warn(`Translation backfill skipped: ${e?.message}`);
+    }
   }
   // Mondays: the area walkthroughs' week (owner, Oct 31 2026; novemberWork.ts): pages live, guides, cost, what's left.
   if (MONDAY) {

@@ -2,6 +2,7 @@
  * Shared bits for the guide builder and publisher (run on your PC with `npx tsx`, like the dev server: it uses the
  * GEMINI_API_KEY from .env and your gcloud login for Firestore).
  */
+import { parseSteamAchievements } from './steamAchievements';
 import dotenv from 'dotenv';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -578,6 +579,8 @@ export async function steamAchievements(appId: number, lang = 'en'): Promise<{ n
   const decode = (x: string) =>
     x.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
       .replace(/\u0085/g, '…').replace(/[\u0080-\u009f]/g, '').replace(/\s+/g, ' ').trim();
+  // Steam's newer page keeps the list in its data, with no markup (steamAchievements.ts).
+  if (!html.includes('class="achieveRow')) return parseSteamAchievements(html, appId);
   return html
     .split('class="achieveRow')
     .slice(1)

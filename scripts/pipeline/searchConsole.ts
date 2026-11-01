@@ -217,6 +217,9 @@ async function gamesInQueries(queries: { query: string; impressions: number }[])
 
 // ---------------------------------------------------------------- weekly run
 
+const STARTED = Date.now();
+const ENTITY_PAGES_A_WEEK = 4, ENTITY_DOLLARS_A_WEEK = 1.5, ENTITY_MINUTES = 30;
+
 async function weekly() {
   const end = new Date(Date.now() - 3 * 86_400_000);
   const start = new Date(end.getTime() - 27 * 86_400_000);
@@ -318,7 +321,11 @@ async function weekly() {
       plan, checked, estimate, repairsOn: REPAIRS_ON, queued, wishes, gained, pageClicks,
     });
     // Every guide page's impressions, clicks and position (the summary above keeps only the top 50), in a sibling doc so
-    // the summary stays small: the rebuild protections read it so a page people find is never replaced blind.
+    // the summary stays small: the rebuild protections read it so a page people find is never replaced blind.
+    // Impressions on the site's pages in each language (the translation backfill's stand-in for visits by language).
+    const byLang: Record<string, number> = {};
+    for (const r of rows) { const l = (String(r.page).match(/questcompendium\.com\/(es|pt|de|fr|ru|ja|ko|zh)\//) || [])[1]; if (l) byLang[l] = (byLang[l] || 0) + r.impressions; }
+    await db().collection('system').doc('searchConsole').set({ byLang }, { merge: true });
     await db().collection('system').doc(PAGE_STATS_DOC).set({ range: { start: iso(start), end: iso(end) }, pulledAt: Date.now(), pages: compactPageStats(sum.pages) });
     // The wish-list games, and when this ran (the daily pipeline runs it again a week later).
     await db().collection('system').doc('pipeline').set({ searchWishes: wishes, searchConsoleAt: Date.now() }, { merge: true });
@@ -330,7 +337,8 @@ async function weekly() {
   let entityLine = '', entityBuilt = 0, entityDollars = 0;
   try {
     const demand = rows.map((r) => ({ query: r.query, impressions: r.impressions, ...(pageRefOf(r.page) || { key: '' }) })).filter((r: any) => r.key);
-    const d = await demandEntities(demand as any, { dry });
+    // run.ts ends a step at 45 minutes: without its last line this one reads as failed, and it runs again every day.
+    const d = await demandEntities(demand as any, { dry, maxPages: ENTITY_PAGES_A_WEEK, maxDollars: ENTITY_DOLLARS_A_WEEK, deadline: STARTED + ENTITY_MINUTES * 60_000 });
     entityBuilt = d.built.filter((b) => b.status === 'published').length;
     entityDollars = d.built.reduce((n, b) => n + b.dollars, 0);
     entityLine = d.built.length || d.skipped.length

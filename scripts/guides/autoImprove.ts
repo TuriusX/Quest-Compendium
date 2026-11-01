@@ -310,11 +310,14 @@ async function corrections() {
 }
 
 // ---- 2. missing facts: the ask box's and the app's "missing" items (missingFacts.ts), checked by contributions.ts ----
-const ASKED_SOURCES = ['site', 'site-suggestion', 'app'];
+// Players' reports and suggestions too (owner, Nov 1 2026: nothing waits for him): what sources confirm goes on the page,
+// the rest is left as it is. The owner's own items stay his (contributions.ts).
+const ASKED_SOURCES = ['site', 'site-suggestion', 'app', 'report'];
+const isAsked = (x: any) => ASKED_SOURCES.includes(String(x.source)) || (!x.source && !x.owner);
 async function missingFacts() {
-  const docs = (await db().collection('contributions').where('status', '==', 'checked').get()).docs.filter((d) => ASKED_SOURCES.includes(String(d.data().source)));
+  const docs = (await db().collection('contributions').where('status', '==', 'checked').get()).docs.filter((d) => isAsked(d.data()));
   // Also the ones set aside a month ago (sources may have filled in).
-  const retry = (await db().collection('contributions').where('status', '==', 'unconfirmed').get()).docs.filter((d) => ASKED_SOURCES.includes(String(d.data().source)) && Number(d.data().unconfirmed?.at || 0) < Date.now() - 30 * DAY);
+  const retry = (await db().collection('contributions').where('status', '==', 'unconfirmed').get()).docs.filter((d) => isAsked(d.data()) && Number(d.data().unconfirmed?.at || 0) < Date.now() - 30 * DAY);
   for (const d of [...docs, ...retry]) {
     if (!can('add')) return;
     const x: any = d.data();

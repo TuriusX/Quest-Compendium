@@ -12,7 +12,7 @@
  *                            doesn't know from an invented one.
  *            --gate          the publishing gate: on a pass (score ≥ 75 and at least 5 pages) a staged build is
  *                            promoted to the live guide (promote.ts) or a guide's drafts are published; on a fail the
- *                            guide goes to the review queue (reviewQueue in Firestore, shown on /admin/reviews)
+ *                            guide keeps its old content and is tried again (promote.ts archiveStage, run.ts)
  *            --tier flash   review with Gemini 3.8 Flash (bulk audits); the default is Pro, counted against its daily
  *                           allowance as an "other" use (proCarefulReserve of config/apiLimits is kept for careful rebuilds)
  *            --max-dollars N stop --all before the estimate passes N (default 15)
@@ -34,7 +34,7 @@ import {
   LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, REVIEWER_CUTOFF, MISSABLE_STANDARD, missableGaps, type Layout,
 } from './common';
 import { estimateCost } from '../../usage';
-import { promote } from './promote';
+import { promote, archiveStage } from './promote';
 import { PRO_MODEL, FLASH_REVIEW_MODEL, takePro, proExhausted, isQuotaError, ProQuotaWait, type ReviewTier, type ProKind } from './reviewerQuota';
 
 // The reviewer is split by importance (reviewerQuota.ts): Gemini 3.1 Pro for careful builds' final gates, counted per
@@ -346,19 +346,7 @@ export async function reviewGuide(key: string, opts: { save: boolean; verify: bo
   return { review, dollars, searches, game: g.game };
 }
 
-/** Put a guide that failed review on the review queue (one open entry per guide; the latest review replaces it). */
-export async function queueForReview(key: string, game: string, review: Review, staged: boolean) {
-  const live = liveKey(key);
-  const problems = [...review.structure.problems, ...review.knowledge.problems, ...review.depth.problems, ...review.coverage.problems, ...review.ordering.problems].slice(0, 6);
-  await db().collection('reviewQueue').doc(`review-${live}`).set({
-    kind: 'review', key: live, game, staged, status: 'open',
-    score: review.score, recommendation: review.recommendation, layout: review.layout, summary: review.summary,
-    problems, pages: review.pages.slice(0, 15), buildMode: review.buildMode, pageCount: review.pageCount,
-    action: null, createdAt: Date.now(), updatedAt: Date.now(),
-  }, { merge: true });
-}
-
-/** The gate: publish a guide that passes, queue one that doesn't. Returns a line for the log. */
+/** The gate: publish a guide that passes; one that doesn't keeps its old content (promote.ts archiveStage), and its queue item is tried again (run.ts). Returns a line for the log. */
 export async function gateGuide(key: string, game: string, review: Review): Promise<string> {
   if (review.pass && review.pageCount >= MIN_PAGES) {
     if (isStageKey(key)) {
@@ -370,8 +358,8 @@ export async function gateGuide(key: string, game: string, review: Review): Prom
     for (const d of drafts.docs) await d.ref.update({ status: 'published', updatedAt: Date.now() });
     return `Gate: passed (${review.score}); ${drafts.size} draft page(s) published.`;
   }
-  await queueForReview(key, game, review, isStageKey(key));
-  return `Gate: failed (${review.score}${review.pageCount < MIN_PAGES ? `, only ${review.pageCount} page(s)` : ''}); queued for review: ${review.recommendation}.`;
+  if (isStageKey(key)) await archiveStage(key, { score: review.score, recommendation: review.recommendation, summary: review.summary, game });
+  return `Gate: failed (${review.score}${review.pageCount < MIN_PAGES ? `, only ${review.pageCount} page(s)` : ''}); the old content stays: ${review.recommendation}.`;
 }
 
 /** The guides --all covers: every live guide with at least one published page. */

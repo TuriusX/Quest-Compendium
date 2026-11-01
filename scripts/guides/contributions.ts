@@ -4,7 +4,8 @@
  *   pending   one targeted search for what the suggestion says, the claim check of each of its sentences against what
  *             the search found, a verdict (supported: every sentence backed; contradicted: a source says otherwise;
  *             unverifiable: the rest), the evidence, and a proposed wording for the page (only what the evidence backs,
- *             or the player's own words when nothing could be checked). Status "checked", for the owner's decision.
+ *             or the player's own words when nothing could be checked). Status "checked": the nightly improvements
+ *             (autoImprove.ts) put what sources confirm on the page, and leave the rest.
  *   approved  once the page has been rebuilt since the approval, does it state the suggestion itself? Then it's
  *             "absorbed" and the site stops showing it as a separate note.
  *
@@ -93,7 +94,7 @@ async function main() {
       dollars += Number(c?.check?.dollars || 0);
       // The ask box's and the app's items (source "site", "site-suggestion", "app") go on their pages through the
       // nightly improvements (autoImprove.ts: checked, placed in the page's text, logged with an undo), not as notes.
-      if (c?.owner && !['site', 'site-suggestion', 'app'].includes(String(c.source))) {
+      if (c?.owner && !['site', 'site-suggestion', 'app', 'report'].includes(String(c.source))) {
         // The owner asked for it: backed by sources, it goes on the page now; else it waits for him.
         if (c.check?.verdict === 'supported') { await d.ref.set({ status: 'approved', decided: { by: 'owner (sources agree)', at: Date.now(), text: String(c.check.proposal || c.text) } }, { merge: true }); applied++; }
         else held++;
@@ -117,7 +118,7 @@ async function main() {
   }
   if (deleted) console.log(`  ${deleted} declined suggestion(s) older than 90 days deleted`);
   const waiting = (await db().collection('contributions').where('status', '==', 'checked').count().get()).data().count;
-  console.log(`suggestions: ${checked} checked, ${waiting} waiting for approval, ${absorbed} now part of their page; $${dollars.toFixed(2)}${applied || held ? `; yours: ${applied} applied, ${held} held for you (sources didn't confirm)` : ''}`);
+  console.log(`suggestions: ${checked} checked, ${waiting} for tonight's improvements, ${absorbed} now part of their page; $${dollars.toFixed(2)}${applied || held ? `; yours: ${applied} applied, ${held} held for you (sources didn't confirm)` : ''}`);
   setTimeout(() => process.exit(0), 300);
 }
 main().catch((e) => { console.error('suggestions failed:', e?.message || e); process.exit(1); });

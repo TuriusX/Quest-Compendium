@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 
 const SITE = 'https://questcompendium.com';
+const RECHECK_MS = 3 * 60_000;
 
 export async function checkCompendiumLinks(dir = 'Marketing_Website_Files'): Promise<{ checked: number; broken: { url: string; status: number }[] }> {
   const root = path.resolve(dir, 'guides');
@@ -26,22 +27,35 @@ export async function checkCompendiumLinks(dir = 'Marketing_Website_Files'): Pro
   const list = [...urls];
   const broken: { url: string; status: number }[] = [];
   let i = 0;
+  const statusOf = async (url: string) => {
+    let status = 0;
+    for (let attempt = 0; attempt < 2 && status !== 200; attempt++) {
+      try {
+        status = (await fetch(url, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(20_000) })).status;
+      } catch {
+        status = 0;
+      }
+    }
+    return status;
+  };
   const worker = async () => {
     while (i < list.length) {
       const url = list[i++];
-      let status = 0;
-      for (let attempt = 0; attempt < 2 && status !== 200; attempt++) {
-        try {
-          status = (await fetch(url, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(20_000) })).status;
-        } catch {
-          status = 0;
-        }
-      }
+      const status = await statusOf(url);
       if (status !== 200) broken.push({ url, status });
     }
   };
   await Promise.all(Array.from({ length: 12 }, worker));
-  return { checked: list.length, broken };
+  if (!broken.length) return { checked: list.length, broken };
+  // A page just deployed can answer 404 for a moment (Nov 1 2026: 3 of that run's new pages, fine soon after): only
+  // what still fails after a wait is broken.
+  await new Promise((r) => setTimeout(r, RECHECK_MS));
+  const still: { url: string; status: number }[] = [];
+  for (const b of broken) {
+    const status = await statusOf(b.url);
+    if (status !== 200) still.push({ url: b.url, status });
+  }
+  return { checked: list.length, broken: still };
 }
 
 if (/linkCheck\.ts$/.test(process.argv[1] || '')) {

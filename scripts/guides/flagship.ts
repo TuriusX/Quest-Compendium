@@ -38,7 +38,7 @@ import {
 } from './common';
 import { infoForPage } from './areaInfo';
 import { fightsForPage } from './fights';
-import { call, reviewerFor, queueForReview, MIN_PAGES, type Review } from './review';
+import { call, reviewerFor, MIN_PAGES, type Review } from './review';
 import { sourcePack, packNotes, WIKIS, type SourcePack } from './sourcePack';
 /** Wikis we fetch directly (a page written from one counts as checked). */
 const WIKI_HOSTS = new Set(Object.values(WIKIS).map((w) => w.name));
@@ -46,11 +46,12 @@ import { structuredPeople } from './compendium';
 import { isTransient, buildEvidencePack, buildGameEvidence, lean, storedEvidenceFor, evidenceText, claimCheck, claimReview, claimSlots, sentencesOf, pageRules, type ClaimVerdict, type ClaimPage, type Evidence, type EvidencePack } from './claimCheck';
 import { ProQuotaWait } from './reviewerQuota';
 import { apiLimits, searchesToday, pipelineRoom, SearchDayWait } from '../../apiLimits';
-import { promote, stageCopy, discard } from './promote';
+import { promote, stageCopy, discard, archiveStage } from './promote';
 import { deployToNetlify } from '../pipeline/netlify';
 import { FieldValue } from 'firebase-admin/firestore';
 import { acquireGuideLock, waitForGuideLock, isRefusal, lockedLine, releaseGuideLocks, SITE_LOCK, type GuideLock } from './guideLock';
 import { guardRebuild, carryOver, contradictedNames } from './rebuildGuard';
+import { stopPage } from '../pipeline/budgetRules';
 
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const none = (v: string | undefined) => !v || /^(none|n\/a|-+|no|nothing)\.?$/i.test(v.trim());
@@ -683,12 +684,16 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   // 5. The review, claim by claim (Pro), on the page as it will be.
   let review = await claimReview(game, p.name, pageClaimPage(proto), ev);
   console.log(`  review: ${review.status}, ${review.supported}/${review.total} specific claims supported (score ${review.score})${review.reason ? `: ${review.reason}` : ''}`);
+  // A failing attempt that has used $0.75 stops here and the old content stays (owner, Nov 1 2026): Dawnshore went on to $1.15.
+  const usedSoFar = () => (scope ? scope.dollars - before.dollars : ledgerDollars() - before.dollars);
+  const cutOff = () => review.status === 'failed' && stopPage(usedSoFar());
+  if (cutOff()) console.log(`  stopped: $${usedSoFar().toFixed(2)} used and failing; the old content stays`);
   // 5b. Fill gaps, don't fail: a page the review fails gets one targeted search for the claims it couldn't support or
   // found contradicted, then the review again with that evidence. What's still unsupported or contradicted is dropped
   // (below, like every review), so the evidence check still holds for everything that stays. The page passes when no
   // more than 2 claims are contradicted and at least GAP_KEEP of its specific claims are supported.
   const gapFill = { tried: false, searches: 0, added: 0, before: review.score };
-  if (review.status === 'failed' && review.total) {
+  if (review.status === 'failed' && review.total && !cutOff()) {
     let weak = [...review.contradicted, ...review.unsupported].slice(0, 15);
     const passes = () => review.contradicted.length <= 2 && (review.total ? review.supported / review.total : 0) >= GAP_KEEP;
     // Lean research (the November walkthroughs): the evidence already stored for the game first (its other areas' lines
@@ -706,7 +711,7 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
         } else weak = [...review.contradicted, ...review.unsupported].slice(0, 15);
       }
     }
-    if (weak.length) {
+    if (weak.length && !cutOff()) {
       gapFill.tried = true;
       const { searchedEvidence } = await import('./entityV2');
       const more = await searchedEvidence(`In the video game "${game}", in the area "${p.name}": check each of these statements against the game's wikis and guides, and state what the sources actually say about each: ${weak.map((c) => `"${cut(c.text, 200)}"`).join('; ')}`, 'gapfill', 'gap check');
@@ -764,7 +769,7 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   // evidence, each person checked (compendium.ts structuredPeople).
   try {
     const listed = [...(out.info?.services || []), ...(out.shops || []).map((x: any) => `${x.name}${x.sells ? `: ${x.sells}` : ''}`)].map((x: any) => String(x).slice(0, 200));
-    const pp = await structuredPeople(game, p.name, listed, ev);
+    const pp = cutOff() ? { groups: [] as any[] } : await structuredPeople(game, p.name, listed, ev);
     if (pp.groups.length) out.people = { groups: pp.groups, at: Date.now() };
   } catch (e: any) {
     console.log(`  services and people: skipped (${String(e?.message || e).slice(0, 80)})`);
@@ -1340,7 +1345,7 @@ export async function packBuildGuide(key: string, game: string, opts: { maxSearc
   if (!staged?.packBuild) {
     if (staged) await discard(key);
     const o = await packOutline(game, opts.layout, opts.note);
-    if (!o.pages.length) return { line: 'Gate: failed (nothing was built: no page list from searched sources); queued for review: rebuild careful.', done: true };
+    if (!o.pages.length) return { line: 'Gate: failed (nothing was built: no page list from searched sources); the old content stays: rebuild careful.', done: true };
     staged = {
       game, title: `${game} guide`, stagingFor: key, layout: o.layout, repair: 'careful', createdAt: Date.now(),
       areas: o.pages.map((x) => ({ slug: x.slug, name: x.name, story: x.story })),
@@ -1404,8 +1409,8 @@ export async function packBuildGuide(key: string, game: string, opts: { maxSearc
     pages: pb.failed.slice(0, 15).map((f: any) => ({ name: f.name, verdict: 'failed review', reason: f.reason })),
     newerThanReviewer: !!opts.newRelease, released: '', buildMode: 'careful', pageCount: total, model: 'pro', tier: 'pro', passMark: 75, at: Date.now(),
   };
-  await queueForReview(stageKey(key), game, review, true);
-  return { line: `Gate: failed (${avg}, only ${passedN} of ${total} pages passed the Pro review); queued for review: rebuild careful.`, done: true, score: avg };
+  await archiveStage(key, { score: avg, recommendation: review.recommendation, summary: review.summary, game });
+  return { line: `Gate: failed (${avg}, only ${passedN} of ${total} pages passed the Pro review); the old content stays: rebuild careful.`, done: true, score: avg };
 }
 
 async function main() {

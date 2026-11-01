@@ -14,6 +14,7 @@
  */
 import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, gameKey, arg, searchesIn, editionOf, editionNote } from './common';
+import { parseSteamAchievements } from './steamAchievements';
 import { estimateCost } from '../../usage';
 import { acquireGuideLock, isRefusal, lockedLine, releaseGuideLocks } from './guideLock';
 
@@ -59,17 +60,7 @@ async function steamList(appId: number): Promise<Ach[]> {
     headers: { Cookie: 'Steam_Language=english', 'Accept-Language': 'en-US,en;q=0.9' },
   });
   if (!r.ok) throw new Error(`Steam returned ${r.status} for the achievement list`);
-  const html = await r.text();
-  const rows = html.split('class="achieveRow').slice(1);
-  return rows
-    .map((row) => {
-      const name = decode((row.match(/<h3>([\s\S]*?)<\/h3>/) || [])[1] || '');
-      const desc = decode((row.match(/<h5>([\s\S]*?)<\/h5>/) || [])[1] || '');
-      const pct = Number(((row.match(/achievePercent">\s*([\d.]+)%/) || [])[1] || 'NaN'));
-      const icon = (row.match(/<img src="([^"]+)"/) || [])[1] || '';
-      return { name, desc, rarity: Number.isFinite(pct) ? pct : null, icon, hidden: !desc };
-    })
-    .filter((a) => a.name);
+  return parseSteamAchievements(await r.text(), appId);
 }
 
 async function main() {

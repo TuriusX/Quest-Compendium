@@ -154,6 +154,32 @@ export async function stageCopy(key: string): Promise<number> {
   return pages.length;
 }
 
+/**
+ * A staged build that failed its gate (owner, Nov 1 2026): nothing waits for a decision. The live guide keeps its old
+ * content; the build is moved to stageArchive/{key}__{at} (some are a game's only copy, and were paid for) and the
+ * guide's address is free for the retry.
+ */
+export async function archiveStage(key: string, failed?: Record<string, unknown>): Promise<boolean> {
+  const ref = db().collection('guides').doc(stageKey(liveKey(key)));
+  const stage = await ref.get();
+  if (!stage.exists) return false;
+  const to = db().collection('stageArchive').doc(`${liveKey(key)}__${Date.now()}`);
+  await to.set(JSON.parse(JSON.stringify({ ...stage.data(), archivedAt: Date.now(), ...(failed ? { failed } : {}) })));
+  let batch = db().batch();
+  let ops = 0;
+  for (const d of (await ref.collection('areas').get()).docs) {
+    batch.set(to.collection('areas').doc(d.id), d.data());
+    if (++ops >= 400) {
+      await batch.commit();
+      batch = db().batch();
+      ops = 0;
+    }
+  }
+  await batch.commit();
+  await db().recursiveDelete(ref);
+  return true;
+}
+
 export async function discard(key: string): Promise<boolean> {
   const ref = db().collection('guides').doc(stageKey(liveKey(key)));
   if (!(await ref.get()).exists) return false;

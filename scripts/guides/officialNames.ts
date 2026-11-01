@@ -11,6 +11,8 @@ import { ThinkingLevel } from '@google/genai';
 import { db, gemini, MODEL, arg, usageScope, searchesIn } from './common';
 import { supportedSegments } from './claimCheck';
 
+/** Measured on The Witcher 3: about $0.11 a searched call of 30 names. */
+const NAMES_A_GUIDE = 60;
 const LANG_NAME: Record<string, string> = { es: 'Spanish', pt: 'Brazilian Portuguese', de: 'German', fr: 'French', ru: 'Russian', ja: 'Japanese', ko: 'Korean', zh: 'Simplified Chinese' };
 
 /** "English = Official" pairs from the source-backed lines of a searched answer. */
@@ -27,6 +29,38 @@ export function sourcedPairs(lines: string[], wanted: string[]): Record<string, 
   return out;
 }
 
+/** Worth looking up before translating a guide: its places and its named items, characters and enemies, not "Storage Locker". */
+const GENERIC_NAME = /\b(locker|crate|chest|kit|station|deposit|cache|container|box|barrel|upgrade|merchant|vendor|shop|mart|trooper|soldier|thug)s?\b/i;
+export function namesToLookUp(pages: any[], max = NAMES_A_GUIDE): string[] {
+  const count = new Map<string, number>();
+  const add = (n: unknown, w = 1) => {
+    const name = String(n || '').trim();
+    if (name.length < 4 || name.length > 60 || /[()|:]/.test(name) || GENERIC_NAME.test(name)) return;
+    count.set(name, (count.get(name) || 0) + w);
+  };
+  for (const p of pages) {
+    add(p.name, 3);
+    for (const e of [...(p.items || []), ...(p.fights || []), ...(p.shops || []), ...(p.enemies || [])]) add(e?.name);
+  }
+  return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, max).map(([n]) => n);
+}
+
+/** The official names sources give for these, before anything is translated. */
+export async function lookUpNames(game: string, lang: string, names: string[]): Promise<Record<string, string>> {
+  const found: Record<string, string> = {};
+  for (let i = 0; i < names.length; i += 30) {
+    const batch = names.slice(i, i + 30);
+    const res: any = await gemini().models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: [{ text: `In the official ${LANG_NAME[lang]} version of the video game "${game}" (its in-game text), what are these called (places, items, characters, enemies)? For each one whose official ${LANG_NAME[lang]} name a source gives, one line: English = Official. Leave out any you can't find, and write nothing else. If the game has no ${LANG_NAME[lang]} version, reply NONE.\n${batch.join('\n')}` }] }],
+      config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    });
+    searchesIn(res);
+    Object.assign(found, sourcedPairs(supportedSegments(res).flatMap((s) => s.text.split('\n')), batch));
+  }
+  return found;
+}
+
 export async function officialNames(key: string, lang: string, dry = false) {
   const info: any = (await db().collection('guides').doc(key).get()).data();
   const game = String(info?.game || key);
@@ -40,7 +74,7 @@ export async function officialNames(key: string, lang: string, dry = false) {
     const batch = names.slice(i, i + 30);
     const res: any = await gemini().models.generateContent({
       model: MODEL,
-      contents: [{ role: 'user', parts: [{ text: `In the official ${LANG_NAME[lang]} version of the video game "${game}" (its in-game text), what are these places called? For each one whose official ${LANG_NAME[lang]} name a source shows, write one line exactly as: English name = official ${LANG_NAME[lang]} name. Leave out any you can't find in a source; never translate a name yourself.\n${batch.join('\n')}\nRun a few searches (the game's ${LANG_NAME[lang]} wikis and guides; never fandom.com; at most five).` }] }],
+      contents: [{ role: 'user', parts: [{ text: `In the official ${LANG_NAME[lang]} version of the video game "${game}" (its in-game text), what are these called (places, items, characters, enemies)? For each one whose official ${LANG_NAME[lang]} name a source shows, write one line exactly as: English name = official ${LANG_NAME[lang]} name. Leave out any you can't find in a source; never translate a name yourself.\n${batch.join('\n')}\nRun a few searches (the game's ${LANG_NAME[lang]} wikis and guides; never fandom.com; at most five).` }] }],
       config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     searchesIn(res);

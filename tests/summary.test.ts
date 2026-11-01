@@ -11,7 +11,7 @@ function test(name: string, fn: () => void) {
 const report = [
   "📊 Yesterday: 31 question(s)",
   "✅ queue fights **CONTROL Resonant**: passed (79); promoted, 6 page(s) live, 3 changed.",
-  "⚠️ queue fights **Cyberpunk 2077**: failed (42); queued for review: rebuild with a different outline. (decide on /admin/reviews)",
+  "⚠️ queue fights **Cyberpunk 2077**: failed (42); the old content stays: rebuild with a different outline; tried again in 7 days.",
   "⏳ queue missables **Baldur's Gate 3**: built up to its search cap; continues next run.",
   "⏸️ queue info **Red Dead Redemption 2**: blocked: a careful rebuild of this guide is staged; nothing searched.",
   "➖ queue missables **CONTROL Resonant**: skipped (no missables to write).",

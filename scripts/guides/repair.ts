@@ -31,7 +31,7 @@
  *   careful  A fresh staged build with research, up to the search cap. A build that stops at the cap continues on
  *            the next run (the staged pages are kept); only a finished build goes to the gate.
  * A guide can override its outline for outline and careful rebuilds: guides/{key}.outline = { layout, extraPages:
- * [{ name, story, note }] } (extra pages go first). The gate (review.ts): a pass promotes the staged build to the live guide; a fail puts it on the review queue.
+ * [{ name, story, note }] } (extra pages go first). The gate (review.ts): a pass promotes the staged build to the live guide; a fail keeps the old content, and the queue tries it again (run.ts).
  * Page passes (fights, missables, queries, info) are gated on their changes only (scopedGate.ts: wrong or invented
  * entries taken out, plus a check that nothing else changed), not by re-grading the whole guide.
  *            --stage-only       outline / careful: build into staging and stop (no whole-guide gate)
@@ -256,7 +256,7 @@ async function main() {
     // Another rebuild of this guide is staged (a careful build part-way, say): never thrown away for a page pass.
     if (staged && staged.repair && staged.repair !== action) {
       ready = false;
-      console.log(`Repair: blocked: a ${staged.repair} rebuild of this guide is staged${staged.awaitingGate === false || !staged.passPending ? ' and waits for a decision on /admin/reviews' : ''}; ${what} wait for it (nothing searched).`);
+      console.log(`Repair: blocked: a ${staged.repair} rebuild of this guide is staged; ${what} wait for it (nothing searched).`);
     } else {
       // A run that stopped at the search cap carries on in its staged copy; otherwise a fresh copy of the live guide.
       const resume = staged?.repair === action && staged?.passPending === true;

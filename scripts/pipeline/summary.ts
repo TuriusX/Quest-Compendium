@@ -34,7 +34,7 @@ export function summarize(report: string[]): string[] {
       else if (icon === '⏸️') q.blocked.push(name);
       else if (icon === '⏳') q.waiting.push(name);
       else if (icon === '➖') q.skipped.push(name);
-      else if (/^failed \(\d+/.test(what)) q.failed.push(`${game} (${action}, ${(what.match(/^failed \((\d+)/) || [])[1]}: ${(what.match(/queued for review: ([^.(]+)/) || [])[1]?.trim() || 'see /admin/reviews'})`);
+      else if (/^failed \(\d+/.test(what)) q.failed.push(`${game} (${action}, ${(what.match(/^failed \((\d+)/) || [])[1]}: ${(what.match(/the old content stays: ([^.(;]+)/) || [])[1]?.trim() || 'see /admin/reviews'})`);
       else q.errors.push(`${name}: ${what.replace(/\s*\(see the job log\)\.?$/, '')}`);
       continue;
     }
@@ -56,7 +56,7 @@ export function summarize(report: string[]): string[] {
   if (total) {
     const counts = [q.passed.length && `${q.passed.length} passed`, q.failed.length && `${q.failed.length} failed review`, q.blocked.length && `${q.blocked.length} blocked`, q.waiting.length && `${q.waiting.length} waiting`, q.skipped.length && `${q.skipped.length} skipped`, q.errors.length && `${q.errors.length} error(s)`].filter(Boolean);
     queueLines.push(`🛠️ Repair queue: ${counts.join(', ')}.`);
-    if (q.failed.length) queueLines.push(`⚠️ Failed review (decide on /admin/reviews): ${q.failed.join('; ')}.`);
+    if (q.failed.length) queueLines.push(`⚠️ Failed review (the old content stays; tried again in a week): ${q.failed.join('; ')}.`);
     if (q.blocked.length) queueLines.push(`⏸️ Blocked by a staged rebuild waiting for a decision: ${q.blocked.join(', ')}.`);
     if (q.errors.length) queueLines.push(`❌ Repair errors: ${q.errors.join('; ')}.`);
   }

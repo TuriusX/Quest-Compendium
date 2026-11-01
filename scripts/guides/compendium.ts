@@ -480,7 +480,7 @@ const ENTITY_ESTIMATE = 0.2; // dollars a page (measured $0.15-0.19 on RDR2)
  * and the Pro review, published when they pass, within config/compendium.monthly (default $10 a month, counted in
  * system/compendium; separate from the flagship programme).
  */
-export async function demandEntities(rows: { query: string; key: string; slug?: string; impressions: number }[], opts: { dry?: boolean; minImpressions?: number } = {}) {
+export async function demandEntities(rows: { query: string; key: string; slug?: string; impressions: number }[], opts: { dry?: boolean; minImpressions?: number; maxPages?: number; deadline?: number; maxDollars?: number } = {}) {
   const month = new Date().toISOString().slice(0, 7);
   // Paid from the core guides' monthly budget (core.ts): the same $30 a month as the core guides' pages and entities.
   const { coreBudget, chargeCore } = await import('./core');
@@ -500,7 +500,9 @@ export async function demandEntities(rows: { query: string; key: string; slug?: 
   }
   type Cand = { key: string; game: string; name: string; type: string; impressions: number };
   const cands: Cand[] = [];
+  const outOfTime = () => !!opts.deadline && Date.now() > opts.deadline;
   for (const [k, queries] of byKey) {
+    if (outOfTime()) { skipped.push('out of time: the rest next week'); break; }
     const info: any = (await db().collection('guides').doc(k).get()).data();
     if (!info) continue;
     const game = String(info.game || k);
@@ -540,6 +542,8 @@ export async function demandEntities(rows: { query: string; key: string; slug?: 
   }
   cands.sort((a, b) => b.impressions - a.impressions);
   for (const c of cands) {
+    // This run's share (the step that calls it has to finish inside its time limit); the rest next week.
+    if (outOfTime() || (opts.maxPages !== undefined && built.length >= opts.maxPages) || (opts.maxDollars !== undefined && spent - startSpent + ENTITY_ESTIMATE > opts.maxDollars)) { skipped.push(`${c.game}: ${c.name} (next week)`); continue; }
     if (spent + ENTITY_ESTIMATE > monthly) { skipped.push(`${c.game}: ${c.name} (this month's $${monthly} is used up)`); continue; }
     if (opts.dry) { built.push({ key: c.key, name: c.name, status: 'planned', dollars: ENTITY_ESTIMATE }); spent += ENTITY_ESTIMATE; continue; }
     try {
