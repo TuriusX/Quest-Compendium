@@ -51,8 +51,10 @@ server's image only holds the built app.
   website, rebuild the image (step 1) and redeploy the job (step 3) so it doesn't put an older homepage back.
 - **Steam picks:** only RPG/adventure games with at least `PIPELINE_MIN_STEAM_REVIEWS` Steam reviews (default 2,000)
   count, so small new games don't use up the month's searches.
-- **Budget:** money: `PIPELINE_DAILY_DOLLARS` (default $8) and `PIPELINE_MONTHLY_AI_DOLLARS` (default $10, or
-  `PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH` for one month), counting tokens and searches ($14 per 1,000).
+- **Budget:** money: `PIPELINE_MONTHLY_AI_DOLLARS` (default $10, or `PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH` for one
+  month), counting tokens and searches ($14 per 1,000). Each day's hard cap is what's left of the month over the days
+  left, so unused days roll over. Within a day: upkeep up to 20%, walkthroughs, translations ($0.50), then rebuilds and
+  repairs if there's room (`budgetRules.ts`).
 - **Searches (since Oct 14, 2026):** two separate monthly shares (searchGuard.ts, counted per month in
   `system/searchBudget` as `pipeline`, `flagship` and `players`):
   - the pipeline and the flagship builds together: `PIPELINE_MONTHLY_SEARCHES` (4,800), or one month's own share in

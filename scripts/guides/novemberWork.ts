@@ -1,8 +1,7 @@
 /**
  * The site audit's content work (roadmap item 22) for November 2026, in the owner's order. Since Oct 26 2026 (owner) it
- * has no allowance of its own: it is paid from the pipeline's November cap ($60; the nightly run gives it at most
- * AUDIT_DAILY a day, never more than the pipeline has left that day and month, and charges what it spent like any
- * step). Rebuilds keep the old page's entries unless sources contradict them (rebuildGuard.ts). The order:
+ * has no allowance of its own: it is paid from the pipeline's November cap ($60; the nightly run gives it the day's rolling
+ * cap after upkeep, less what's kept for translations, budgetRules.ts, and charges what it spent like any step). Rebuilds keep the old page's entries unless sources contradict them (rebuildGuard.ts). The order:
  *
  *   1. reverify    the queue's pages (highest Search Console impressions first) rebuilt with the evidence method; a page
  *                  goes live only when it passes the review and the rebuild guard agrees
@@ -17,7 +16,8 @@
  * with one by the same evidence method as re-verification (checked against sources; the rebuild guard keeps its
  * entries), the guides with the most questions and search traffic first (system/demand), a few guides a night: three
  * pages each of three guides, in turn among the twelve most in demand (walkthroughQueue). The queue's other work follows.
- * Every 10 walkthrough pages, fewer than 7 going live pauses it (system/auditWork.paused) until the owner looks.
+ * Fewer than 7 of a guide's 10 walkthrough pages going live pauses that guide (system/auditWork.walkPaused, owner, Nov 1
+ * 2026): the queue moves on to the next guide, and Monday's summary lists it.
  *
  *   npx tsx scripts/guides/novemberWork.ts --setup        write the queue and the allowance (no AI)
  *   npx tsx scripts/guides/novemberWork.ts --queue-walkthroughs [--dry]   put the area walkthroughs first (no AI)
@@ -25,14 +25,13 @@
  *   npx tsx scripts/guides/novemberWork.ts --status       what's done, spent and left
  * Each step is charged to system/auditWork.spent (and shows in the pipeline's cost lines like any run).
  */
-import { worstCost } from '../pipeline/budgetRules';
+import { worstCost, guideWalkCheck } from '../pipeline/budgetRules';
 import fs from 'fs';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db, arg, usageScope } from './common';
 import { acquireGuideLock, isRefusal, releaseGuideLocks } from './guideLock';
 
 export const AUDIT_MONTH = '2026-11';
-export const AUDIT_DAILY = Number(process.env.AUDIT_DAILY || 5);
 const ref = () => db().collection('system').doc('auditWork');
 const month = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }).slice(0, 7);
 const day = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
@@ -42,10 +41,10 @@ export type Work = { kind: 'reverify' | 'walkthrough' | 'stepPlaces' | 'epilogue
 const WALK_GUIDES = 3, WALK_PAGES = 3, WALK_POOL = 12;
 /**
  * Upkeep (owner, Oct 31 2026): about 20% of the pipeline's November budget ($60) is kept for contradictions, fixes and
- * re-verification, so existing pages don't go stale: each night it goes first, up to that share of the night's room,
- * and never past its month's reserve. What it doesn't use goes to the walkthroughs. Its list: system/auditWork.upkeep.
+ * re-verification, so existing pages don't go stale: each night it goes first, within what the nightly run gives it
+ * (budgetRules.ts upkeepRoom) and never past its month's reserve. Its list: system/auditWork.upkeep.
  */
-const UPKEEP_SHARE = 0.2, UPKEEP_MONTH = Number(process.env.AUDIT_UPKEEP_MONTH || 12);
+const UPKEEP_MONTH = Number(process.env.AUDIT_UPKEEP_MONTH || 12);
 /** A page verified longer ago than this is stale: re-verified as upkeep, the most visited first. */
 const STALE_DAYS = 45;
 const hasWalkthrough = (a: any) => (a?.walkthrough || []).some((s: any) => s?.title);
@@ -222,29 +221,32 @@ export async function doOne(w: Work): Promise<{ status: string; dollars: number;
 }
 
 /**
- * Up to max dollars of the next work today (November 2026 only). The caller passes what the pipeline has left (its
- * November cap); at most AUDIT_DAILY a day. Returns the summary lines and what it spent, for the pipeline to charge.
+ * Up to max dollars of the next work today (November 2026 only), upkeepMax of it on upkeep. The caller passes what the
+ * pipeline's rolling cap leaves. Returns the summary lines and what it spent, for the pipeline to charge.
  */
-export async function runAuditWork(max = AUDIT_DAILY): Promise<{ lines: string[]; dollars: number; searches: number }> {
-  const none = { lines: [] as string[], dollars: 0, searches: 0 };
+export async function runAuditWork(max: number, upkeepMax = max): Promise<{ lines: string[]; dollars: number; searches: number; upkeep: number }> {
+  const none = { lines: [] as string[], dollars: 0, searches: 0, upkeep: 0 };
   if (month() !== AUDIT_MONTH && !process.env.AUDIT_FORCE) return none;
   const st: any = (await ref().get()).data() || {};
   if (!st.approved || !Array.isArray(st.queue) || st.paused) return none;
   const spentToday = st.day === day() ? Number(st.spentToday || 0) : 0;
-  let room = Math.min(max, AUDIT_DAILY - spentToday);
+  let room = max;
   let searches = 0;
   const lines: string[] = [];
   let next = Number(st.next || 0), spent = Number(st.spent || 0), today = spentToday;
   let reverifySpent = Number(st.reverifySpent || 0);
   const upkeep: Work[] = st.upkeep || [];
   let upNext = Number(st.upkeepNext || 0), upSpent = Number(st.upkeepSpent || 0), upToday = 0;
-  // Upkeep first each night (owner, Oct 31 2026): about a fifth of the night's room, within its month's reserve.
-  const upRoom = Math.max(0, Math.min(room * UPKEEP_SHARE, UPKEEP_MONTH - upSpent));
+  // Upkeep first each night (owner, Oct 31 2026), within what it's given and its month's reserve.
+  const upRoom = Math.max(0, Math.min(upkeepMax, UPKEEP_MONTH - upSpent));
+  const pausedGuides = new Set<string>(Object.keys(st.walkPaused || {}));
   let stop = false;
   // Already checked since it was queued (the October fund, the core programme): skipped, free. So is a walkthrough
   // page that has one by now (the core programme built it), and a stale page rebuilt since.
   const done = async (w: Work) => {
     if (w.kind !== 'reverify' && w.kind !== 'walkthrough') return false;
+    // A paused guide's pages are passed over: the next guide's come sooner.
+    if (w.kind === 'walkthrough' && pausedGuides.has(w.key)) return true;
     const a: any = (await db().collection('guides').doc(w.key).collection('areas').doc(w.ref).get()).data();
     if (!a || a.status !== 'published') return true;
     if (w.kind === 'walkthrough') return hasWalkthrough(a);
@@ -258,17 +260,17 @@ export async function runAuditWork(max = AUDIT_DAILY): Promise<{ lines: string[]
     if (lane === 'upkeep') { upSpent += r.dollars; upToday += r.dollars; upNext++; } else next++;
     lines.push(`${lane === 'upkeep' ? 'upkeep: ' : ''}${w.kind} ${w.key}/${w.ref}: ${r.status}, $${r.dollars.toFixed(3)}${r.detail ? ` (${r.detail})` : ''}`);
     await ref().set({ next, upkeepNext: upNext, upkeepSpent: upSpent, spent, reverifySpent, day: day(), spentToday: today, log: FieldValue.arrayUnion({ at: Date.now(), kind: w.kind, key: w.key, ref: w.ref, status: r.status, dollars: Math.round(r.dollars * 1000) / 1000, ...(lane === 'upkeep' ? { upkeep: true } : {}) }) }, { merge: true });
-    // The walkthroughs' checkpoint: every 10 pages, fewer than 7 live pauses the work until the owner looks.
+    // The walkthroughs' checkpoint, guide by guide: fewer than 7 of 10 live pauses that guide only.
     if (w.kind === 'walkthrough') {
-      const cp = await walkCheckpoint();
-      if (cp) { lines.push(`⚠️ ${cp}`); stop = true; }
+      const cp = await walkCheckpoint(w.key);
+      if (cp) { lines.push(`⚠️ ${cp}`); pausedGuides.add(w.key); }
     }
     return r.dollars;
   };
   // The daily cap is hard (owner, Nov 1 2026): nothing starts unless its worst case fits what's left.
-  while (!stop && upRoom - upToday > 0.05 && upNext < upkeep.length) {
+  while (!stop && upNext < upkeep.length) {
     if (await done(upkeep[upNext])) { upNext++; continue; }
-    if (room < worstCost(upkeep[upNext].kind)) break;
+    if (Math.min(room, upRoom - upToday) < worstCost(upkeep[upNext].kind)) break;
     await one(upkeep[upNext], 'upkeep');
   }
   while (!stop && next < st.queue.length) {
@@ -277,21 +279,20 @@ export async function runAuditWork(max = AUDIT_DAILY): Promise<{ lines: string[]
     await one(st.queue[next], 'main');
   }
   if (lines.length) lines.unshift(`🧭 November site work (roadmap 22, from the pipeline's November cap): ${lines.length} item(s) today, $${(today - spentToday).toFixed(2)} ($${upToday.toFixed(2)} upkeep); $${spent.toFixed(2)} so far this month ($${upSpent.toFixed(2)} of the $${UPKEEP_MONTH} upkeep reserve), ${st.queue.length - next} item(s) left.`);
-  return { lines, dollars: today - spentToday, searches };
+  return { lines, dollars: today - spentToday, searches, upkeep: upToday };
 }
 
-/** Every 10 walkthrough pages since the last check: fewer than 7 live pauses the November work. The reason, or null. */
-async function walkCheckpoint(): Promise<string | null> {
+/** A guide's walkthrough pages since its last check (budgetRules.ts guideWalkCheck). The reason when it paused, or null. */
+async function walkCheckpoint(key: string): Promise<string | null> {
   const st: any = (await ref().get()).data() || {};
-  const since = Number(st.walkCheckAt || 0);
-  const runs = ((st.log || []) as any[]).filter((x) => x.kind === 'walkthrough' && Number(x.at) > since).sort((a, b) => a.at - b.at);
-  if (runs.length < 10) return null;
-  const ten = runs.slice(0, 10);
-  const live = ten.filter((x) => x.status === 'live').length;
-  await ref().set({ walkCheckAt: ten[9].at }, { merge: true });
-  if (live >= 7) return null;
-  const why = `Area walkthroughs paused: ${live} of the last 10 pages went live (under 7). Nothing more is built until the owner looks (system/auditWork.paused).`;
-  await ref().set({ paused: { why, at: Date.now() } }, { merge: true });
+  const since = Number(st.walkChecked?.[key] || 0);
+  const rows = ((st.log || []) as any[]).filter((x) => x.kind === 'walkthrough' && x.key === key && Number(x.at) > since).sort((a, b) => a.at - b.at);
+  const c = guideWalkCheck(rows);
+  if (c.verdict === 'wait') return null;
+  await ref().set({ walkChecked: { [key]: c.through } }, { merge: true });
+  if (c.verdict === 'ok') return null;
+  const why = `Area walkthroughs paused for ${key}: ${c.live} of ${c.tried} pages went live (7 of 10 can't be reached). The next guide in the queue carries on; listed on Mondays.`;
+  await ref().set({ walkPaused: { [key]: { at: Date.now(), live: c.live, tried: c.tried } } }, { merge: true });
   return why;
 }
 
@@ -310,7 +311,8 @@ export async function walkthroughWeekLines(): Promise<string[]> {
   const held = pages.filter((x) => x.status === 'held by the rebuild guard').length;
   const guides = [...new Set(live.map((x) => String(x.key)))];
   const chapters = log.filter((x) => x.kind === 'stepPlaces' && x.status === 'done').length;
-  const left = queue.slice(Number(st.next || 0)).filter((w) => w.kind === 'walkthrough').length;
+  const walkPaused: Record<string, any> = st.walkPaused || {};
+  const left = queue.slice(Number(st.next || 0)).filter((w) => w.kind === 'walkthrough' && !walkPaused[w.key]).length;
   const dollars = log.reduce((s, x) => s + Number(x.dollars || 0), 0);
   const pageDollars = pages.reduce((s, x) => s + Number(x.dollars || 0), 0);
   const up = ((st.log || []) as any[]).filter((x) => Number(x.at) > week && x.upkeep);
@@ -321,6 +323,8 @@ export async function walkthroughWeekLines(): Promise<string[]> {
     `🧰 Upkeep this week (contradictions and re-verification, about 20% of the budget): ${up.length} item(s), ${up.filter((x) => x.status === 'live').length} page(s) re-verified live, $${up.reduce((s, x) => s + Number(x.dollars || 0), 0).toFixed(2)}; $${Number(st.upkeepSpent || 0).toFixed(2)} of the month's $${UPKEEP_MONTH} reserve used.`,
   ];
   if (st.paused?.why) out.push(`⚠️ ${st.paused.why}`);
+  const stopped = Object.entries(walkPaused).map(([k, v]) => `${k} (${v.live} of ${v.tried} live)`);
+  if (stopped.length) out.push(`⚠️ Area walkthroughs paused guide by guide, fewer than 7 of 10 going live; other guides carry on: ${stopped.join(', ')}. Their old pages stay as they are.`);
   return out;
 }
 
@@ -365,7 +369,7 @@ async function main() {
     const counts = upkeep.reduce((m: Record<string, number>, w) => ((m[w.kind + (w.since ? ' (stale)' : '')] = (m[w.kind + (w.since ? ' (stale)' : '')] || 0) + 1), m), {});
     const dry = arg('dry') === 'true';
     if (!dry) await ref().set({ queue, upkeep, upkeepNext: 0, upkeepSpent: Number(st.upkeepSpent || 0) }, { merge: true });
-    console.log(`${dry ? '(dry run) ' : ''}Upkeep: ${upkeep.length} item(s) ${JSON.stringify(counts)}; main queue from item ${next}: ${queue.length - next} item(s). Reserve $${UPKEEP_MONTH}, at most ${UPKEEP_SHARE * 100}% of a night.`);
+    console.log(`${dry ? '(dry run) ' : ''}Upkeep: ${upkeep.length} item(s) ${JSON.stringify(counts)}; main queue from item ${next}: ${queue.length - next} item(s). Reserve $${UPKEEP_MONTH}, within the nightly run's upkeep share.`);
     console.log(`  first: ${upkeep.slice(0, 10).map((w) => `${w.kind} ${w.key}/${w.ref}`).join(', ')}`);
   } else if (arg('queue-walkthroughs') === 'true') {
     // The area walkthroughs go first (owner, Oct 31 2026): the work done stays as it was and the rest follows them. A
@@ -387,10 +391,10 @@ async function main() {
     const gsc = JSON.parse(fs.readFileSync(String(arg('gsc') || 'C:/Users/Noah/Desktop/QC-site-audit/notes/gsc.json'), 'utf8'));
     const queue = await buildQueue(gsc.pages);
     const counts = queue.reduce((m: Record<string, number>, w) => ((m[w.kind] = (m[w.kind] || 0) + 1), m), {});
-    await ref().set({ approved: { by: 'owner', at: Date.now(), note: 'roadmap item 22, ~$115, re-verification first by impressions' }, month: AUDIT_MONTH, budget: "the pipeline's November cap", daily: AUDIT_DAILY, queue, next: 0, spent: 0 }, { merge: true });
-    console.log(`Queue written: ${queue.length} item(s) ${JSON.stringify(counts)}; paid from the pipeline's ${AUDIT_MONTH} cap, at most $${AUDIT_DAILY} a day.`);
+    await ref().set({ approved: { by: 'owner', at: Date.now(), note: 'roadmap item 22, ~$115, re-verification first by impressions' }, month: AUDIT_MONTH, budget: "the pipeline's November cap", queue, next: 0, spent: 0 }, { merge: true });
+    console.log(`Queue written: ${queue.length} item(s) ${JSON.stringify(counts)}; paid from the pipeline's ${AUDIT_MONTH} cap.`);
   } else if (arg('run') === 'true') {
-    for (const l of (await runAuditWork(Number(arg('max', String(AUDIT_DAILY))) || AUDIT_DAILY)).lines) console.log(l);
+    for (const l of (await runAuditWork(Number(arg('max', '5')) || 5)).lines) console.log(l);
   } else {
     const st: any = (await ref().get()).data() || {};
     console.log(`${st.month}: $${Number(st.spent || 0).toFixed(2)} spent (from the pipeline's cap); ${Number(st.next || 0)} of ${(st.queue || []).length} item(s) done.`);

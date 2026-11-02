@@ -140,7 +140,7 @@ async function cli() {
   const report: string[] = Array.isArray(s.lastReport) ? s.lastReport : [];
   const when = s.lastRun ? new Date(s.lastRun).toISOString().slice(0, 16).replace('T', ' ') : '?';
   // A run from before closing lines were saved gets one from the saved state: it finished, and what it spent.
-  const closing = s.lastEnd || `🏁 Run finished at ${when} UTC. Today $${Number(s.spend?.dollars || 0).toFixed(2)} of $8; this month $${Number(s.dollars || 0).toFixed(2)} (tokens and searches).`;
+  const closing = s.lastEnd || `🏁 Run finished at ${when} UTC. Today $${Number(s.spend?.dollars || 0).toFixed(2)} of $${Number(s.dayCap || 0).toFixed(2)}; this month $${Number(s.dollars || 0).toFixed(2)} (tokens and searches).`;
   const text = summaryText(report, closing, `**Quest Compendium guide pipeline** (run of ${when} UTC)`);
   console.log(text);
   if (arg('post') === 'true') {

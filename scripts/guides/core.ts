@@ -22,8 +22,9 @@
  * Guides in system/core.keepPages (Baldur's Gate 3) keep their existing flagship pages (earlier flagship method,
  * reviewed): those count as complete and are rebuilt only when flagged (the page's `reverify` field, set by a failed
  * review or a re-verification request); only their compendium is built.
- * Pages and entities that fail review aren't retried automatically (listed in the Discord summary; add their ids to
- * system/core.retry to try again). A guide moves on once everything has been tried.
+ * Pages and entities that fail review are retried once on the next run with fresh research (owner, Nov 1 2026;
+ * system/core.autoRetried); failing again, they're listed on Mondays. Adding their ids to system/core.retry tries them
+ * again by hand. A guide moves on once everything has been tried.
  *
  * Guides with an approved blueprint (guideBlueprints/{key}, scripts/guides/blueprintBuild.ts) follow it instead of the
  * fixed template above, first (system/core.blueprintOrder sets their order), section by section in priority order.
@@ -366,8 +367,15 @@ export async function runCore(): Promise<void> {
   // (a complete guide is otherwise skipped): the evidence method with gap-filling. One the budget or a daily limit
   // stopped stays on the list for the next run; the rest come off it (a failure goes back on the guide's failed list).
   const pageRetries = [...retry].filter((x) => /^[^/:]+\/.+$/.test(x));
-  if (pageRetries.length) {
-    const res = await retryOnly(pageRetries, { publish: false });
+  // What failed review and hasn't had its one automatic retry, with fresh research.
+  const autoRetried: Record<string, number> = st.autoRetried || {};
+  const fresh = new Set<string>();
+  for (const [k, pg] of Object.entries<any>(st.perGuide || {})) {
+    for (const f of pg.failedPages || []) if (f.slug && !autoRetried[`${k}/${f.slug}`] && !retry.has(`${k}/${f.slug}`)) fresh.add(`${k}/${f.slug}`);
+    for (const f of pg.failedEntities || []) if (f.slug && !autoRetried[`${k}:${f.slug}`] && !retry.has(`${k}:${f.slug}`)) fresh.add(`${k}:${f.slug}`);
+  }
+  if (pageRetries.length || fresh.size) {
+    const res = await retryOnly([...pageRetries, ...fresh], { publish: false, fresh });
     if (res.some((r) => r.status === 'passed')) wentLive = true;
     // A download or network error ("fetch failed") isn't the page's fault: it stays queued, up to RETRY_NIGHTS runs.
     // Any other error (too little evidence) or a result takes it off the queue.
@@ -377,7 +385,10 @@ export async function runCore(): Promise<void> {
       r.status === 'stopped' || r.status === 'skipped' && !/no such guide|not key/.test(r.detail) || (transient(r) && (tries[r.item] = (tries[r.item] || 0) + 1) < RETRY_NIGHTS);
     const ran = new Set(res.filter((r) => !keep(r)).map((r) => r.item));
     for (const x of ran) { retry.delete(x); delete tries[x]; }
-    await cref().set({ retry: [...retry], retryTries: tries }, { merge: true });
+    // Passed: it could get another retry if it ever fails again.
+    const once: Record<string, any> = {};
+    for (const r of res) if (fresh.has(r.item) && ran.has(r.item)) once[r.item] = r.status === 'passed' || r.status === 'published' ? FieldValue.delete() : Date.now();
+    await cref().set({ retry: [...retry], retryTries: tries, autoRetried: once }, { merge: true });
     if (res.some((r) => r.status === 'stopped')) { console.log('\nPage retries stopped by the budget; the next run carries on.'); if (wentLive) await publishSiteForCore(); return; }
   }
   // The compendium rollout to the new method first (rollout.ts): rebuilds across guides by demand, then (from
@@ -540,7 +551,7 @@ ${r.stopped}; the next run carries on.`); if (wentLive) await publishSiteForCore
  * compendium's current method), each charged to the core budget, logged, and taken off (or put on) the guide's failed
  * list like in a run. The site is published once at the end when anything went live. Prints each one's cost and result.
  */
-export async function retryOnly(items: string[], opts: { publish?: boolean } = {}): Promise<{ item: string; status: string; dollars: number; detail: string }[]> {
+export async function retryOnly(items: string[], opts: { publish?: boolean; fresh?: Set<string> } = {}): Promise<{ item: string; status: string; dollars: number; detail: string }[]> {
   process.env.CORE_CHARGED = '1'; // charged to the core budget, so not to the local-runs ledger too
   const { buildPageEvidenceForCore, writePageForCore, publishSiteForCore } = await import('./flagship');
   const { buildEntity } = await import('./compendium');
@@ -565,7 +576,7 @@ export async function retryOnly(items: string[], opts: { publish?: boolean } = {
       if (page) {
         const slug = page[2];
         const area = (info.areas || []).find((a: any) => a.slug === slug);
-        const r: any = await usageScope.run(scope, () => buildPageEvidenceForCore(key, String(info.game || key), slug, info.areas || [], key));
+        const r: any = await usageScope.run(scope, () => buildPageEvidenceForCore(key, String(info.game || key), slug, info.areas || [], key, { rebuild: !!opts.fresh?.has(item) }));
         await chargeCore(scope.dollars, key);
         if (r?.review?.status === 'passed') {
           if (await writePageForCore(key, slug, r.proto)) {
@@ -585,7 +596,7 @@ export async function retryOnly(items: string[], opts: { publish?: boolean } = {
         const known = [...(comp.entities || []), ...(comp.core?.entities || [])].find((e: any) => e && (e.slug === slug || String(e.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === slug));
         const doc: any = (await db().collection('guideCompendium').doc(key).collection('entities').doc(slug).get()).data();
         const name = String(doc?.name || known?.name || pg.failedEntities.find((f: any) => f.slug === slug)?.name || slug);
-        const r = await usageScope.run(scope, () => buildEntity(key, name, { type: doc?.type || known?.type }));
+        const r = await usageScope.run(scope, () => buildEntity(key, name, { type: doc?.type || known?.type, ...(opts.fresh?.has(item) ? { rebuild: true, keepOnFail: true } : {}) }));
         // The entity build counts its spending in its own scope: its result carries the real cost.
         scope.dollars = Math.max(scope.dollars, Number(r.dollars) || 0);
         await chargeCore(scope.dollars, key);

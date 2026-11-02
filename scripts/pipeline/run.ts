@@ -48,8 +48,6 @@
  *   PIPELINE_LANGS                languages to translate into (default es,pt,de,fr,ru,ja,ko,zh)
  *   PIPELINE_FEATURED             guides to translate into every language even before players ask, separated by |
  *                                 (default: the five checked guides: FF VI, Chrono Trigger, DQ XI, BG3, The Witcher 3)
- *   PIPELINE_DAILY_DOLLARS        hard spending cap per day, Chicago time (default 8): each step may only spend what's
- *                                 left (its scripts refuse further AI calls past it), and nothing starts below $0.25
  *   PIPELINE_RUN_ALERT_DOLLARS    a Discord alert as soon as one run has spent this much (default 5)
  *   PIPELINE_SEARCH_DOLLARS       what a search costs (default 0.014: $14 per 1,000, no free allowance assumed)
  *   Costs are real: each step's "Usage:" line (common.ts ledger: every response's tokens, thinking included, and its
@@ -64,7 +62,7 @@
  * wait. Existing guides keep improving (repairs, corrections, translations, revisits). system/pipeline.newGuides = true
  * (or PIPELINE_NEW_GUIDES=on) turns new guides back on. The core guides (scripts/guides/core.ts) get the depth.
  */
-import { TRANSLATE_SHARE, WALK_RESERVE, STEP_MARGIN, BIG_STEP_MIN, RETRY_DAYS, MAX_TRIES, afterFailedTry } from './budgetRules';
+import { TRANSLATE_SHARE, STEP_MARGIN, BIG_STEP_MIN, RETRY_DAYS, MAX_TRIES, afterFailedTry, rollingDayCap, upkeepRoom } from './budgetRules';
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -134,8 +132,7 @@ type QueueItem = { game: string; mode: 'careful' | 'quick' | 'fix' | 'outline' |
   approved?: boolean };
 /** Minutes the repair queue may run before the rest of the run (the job's limit is 3 hours). */
 const QUEUE_MINUTES = env('PIPELINE_QUEUE_MINUTES', 120);
-/** Hard spending cap per day (Chicago time), and the one-run total that sends a Discord alert. Real dollars. */
-const DAILY_CAP = env('PIPELINE_DAILY_DOLLARS', 8);
+/** The one-run total that sends a Discord alert. Real dollars. */
 const RUN_ALERT = env('PIPELINE_RUN_ALERT_DOLLARS', 5);
 /** What may still be spent (set by main from the daily and monthly caps); each script gets it as its hard limit. */
 let spendLeft = () => Infinity;
@@ -360,18 +357,22 @@ async function main() {
   // limit, and its searches are capped to fit), and one run passing RUN_ALERT dollars posts an alert ----
   let runDollars = 0, alerted = false;
   RUN.spent = () => runDollars;
-  const dayRoom = () => DAILY_CAP - state.spend.dollars;
-  // Part of the day's room is kept for the walkthrough pages until the November work has had its turn, and a small share
-  // for the translation backfill, which goes last (owner, Nov 1 2026).
-  let walkReserve = TRANSLATE_SHARE;
-  try {
-    const { AUDIT_MONTH } = await import('../guides/novemberWork');
-    const aw: any = (await db().collection('system').doc('auditWork').get()).data() || {};
-    if (month === AUDIT_MONTH && aw.approved && !aw.paused) walkReserve += WALK_RESERVE;
-  } catch { /* no reserve then */ }
-  const room = () => Math.min(aiRoom, dayRoom()) - walkReserve;
+  // The day's hard cap, Chicago time, rolls (owner, Nov 1 2026; budgetRules.ts): what's left of the month over the days
+  // left. Each step may only spend what its lane leaves (its scripts refuse further AI calls past it).
+  const DAY_CAP = rollingDayCap(AI_CAP, state.dollars - state.spend.dollars, daysLeft + 1);
+  state.dayCap = DAY_CAP;
+  if (!DRY) await stateRef.set({ dayCap: DAY_CAP }, { merge: true }).catch(() => {});
+  const dayRoom = () => DAY_CAP - state.spend.dollars;
+  const total = () => Math.min(aiRoom, dayRoom());
+  // The day's order: upkeep up to its share, then the walkthrough pages (keeping translations' share), then translations,
+  // then rebuilds and repairs with what's left.
+  if (state.upkeep?.month !== month) state.upkeep = { month, dollars: 0 };
+  if (state.upkeep.day !== today) state.upkeep = { ...state.upkeep, day: today, today: 0 };
+  const upkeepLeft = () => upkeepRoom({ dayCap: DAY_CAP, monthCap: AI_CAP, spentMonth: state.upkeep.dollars, spentToday: state.upkeep.today, dayOfMonth: chicago.getDate(), daysInMonth: daysLeft + chicago.getDate() });
+  let lane: 'upkeep' | 'walkthroughs' | 'rest' = 'upkeep';
+  const room = () => (lane === 'upkeep' ? Math.min(total(), upkeepLeft()) : lane === 'walkthroughs' ? total() - TRANSLATE_SHARE : total());
   spendLeft = room;
-  const capReached = () => (walkReserve && Math.min(aiRoom, dayRoom()) > 0.25 ? `what's left today ($${Math.min(aiRoom, dayRoom()).toFixed(2)}) is kept for the walkthrough pages and translations` : dayRoom() <= aiRoom ? `today's $${DAILY_CAP} spending cap is reached` : 'the monthly AI budget is used up');
+  const capReached = () => (lane === 'upkeep' && total() > 0.25 ? `today's upkeep share is used` : dayRoom() <= aiRoom ? `today's $${DAY_CAP.toFixed(2)} spending cap is reached` : 'the monthly AI budget is used up');
   // Google's daily search limit (config/apiLimits): the pipeline's share of today's searches, read before each step.
   let searchDay = Infinity;
   const refreshSearchDay = async () => {
@@ -393,10 +394,11 @@ async function main() {
     state.spend.dollars += r.dollars;
     aiRoom -= r.dollars;
     runDollars += r.dollars;
-    if (!DRY) await stateRef.set({ spend: state.spend, dollars: state.dollars, searches: state.searches, costBasis: 'billed' }, { merge: true }).catch(() => {});
+    if (lane === 'upkeep') state.upkeep = { ...state.upkeep, dollars: state.upkeep.dollars + r.dollars, today: state.upkeep.today + r.dollars };
+    if (!DRY) await stateRef.set({ spend: state.spend, upkeep: state.upkeep, dollars: state.dollars, searches: state.searches, costBasis: 'billed' }, { merge: true }).catch(() => {});
     if (!alerted && runDollars >= RUN_ALERT) {
       alerted = true;
-      const msg = `⚠️ **Guide pipeline spending alert**: this run has spent $${runDollars.toFixed(2)} (alert at $${RUN_ALERT}). Today: $${state.spend.dollars.toFixed(2)} of the $${DAILY_CAP} daily cap; this month: $${state.dollars.toFixed(2)}.`;
+      const msg = `⚠️ **Guide pipeline spending alert**: this run has spent $${runDollars.toFixed(2)} (alert at $${RUN_ALERT}). Today: $${state.spend.dollars.toFixed(2)} of today's $${DAY_CAP.toFixed(2)} cap; this month: $${state.dollars.toFixed(2)}.`;
       report.push(msg.replace(/^⚠️ /, '🚨 '));
       if (process.env.DISCORD_WEBHOOK_URL && !DRY)
         await fetch(process.env.DISCORD_WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: msg }) }).catch((e) => console.warn(`Discord alert failed: ${e?.message}`));
@@ -415,6 +417,23 @@ async function main() {
       if (it.key && it.page) await db().collection('contributions').add({ key: it.key, slug: it.page, page: 'area', label: String(it.pageName || it.page).slice(0, 200), kind: 'correction', text: String(it.text || '').slice(0, 1000), lang: 'en', source: 'report', status: 'pending', at: Date.now() });
       await d.ref.set({ status: 'done', resolution: it.key && it.page ? 'sent to the nightly source check' : 'names no page to check', updatedAt: Date.now() }, { merge: true });
     }
+    // Players' "wrong or misleading" reports on AI answers go the same way, when the game has a guide page to check them
+    // on. "Harmful" and "other" stay on the Reports tab (Store policy 11.16).
+    let sentAnswers = 0, noPage = 0;
+    for (const d of (await db().collection('answerReports').where('status', '==', 'open').where('reason', '==', 'wrong').get()).docs) {
+      const it: any = d.data();
+      const key = it.game ? gameKey(String(it.game)) : '';
+      const pages = key ? (await db().collection('guides').doc(key).collection('areas').where('status', '==', 'published').get()).docs : [];
+      const has = (t: unknown, n: string) => String(t || '').toLowerCase().includes(n.toLowerCase());
+      const named = pages.map((p) => ({ slug: p.id, name: String(p.data().name || p.id) })).filter((p) => p.name.length >= 4).sort((a, b) => b.name.length - a.name.length);
+      const page = named.find((p) => has(it.place, p.name)) || named.find((p) => has(it.question, p.name)) || named.find((p) => has(it.answer, p.name));
+      if (page) {
+        await db().collection('contributions').add({ key, slug: page.slug, page: 'area', label: page.name.slice(0, 200), kind: 'correction', text: String(it.comment || it.answer || '').slice(0, 1000), lang: 'en', source: 'report', status: 'pending', at: Date.now() });
+        sentAnswers++;
+      } else noPage++;
+      await d.ref.set({ status: page ? 'actioned' : 'reviewed', resolution: page ? 'sent to the nightly source check' : 'no guide page to check it against', updatedAt: Date.now() }, { merge: true });
+    }
+    if (sentAnswers || noPage) report.push(`🧾 Answer reports: ${sentAnswers} sent to the source check${noPage ? `, ${noPage} with no guide page to check against` : ''}.`);
     const decided = await db().collection('reviewQueue').where('status', '==', 'queued').get();
     for (const d of decided.docs) {
       const it: any = d.data();
@@ -516,6 +535,88 @@ async function main() {
     if (ai.summary && !/^improvements: (0 change|paused)/.test(ai.summary)) report.push(`${ai.ok ? '🔧' : '⚠️'} ${ai.summary || 'improvements failed (see the job log)'}`);
     if (/^improvements: [1-9]/.test(ai.summary || '')) changed = true;
   }
+  // ---- the walkthrough pages, after upkeep and before everything else (owner, Nov 1 2026): the site audit's November
+  // content work (roadmap 22, novemberWork.ts), paid from this pipeline's November cap, with its upkeep lane first; what it
+  // spends is charged here. Does nothing outside November 2026. ----
+  try {
+    const { runAuditWork } = await import('../guides/novemberWork');
+    lane = 'walkthroughs';
+    const left = room();
+    if (!DRY && left >= 0.5) {
+      const aw = await runAuditWork(left, Math.max(0, upkeepLeft()));
+      lane = 'upkeep';
+      if (aw.upkeep > 0) await charge({ dollars: aw.upkeep, searches: 0 }, 'November upkeep');
+      lane = 'walkthroughs';
+      if (aw.dollars > aw.upkeep || aw.searches > 0) await charge({ dollars: aw.dollars - aw.upkeep, searches: aw.searches }, 'November walkthroughs');
+      for (const l of aw.lines) report.push(l);
+    }
+  } catch (e: any) {
+    console.warn(`November site work skipped: ${e?.message}`);
+  }
+  lane = 'rest';
+
+  // ---- 3d. translations kept in sync: a guide whose pages changed (repairs, missables, Key fights, corrections,
+  // rebuilds: promote.ts marks translationsDue) gets just the changed pages retranslated, in the languages it's already
+  // translated into (translate-guide.ts redoes only pages newer than their translation). New languages are still only
+  // added where players use them or the guide is featured (step 3 above). ----
+  if (!DRY) {
+    const due = (await db().collection('guides').where('translationsDue.at', '>', 0).get()).docs.filter((d) => !d.id.endsWith('--next'));
+    let synced = 0, pages = 0, cost = 0;
+    for (const d of due) {
+      const info: any = d.data();
+      const langs: string[] = Array.isArray(info.languages) ? info.languages : [];
+      if (!langs.length) {
+        await d.ref.set({ translationsDue: null }, { merge: true });
+        continue;
+      }
+      if (room() < 0.25) {
+        report.push(`⏳ translations: ${due.length - synced} guide(s) wait for the next run (${capReached()}).`);
+        RUN.stoppedBy = capReached();
+        break;
+      }
+      const r = runScript(['scripts/guides/translate-guide.ts', '--game', String(info.game || d.id), '--lang', langs.join(',')]);
+      await charge(r, `translations ${info.game || d.id}`);
+      cost += r.dollars;
+      if (r.ok) {
+        await d.ref.set({ translationsDue: null }, { merge: true });
+        synced++;
+        pages += Number((r.summary.match(/^(\d+) page translation/) || [])[1] || 0);
+        changed = true;
+      } else report.push(`⚠️ translations **${info.game || d.id}** (${langs.join(', ')}): the update failed; tried again next run.`);
+    }
+    if (synced) report.push(`🌍 translations kept in sync: ${synced} guide(s), ${pages} page translation(s), ≈ $${cost.toFixed(2)}.`);
+  }
+
+  // The translation gaps, a little each night (owner, Nov 1 2026; translateBackfill.ts), with what keeping the others in
+  // sync left of translations' share: shows with the next publish.
+  if (!DRY) {
+    try {
+      const { translationGaps } = await import('../guides/translateBackfill');
+      const { gaps } = await translationGaps();
+      let share = Math.min(TRANSLATE_SHARE, room()), spentOn = 0, pages = 0;
+      const did: string[] = [];
+      const before = spendLeft;
+      for (const g of gaps.slice(0, 4)) {
+        if (share < 0.1) break;
+        const left = share;
+        spendLeft = () => Math.min(room(), left + STEP_MARGIN);
+        const r = runScript(['scripts/guides/translate-guide.ts', '--game', g.game, '--lang', g.lang, '--max-dollars', left.toFixed(2), '--official']);
+        spendLeft = before;
+        await charge(r, `translation backfill ${g.game} → ${g.lang}`);
+        share -= r.dollars;
+        spentOn += r.dollars;
+        const n = Number((r.summary.match(/(\d+) page translation/) || [])[1] || 0);
+        pages += n;
+        if (n) did.push(`${shortName(g.game)} → ${g.lang}`);
+      }
+      if (pages) await db().collection('system').doc('editor').set({ dirtyAt: Date.now() }, { merge: true });
+      report.push(`🌐 Translations: ${pages} page(s), $${spentOn.toFixed(2)} (${did.join(', ') || 'nothing done'}); ${gaps.length} guide and language pair(s) still to finish.`);
+    } catch (e: any) {
+      console.warn(`Translation backfill skipped: ${e?.message}`);
+    }
+  }
+
+  // ---- rebuilds and repairs, with what's left of the day ----
   let queueRoom = Math.min(QUEUE_DAILY, shareRoom) - correctionSearches;
   const waiting: QueueItem[] = [];
   const queueStart = Date.now();
@@ -604,7 +705,7 @@ async function main() {
   // cap): what's left of it is each approved repair's hard limit, and none starts with less than $0.25 left.
   const approvedBudget = Number(state.queueHold?.approvedDollars);
   const approvedLeft = () => (Number.isFinite(approvedBudget) ? approvedBudget - Number(state.queueHold?.approvedSpent || 0) : Infinity);
-  let approvedStopNoted = false;
+  let approvedStopNoted = false, rebuildsWait = false;
   /** A failed repair: the old content stays, it comes back in a week, and a second failure stops it (listed on Mondays). */
   const failedTry = (item: QueueItem, action: string, why: string) => {
     const r = afterFailedTry(item);
@@ -629,12 +730,20 @@ async function main() {
     // Careful builds, and outline rebuilds of new releases (careful too), need real search room; fixes and quick
     // rebuilds search little (spot-checks, careful pages of new games).
     const big = action === 'careful' || action === 'extend' || action === 'upgrade' || !!item.newRelease;
+    const whole = big || action === 'outline';
     const need = big ? QUEUE_MIN : 60;
-    if (room() < (big ? BIG_STEP_MIN : 0.25) || Date.now() - queueStart > QUEUE_MINUTES * 60_000) {
-      if (room() < (big ? BIG_STEP_MIN : 0.25)) { report.push(`⏸️ Repair queue stopped: ${room() < 0.25 ? capReached() : `a rebuild could go over what's left today ($${room().toFixed(2)} for repairs)`}.`); RUN.stoppedBy = capReached(); }
+    if (room() < 0.25 || Date.now() - queueStart > QUEUE_MINUTES * 60_000) {
+      if (room() < 0.25) { report.push(`⏸️ Repair queue stopped: ${capReached()}.`); RUN.stoppedBy = capReached(); }
       waiting.push(item, ...queue);
       queue.length = 0;
       break;
+    }
+    // A rebuild only starts if its worst case fits; smaller repairs behind it still can.
+    if (whole && room() < BIG_STEP_MIN) {
+      if (!rebuildsWait) report.push(`⏸️ Rebuilds wait: a rebuild's worst case ($${BIG_STEP_MIN}) doesn't fit the $${room().toFixed(2)} left today.`);
+      rebuildsWait = true;
+      waiting.push(item);
+      continue;
     }
     if (queueRoom < need || affordable(need) < need) {
       waiting.push(item);
@@ -720,6 +829,7 @@ async function main() {
     if (paused && (a.kind === 'build-checked' || a.kind === 'revisit' || a.kind === 'upgrade')) continue;
     // On hold: no new careful builds or upgrades, and no searched achievement guides.
     if (hold && (a.kind === 'build-checked' || a.kind === 'revisit' || a.kind === 'upgrade' || a.kind === 'achievements')) continue;
+    if (['build', 'build-checked', 'revisit', 'upgrade'].includes(a.kind) && room() < BIG_STEP_MIN) continue;
     if (a.searches > 0 && (a.searches > searchRoom || affordable(a.searches) < Math.min(a.searches, 30))) continue; // try cheaper actions instead
     console.log(`\n▶ ${a.kind} ${a.game}${a.lang ? ` (${a.lang})` : ''}: ${a.why}`);
     if (DRY) {
@@ -778,38 +888,6 @@ async function main() {
   }
   // Why the pipeline's own queue did nothing: its budget, or nothing it may run (repairs on hold, new guides paused).
   if (!done) report.push(aiRoom > 0.25 && dayRoom() > 0.25 ? `Nothing for the pipeline's own queue to run${hold ? ' (repairs on hold' : ''}${hold && !NEW_GUIDES ? ', new guides paused)' : hold ? ')' : !NEW_GUIDES ? ' (new guides paused)' : ''}.` : `The pipeline's own queue stopped: ${capReached()}.`);
-
-  // ---- 3d. translations kept in sync: a guide whose pages changed (repairs, missables, Key fights, corrections,
-  // rebuilds: promote.ts marks translationsDue) gets just the changed pages retranslated, in the languages it's already
-  // translated into (translate-guide.ts redoes only pages newer than their translation). New languages are still only
-  // added where players use them or the guide is featured (step 3 above). ----
-  if (!DRY) {
-    const due = (await db().collection('guides').where('translationsDue.at', '>', 0).get()).docs.filter((d) => !d.id.endsWith('--next'));
-    let synced = 0, pages = 0, cost = 0;
-    for (const d of due) {
-      const info: any = d.data();
-      const langs: string[] = Array.isArray(info.languages) ? info.languages : [];
-      if (!langs.length) {
-        await d.ref.set({ translationsDue: null }, { merge: true });
-        continue;
-      }
-      if (room() < 0.25) {
-        report.push(`⏳ translations: ${due.length - synced} guide(s) wait for the next run (${capReached()}).`);
-        RUN.stoppedBy = capReached();
-        break;
-      }
-      const r = runScript(['scripts/guides/translate-guide.ts', '--game', String(info.game || d.id), '--lang', langs.join(',')]);
-      await charge(r, `translations ${info.game || d.id}`);
-      cost += r.dollars;
-      if (r.ok) {
-        await d.ref.set({ translationsDue: null }, { merge: true });
-        synced++;
-        pages += Number((r.summary.match(/^(\d+) page translation/) || [])[1] || 0);
-        changed = true;
-      } else report.push(`⚠️ translations **${info.game || d.id}** (${langs.join(', ')}): the update failed; tried again next run.`);
-    }
-    if (synced) report.push(`🌍 translations kept in sync: ${synced} guide(s), ${pages} page translation(s), ≈ $${cost.toFixed(2)}.`);
-  }
 
   // The owner's changes on the site (the editor's Fix now and picture tools, /admin/images): published tonight.
   const editorState: any = (await db().collection('system').doc('editor').get()).data() || {};
@@ -920,50 +998,7 @@ async function main() {
       const name = shortName(String((await db().collection('guides').doc(k).get()).data()?.game || k));
       for (const f of fl) failedPages.push(`${name} / ${f.name}${f.score != null ? ` (${f.score})` : ''}: ${String(f.reason || 'failed review').slice(0, 80)}`);
     }
-    if (failedPages.length) report.push(`⚠️ Re-verification failed (old content kept, no badge; ${failedPages.length} page(s), say which to retry): ${failedPages.slice(0, 25).join('; ')}${failedPages.length > 25 ? `; and ${failedPages.length - 25} more` : ''}.`);
-    }
-  }
-  // The site audit's November content work (roadmap 22, novemberWork.ts), paid from this pipeline's November cap (owner,
-  // Oct 26 2026): at most AUDIT_DAILY a day and never more than the pipeline has left; what it spends is charged here.
-  // Re-verification of the most-searched unchecked pages first. Does nothing outside November 2026.
-  try {
-    const { runAuditWork, AUDIT_DAILY } = await import('../guides/novemberWork');
-    walkReserve = TRANSLATE_SHARE;
-    const left = room();
-    if (left >= 0.5) {
-      const aw = await runAuditWork(Math.min(AUDIT_DAILY, left));
-      if (aw.dollars > 0 || aw.searches > 0) await charge({ dollars: aw.dollars, searches: aw.searches }, 'November site work');
-      for (const l of aw.lines) report.push(l);
-    }
-  } catch (e: any) {
-    console.warn(`November site work skipped: ${e?.message}`);
-  }
-  // The translation gaps, a little each night (owner, Nov 1 2026; translateBackfill.ts): shows with the next publish.
-  walkReserve = 0;
-  if (!DRY) {
-    try {
-      const { translationGaps } = await import('../guides/translateBackfill');
-      const { gaps } = await translationGaps();
-      let share = Math.min(TRANSLATE_SHARE, room()), spentOn = 0, pages = 0;
-      const did: string[] = [];
-      const before = spendLeft;
-      for (const g of gaps.slice(0, 4)) {
-        if (share < 0.1) break;
-        const left = share;
-        spendLeft = () => Math.min(room(), left + STEP_MARGIN);
-        const r = runScript(['scripts/guides/translate-guide.ts', '--game', g.game, '--lang', g.lang, '--max-dollars', left.toFixed(2), '--official']);
-        spendLeft = before;
-        await charge(r, `translation backfill ${g.game} → ${g.lang}`);
-        share -= r.dollars;
-        spentOn += r.dollars;
-        const n = Number((r.summary.match(/(\d+) page translation/) || [])[1] || 0);
-        pages += n;
-        if (n) did.push(`${shortName(g.game)} → ${g.lang}`);
-      }
-      if (pages) await db().collection('system').doc('editor').set({ dirtyAt: Date.now() }, { merge: true });
-      report.push(`🌐 Translations: ${pages} page(s), $${spentOn.toFixed(2)} (${did.join(', ') || 'nothing done'}); ${gaps.length} guide and language pair(s) still to finish.`);
-    } catch (e: any) {
-      console.warn(`Translation backfill skipped: ${e?.message}`);
+    if (failedPages.length) report.push(`⚠️ Re-verification failed (old content kept, no badge; ${failedPages.length} page(s)): ${failedPages.slice(0, 25).join('; ')}${failedPages.length > 25 ? `; and ${failedPages.length - 25} more` : ''}.`);
     }
   }
   // Mondays: the area walkthroughs' week (owner, Oct 31 2026; novemberWork.ts): pages live, guides, cost, what's left.
@@ -1112,8 +1147,10 @@ async function main() {
           // Compendium: the guide's live entity pages against the cap (every live page counts, the rollout's too).
           report.push(`${done ? '✅' : '•'} ${shortName(r.game)}: flagship pages ${r.corePages}/${r.pages}${r.keptPages ? ' (kept)' : ''} · compendium pages ${Math.min(r.entitiesLive, r.cap)}/${r.cap}${r.entitiesLive > r.cap ? ` (${r.entitiesLive} live in all)` : ''} · $${r.cost.toFixed(2)} so far, ≈ $${r.left.toFixed(2)} left`);
         }
-        const fails = (coreSt.guides as string[]).flatMap((k) => [...(coreSt.perGuide?.[k]?.failedPages || []).map((f: any) => `${f.name} (page)`), ...(coreSt.perGuide?.[k]?.failedEntities || []).map((f: any) => `${f.name} (entity)`)]);
-        if (fails.length) report.push(`⚠️ Core pieces that failed review (not retried; add them to system/core.retry to try again): ${fails.slice(0, 15).join(', ')}${fails.length > 15 ? `, and ${fails.length - 15} more` : ''}.`);
+        // After their one automatic retry with fresh research (core.ts); the ones still waiting for it aren't listed.
+        const again = coreSt.autoRetried || {};
+        const fails = (coreSt.guides as string[]).flatMap((k) => [...(coreSt.perGuide?.[k]?.failedPages || []).filter((f: any) => again[`${k}/${f.slug}`]).map((f: any) => `${f.name} (page)`), ...(coreSt.perGuide?.[k]?.failedEntities || []).filter((f: any) => again[`${k}:${f.slug}`]).map((f: any) => `${f.name} (entity)`)]);
+        if (fails.length) report.push(`⚠️ Core pieces that failed review again after a retry with fresh research (old content kept): ${fails.slice(0, 15).join(', ')}${fails.length > 15 ? `, and ${fails.length - 15} more` : ''}.`);
       }
     }
   } catch (e: any) {
@@ -1183,7 +1220,7 @@ async function main() {
     }
     const parts = [...byKind].sort((a, b) => b[1].dollars - a[1].dollars).map(([k, v]) => `${k}${v.n > 1 ? ` ×${v.n}` : ''} $${v.dollars.toFixed(2)}${v.searches ? ` (${v.searches} searches)` : ''}`);
     const top = costs.filter((c) => c.dollars >= 0.5).sort((a, b) => b.dollars - a.dollars).slice(0, 5).map((c) => `${c.label} $${c.dollars.toFixed(2)}`);
-    report.push(`💰 Costs this run: $${runDollars.toFixed(2)}: ${parts.join(', ')}.${top.length ? ` Biggest: ${top.join('; ')}.` : ''} Today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; ${new Date().toLocaleString('en-US', { month: 'long' })} $${(state.dollars || 0).toFixed(2)} of $${AI_CAP}.`);
+    report.push(`💰 Costs this run: $${runDollars.toFixed(2)}: ${parts.join(', ')}.${top.length ? ` Biggest: ${top.join('; ')}.` : ''} Today $${state.spend.dollars.toFixed(2)} of $${DAY_CAP.toFixed(2)}; ${new Date().toLocaleString('en-US', { month: 'long' })} $${(state.dollars || 0).toFixed(2)} of $${AI_CAP}.`);
   }
   // The closing line: how the run ended (finished, or stopped by which cap) and what it spent.
   // The limits that apply: the daily and monthly dollar caps, and the app's monthly searches minus the player reserve.
@@ -1217,7 +1254,7 @@ async function main() {
   } catch (e: any) {
     console.warn(`Unpriced-model line skipped: ${e?.message}`);
   }
-  const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAILY_CAP}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches, ${state.searches || 0} pipeline searches).${sm ? ` 🔎 Searches this month: pipeline ${sm.pipeline + sm.flagship} of its ${pipelineShare(month)} (flagship ${sm.flagship}); players ${sm.players} of their ${PLAYER_MONTHLY()}; ${sm.count} in all, ${Math.max(0, sm.count - 5000)} past the free 5,000 (≈ $${(Math.max(0, sm.count - 5000) * 0.014).toFixed(2)}).` : ''}`;
+  const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAY_CAP.toFixed(2)}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches, ${state.searches || 0} pipeline searches).${sm ? ` 🔎 Searches this month: pipeline ${sm.pipeline + sm.flagship} of its ${pipelineShare(month)} (flagship ${sm.flagship}); players ${sm.players} of their ${PLAYER_MONTHLY()}; ${sm.count} in all, ${Math.max(0, sm.count - 5000)} past the free 5,000 (≈ $${(Math.max(0, sm.count - 5000) * 0.014).toFixed(2)}).` : ''}`;
   const closing = RUN.stoppedBy ? `🛑 Run stopped early: ${RUN.stoppedBy}. ${totals}` : `🏁 Run finished. ${totals}`;
   state.lastRun = Date.now();
   state.lastReport = report;

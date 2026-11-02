@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/budgetRules.test.ts)
 import assert from "node:assert/strict";
-import { afterFailedTry, stopPage, worstCost, RETRY_DAYS } from "../scripts/pipeline/budgetRules";
+import { afterFailedTry, stopPage, worstCost, rollingDayCap, upkeepRoom, guideWalkCheck, BIG_STEP_MIN, RETRY_DAYS } from "../scripts/pipeline/budgetRules";
 import { parseSteamAchievements } from "../scripts/guides/steamAchievements";
 import { languageWeights, rankTranslations } from "../scripts/guides/translateBackfill";
 import { namesToLookUp } from "../scripts/guides/officialNames";
@@ -26,6 +26,36 @@ test("a page attempt stops at $0.75, and Dawnshore's $1.15 fits a re-verificatio
   assert.ok(worstCost("reverify") >= 1.15);
   assert.ok(worstCost("walkthrough") >= 0.75);
   assert.ok(worstCost("anything new") > 0);
+});
+
+test("the day's cap: what's left over the days left, so unused days roll over and the month ends at its cap", () => {
+  assert.equal(rollingDayCap(60, 30, 15), 2);
+  assert.equal(rollingDayCap(60, 0, 30), 2);
+  assert.ok(rollingDayCap(60, 10, 25) > rollingDayCap(60, 10, 26));
+  assert.equal(rollingDayCap(60, 70, 5), 0);
+  // Spending each day's cap ends the month exactly at the cap.
+  let spent = 8.3;
+  for (let left = 29; left >= 1; left--) spent += rollingDayCap(60, spent, left);
+  assert.ok(Math.abs(spent - 60) < 1e-9);
+  assert.ok(BIG_STEP_MIN >= 2.79);
+});
+
+test("upkeep: 20% of the day, or what has built up so one re-verification can fit", () => {
+  const u = { dayCap: 1.78, monthCap: 60, daysInMonth: 30 };
+  assert.ok(Math.abs(upkeepRoom({ ...u, spentMonth: 50, spentToday: 0, dayOfMonth: 2 }) - 0.356) < 1e-9);
+  assert.ok(Math.abs(upkeepRoom({ ...u, spentMonth: 1, spentToday: 0, dayOfMonth: 10 }) - 3) < 1e-9);
+  assert.ok(upkeepRoom({ ...u, spentMonth: 50, spentToday: 0.4, dayOfMonth: 2 }) < 0);
+});
+
+const walk = (statuses: string[]) => statuses.map((status, i) => ({ status, at: i + 1, dollars: 0.3 }));
+test("a guide's walkthroughs: fewer than 7 of 10 live pauses it; four not live settles it early", () => {
+  assert.equal(guideWalkCheck(walk(Array(9).fill("live"))).verdict, "wait");
+  assert.deepEqual(guideWalkCheck(walk([...Array(7).fill("live"), ...Array(3).fill("not live")])), { verdict: "ok", live: 7, tried: 10, through: 10 });
+  assert.equal(guideWalkCheck(walk(["not live", "live", "not live", "not live"])).verdict, "wait");
+  assert.deepEqual(guideWalkCheck(walk(["not live", "live", "not live", "not live", "not live"])), { verdict: "pause", live: 1, tried: 5, through: 5 });
+  // A daily limit isn't the guide's fault.
+  assert.equal(guideWalkCheck(Array.from({ length: 5 }, (_, i) => ({ status: "error", at: i, dollars: 0 }))).verdict, "wait");
+  assert.equal(guideWalkCheck([{ status: "error", at: 1, dollars: 0.2 }]).tried, 1);
 });
 
 // As Steam's page has it now: JSON in a script string, with a quote inside a description.
