@@ -62,7 +62,7 @@
  * wait. Existing guides keep improving (repairs, corrections, translations, revisits). system/pipeline.newGuides = true
  * (or PIPELINE_NEW_GUIDES=on) turns new guides back on. The core guides (scripts/guides/core.ts) get the depth.
  */
-import { TRANSLATE_SHARE, STEP_MARGIN, BIG_STEP_MIN, RETRY_DAYS, MAX_TRIES, afterFailedTry, rollingDayCap, upkeepRoom } from './budgetRules';
+import { TRANSLATE_SHARE, STEP_MARGIN, BIG_STEP_MIN, WALK_START, RETRY_DAYS, MAX_TRIES, afterFailedTry, rollingDayCap, upkeepRoom } from './budgetRules';
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -542,7 +542,7 @@ async function main() {
     const { runAuditWork } = await import('../guides/novemberWork');
     lane = 'walkthroughs';
     const left = room();
-    if (!DRY && left >= 0.5) {
+    if (!DRY && left >= WALK_START) {
       const aw = await runAuditWork(left, Math.max(0, upkeepLeft()));
       lane = 'upkeep';
       if (aw.upkeep > 0) await charge({ dollars: aw.upkeep, searches: 0 }, 'November upkeep');

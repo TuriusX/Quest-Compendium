@@ -25,7 +25,7 @@
  *   npx tsx scripts/guides/novemberWork.ts --status       what's done, spent and left
  * Each step is charged to system/auditWork.spent (and shows in the pipeline's cost lines like any run).
  */
-import { worstCost, guideWalkCheck } from '../pipeline/budgetRules';
+import { worstCost, startNeed, guideWalkCheck } from '../pipeline/budgetRules';
 import fs from 'fs';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db, arg, usageScope } from './common';
@@ -275,7 +275,7 @@ export async function runAuditWork(max: number, upkeepMax = max): Promise<{ line
   }
   while (!stop && next < st.queue.length) {
     if (await done(st.queue[next])) { next++; continue; }
-    if (room < worstCost(st.queue[next].kind)) break;
+    if (room < startNeed(st.queue[next].kind)) break;
     await one(st.queue[next], 'main');
   }
   if (lines.length) lines.unshift(`🧭 November site work (roadmap 22, from the pipeline's November cap): ${lines.length} item(s) today, $${(today - spentToday).toFixed(2)} ($${upToday.toFixed(2)} upkeep); $${spent.toFixed(2)} so far this month ($${upSpent.toFixed(2)} of the $${UPKEEP_MONTH} upkeep reserve), ${st.queue.length - next} item(s) left.`);

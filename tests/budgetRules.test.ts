@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/budgetRules.test.ts)
 import assert from "node:assert/strict";
-import { afterFailedTry, stopPage, worstCost, rollingDayCap, upkeepRoom, guideWalkCheck, BIG_STEP_MIN, RETRY_DAYS } from "../scripts/pipeline/budgetRules";
+import { afterFailedTry, stopPage, worstCost, startNeed, rollingDayCap, upkeepRoom, guideWalkCheck, BIG_STEP_MIN, RETRY_DAYS, TRANSLATE_SHARE, WALK_START } from "../scripts/pipeline/budgetRules";
 import { parseSteamAchievements } from "../scripts/guides/steamAchievements";
 import { languageWeights, rankTranslations } from "../scripts/guides/translateBackfill";
 import { namesToLookUp } from "../scripts/guides/officialNames";
@@ -45,6 +45,14 @@ test("upkeep: 20% of the day, or what has built up so one re-verification can fi
   assert.ok(Math.abs(upkeepRoom({ ...u, spentMonth: 50, spentToday: 0, dayOfMonth: 2 }) - 0.356) < 1e-9);
   assert.ok(Math.abs(upkeepRoom({ ...u, spentMonth: 1, spentToday: 0, dayOfMonth: 10 }) - 3) < 1e-9);
   assert.ok(upkeepRoom({ ...u, spentMonth: 50, spentToday: 0.4, dayOfMonth: 2 }) < 0);
+});
+
+test("a walkthrough starts at $0.30: its worst case still fits the day's cap, with translations' share behind it", () => {
+  assert.equal(WALK_START, 0.3);
+  assert.equal(startNeed("walkthrough"), WALK_START);
+  assert.ok(WALK_START + TRANSLATE_SHARE >= worstCost("walkthrough"));
+  assert.equal(startNeed("reverify"), worstCost("reverify"));
+  assert.equal(startNeed("place"), worstCost("place"));
 });
 
 const walk = (statuses: string[]) => statuses.map((status, i) => ({ status, at: i + 1, dollars: 0.3 }));

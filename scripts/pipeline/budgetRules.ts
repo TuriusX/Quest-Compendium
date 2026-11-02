@@ -24,6 +24,13 @@ export const MAX_TRIES = 2;
 /** The most one piece of November work should cost: a full re-verification measured $1.15, a lean page about $0.22. */
 export const WORST_COST: Record<string, number> = { reverify: 1.25, walkthrough: 0.8, place: 0.6, mission: 0.6, epilogue: 0.6, stepPlaces: 0.3, conflicts: 0.3, glossary: 0.15 };
 export const worstCost = (kind: string) => WORST_COST[kind] ?? 0.6;
+/**
+ * A walkthrough page starts with this much left of its lane (owner, Nov 2 2026: as many pages as the cap allows). The lane
+ * keeps translations' share back, so a page's worst case still fits the day's cap; a dear page takes from that night's
+ * translations, never from the cap.
+ */
+export const WALK_START = Math.round((WORST_COST.walkthrough - TRANSLATE_SHARE) * 100) / 100;
+export const startNeed = (kind: string) => (kind === 'walkthrough' ? WALK_START : worstCost(kind));
 
 export const stopPage = (used: number) => used >= PAGE_FAIL_STOP;
 
