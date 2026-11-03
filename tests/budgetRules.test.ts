@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/budgetRules.test.ts)
 import assert from "node:assert/strict";
-import { afterFailedTry, stopPage, worstCost, startNeed, rollingDayCap, upkeepRoom, guideWalkCheck, BIG_STEP_MIN, RETRY_DAYS, TRANSLATE_SHARE, WALK_START } from "../scripts/pipeline/budgetRules";
+import { afterFailedTry, stopPage, worstCost, startNeed, rollingDayCap, upkeepRoom, guideWalkCheck, BIG_STEP_MIN, RETRY_DAYS, TRANSLATE_SHARE, WALK_START, WALK_FAIL_STOP } from "../scripts/pipeline/budgetRules";
 import { parseSteamAchievements } from "../scripts/guides/steamAchievements";
 import { languageWeights, rankTranslations } from "../scripts/guides/translateBackfill";
 import { namesToLookUp } from "../scripts/guides/officialNames";
@@ -24,7 +24,9 @@ test("a page attempt stops at $0.75, and Dawnshore's $1.15 fits a re-verificatio
   assert.equal(stopPage(0.74), false);
   assert.equal(stopPage(0.75), true);
   assert.ok(worstCost("reverify") >= 1.15);
-  assert.ok(worstCost("walkthrough") >= 0.75);
+  assert.equal(stopPage(0.64, true), false);
+  assert.equal(stopPage(0.65, true), true);
+  assert.ok(worstCost("walkthrough") >= WALK_FAIL_STOP);
   assert.ok(worstCost("anything new") > 0);
 });
 
@@ -47,8 +49,8 @@ test("upkeep: 20% of the day, or what has built up so one re-verification can fi
   assert.ok(upkeepRoom({ ...u, spentMonth: 50, spentToday: 0.4, dayOfMonth: 2 }) < 0);
 });
 
-test("a walkthrough starts at $0.30: its worst case still fits the day's cap, with translations' share behind it", () => {
-  assert.equal(WALK_START, 0.3);
+test("a walkthrough starts at $0.20, above the dearest live page ($0.16): its worst case still fits the day's cap, with translations' share behind it", () => {
+  assert.equal(WALK_START, 0.2);
   assert.equal(startNeed("walkthrough"), WALK_START);
   assert.ok(WALK_START + TRANSLATE_SHARE >= worstCost("walkthrough"));
   assert.equal(startNeed("reverify"), worstCost("reverify"));

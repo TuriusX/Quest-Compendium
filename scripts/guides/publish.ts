@@ -21,6 +21,7 @@ import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from '.
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
 import { entryKind, entryIconSvg, type EntryKind } from '../../src/utils/entryKind';
+import { liveTitles, withBrand } from '../pipeline/searchTitleRules';
 import { entityKind, shortGame, areaSeo, entitySeo, searchName, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterPage, coveringPage, singularLabel, type AchFlag } from './siteText';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
@@ -1247,6 +1248,8 @@ function updateVersion() {
   console.log(`Homepage version text: ${version} (${pages} page(s)).`);
 }
 
+/** The search title trials' changes by page (scripts/pipeline/searchTitles.ts): English pages only. */
+let SEARCH_TITLES: Record<string, { title: string; description: string }> = {};
 /** The app's releases for "Recent updates" (system/changelog, kept by scripts/pipeline/changelog.ts), newest first. */
 let CHANGELOG: { v: string; date: string; text: string; tr?: Record<string, string> }[] = [];
 // Some stored translations carry HTML entities ("&quot;"); they're decoded here, since esc() escapes the text again.
@@ -1456,8 +1459,9 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
     if (LANG === 'en') {
       // Place first, then what the page answers (siteText.areaSeo): search results cut titles at about 60 characters.
       const seo = areaSeo(a, sg);
-      title = a.seoTitle ? `${a.seoTitle} | Quest Compendium` : seo.title.length + 19 <= 60 ? `${seo.title} | Quest Compendium` : seo.title;
-      description = snippet(a.seoDescription || seo.description, 158);
+      const tried = SEARCH_TITLES[`${key}/${o.slug}`];
+      title = tried ? withBrand(tried.title) : a.seoTitle ? `${a.seoTitle} | Quest Compendium` : seo.title.length + 19 <= 60 ? `${seo.title} | Quest Compendium` : seo.title;
+      description = snippet(tried?.description || a.seoDescription || seo.description, 158);
     } else {
       title = ui('areaTitle', { area: a.name, game: sg });
       // The page's own translated summary, not one template for every page (the template is the fallback).
@@ -2308,7 +2312,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     const url = `${SITE}/guides/${key}/${e.slug}/`;
     const ld: object[] = [breadcrumb([{ name: ui('navGuides'), url: `${SITE}/guides/` }, { name: shortGame(gameName), url: `${SITE}/guides/${key}/` }, { name: e.name, url }])];
     // The title and description say what the page answers, with the full name people search (siteText.entitySeo).
-    const seo = entitySeo(e.quest ? { ...e, quest: { ...e.quest, stepShown: !!missionStep(e, byslug) } } : e, shortGame(gameName), person);
+    const seo = { ...entitySeo(e.quest ? { ...e, quest: { ...e.quest, stepShown: !!missionStep(e, byslug) } } : e, shortGame(gameName), person), ...SEARCH_TITLES[`${key}/${e.slug}`] };
     ld.push(guideArticle({ headline: seo.title, description: seo.description, url, game: gameName, modified: Number((e as any).builtAt) || undefined }));
     const title = seo.title.length + 19 <= 60 ? `${seo.title} | Quest Compendium` : seo.title;
     fs.writeFileSync(path.join(dir, 'index.html'), page({ title, description: seo.description, depth: 3, canonical: url, ld, body: body + entPreview(), draft: !!PREVIEW, guide: key, wide: true }));
@@ -2522,6 +2526,7 @@ async function main() {
   const contribCfg: any = (await db().collection('config').doc('contrib').get()).data() || {};
   if (!CONTRIB_ON) CONTRIB_ON = contribCfg.enabled === true;
   CHANGELOG = (((await db().collection('system').doc('changelog').get()).data() || {}).entries || []) as any[];
+  SEARCH_TITLES = liveTitles(((await db().collection('system').doc('searchTitles').get()).data() || {}).trials);
   {
     const sc: any = (await db().collection('system').doc('searchConsole').get()).data() || {};
     for (const x of [...(Array.isArray(sc.pages) ? sc.pages : []), ...(Array.isArray(sc.pages) ? [] : sc.topPages || [])]) if (x?.key) DEMAND.set(String(x.key), (DEMAND.get(String(x.key)) || 0) + (Number(x.impressions) || 0));

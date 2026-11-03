@@ -535,6 +535,17 @@ async function main() {
     if (ai.summary && !/^improvements: (0 change|paused)/.test(ai.summary)) report.push(`${ai.ok ? '🔧' : '⚠️'} ${ai.summary || 'improvements failed (see the job log)'}`);
     if (/^improvements: [1-9]/.test(ai.summary || '')) changed = true;
   }
+  // ---- clearer search titles (owner, Nov 3 2026; searchTitles.ts): about $0.02 a night, no searches, ahead of the steps
+  // that can use up the day. Each change is compared after 28 days and put back if clicks dropped ----
+  lane = 'rest';
+  if (!DRY && room() >= STEP_MARGIN + 0.05) {
+    const stl = runScript(['scripts/pipeline/searchTitles.ts']);
+    await charge(stl, 'search titles');
+    if (!stl.ok) report.push('⚠️ Search titles failed (see the job log); tried again next run.');
+    else if (!/^search titles: 0 rewritten, 0 refused, 0 kept, 0 put back/.test(stl.summary)) report.push(`🔤 ${stl.summary}`);
+    if (/[1-9]\d* (rewritten|put back)/.test(stl.summary)) changed = true;
+  }
+  lane = 'upkeep';
   // ---- the walkthrough pages, after upkeep and before everything else (owner, Nov 1 2026): the site audit's November
   // content work (roadmap 22, novemberWork.ts), paid from this pipeline's November cap, with its upkeep lane first; what it
   // spends is charged here. Does nothing outside November 2026. ----
@@ -1018,6 +1029,15 @@ async function main() {
       for (const l of await answerWeekLines()) report.push(l);
     } catch (e: any) {
       console.warn(`Answers by game skipped: ${e?.message}`);
+    }
+  }
+  // Mondays: the search titles' click rates, before and after (searchTitleRules.ts), read only.
+  if (MONDAY) {
+    try {
+      const { trialLines } = await import('./searchTitleRules');
+      report.push(...trialLines(((await db().collection('system').doc('searchTitles').get()).data() || {}).trials));
+    } catch (e: any) {
+      console.warn(`Search titles' week skipped: ${e?.message}`);
     }
   }
   // Mondays: do re-verified pages gain search traffic? Against similar untouched pages (reverifyStudy.ts), read only.

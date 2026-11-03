@@ -684,9 +684,9 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
   // 5. The review, claim by claim (Pro), on the page as it will be.
   let review = await claimReview(game, p.name, pageClaimPage(proto), ev);
   console.log(`  review: ${review.status}, ${review.supported}/${review.total} specific claims supported (score ${review.score})${review.reason ? `: ${review.reason}` : ''}`);
-  // A failing attempt that has used $0.75 stops here and the old content stays (owner, Nov 1 2026): Dawnshore went on to $1.15.
+  // A failing attempt that has used $0.75 ($0.65 on a lean walkthrough page) stops here and the old content stays (owner, Nov 1 2026): Dawnshore went on to $1.15.
   const usedSoFar = () => (scope ? scope.dollars - before.dollars : ledgerDollars() - before.dollars);
-  const cutOff = () => review.status === 'failed' && stopPage(usedSoFar());
+  const cutOff = () => review.status === 'failed' && stopPage(usedSoFar(), process.env.EVIDENCE_LEAN === '1');
   if (cutOff()) console.log(`  stopped: $${usedSoFar().toFixed(2)} used and failing; the old content stays`);
   // 5b. Fill gaps, don't fail: a page the review fails gets one targeted search for the claims it couldn't support or
   // found contradicted, then the review again with that evidence. What's still unsupported or contradicted is dropped

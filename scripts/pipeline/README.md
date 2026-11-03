@@ -53,8 +53,11 @@ server's image only holds the built app.
   count, so small new games don't use up the month's searches.
 - **Budget:** money: `PIPELINE_MONTHLY_AI_DOLLARS` (default $10, or `PIPELINE_MONTHLY_AI_DOLLARS_BY_MONTH` for one
   month), counting tokens and searches ($14 per 1,000). Each day's hard cap is what's left of the month over the days
-  left, so unused days roll over. Within a day: upkeep up to 20%, walkthroughs (a page starts with $0.30 left of their lane), translations ($0.50), then rebuilds and
+  left, so unused days roll over. Within a day: upkeep up to 20%, walkthroughs (a page starts with $0.20 left of their lane), translations ($0.50), then rebuilds and
   repairs if there's room (`budgetRules.ts`).
+- **Search titles (`searchTitles.ts`):** each night up to 5 pages with many impressions and few clicks get a clearer title
+  and description, 20 on trial at a time, English pages only, in `system/searchTitles`. Monday's summary shows each page's
+  click rate before and after; after 28 days a change stays only if clicks didn't drop (`searchTitleRules.ts`).
 - **Searches (since Oct 14, 2026):** two separate monthly shares (searchGuard.ts, counted per month in
   `system/searchBudget` as `pipeline`, `flagship` and `players`):
   - the pipeline and the flagship builds together: `PIPELINE_MONTHLY_SEARCHES` (4,800), or one month's own share in
