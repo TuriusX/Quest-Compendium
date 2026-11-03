@@ -108,8 +108,10 @@ export const isBlankAnswer = (text: string) =>
 export const NOT_BLANK = `[ANSWER NOW]
 Your previous attempt returned nothing. Answer the player's question now, in plain text.`;
 
-/** True when the model's first reply only asks for a search. */
-export const asksForSearch = (text: string) => /^\s*<qc-search\s*\/?>\s*(<\/qc-search>)?\s*$/i.test(String(text || ''));
+/** True when the model's first reply asks for a search: it opens with the line (sometimes followed by its own working aloud). */
+export const asksForSearch = (text: string) => /^\s*<qc-search\s*\/?>/i.test(String(text || ''));
+/** A search line left anywhere else in an answer: never shown. */
+export const stripSearchAsk = (text: string) => String(text || '').replace(/[ \t]*<qc-search\s*\/?>(?:\s*<\/qc-search>)?/gi, '');
 
 /** Always in the prompt: never deny something exists; search instead, then ask the player for more. */
 export const EXISTENCE_RULES = `[UNFAMILIAR GAMES, PLACES, ITEMS AND CHARACTERS]

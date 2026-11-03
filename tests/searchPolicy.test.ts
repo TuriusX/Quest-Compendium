@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/searchPolicy.test.ts)
 import assert from "node:assert/strict";
-import { asksForSearch, isNewRelease, searchMode, isBlankAnswer, wantsSpecifics, EXISTENCE_RULES } from "../searchPolicy";
+import { asksForSearch, stripSearchAsk, isNewRelease, searchMode, isBlankAnswer, wantsSpecifics, EXISTENCE_RULES } from "../searchPolicy";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -31,6 +31,10 @@ test("the model asking to search is recognised only when that's the whole reply"
   assert.equal(asksForSearch("  <qc-search />\n"), true);
   assert.equal(asksForSearch("Go north. <qc-search/>"), false);
   assert.equal(asksForSearch(""), false);
+  // The model working aloud after the line (seen Nov 3 2026): still a request, and never shown.
+  assert.equal(asksForSearch("<qc-search/> direct search? Wait, I must reply with ONLY the line. Let's do a search!<qc-search/>"), true);
+  assert.equal(stripSearchAsk("Go north. <qc-search/>"), "Go north.");
+  assert.equal(stripSearchAsk("Go north."), "Go north.");
 });
 
 test("the prompt never lets the model deny that something exists", () => {

@@ -3,10 +3,12 @@
  * front page, chapter/area page and compendium page (scripts/guides/publish.ts askBox, Marketing_Website_Files/assets/ask.js).
  *
  *   Switch: config/siteAsk.enabled (read every 30 seconds; off, the box hides itself and the endpoint refuses).
- *   Answers: the app's answer model (MAIN_MODEL, no screenshot), from the page being read (its page.json) and the rest of
- *     the game's guide (its search.json: the entries that match the question, and the two pages they point to most).
- *     No search unless the guide doesn't cover it; then one Google-grounded call, if the day's searches allow. Each
- *     answer links the guide sections it used.
+ *   Answers: with config/siteAsk.fullAnswers (owner, Nov 3 2026), the app's own answer code and instructions (server.ts
+ *     chatHandler, Fast): full knowledge first, the guide as reference for exact details and links, never a limit.
+ *     Without it, the older way: the app's answer model (MAIN_MODEL, no screenshot), from the page being read (its
+ *     page.json) and the rest of the game's guide (its search.json: the entries that match the question, and the two pages
+ *     they point to most); no search unless the guide doesn't cover it; then one Google-grounded call, if the day's
+ *     searches allow. Each answer links the guide sections it used.
  *   Who may ask: Firebase App Check (reCAPTCHA Enterprise, config/siteAsk.recaptchaKey; enforced on the deployed
  *     server once the key is set). Guide questions have their own daily allowance, never the app's: 2 a device (and 10 a
  *     network) signed out, then "Sign in for more" (signing in right there; the question is then asked); 10 signed in;
@@ -36,6 +38,7 @@ import { playerSearchesToday, monthlyBudgetOk, countSearches, recordPlayerSearch
 import { clientIp } from './guestGuard';
 import { isLocalServer } from './testTraffic';
 import { registerAutoChanges } from './autoChanges';
+import { GUIDE_REFERENCE } from './guidesApi';
 
 const SITE = () => (process.env.QC_SITE_URL || 'https://questcompendium.com').replace(/\/$/, '');
 const MODEL = () => process.env.MAIN_MODEL || 'gemini-3.8-flash';
@@ -50,7 +53,7 @@ const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim
  */
 const col = (name: string) => getFirestore().collection(isLocalServer() ? `test_${name}` : name);
 
-export type SiteAskConfig = { enabled: boolean; appCheck: 'enforce' | 'off'; recaptchaKey: string; dailyDollars: number; perDevice: number; perIp: number; perSignedIn: number; perPremium: number; fixesPerDay: number; monthlyChecks: number; autoOff?: { month: string; at: number; checks: number } };
+export type SiteAskConfig = { fullAnswers?: boolean; enabled: boolean; appCheck: 'enforce' | 'off'; recaptchaKey: string; dailyDollars: number; perDevice: number; perIp: number; perSignedIn: number; perPremium: number; fixesPerDay: number; monthlyChecks: number; autoOff?: { month: string; at: number; checks: number } };
 const DEFAULTS: SiteAskConfig = { enabled: false, appCheck: 'enforce', recaptchaKey: '', dailyDollars: 1, perDevice: 2, perIp: 10, perSignedIn: 10, perPremium: 50, fixesPerDay: 10, monthlyChecks: 8000 };
 let cfgCache: { at: number; v: SiteAskConfig } | null = null;
 export async function siteAskConfig(fresh = false): Promise<SiteAskConfig> {
@@ -60,6 +63,7 @@ export async function siteAskConfig(fresh = false): Promise<SiteAskConfig> {
   // Switched off by the reCAPTCHA safety net this month (guard): off until the month is over.
   if (v.autoOff?.month === new Date().toISOString().slice(0, 7)) v = { ...v, enabled: false };
   if (isLocalServer() && process.env.QC_SITE_ASK_ON === '1') v = { ...v, enabled: true, perIp: Number(process.env.QC_SITE_ASK_PER_IP) || v.perIp, perDevice: Number(process.env.QC_SITE_ASK_PER_DEVICE) || v.perDevice };
+  if (isLocalServer() && process.env.QC_SITE_FULL === '1') v = { ...v, fullAnswers: true };
   cfgCache = { at: Date.now(), v };
   return v;
 }
@@ -178,6 +182,13 @@ function pageLines(p: any, base: string, prefix: string, budget: number, refs: R
   return body;
 }
 
+/** The area a question names, whole name, the longest name first ("Moonrise Towers Prison" over "Moonrise Towers"). */
+export function namedArea<T extends { name: string }>(q: string, areas: T[]): T | undefined {
+  const flat = (t: string) => ` ${String(t || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/['’]/g, '').replace(/^the\s+/, '').split(/[^\p{L}\p{N}]+/u).join(' ')} `;
+  const text = flat(q);
+  return [...areas].filter((a) => flat(a.name).trim().length >= 3).sort((a, b) => b.name.length - a.name.length).find((a) => text.includes(flat(a.name)));
+}
+
 /** The context: the page being read, the guide entries that match the question, and the two pages they point to most. */
 async function context(key: string, slug: string, kind: string, lang: string, q: string) {
   const refs: Record<string, Ref> = {};
@@ -200,14 +211,24 @@ async function context(key: string, slug: string, kind: string, lang: string, q:
   for (const { x, s } of scored) { const m = String(x.h).match(/\/guides\/[^/]+\/([^/#]+)\//); if (m && m[1] !== slug) pageCount.set(m[1], (pageCount.get(m[1]) || 0) + s); }
   const others = [...pageCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([s]) => s);
   const otherText: string[] = [];
+  const otherPages: { slug: string; text: string }[] = [];
   for (const [i, s] of others.entries()) {
     const isArea = (guide?.areas || []).some((a: any) => a.slug === s);
     const p = await siteJson(pagePath(s, !isArea));
-    if (p) otherText.push(`[PAGE: ${p.name}]\n${pageLines(p, isArea ? base : guideBase(key, 'en'), `o${i + 1}_`, 1500, refs)}`);
+    if (p) {
+      const text = `[PAGE: ${p.name}]\n${pageLines(p, isArea ? base : guideBase(key, 'en'), `o${i + 1}_`, 1500, refs)}`;
+      otherText.push(text);
+      otherPages.push({ slug: s, text });
+    }
   }
   const outline = (guide?.areas || []).map((a: any) => a.name).slice(0, 80).join(' · ');
   const selfText = self ? `[THE PAGE BEING READ: ${self.name}${self.type ? ` (${self.type})` : ''}]\n${pageLines(self, kind === 'entity' ? guideBase(key, 'en') : base, 'p', 3500, refs)}` : '';
-  return { game: String(guide?.game || key), pageName: String(self?.name || guide?.game || key), selfText, matchLines, otherText: otherText.join('\n'), outline, refs };
+  // The guide's English area names (what the app's guide lookup goes by): the page's own, else an area the question names.
+  // Never a guess from loose matches: a place the player didn't mention would steer the answer.
+  const enAreas: any[] = (await siteJson(`${guideBase(key, 'en')}guide.json`))?.areas || guide?.areas || [];
+  const placeSlug = enAreas.some((a) => a.slug === slug) ? slug : !slug ? namedArea(q, enAreas)?.slug || '' : '';
+  const place = placeSlug ? String(enAreas.find((a) => a.slug === placeSlug)?.name || '') : '';
+  return { game: String(guide?.game || key), pageName: String(self?.name || guide?.game || key), selfText, matchLines, otherText: otherText.join('\n'), outline, refs, exists: !!(guide || self), place, placeSlug, otherPages };
 }
 
 /** One answer: the guide first; a search only when the guide doesn't cover it and searches allow. */
@@ -252,6 +273,75 @@ async function answer(ai: GoogleGenAI, ctx: Awaited<ReturnType<typeof context>>,
   return { text, covered, sources, searches: searched, aboutPage, elsewhere };
 }
 
+// ---- the app's own answers for the website (server.ts chatHandler; owner, Nov 3 2026) ----
+export type SiteReference = { withPage: string; withoutPage: string; refs: Record<string, any> };
+export type SiteAnswerOpts = { req: Request; question: string; game: string; guideKey?: string; place?: string; language: string; premium: boolean; maySearch: boolean; situation?: string; reference?: SiteReference; imageBase64?: string };
+export type SiteAnswerOut = { text: string; guideRefs?: any[]; searched?: boolean; site?: { answered: boolean; dollars: number; searches: number; missing: { name: string; fact: string }[]; page: { key: string; slug: string; name: string } | null } };
+const APP_LANGUAGE: Record<string, string> = { en: 'English', es: 'Spanish', pt: 'Brazilian Portuguese', de: 'German', fr: 'French', ru: 'Russian', ja: 'Japanese', ko: 'Korean', zh: 'Simplified Chinese' };
+export const appLanguage = (lang: string) => APP_LANGUAGE[lang] || 'English';
+
+/** What an attempt the answer gave up on is taken to have cost (a full Fast attempt measured $0.015 on Nov 3 2026). */
+export const SITE_ABANDONED_DOLLARS = 0.02;
+
+/** The app's answers are written with markdown; the site's box shows plain text with its line breaks. Nothing is cut. */
+export function plainAnswer(text: string): string {
+  return String(text || '')
+    .replace(/\*\*/g, '').replace(/^#{1,6}\s+/gm, '').replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm, '').replace(/^(\s*)[*-]\s+/gm, '$1• ')
+    .replace(/(^|[\s(])\*([^\s*][^*\n]*?)\*(?=[\s.,;:!?)]|$)/gm, '$1$2').replace(/`([^`\n]+)`/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+}
+/** A long answer as a "missing" item: whole sentences, so the nightly check isn't paying to check a whole essay. */
+export function missingText(text: string, max = 800): string {
+  const t = String(text || '').trim();
+  if (t.length <= max) return t;
+  const head = t.slice(0, max), end = Math.max(head.lastIndexOf('. '), head.lastIndexOf('.\n'));
+  return end > 200 ? head.slice(0, end + 1) : head;
+}
+/** A guide entry the app's prompt tagged, as a link: the same anchors as the pages (items and secrets e-<id>; steps and fights <id>). */
+export function refLink(r: any, key: string, lang: string): Ref | null {
+  if (r?.href) return { label: cut(r.label, 80), href: String(r.href) };
+  if (!r?.slug) return null;
+  const anchor = r.entry ? (r.kind === 'step' || r.kind === 'boss' ? String(r.entry) : `e-${r.entry}`) : '';
+  return { label: cut(r.name || r.area, 80), href: `${guideBase(r.key || key, lang)}${r.slug}/${anchor ? `#${anchor}` : ''}` };
+}
+/** The site's guide lines as reference in the app's words (GUIDE_REFERENCE), with tags extractGuideRefs reads (g1001…). */
+export function siteReference(ctx: { selfText: string; matchLines: string; otherPages: { slug: string; text: string }[]; placeSlug: string; refs: Record<string, Ref> }, aboutPage: string): SiteReference {
+  const refs: Record<string, any> = {};
+  const tags = new Map<string, string>();
+  Object.keys(ctx.refs).forEach((t, i) => { tags.set(t, `g${1001 + i}`); refs[`g${1001 + i}`] = ctx.refs[t]; });
+  const retag = (s: string) => s.replace(/\[([a-z]\d+(?:_\d+)?)\]/g, (m, t) => (tags.has(t) ? `[${tags.get(t)}]` : m));
+  const about = aboutPage ? `Then one more line: <qc-about>yes</qc-about> if the question asks what or who "${aboutPage}" itself is about, or asks to explain its own subject (not one detail of it), otherwise <qc-about>no</qc-about>.` : '';
+  const block = (parts: string[]) => {
+    const body = parts.filter(Boolean).join('\n\n');
+    if (!body) return about;
+    return `[MORE FROM THE QUEST COMPENDIUM GUIDE]\n${GUIDE_REFERENCE} Each line starts with its tag.\n${retag(body)}\nIf your answer uses any of these entries, end it with one line listing the tags you used, like <qc-guide>["g1001","g1003"]</qc-guide>. Never mention the tags or this block in the answer text.${about ? `\n${about}` : ''}`;
+  };
+  const matches = ctx.matchLines && `[MATCHING ENTRIES FROM THE REST OF THE GUIDE]\n${ctx.matchLines}`;
+  return {
+    // With the app's own notes for the place, that page isn't sent twice.
+    withPage: block([matches, ...ctx.otherPages.filter((p) => p.slug !== ctx.placeSlug).map((p) => p.text)]),
+    withoutPage: block([ctx.selfText, matches, ...ctx.otherPages.map((p) => p.text)]),
+    refs,
+  };
+}
+/** What the website adds to the app's situation: where the question comes from. It says nothing about how to answer. */
+export const siteSituation = (pageName: string, game: string) => `[ASKED ON THE QUEST COMPENDIUM WEBSITE: the player is reading the guide${pageName && pageName !== game ? ` page "${pageName}"` : ''} for ${game}, and may not be at that place in the game. No app, overlay or quest log is in use here.]`;
+
+async function fullAnswer(run: (o: SiteAnswerOpts) => Promise<SiteAnswerOut>, req: Request, ctx: Awaited<ReturnType<typeof context>>, key: string, slug: string, lang: string, q: string, premium: boolean, maySearch: boolean) {
+  const r = await run({ req, question: q, game: ctx.game, guideKey: key, place: ctx.place || undefined, language: appLanguage(lang), premium, maySearch, situation: siteSituation(ctx.pageName, ctx.game), reference: siteReference(ctx, slug ? ctx.pageName : '') });
+  if (!r.site?.answered) throw new Error(`no answer: ${cut(r.text, 120)}`);
+  const seen = new Set<string>();
+  const links = (r.guideRefs || []).map((x) => refLink(x, key, lang)).filter((x): x is Ref => !!x && !seen.has(x.href) && !!seen.add(x.href));
+  const aboutPage = /<qc-about>\s*yes/i.test(r.text);
+  const here = slug ? `/${slug}/` : '';
+  return {
+    text: plainAnswer(r.text.replace(/<qc-about>[\s\S]*?<\/qc-about>/gi, '')),
+    covered: links.length > 0, sources: links.slice(0, 3), searches: r.site.searches, aboutPage,
+    // Answered only from other pages: a suggestion for this page, as before.
+    elsewhere: here && links.length && links.every((l) => !l.href.includes(here)) ? links.slice(0, 3) : [],
+    missing: r.site.missing, missingPage: r.site.page?.slug || '', dollars: r.site.dollars,
+  };
+}
+
 // ---- limits: devices and networks per day (hashed with the day's salt), the site's dollars per day ----
 const SALT = () => process.env.SITE_ASK_SALT || process.env.CORRECTION_SALT || 'qc-site-ask';
 const hashOf = (day: string, kind: string, v: string) => crypto.createHmac('sha256', `${SALT()}:${day}`).update(`${kind}:${v}`).digest('hex').slice(0, 16);
@@ -292,7 +382,7 @@ async function cleanOld() {
 }
 
 // ---- what the questions teach: fixes for the pipeline, "Players asked" suggestions ----
-async function learn(id: string, x: { key: string; slug: string; kind: string; lang: string; q: string; answer: string; covered: boolean; searched: number; aboutPage?: boolean; elsewhere?: Ref[] }, c: SiteAskConfig) {
+async function learn(id: string, x: { key: string; slug: string; kind: string; lang: string; q: string; answer: string; covered: boolean; searched: number; aboutPage?: boolean; elsewhere?: Ref[]; missing?: { name: string; fact: string }[]; missingPage?: string }, c: SiteAskConfig) {
   // The page itself could be better: the answer came mostly from other pages (add the fact, or a link, here), or the
   // question asked about the page's own subject (its opening may be too thin). Suggestions for /admin/asked.
   if (x.slug && (x.elsewhere?.length || x.aboutPage)) {
@@ -311,8 +401,27 @@ async function learn(id: string, x: { key: string; slug: string; kind: string; l
     .map((d) => ({ id: d.id, ...(d.data() as any) }))
     .filter((d) => d.at > Date.now() - 60 * 86_400_000 && d.lang === x.lang);
   const same = recent.filter((d) => similar(d.q, x.q) >= 0.5);
-  // Not in the guide, and answered from a search: a "missing" item for that page, checked and decided like the rest.
-  if (!x.covered && x.searched && x.slug) {
+  // Things a full answer names that the page doesn't have: "missing" items for it, as from the app (missingFacts.ts), within
+  // the site's own daily limit; a thing already waiting for the page in the last 30 days isn't queued again.
+  if (x.missing?.length && x.missingPage) {
+    const dayRef = col('siteAskDays').doc(dayOf());
+    let today = Number((await dayRef.get()).data()?.fixes) || 0;
+    const nameOf = (s: unknown) => String(s ?? '').toLowerCase().replace(/^missing:\s*/, '').trim();
+    const waiting = (await col('contributions').where('key', '==', x.key).where('slug', '==', x.missingPage).get()).docs.map((d) => d.data()).filter((d) => d.kind === 'missing' && Number(d.at) > Date.now() - 30 * 86_400_000).map((d) => nameOf(d.name || d.label));
+    for (const m of x.missing) {
+      if (today >= c.fixesPerDay) break;
+      if (waiting.includes(nameOf(m.name))) continue;
+      await col('contributions').add({
+        key: x.key, slug: x.missingPage, page: 'area', anchor: '', label: `Missing: ${cut(m.name, 180)}`, name: cut(m.name, 180), kind: 'missing',
+        text: cut(m.fact, 2000), lang: x.lang, credit: false, owner: false, uid: 'site', source: 'site', status: 'pending', at: Date.now(),
+      });
+      await dayRef.set({ fixes: FieldValue.increment(1) }, { merge: true });
+      today++;
+    }
+    await col('siteQuestions').doc(id).set({ queued: true }, { merge: true });
+  } else if (!x.covered && x.searched && x.slug) {
+    // Not in the guide, and answered from a search: a "missing" item for that page, checked and decided like the rest.
+    // Also with full answers when they list nothing themselves: they rarely do (1 of 14 in the Nov 3 2026 test).
     const month = same.filter((d) => d.id !== id && d.queued && d.at > Date.now() - 30 * 86_400_000);
     const day = dayOf();
     const dayRef = col('siteAskDays').doc(day);
@@ -320,7 +429,7 @@ async function learn(id: string, x: { key: string; slug: string; kind: string; l
     if (!month.length && queuedToday < c.fixesPerDay) {
       await col('contributions').add({
         key: x.key, slug: x.slug, page: x.kind === 'entity' ? 'entity' : 'area', anchor: '', label: cut(x.q, 200), kind: 'missing',
-        text: cut(x.answer, 2000), lang: x.lang, credit: false, owner: false, uid: 'site', source: 'site', status: 'pending', at: Date.now(),
+        text: missingText(x.answer), lang: x.lang, credit: false, owner: false, uid: 'site', source: 'site', status: 'pending', at: Date.now(),
       });
       await dayRef.set({ fixes: FieldValue.increment(1) }, { merge: true });
       await col('siteQuestions').doc(id).set({ queued: true }, { merge: true });
@@ -335,7 +444,7 @@ async function learn(id: string, x: { key: string; slug: string; kind: string; l
 }
 
 type SiteAccount = { uid: string; premium: boolean };
-export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI; requireAuth: any; firebaseWebConfig: Record<string, string>; siteAccount?: (req: Request) => Promise<SiteAccount | { error: 'auth' } | null> }) {
+export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswerOpts) => Promise<SiteAnswerOut>; gemini: () => GoogleGenAI; requireAuth: any; firebaseWebConfig: Record<string, string>; siteAccount?: (req: Request) => Promise<SiteAccount | { error: 'auth' } | null> }) {
   // The box asks whether it's on (and for the App Check key) when a page opens.
   app.get('/api/site/ask/config', async (_req: Request, res: Response) => {
     void guard().catch((e) => console.warn('[site-ask] guard', e?.message));
@@ -367,11 +476,18 @@ export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI;
     try {
       const out = await requestCost.run(scope, async () => {
         const ctx = await context(key, slug, kind, lang, q);
-        if (!ctx.selfText && !ctx.matchLines) return null;
+        const full = c.fullAnswers && deps.fullAnswer;
+        // The app's answers don't need a match in the guide: only a guide that doesn't exist has nothing to go on.
+        if (full ? !ctx.exists : !ctx.selfText && !ctx.matchLines) return null;
         // A search only with room for it: the day's and month's searches, and enough of the site's dollars left.
         const day: any = (await col('siteAskDays').doc(dayOf()).get()).data() || {};
         const mayLookUp = (acct?.premium ? true : (Number(day.dollars) || 0) + 0.05 < c.dailyDollars) && (await playerSearchesToday()) && (await monthlyBudgetOk());
-        return { ctx, a: await answer(deps.gemini(), ctx, q, lang, mayLookUp) };
+        if (full) {
+          const a = await fullAnswer(full, req, ctx, key, slug, lang, q, !!acct?.premium, mayLookUp);
+          scope.dollars = a.dollars;
+          return { ctx, a };
+        }
+        return { ctx, a: (await answer(deps.gemini(), ctx, q, lang, mayLookUp)) as any };
       });
       if (!out) return res.status(404).json({ error: 'no guide' });
       if (out.a.searches) recordPlayerSearches(out.a.searches);
@@ -383,7 +499,7 @@ export function registerSiteAsk(app: Express, deps: { gemini: () => GoogleGenAI;
         key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, signedIn: !!acct, ...(acct?.premium ? { premium: true } : {}), sources: out.a.sources.map((s) => s.href), searches: out.a.searches,
         dollars, model: MODEL(), at: Date.now(), day: dayOf(), ...(isLocalServer() ? { test: true } : {}),
       });
-      void learn(doc.id, { key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, searched: out.a.searches, aboutPage: out.a.aboutPage, elsewhere: out.a.elsewhere }, c).catch((e) => console.warn('[site-ask] learn', e?.message));
+      void learn(doc.id, { key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, searched: out.a.searches, aboutPage: out.a.aboutPage, elsewhere: out.a.elsewhere, missing: out.a.missing, missingPage: out.a.missingPage }, c).catch((e) => console.warn('[site-ask] learn', e?.message));
       res.json({ answer: out.a.text, sources: out.a.sources, covered: out.a.covered, searched: out.a.searches > 0, left, ...(acct ? { account: true } : {}) });
     } catch (e: any) {
       console.error('[site-ask]', e?.message);

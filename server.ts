@@ -28,7 +28,7 @@ import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
-import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode } from './searchPolicy';
+import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
 import { questionType } from './src/utils/questionType';
@@ -40,14 +40,14 @@ import { registerContributions } from './contributions';
 import { registerAnswerReports } from './answerReports';
 import { registerAnswerFeedback, recordMarkerCheck } from './answerFeedback';
 import { registerDiscord } from './discord';
-import { registerSiteAsk } from './siteAsk';
+import { registerSiteAsk, SITE_ABANDONED_DOLLARS, type SiteAnswerOpts, type SiteAnswerOut } from './siteAsk';
 import { registerSiteAccount } from './siteAccount';
 import { pingNewSignup } from './signupPing';
 import { STEPS_RULES, extractSteps, cleanObjective, objectiveRules, extractTicked } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
 import { disagreeingEntries } from './src/utils/guideAgree';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
-import { MISSING_RULES, extractMissing, saveMissingFacts } from './missingFacts';
+import { MISSING_RULES, extractMissing, saveMissingFacts, notOnPage } from './missingFacts';
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
@@ -462,6 +462,8 @@ async function startServer() {
   registerSiteAsk(app, {
     gemini: getGeminiClient,
     requireAuth,
+    // The app's own answers for the website (owner, Nov 3 2026), behind config/siteAsk.fullAnswers.
+    fullAnswer: (o) => siteAnswer(o),
     // A signed-in player on the website: who they are and whether they're Premium (the guide's own allowance, siteAsk.ts;
     // never the app's). null: not signed in; { error }: a token that doesn't check out.
     siteAccount: async (req: any) => {
@@ -1096,7 +1098,7 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
     ]);
   };
 
-  app.post('/api/chat', requireAuth, async (req, res) => {
+  const chatHandler = async (req: express.Request, res: express.Response) => {
     logDebug(`[API Chat] Incoming request from uid: ${(req as any).user?.uid}`);
 
     try {
@@ -1104,6 +1106,9 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       const userId = (req as any).user.uid;
       const isGuest = (req as any).user.isGuest || userId.startsWith('guest_');
       logDebug(`[API Chat] Processing for userId: ${userId}, isGuest: ${isGuest}`);
+      // The website's questions (siteAnswer below, siteAsk.ts): the same instructions and models as the app. Its limits and
+      // cap are siteAsk.ts's, and nothing about it counts as a player or goes into the shared facts.
+      const site: SiteAnswerOpts | null = (req as any).siteAnswer || null;
       // Everything this answer costs (usage.ts), for the per-player cost report.
       const costScope = { dollars: 0, searches: 0 };
       requestCost.enterWith(costScope);
@@ -1113,7 +1118,9 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       let guestQuota: GuestQuota | null = null;
       const tz = tzOf(req);
       let free: FreeRules = { keys: [], limited: false };
-      if (!isGuest) {
+      if (site) {
+        userData = { isPremium: site.premium, proQueriesAvailable: 0, flashQueriesAvailable: 1, isGuest: true };
+      } else if (!isGuest) {
         userData = await getFirestoreDocREST(idToken, userId) || { isPremium: false };
         const rawEmail = (req as any).user?.email;
         const userEmail = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : null;
@@ -1160,7 +1167,7 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
 
       // Fast answers: Gemini 3.8 Flash with adaptive thinking (Flash-Lite for free players after the beta). Pro answers:
       // Gemini Pro. The player picks one next to the send button; when it's used up today, the other one answers.
-      let targetModel = hasFullAccess(isPremium) ? MAIN_MODEL : FREE_MODEL;
+      let targetModel = site || hasFullAccess(isPremium) ? MAIN_MODEL : FREE_MODEL;
       const skipPrimary = true;
       const wanted = wantedBucket(req.body);
       // Model comparisons (scripts/evals/model-compare): with QC_EVAL_CAPTURE set on a LOCAL server (never on Cloud Run)
@@ -1333,6 +1340,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       } else {
         situationalContext += `\n[System Status: No active video game is running locally on the player's system]\n`;
       }
+      if (site?.situation) situationalContext += `\n${site.situation}\n`;
 
       const promptLower = (question || '').toLowerCase();
       const mentionsAchievements = promptLower.includes('achievement') || promptLower.includes('trophy') || promptLower.includes('completion');
@@ -1382,7 +1390,7 @@ You must respond entirely in ${language}. Do not use English unless the user's l
       }
       // Don't point backwards: areas before the player's in the guide's order are assumed done.
       const areaIndex = place ? guideAreas.findIndex((a) => samePlace(a, place!.name)) : -1;
-      if (areaIndex > 0) {
+      if (areaIndex > 0 && !site) {
         const earlier = guideAreas.slice(Math.max(0, areaIndex - 8), areaIndex);
         situationalContext += `\n[GUIDE ORDER: the player is in ${guideAreas[areaIndex]}, area ${areaIndex + 1} of ${guideAreas.length} in the guide's order. Steps, fights and events in earlier areas (${areaIndex > 8 ? '…, ' : ''}${earlier.join(', ')}) are assumed done, including the way into ${guideAreas[areaIndex]} (its gate, entrance or approach, and any fight there): never send the player back, tell them to go to or approach those places, or prepare them for those fights, even if earlier messages in this conversation did, unless they ask about it.]\n`;
       }
@@ -1507,6 +1515,12 @@ percentages:
         if (corrected) systemInstruction += `\n\n${corrected}`;
         systemInstruction += `\n${CORRECTION_RULES}${MISSING_RULES}`;
       }
+      // The website: the rest of the guide that matches the question, as reference in the same way, for its links.
+      if (site?.reference) {
+        guideTags = { ...guideTags, ...site.reference.refs };
+        const more = guidePage ? site.reference.withPage : site.reference.withoutPage;
+        if (more) systemInstruction += `\n\n${more}`;
+      }
       // Guide-backed markers (roadmap item 7): with a screenshot and markers on, the area's guide entries the player
       // hasn't ticked (the app sends its ticks for the area), so the answer can mark any that are visible. No extra call.
       const guideMarkable = imageBase64 && wantMarkers && guidePage ? guideEntriesForMarkers(guidePage, req.body.guideDone) : [];
@@ -1530,7 +1544,7 @@ percentages:
       const searchMode: SearchMode = !effectiveGame?.name
         ? 'ask'
         : searchModeFor({ newRelease, dated: release?.source !== 'unknown', type: qtype, covered: Boolean(guidePage?.verified), screenshot: !!imageBase64, specifics: wantsSpecifics(String(question || '')) });
-      const searchOk = evalCapture ? true : searchMode === 'force'
+      const searchOk = evalCapture ? true : site ? site.maySearch : searchMode === 'force'
         ? (await playerSearchesToday()) && (await monthlyBudgetOk())
         : await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
       const searchTools = searchOk && searchMode !== 'ask';
@@ -1695,6 +1709,8 @@ percentages:
       // Query Gemini API
       let responseText = '';
       let modelUsed = targetModel === MAIN_MODEL ? 'Gemini 3.8 Flash' : 'Gemini Flash-Lite';
+      // First attempts given up on: billed, but never reported back (the website's dollars a day count them).
+      let abandoned = 0;
 
       logDebug(`[API Chat] Processing question "${(question || '').slice(0, 30)}..." with model: ${targetModel}, skipPrimary: ${skipPrimary}`);
 
@@ -1754,19 +1770,22 @@ percentages:
           // Pro: no longer than the routing allows, then the Flash fallback below answers (players never wait on Pro).
           // Pro with search takes longer (about 30-40 s): up to 45 s then, still inside the app's 75 s with the fallback.
           const proWait = searchTools ? Math.max(routingCfg.proTimeoutMs, 45000) : routingCfg.proTimeoutMs;
+          // The website's questions are often broad ("what can I miss here?"), and a long answer takes about 25 s: stopping
+          // there pays for the attempt and gets a thinner answer from the fallback, so they get longer.
+          const flashWait = site ? 45000 : 25000;
           if (evalCapture) {
             const fs = await import('node:fs');
             fs.appendFileSync(String(process.env.QC_EVAL_CAPTURE), JSON.stringify({ id: req.body.evalId, model: answerModel, contents: contentsPayload, systemInstruction: firstSystem, withSearch: !!searchTools, searchMode, temperature: aiMode === 'roleplay' ? 0.9 : 0.7, qtype }) + String.fromCharCode(10));
             return res.json({ text: 'captured', modelUsed: 'eval' });
           }
-          let response = await withTimeout(answerCall(firstSystem, searchTools), usePro ? proWait : 25000, usePro ? 'Pro query' : 'Flash query') as any;
+          let response = await withTimeout(answerCall(firstSystem, searchTools), usePro ? proWait : flashWait, usePro ? 'Pro query' : 'Flash query') as any;
           logUsage(usePro ? `chat-pro:${qtype}` : 'chat', answerModel, response);
           // A new release must be answered from a search: if the model skipped it, once more, told to search first.
           // (Flash only: Pro follows the instruction, and a second Pro call would run past the app's wait.)
           if (searchMode === 'force' && searchTools && !usePro && countSearches(response) === 0) {
             const first = response;
             try {
-              response = await withTimeout(answerCall(`${systemInstruction}\n\n${FORCE_AGAIN}`, true), 25000, 'New release, searching') as any;
+              response = await withTimeout(answerCall(`${systemInstruction}\n\n${FORCE_AGAIN}`, true), flashWait, 'New release, searching') as any;
               logUsage(usePro ? 'chat-pro-searched' : 'chat-searched', answerModel, response);
               if (!String(response?.text || '').trim()) response = first;
             } catch {
@@ -1776,7 +1795,7 @@ percentages:
           if (searchMode === 'ask' && asksForSearch(response?.text || '')) {
             // The model needs a search for this one: the same question again, with search when it's allowed.
             searchAsked = true;
-            response = await withTimeout(answerCall(systemInstruction, searchOk), usePro ? (searchOk ? Math.max(routingCfg.proTimeoutMs, 45000) : routingCfg.proTimeoutMs) : 25000, 'Answer after asking to search') as any;
+            response = await withTimeout(answerCall(systemInstruction, searchOk), usePro ? (searchOk ? Math.max(routingCfg.proTimeoutMs, 45000) : routingCfg.proTimeoutMs) : flashWait, 'Answer after asking to search') as any;
             logUsage(usePro ? 'chat-pro-searched' : 'chat-searched', answerModel, response);
           }
           // A player never gets a blank answer: nothing readable (the model tried a search it wasn't given, or only
@@ -1785,7 +1804,7 @@ percentages:
             const blank = response;
             console.log(`[chat-blank] ${response?.candidates?.[0]?.finishReason || 'empty'}: retrying${searchOk ? ' with search' : ''}`);
             try {
-              response = await withTimeout(answerCall(`${systemInstruction}\n\n${NOT_BLANK}`, searchOk), usePro ? Math.max(routingCfg.proTimeoutMs, 45000) : 25000, 'Answer after a blank one') as any;
+              response = await withTimeout(answerCall(`${systemInstruction}\n\n${NOT_BLANK}`, searchOk), usePro ? Math.max(routingCfg.proTimeoutMs, 45000) : flashWait, 'Answer after a blank one') as any;
               logUsage(usePro ? 'chat-pro-blank' : 'chat-blank', answerModel, response);
               if (isBlankAnswer(response?.text || '')) response = blank;
             } catch {
@@ -1808,6 +1827,7 @@ percentages:
         await saveBalances();
       } catch (primaryErr: any) {
         console.log('Primary query issue or timeout, attempting fallback. Reason:', primaryErr?.message);
+        if (/timed out/i.test(String(primaryErr?.message))) abandoned++;
         
         try {
           // Fallback retry
@@ -1882,7 +1902,7 @@ percentages:
         responseText = 'The Compendium received a blank response from the AI. Please try again.';
       }
 
-      responseText = stripSearchCitations(responseText);
+      responseText = stripSearchAsk(stripSearchCitations(responseText));
 
       // Free players' screenshot questions (when switched on): a Pro step places the markers on the Flash answer.
       // Slow or failed, or no Pro requests left: the answer keeps its own markers.
@@ -1958,51 +1978,53 @@ percentages:
       // against sources there, as the site's ask box's are). In the background: the answer doesn't wait for it.
       const missingParsed = extractMissing(responseText);
       responseText = missingParsed.text;
-      if (guidePage && missingParsed.missing.length) {
+      // The website's go through siteAsk.ts (its own daily limit, and a local server keeps to its test collections).
+      const siteMissing = site && guidePage ? notOnPage(guidePage, missingParsed.missing) : [];
+      if (!site && guidePage && missingParsed.missing.length) {
         void saveMissingFacts({ page: guidePage, missing: missingParsed.missing, uid: userId, language })
           .then((n) => { if (n) recordAnswerGame(effectiveGame?.name, userId, (req as any).user?.email, { missing: n }); });
       }
       // The answer wins over the guide (owner, Oct 31 2026): guide entries its steps advise against ("Do not open the
       // outdoor barrels and crates" against "Potion: barrel left of the stables") are hidden from the quest log, and go
       // to the nightly corrections check with the answer's advice as the claim, to be settled against sources.
-      const disagree = guidePage ? disagreeingEntries(guidePage.items || [], stepsParsed.steps) : [];
+      const disagree = guidePage && !site ? disagreeingEntries(guidePage.items || [], stepsParsed.steps) : [];
       const corrections = [
         ...correctionsParsed.corrections,
         ...disagree
           .filter((d) => !correctionsParsed.corrections.some((c) => c.entry === d.entry.name))
           .map((d) => ({ entry: String(d.entry.name), guide: String(d.entry.where || ''), claim: `Leave it for now: ${d.advice}`.slice(0, 300), field: 'notes' as const })),
       ];
-      const correctionIds = await saveCorrectionCandidates({
+      const correctionIds = site ? [] : await saveCorrectionCandidates({
         page: guidePage, corrections, question: String(question || ''), uid: userId, isGuest, game: String(effectiveGame?.name || ''),
       });
       const guideConflicts = guidePage && disagree.length ? { key: guidePage.key, slug: guidePage.slug, ids: disagree.map((d) => String(d.entry.id)).slice(0, 20) } : null;
       // A fight on screen that the area's guide page doesn't cover: a missing-fight candidate (the fight, its enemies
       // and the battle plan's steps; no conversation text). In the background: the answer doesn't wait for it.
-      if (combatParsed.combat && guidePage) {
+      if (combatParsed.combat && guidePage && !site) {
         void saveMissingFight({ page: guidePage, combat: combatParsed, steps: stepsParsed.steps, uid: userId, isGuest, game: String(effectiveGame?.name || '') });
       }
-      if (searchesUsed > 0) recordSearches(searchCtx, searchesUsed);
-      if (chargedBucket) recordPlayerCost({ uid: userId, premium: isPremium, guest: isGuest, dollars: costScope.dollars, searches: costScope.searches });
+      if (searchesUsed > 0 && !site) recordSearches(searchCtx, searchesUsed);
+      if (chargedBucket && !site) recordPlayerCost({ uid: userId, premium: isPremium, guest: isGuest, dollars: costScope.dollars, searches: costScope.searches });
       // The same cost by day, for the weekly player report (free, Premium or guest).
-      if (chargedBucket) recordDailyCost(userId, isGuest ? 'guest' : isPremium ? 'premium' : 'free', costScope.dollars, (req as any).user?.email, { searched: searchesUsed > 0, shot: !!imageBase64 });
+      if (chargedBucket && !site) recordDailyCost(userId, isGuest ? 'guest' : isPremium ? 'premium' : 'free', costScope.dollars, (req as any).user?.email, { searched: searchesUsed > 0, shot: !!imageBase64 });
       // By game, for the Monday summary: how many answers needed a search.
-      if (chargedBucket) recordAnswerGame(effectiveGame?.name, userId, (req as any).user?.email, { question: true, searched: searchesUsed > 0 });
+      if (chargedBucket && !site) recordAnswerGame(effectiveGame?.name, userId, (req as any).user?.email, { question: true, searched: searchesUsed > 0 });
       // One line per answer, for the search rate per question (searchPolicy.ts).
       console.log(`[chat-search] mode=${searchMode} allowed=${searchOk} asked=${searchAsked} searches=${searchesUsed} model=${chargedBucket || '-'}${newRelease ? ' new-release' : ''}`);
       // Only file a fact under a place or story point that's actually known: confirmed by the player, or settled on
       // screen. A guessed place would put facts in the wrong spot for everyone.
       // A fact only counts if its subject shows up in a part of the answer a search result actually backs up;
       // the AI can report facts from memory even when it searched for something else.
-      recordGameDemand(effectiveGame?.name, userId, language); // which games and languages players use (for the guide pipeline)
+      if (!site) recordGameDemand(effectiveGame?.name, userId, language); // which games and languages players use (for the guide pipeline)
       // The guide didn't ground this answer (anonymous: game, page, question type, why), for the monthly blueprint report.
       void (async () => {
         const gk = guideKey;
-        if (!gk) return;
+        if (!gk || site) return;
         const reason = !guidePage ? 'no-page' : !guidePage.verified ? 'unchecked' : !guideParsed.used.length ? 'not-used' : null;
         if (reason) recordGroundingMiss({ uid: userId, key: gk, page: guidePage?.slug, qtype, reason });
       })();
-      recordDailyActivity(userId, isGuest, req.headers['user-agent'], String(req.headers['x-qc-app'] || ''), cleanTag(req.headers['x-qc-from'])); // daily questions, players vs guests, which app, and where the player came from
-      const factsSaved = saveGameFacts(effectiveGame?.name, factsBackedBySearch(factsParsed.facts, groundedSeen), {
+      if (!site) recordDailyActivity(userId, isGuest, req.headers['user-agent'], String(req.headers['x-qc-app'] || ''), cleanTag(req.headers['x-qc-from'])); // daily questions, players vs guests, which app, and where the player came from
+      const factsSaved = site ? false : saveGameFacts(effectiveGame?.name, factsBackedBySearch(factsParsed.facts, groundedSeen), {
         searched: searchesUsed > 0,
         // The confirmed place only counts while the player is still there: if this answer is about a different place,
         // the player has moved on, and facts go under the new place only if something on screen settled it.
@@ -2042,7 +2064,7 @@ percentages:
 
       logDebug(`[API Chat] Sending response for uid: ${(req as any).user?.uid}, modelUsed: ${modelUsed}`);
       // An older Steam Deck plugin (below config/deck.minPluginVersion): a short update note once a day (deckNotice.ts).
-      const deckNote = await deckUpdateNote(req.headers['user-agent'], String(userId || ''), !!isGuest, language).catch(() => '');
+      const deckNote = site ? '' : await deckUpdateNote(req.headers['user-agent'], String(userId || ''), !!isGuest, language).catch(() => '');
       return res.json({
         text: responseText.trim() + (deckNote ? `
 
@@ -2080,6 +2102,7 @@ percentages:
         // (it was used up: the app switches its toggle and says so).
         ...(chargedBucket ? { answeredWith: chargedBucket === 'pro' ? 'pro' : 'fast', ...(chargedBucket !== wanted ? { switched: true } : {}) } : {}),
         searched: searchesUsed > 0,
+        ...(site ? { site: { answered: !!chargedBucket, dollars: costScope.dollars + abandoned * SITE_ABANDONED_DOLLARS, searches: searchesUsed, missing: siteMissing, page: guidePage ? { key: guidePage.key, slug: guidePage.slug, name: guidePage.name } : null } } : {}),
         // A guest who just used their last question today: the apps show the sign-in card under this answer.
         ...(isGuest && chargedBucket && !(Number(userData.proQueriesAvailable) > 0) && !(Number(userData.flashQueriesAvailable) > 0) ? { signInNudge: true } : {}),
         userData: {
@@ -2096,6 +2119,26 @@ percentages:
         error: err?.message || 'Failed to generate response.'
       });
     }
+  };
+  app.post('/api/chat', requireAuth, chatHandler);
+
+  /**
+   * One website question through the app's answer code (chatHandler). Limits, App Check and the cap are checked in siteAsk.ts
+   * first; markers and the player's own progress are off, since there's no overlay or quest log there. Fast only.
+   */
+  const siteAnswer = (o: SiteAnswerOpts): Promise<SiteAnswerOut> => new Promise((resolve, reject) => {
+    // A local server in capture mode: a test id, so the prompt is written out instead of being sent (scripts/evals).
+    const uid = process.env.QC_EVAL_CAPTURE && !process.env.K_SERVICE ? 'guest_dev_site' : 'site';
+    const body = {
+      question: o.question, history: [], ...(o.imageBase64 ? { imageBase64: o.imageBase64 } : {}), aiMode: 'standard', isGameRunningLocally: false,
+      activeGame: { name: o.game }, language: o.language, markers: false, answerModel: 'fast', ...(o.guideKey ? { guideKey: o.guideKey } : {}),
+      ...(o.place ? { place: { name: o.place, confirmed: false } } : {}), evalId: o.question.slice(0, 40),
+    };
+    const fakeReq = Object.assign(Object.create(o.req), { body, user: { uid, isGuest: true }, siteAnswer: o, headers: { ...o.req.headers, authorization: `Bearer ${uid}` } });
+    let code = 200;
+    const fakeRes: any = { status(c: number) { code = c; return fakeRes; }, json(b: any) { if (code === 200) resolve(b); else reject(new Error(String(b?.error || b?.text || code))); return fakeRes; } };
+    // Its own cost scope: the handler's enterWith stays inside this call.
+    requestCost.run({ dollars: 0, searches: 0 }, () => chatHandler(fakeReq, fakeRes)).catch(reject);
   });
 
   /** The AI's "where is the player" line: {name, sure, options}. Removed from the answer text either way. */
