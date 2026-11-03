@@ -40,6 +40,7 @@ import { registerContributions } from './contributions';
 import { registerAnswerReports } from './answerReports';
 import { registerAnswerFeedback, recordMarkerCheck } from './answerFeedback';
 import { registerDiscord } from './discord';
+import { collectStream } from './answerStream';
 import { registerSiteAsk, SITE_ABANDONED_DOLLARS, type SiteAnswerOpts, type SiteAnswerOut } from './siteAsk';
 import { registerSiteAccount } from './siteAccount';
 import { pingNewSignup } from './signupPing';
@@ -1109,6 +1110,7 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       // The website's questions (siteAnswer below, siteAsk.ts): the same instructions and models as the app. Its limits and
       // cap are siteAsk.ts's, and nothing about it counts as a player or goes into the shared facts.
       const site: SiteAnswerOpts | null = (req as any).siteAnswer || null;
+      const startedAt = Date.now();
       // Everything this answer costs (usage.ts), for the per-player cost report.
       const costScope = { dollars: 0, searches: 0 };
       requestCost.enterWith(costScope);
@@ -1711,6 +1713,9 @@ percentages:
       let modelUsed = targetModel === MAIN_MODEL ? 'Gemini 3.8 Flash' : 'Gemini Flash-Lite';
       // First attempts given up on: billed, but never reported back (the website's dollars a day count them).
       let abandoned = 0;
+      const modelStartedAt = Date.now();
+      // The website, shown as it's written: only the attempt running now may reach the page.
+      let attempt = 0;
 
       logDebug(`[API Chat] Processing question "${(question || '').slice(0, 30)}..." with model: ${targetModel}, skipPrimary: ${skipPrimary}`);
 
@@ -1751,7 +1756,7 @@ percentages:
         } else {
           const answerModel = usePro ? PRO_CHAT_MODEL : targetModel;
           if (usePro) modelUsed = 'Gemini 3.1 Pro';
-          const answerCall = (sys: string, withSearch: boolean) => ai.models.generateContent({
+          const answerParams = (sys: string, withSearch: boolean) => ({
             model: answerModel,
             contents: contentsPayload,
             config: {
@@ -1767,12 +1772,19 @@ percentages:
               ...(usePro ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : targetModel === MAIN_MODEL ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } } : {}),
             }
           });
+          const answerCall = (sys: string, withSearch: boolean): Promise<any> => {
+            if (!site?.stream) return ai.models.generateContent(answerParams(sys, withSearch));
+            const mine = ++attempt;
+            if (mine > 1) site.stream({ reset: true });
+            return ai.models.generateContentStream(answerParams(sys, withSearch)).then((st) => collectStream(st, (all) => { if (mine === attempt) site.stream!({ raw: all }); }));
+          };
           // Pro: no longer than the routing allows, then the Flash fallback below answers (players never wait on Pro).
           // Pro with search takes longer (about 30-40 s): up to 45 s then, still inside the app's 75 s with the fallback.
           const proWait = searchTools ? Math.max(routingCfg.proTimeoutMs, 45000) : routingCfg.proTimeoutMs;
           // The website's questions are often broad ("what can I miss here?"), and a long answer takes about 25 s: stopping
           // there pays for the attempt and gets a thinner answer from the fallback, so they get longer.
-          const flashWait = site ? 45000 : 25000;
+          // Shown as it's written, a long answer isn't given up on while the player is reading it.
+          const flashWait = site?.stream ? 75000 : site ? 45000 : 25000;
           if (evalCapture) {
             const fs = await import('node:fs');
             fs.appendFileSync(String(process.env.QC_EVAL_CAPTURE), JSON.stringify({ id: req.body.evalId, model: answerModel, contents: contentsPayload, systemInstruction: firstSystem, withSearch: !!searchTools, searchMode, temperature: aiMode === 'roleplay' ? 0.9 : 0.7, qtype }) + String.fromCharCode(10));
@@ -1795,6 +1807,7 @@ percentages:
           if (searchMode === 'ask' && asksForSearch(response?.text || '')) {
             // The model needs a search for this one: the same question again, with search when it's allowed.
             searchAsked = true;
+            site?.stream?.({ searching: true });
             response = await withTimeout(answerCall(systemInstruction, searchOk), usePro ? (searchOk ? Math.max(routingCfg.proTimeoutMs, 45000) : routingCfg.proTimeoutMs) : flashWait, 'Answer after asking to search') as any;
             logUsage(usePro ? 'chat-pro-searched' : 'chat-searched', answerModel, response);
           }
@@ -1828,6 +1841,8 @@ percentages:
       } catch (primaryErr: any) {
         console.log('Primary query issue or timeout, attempting fallback. Reason:', primaryErr?.message);
         if (/timed out/i.test(String(primaryErr?.message))) abandoned++;
+        attempt++;
+        site?.stream?.({ reset: true });
         
         try {
           // Fallback retry
@@ -2010,7 +2025,7 @@ percentages:
       // By game, for the Monday summary: how many answers needed a search.
       if (chargedBucket && !site) recordAnswerGame(effectiveGame?.name, userId, (req as any).user?.email, { question: true, searched: searchesUsed > 0 });
       // One line per answer, for the search rate per question (searchPolicy.ts).
-      console.log(`[chat-search] mode=${searchMode} allowed=${searchOk} asked=${searchAsked} searches=${searchesUsed} model=${chargedBucket || '-'}${newRelease ? ' new-release' : ''}`);
+      console.log(`[chat-search] mode=${searchMode} allowed=${searchOk} asked=${searchAsked} searches=${searchesUsed} model=${chargedBucket || '-'}${newRelease ? ' new-release' : ''} build=${modelStartedAt - startedAt}ms answer=${Date.now() - modelStartedAt}ms${site ? ' site' : ''}`);
       // Only file a fact under a place or story point that's actually known: confirmed by the player, or settled on
       // screen. A guessed place would put facts in the wrong spot for everyone.
       // A fact only counts if its subject shows up in a part of the answer a search result actually backs up;

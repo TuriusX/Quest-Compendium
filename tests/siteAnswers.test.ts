@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/siteAnswers.test.ts)
 import assert from "node:assert/strict";
-import { plainAnswer, refLink, siteReference, siteSituation, appLanguage, namedArea, missingText } from "../siteAsk";
+import { plainAnswer, refLink, siteReference, siteSituation, appLanguage, namedArea, missingText, previewKeyOk } from "../siteAsk";
 import { GUIDE_REFERENCE, extractGuideRefs } from "../guidesApi";
 
 let passed = 0;
@@ -89,6 +89,16 @@ test("a long answer goes to the nightly check as whole sentences; a short one as
   const long = Array.from({ length: 80 }, (_, i) => `Sentence number ${i} here.`).join(" ");
   const out = missingText(long);
   assert.ok(out.length <= 800 && out.endsWith("here."));
+});
+
+test("the preview needs the whole key; no key set means no preview", () => {
+  const key = "k".repeat(40);
+  assert.equal(previewKeyOk(key, key), true);
+  assert.equal(previewKeyOk(key.slice(1), key), false);
+  assert.equal(previewKeyOk("x".repeat(40), key), false);
+  assert.equal(previewKeyOk("", ""), false);
+  assert.equal(previewKeyOk(undefined, undefined), false);
+  assert.equal(previewKeyOk("short", "short"), false);
 });
 
 test("every site language maps to one the app's route accepts", () => {

@@ -28,6 +28,7 @@
  *       add the fact here, or a fuller opening).
  */
 import crypto from 'crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { type Express, type Request, type Response } from 'express';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getAppCheck } from 'firebase-admin/app-check';
@@ -39,6 +40,7 @@ import { clientIp } from './guestGuard';
 import { isLocalServer } from './testTraffic';
 import { registerAutoChanges } from './autoChanges';
 import { GUIDE_REFERENCE } from './guidesApi';
+import { visiblePart, nextPiece } from './answerStream';
 
 const SITE = () => (process.env.QC_SITE_URL || 'https://questcompendium.com').replace(/\/$/, '');
 const MODEL = () => process.env.MAIN_MODEL || 'gemini-3.8-flash';
@@ -51,9 +53,18 @@ const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim
  * A local server (tests) keeps to its own collections (test_siteQuestions, test_contributions…), so nothing it does
  * reaches the pipeline, the review queues or the numbers; QC_SITE_ASK_ON=1 turns the box on for it alone.
  */
-const col = (name: string) => getFirestore().collection(isLocalServer() ? `test_${name}` : name);
+const col = (name: string) => getFirestore().collection(isLocalServer() || previewScope.getStore() ? `test_${name}` : name);
+/**
+ * The owner's preview on the deployed server (a header with config/siteAsk.previewKey, which the config endpoint never hands
+ * out): the switches as if on, no App Check, and test collections, so it reaches no player, pipeline or number.
+ */
+const previewScope = new AsyncLocalStorage<boolean>();
+export function previewKeyOk(given: unknown, key: unknown): boolean {
+  const a = Buffer.from(String(given || '')), b = Buffer.from(String(key || ''));
+  return b.length >= 32 && a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
-export type SiteAskConfig = { fullAnswers?: boolean; enabled: boolean; appCheck: 'enforce' | 'off'; recaptchaKey: string; dailyDollars: number; perDevice: number; perIp: number; perSignedIn: number; perPremium: number; fixesPerDay: number; monthlyChecks: number; autoOff?: { month: string; at: number; checks: number } };
+export type SiteAskConfig = { fullAnswers?: boolean; previewKey?: string; enabled: boolean; appCheck: 'enforce' | 'off'; recaptchaKey: string; dailyDollars: number; perDevice: number; perIp: number; perSignedIn: number; perPremium: number; fixesPerDay: number; monthlyChecks: number; autoOff?: { month: string; at: number; checks: number } };
 const DEFAULTS: SiteAskConfig = { enabled: false, appCheck: 'enforce', recaptchaKey: '', dailyDollars: 1, perDevice: 2, perIp: 10, perSignedIn: 10, perPremium: 50, fixesPerDay: 10, monthlyChecks: 8000 };
 let cfgCache: { at: number; v: SiteAskConfig } | null = null;
 export async function siteAskConfig(fresh = false): Promise<SiteAskConfig> {
@@ -275,7 +286,7 @@ async function answer(ai: GoogleGenAI, ctx: Awaited<ReturnType<typeof context>>,
 
 // ---- the app's own answers for the website (server.ts chatHandler; owner, Nov 3 2026) ----
 export type SiteReference = { withPage: string; withoutPage: string; refs: Record<string, any> };
-export type SiteAnswerOpts = { req: Request; question: string; game: string; guideKey?: string; place?: string; language: string; premium: boolean; maySearch: boolean; situation?: string; reference?: SiteReference; imageBase64?: string };
+export type SiteAnswerOpts = { req: Request; question: string; game: string; guideKey?: string; place?: string; language: string; premium: boolean; maySearch: boolean; situation?: string; reference?: SiteReference; imageBase64?: string; stream?: (e: { raw?: string; reset?: boolean; searching?: boolean }) => void };
 export type SiteAnswerOut = { text: string; guideRefs?: any[]; searched?: boolean; site?: { answered: boolean; dollars: number; searches: number; missing: { name: string; fact: string }[]; page: { key: string; slug: string; name: string } | null } };
 const APP_LANGUAGE: Record<string, string> = { en: 'English', es: 'Spanish', pt: 'Brazilian Portuguese', de: 'German', fr: 'French', ru: 'Russian', ja: 'Japanese', ko: 'Korean', zh: 'Simplified Chinese' };
 export const appLanguage = (lang: string) => APP_LANGUAGE[lang] || 'English';
@@ -326,8 +337,8 @@ export function siteReference(ctx: { selfText: string; matchLines: string; other
 /** What the website adds to the app's situation: where the question comes from. It says nothing about how to answer. */
 export const siteSituation = (pageName: string, game: string) => `[ASKED ON THE QUEST COMPENDIUM WEBSITE: the player is reading the guide${pageName && pageName !== game ? ` page "${pageName}"` : ''} for ${game}, and may not be at that place in the game. No app, overlay or quest log is in use here.]`;
 
-async function fullAnswer(run: (o: SiteAnswerOpts) => Promise<SiteAnswerOut>, req: Request, ctx: Awaited<ReturnType<typeof context>>, key: string, slug: string, lang: string, q: string, premium: boolean, maySearch: boolean) {
-  const r = await run({ req, question: q, game: ctx.game, guideKey: key, place: ctx.place || undefined, language: appLanguage(lang), premium, maySearch, situation: siteSituation(ctx.pageName, ctx.game), reference: siteReference(ctx, slug ? ctx.pageName : '') });
+async function fullAnswer(run: (o: SiteAnswerOpts) => Promise<SiteAnswerOut>, req: Request, ctx: Awaited<ReturnType<typeof context>>, key: string, slug: string, lang: string, q: string, premium: boolean, maySearch: boolean, stream?: SiteAnswerOpts['stream']) {
+  const r = await run({ stream, req, question: q, game: ctx.game, guideKey: key, place: ctx.place || undefined, language: appLanguage(lang), premium, maySearch, situation: siteSituation(ctx.pageName, ctx.game), reference: siteReference(ctx, slug ? ctx.pageName : '') });
   if (!r.site?.answered) throw new Error(`no answer: ${cut(r.text, 120)}`);
   const seen = new Set<string>();
   const links = (r.guideRefs || []).map((x) => refLink(x, key, lang)).filter((x): x is Ref => !!x && !seen.has(x.href) && !!seen.add(x.href));
@@ -453,10 +464,11 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
     res.json(c.enabled ? { on: true, perDevice: c.perDevice, ...(appCheckOn(c) ? { appCheck: { key: c.recaptchaKey, firebase: deps.firebaseWebConfig } } : {}) } : { on: false });
   });
 
-  app.post('/api/site/ask', async (req: Request, res: Response) => {
-    const c = await siteAskConfig();
+  const ask = async (req: Request, res: Response, preview: boolean) => {
+    const base = await siteAskConfig();
+    const c: SiteAskConfig = preview ? { ...base, enabled: true, fullAnswers: true, perIp: 1000 } : base;
     if (!c.enabled) return res.status(503).json({ off: true });
-    if (appCheckOn(c)) {
+    if (appCheckOn(c) && !preview) {
       try { await getAppCheck().verifyToken(String(req.headers['x-firebase-appcheck'] || '')); } catch { return res.status(401).json({ error: 'check' }); }
     }
     const b = req.body || {};
@@ -473,9 +485,36 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
     // At the limit: how many guide questions a free account (or Premium) gets, so the next step is clear.
     if (t.ok === false) return res.json({ limit: t.why, freePerDay: c.perSignedIn, premiumPerDay: c.perPremium, ...(acct ? { premium: acct.premium, account: true } : {}) });
     const scope = { dollars: 0, searches: 0 };
+    // Shown as it's written (answerStream.ts): lines of JSON, ending with the same result as without. Only full answers.
+    const streaming = b.stream === true && !!c.fullAnswers && !!deps.fullAnswer;
+    const t0 = Date.now();
+    let firstText = 0, contextMs = 0, shown = '';
+    const line = (o: object) => res.write(`${JSON.stringify(o)}\n`);
+    const finish = (status: number, o: object) => {
+      if (!streaming) return res.status(status).json(o);
+      line({ t: 'done', status, ...o });
+      return res.end();
+    };
+    if (streaming) {
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.flushHeaders();
+    }
+    const onStream: SiteAnswerOpts['stream'] = (e) => {
+      if (e.searching) line({ t: 'searching' });
+      if (e.reset) { if (shown) line({ t: 'reset' }); shown = ''; }
+      if (e.raw === undefined) return;
+      const now = plainAnswer(visiblePart(e.raw));
+      const piece = nextPiece(shown, now);
+      if (!piece) return;
+      if (!firstText) firstText = Date.now() - t0;
+      shown = now;
+      line({ t: 'text', ...piece });
+    };
     try {
       const out = await requestCost.run(scope, async () => {
         const ctx = await context(key, slug, kind, lang, q);
+        contextMs = Date.now() - t0;
         const full = c.fullAnswers && deps.fullAnswer;
         // The app's answers don't need a match in the guide: only a guide that doesn't exist has nothing to go on.
         if (full ? !ctx.exists : !ctx.selfText && !ctx.matchLines) return null;
@@ -483,13 +522,13 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
         const day: any = (await col('siteAskDays').doc(dayOf()).get()).data() || {};
         const mayLookUp = (acct?.premium ? true : (Number(day.dollars) || 0) + 0.05 < c.dailyDollars) && (await playerSearchesToday()) && (await monthlyBudgetOk());
         if (full) {
-          const a = await fullAnswer(full, req, ctx, key, slug, lang, q, !!acct?.premium, mayLookUp);
+          const a = await fullAnswer(full, req, ctx, key, slug, lang, q, !!acct?.premium, mayLookUp, streaming ? onStream : undefined);
           scope.dollars = a.dollars;
           return { ctx, a };
         }
         return { ctx, a: (await answer(deps.gemini(), ctx, q, lang, mayLookUp)) as any };
       });
-      if (!out) return res.status(404).json({ error: 'no guide' });
+      if (!out) return finish(404, { error: 'no guide' });
       if (out.a.searches) recordPlayerSearches(out.a.searches);
       const dollars = Math.round(scope.dollars * 10000) / 10000;
       // The site's dollars a day count signed-out and free questions; Premium ones are counted apart.
@@ -500,11 +539,16 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
         dollars, model: MODEL(), at: Date.now(), day: dayOf(), ...(isLocalServer() ? { test: true } : {}),
       });
       void learn(doc.id, { key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, searched: out.a.searches, aboutPage: out.a.aboutPage, elsewhere: out.a.elsewhere, missing: out.a.missing, missingPage: out.a.missingPage }, c).catch((e) => console.warn('[site-ask] learn', e?.message));
-      res.json({ answer: out.a.text, sources: out.a.sources, covered: out.a.covered, searched: out.a.searches > 0, left, ...(acct ? { account: true } : {}) });
+      console.log(`[site-time] context=${contextMs}ms first=${firstText}ms total=${Date.now() - t0}ms${preview ? ' preview' : ''}`);
+      finish(200, { answer: out.a.text, sources: out.a.sources, covered: out.a.covered, searched: out.a.searches > 0, left, ...(acct ? { account: true } : {}), ...(preview ? { timing: { context: contextMs, first: firstText, total: Date.now() - t0, dollars, searches: out.a.searches } } : {}) });
     } catch (e: any) {
       console.error('[site-ask]', e?.message);
-      res.status(500).json({ error: 'failed' });
+      finish(500, { error: 'failed' });
     }
+  };
+  app.post('/api/site/ask', async (req: Request, res: Response) => {
+    const preview = previewKeyOk(req.headers['x-qc-preview'], (await siteAskConfig()).previewKey);
+    return previewScope.run(preview, () => ask(req, res, preview));
   });
 
   // ---- /admin/asked: the log of the guides' nightly improvements, with undo (autoChanges.ts) ----
