@@ -43,6 +43,14 @@ await test("ordinary text with brackets and angle signs isn't held back for good
 await test("search citations don't show", () => {
   assert.equal(visiblePart("Go north [PerQueryResult(index=1)] now"), "Go north now");
   assert.equal(visiblePart("Go north [PerQuery"), "Go north");
+  // Just the numbers, as the model also writes them (seen Nov 3 2026), whole and while they're being written.
+  assert.equal(visiblePart("the Dank Crypt [1.0.25]. She"), "the Dank Crypt. She");
+  assert.equal(visiblePart("the helm battle [1.0.7, 1.0.25], their"), "the helm battle, their");
+  const reply = "Lae'zel) [1.0.25]: use a scroll [1.0.7, 1.0.25].";
+  for (let i = 0; i <= reply.length; i++) assert.doesNotMatch(visiblePart(reply.slice(0, i)), /\[|\d\.\d/);
+  assert.equal(visiblePart(reply), "Lae'zel): use a scroll.");
+  // Other brackets and numbers stay.
+  assert.equal(visiblePart("Patch 1.0.25 adds [two] rooms and [3 items]."), "Patch 1.0.25 adds [two] rooms and [3 items].");
 });
 
 await test("the next piece: what's new, or the whole text when it changed", () => {

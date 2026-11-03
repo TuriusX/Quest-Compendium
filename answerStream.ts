@@ -4,6 +4,9 @@
  * once the whole reply is in. visiblePart says how much of the reply so far can be shown; the finished answer replaces it.
  */
 
+/** Google Search's citation numbers as the model can write them: [1.0.25], [1.0.7, 1.0.25] (search, result, part). */
+export const SEARCH_NUMBERS = /[ \t]*\[\s*\d+\.\d+\.\d+(?:\s*,\s*\d+\.\d+\.\d+)*\s*\]/g;
+
 /** What can be shown of a reply so far: nothing that is, or might be the start of, one of our lines. */
 export function visiblePart(raw: string): string {
   const text = String(raw || '');
@@ -13,12 +16,13 @@ export function visiblePart(raw: string): string {
     .replace(/(?:```[a-z]*\s*)?<qc-[a-z-]+(?:\s[^>]*)?>[\s\S]*?<\/qc-[a-z-]+>(?:\s*```)?/gi, '')
     .replace(/<qc-[a-z-]+[^>]*\/>/gi, '')
     .replace(/[ \t]*\[g\d+\]/g, '')
-    .replace(/[ \t]*\[\s*PerQueryResult\([^\]]*\]/g, '');
+    .replace(/[ \t]*\[\s*PerQueryResult\([^\]]*\]/g, '')
+    .replace(SEARCH_NUMBERS, '');
   const open = s.search(/<qc-/i);
   if (open >= 0) s = s.slice(0, open);
   return s
     .replace(/<(?:q(?:c(?:-[a-z-]*)?)?)?$/i, '')
-    .replace(/[ \t]*\[(?:g\d*|\s*P[a-zA-Z]*(?:\([^\]]*)?)?$/, '')
+    .replace(/[ \t]*\[(?:g\d*|\s*P[a-zA-Z]*(?:\([^\]]*)?|\s*\d[\d., \t]*)?$/, '')
     .replace(/`{1,3}[a-z]*\s*$/i, '');
 }
 

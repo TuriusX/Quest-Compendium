@@ -40,7 +40,7 @@ import { registerContributions } from './contributions';
 import { registerAnswerReports } from './answerReports';
 import { registerAnswerFeedback, recordMarkerCheck } from './answerFeedback';
 import { registerDiscord } from './discord';
-import { collectStream } from './answerStream';
+import { collectStream, SEARCH_NUMBERS } from './answerStream';
 import { registerSiteAsk, SITE_ABANDONED_DOLLARS, type SiteAnswerOpts, type SiteAnswerOut } from './siteAsk';
 import { registerSiteAccount } from './siteAccount';
 import { pingNewSignup } from './signupPing';
@@ -2204,10 +2204,13 @@ percentages:
 
   /**
    * Google Search grounding can leave raw citation tags in the answer, e.g. `[PerQueryResult(index="3.2.9")]`
-   * (search 3, result 2, part 9). They're meant for software, not players, so remove them, one or several per bracket.
+   * (search 3, result 2, part 9), or just the numbers, `[1.0.25]` or `[1.0.7, 1.0.25]` (seen Nov 3 2026 in an answer with
+   * search offered from the first call). They're meant for software, not players, so remove them, one or several per bracket.
    */
   function stripSearchCitations(text: string): string {
-    return text.replace(/[ \t]*\[\s*PerQueryResult\([^)\]]*\)(?:\s*,\s*PerQueryResult\([^)\]]*\))*\s*\]/g, '');
+    return text
+      .replace(/[ \t]*\[\s*PerQueryResult\([^)\]]*\)(?:\s*,\s*PerQueryResult\([^)\]]*\))*\s*\]/g, '')
+      .replace(SEARCH_NUMBERS, '');
   }
 
   /**
