@@ -817,7 +817,7 @@ export function extractGuideRefs(text: string, refs: Record<string, GuideRef>): 
       tags.push(...String(inner).match(/g\d+/g) || []);
     }
     return '';
-  }).replace(/[ \t]*\[g\d+\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  }).replace(/[ \t]*\[\s*g\d+(?:\s*[,;]\s*g\d+)*\s*\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
   tags = [...new Set(tags)];
   const used = tags.map((t) => refs[t]).filter(Boolean).slice(0, 4);
   return { text: cleaned || text, used };

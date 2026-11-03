@@ -45,7 +45,7 @@ html.qc-light #qc-app{--p:#fff;--p2:#f3f1f8;--p3:#e8e5f0;--l:rgba(23,21,29,.12);
 .qa-c{position:absolute;right:15px;width:14px;height:14px;pointer-events:none;--c:var(--g)}
 .qa-c.t{top:9px;background:linear-gradient(var(--c),var(--c)) 0 0/100% 5px no-repeat,linear-gradient(var(--c),var(--c)) 100% 0/5px 100% no-repeat}
 .qa-c.b{bottom:9px;background:linear-gradient(var(--c),var(--c)) 0 100%/100% 5px no-repeat,linear-gradient(var(--c),var(--c)) 100% 0/5px 100% no-repeat}
-.qa-body{display:grid;gap:1rem;min-width:0}
+.qa-body{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;min-width:0}
 .qa-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.875rem;padding-right:.75rem}
 .qa-head h2{margin:0;font-size:1.3125rem;line-height:1.2;font-weight:700;color:var(--s);letter-spacing:-.01em}
 .qa-head p{margin:.1875rem 0 0;font-size:.84rem;color:var(--t3)}

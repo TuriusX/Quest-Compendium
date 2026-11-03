@@ -15,14 +15,14 @@ export function visiblePart(raw: string): string {
   let s = text
     .replace(/(?:```[a-z]*\s*)?<qc-[a-z-]+(?:\s[^>]*)?>[\s\S]*?<\/qc-[a-z-]+>(?:\s*```)?/gi, '')
     .replace(/<qc-[a-z-]+[^>]*\/>/gi, '')
-    .replace(/[ \t]*\[g\d+\]/g, '')
+    .replace(/[ \t]*\[\s*g\d+(?:\s*[,;]\s*g\d+)*\s*\]/g, '')
     .replace(/[ \t]*\[\s*PerQueryResult\([^\]]*\]/g, '')
     .replace(SEARCH_NUMBERS, '');
   const open = s.search(/<qc-/i);
   if (open >= 0) s = s.slice(0, open);
   return s
     .replace(/<(?:q(?:c(?:-[a-z-]*)?)?)?$/i, '')
-    .replace(/[ \t]*\[(?:g\d*|\s*P[a-zA-Z]*(?:\([^\]]*)?|\s*\d[\d., \t]*)?$/, '')
+    .replace(/[ \t]*\[(?:\s*g\d*(?:\s*[,;]\s*g?\d*)*|\s*P[a-zA-Z]*(?:\([^\]]*)?|\s*\d[\d., \t]*)?$/, '')
     .replace(/`{1,3}[a-z]*\s*$/i, '');
 }
 

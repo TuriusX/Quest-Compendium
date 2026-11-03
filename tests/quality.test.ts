@@ -60,6 +60,7 @@ test("grounding: tagged verified entries, the same size as the plain notes", () 
 
 test("grounding: the answer's <qc-guide> line becomes the badge's links, and the tags never show", () => {
   const g = guideGroundingForPrompt(page);
+  assert.equal(extractGuideRefs("The Dank Crypt [g1024, g1025]. The crash [g4,g5; g6]. Keep [two] and [g].", {}).text, "The Dank Crypt. The crash. Keep [two] and [g].");
   const r = extractGuideRefs("Look under the Scuffed Rock [g1].\n<qc-guide>[\"g1\",\"g9\"]</qc-guide>", g.refs);
   assert.equal(r.text, "Look under the Scuffed Rock.");
   assert.equal(r.used.length, 1);

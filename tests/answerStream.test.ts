@@ -49,6 +49,10 @@ await test("search citations don't show", () => {
   const reply = "Lae'zel) [1.0.25]: use a scroll [1.0.7, 1.0.25].";
   for (let i = 0; i <= reply.length; i++) assert.doesNotMatch(visiblePart(reply.slice(0, i)), /\[|\d\.\d/);
   assert.equal(visiblePart(reply), "Lae'zel): use a scroll.");
+  // Several guide tags in one bracket (seen Nov 3 2026), whole and while they're being written.
+  const tagged = "the Dank Crypt [g1024, g1025]. The crash [g4, g5, g6, g1014].";
+  for (let i = 0; i <= tagged.length; i++) assert.doesNotMatch(visiblePart(tagged.slice(0, i)), /\[|g\d/);
+  assert.equal(visiblePart(tagged), "the Dank Crypt. The crash.");
   // Other brackets and numbers stay.
   assert.equal(visiblePart("Patch 1.0.25 adds [two] rooms and [3 items]."), "Patch 1.0.25 adds [two] rooms and [3 items].");
 });
