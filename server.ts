@@ -1543,9 +1543,11 @@ percentages:
       const release = effectiveGame?.name ? await releaseOf(effectiveGame.name, Number(effectiveGame.appId) || undefined) : null;
       const cut = await cutoffs();
       const newRelease = !!release && isNewRelease(release, usePro ? cut.pro : cut.flash);
-      const searchMode: SearchMode = !effectiveGame?.name
+      // The website offers search from the first call: asking first takes two calls, and the first words came 14-28 s in (Nov 3 2026).
+      const appSearchMode: SearchMode = !effectiveGame?.name
         ? 'ask'
         : searchModeFor({ newRelease, dated: release?.source !== 'unknown', type: qtype, covered: Boolean(guidePage?.verified), screenshot: !!imageBase64, specifics: wantsSpecifics(String(question || '')) });
+      const searchMode: SearchMode = site && appSearchMode === 'ask' ? 'offer' : appSearchMode;
       const searchOk = evalCapture ? true : site ? site.maySearch : searchMode === 'force'
         ? (await playerSearchesToday()) && (await monthlyBudgetOk())
         : await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
@@ -1769,7 +1771,8 @@ percentages:
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
               ],
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
-              ...(usePro ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : targetModel === MAIN_MODEL ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } } : {}),
+              // The website thinks less before it writes: the first words in 1-9 s instead of 14-28, with answers as full (Nov 3 2026).
+              ...(usePro ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : targetModel === MAIN_MODEL ? { thinkingConfig: { thinkingLevel: site ? ThinkingLevel.LOW : ThinkingLevel.MEDIUM } } : {}),
             }
           });
           const answerCall = (sys: string, withSearch: boolean): Promise<any> => {
