@@ -223,6 +223,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   ixSoonNote: 'Coming soon: {list}. Each gets its own page; this section fills in as they are written.',
   ixFrom: 'from {ch}',
   askTitle: 'Stuck? Ask about this',
+  askShowFull: 'Show the full answer',
   askPlaceholder: 'Ask about this page or the game…',
   askButton: 'Ask',
   askThinking: 'Looking through the guide…',

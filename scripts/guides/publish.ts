@@ -1801,7 +1801,7 @@ function askBox(key: string, game: string, slug: string, kind: 'area' | 'entity'
   return `<div hidden data-qc-ask data-key="${esc(key)}" data-slug="${esc(slug)}" data-kind="${kind}" data-lang="${LANG}" data-game="${esc(game)}" data-page="${esc(page)}" data-api="${esc(SERVER_URL)}" data-app="${esc(`${SERVER_URL}/?from=guide`)}" data-download="${esc(download)}" data-t="${esc(JSON.stringify(T))}" class="qc-site-only mt-5 rounded-xl border border-[#a87ffb]/30 bg-[#a87ffb]/[0.06] px-3.5 py-2.5">
         <form class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5"><label for="qc-ask-q" class="w-full text-sm font-semibold text-[#c4b0ff] sm:w-auto">${esc(ui('askTitle'))}</label><input id="qc-ask-q" name="q" maxlength="300" autocomplete="off" placeholder="${esc(ui('askPlaceholder'))}" class="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:border-[#a87ffb] focus:outline-none"><button class="rounded-lg bg-[#a87ffb] px-3 py-1.5 text-sm font-semibold text-black hover:bg-white disabled:opacity-50">${esc(ui('askButton'))}</button></form>
         <div data-ask-out aria-live="polite"></div>
-        <template data-ask-answer><div class="mt-2.5 border-t border-white/10 pt-2.5"><p data-q class="text-xs text-zinc-500"></p><div data-a class="mt-1 whitespace-pre-line text-sm leading-relaxed text-zinc-200"></div><p data-note class="mt-1.5 text-xs text-amber-200/90"></p><p data-src class="mt-1.5 text-xs text-zinc-400"></p><p class="mt-1.5 text-xs text-zinc-500">${esc(ui('askOverlay'))} <a class="font-semibold text-[#a87ffb] hover:text-white" href="${esc(download)}">${esc(ui('askGetApp'))}</a></p></div></template>
+        <template data-ask-answer><div class="mt-2.5 border-t border-white/10 pt-2.5"><p data-q class="text-xs text-zinc-500"></p><div data-a class="mt-1 whitespace-pre-line text-sm leading-relaxed text-zinc-200"></div><button type="button" data-more hidden class="mt-1 text-sm font-semibold text-[#a87ffb] hover:text-white">${esc(ui('askShowFull'))}</button><p data-note class="mt-1.5 text-xs text-amber-200/90"></p><p data-src class="mt-1.5 text-xs text-zinc-400"></p><p class="mt-1.5 text-xs text-zinc-500">${esc(ui('askOverlay'))} <a class="font-semibold text-[#a87ffb] hover:text-white" href="${esc(download)}">${esc(ui('askGetApp'))}</a></p></div></template>
         <template data-ask-msg><p class="mt-2 text-xs text-zinc-400"></p></template>
         <template data-ask-link><a class="font-semibold text-[#a87ffb] hover:text-white"></a></template>
       </div><script src="/assets/ask.js" defer></script>`;
@@ -1864,6 +1864,9 @@ const ASK_JS = String.raw`// "Stuck? Ask about this" (scripts/guides/publish.ts 
       if(j.sources&&j.sources.length){src.textContent=T.from+' ';j.sources.forEach(function(s,i){if(i)src.appendChild(document.createTextNode(' · '));src.appendChild(link(s.label,s.href));});}else src.remove();
       if(typeof j.left==='number'){var l=tpl('msg');l.textContent=(j.account?T.leftAcct:j.left===1?T.leftOne:T.left).replace('{n}',j.left);el.appendChild(l);}
       out.replaceChildren(el); input.value='';
+      // A long answer doesn't push the guide off the page: all of it is there, folded, one tap from being read.
+      var a=el.querySelector('[data-a]'), more=el.querySelector('[data-more]'), fade='linear-gradient(#000 70%,transparent)';
+      if(a.scrollHeight>420){a.style.maxHeight='18rem';a.style.overflow='hidden';a.style.webkitMaskImage=fade;a.style.maskImage=fade;more.hidden=false;more.addEventListener('click',function(){a.removeAttribute('style');more.remove();});}else more.remove();
     }).catch(function(){msg(T.error);}).then(function(){btn.disabled=false;});
   }
   form.addEventListener('submit',function(ev){
