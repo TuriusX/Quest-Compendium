@@ -49,7 +49,7 @@ const withEol = (s: string, eol: string) => s.replace(/\r?\n/g, eol);
 
 /** Split the page into parts that may be translated and parts that must stay exactly as they are. */
 function segments(html: string): { text: string; locked: boolean }[] {
-  const lockRe = /<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!-- QC-(?:GUIDES|LANGS|HREFLANG):START -->[\s\S]*?<!-- QC-(?:GUIDES|LANGS|HREFLANG):END -->|<!--[\s\S]*?-->|<code[\s\S]*?<\/code>/g;
+  const lockRe = /<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!-- QC-(?:GUIDES|LANGS|HREFLANG|HOMEAPP|ACCOUNT):START -->[\s\S]*?<!-- QC-(?:GUIDES|LANGS|HREFLANG|HOMEAPP|ACCOUNT):END -->|<!--[\s\S]*?-->|<code[\s\S]*?<\/code>/g;
   const out: { text: string; locked: boolean }[] = [];
   let last = 0;
   for (const m of html.matchAll(lockRe)) {

@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/siteAnswers.test.ts)
 import assert from "node:assert/strict";
-import { plainAnswer, refLink, siteReference, siteSituation, appLanguage, namedArea, missingText, previewKeyOk } from "../siteAsk";
+import { plainAnswer, refLink, siteReference, siteSituation, appLanguage, namedArea, missingText, previewKeyOk, validImage, cleanGameName, homeSituation, MAX_IMAGE_CHARS } from "../siteAsk";
 import { GUIDE_REFERENCE, extractGuideRefs } from "../guidesApi";
 
 let passed = 0;
@@ -99,6 +99,25 @@ test("the preview needs the whole key; no key set means no preview", () => {
   assert.equal(previewKeyOk("", ""), false);
   assert.equal(previewKeyOk(undefined, undefined), false);
   assert.equal(previewKeyOk("short", "short"), false);
+});
+
+const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+test("a screenshot must really be a picture of the right kind, and small enough", () => {
+  assert.ok(validImage(`data:image/png;base64,${png}`));
+  assert.equal(validImage(`data:image/jpeg;base64,${png}`), null);
+  assert.equal(validImage("data:image/svg+xml;base64,PHN2Zz4="), null);
+  assert.equal(validImage(`data:image/png;base64,${Buffer.from("<script>alert(1)</script>").toString("base64")}`), null);
+  assert.equal(validImage(`data:image/png;base64,${png}${"A".repeat(MAX_IMAGE_CHARS)}`), null);
+  assert.equal(validImage(12), null);
+  assert.equal(validImage("https://example.com/a.png"), null);
+});
+
+test("a game named in the box can't carry markup or instructions' brackets, and stays short", () => {
+  assert.equal(cleanGameName("Dark Souls II"), "Dark Souls II");
+  assert.equal(cleanGameName("Hades <qc-steps>[x]</qc-steps>"), "Hades qc-steps x /qc-steps");
+  assert.equal(cleanGameName("x".repeat(200)).length, 80);
+  assert.match(homeSituation("Hades"), /asking about Hades/);
+  assert.doesNotMatch(homeSituation("Hades"), /short|brief|only|limit/i);
 });
 
 test("every site language maps to one the app's route accepts", () => {

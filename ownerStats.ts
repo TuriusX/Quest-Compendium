@@ -40,7 +40,7 @@ const isLeftOut = (u: UserRecord, w: Who) =>
 
 /** Real accounts that signed up on the website (users.signupSource "site"), with their creation times. */
 async function siteSignups(w: Who): Promise<number[]> {
-  const ids = (await getFirestore().collection('users').where('signupSource', '==', 'site').get()).docs.map((d) => d.id);
+  const ids = (await getFirestore().collection('users').where('signupSource', 'in', ['site', 'homepage']).get()).docs.map((d) => d.id);
   const out: number[] = [];
   for (let i = 0; i < ids.length; i += 100) {
     const r = await getAuth().getUsers(ids.slice(i, i + 100).map((uid) => ({ uid })));
@@ -193,6 +193,11 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   // The website's ask box, apart from the players' numbers above (siteAsk.ts).
   const siteMs = window === '30d' ? 30 * DAY : window === '7d' ? 7 * DAY : DAY;
   const site = await siteAskWindow(now - siteMs, now);
+  // The homepage's app (scripts/guides/homeApp.ts): tries, sign-ups and Premium starts from it.
+  const homeUsers = async (field: string, value: string) => (await getFirestore().collection('users').where(field, '==', value).get()).docs.map((d) => d.data() as any);
+  const homeSignups = (await homeUsers('signupSource', 'homepage')).length;
+  const homePremium = (await homeUsers('premiumFrom', 'homepage')).filter((u) => Number(u.premiumFromAt) >= now - siteMs).length;
+  parts.push(`**Homepage app** (${window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours'}): ${site.home} tries (${site.homeShots} with a screenshot, ${site.homeNoGuide} about a game with no guide), ${homePremium} Premium start(s); ${homeSignups} sign-ups from it in all`);
   // Locate me in the app (by hand and automatic: locateMe.ts), counted since Oct 31 2026.
   const loc = await locates(now - siteMs, now, owners);
   parts.push(`**Locate me** (${window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours'}): ${loc.n} check(s), ${loc.auto} automatic, ${loc.found} found the place · $${loc.dollars.toFixed(2)}${loc.n ? ` ($${(loc.dollars / loc.n).toFixed(4)} each)` : ''}`);

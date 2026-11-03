@@ -305,6 +305,7 @@ async function startServer() {
           await db.collection('users').doc(userId).set({
             ...(session.customer ? { stripeCustomerId: String(session.customer) } : {}),
             ...(session.mode === 'subscription' && session.payment_status === 'paid' ? { isPremium: true, subscriptionStatus: 'active' } : {}),
+            ...(session.metadata?.from === 'homepage' ? { premiumFrom: 'homepage', premiumFromAt: Date.now() } : {}),
           }, { merge: true });
           forgetStripeView(userId);
           console.log('[stripe] checkout completed for', userId.slice(-6));
@@ -811,21 +812,33 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       // Stripe). Needs Managed Payments activated in the Stripe dashboard and an eligible tax code on the product, so
       // it's on only with STRIPE_MANAGED_PAYMENTS=true on the server; checkout works as before without it.
       const managed = process.env.STRIPE_MANAGED_PAYMENTS === 'true';
-      const session = await stripe.checkout.sessions.create({
+      // The homepage's app (scripts/guides/homeApp.ts): Stripe's form inside the page, or back to the homepage from Stripe's own.
+      const fromHome = req.body?.from === 'homepage';
+      const site = (process.env.QC_SITE_URL || 'https://questcompendium.com').replace(/\/$/, '');
+      const sessionFields: any = {
         mode: 'subscription',
         ...(managed ? { managed_payments: { enabled: true } } : {}),
         client_reference_id: userId,
         ...(saved?.stripeCustomerId ? { customer: saved.stripeCustomerId } : userEmail ? { customer_email: userEmail } : {}),
-        subscription_data: { metadata: { uid: userId } },
+        subscription_data: { metadata: { uid: userId, ...(fromHome ? { from: 'homepage' } : {}) } },
+        ...(fromHome ? { metadata: { from: 'homepage' } } : {}),
         line_items: [
           {
             price: priceId,
             quantity: 1,
           },
         ],
-        success_url: done,
-        cancel_url: back,
-      });
+      };
+      const hosted = { ...sessionFields, success_url: fromHome ? `${site}/?upgrade=success` : done, cancel_url: fromHome ? `${site}/?upgrade=canceled` : back };
+      if (fromHome && req.body?.embedded === true) {
+        try {
+          const inPage = await stripe.checkout.sessions.create({ ...sessionFields, ui_mode: 'embedded', redirect_on_completion: 'if_required', return_url: `${site}/?upgrade=success` } as any);
+          return res.json({ clientSecret: inPage.client_secret });
+        } catch (e: any) {
+          console.warn('[checkout] embedded refused, using the hosted page:', e?.message);
+        }
+      }
+      const session = await stripe.checkout.sessions.create(hosted);
 
       res.json({ url: session.url });
     } catch (err: any) {
@@ -2722,7 +2735,7 @@ percentages:
     <p>We do not sell, rent, or trade your personal information. We share data only with the following trusted infrastructure providers to deliver the service:</p>
     <ul>
       <li><strong>Google Cloud & Firebase:</strong> Provides user authentication and encrypted cloud database synchronization (Firestore), and sends sign-in link emails.</li>
-      <li><strong>Google Gemini API:</strong> Processes your submitted gameplay inquiries, images, and voice queries to generate answers, guides, and text-to-speech narration.</li>
+      <li><strong>Google Gemini API:</strong> Processes your submitted gameplay inquiries, images, and voice queries to generate answers, guides, and text-to-speech narration. Google may keep prompts for up to 55 days to check for abuse. We don't keep screenshots sent from our homepage: they go to the Gemini API to answer that one question.</li>
       <li><strong>Valve Steam Web API:</strong> Provides public game details, achievement lists, and news.</li>
       <li><strong>Stripe:</strong> Secure payment gateway for managing subscriptions and checkout.</li>
     </ul>

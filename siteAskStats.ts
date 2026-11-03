@@ -19,7 +19,8 @@ export async function siteAskWeekLine(now = Date.now()): Promise<string> {
 }
 
 /** The site's questions and their cost in a window (ownerStats.ts /stats "Site"). */
-export async function siteAskWindow(from: number, to: number): Promise<{ questions: number; uncovered: number; dollars: number }> {
+export async function siteAskWindow(from: number, to: number): Promise<{ questions: number; uncovered: number; dollars: number; home: number; homeShots: number; homeNoGuide: number }> {
   const qs = (await getFirestore().collection('siteQuestions').where('at', '>=', from).get()).docs.map((d) => d.data() as any).filter((q) => q.at < to && !q.test);
-  return { questions: qs.length, uncovered: qs.filter((q) => !q.covered).length, dollars: qs.reduce((n, q) => n + (Number(q.dollars) || 0), 0) };
+  const home = qs.filter((q) => q.surface === 'home');
+  return { questions: qs.length, uncovered: qs.filter((q) => !q.covered).length, dollars: qs.reduce((n, q) => n + (Number(q.dollars) || 0), 0), home: home.length, homeShots: home.filter((q) => q.hadImage).length, homeNoGuide: home.filter((q) => q.noGuide).length };
 }

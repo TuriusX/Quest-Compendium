@@ -22,6 +22,7 @@ import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
 import { entryKind, entryIconSvg, type EntryKind } from '../../src/utils/entryKind';
 import { liveTitles, withBrand } from '../pipeline/searchTitleRules';
+import { homeAppBlock, HOME_APP_JS, pickExample, type HomeExample, type HomeTile } from './homeApp';
 import { entityKind, shortGame, areaSeo, entitySeo, searchName, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterPage, coveringPage, singularLabel, type AchFlag } from './siteText';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
@@ -652,7 +653,9 @@ function writeRedirects(moved: { key: string; from: string; to: string }[], live
   // The owner's editor from this site's own address (editorLoader): its script and the calls it makes.
   // /owner: the short way to connect a device (sign-in happens on the app server: the website can't sign in itself).
   const editor = [`/owner ${SERVER_URL}/editor/connect?to=${SITE}/guides/ 302`, `/_qc/connect ${SERVER_URL}/editor/connect 302`, `/_qc/e.js ${SERVER_URL}/editor/qc-editor.js 200!`, `/_qc/api/editor/* ${SERVER_URL}/api/editor/:splat 200!`, `/_qc/api/admin/images ${SERVER_URL}/api/admin/images 200!`, `/_qc/api/admin/images/* ${SERVER_URL}/api/admin/images/:splat 200!`];
-  const admin = [...editor, `/admin ${SERVER_URL}/admin/reviews 302`, `/admin/* ${SERVER_URL}/admin/:splat 302`, ...suggest];
+  // Sign-in by way of this site's own address, with the homepage's app (writeAccountScript).
+  const authProxy = HOME_APP_ON && !CONTRIB_SITE_AUTH ? ['/__/auth/* https://quest-compendium-1bccf.firebaseapp.com/__/auth/:splat 200!', '/__/firebase/* https://quest-compendium-1bccf.firebaseapp.com/__/firebase/:splat 200!'] : [];
+  const admin = [...editor, `/admin ${SERVER_URL}/admin/reviews 302`, `/admin/* ${SERVER_URL}/admin/:splat 302`, ...suggest, ...authProxy];
   fs.writeFileSync(path.join(OUT, '_redirects'), `# Made by scripts/guides/publish.ts: pages that moved (scripts/guides/site-redirects.json, guide aliases).\n${[...admin, ...lines].join('\n')}\n`);
   console.log(`Redirects: ${lines.length} old URL(s) to the pages that replaced them.`);
 }
@@ -1686,7 +1689,9 @@ function continueSection(): string {
 }
 function writeAccountScript() {
   fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
-  fs.writeFileSync(path.join(OUT, 'assets', 'account.js'), ACCOUNT_JS.replace('__CFG__', JSON.stringify(SITE_FIREBASE)));
+  // With the homepage's app on, sign-in goes through this site's own address, so a redirect works in browsers that block
+  // third-party storage (writeRedirects passes /__/auth through; the address is on the Google sign-in's list, owner Nov 3 2026).
+  fs.writeFileSync(path.join(OUT, 'assets', 'account.js'), ACCOUNT_JS.replace('__CFG__', JSON.stringify(HOME_APP_ON ? { ...SITE_FIREBASE, authDomain: 'questcompendium.com' } : SITE_FIREBASE)));
 }
 const ACCOUNT_JS = String.raw`// Signed in on questcompendium.com (scripts/guides/publish.ts accountSlot; the server's siteAccount.ts and siteAsk.ts).
 (function(){
@@ -1706,7 +1711,7 @@ const ACCOUNT_JS = String.raw`// Signed in on questcompendium.com (scripts/guide
     return fb;
   }
   function token(){return st.user?st.user.getIdToken():Promise.resolve('');}
-  function api(path,body){return token().then(function(t){return fetch(API+path,{method:body?'POST':'GET',headers:Object.assign({Authorization:'Bearer '+t,'x-qc-app':'site','x-qc-from':'site'},body?{'Content-Type':'application/json'}:{}),body:body?JSON.stringify(body):undefined});}).then(function(r){return r.json();});}
+  function api(path,body){return token().then(function(t){return fetch(API+path,{method:body?'POST':'GET',headers:Object.assign({Authorization:'Bearer '+t,'x-qc-app':'site','x-qc-from':d.from||'site'},body?{'Content-Type':'application/json'}:{}),body:body?JSON.stringify(body):undefined});}).then(function(r){return r.json();});}
   function onUser(u){
     st.user=u||null; st.ready=true; ls('qc-site-auth',u?'1':null); render();
     if(u){ api('/api/user/status').then(function(j){st.premium=!!(j&&(j.isPremium||(j.userData&&j.userData.isPremium)));render();}).catch(function(){}); syncTicks(); }
@@ -1774,12 +1779,20 @@ const ACCOUNT_JS = String.raw`// Signed in on questcompendium.com (scripts/guide
   }
   window.QC_AUTH={
     state:st, token:token,
-    signIn:function(){return load().then(function(x){return x.m.signInWithPopup(x.auth,new x.m.GoogleAuthProvider());}).then(function(){return st.user||new Promise(function(r){waiting.push(r);});});},
+    // A blocked popup (phones, some browsers): by redirect instead, back on this page. Whoever's waiting keeps its work first.
+    signIn:function(){return load().then(function(x){var p=new x.m.GoogleAuthProvider();return x.m.signInWithPopup(x.auth,p).catch(function(e){
+      if(!/popup-blocked|operation-not-supported/.test(String(e&&e.code)))throw e;
+      window.dispatchEvent(new Event('qc-before-redirect'));try{sessionStorage.setItem('qc-auth-redirect','1');}catch(y){}
+      return x.m.signInWithRedirect(x.auth,p).then(function(){return new Promise(function(){});});
+    });}).then(function(){return st.user||new Promise(function(r){waiting.push(r);});});},
     signOut:function(){return load().then(function(x){return x.m.signOut(x.auth);}).then(function(){st.done=null;var sec=document.querySelector('[data-qc-mine]');if(sec)sec.hidden=true;});},
     onChange:function(f){listeners.push(f);}
   };
   render();
   if(ls('qc-site-auth')) load();
+  // Back from signing in by redirect.
+  var redir=null;try{redir=sessionStorage.getItem('qc-auth-redirect');sessionStorage.removeItem('qc-auth-redirect');}catch(y){}
+  if(redir) load().then(function(x){return x.m.getRedirectResult(x.auth);}).catch(function(){});
 })();
 `;
 
@@ -1875,6 +1888,62 @@ const ASK_JS = String.raw`// "Stuck? Ask about this" (scripts/guides/publish.ts 
   });
 })();
 `;
+
+let HOME_APP_ON = false;
+/** The widget's words in the page's language (homeApp.ts). */
+function homeAppWords(): Record<string, string> {
+  const w: Record<string, string> = {};
+  for (const k of Object.keys(GUIDE_UI_EN)) if (k.startsWith('home')) w[k[4].toLowerCase() + k.slice(5)] = ui(k);
+  return w;
+}
+/**
+ * The homepage's app between the QC-HOMEAPP markers, per language (homeApp.ts), and what it reads. config/siteAsk.homeApp off: the
+ * logo, as before, and nothing else changes on the page.
+ */
+async function updateHomeApp(games: { key: string; game: string; published: number; appId?: number }[]) {
+  const on = ((await db().collection('config').doc('siteAsk').get()).data() as any)?.homeApp === true;
+  HOME_APP_ON = on;
+  const top = games.slice().sort((x, y) => (DEMAND.get(y.key) || 0) - (DEMAND.get(x.key) || 0) || y.published - x.published).slice(0, 6);
+  const tiles: HomeTile[] = top.map((g) => {
+    const c = IGDB.get(g.key);
+    const sa = STEAM_ART.get(g.key) || {};
+    return { key: g.key, name: shortGame(g.game), art: c && !c.missing && c.cover ? coverSet(c.cover).src : sa.library || (g.appId ? steamAsset(g.appId, 'library_600x900.jpg') : '') };
+  });
+  for (const code of Object.keys(HOME_GUIDES)) {
+    const file = code === 'en' ? path.join(OUT, 'index.html') : path.join(OUT, code, 'index.html');
+    if (!fs.existsSync(file)) continue;
+    const html = fs.readFileSync(file, 'utf8');
+    const m = html.match(/<!-- QC-HOMEAPP:START -->[\s\S]*?<!-- QC-HOMEAPP:END -->/);
+    if (!m) { console.log(`Homepage app: no markers in ${path.relative(OUT, file)}; skipped.`); continue; }
+    setLang(code);
+    const up = code === 'en' ? '' : '../';
+    const logo = `<img src="${up}logo.svg" alt="${esc(ui('homeLogoAlt'))}" class="w-24 h-24 mx-auto mb-6 drop-shadow-[0_0_30px_rgba(168,127,251,0.4)]" style="image-rendering: pixelated;">`;
+    const block = on ? homeAppBlock({ logoAlt: ui('homeLogoAlt'), logoSrc: `${up}logo.svg`, api: SERVER_URL, lang: code, T: homeAppWords(), tiles, up }) : logo;
+    let next = html.replace(m[0], () => `<!-- QC-HOMEAPP:START -->\n      ${block}\n      <!-- QC-HOMEAPP:END -->`);
+    // Signing in on the homepage only with the app there (the account's script needs its slot).
+    next = next.replace(/<!-- QC-ACCOUNT:START -->[\s\S]*?<!-- QC-ACCOUNT:END -->/, () => `<!-- QC-ACCOUNT:START -->${on ? `${accountSlot().replace('data-qc-account', 'data-qc-account data-from="homepage"')}<script src="${up}assets/account.js" defer></script>` : ''}<!-- QC-ACCOUNT:END -->`);
+    if (next !== html) fs.writeFileSync(file, next);
+  }
+  setLang('en');
+  fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(OUT, 'assets', 'home-app.js'), HOME_APP_JS);
+  // Each guide's fitting example questions: only what it really has.
+  const examples: Record<string, HomeExample> = {};
+  for (const g of games) {
+    const info: any = (await db().collection('guides').doc(g.key).get()).data() || {};
+    const areas = (await db().collection('guides').doc(g.key).collection('areas').where('status', '==', 'published').get()).docs.map((d) => d.data() as any);
+    const comp: any = (await db().doc(`guideCompendium/${g.key}`).get()).data() || {};
+    const bp: any = (await db().doc(`guideBlueprints/${g.key}`).get()).data() || {};
+    examples[g.key] = pickExample({
+      hasAchievements: info.hasAchievements === true,
+      missablesByArea: areas.map((a) => ({ name: String(a.name || ''), n: [...(a.items || []), ...(a.secrets || [])].filter((x: any) => x?.missable).length })),
+      sectionNames: [...(Array.isArray(comp.taxonomy) ? comp.taxonomy.map((t: any) => String(t.label || t.id || '')) : []), ...(Array.isArray(bp.sections) ? bp.sections.map((t: any) => String(t.title || t.id || '')) : [])],
+    });
+  }
+  fs.mkdirSync(path.join(OUT, 'guides'), { recursive: true });
+  fs.writeFileSync(path.join(OUT, 'guides', 'home-examples.json'), JSON.stringify(examples));
+  console.log(`Homepage app: ${on ? 'on' : 'off (logo)'}; example questions for ${Object.keys(examples).length} guide(s).`);
+}
 
 /** The compendium as compSections made it last (guide.json): live sections first, then the ones only coming soon. */
 let COMP_MODEL: any = null;
@@ -2733,6 +2802,7 @@ async function main() {
     console.log(`Owner edits: ${st.applied} applied, ${st.kept} already in the page${st.stale ? `, ${st.stale} no longer fit their page (see Your edits)` : ''}.`);
   }
   updateHomepage(games.filter((g) => g.published > 0));
+  await updateHomeApp(games.filter((g) => g.published > 0));
   updateHomepageUpdates();
   updateVersion();
   inlineHomeIcons();

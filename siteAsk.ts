@@ -64,7 +64,7 @@ export function previewKeyOk(given: unknown, key: unknown): boolean {
   return b.length >= 32 && a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-export type SiteAskConfig = { fullAnswers?: boolean; previewKey?: string; enabled: boolean; appCheck: 'enforce' | 'off'; recaptchaKey: string; dailyDollars: number; perDevice: number; perIp: number; perSignedIn: number; perPremium: number; fixesPerDay: number; monthlyChecks: number; autoOff?: { month: string; at: number; checks: number } };
+export type SiteAskConfig = { fullAnswers?: boolean; homeApp?: boolean; previewKey?: string; enabled: boolean; appCheck: 'enforce' | 'off'; recaptchaKey: string; dailyDollars: number; perDevice: number; perIp: number; perSignedIn: number; perPremium: number; fixesPerDay: number; monthlyChecks: number; autoOff?: { month: string; at: number; checks: number } };
 const DEFAULTS: SiteAskConfig = { enabled: false, appCheck: 'enforce', recaptchaKey: '', dailyDollars: 1, perDevice: 2, perIp: 10, perSignedIn: 10, perPremium: 50, fixesPerDay: 10, monthlyChecks: 8000 };
 let cfgCache: { at: number; v: SiteAskConfig } | null = null;
 export async function siteAskConfig(fresh = false): Promise<SiteAskConfig> {
@@ -74,7 +74,7 @@ export async function siteAskConfig(fresh = false): Promise<SiteAskConfig> {
   // Switched off by the reCAPTCHA safety net this month (guard): off until the month is over.
   if (v.autoOff?.month === new Date().toISOString().slice(0, 7)) v = { ...v, enabled: false };
   if (isLocalServer() && process.env.QC_SITE_ASK_ON === '1') v = { ...v, enabled: true, perIp: Number(process.env.QC_SITE_ASK_PER_IP) || v.perIp, perDevice: Number(process.env.QC_SITE_ASK_PER_DEVICE) || v.perDevice };
-  if (isLocalServer() && process.env.QC_SITE_FULL === '1') v = { ...v, fullAnswers: true };
+  if (isLocalServer() && process.env.QC_SITE_FULL === '1') v = { ...v, fullAnswers: true, homeApp: true };
   cfgCache = { at: Date.now(), v };
   return v;
 }
@@ -334,11 +334,25 @@ export function siteReference(ctx: { selfText: string; matchLines: string; other
     refs,
   };
 }
+/** A homepage screenshot: a picture of the right kind and size, by its first bytes as well as its label. It's never saved. */
+export const MAX_IMAGE_CHARS = 5_500_000;
+export function validImage(v: unknown): string | null {
+  const m = typeof v === 'string' && v.length <= MAX_IMAGE_CHARS ? v.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/) : null;
+  if (!m) return null;
+  const head = Buffer.from(m[2].slice(0, 24), 'base64');
+  const png = head[0] === 0x89 && head.toString('latin1', 1, 4) === 'PNG', jpeg = head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
+  const webp = head.toString('latin1', 0, 4) === 'RIFF' && head.toString('latin1', 8, 12) === 'WEBP';
+  return (m[1] === 'png' && png) || (m[1] === 'jpeg' && jpeg) || (m[1] === 'webp' && webp) ? v as string : null;
+}
+/** A game named in the homepage's box, as it goes into the instructions: a short name and nothing that could pass for markup. */
+export const cleanGameName = (v: unknown) => cut(String(v ?? '').replace(/[<>\[\]{}`"\\]/g, ' '), 80);
+
 /** What the website adds to the app's situation: where the question comes from. It says nothing about how to answer. */
+export const homeSituation = (game: string) => `[ASKED ON THE QUEST COMPENDIUM HOMEPAGE: a visitor trying it out, asking about ${game}. They may be anywhere in the game. No app, overlay or quest log is in use here.]`;
 export const siteSituation = (pageName: string, game: string) => `[ASKED ON THE QUEST COMPENDIUM WEBSITE: the player is reading the guide${pageName && pageName !== game ? ` page "${pageName}"` : ''} for ${game}, and may not be at that place in the game. No app, overlay or quest log is in use here.]`;
 
-async function fullAnswer(run: (o: SiteAnswerOpts) => Promise<SiteAnswerOut>, req: Request, ctx: Awaited<ReturnType<typeof context>>, key: string, slug: string, lang: string, q: string, premium: boolean, maySearch: boolean, stream?: SiteAnswerOpts['stream']) {
-  const r = await run({ stream, req, question: q, game: ctx.game, guideKey: key, place: ctx.place || undefined, language: appLanguage(lang), premium, maySearch, situation: siteSituation(ctx.pageName, ctx.game), reference: siteReference(ctx, slug ? ctx.pageName : '') });
+async function fullAnswer(run: (o: SiteAnswerOpts) => Promise<SiteAnswerOut>, req: Request, ctx: Awaited<ReturnType<typeof context>>, key: string, slug: string, lang: string, q: string, premium: boolean, maySearch: boolean, stream?: SiteAnswerOpts['stream'], home?: { imageBase64?: string }) {
+  const r = await run({ stream, req, question: q, game: ctx.game, guideKey: key || undefined, place: ctx.place || undefined, language: appLanguage(lang), premium, maySearch, situation: home ? homeSituation(ctx.game) : siteSituation(ctx.pageName, ctx.game), reference: key ? siteReference(ctx, slug ? ctx.pageName : '') : undefined, imageBase64: home?.imageBase64 });
   if (!r.site?.answered) throw new Error(`no answer: ${cut(r.text, 120)}`);
   const seen = new Set<string>();
   const links = (r.guideRefs || []).map((x) => refLink(x, key, lang)).filter((x): x is Ref => !!x && !seen.has(x.href) && !!seen.add(x.href));
@@ -352,6 +366,8 @@ async function fullAnswer(run: (o: SiteAnswerOpts) => Promise<SiteAnswerOut>, re
     missing: r.site.missing, missingPage: r.site.page?.slug || '', dollars: r.site.dollars,
   };
 }
+
+const gameKeyOf = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
 
 // ---- limits: devices and networks per day (hashed with the day's salt), the site's dollars per day ----
 const SALT = () => process.env.SITE_ASK_SALT || process.env.CORRECTION_SALT || 'qc-site-ask';
@@ -461,12 +477,12 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
     void guard().catch((e) => console.warn('[site-ask] guard', e?.message));
     const c = await siteAskConfig();
     res.set('Cache-Control', 'public, max-age=30');
-    res.json(c.enabled ? { on: true, perDevice: c.perDevice, ...(appCheckOn(c) ? { appCheck: { key: c.recaptchaKey, firebase: deps.firebaseWebConfig } } : {}) } : { on: false });
+    res.json(c.enabled ? { on: true, perDevice: c.perDevice, home: !!c.homeApp, ...(process.env.STRIPE_PUBLISHABLE_KEY ? { stripeKey: process.env.STRIPE_PUBLISHABLE_KEY } : {}), ...(appCheckOn(c) ? { appCheck: { key: c.recaptchaKey, firebase: deps.firebaseWebConfig } } : {}) } : { on: false });
   });
 
   const ask = async (req: Request, res: Response, preview: boolean) => {
     const base = await siteAskConfig();
-    const c: SiteAskConfig = preview ? { ...base, enabled: true, fullAnswers: true, perIp: 1000 } : base;
+    const c: SiteAskConfig = preview ? { ...base, enabled: true, fullAnswers: true, homeApp: true, perIp: 1000 } : base;
     if (!c.enabled) return res.status(503).json({ off: true });
     if (appCheckOn(c) && !preview) {
       try { await getAppCheck().verifyToken(String(req.headers['x-firebase-appcheck'] || '')); } catch { return res.status(401).json({ error: 'check' }); }
@@ -475,7 +491,13 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
     const key = String(b.key || ''), slug = String(b.slug || ''), kind = ['area', 'entity', 'front'].includes(b.kind) ? String(b.kind) : 'area';
     const lang = LANGS.includes(b.lang) ? String(b.lang) : 'en';
     const q = cut(b.q, 300), device = String(b.device || '');
-    if (!/^[a-z0-9-]{2,120}$/.test(key) || (slug && !/^[a-z0-9-]{1,160}$/.test(slug)) || q.length < 3 || !/^[a-f0-9]{16,64}$/.test(device)) return res.status(400).json({ error: 'bad request' });
+    // The homepage's app (scripts/guides/homeApp.ts): a guide's game or any game by name, and a screenshot.
+    const home = b.surface === 'home';
+    if (home && !c.homeApp) return res.status(503).json({ off: true });
+    const image = home && b.image ? validImage(b.image) : null;
+    if (home && b.image && !image) return res.status(400).json({ error: 'bad image' });
+    const noGuide = home && !key ? cleanGameName(b.game) : '';
+    if ((noGuide ? noGuide.length < 2 : !/^[a-z0-9-]{2,120}$/.test(key)) || (slug && !/^[a-z0-9-]{1,160}$/.test(slug)) || (q.length < 3 && !image) || !/^[a-f0-9]{16,64}$/.test(device)) return res.status(400).json({ error: 'bad request' });
     void cleanOld().catch(() => {});
     // Signed in: the guide allowance for the account (free or Premium), never the app's.
     const signedIn = deps.siteAccount ? await deps.siteAccount(req) : null;
@@ -513,7 +535,7 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
     };
     try {
       const out = await requestCost.run(scope, async () => {
-        const ctx = await context(key, slug, kind, lang, q);
+        const ctx = noGuide ? { game: noGuide, pageName: noGuide, selfText: '', matchLines: '', otherText: '', outline: '', refs: {}, exists: true, place: '', placeSlug: '', otherPages: [] } : await context(key, slug, kind, lang, q);
         contextMs = Date.now() - t0;
         const full = c.fullAnswers && deps.fullAnswer;
         // The app's answers don't need a match in the guide: only a guide that doesn't exist has nothing to go on.
@@ -522,7 +544,7 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
         const day: any = (await col('siteAskDays').doc(dayOf()).get()).data() || {};
         const mayLookUp = (acct?.premium ? true : (Number(day.dollars) || 0) + 0.05 < c.dailyDollars) && (await playerSearchesToday()) && (await monthlyBudgetOk());
         if (full) {
-          const a = await fullAnswer(full, req, ctx, key, slug, lang, q, !!acct?.premium, mayLookUp, streaming ? onStream : undefined);
+          const a = await fullAnswer(full, req, ctx, key, slug, lang, q, !!acct?.premium, mayLookUp, streaming ? onStream : undefined, home ? { imageBase64: image || undefined } : undefined);
           scope.dollars = a.dollars;
           return { ctx, a };
         }
@@ -535,12 +557,15 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
       await col('siteAskDays').doc(dayOf()).set(acct?.premium ? { questions: FieldValue.increment(1), premium: FieldValue.increment(1), premiumDollars: FieldValue.increment(dollars) } : { dollars: FieldValue.increment(dollars), questions: FieldValue.increment(1), ...(acct ? { signedIn: FieldValue.increment(1) } : {}) }, { merge: true });
       const left = t.left;
       const doc = await col('siteQuestions').add({
-        key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, signedIn: !!acct, ...(acct?.premium ? { premium: true } : {}), sources: out.a.sources.map((s) => s.href), searches: out.a.searches,
+        // The screenshot itself is never saved or logged: only that there was one.
+        ...(home ? { surface: 'home' } : {}), ...(image ? { hadImage: true } : {}), ...(noGuide ? { noGuide: true, game: noGuide } : {}),
+        key: key || `noguide:${gameKeyOf(noGuide)}`, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, signedIn: !!acct, ...(acct?.premium ? { premium: true } : {}), sources: out.a.sources.map((s) => s.href), searches: out.a.searches,
         dollars, model: MODEL(), at: Date.now(), day: dayOf(), ...(isLocalServer() ? { test: true } : {}),
       });
-      void learn(doc.id, { key, slug, kind, lang, q, answer: out.a.text, covered: out.a.covered, searched: out.a.searches, aboutPage: out.a.aboutPage, elsewhere: out.a.elsewhere, missing: out.a.missing, missingPage: out.a.missingPage }, c).catch((e) => console.warn('[site-ask] learn', e?.message));
+      // What a question teaches needs a guide page to teach, and a question about a screenshot makes no sense without it.
+      if (key && !image) void learn(doc.id, { key, slug: slug || out.ctx.placeSlug, kind: slug || !out.ctx.placeSlug ? kind : 'area', lang, q, answer: out.a.text, covered: out.a.covered, searched: out.a.searches, aboutPage: out.a.aboutPage, elsewhere: out.a.elsewhere, missing: out.a.missing, missingPage: out.a.missingPage }, c).catch((e) => console.warn('[site-ask] learn', e?.message));
       console.log(`[site-time] context=${contextMs}ms first=${firstText}ms total=${Date.now() - t0}ms${preview ? ' preview' : ''}`);
-      finish(200, { answer: out.a.text, sources: out.a.sources, covered: out.a.covered, searched: out.a.searches > 0, left, ...(acct ? { account: true } : {}), ...(preview ? { timing: { context: contextMs, first: firstText, total: Date.now() - t0, dollars, searches: out.a.searches } } : {}) });
+      finish(200, { answer: out.a.text, sources: out.a.sources, covered: out.a.covered, searched: out.a.searches > 0, ...(noGuide ? { noGuide: true } : {}), left, ...(acct ? { account: true } : {}), ...(preview ? { timing: { context: contextMs, first: firstText, total: Date.now() - t0, dollars, searches: out.a.searches } } : {}) });
     } catch (e: any) {
       console.error('[site-ask]', e?.message);
       finish(500, { error: 'failed' });

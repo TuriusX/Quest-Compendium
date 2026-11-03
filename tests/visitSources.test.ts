@@ -22,6 +22,7 @@ test("sources: the ?from= tag first, then the referrer, else direct", () => {
   // Moving around inside the app isn't a visit.
   assert.equal(sourceOf("", `https://${SELF}/`, SELF), "");
   assert.equal(cleanTag("store"), "store");
+  assert.equal(cleanTag("homepage"), "homepage");
   assert.equal(cleanTag("<script>"), "");
 });
 
