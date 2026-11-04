@@ -100,7 +100,7 @@ html.qc-light #qc-app{--p:#fff;--p2:#f3f1f8;--p3:#e8e5f0;--l:rgba(23,21,29,.12);
 .qa-wait{display:grid;gap:.5625rem}.qa-wait i{display:block;height:11px;border-radius:2px;background:var(--p3)}
 .qa-status{display:flex;align-items:center;gap:.5625rem;font-size:.84rem;color:var(--ok);padding:.5625rem .6875rem;border-radius:7px;background:var(--oks);font-weight:500}.qa-status svg{flex:none}
 .qa-look{font-size:.875rem;color:var(--t3)}
-.qa-plans{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.qa-plans{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}.qa-gate p.qa-tax{margin:-.25rem 0 0;font-size:.78rem;color:var(--t3)}
 #qc-app .qa-plan{display:block;text-align:left;padding:.6875rem .8125rem;border:1px solid var(--l2);border-radius:8px;background:var(--p);min-width:0}
 #qc-app .qa-plan.sel{border:2px solid var(--a);padding:.625rem .75rem}
 .qa-plan small{display:block;font-size:.78rem;color:var(--t3)}.qa-plan b{display:block;font-size:1.3125rem;color:var(--s);line-height:1.25;letter-spacing:-.01em}.qa-plan b i{font-style:normal;font-size:.8125rem;font-weight:500;color:var(--t3);letter-spacing:0}
@@ -234,7 +234,7 @@ export const HOME_APP_JS = String.raw`// The homepage's app (scripts/guides/home
   function viewPremium(){
     var gets=h('ul',{class:'qa-gets'});[T.get1.replace('{n}',S.premiumPerDay||50),T.get2,T.get3].forEach(function(x){gets.appendChild(h('li',{html:IC.ok+'<span>'+esc(x)+'</span>'}));});
     return [head(),S.game?gameCard():null,pendingBlock(),h('div',{class:'qa-gate'},h('h3',{text:T.premT.replace('{n}',S.perSignedIn||10)}),h('p',{text:T.premP}),
-      h('div',{class:'qa-plans'},planBtn('month',T.month,'$4.99',T.perMonth),planBtn('year',T.year,'$39.99',T.perYear,T.save)),gets,
+      h('div',{class:'qa-plans'},planBtn('month',T.month,'$4.99',T.perMonth),planBtn('year',T.year,'$39.99',T.perYear,T.save)),h('p',{class:'qa-tax',text:T.tax}),gets,
       h('button',{type:'button',class:'qa-pay',text:T.cont,on:{click:checkout}}),S.note?h('p',{text:S.note}):null,
       h('div',{class:'qa-alt',text:T.cancel+' '+T.premAlt.replace('{n}',S.perSignedIn||10)}))];
   }

@@ -286,6 +286,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   homeYear: 'Yearly',
   homePerMonth: '/month',
   homePerYear: '/year',
+  homeTax: 'plus tax where it applies',
   homeSave: 'save 33%',
   homeGet1: '{n} questions a day here on the site',
   homeGet2: '8 Pro + 25 Fast a day in the app; unused ones carry over',
