@@ -1,9 +1,10 @@
 /**
- * The homepage's own small app, in place of the spellbook logo (owner, Nov 3 2026; mockups: Desktop\QC-homepage-app): pick a game,
- * ask, get the answer as it's written, sign in for more and take Premium, all without leaving the page. publish.ts puts it
- * between the QC-HOMEAPP markers, one copy per language, when config/siteAsk.homeApp is on; off, the logo stays and the page is
- * as it was. Switched off while live (the reCAPTCHA safety net, or the server can't be reached), the script brings the logo
- * back. The server side is siteAsk.ts (surface "home"), with the guide box's limits, App Check and $1 a day.
+ * The homepage's own small app, in the place of the big app screenshot under the hero (owner, Nov 3 2026, moved Nov 4; mockups:
+ * Desktop\QC-homepage-app): pick a game, ask, get the answer as it's written, sign in for more and take Premium, all without leaving
+ * the page. publish.ts puts it between the QC-HOMEAPP markers, one copy per language, when config/siteAsk.homeApp is on; off, that spot
+ * stays empty (the hero's Launch Web App button is just above) and the spellbook logo at the top is there either way. Switched off
+ * while live (the reCAPTCHA safety net, or the server can't be reached), the script hides it the same way. The server side is
+ * siteAsk.ts (surface "home"), with the guide box's limits, App Check and $1 a day.
  */
 
 export type HomeTile = { key: string; name: string; art: string };
@@ -19,24 +20,15 @@ export function pickExample(g: { hasAchievements?: boolean; missablesByArea: { n
 const CSS = String.raw`
 #qc-app{--p:#0e0f17;--p2:#171824;--p3:#20212f;--l:rgba(255,255,255,.1);--l2:rgba(255,255,255,.18);--s:#fff;--t1:#e4e4e7;--t2:#c4c4cc;--t3:#a1a1aa;--t4:#85858f;--a:#a87ffb;--a2:#c4b0ff;--on:#0b0814;--as:rgba(168,127,251,.14);--al:rgba(168,127,251,.45);--g:#f4c534;--pg1:#d6cfa6;--pg2:#a59e70;--ok:#6ee7b7;--oks:rgba(16,185,129,.14);--off:#2a2b3a;--glow:0 0 70px rgba(168,127,251,.2)}
 html.qc-light #qc-app{--p:#fff;--p2:#f3f1f8;--p3:#e8e5f0;--l:rgba(23,21,29,.12);--l2:rgba(23,21,29,.22);--s:#17151d;--t1:#221f2a;--t2:#36323f;--t3:#4a4555;--t4:#5c5768;--a:#5f33c4;--a2:#4f2aa8;--on:#fff;--as:rgba(95,51,196,.09);--al:rgba(95,51,196,.4);--g:#c9920c;--pg1:#d9d2ab;--pg2:#b4ad80;--ok:#05664a;--oks:rgba(5,102,74,.1);--off:#dcd8e6;--glow:0 18px 50px rgba(62,38,130,.14)}
-[data-qc-hero]:not(.qa-off){max-width:75rem;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,36rem);column-gap:3.25rem;text-align:left;align-content:start}
-[data-qc-hero]:not(.qa-off)>*{grid-column:1}
-[data-qc-hero]:not(.qa-off)>#qc-app{grid-column:2;grid-row:1/span 7;align-self:start}
-[data-qc-hero]:not(.qa-off)>figure{grid-column:1/-1}
-[data-qc-hero]:not(.qa-off)>h1{font-size:3.25rem;line-height:1.08;padding-top:1.75rem}
-[data-qc-hero]:not(.qa-off)>p{margin-left:0!important;margin-right:0!important}
-[data-qc-hero]:not(.qa-off)>div{flex-direction:row;flex-wrap:wrap;justify-content:flex-start;gap:.625rem}
-[data-qc-hero]:not(.qa-off)>div a{width:auto;padding:.5rem 1.1rem;font-size:.875rem;order:0!important}
-[data-qc-hero]:not(.qa-off)>div a:first-child{padding:0}
-[data-qc-hero]:not(.qa-off)>.qa-logo,[data-qc-hero].qa-off>#qc-app{display:none}
-@media (max-width:68.75rem){[data-qc-hero]:not(.qa-off){grid-template-columns:minmax(0,1fr);padding-top:1.5rem;text-align:center}
-[data-qc-hero]:not(.qa-off)>#qc-app{grid-column:1;grid-row:auto;order:1;max-width:40rem;width:100%;margin:0 auto 1.5rem}
-[data-qc-hero]:not(.qa-off)>h1{order:0;font-size:1.875rem;padding-top:0;margin-bottom:1rem}
-[data-qc-hero]:not(.qa-off)>h1 span{font-size:1.125rem;margin-top:.375rem}
-[data-qc-hero]:not(.qa-off)>p,[data-qc-hero]:not(.qa-off)>div,[data-qc-hero]:not(.qa-off)>figure{order:2}
-[data-qc-hero]:not(.qa-off)>p{margin-left:auto!important;margin-right:auto!important}
-[data-qc-hero]:not(.qa-off)>div{justify-content:center}}
-#qc-app{position:relative;background:var(--p);border:1px solid var(--l2);border-radius:6px;box-shadow:var(--glow);padding:1.375rem 1.875rem 1.25rem 1.375rem;display:grid;gap:1rem;color:var(--t1);font-size:1rem;line-height:1.5;text-align:left;min-width:0}
+[data-qc-hero].qa-off>#qc-app,[data-qc-hero].qa-off .qa-try{display:none}
+[data-qc-hero]>div.flex{flex-wrap:wrap}
+.qa-try{display:inline-flex;align-items:center;justify-content:center;min-height:2.75rem;padding:.375rem 1.125rem;border:1px solid rgba(168,127,251,.6);border-radius:999px;color:#a87ffb;font-size:.9375rem;font-weight:600;white-space:nowrap}.qa-try:hover{background:rgba(168,127,251,.14)}html.qc-light .qa-try{color:#5f33c4;border-color:rgba(95,51,196,.5)}@media (max-width:39.99rem){.qa-try{order:-10000}}
+nav>div.h-16>a{flex:none}
+@media (max-width:27rem){nav>div.h-16,nav>div.h-16>.ml-auto{gap:.5rem}nav>div.h-16{padding-left:1rem;padding-right:1rem}}
+@media (max-width:24rem){nav a[href="#download"]{display:none}}
+@media (max-width:63.99rem){nav>div.h-16>a span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}}
+@media (max-width:55.99rem){nav a.md\:inline{display:none}}
+#qc-app{position:relative;width:100%;margin-top:2.5rem;background:var(--p);border:1px solid var(--l2);border-radius:6px;box-shadow:var(--glow);padding:1.375rem 1.875rem 1.25rem 1.375rem;display:grid;gap:1rem;color:var(--t1);font-size:1rem;line-height:1.5;text-align:left;min-width:0}
 #qc-app *{box-sizing:border-box}
 #qc-app button,#qc-app input,#qc-app textarea{font:inherit;color:inherit}
 #qc-app button{cursor:pointer;background:none;border:0;padding:0}
@@ -46,7 +38,7 @@ html.qc-light #qc-app{--p:#fff;--p2:#f3f1f8;--p3:#e8e5f0;--l:rgba(23,21,29,.12);
 .qa-c.t{top:9px;background:linear-gradient(var(--c),var(--c)) 0 0/100% 5px no-repeat,linear-gradient(var(--c),var(--c)) 100% 0/5px 100% no-repeat}
 .qa-c.b{bottom:9px;background:linear-gradient(var(--c),var(--c)) 0 100%/100% 5px no-repeat,linear-gradient(var(--c),var(--c)) 100% 0/5px 100% no-repeat}
 .qa-body{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;min-width:0}
-.qa-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.875rem;padding-right:.75rem}
+.qa-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:.25rem .875rem;padding-right:.75rem}
 .qa-head h2{margin:0;font-size:1.3125rem;line-height:1.2;font-weight:700;color:var(--s);letter-spacing:-.01em}
 .qa-head p{margin:.1875rem 0 0;font-size:.84rem;color:var(--t3)}
 .qa-left{flex:none;display:flex;align-items:center;gap:.4375rem;font-size:.78rem;color:var(--t3);white-space:nowrap;padding-top:.25rem}
@@ -75,7 +67,7 @@ html.qc-light #qc-app{--p:#fff;--p2:#f3f1f8;--p3:#e8e5f0;--l:rgba(23,21,29,.12);
 .qa-chip em{flex:none;width:5.75rem;font-style:normal;font-size:.6875rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--a)}
 .qa-ask{position:relative;border:1px solid var(--l2);border-radius:8px;background:var(--p2)}
 .qa-ask.off{opacity:.6;border-color:var(--l)}.qa-ask:focus-within{border-color:var(--a);box-shadow:0 0 0 3px var(--as)}
-.qa-ask textarea{display:block;width:100%;height:3.625rem;resize:none;padding:.6875rem .8125rem 0;border:0;background:none;outline:0;line-height:1.4;font-size:1rem}
+.qa-ask textarea{display:block;width:100%;height:5rem;resize:none;padding:.6875rem .8125rem 0;border:0;background:none;outline:0;line-height:1.4;font-size:1rem}
 .qa-bar{display:flex;align-items:center;gap:.5rem;padding:.375rem .4375rem .4375rem}
 #qc-app .qa-clip{display:flex;align-items:center;gap:.4375rem;min-height:2.375rem;padding:0 .5625rem;border-radius:6px;font-size:.8125rem;font-weight:500;color:var(--t3)}
 #qc-app .qa-clip:hover{background:var(--p3);color:var(--t1)}#qc-app .qa-clip[disabled]{cursor:default;background:none;color:var(--t3)}
@@ -104,23 +96,28 @@ html.qc-light #qc-app{--p:#fff;--p2:#f3f1f8;--p3:#e8e5f0;--l:rgba(23,21,29,.12);
 #qc-app .qa-plan{display:block;text-align:left;padding:.6875rem .8125rem;border:1px solid var(--l2);border-radius:8px;background:var(--p);min-width:0}
 #qc-app .qa-plan.sel{border:2px solid var(--a);padding:.625rem .75rem}
 .qa-plan small{display:block;font-size:.78rem;color:var(--t3)}.qa-plan b{display:block;font-size:1.3125rem;color:var(--s);line-height:1.25;letter-spacing:-.01em}.qa-plan b i{font-style:normal;font-size:.8125rem;font-weight:500;color:var(--t3);letter-spacing:0}
-.qa-save{display:inline-block;margin-left:.25rem;padding:0 .3125rem;font-size:.6875rem;font-weight:700;color:var(--ok);background:var(--oks);border-radius:3px}
+.qa-save{display:inline-block;white-space:nowrap;margin-left:.25rem;padding:0 .3125rem;font-size:.6875rem;font-weight:700;color:var(--ok);background:var(--oks);border-radius:3px}
 .qa-gets{margin:0;padding:0;list-style:none;display:grid;gap:.375rem;font-size:.875rem;color:var(--t2)}.qa-gets li{display:flex;gap:.5625rem;line-height:1.35}.qa-gets svg{flex:none;margin-top:3px;color:var(--a)}
 #qc-app .qa-pay{display:flex;align-items:center;justify-content:center;min-height:2.875rem;width:100%;border-radius:6px;background:var(--a);color:var(--on);font-weight:700;font-size:.94rem}
 #qc-app .qa-back{display:flex;align-items:center;gap:.375rem;font-size:.8125rem;font-weight:600;color:var(--a);min-height:1.875rem}
 .qa-stripe{background:#fff;border-radius:8px;min-height:20rem;overflow:hidden}
 .qa-one{display:flex;gap:.5rem}.qa-one input{flex:1;min-width:0;min-height:2.75rem;padding:0 .75rem;border:1px solid var(--l2);border-radius:8px;background:var(--p2);outline:0;font-size:1rem}
 #qc-app .qa-one .qa-send{margin:0;min-height:2.75rem}#qc-app .qa-one .qa-clip{padding:0 .625rem;min-height:2.75rem;border:1px solid var(--l2);border-radius:8px;background:var(--p2)}
+@media (min-width:48rem){#qc-app{padding:2rem 3rem 1.75rem 2.25rem;gap:1.25rem}.qa-body{gap:1.25rem}.qa-c{right:17px}.qa-head h2{font-size:1.625rem}.qa-head p{font-size:.9375rem}.qa-left{font-size:.875rem}.qa-lbl{font-size:.8125rem}.qa-find input{min-height:3.25rem;font-size:1.0625rem}.qa-tiles{gap:.625rem}#qc-app .qa-tile{min-height:4rem;font-size:.9375rem;padding:.375rem .625rem .375rem .375rem;gap:.75rem}.qa-tile img{width:3.125rem;height:3.125rem}.qa-game img{width:3.125rem;height:3.125rem}.qa-game b{font-size:1.0625rem}.qa-ask textarea{height:7.5rem;padding:.875rem 1rem 0;font-size:1.0625rem}.qa-bar{padding:.5rem .5625rem .5625rem}#qc-app .qa-clip{font-size:.875rem}#qc-app .qa-send{min-height:2.625rem;padding:0 1.5rem;font-size:.94rem}.qa-chips{gap:.5625rem}#qc-app .qa-chip{min-height:3.25rem;padding:.5rem 1rem;font-size:1rem;gap:.875rem}.qa-chip em{width:7rem;font-size:.75rem}.qa-q{font-size:1rem}.qa-a{font-size:1.0625rem;line-height:1.65}.qa-note,.qa-more{font-size:.9375rem}.qa-gate{padding:1.5rem;gap:1rem}.qa-gate h3{font-size:1.375rem}.qa-gate p{font-size:.9375rem}.qa-gate p.qa-tax{font-size:.84rem}.qa-gets{font-size:.9375rem}.qa-plan b{font-size:1.5rem}}
 .qa-s{display:none}
 @media (max-width:35rem){#qc-app{padding:1rem 1.5rem 1rem .875rem;gap:.875rem}.qa-body{gap:.875rem}.qa-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.qa-head h2{font-size:1.1875rem}
 #qc-app .qa-chip{display:block;min-height:3rem}.qa-chip em{display:block;width:auto;margin-bottom:1px}.qa-c{right:12px}.qa-g{display:none}.qa-s{display:inline}.qa-plan b{font-size:1.1875rem}.qa-drop{margin-right:1.125rem}#qc-app .qa-clip,#qc-app .qa-send{min-height:2.75rem}}
 `;
 
-/** The block between the markers: the logo for when it's off, the app's frame, and everything its script needs. */
-export function homeAppBlock(o: { logoAlt: string; logoSrc: string; api: string; lang: string; T: Record<string, string>; tiles: HomeTile[]; up: string }): string {
+/** The small button by the hero's download buttons that takes people down to the app (owner, Nov 4 2026); only with the app on. */
+export function homeTryLink(text: string): string {
+  return `<a href="#qc-app" class="qa-try">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</a>`;
+}
+
+/** The block between the markers: the app's frame and everything its script needs. */
+export function homeAppBlock(o: { api: string; lang: string; T: Record<string, string>; tiles: HomeTile[]; up: string }): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return `<style>${CSS.replace(/\s*\n\s*/g, '')}</style>
-      <img src="${esc(o.logoSrc)}" alt="${esc(o.logoAlt)}" class="qa-logo w-24 h-24 mx-auto mb-6 drop-shadow-[0_0_30px_rgba(168,127,251,0.4)]" style="image-rendering: pixelated;">
       <section id="qc-app" aria-label="${esc(o.T.title)}" data-api="${esc(o.api)}" data-lang="${esc(o.lang)}" data-up="${esc(o.up)}" data-t="${esc(JSON.stringify(o.T))}" data-tiles="${esc(JSON.stringify(o.tiles))}"><i class="qa-c t"></i><i class="qa-c b"></i><div class="qa-body" data-body></div></section>
       <script src="${esc(o.up)}assets/home-app.js" defer></script>`;
 }

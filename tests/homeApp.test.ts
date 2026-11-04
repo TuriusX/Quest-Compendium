@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/homeApp.test.ts)
 import assert from "node:assert/strict";
-import { pickExample, homeAppBlock, HOME_APP_JS } from "../scripts/guides/homeApp";
+import { pickExample, homeTryLink, homeAppBlock, HOME_APP_JS } from "../scripts/guides/homeApp";
 import { GUIDE_UI_EN } from "../scripts/guides/guide-ui";
 import { GENERATED } from "../scripts/guides/guide-ui.generated";
 
@@ -35,10 +35,11 @@ test("a translation keeps the placeholders its English has", () => {
   }
 });
 
-test("the screenshot line is the agreed wording; the block carries the logo for when it's off", () => {
+test("the screenshot line is the agreed wording; the block is the app alone: the logo stays in the hero", () => {
   assert.equal(GUIDE_UI_EN.homeKept, "We don't keep your screenshot.");
-  const b = homeAppBlock({ logoAlt: "Quest Compendium", logoSrc: "logo.svg", api: "https://x", lang: "en", T, tiles: [{ key: "g", name: 'A "quoted" <game>', art: "a.jpg" }], up: "" });
-  assert.match(b, /qa-logo/);
+  const b = homeAppBlock({ api: "https://x", lang: "en", T, tiles: [{ key: "g", name: 'A "quoted" <game>', art: "a.jpg" }], up: "" });
+  assert.doesNotMatch(b, /logo\.svg|qa-logo/);
+  assert.equal(homeTryLink("Try <now> ↓"), '<a href="#qc-app" class="qa-try">Try &lt;now> ↓</a>');
   assert.match(b, /id="qc-app"/);
   assert.doesNotMatch(b, /<game>/);
   assert.match(b, /assets\/home-app\.js/);

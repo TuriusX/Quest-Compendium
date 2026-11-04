@@ -22,7 +22,7 @@ import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
 import { entryKind, entryIconSvg, type EntryKind } from '../../src/utils/entryKind';
 import { liveTitles, withBrand } from '../pipeline/searchTitleRules';
-import { homeAppBlock, HOME_APP_JS, pickExample, type HomeExample, type HomeTile } from './homeApp';
+import { homeAppBlock, homeTryLink, HOME_APP_JS, pickExample, type HomeExample, type HomeTile } from './homeApp';
 import { entityKind, shortGame, areaSeo, entitySeo, searchName, relatedQuests, achFlags, ACH_FLAGS, finalLinks, redirectLines, entitySegments, fuzzyScore, chapterPage, coveringPage, singularLabel, type AchFlag } from './siteText';
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
@@ -1897,8 +1897,8 @@ function homeAppWords(): Record<string, string> {
   return w;
 }
 /**
- * The homepage's app between the QC-HOMEAPP markers, per language (homeApp.ts), and what it reads. config/siteAsk.homeApp off: the
- * logo, as before, and nothing else changes on the page.
+ * The homepage's app between the QC-HOMEAPP markers, per language (homeApp.ts), and what it reads. config/siteAsk.homeApp off: that spot
+ * stays empty; the hero's logo and Launch Web App button are there either way.
  */
 async function updateHomeApp(games: { key: string; game: string; published: number; appId?: number }[]) {
   const on = ((await db().collection('config').doc('siteAsk').get()).data() as any)?.homeApp === true;
@@ -1917,9 +1917,9 @@ async function updateHomeApp(games: { key: string; game: string; published: numb
     if (!m) { console.log(`Homepage app: no markers in ${path.relative(OUT, file)}; skipped.`); continue; }
     setLang(code);
     const up = code === 'en' ? '' : '../';
-    const logo = `<img src="${up}logo.svg" alt="${esc(ui('homeLogoAlt'))}" class="w-24 h-24 mx-auto mb-6 drop-shadow-[0_0_30px_rgba(168,127,251,0.4)]" style="image-rendering: pixelated;">`;
-    const block = on ? homeAppBlock({ logoAlt: ui('homeLogoAlt'), logoSrc: `${up}logo.svg`, api: SERVER_URL, lang: code, T: homeAppWords(), tiles, up }) : logo;
+    const block = on ? homeAppBlock({ api: SERVER_URL, lang: code, T: homeAppWords(), tiles, up }) : '';
     let next = html.replace(m[0], () => `<!-- QC-HOMEAPP:START -->\n      ${block}\n      <!-- QC-HOMEAPP:END -->`);
+    next = next.replace(/<!-- QC-HOMETRY:START -->[\s\S]*?<!-- QC-HOMETRY:END -->/, () => `<!-- QC-HOMETRY:START -->${on ? homeTryLink(ui('homeTry')) : ''}<!-- QC-HOMETRY:END -->`);
     // Signing in on the homepage only with the app there (the account's script needs its slot).
     next = next.replace(/<!-- QC-ACCOUNT:START -->[\s\S]*?<!-- QC-ACCOUNT:END -->/, () => `<!-- QC-ACCOUNT:START -->${on ? `${accountSlot().replace('data-qc-account', 'data-qc-account data-from="homepage"')}<script src="${up}assets/account.js" defer></script>` : ''}<!-- QC-ACCOUNT:END -->`);
     if (next !== html) fs.writeFileSync(file, next);
@@ -1942,7 +1942,7 @@ async function updateHomeApp(games: { key: string; game: string; published: numb
   }
   fs.mkdirSync(path.join(OUT, 'guides'), { recursive: true });
   fs.writeFileSync(path.join(OUT, 'guides', 'home-examples.json'), JSON.stringify(examples));
-  console.log(`Homepage app: ${on ? 'on' : 'off (logo)'}; example questions for ${Object.keys(examples).length} guide(s).`);
+  console.log(`Homepage app: ${on ? 'on' : 'off (empty spot)'}; example questions for ${Object.keys(examples).length} guide(s).`);
 }
 
 /** The compendium as compSections made it last (guide.json): live sections first, then the ones only coming soon. */
