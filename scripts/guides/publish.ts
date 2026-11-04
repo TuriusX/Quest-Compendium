@@ -2632,6 +2632,8 @@ async function main() {
     if (!m.merge?.from || !m.merge?.to || (ONLY && m.key !== ONLY)) continue;
     merged.set(m.key, (merged.get(m.key) || new Map()).set(String(m.merge.from), String(m.merge.to)));
   }
+  // Loaded before the first page they go on: the compendium's pages just below, then the guide pages.
+  const ownerEdits = await loadOwnerEdits(ONLY);
   // The compendium (scripts/guides/compendium.ts): each guide's published entity pages (a preview shows all of them).
   for (const cd of (await db().collection('guideCompendium').get()).docs) {
     if (ONLY && cd.id !== ONLY) continue;
@@ -2652,7 +2654,6 @@ async function main() {
   }
   // Owner-approved pictures (roadmap 14, /admin/images): on their pages from this publish on.
   console.log(`Pictures: ${await loadSitePictures(OUT, ONLY)} on the site.`);
-  const ownerEdits = await loadOwnerEdits(ONLY);
   // "Players asked" entries (siteAsk.ts; reworded and checked against sources by the nightly improvements,
   // autoImprove.ts, undone on /admin/asked): inside the page they were asked on.
   // (QC_PLAYERS_ASKED=test_playersAsked: a local server's test entries, for looking at a local build.)

@@ -1,5 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/ownerEdits.test.ts)
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { getAt, setAt, applyEdit, EDIT_PATH } from "../scripts/guides/ownerEdits";
 
 let passed = 0;
@@ -75,6 +76,13 @@ test("taking a sentence out leaves no stray space", () => {
   const p: any = page();
   assert.equal(applyEdit(p, { path: "overview", before: "Geralt travels to Fyke Isle.", after: "" }), "applied");
   assert.equal(p.overview, "Using a magical lamp, he retraces the massacre.");
+});
+
+test("the edits are loaded before the first page they go on", () => {
+  // Loaded after the compendium pages (until Nov 4 2026), their edits never went on and stayed "waiting" for good.
+  const src = readFileSync("scripts/guides/publish.ts", "utf8");
+  const load = src.indexOf("await loadOwnerEdits("), first = src.indexOf("applyOwnerEdits(cd.id");
+  assert.ok(load > 0 && first > 0 && load < first);
 });
 
 console.log(`\n${passed} passed`);
