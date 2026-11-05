@@ -144,8 +144,7 @@ export const PROMPT_PERSONA_END = 'Provide clear, direct answers without adoptin
  * Pro's own rules (owner, Nov 5 2026: a Pro answer should beat asking Gemini Pro yourself). 12 test questions, fact-checked:
  * 3 wrong claims against 7 for plain Gemini Pro and 7 for the app's Pro before this. Without search, the rule to check is left out.
  */
-export const PRO_RULES = (canSearch: boolean, screenshot = false) => `[PRO ANSWER: THE BEST ANSWER THIS PLAYER CAN GET]
-The player chose Pro because they want a better answer than a general assistant would give. Accuracy and completeness come first.
+export const PRO_RULES = (canSearch: boolean, screenshot = false, pro = true) => `${pro ? '[PRO ANSWER: THE BEST ANSWER THIS PLAYER CAN GET]\nThe player chose Pro because they want' : '[ANSWER: THE BEST ANSWER THIS PLAYER CAN GET]\nThe player wants'} a better answer than a general assistant would give. Accuracy and completeness come first.
 ${screenshot ? "- Look closely at the screenshot first and use what's actually in it: characters, creatures, what the player is holding or doing, text on screen, landmarks. If the same view could be more than one place, say so and cover each. If you can't be sure of the place, give your best guess, say it's a guess, and answer for it rather than giving a general answer.\n" : ''}${canSearch ? "- Always run Google Search before you answer, at least twice when the answer depends on more than one fact, for the specifics it depends on (names, locations, requirements, numbers, rewards, what a choice leads to), on the game's wikis and guides. Don't state from memory what you can check. Search for the exact version of the game the player is on.\n" : ''}- Answer the whole question: every step, requirement and consequence the player needs, with exact names and places, and what they can miss for good. Cover all of what was asked about: every phase of a fight (including any after a cutscene or in another place), every outcome of a choice, every way to get an item, even when the player's area or the guide notes only cover part of it. Then anything closely related they would otherwise have to ask next. Never leave a part of the question unanswered.
 - Lead with the direct answer, then go into full detail, like the best dedicated guide for this game would: don't shorten or summarize to save space, and don't stop at the first thing that answers it. When the player has a decision, lay out each option's consequences, then say what you'd do and why.
 - Never invent a place, item, character or detail to round out the answer: if you can't confirm it, leave it out.
@@ -170,9 +169,10 @@ No screenshot or image is attached to this question. Never describe, refer to or
 /** In place of the vision rule that had answers open with "I don't see a screenshot", even on questions that don't need one. */
 export const PRO_MISSING_IMAGE = "3. MISSING IMAGE HANDLING: Only if the player directly asks about what's on their screen and no image came with the question, say in one sentence that you don't see a screenshot. Otherwise don't mention screenshots.";
 
+/** Fast in the app uses the same rules on Flash since Nov 5 2026 (`pro` false: the same words, without saying the player chose Pro). */
 /** The prompt with Pro's rules near the start and again at the very end, after the rules about the quest log and the place. */
-export function withProRules(prompt: string, canSearch: boolean, screenshot = false): string {
-  const rules = PRO_RULES(canSearch, screenshot);
+export function withProRules(prompt: string, canSearch: boolean, screenshot = false, pro = true): string {
+  const rules = PRO_RULES(canSearch, screenshot, pro);
   const system = prompt.replace(/\[STORY TIMING\][\s\S]*?(?=\n\n\[)/, () => PRO_STORY_TIMING).replace(/\[NO SCREENSHOT WITH THIS QUESTION\][\s\S]*?(?=\n\n\[)/, () => PRO_NO_SCREENSHOT).replace(/3\. MISSING IMAGE HANDLING:[^\n]*/, () => PRO_MISSING_IMAGE);
   const at = system.indexOf(PROMPT_PERSONA_END);
   const start = at < 0 ? system : `${system.slice(0, at + PROMPT_PERSONA_END.length)}\n\n${rules}${system.slice(at + PROMPT_PERSONA_END.length)}`;

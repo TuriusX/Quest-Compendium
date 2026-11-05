@@ -67,6 +67,7 @@ test("Pro's rules: near the start and at the very end; no rule to search when it
   assert.ok(out.indexOf(rules) < out.indexOf("middle"));
   assert.ok(rules.includes("Google Search"));
   assert.ok(!PRO_RULES(false).includes("Google Search"));
+  assert.ok(!PRO_RULES(true, false, false).includes("chose Pro") && PRO_RULES(true, false, false).includes("Google Search"), "Fast: the same rules without saying Pro");
   assert.ok(readFileSync("server.ts", "utf8").includes(PROMPT_PERSONA_END), "the answer prompt still has the line the rules follow");
   assert.ok(readFileSync("server.ts", "utf8").includes("3. MISSING IMAGE HANDLING:"), "the answer prompt still has the vision rule this replaces");
   assert.ok(withProRules("3. MISSING IMAGE HANDLING: say so\n4. next", true).includes("Otherwise don't mention screenshots"));

@@ -1549,9 +1549,12 @@ percentages:
       let qtype = questionType(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null));
       const routingCfg = await routing();
       const usePro = evalCapture ? true : picked.bucket === 'pro' && (await takePlayerPro(routingCfg));
+      // Fast in the app (Flash, for players with full access; Flash-Lite for the rest is unchanged) gets the same rules, search from the first
+      // try and guide lines as Pro, thinking low (owner, Nov 5 2026: 12 test questions, 5 wrong claims against 6, median 14 s against 27).
+      const fastApp = !site && !usePro && targetModel === MAIN_MODEL;
       // Pro in the app: the guide lines that match the question, from anywhere in the guide (the area's page alone often has
       // nothing on it, and with no place known there was no guide at all). A slow read just goes without.
-      if (usePro && !site && guideKey && String(question || '').trim()) {
+      if ((usePro || fastApp) && !site && guideKey && String(question || '').trim()) {
         try {
           const more = await withTimeout(appGuideLines(guideKey, String(question), guidePage?.slug || ''), 4000, 'Guide lines') as Awaited<ReturnType<typeof appGuideLines>>;
           if (more.text) {
@@ -1559,7 +1562,7 @@ percentages:
             systemInstruction += `\n\n${more.text}`;
           }
         } catch (e: any) {
-          console.log('[chat] no guide lines for Pro:', String(e?.message || e).slice(0, 120));
+          console.log('[chat] no guide lines:', String(e?.message || e).slice(0, 120));
         }
       }
 
@@ -1574,7 +1577,7 @@ percentages:
       const appSearchMode: SearchMode = !effectiveGame?.name
         ? 'ask'
         : searchModeFor({ newRelease, dated: release?.source !== 'unknown', type: qtype, covered: Boolean(guidePage?.verified), screenshot: !!imageBase64, specifics: wantsSpecifics(String(question || '')) });
-      const searchMode: SearchMode = (site || usePro) && appSearchMode === 'ask' ? 'offer' : appSearchMode;
+      const searchMode: SearchMode = (site || usePro || fastApp) && appSearchMode === 'ask' ? 'offer' : appSearchMode;
       const searchOk = evalCapture ? true : site ? site.maySearch : searchMode === 'force'
         ? (await playerSearchesToday()) && (await monthlyBudgetOk())
         : await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
@@ -1584,7 +1587,7 @@ percentages:
       if (!searchOk) {
         systemInstruction += `\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. If something is unfamiliar, say there isn't enough information about it yet and ask for a screenshot or a detail. Don't mention search limits to the player.`;
       }
-      if (usePro && !site) systemInstruction = withProRules(systemInstruction, searchOk, !!imageBase64);
+      if ((usePro || fastApp) && !site) systemInstruction = withProRules(systemInstruction, searchOk, !!imageBase64, usePro);
       // Ask mode: the first try has no search, and may ask for it.
       const firstSystem = searchMode === 'ask' && searchOk ? `${systemInstruction}\n\n${ASK_RULES}` : systemInstruction;
       let searchAsked = false;
@@ -1801,7 +1804,7 @@ percentages:
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
               // The website thinks less before it writes: the first words in 1-9 s instead of 14-28, with answers as full (Nov 3 2026).
               // Pro thinks low (owner, Nov 5 2026: about 15 s is the goal, 30 s the limit): with the Pro rules, search and guide lines it holds up; medium took 36-50 s.
-              ...(usePro ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : targetModel === MAIN_MODEL ? { thinkingConfig: { thinkingLevel: site ? ThinkingLevel.LOW : ThinkingLevel.MEDIUM } } : {}),
+              ...(usePro ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : targetModel === MAIN_MODEL ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {}),
             }
           });
           const answerCall = (sys: string, withSearch: boolean): Promise<any> => {
@@ -1816,7 +1819,8 @@ percentages:
           // The website's questions are often broad ("what can I miss here?"), and a long answer takes about 25 s: stopping
           // there pays for the attempt and gets a thinner answer from the fallback, so they get longer.
           // Shown as it's written, a long answer isn't given up on while the player is reading it.
-          const flashWait = site?.stream ? 75000 : site ? 45000 : 25000;
+          // The app's Fast: 20 s at most in the test, 30 s before the fallback.
+          const flashWait = site?.stream ? 75000 : site ? 45000 : 30000;
           if (evalCapture) {
             const fs = await import('node:fs');
             fs.appendFileSync(String(process.env.QC_EVAL_CAPTURE), JSON.stringify({ id: req.body.evalId, model: answerModel, contents: contentsPayload, systemInstruction: firstSystem, withSearch: !!searchTools, searchMode, temperature: aiMode === 'roleplay' ? 0.9 : 0.7, qtype }) + String.fromCharCode(10));
