@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useT } from '../i18n';
 import { balancesOf, topUp, resetParts } from '../utils/answerModel';
 
@@ -41,25 +41,15 @@ export function clock(ms: number): string {
 }
 
 /**
- * The questions left today and the time to the next top-up, in the header (and the compact view): "Pro 1 · Fast 3 ·
- * ⏱ 5:26:41", ticking every second, amber when both are used up. Click it for each model's count, a large countdown,
- * what the next top-up brings, and Premium.
+ * The questions left and the time to the next top-up, at the top of the ⋯ menu (owner, Nov 5 2026: the header's pill is
+ * gone; the counts are on the Pro / Fast switch by the question box). Ticks every second while the menu is open.
  */
-export function QuestionsPill({ userData, onOpenPaywall, small, onPress }: { userData?: any; onOpenPaywall?: () => void; small?: boolean; /** Instead of the popover (the compact view: no room for it, so it opens the full view). */ onPress?: () => void }) {
+export function QuestionsSummary({ userData }: { userData?: any }) {
   const t = useT();
   const now = useSecond();
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    setTimeout(() => popRef.current?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true }), 0);
-  }, [open]);
   // Nothing until the server has said (the app's placeholder before it answers isn't a real balance).
   if (!userData || !(Number(userData.resetAt) > 0)) return null;
   const b = balancesOf(userData);
-  const out = b.pro + b.fast === 0;
-  const left = b.resetAt ? clock(b.resetAt - now) : '';
   const u = topUp(b, now);
   const refill = u && u.reset
     ? t('pill.reset', { parts: resetParts(u, t) })
@@ -69,100 +59,18 @@ export function QuestionsPill({ userData, onOpenPaywall, small, onPress }: { use
         u.fastMax ? t('topup.max', { model: t('model.fast'), n: u.cap }) : u.fast > 0 ? t('topup.add', { model: t('model.fast'), n: u.fast }) : '',
       ].filter(Boolean).join(' · ') })
     : '';
-  const row = (label: string, n: number, daily: number) => {
-    const of = b.rollover && b.bankCap ? b.bankCap : daily;
-    return (
-      <div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-zinc-300">{label}</span>
-          <span className="flex-1" />
-          <b className="text-white tabular-nums">{n}</b>
-          {of > 0 && <span className="text-zinc-500 tabular-nums">{t('pill.of', { n: of })}</span>}
-        </div>
-        <div className="h-1.5 mt-1 mb-2 rounded-full bg-white/[0.08] overflow-hidden">
-          <div className="h-full rounded-full bg-[var(--accent-color)]" style={{ width: `${of > 0 ? Math.min(100, (n / of) * 100) : 0}%` }} />
-        </div>
-      </div>
-    );
-  };
-  const title = [t('model.proHint', { n: b.pro }), t('model.fastHint', { n: b.fast }), left && t('pill.nextIn', { time: left })].filter(Boolean).join('\n');
   return (
-    <div className="relative flex-shrink-0" style={{ WebkitAppRegion: 'no-drag' } as any}>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={() => (onPress ? onPress() : setOpen((v) => !v))}
-        aria-haspopup={onPress ? undefined : 'dialog'}
-        aria-expanded={onPress ? undefined : open}
-        title={title}
-        className={`qc-pill flex items-center gap-1.5 rounded-full border whitespace-nowrap font-semibold tabular-nums cursor-pointer transition-colors ${
-          small ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-[11.5px]'
-        } ${
-          out
-            ? 'bg-amber-500/15 border-amber-500/45 text-amber-100 hover:bg-amber-500/25'
-            : 'bg-white/[0.04] border-white/[0.12] text-zinc-200 hover:border-[var(--accent-border)] hover:bg-white/[0.07]'
-        }`}
-      >
-        <span>{t('model.pro')} {b.pro}</span>
-        <span className="text-zinc-500">·</span>
-        <span>{t('model.fast')} {b.fast}</span>
-        {left && (
-          <>
-            <span className="text-zinc-500">·</span>
-            <span className={out ? 'text-amber-300' : 'text-[var(--accent-color)]'}>
-              <span aria-hidden="true">⏱ </span>
-              {left}
-            </span>
-          </>
-        )}
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
-          <div
-            ref={popRef}
-            role="dialog"
-            aria-label={t('pill.title')}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.preventDefault();
-                e.stopPropagation();
-                setOpen(false);
-                btnRef.current?.focus();
-              }
-            }}
-            className="absolute right-0 top-9 z-50 w-72 p-3.5 rounded-xl bg-[#151622] border border-[var(--accent-border)] shadow-2xl text-[12.5px] animate-in fade-in zoom-in-95 duration-100"
-          >
-            <div className="font-bold text-white mb-2">{t('pill.title')}</div>
-            {row(t('model.pro'), b.pro, b.dailyPro)}
-            {row(t('model.fast'), b.fast, b.dailyFast)}
-            {left && (
-              <>
-                <div className="text-[11.5px] text-zinc-500">{t('pill.nextLabel')}</div>
-                <div className={`text-[22px] font-bold tabular-nums leading-tight ${out ? 'text-amber-300' : 'text-[var(--accent-color)]'}`}>{left}</div>
-              </>
-            )}
-            {refill && <div className="text-[11.5px] text-zinc-400 mt-0.5">{refill}</div>}
-            <div className="text-[11.5px] text-zinc-500 mt-1">{t('pill.pick')}</div>
-            {b.rollover ? (
-              <div className="mt-2.5 text-[11.5px] text-zinc-300">{t('pill.carryOver', { n: b.bankCap || 0 })}</div>
-            ) : (
-              onOpenPaywall && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    onOpenPaywall();
-                  }}
-                  className="mt-2.5 w-full text-left px-2.5 py-2 rounded-lg bg-[var(--accent-dim)] border border-[var(--accent-border)] text-white text-[12px] font-semibold hover:brightness-125 cursor-pointer"
-                >
-                  {t('pill.premium')}
-                </button>
-              )
-            )}
-          </div>
-        </>
-      )}
+    <div className="px-3 pt-1 pb-2 mb-1 border-b border-white/[0.08] text-[12px] tabular-nums">
+      <div className="font-semibold text-white">{t('model.pro')} {b.pro} <span className="text-zinc-500">·</span> {t('model.fast')} {b.fast}</div>
+      {b.resetAt ? <div className="text-[var(--accent-color)] mt-0.5">{t('pill.nextIn', { time: clock(b.resetAt - now) })}</div> : null}
+      {refill && <div className="text-[11.5px] text-zinc-400 mt-0.5">{refill}</div>}
     </div>
   );
+}
+
+/** Above the question box when both are used up: when the next questions come, ticking. */
+export function NextQuestionsLine({ resetAt }: { resetAt: number }) {
+  const t = useT();
+  const now = useSecond();
+  return <div role="status" className="mb-2 text-center text-[12px] font-semibold tabular-nums text-amber-300">{t('pill.nextIn', { time: clock(resetAt - now) })}</div>;
 }

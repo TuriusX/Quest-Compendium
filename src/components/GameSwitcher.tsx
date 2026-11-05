@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Edit3, FileText, Target, Globe, Trophy } from './icons';
+import { Plus, Trash2, Edit3, FileText, Target, Globe, Trophy, MapPin } from './icons';
 import { GameTab, SteamGameData } from '../types';
 import { playBlipSound } from '../utils/audio';
 import { useT } from '../i18n';
@@ -18,7 +18,8 @@ function ago(ms: number, t: (k: string, v?: Record<string, string | number>) => 
 }
 
 /**
- * The game switcher in the header: "● Elden Ring ▾" (green while the game is running). It opens your games (the
+ * The game switcher, the header's title: box art (a green dot while the game is running), the full name (it wraps rather
+ * than being cut) and where the player is under it. It opens your games (the
  * running one first with its achievements, then the others by last played), New compendium, Browse all guides, and
  * the current game's notes and quests. Each game has rename and delete buttons (also on right-click). It replaces the
  * old games sidebar.
@@ -29,6 +30,7 @@ export function GameSwitcher({
   activeGame,
   isGameRunningLocally,
   detection,
+  placeName,
   chosenGame,
   soundEnabled,
   onSelectTab,
@@ -47,6 +49,8 @@ export function GameSwitcher({
   isGameRunningLocally: boolean;
   /** Set: the dot is green only when the open compendium is the running game. */
   detection?: Detection;
+  /** Where the player is, under the name. */
+  placeName?: string;
   /** The game picked for a collection app ("Which game?"), and changing it (the detection line asks again). */
   chosenGame?: { game: string; onChange: () => void };
   soundEnabled: boolean;
@@ -55,8 +59,7 @@ export function GameSwitcher({
   /** Rename a compendium (not with one space per game: a game keeps its name). */
   onStartRenameTab?: (id: string, name: string) => void;
   /**
-   * One space per game (flag on): the button is the game's box art (the full name is on the line under the header),
-   * the list is the player's games with their box art and full names, the running one first; "Add a game" in place
+   * One space per game (flag on): the list is the player's games with their box art and full names, the running one first; "Add a game" in place
    * of "New compendium".
    */
   gamesMode?: boolean;
@@ -104,8 +107,7 @@ export function GameSwitcher({
   const runningName = isGameRunningLocally && activeGame?.isAutoDetected ? activeGame.name : '';
   const isRunning = (tab: GameTab) => (gamesMode ? !!runningTabId && tab.id === runningTabId : !!runningName && tab.id === activeTabId && (!detection || detection.open));
   const sorted = [...tabs].sort((a, b) => Number(isRunning(b)) - Number(isRunning(a)) || (b.lastActive || 0) - (a.lastActive || 0));
-  const label = active ? active.name : t('switch.choose');
-  const live = !!active && isGameRunningLocally && (!detection || detection.open);
+  const name = active ? displayGameName(active.name) : t('switch.choose');
   const coverOf = (tab: GameTab, className: string, dot?: string) => (
     <GameCover appId={Number(tab.activeSteamGame?.appId) || undefined} name={tab.name} fallback={tab.activeSteamGame?.headerImage} unknown={!!tab.unknownGame} live={isRunning(tab)} className={className} dot={dot} />
   );
@@ -113,28 +115,6 @@ export function GameSwitcher({
   const item = 'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer';
   return (
     <div className="relative min-w-0" style={{ WebkitAppRegion: 'no-drag' } as any}>
-      {gamesMode ? (
-        <button
-          ref={btnRef}
-          type="button"
-          onClick={() => {
-            playBlipSound(soundEnabled);
-            setOpen((v) => !v);
-          }}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          aria-label={`${active ? active.name : t('switch.choose')}: ${t('spaces.openGames')}`}
-          title={active ? active.name : t('switch.choose')}
-          className={`h-9 pl-0.5 pr-1 flex items-center gap-1 rounded-lg border cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
-            open ? 'bg-white/[0.08] border-[var(--accent-border)]' : tabs.length === 0 ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] animate-pulse' : 'bg-white/[0.03] border-white/[0.12] hover:bg-white/[0.07] hover:border-white/25'
-          }`}
-        >
-          {active ? coverOf(active, 'w-[30px] h-[30px]', 'w-2.5 h-2.5') : <span className="w-[30px] h-[30px] rounded-md grid place-items-center"><Plus className="w-4 h-4 text-[var(--accent-color)]" /></span>}
-          <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true" className={`flex-shrink-0 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`}>
-            <path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" />
-          </svg>
-        </button>
-      ) : (
       <button
         ref={btnRef}
         type="button"
@@ -144,22 +124,28 @@ export function GameSwitcher({
         }}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={isGameRunningLocally ? t('header.playing', { game: activeGame?.name ?? '' }) : t('header.noGame')}
-        className={`max-w-full h-8 pl-2.5 pr-2 flex items-center gap-2 rounded-xl border text-[13px] font-semibold cursor-pointer transition-colors ${
-          tabs.length === 0
-            ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white shadow-[0_0_15px_var(--accent-glow)] animate-pulse'
-            : open
-              ? 'bg-white/[0.08] border-[var(--accent-border)] text-white'
-              : 'bg-white/[0.03] border-white/[0.1] text-zinc-100 hover:bg-white/[0.07] hover:border-white/20'
+        aria-label={`${name}${placeName ? `, ${placeName}` : ''}: ${t('spaces.openGames')}`}
+        title={isGameRunningLocally ? t('header.playing', { game: activeGame?.name ?? '' }) : name}
+        className={`max-w-full min-w-0 flex items-center gap-2.5 p-1 pr-2 rounded-lg text-left cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
+          open ? 'bg-white/[0.08]' : tabs.length === 0 ? 'bg-[var(--accent-dim)] animate-pulse' : 'hover:bg-white/[0.06]'
         }`}
       >
-        <span className={`w-2 h-2 flex-shrink-0 rounded-full ${live ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-zinc-600'}`} aria-hidden="true" />
-        <span className="truncate">{label}</span>
-        <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true" className={`flex-shrink-0 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`}>
-          <path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        </svg>
+        {active ? coverOf(active, 'w-[42px] h-[42px]', 'w-2.5 h-2.5') : <span className="flex-shrink-0 w-[42px] h-[42px] rounded-md border border-[var(--accent-border)] grid place-items-center"><Plus className="w-5 h-5 text-[var(--accent-color)]" /></span>}
+        <span className="min-w-0 flex flex-col gap-0.5">
+          <span className="min-w-0 flex items-center gap-1.5">
+            <span className="min-w-0 text-[14.5px] font-bold leading-[1.2] text-white break-words line-clamp-2">{name}</span>
+            <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true" className={`flex-shrink-0 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`}>
+              <path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
+          </span>
+          {active && (
+            <span className={`min-w-0 flex items-center gap-1 text-[12px] leading-[1.2] ${placeName ? 'text-zinc-300' : 'text-zinc-500'}`}>
+              <MapPin className="w-3 h-3 flex-shrink-0 text-[var(--accent-color)]" aria-hidden="true" />
+              <span className="truncate">{placeName || t('strip.noPlaceShort')}</span>
+            </span>
+          )}
+        </span>
       </button>
-      )}
 
       {open && (
         <>
@@ -169,7 +155,7 @@ export function GameSwitcher({
             role="menu"
             aria-label={t('side.title')}
             onKeyDown={onKey}
-            className={`absolute left-0 top-10 z-50 ${gamesMode ? 'w-[340px]' : 'w-[300px]'} max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#151622] border border-[var(--accent-border)] shadow-2xl animate-in fade-in zoom-in-95 duration-100`}
+            className={`absolute left-0 top-full mt-1 z-50 ${gamesMode ? 'w-[340px]' : 'w-[300px]'} max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#151622] border border-[var(--accent-border)] shadow-2xl animate-in fade-in zoom-in-95 duration-100`}
           >
             {gamesMode && (
               // The library: box art and full names (two lines rather than cut), the running game first.
@@ -177,7 +163,7 @@ export function GameSwitcher({
                 {sorted.map((tab, i) => {
                   const on = tab.id === activeTabId;
                   const running = isRunning(tab);
-                  const firstOther = sorted.findIndex((x) => !isRunning(x));
+                  const firstOther = sorted.findIndex((x) => !isRunning(x));
                   const section = running && i === 0 ? t('spaces.playingNow') : i === firstOther ? (firstOther > 0 ? t('spaces.recent') : t('side.title')) : '';
                   const pts = tab.playthrough && tab.playthrough.count > 1 ? t('spaces.playthroughCount', { n: tab.playthrough.count }) : '';
                   return (

@@ -27,7 +27,7 @@ export interface Detection {
 }
 
 /**
- * A slim line under the header (and at the top of the compact view), said without hovering:
+ * A slim line under the header, said without hovering:
  *   "▶ Playing Baldur's Gate 3 · Switch" (another compendium is open; Switch opens or starts the game's),
  *   "▶ Playing Baldur's Gate 3 · this compendium", or "No game detected · start one in Steam and it shows here".
  * Switch is an ordinary button, so the controller reaches it like any other.

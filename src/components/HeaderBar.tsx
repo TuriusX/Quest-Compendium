@@ -7,17 +7,16 @@ import {
   Square,
   RefreshCw,
   LogIn,
-  MessageSquareText,
-  Minimize2
+  MessageSquareText
 } from './icons';
 import { PWAInstallButton } from './PWAInstallButton';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 import { closeAppAfterSync } from '../utils/closeApp';
 import { GameTab, SteamGameData, ColorTheme } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import { useT } from '../i18n';
-import { QuestLogo } from './QuestLogo';
 import { GameSwitcher } from './GameSwitcher';
-import { QuestionsPill } from './QuestionsPill';
+import { QuestionsSummary } from './QuestionsPill';
 import { GlainIcon } from './GlainIcon';
 import type { Detection } from './DetectionLine';
 
@@ -29,6 +28,8 @@ interface HeaderBarProps {
   isGameRunningLocally: boolean;
   /** The running game: the switcher's dot is green only when the open compendium is it. */
   detection?: Detection;
+  /** Where the player is, under the game's name. */
+  placeName?: string;
   /** The game picked for a collection app, with a way to change it (GameSwitcher). */
   chosenGame?: { game: string; onChange: () => void };
   onSelectTab: (tabId: string) => void;
@@ -61,8 +62,6 @@ interface HeaderBarProps {
   questLogReady?: boolean;
   theme: ColorTheme;
   onSync?: () => Promise<boolean>;
-  /** Switch to the compact view (the small resting state over the game). */
-  onCompact?: () => void;
   /**
    * Games-not-tabs (flag on): the game's playthroughs. "New playthrough" is in the ⋯ menu; switching too, when there
    * are several (the current one's name then shows by the game's).
@@ -73,8 +72,8 @@ interface HeaderBarProps {
 }
 
 /**
- * One header row: a small logo, the game switcher ("● Elden Ring ▾"), the questions pill with its live countdown,
- * then Sign in (guests), tuck away and the quest log (desktop), the ⋯ menu, and close (desktop).
+ * The header (owner, Nov 5 2026): the game switcher as the title (box art, the game's full name, where the player is under
+ * it), then Sign in (guests), tuck away (desktop), the ⋯ menu with the questions left, and close (desktop).
  */
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   userData,
@@ -83,6 +82,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   activeGame,
   isGameRunningLocally,
   detection,
+  placeName,
   chosenGame,
   onSelectTab,
   onStartCreateTab,
@@ -106,11 +106,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   tuckSide = 'right',
   questLogReady = true,
   onSync,
-  onCompact,
   playthroughs,
   runningTabId,
 }) => {
   const t = useT();
+  const pwa = usePWAInstall();
   const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
   const [isClosing, setIsClosing] = useState(false);
   // The "More" menu: the header's less-used controls.
@@ -143,9 +143,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const menuItem = 'w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer';
 
   return (
-    <header className="qc-stars h-12 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center gap-2 px-2.5 sm:px-3 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
-      {/* Left: a small logo and the game switcher (it shrinks, so the controls on the right always stay visible) */}
-      <QuestLogo size={22} compact className="flex-shrink-0 drop-shadow-[0_0_8px_var(--accent-glow)]" />
+    <header className="qc-stars min-h-[60px] py-1 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center gap-2 px-2.5 sm:px-3 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
+      {/* Left: the game switcher (it shrinks, so the controls on the right always stay visible) */}
       <div className="min-w-0 flex-1 flex">
         <GameSwitcher
           tabs={tabs}
@@ -153,6 +152,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           activeGame={activeGame}
           isGameRunningLocally={isGameRunningLocally}
           detection={detection}
+          placeName={placeName}
           chosenGame={chosenGame}
           soundEnabled={soundEnabled}
           onSelectTab={onSelectTab}
@@ -169,8 +169,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
       {/* Right controls */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <QuestionsPill userData={userData} onOpenPaywall={onOpenPaywall} />
-
         {onSignIn && (
           <button
             style={{ WebkitAppRegion: "no-drag" } as any}
@@ -189,19 +187,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         {/* Tuck the panel away (the quest log has its own bookmark on the panel's edge, and is in the ⋯ menu). */}
         {isDesktop && (
           <>
-            {/* The compact view, in sight (owner, Oct 27 2026; also in the ⋯ menu and on Ctrl+Shift+F) */}
-            {onCompact && (
-              <button
-                type="button"
-                style={{ WebkitAppRegion: "no-drag" } as any}
-                onClick={() => { playBlipSound(soundEnabled); onCompact(); }}
-                title={`${t('compact.collapse')} (Ctrl+Shift+F)`}
-                aria-label={t('compact.collapse')}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer"
-              >
-                <Minimize2 className="w-4 h-4" aria-hidden="true" />
-              </button>
-            )}
             {/* Tuck away: the panel slides to the screen edge (Esc does the same) */}
             {onTuckAway && (
               <button
@@ -220,7 +205,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </>
         )}
 
-        {/* "More": your playthrough, achievements, compact view, settings, quick tour, dock / undock, beta feedback */}
+        {/* "More": your playthrough, achievements, settings, quick tour, dock / undock, beta feedback */}
         <div className="relative" style={{ WebkitAppRegion: "no-drag" } as any}>
           <button
             ref={menuBtnRef}
@@ -240,7 +225,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden="true" />
-              <div ref={menuRef} role="menu" aria-label={t('header.menu')} onKeyDown={onMenuKey} className="absolute right-0 top-10 z-50 w-56 py-1.5 rounded-xl bg-[#161620] border border-white/15 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+              <div ref={menuRef} role="menu" aria-label={t('header.menu')} onKeyDown={onMenuKey} className="absolute right-0 top-10 z-50 w-64 max-w-[calc(100vw-24px)] py-1.5 rounded-xl bg-[#161620] border border-white/15 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                <QuestionsSummary userData={userData} />
                 <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); window.dispatchEvent(new CustomEvent('qc-open-playthrough')); })} className={menuItem}>
                   <span className="w-4 h-4 flex items-center justify-center text-[13px]" aria-hidden="true">✦</span>
                   <span className="flex-1">{t('play.title')}</span>
@@ -274,13 +260,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     </button>
                   </>
                 )}
-                {onCompact && (
-                  <button type="button" role="menuitem" onClick={pick(onCompact)} className={menuItem}>
-                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" className="text-zinc-400"><path fill="none" stroke="currentColor" strokeWidth="1.5" d="M2 10h12v4H2zM4 6h8M6 3h4" /></svg>
-                    <span className="flex-1">{t('compact.collapse')}</span>
-                    <span className="text-[10px] text-zinc-500 font-mono">Ctrl+Shift+F</span>
-                  </button>
-                )}
                 {/* Premium (free players and guests) or Your plan (Premium players): the same screen */}
                 {onOpenPaywall && (
                   <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); onOpenPaywall(); })} className={menuItem}>
@@ -304,6 +283,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     <span className="flex-1">{isDocked ? t('header.undock') : t('header.dock')}</span>
                   </button>
                 )}
+                <PWAInstallButton className={menuItem} state={pwa} onDone={() => setMenuOpen(false)} />
                 <div className="h-px bg-white/[0.08] my-1 mx-2" />
                 <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); onOpenFeedback(); })} className={menuItem}>
                   <MessageSquareText className="w-4 h-4 text-amber-400" />
@@ -312,10 +292,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               </div>
             </>
           )}
-        </div>
-
-        <div className="flex items-center" style={{ WebkitAppRegion: "no-drag" } as any}>
-          <PWAInstallButton />
         </div>
 
         {/* Close (desktop) */}

@@ -19,7 +19,7 @@ export function newerVersion(a: string, b: string): boolean {
  *     Recent updates line, in the app's language), dismissible.
  * `preview` shows both with sample data (for screenshots in a browser).
  */
-export const AppUpdates: React.FC<{ compact?: boolean; preview?: { ready?: string; whatsNew?: { v: string; text: string } } }> = ({ compact = false, preview }) => {
+export const AppUpdates: React.FC<{ preview?: { ready?: string; whatsNew?: { v: string; text: string } } }> = ({ preview }) => {
   const t = useT();
   const locale = useLocale();
   const api = typeof window !== 'undefined' ? (window as any).electronAPI : null;
@@ -65,8 +65,8 @@ export const AppUpdates: React.FC<{ compact?: boolean; preview?: { ready?: strin
 
   return (
     <>
-      {/* In line under the header (it covers nothing); not in the compact view, where the update simply installs on quit. */}
-      {ready && !later && !compact && (
+      {/* In line under the header (it covers nothing). */}
+      {ready && !later && (
         <div role="status" className="flex-shrink-0 mx-3 mt-2 flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[#161620] border border-[var(--accent-border)] text-[12.5px] text-zinc-200 animate-in fade-in slide-in-from-top-1 duration-200">
           <Download className="w-4 h-4 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />
           <span className="flex-1 min-w-0">{t('update.ready', { v: ready })}</span>

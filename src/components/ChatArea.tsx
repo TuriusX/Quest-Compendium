@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { NextQuestionsLine } from './QuestionsPill';
 import { ModelToggle } from './ModelToggle';
-import { QuestionsPill } from './QuestionsPill';
 import { balancesOf, modelKind, readAnswerModel, saveAnswerModel, startingModel, type AnswerModel } from '../utils/answerModel';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -61,7 +61,6 @@ import { showFirstRunHints } from '../utils/sessions';
 import { ENTRY_ICON_PATHS, ENTRY_COLORS, type EntryKind } from '../utils/entryKind';
 import { isGoalAnswer } from '../utils/questLogView';
 import { TtsPlayer } from '../utils/ttsPlayer';
-import { CompactCard, type CompactLayout } from './CompactCard';
 import type { Detection } from './DetectionLine';
 declare const __APP_BUILD__: { version: string } | undefined;
 const BUILD = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : { version: 'dev' };
@@ -89,8 +88,6 @@ interface ChatAreaProps {
    * here"; ids are the log's g:<area>:<entry>): listed under the latest answer about that area.
    */
   missablesHere?: { area: string; items: { id: string; label: string; why?: string; where?: string }[] } | null;
-  /** The compact view's "Near you": the next unticked thing the guide lists in this area (missables first). */
-  nearYou?: { id: string; label: string; where?: string; missable?: boolean } | null;
   /** Immersive mode: hold-to-talk answers are read aloud (Settings; default on). */
   immersiveReadAloud?: boolean;
   /** Desktop: show an answer's markers in the on-screen objectives tracker (hides the panel). */
@@ -116,8 +113,6 @@ interface ChatAreaProps {
   nowUndo?: { msgId?: string; onUndo: () => void } | null;
   onPinAnswer?: (msgId: string) => void;
   onDismissOffer?: (msgId: string) => void;
-  /** The compact card's quest log (its Now line and fold). */
-  compactLog?: { view: import('../utils/questLogView').LogView; open: boolean; onTick: (id: string) => void; onToggle: () => void; keysLabel: string; onLocate?: () => void; onPickPlace?: (name: string) => void; locateKeys?: string } | null;
   /** The player picked where they are (one tap or voice): remember it for this game. */
   onSetPlace?: (name: string) => void;
   /** "Locate me" in the PlaceBar (desktop, games with a guide). */
@@ -141,20 +136,6 @@ interface ChatAreaProps {
   openAiApiKey?: string;
   steamName?: string;
   steamAvatar?: string;
-  /** Compact view: a small resting state (where you are, the current objective, the question box). */
-  compact?: boolean;
-  /** The compact view's layout: the card (side docks, floating) or the ribbon (bottom corners). */
-  compactLayout?: CompactLayout;
-  /** What the app sees on Steam: the compact view's green dot on the art, "Playing X" and a collection's "Which game?". */
-  detection?: Detection;
-  /** The detection line (the compact view shows it once for a collection's "Which game?"). */
-  detectionLine?: React.ReactNode;
-  /** Open the full view (from the compact one). */
-  onExpand?: () => void;
-  /** Show the quest log (the compact view's objective line). */
-  onShowQuestLog?: () => void;
-  /** Close the app from the compact view (desktop; syncs first). */
-  onCloseApp?: () => void;
 }
 
 /**
@@ -253,7 +234,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   tickKeys,
   nextKeys,
   missablesHere,
-  nearYou,
   immersiveReadAloud = true,
   onTrackOnScreen,
   onNextTurn,
@@ -265,13 +245,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   openAiApiKey,
   steamName,
   steamAvatar,
-  compact = false,
-  compactLayout = 'card',
-  detection,
-  detectionLine,
-  onExpand,
-  onShowQuestLog,
-  onCloseApp,
   onUpdateMessage,
   markerLifetime,
   onChangeMarkerLifetime,
@@ -283,7 +256,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   nowUndo,
   onPinAnswer,
   onDismissOffer,
-  compactLog,
   onSetPlace,
   onLocate,
   locating,
@@ -1267,12 +1239,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const askForm = (
       <form
         onSubmit={handleSubmit}
-        className={compact ? 'min-w-0' : 'p-3 sm:p-4 bg-[#0a0b10]/90 border-t border-white/[0.08] backdrop-blur-2xl'}
+        className="p-3 sm:p-4 bg-[#0a0b10]/90 border-t border-white/[0.08] backdrop-blur-2xl"
       >
         {/* Suggestions, one set at a time on one line: the starter questions in an empty conversation, the follow-ups
             after an answer ("Show me where on screen" only with markers on and an answer about a screenshot: the web
             app sends that screenshot again, the desktop app takes a fresh one). The rest are under "More". */}
-        {!compact && (() => {
+        {(() => {
           const msgs = activeTab?.messages ?? [];
           const asked = msgs.some((m) => m.role === 'user');
           let shot: string | undefined;
@@ -1349,7 +1321,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             </div>
           );
         })()}
-        <div className={`relative flex items-center ${compact ? 'rounded-lg' : 'rounded-2xl'} bg-[#13141d] border border-white/15 focus-within:border-[var(--accent-color)] focus-within:shadow-[0_0_20px_var(--accent-glow)] transition-all shadow-lg`}>
+        {bal.pro + bal.fast === 0 && bal.resetAt ? <NextQuestionsLine resetAt={bal.resetAt} /> : null}
+        <div className={`relative flex items-center rounded-2xl bg-[#13141d] border border-white/15 focus-within:border-[var(--accent-color)] focus-within:shadow-[0_0_20px_var(--accent-glow)] transition-all shadow-lg`}>
           <AskTextarea
             ref={askRef}
             takeInitial={takeInitialText}
@@ -1361,22 +1334,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 ? t('chat.listening') 
                 : attachedImage 
                   ? t('chat.askShot') 
-                  : compact && !placeNow
-                    ? t('compact.askWhere')
-                    : gameLabel
-                      ? t('chat.askGame', { game: gameLabel })
-                      : t('chat.ask')
+                  : gameLabel
+                    ? t('chat.askGame', { game: gameLabel })
+                    : t('chat.ask')
             }
             rows={1}
-            className={`flex-1 bg-transparent text-white outline-none resize-none ${
-              compact
-                ? `h-[30px] max-h-[30px] overflow-y-auto py-[5px] pl-2.5 text-[12.5px] leading-[18px] ${compactLayout === 'ribbon' ? 'pr-16' : 'pr-24'}`
-                : 'max-h-48 min-h-[72px] py-4 pl-4 pr-4 sm:pr-4 pb-14'
-            }`}
+            className="flex-1 bg-transparent text-white outline-none resize-none max-h-48 min-h-[72px] py-4 pl-4 pr-4 sm:pr-4 pb-14"
           />
 
           {/* Action Buttons inside Input Bar */}
-          <div className={`absolute flex items-center ${compact ? 'gap-0.5 right-1 top-1/2 -translate-y-1/2 [&_button]:!p-1 [&_button]:!rounded-md' : 'gap-1.5 right-2.5 bottom-2.5'}`}>
+          <div className="absolute flex items-center gap-1.5 right-2.5 bottom-2.5">
 
             {/* Hidden file input for manual upload */}
             <input
@@ -1426,8 +1393,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               )}
             </button>
 
-            {/* Push to Talk / Voice Dictation (not in the compact ribbon: hold-to-talk still works) */}
-            {!(compact && compactLayout === 'ribbon') && <button
+            {/* Push to Talk / Voice Dictation */}
+            <button
               type="button"
               onClick={toggleVoiceRecording}
               title={isRecording ? t('chat.stopVoice') : t('chat.voice')}
@@ -1439,10 +1406,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               }`}
             >
               {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            </button>}
+            </button>
 
-            {/* Pro / Fast, with the questions left of each (the full view only: compact asks with the last one chosen) */}
-            {!compact && <ModelToggle value={answerModel} onChange={chooseModel} pro={bal.pro} fast={bal.fast} disabled={isLoading} balances={bal} />}
+            {/* Pro / Fast, with the questions left of each */}
+            <ModelToggle value={answerModel} onChange={chooseModel} pro={bal.pro} fast={bal.fast} disabled={isLoading} balances={bal} showCounts={Number(quota?.resetAt) > 0} />
 
             {/* Submit Send Button (follows whether the box has text without re-rendering the conversation) */}
             <HasTextGate ref={hasTextRef}>{(hasText) => (
@@ -1472,7 +1439,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             )}</HasTextGate>
           </div>
         </div>
-        {!compact && (() => {
+        {(() => {
           const note = modelNote || (firstRunHint ? (isDesktopApp ? t('chat.hintDesktop') : t('chat.hintWeb')) : '');
           return (
             <div role="status" aria-live="polite" className={`${note ? 'mt-2' : ''} text-center text-[10px] font-mono uppercase ${modelNote ? 'text-[var(--accent-color)]' : 'text-zinc-500'}`}>
@@ -1483,51 +1450,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       </form>
   );
 
-  // The compact view (CompactCard): the box art, where you are, the current objective and the one-line question box.
-  if (compact && activeTab) {
-    const msgs = activeTab.messages ?? [];
-    let objective: { title?: string; step?: string } | null = null;
-    for (let i = msgs.length - 1; i >= 0 && !objective; i--) {
-      const m = msgs[i];
-      if (m.role !== 'assistant' || !(m.title || m.steps?.length)) continue;
-      const done = m.doneSteps ?? [];
-      const next = (m.steps ?? []).find((st, j) => st.kind !== 'warning' && !done.includes(j));
-      objective = { title: m.title, step: next?.text };
-    }
-    return (
-      <CompactCard
-        layout={compactLayout}
-        gameName={gameLabel || displayGameName(activeTab.name)}
-        appId={Number(activeTab.activeSteamGame?.appId || activeGame?.appId) || undefined}
-        fallbackArt={activeTab.activeSteamGame?.headerImage || activeGame?.headerImage}
-        place={placeNow}
-        objective={objective}
-        near={nearYou || null}
-        detection={detection}
-        detectionLine={detectionLine}
-        quota={quota}
-        soundEnabled={soundEnabled}
-        askForm={askForm}
-        onExpand={onExpand}
-        onObjective={onShowQuestLog}
-        onClose={onCloseApp}
-        log={compactLog}
-        // Near you: the next thing the guide lists here, unticked (missables first). Opens it in the guide. Free.
-        onNear={nearYou ? () => {
-          const [, slug, ...rest] = nearYou.id.split(':');
-          onExpand?.();
-          setTimeout(() => window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug, entry: rest.join(':').split('+')[0] } })), 50);
-        } : undefined}
-      />
-    );
-  }
-
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-[#0d0e14] via-[#090a0f] to-[#07070b] relative crt-grid">
       {activeTab && (
-        <div className="flex-shrink-0 h-10 px-3 sm:px-4 flex items-center gap-2.5 text-[11px] text-zinc-300 min-w-0 border-b border-white/[0.06] bg-black/15">
-          {/* Ask | Guide */}
-          <div role="tablist" aria-label={t('main.modeLabel')} className="flex-shrink-0 flex items-center p-0.5 rounded-lg bg-black/40 border border-white/10" title={t('main.modeHint')}>
+        <div className="flex-shrink-0 h-10 flex items-stretch min-w-0 border-b border-white/[0.08] bg-black/15">
+          {/* Ask | Guide, the full width (owner, Nov 5 2026) */}
+          <div role="tablist" aria-label={t('main.modeLabel')} className="flex-1 min-w-0 flex items-stretch" title={t('main.modeHint')}>
             {(['ask', 'guide'] as const).map((m) => (
               <button
                 key={m}
@@ -1535,25 +1463,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 role="tab"
                 aria-selected={mode === m}
                 onClick={() => setMode(m)}
-                className={`h-6 px-2.5 rounded-md text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                  mode === m ? 'bg-[var(--accent-dim)] text-white border border-[var(--accent-border)]' : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
+                className={`flex-1 -mb-px border-b-2 text-[13.5px] font-semibold transition-colors cursor-pointer outline-none focus-visible:bg-white/[0.06] ${
+                  mode === m ? 'text-white border-[var(--accent-color)]' : 'text-zinc-400 hover:text-zinc-200 border-transparent'
                 }`}
               >
-                {m === 'ask' ? <QuestLogo size={14} compact /> : <BookOpen className="w-3.5 h-3.5 text-[var(--accent-color)]" />}
                 {t(m === 'ask' ? 'main.ask' : 'main.guide')}
               </button>
             ))}
           </div>
-          {/* Where you are, and what can be missed here (opens the guide at the missables) */}
-          <span className="ml-auto min-w-0 flex items-center gap-1.5">
-            <MapPin className="w-3.5 h-3.5 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />
-            <span className={`truncate ${placeNow ? 'text-zinc-100 font-semibold' : 'text-zinc-500'}`}>{placeNow || t('strip.noPlace')}</span>
-          </span>
+          {/* What can be missed here (opens the guide at the missables) */}
           {missHere.length > 0 && (
             <button
               type="button"
               onClick={() => missHere[0].area && window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug: missHere[0].area } }))}
-              className="flex-shrink-0 flex items-center gap-1 px-1.5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-200 font-semibold hover:bg-amber-500/25 cursor-pointer"
+              className="flex-shrink-0 self-center mx-2 flex items-center gap-1 px-1.5 h-6 rounded-md bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-200 font-semibold hover:bg-amber-500/25 cursor-pointer"
               title={t('strip.missableHint')}
             >
               ⚠ {t('strip.missable', { n: missHere.length })}

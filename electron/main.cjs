@@ -112,19 +112,8 @@ let localAuthPort = null;
 let currentUiScale = 1.0;
 let baseLogicalWidth = 550;
 let baseLogicalHeight = 800;
-// The compact view (the app's small resting state over the game): the window is this size (before the UI scale) and
-// stays in its dock corner; the full size comes back when the full view opens. Two layouts (owner, Oct 27 2026): the
-// card (box art and three lines) and, in the bottom corners, the ribbon (two rows, the question box beside them).
-const COMPACT_SIZES = { card: { width: 460, height: 104 }, ribbon: { width: 560, height: 64 } };
-let compactMode = false;
-let compactLayout = 'card';
-let compactExtra = 0; // the quest log's fold under the compact card (logical px)
-const compactSize = () => {
-  const s = COMPACT_SIZES[compactLayout] || COMPACT_SIZES.card;
-  return { width: s.width, height: s.height + compactExtra };
-};
-const logicalWidth = () => (compactMode ? compactSize().width : baseLogicalWidth);
-const logicalHeight = () => (compactMode ? compactSize().height : baseLogicalHeight);
+const logicalWidth = () => baseLogicalWidth;
+const logicalHeight = () => baseLogicalHeight;
 
 // Auth Server
 const authServer = http.createServer((req, res) => {
@@ -519,11 +508,11 @@ function createWindow() {
   });
 
   mainWindow.on('resize', () => {
-    if (mainWindow && !compactMode) {
+    if (mainWindow) {
       const bounds = mainWindow.getBounds();
       baseLogicalHeight = bounds.height / currentUiScale;
     }
-    tracker.follow(); // an attached quest log keeps to the panel (compact, UI scale, the achievements drawer)
+    tracker.follow(); // an attached quest log keeps to the panel (UI scale, the achievements drawer)
   });
   // The panel moved (sliding to its dock, a new dock, dragged while undocked, onto another screen): an attached quest
   // log goes with it.
@@ -643,9 +632,8 @@ app.whenReady().then(() => {
     // The book icon opens the panel at its dock; the quest log stays where it is.
     onOpenPanel: () => { if (!isAppVisible) slideIn(); },
     getPanelRect: () => panelRect(),
-    // Attached quest log: which side of the panel it goes on, and its height limit in the compact view.
+    // Attached quest log: which side of the panel it goes on.
     getDock: () => currentDockPosition,
-    isCompact: () => compactMode,
     // With the panel away: the spine the attached log (or its bookmark) sticks out of.
     getSpineAnchor: () => spine.anchor(),
     // A new tracker opens on the game's screen: the one the last screenshot came from.
@@ -1253,35 +1241,9 @@ ipcMain.on('set-ui-scale', (event, scale) => {
   }
 });
 
-// Compact view on / off (and its layout): the window keeps its dock corner (a right corner its right edge, a bottom
-// corner its bottom edge); floating, it keeps its top-left and stays on screen.
-ipcMain.on('set-compact', (event, on, layout, extra) => {
-  on = !!on;
-  const nextLayout = layout === 'ribbon' ? 'ribbon' : 'card';
-  const nextExtra = on ? Math.max(0, Math.min(240, Math.round(Number(extra) || 0))) : 0;
-  if (!mainWindow || (on === compactMode && (!on || (nextLayout === compactLayout && nextExtra === compactExtra)))) return;
-  compactMode = on;
-  compactLayout = nextLayout;
-  compactExtra = nextExtra;
-  const bounds = mainWindow.getBounds();
-  const { width: sWidth, height: sHeight } = screen.getPrimaryDisplay().workAreaSize;
-  const width = Math.round(logicalWidth() * currentUiScale);
-  const height = Math.round(logicalHeight() * currentUiScale);
-  let { x, y } = bounds;
-  if (currentDockPosition === 'top-right' || currentDockPosition === 'bottom-right') x = sWidth - width;
-  else if (currentDockPosition === 'top-left' || currentDockPosition === 'bottom-left') x = 0;
-  if (currentDockPosition === 'top-right' || currentDockPosition === 'top-left') y = 0;
-  else if (currentDockPosition === 'bottom-right' || currentDockPosition === 'bottom-left') y = sHeight - height;
-  else {
-    x = Math.max(0, Math.min(x, sWidth - width));
-    y = Math.max(0, Math.min(y, sHeight - height));
-  }
-  mainWindow.setBounds({ x, y, width, height });
-});
-
 ipcMain.on('resize-window', (event, width) => {
   baseLogicalWidth = width;
-  if (mainWindow && !compactMode) { // compact has its own width; this one comes back with the full view
+  if (mainWindow) {
     const bounds = mainWindow.getBounds();
     const primaryDisplay = screen.getPrimaryDisplay();
     const screenWidth = primaryDisplay.workAreaSize.width;

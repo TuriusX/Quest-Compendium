@@ -5,7 +5,7 @@ import { QuestLogo } from './QuestLogo';
 
 /**
  * The 30-second first-run tour. Desktop: the show / hide hotkey (it also frees the mouse; borderless mode so the overlay
- * can show), the screenshot hotkey, the compact view, the quest log and its keys, Pro / Fast. The web app: asking with a
+ * can show), the screenshot hotkey, the quest log and its keys, Pro / Fast. The web app: asking with a
  * screenshot, Ask | Guide, Pro / Fast. Each step shows its keys as keycaps, from the player's own settings.
  *
  * Shown once per computer (a player who saw the earlier tour isn't shown this one); "Skip" is always there, and the
@@ -53,7 +53,6 @@ export function Walkthrough({ isDesktop, screenshotKeys, hideKeys, tickKeys, nex
     ? [
         { icon: '🎮', title: t('tour2.hideT'), body: t('tour2.hideB', { keys: hide }), keys: [hide] },
         { icon: '📸', title: t('tour2.shotT'), body: t('tour2.shotB', { keys: shot }), keys: [shot] },
-        { icon: '🗔', title: t('tour2.compactT'), body: t('tour2.compactB', { keys: 'Ctrl+Shift+F' }), keys: ['Ctrl+Shift+F'] },
         { icon: '📜', title: t('tour2.logT'), body: t('tour2.logB', { tick, next }), keys: [tick, next] },
         { icon: '⚡', title: t('tour2.proT'), body: t('tour2.proB') },
       ]

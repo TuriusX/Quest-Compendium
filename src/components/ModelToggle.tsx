@@ -20,11 +20,11 @@ function useMinute(): number {
 }
 
 /**
- * Pro / Fast next to the send button (the questions left are in the header's pill and the tooltips). A radio group: click
+ * Pro / Fast next to the send button, with the questions left of each (`showCounts`, once the server has said). A radio group: click
  * either side, or Left / Right (and Up / Down) when it has focus; a controller's R3 switches too (ControllerLayer).
- * The tooltips add the next daily top-up ("+8 Pro · +25 Fast in 13h 20m"); the header's questions pill counts it down.
+ * The tooltips add the next daily top-up ("+8 Pro · +25 Fast in 13h 20m"); the ⋯ menu counts it down.
  */
-export function ModelToggle({ value, onChange, pro, fast, disabled, balances }: { value: AnswerModel; onChange: (m: AnswerModel) => void; pro: number; fast: number; disabled?: boolean; balances?: Balances }) {
+export function ModelToggle({ value, onChange, pro, fast, disabled, balances, showCounts = false }: { value: AnswerModel; onChange: (m: AnswerModel) => void; pro: number; fast: number; disabled?: boolean; balances?: Balances; showCounts?: boolean }) {
   const t = useT();
   const now = useMinute();
   const next = balances ? topUpLine(balances, t, now) : '';
@@ -61,7 +61,7 @@ export function ModelToggle({ value, onChange, pro, fast, disabled, balances }: 
               on ? 'bg-[var(--accent-dim)] text-white shadow-[inset_0_0_0_1px_var(--accent-border)]' : 'text-zinc-400 hover:text-zinc-100'
             } ${o.left === 0 ? 'opacity-60' : ''}`}
           >
-            <span>{o.label}</span>
+            <span className="tabular-nums">{o.label}{showCounts ? ` ${o.left}` : ''}</span>
           </button>
         );
       })}

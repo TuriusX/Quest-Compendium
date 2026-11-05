@@ -7,7 +7,7 @@ import { sharpIgdb, steamCover, steamHeader, useArt } from '../utils/artCache';
  * A game's box art, sharp at any screen scale (utils/artCache.ts: the largest size, scaled down, kept on this
  * computer): IGDB's cover when the game has a guide, else Steam's library portrait, else the picture the game came
  * with, else Steam's header, else the game's initials. `unknown`: a neutral "?" (a space with no game yet). `live`: a
- * green dot (the running game). Used by the compact card, the game switcher's button and its list.
+ * green dot (the running game). Used by the game switcher's button and its list.
  */
 export function GameCover({ appId, name, fallback, live = false, unknown = false, className, dot = 'w-3 h-3' }: { appId?: number; name: string; fallback?: string; live?: boolean; unknown?: boolean; className: string; dot?: string }) {
   const t = useT();

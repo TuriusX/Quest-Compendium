@@ -58,7 +58,6 @@ import { PlaythroughPanel } from './components/PlaythroughPanel';
 import { appSource, isPhone } from './utils/source';
 import { useGameArt } from './utils/gameArt';
 import { sharpIgdb, steamHeader, useArt } from './utils/artCache';
-import { closeAppAfterSync } from './utils/closeApp';
 import { deviceId } from './utils/deviceId';
 import { followRunning, runningId, tabForGame, type FollowState, type ResolvedGame } from './utils/runningGame';
 import { guideApi } from './utils/guideApi';
@@ -362,17 +361,6 @@ export default function App() {
   const [renameModalMode, setRenameModalMode] = useState<'create' | 'rename'>('create');
   const [renameModalTabId, setRenameModalTabId] = useState<string | null>(null);
   const [renameModalInitialValue, setRenameModalInitialValue] = useState('');
-  // The compact view (desktop). The player's choice is remembered per game (qc_view_by_game); a game with no choice
-  // yet opens compact while it is running. viewNow is this session's view (an answer opening the full view, or a
-  // choice made with no game running), cleared when the running game changes.
-  const [viewByGame, setViewByGame] = useState<Record<string, 'compact' | 'full'>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('qc_view_by_game') || '{}') || {};
-    } catch {
-      return {};
-    }
-  });
-  const [viewNow, setViewNow] = useState<'compact' | 'full' | null>(null);
   const [examinedImageUrl, setExaminedImageUrl] = useState<string | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [steamGame, setGlobalActiveGame] = useState<SteamGameData | null>(null);
@@ -1257,19 +1245,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const missablesHere = trackerGame.guideArea && missSection
     ? { area: trackerGame.guideArea.name, items: missSection.items.filter((it) => !it.done && ![...(activeTab?.questLog?.hidden || []), ...heldIds(activeTab?.questLog)].includes(it.id)).map((it) => ({ id: it.id, label: it.label, why: it.detail?.missable, where: it.where })) }
     : null;
-  // "Near you" on the compact view (roadmap item 7): the next thing the guide lists here that isn't ticked, missables
-  // first, in the guide's order. The guides have no map positions, so it's "next in this area", not a distance.
-  const nearYou = (() => {
-    const secs = builtTrackerPayload?.data.sections || [];
-    // Not what an answer advised against, and never a plain pickup ("Potion") as if it were an objective (owner, Oct 31
-    // 2026): those stay in Show more.
-    const hiddenLog = new Set([...(activeTab?.questLog?.hidden || []), ...heldIds(activeTab?.questLog)]);
-    for (const id of ['missable', 'collect'] as const) {
-      const it = secs.find((x) => x.id === id)?.items.find((i) => !i.done && i.id.startsWith('g:') && !hiddenLog.has(i.id) && (id === 'missable' || (i.icon !== 'item' && i.icon !== 'chest')));
-      if (it) return { id: it.id, label: it.label, where: it.where, missable: id === 'missable' };
-    }
-    return null;
-  })();
   const trackerGuideKeyRef = useRef(trackerGame.guideKey);
   trackerGuideKeyRef.current = trackerGame.guideKey;
   // The owner's picture capture (Ctrl+Shift+P, admins only): what the picture most likely shows, best guess first. What
@@ -2969,53 +2944,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const tuckAway = () => (window as any).electronAPI?.hidePanel?.();
   const tuckSide: 'left' | 'right' = String(settings.dockPosition).endsWith('left') ? 'left' : 'right';
 
-  // The compact view: a small resting state (where you are, the current objective, the question box) over the game.
-  const runningKey = globalActiveGame ? String(globalActiveGame.appId || globalActiveGame.name || '') : '';
-  useEffect(() => setViewNow(null), [runningKey]);
-  // A game starting brings its compendium up once (followRunning, near the detection line above).
-  const view = viewNow ?? (runningKey ? viewByGame[runningKey] ?? 'compact' : 'full');
-  const compact = isDesktop && !!activeTab && !isBrowserMode && view === 'compact';
-  // The compact card, or in the bottom corners the ribbon (two rows: it covers the least of the game there).
-  const compactLayout: 'card' | 'ribbon' = String(settings.dockPosition || '').startsWith('bottom') ? 'ribbon' : 'card';
-  // The player chose a view (Ctrl+Shift+F, the ⋯ menu, the compact card): remembered for the running game.
-  const chooseView = (v: 'compact' | 'full') => {
-    setViewNow(v);
-    if (!runningKey) return;
-    setViewByGame((prev) => {
-      const next = { ...prev, [runningKey]: v };
-      try {
-        localStorage.setItem('qc_view_by_game', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
-  // The compact card's quest log fold: the docked log's open state (the same toggle), with its window room.
-  const compactFold = compact && questLogAttached && questLogVisible && !!logView?.now;
-  // Its room: Next's heading and steps (two lines each), and Watch out.
-  const compactFoldHeight = Math.min(220, 18 + (logView?.next.length ? 18 + logView.next.length * 40 : 0) + (logView?.watch ? 58 : 0));
-  useEffect(() => {
-    (window as any).electronAPI?.setCompact?.(compact, compactLayout, compactFold ? compactFoldHeight : 0);
-    // The side panels close (the compact view has its own size).
-    if (compact) {
-      setIsAchDrawerOpen(false);
-    }
-  }, [compact, compactLayout, compactFold, compactFoldHeight]);
-  // A question asked from anywhere (the screenshot shortcut too) opens the full view, where its answer appears.
-  useEffect(() => {
-    if (isLoadingAi && compact) setViewNow('full');
-  }, [isLoadingAi, compact]);
-  // Ctrl+Shift+F: compact view / full view.
-  useEffect(() => {
-    if (!isDesktop) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey || e.code !== 'KeyF' || e.repeat) return;
-      e.preventDefault();
-      chooseView(compact ? 'full' : 'compact');
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isDesktop, compact, runningKey]);
-
   // Docking Layout Container classes
   useEffect(() => {
     if (!isDesktop) return;
@@ -3051,9 +2979,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     ) : null;
 
   // The docked quest log (owner, Oct 30 2026): a column inside the panel, on its inner side, out while the log is
-  // (Ctrl+Shift+L, the controller's View, the bookmark); the compact view shows it on the card instead.
+  // (Ctrl+Shift+L, the controller's View, the bookmark).
   const logSide: 'left' | 'right' = settings.dockPosition !== 'undocked' && tuckSide === 'left' ? 'right' : 'left';
-  const dockedLogOpen = isDesktop && !compact && questLogAttached && questLogVisible && !!logView;
+  const dockedLogOpen = isDesktop && questLogAttached && questLogVisible && !!logView;
   const logKeys = formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L');
   const logColumn = (side: 'left' | 'right') =>
     dockedLogOpen && logView && logSide === side ? (
@@ -3141,21 +3069,22 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         <div className="flex-1 min-w-0 min-h-0 flex flex-col relative">
         {/* "Mouse unlocked": the panel opened with the show/hide shortcut (the first 10 times) */}
         {mouseToast && (
-          <div role="status" aria-live="polite" className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 z-[80] max-w-[90%] animate-in fade-in slide-in-from-top-2 duration-200">
+          <div role="status" aria-live="polite" className="pointer-events-none absolute bottom-48 left-1/2 -translate-x-1/2 z-[80] max-w-[90%] animate-in fade-in slide-in-from-bottom-2 duration-200">
             <div className="qc-px-frame px-3.5 py-2 rounded-lg bg-[#16101f]/95 border border-[var(--accent-border)] shadow-[0_0_18px_var(--accent-glow)] text-[12.5px] font-semibold text-white text-center">
               {mouseToast}
             </div>
           </div>
         )}
 
-        {/* Header Bar (not in the compact view) */}
-        {!compact && <HeaderBar
+        {/* Header Bar */}
+        <HeaderBar
           userData={userData}
           tabs={tabs}
           activeTabId={activeTabId}
           activeGame={activeGame}
           isGameRunningLocally={globalActiveGame !== null}
           detection={detection}
+          placeName={activeTab?.place?.name || ''}
           chosenGame={activeTab?.guideKey ? { game: collection?.games.find((g) => g.key === activeTab.guideKey)?.game || activeTab.guideKey, onChange: () => chooseCollectionGame(activeTab.id, undefined) } : undefined}
           onSelectTab={handleSelectTab}
           onStartCreateTab={spacesOn && spaces ? () => setIsGameSearchOpen(true) : handleStartCreateTab}
@@ -3186,10 +3115,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           questLogReady={!!trackerPayload}
           theme={settings.theme}
           onSync={syncDiagnostics?.triggerSyncNow}
-          onCompact={isDesktop && activeTab ? () => chooseView('compact') : undefined}
           playthroughs={playthroughMenu}
           runningTabId={spacesOn && spaces ? runningTab?.id : undefined}
-        />}
+        />
         {/* The tucked-in quest log's bookmark is its own window just outside the panel's edge, which keyboard focus
             can't reach: this invisible stop sits under it on the panel's inner edge. Focused (Tab, or the controller's
             d-pad toward the edge), it rings the bookmark; Enter, Space or A slides the log out. */}
@@ -3204,11 +3132,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
             style={{ WebkitAppRegion: 'no-drag' } as any}
           />
         )}
-        {/* With one space per game (flag on): the game's full name on its own line (or "Which game is this?"), the
+        {/* With one space per game (flag on): the "Which game is this?" line, or the playthrough when there are several (the name is in the header), the
             detection line only when it has something to do, and the one-time migration notice. */}
-        {!compact && (spacesOn && spaces ? (
+        {(spacesOn && spaces ? (
           <>
-            {activeTab && (
+            {activeTab && (activeTab.unknownGame || (activeTab.playthrough?.count || 0) > 1) && (
               <GameLine
                 name={activeTab.name}
                 running={!!detection.running && detection.open}
@@ -3242,7 +3170,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
             both with sample notes at ?previewUpdate (for screenshots). */}
         {(isDesktop || previewUpdate) && (
           <AppUpdates
-            compact={compact}
             preview={previewUpdate
               ? { ready: '0.5.7', ...(/whatsnew/.test(location.search) ? { whatsNew: { v: '0.5.6', text: 'a cleaner quest log with short objectives and a highlight on the next one; tick and move between objectives without your mouse; load a guide’s steps for your current quest' } } : {}) }
               : undefined}
@@ -3414,11 +3341,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 hideKeys={formatShortcut(settings.hideAppShortcut)}
                 tickKeys={formatShortcut(settings.trackerTickShortcut || 'CmdOrCtrl+Shift+Enter')}
                 missablesHere={missablesHere}
-                // "Next here" is the attached quest log's list too: the compact view leaves it out while that shows.
-                nearYou={compact && questLogVisible && questLogAttached ? null : nearYou}
                 logAttached={questLogAttached && (questLogVisible || questLogTucked)}
                 questLog={activeTab?.questLog}
-                compactLog={compact && (logView?.now || logView?.where || logView?.here) ? { view: logView, open: compactFold, onTick: (id) => tickLog(id, true), onToggle: toggleQuestLog, keysLabel: formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L'), onLocate: isDesktop ? () => runLocate(false) : undefined, onPickPlace: moveToArea, locateKeys: formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K') } : null}
                 onSetNow={isDesktop ? setLogNow : undefined}
                 nowUndo={logCleared?.from === 'now' ? { msgId: logCleared.msgId, onUndo: undoLog } : null}
                 onPinAnswer={isDesktop ? togglePin : undefined}
@@ -3455,13 +3379,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 ttsVoice={settings.ttsVoice}
                 customApiKey={settings.customApiKey}
                 openAiApiKey={settings.openAiApiKey}
-                compact={compact}
-                compactLayout={compactLayout}
-                detection={detection}
-                detectionLine={<DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
-                onExpand={() => chooseView('full')}
-                onShowQuestLog={isDesktop ? () => { if (!questLogVisible) toggleQuestLog(); } : undefined}
-                onCloseApp={isDesktop ? () => void closeAppAfterSync(syncDiagnostics?.triggerSyncNow) : undefined}
               />
             )}
 
@@ -3534,15 +3451,15 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
             />
           )}
 
-          {/* Right Achievements Drawer (not in the compact view) */}
-          {!compact && <AchievementsDrawer
+          {/* Right Achievements Drawer */}
+          <AchievementsDrawer
             width={achDrawerWidth}
             isDragging={isDraggingAch}
             isOpen={isAchDrawerOpen}
             onClose={() => setIsAchDrawerOpen(false)}
             gameData={activeGame}
             soundEnabled={settings.soundEnabled}
-          />}
+          />
         </div>
         </div>
         {logColumn('right')}

@@ -14,7 +14,7 @@
  *
  * Two modes, per game (the 📌 / ⇱ button in its header):
  * - Attached (new players' default, from 0.6.0): it sticks out of the panel's inner side (left of a panel docked right,
- *   right of one docked left; undocked, the side with more room), top-aligned with it, and moves, docks and goes compact
+ *   right of one docked left; undocked, the side with more room), top-aligned with it, and moves and docks
  *   with the panel (follow()). Tucked in (its header's bookmark button, the ⋯ menu), only a small bookmark sticks out
  *   of the panel's edge near its top; a click slides the log out again. With the panel away, slid out it sits beside the
  *   book spine (spine.anchor()); tucked in it's invisible and the spine shows its uncollected count as a badge instead
@@ -81,11 +81,11 @@ const DEFAULTS = { view: 'full', size: 'medium', alpha: 100, backdrop: 45, x: nu
 const MAX_HIDDEN = 600;
 /** The tracker grows with its content up to this share of the screen's height, then scrolls inside. */
 const MAX_HEIGHT_SHARE = 0.7;
-/** Popped out: 70% of its screen. Attached: the panel's height (in the compact view, 70% of the panel's screen). */
+/** Popped out: 70% of its screen. Attached: the panel's height. */
 function maxHeight() {
   const a = isAttached() ? anchor() : null;
   if (!a) return Math.round(display().workArea.height * MAX_HEIGHT_SHARE);
-  if (a.kind === 'spine' || (deps.isCompact && deps.isCompact())) return Math.round(deps.screen.getDisplayMatching(a.rect).workArea.height * MAX_HEIGHT_SHARE);
+  if (a.kind === 'spine') return Math.round(deps.screen.getDisplayMatching(a.rect).workArea.height * MAX_HEIGHT_SHARE);
   return Math.round(a.rect.height);
 }
 
@@ -361,7 +361,7 @@ const BOOKMARK_TOP = 8;
 
 /**
  * Attached: put the log against the panel's inner side, top-aligned (kept on the panel's screen), and keep its height
- * limit at the panel's. Called on every panel move, resize, dock change, compact switch and UI-scale change. Its size
+ * limit at the panel's. Called on every panel move, resize, dock change and UI-scale change. Its size
  * is the one the page reported, set explicitly: a window moved onto a screen with another scale keeps its size.
  */
 function follow() {

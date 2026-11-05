@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: node tests/trackerAttach.test.cjs)
 // The attached quest log (electron/tracker.cjs) against fake Electron windows: where it goes for each dock and screen,
-// hiding with the panel, the compact height limit, popping out, and who starts attached. Since the quest log redesign
+// hiding with the panel, the height limit, popping out, and who starts attached. Since the quest log redesign
 // (Oct 30 2026), docked and out it's the column inside the panel (src/components/QuestLog.tsx): this window is then
 // invisible and shows only as the bookmark, the popped-out log, or a heads-up beside the spine.
 const assert = require('node:assert/strict');
@@ -50,7 +50,7 @@ async function setup({ existing }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qc-trk-'));
   if (existing) fs.writeFileSync(path.join(dir, 'tracker.json'), JSON.stringify({ old: { x: 100, y: 100, shown: true } }));
   const handlers = {};
-  const env = { panel: null, dock: 'top-right', compact: false, told: [], spine: null, keys: null };
+  const env = { panel: null, dock: 'top-right', told: [], spine: null, keys: null };
   tracker.init({
     app: { getPath: () => dir, on: () => {} },
     ipcMain: { on: (n, f) => { handlers[n] = f; }, handle: (n, f) => { handlers[n] = f; } },
@@ -58,7 +58,6 @@ async function setup({ existing }) {
     getMainWindow: () => ({ isDestroyed: () => false, webContents: { send: (c, p) => env.told.push(p) } }),
     getPanelRect: () => env.panel,
     getDock: () => env.dock,
-    isCompact: () => env.compact,
     getSpineAnchor: () => env.spine,
     onOpenPanel: () => env.onOpenPanel && env.onOpenPanel(),
     onLogVisible: (visible, available) => { env.keys = { visible, available }; },
@@ -134,14 +133,11 @@ async function test(name, fn) {
     tracker.hide();
   });
 
-  await test('the height limit: the panel\'s height, or 70% of its screen in the compact view', async () => {
+  await test('the height limit: the panel\'s height', async () => {
     const { tracker, win, env } = await setup({ existing: false });
     env.panel = { x: 1370, y: 0, width: 550, height: 800 };
     tracker.panelShown();
     assert.ok(win.js.some((c) => c.includes('"maxHeight":800')));
-    env.compact = true; env.panel = { x: 1370, y: 0, width: 550, height: 176 };
-    tracker.follow();
-    assert.ok(win.js.some((c) => c.includes('"maxHeight":728')), '0.7 x 1040');
     tracker.hide();
   });
 
