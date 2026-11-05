@@ -2445,7 +2445,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 75 seconds.")), 75000);
+    const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out after 100 seconds.")), 100000);
     // Both models' questions used up today: the limit message, with when they come back (and Premium for free players).
     let limitText = '';
     let guestLimit = false; // a guest at their limit: the sign-in card, not the Premium screen

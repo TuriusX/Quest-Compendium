@@ -219,6 +219,17 @@ const MessageMarkdown = React.memo(
   (a, b) => a.text === b.text && a.markerKey === b.markerKey,
 );
 
+/** A Pro answer takes about half a minute: after a few seconds, a word on why. */
+function ProPatience() {
+  const t = useT();
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setShow(true), 8000);
+    return () => clearTimeout(id);
+  }, []);
+  return show ? <span className="text-[11.5px] text-zinc-400 mt-1">{t('chat.proChecking')}</span> : null;
+}
+
 export const ChatArea: React.FC<ChatAreaProps> = ({
   markersOn = true,
   quota,
@@ -2101,6 +2112,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <span className="qc-keep-anim font-fantasy font-bold text-xs text-[var(--accent-color)] tracking-wide animate-pulse mt-1">
               {t('chat.consulting')}
             </span>
+            {answerModel === 'pro' && <ProPatience />}
           </div>
         )}
       </div>

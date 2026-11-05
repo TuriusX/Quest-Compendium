@@ -5,6 +5,7 @@
  */
 export const GENERATED: Record<string, Record<string, string>> = {
   de: {
+    "chat.proChecking": "Pro prüft die Fakten, das kann eine halbe Minute dauern",
     "strip.noPlaceShort": "Wo bist du?",
     "menu.install": "App installieren",
     "header.questionsTitle": "Heute noch {left} von {daily} Fragen übrig",
@@ -1305,6 +1306,7 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "pay.signInFirst": "Premium se vincula a tu cuenta, así que inicia sesión primero."
   },
   fr: {
+    "chat.proChecking": "Pro vérifie les faits, cela peut prendre une demi-minute",
     "strip.noPlaceShort": "Où êtes-vous ?",
     "menu.install": "Installer l'app",
     "header.questionsTitle": "{left} sur {daily} questions restantes aujourd'hui",
@@ -2275,6 +2277,7 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "auth.err.generic": "Impossible de se connecter avec Google. Réessayez ou continuez en invité."
   },
   ja: {
+    "chat.proChecking": "Proが事実を確認中です。30秒ほどかかる場合があります",
     "strip.noPlaceShort": "今どこにいますか?",
     "menu.install": "アプリをインストール",
     "header.questionsTitle": "本日の残り質問数: {left}/{daily}",
@@ -3245,6 +3248,7 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "auth.err.generic": "Googleでサインインできませんでした。再試行するか、ゲストとして続けてください。"
   },
   ko: {
+    "chat.proChecking": "Pro가 사실을 확인하는 중입니다. 30초 정도 걸릴 수 있어요",
     "strip.noPlaceShort": "지금 어디인가요?",
     "menu.install": "앱 설치",
     "header.questionsTitle": "오늘 남은 질문: {left}/{daily}",
@@ -4545,6 +4549,7 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "pay.signInFirst": "O Premium fica na sua conta, então entre primeiro."
   },
   ru: {
+    "chat.proChecking": "Pro проверяет факты, это может занять полминуты",
     "strip.noPlaceShort": "Где вы?",
     "menu.install": "Установить приложение",
     "header.questionsTitle": "Осталось вопросов на сегодня: {left} из {daily}",
@@ -5515,6 +5520,7 @@ export const GENERATED: Record<string, Record<string, string>> = {
     "auth.err.generic": "Не удалось войти через Google. Попробуйте снова или продолжите как гость."
   },
   zh: {
+    "chat.proChecking": "Pro 正在核实信息,可能需要半分钟",
     "strip.noPlaceShort": "你在哪里?",
     "menu.install": "安装应用",
     "header.questionsTitle": "今日剩余提问：{left} / {daily}",

@@ -1,6 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/searchPolicy.test.ts)
 import assert from "node:assert/strict";
-import { asksForSearch, stripSearchAsk, isNewRelease, searchMode, isBlankAnswer, wantsSpecifics, EXISTENCE_RULES } from "../searchPolicy";
+import { readFileSync } from "node:fs";
+import { withProRules, PRO_RULES, PROMPT_PERSONA_END, asksForSearch, stripSearchAsk, isNewRelease, searchMode, isBlankAnswer, wantsSpecifics, EXISTENCE_RULES } from "../searchPolicy";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -57,6 +58,21 @@ test("a blank answer: nothing readable once our tags are out; a short real answe
   assert.equal(isBlankAnswer('<qc-title now="no">Mansion</qc-title>\n```\n<qc-steps>[]</qc-steps>\n```'), true);
   assert.equal(isBlankAnswer("Yes."), false);
   assert.equal(isBlankAnswer("<qc-title>Mansion</qc-title>Go behind the bookcase."), false);
+});
+
+test("Pro's rules: near the start and at the very end; no rule to search when it can't", () => {
+  const out = withProRules(`intro ${PROMPT_PERSONA_END}\n\nmiddle`, true);
+  const rules = PRO_RULES(true);
+  assert.ok(out.endsWith(rules));
+  assert.ok(out.indexOf(rules) < out.indexOf("middle"));
+  assert.ok(rules.includes("Google Search"));
+  assert.ok(!PRO_RULES(false).includes("Google Search"));
+  assert.ok(readFileSync("server.ts", "utf8").includes(PROMPT_PERSONA_END), "the answer prompt still has the line the rules follow");
+  assert.ok(readFileSync("server.ts", "utf8").includes("3. MISSING IMAGE HANDLING:"), "the answer prompt still has the vision rule this replaces");
+  assert.ok(withProRules("3. MISSING IMAGE HANDLING: say so\n4. next", true).includes("Otherwise don't mention screenshots"));
+  const story = withProRules(`[STORY TIMING]\nleave it out\n\n[NEXT]\nkept`, true);
+  assert.ok(!story.includes("old story rule") && story.includes("[NEXT]") && story.includes("rather than leaving it out"));
+  assert.ok(readFileSync("server.ts", "utf8").replace(/\r+\n/g, "\n").includes("[STORY TIMING]\nWork out where"), "the answer prompt still has the story rule this replaces");
 });
 
 console.log(`\n${passed} tests passed`);

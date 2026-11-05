@@ -28,7 +28,7 @@ import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
-import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode } from './searchPolicy';
+import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
 import { questionType } from './src/utils/questionType';
@@ -41,7 +41,7 @@ import { registerAnswerReports } from './answerReports';
 import { registerAnswerFeedback, recordMarkerCheck } from './answerFeedback';
 import { registerDiscord } from './discord';
 import { collectStream, SEARCH_NUMBERS } from './answerStream';
-import { registerSiteAsk, SITE_ABANDONED_DOLLARS, type SiteAnswerOpts, type SiteAnswerOut } from './siteAsk';
+import { registerSiteAsk, SITE_ABANDONED_DOLLARS, type SiteAnswerOpts, type SiteAnswerOut, appGuideLines } from './siteAsk';
 import { registerSiteAccount } from './siteAccount';
 import { pingNewSignup } from './signupPing';
 import { STEPS_RULES, extractSteps, cleanObjective, objectiveRules, extractTicked } from './steps';
@@ -1549,6 +1549,19 @@ percentages:
       let qtype = questionType(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null));
       const routingCfg = await routing();
       const usePro = evalCapture ? true : picked.bucket === 'pro' && (await takePlayerPro(routingCfg));
+      // Pro in the app: the guide lines that match the question, from anywhere in the guide (the area's page alone often has
+      // nothing on it, and with no place known there was no guide at all). A slow read just goes without.
+      if (usePro && !site && guideKey && String(question || '').trim()) {
+        try {
+          const more = await withTimeout(appGuideLines(guideKey, String(question), guidePage?.slug || ''), 4000, 'Guide lines') as Awaited<ReturnType<typeof appGuideLines>>;
+          if (more.text) {
+            guideTags = { ...guideTags, ...more.refs };
+            systemInstruction += `\n\n${more.text}`;
+          }
+        } catch (e: any) {
+          console.log('[chat] no guide lines for Pro:', String(e?.message || e).slice(0, 120));
+        }
+      }
 
       // Search (searchPolicy.ts): always for a game released after the answering model's cutoff (past the player's own
       // daily search allowance; the app-wide caps still apply); offered for unfamiliar games and for exact-data questions
@@ -1557,10 +1570,11 @@ percentages:
       const cut = await cutoffs();
       const newRelease = !!release && isNewRelease(release, usePro ? cut.pro : cut.flash);
       // The website offers search from the first call: asking first takes two calls, and the first words came 14-28 s in (Nov 3 2026).
+      // Pro too (owner, Nov 5 2026): told to answer first, it hardly ever searched (2 searches in 12 test questions).
       const appSearchMode: SearchMode = !effectiveGame?.name
         ? 'ask'
         : searchModeFor({ newRelease, dated: release?.source !== 'unknown', type: qtype, covered: Boolean(guidePage?.verified), screenshot: !!imageBase64, specifics: wantsSpecifics(String(question || '')) });
-      const searchMode: SearchMode = site && appSearchMode === 'ask' ? 'offer' : appSearchMode;
+      const searchMode: SearchMode = (site || usePro) && appSearchMode === 'ask' ? 'offer' : appSearchMode;
       const searchOk = evalCapture ? true : site ? site.maySearch : searchMode === 'force'
         ? (await playerSearchesToday()) && (await monthlyBudgetOk())
         : await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
@@ -1570,6 +1584,7 @@ percentages:
       if (!searchOk) {
         systemInstruction += `\n\n[GOOGLE SEARCH IS NOT AVAILABLE FOR THIS QUESTION]\nAnswer from what you know and the verified facts above. For exact game data you can't confirm, say it's unconfirmed (or leave it out) rather than stating it as fact, and don't put unconfirmed data in marker notes. If something is unfamiliar, say there isn't enough information about it yet and ask for a screenshot or a detail. Don't mention search limits to the player.`;
       }
+      if (usePro && !site) systemInstruction = withProRules(systemInstruction, searchOk, !!imageBase64);
       // Ask mode: the first try has no search, and may ask for it.
       const firstSystem = searchMode === 'ask' && searchOk ? `${systemInstruction}\n\n${ASK_RULES}` : systemInstruction;
       let searchAsked = false;
@@ -1785,6 +1800,7 @@ percentages:
               ],
               temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
               // The website thinks less before it writes: the first words in 1-9 s instead of 14-28, with answers as full (Nov 3 2026).
+              // Pro thinks low (owner, Nov 5 2026: about 15 s is the goal, 30 s the limit): with the Pro rules, search and guide lines it holds up; medium took 36-50 s.
               ...(usePro ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : targetModel === MAIN_MODEL ? { thinkingConfig: { thinkingLevel: site ? ThinkingLevel.LOW : ThinkingLevel.MEDIUM } } : {}),
             }
           });
@@ -1794,9 +1810,9 @@ percentages:
             if (mine > 1) site.stream({ reset: true });
             return ai.models.generateContentStream(answerParams(sys, withSearch)).then((st) => collectStream(st, (all) => { if (mine === attempt) site.stream!({ raw: all }); }));
           };
-          // Pro: no longer than the routing allows, then the Flash fallback below answers (players never wait on Pro).
-          // Pro with search takes longer (about 30-40 s): up to 45 s then, still inside the app's 75 s with the fallback.
-          const proWait = searchTools ? Math.max(routingCfg.proTimeoutMs, 45000) : routingCfg.proTimeoutMs;
+          // Pro: no longer than this, then the Flash fallback below answers. It took 50-53 s through the server in the test: 60 s, with the
+          // desktop versions already out stopping at 75 s (raise this once they wait 100 s).
+          const proWait = Math.max(routingCfg.proTimeoutMs, 60000);
           // The website's questions are often broad ("what can I miss here?"), and a long answer takes about 25 s: stopping
           // there pays for the attempt and gets a thinner answer from the fallback, so they get longer.
           // Shown as it's written, a long answer isn't given up on while the player is reading it.

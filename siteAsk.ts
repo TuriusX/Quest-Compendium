@@ -39,7 +39,7 @@ import { playerSearchesToday, monthlyBudgetOk, countSearches, recordPlayerSearch
 import { clientIp } from './guestGuard';
 import { isLocalServer } from './testTraffic';
 import { registerAutoChanges } from './autoChanges';
-import { GUIDE_REFERENCE } from './guidesApi';
+import { GUIDE_REFERENCE, type GuideRef } from './guidesApi';
 import { visiblePart, nextPiece } from './answerStream';
 
 const SITE = () => (process.env.QC_SITE_URL || 'https://questcompendium.com').replace(/\/$/, '');
@@ -334,6 +334,30 @@ export function siteReference(ctx: { selfText: string; matchLines: string; other
     refs,
   };
 }
+/** A site link from the guide's search list as the app's guide link (its "From the guide" chip): null when it isn't a page of this guide. */
+export function appRefFromSite(r: { label?: string; href?: string }, key: string): GuideRef | null {
+  const m = String(r?.href || '').match(/\/guides\/([^/]+)\/([^/#?]+)\/?(?:#(.+))?$/);
+  if (!m || m[1] !== key) return null;
+  const name = cut(r.label, 80) || m[2];
+  const anchor = m[3] || '';
+  return { key, slug: m[2], area: name, name, ...(anchor ? { entry: anchor.replace(/^e-/, '') } : {}), ...(anchor && !anchor.startsWith('e-') ? { kind: 'step' as const } : {}) };
+}
+
+/**
+ * For a Pro answer in the app: the guide lines that match the question and the two pages they're on, from anywhere in the guide, not only the
+ * player's area (the same lookup as the website). `placeSlug`: the page the prompt already has, not sent twice. Reads the site's public files.
+ */
+export async function appGuideLines(key: string, question: string, placeSlug = ''): Promise<{ text: string; refs: Record<string, GuideRef> }> {
+  const ctx = await context(key, '', 'area', 'en', question);
+  const ref = siteReference({ ...ctx, placeSlug: placeSlug || ctx.placeSlug }, '');
+  const refs: Record<string, GuideRef> = {};
+  for (const [t, r] of Object.entries(ref.refs)) {
+    const a = appRefFromSite(r as any, key);
+    if (a) refs[t] = a;
+  }
+  return { text: placeSlug ? ref.withPage : ref.withoutPage, refs };
+}
+
 /** A homepage screenshot: a picture of the right kind and size, by its first bytes as well as its label. It's never saved. */
 export const MAX_IMAGE_CHARS = 5_500_000;
 export function validImage(v: unknown): string | null {
