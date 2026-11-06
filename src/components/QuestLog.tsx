@@ -145,17 +145,13 @@ export function QuestLog(p: QuestLogProps) {
       onKeyDown={onKeyDown}
       className="h-full flex flex-col min-h-0 bg-gradient-to-b from-[#121119] to-[#0f0f15] text-zinc-100"
     >
-      {/* Header: the log's name and where the player is, then pop out and close. */}
+      {/* Header: the log's name, then pop out. Closing is the logo in the panel's header (owner, Nov 6 2026), Ctrl+Shift+L or the menu. */}
       <div className="flex items-center gap-1.5 pl-3.5 pr-2 py-2.5 border-b border-white/[0.07]">
         <span className="font-mono font-extrabold text-[12px] tracking-[0.14em] uppercase">{t('tracker.logTitle')}</span>
         <span className="flex-1" />
         <button type="button" onClick={p.onPopOut} title={t('tracker.popOut')} aria-label={t('tracker.popOut')}
           className="w-6 h-6 rounded border border-white/10 text-zinc-400 hover:text-white hover:border-[var(--accent-border)] flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-white">
           <ExternalLink className="w-3.5 h-3.5" />
-        </button>
-        <button type="button" onClick={p.onClose} title={`${t('tracker.logClose')} (${p.keysLabel})`} aria-label={t('tracker.logClose')}
-          className="w-6 h-6 rounded border border-white/10 text-zinc-400 hover:text-white hover:border-[var(--accent-border)] flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-white">
-          <X className="w-3.5 h-3.5" />
         </button>
       </div>
 

@@ -16,8 +16,8 @@ import { GameTab, SteamGameData, ColorTheme } from '../types';
 import { playBlipSound, playPageTurnSound } from '../utils/audio';
 import { useT } from '../i18n';
 import { GameSwitcher } from './GameSwitcher';
-import { QuestionsSummary } from './QuestionsPill';
 import { GlainIcon } from './GlainIcon';
+import { QuestLogo, QuestLogoOpen } from './QuestLogo';
 import type { Detection } from './DetectionLine';
 
 interface HeaderBarProps {
@@ -60,6 +60,8 @@ interface HeaderBarProps {
   tuckSide?: 'left' | 'right';
   /** There's something to put on the quest log (a known place, or an answer with steps). */
   questLogReady?: boolean;
+  /** The closed book: how many Now and Next steps are open (its badge), and the hover card's Now step and watch-out. */
+  questLogPeek?: { now?: string; steps?: number; watch?: string };
   theme: ColorTheme;
   onSync?: () => Promise<boolean>;
   /**
@@ -105,6 +107,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onTuckAway,
   tuckSide = 'right',
   questLogReady = true,
+  questLogPeek,
   onSync,
   playthroughs,
   runningTabId,
@@ -144,6 +147,17 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
   return (
     <header className="qc-stars min-h-[60px] py-1 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/[0.08] flex items-center gap-2 px-2.5 sm:px-3 select-none z-30 flex-shrink-0 relative shadow-[0_4px_20px_rgba(0,0,0,0.5)]" style={{ WebkitAppRegion: isDocked ? "no-drag" : "drag" } as any}>
+      {/* The logo is the quest log's switch (desktop): a closed book while the log is away, open while it's out. */}
+      {onToggleQuestLog && (
+        <LogBook
+          open={questLogVisible}
+          ready={questLogReady}
+          peek={questLogPeek}
+          keys={questLogKeys}
+          soundEnabled={soundEnabled}
+          onToggle={onToggleQuestLog}
+        />
+      )}
       {/* Left: the game switcher (it shrinks, so the controls on the right always stay visible) */}
       <div className="min-w-0 flex-1 flex">
         <GameSwitcher
@@ -169,6 +183,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
       {/* Right controls */}
       <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Pro / Fast (ModelToggle, drawn here by the chat area, which keeps the choice) */}
+        <div id="qc-model-slot" className="flex items-center empty:hidden mr-0.5" />
         {onSignIn && (
           <button
             style={{ WebkitAppRegion: "no-drag" } as any}
@@ -226,7 +242,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             <>
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden="true" />
               <div ref={menuRef} role="menu" aria-label={t('header.menu')} onKeyDown={onMenuKey} className="absolute right-0 top-10 z-50 w-64 max-w-[calc(100vw-24px)] py-1.5 rounded-xl bg-[#161620] border border-white/15 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
-                <QuestionsSummary userData={userData} />
                 <button type="button" role="menuitem" onClick={pick(() => { playBlipSound(soundEnabled); window.dispatchEvent(new CustomEvent('qc-open-playthrough')); })} className={menuItem}>
                   <span className="w-4 h-4 flex items-center justify-center text-[13px]" aria-hidden="true">✦</span>
                   <span className="flex-1">{t('play.title')}</span>
@@ -316,5 +331,62 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         )}
       </div>
     </header>
+  );
+};
+
+/**
+ * The quest log's switch (owner, Nov 6 2026): the app's spellbook logo. Closed while the log is away, with the number of
+ * open Now and Next steps; hovering it shows the Now step (and a watch-out from an answer). A click flips the cover and
+ * opens the log; the open book (glowing in the theme's colour) closes it. Ctrl+Shift+L, the controller and the ⋯ menu
+ * still work.
+ */
+const LogBook: React.FC<{ open: boolean; ready: boolean; peek?: { now?: string; steps?: number; watch?: string }; keys?: string; soundEnabled: boolean; onToggle: () => void }> = ({ open, ready, peek, keys, soundEnabled, onToggle }) => {
+  const t = useT();
+  const [flip, setFlip] = useState(0);
+  const [hover, setHover] = useState(false);
+  const busy = React.useRef(false);
+  const label = open ? t('menu.questLogHide') : t('menu.questLogShow');
+  const click = () => {
+    if (!ready || busy.current) return;
+    busy.current = true;
+    playPageTurnSound(soundEnabled);
+    setFlip((n) => n + 1);
+    setHover(false);
+    // The cover turns, then the log comes out (or goes away) under it.
+    setTimeout(() => { busy.current = false; onToggle(); }, 130);
+  };
+  const showPeek = hover && !open && ready && !!(peek?.now || peek?.watch);
+  return (
+    <div className="relative flex-shrink-0" style={{ WebkitAppRegion: 'no-drag' } as any} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <button
+        type="button"
+        onClick={click}
+        aria-pressed={open}
+        aria-label={label}
+        title={ready ? `${label}${keys ? ` (${keys})` : ''}` : t('header.questLogEmpty')}
+        className={`relative w-11 h-11 rounded-lg flex items-center justify-center border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white ${open ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] shadow-[0_0_14px_var(--accent-glow)]' : 'border-transparent hover:bg-white/[0.06] hover:border-[var(--accent-border)]'} ${ready ? 'cursor-pointer' : 'opacity-50 cursor-default'}`}
+      >
+        <span key={flip} className={flip ? 'qc-book-flip' : undefined}>
+          {open ? <QuestLogoOpen size={32} /> : <QuestLogo size={32} compact />}
+        </span>
+        {!open && ready && !!peek?.steps && (
+          <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[var(--accent-color)] text-black text-[10px] font-black tabular-nums flex items-center justify-center shadow-[0_0_0_2px_#0a0b10]" aria-hidden="true">{peek.steps > 9 ? '9+' : peek.steps}</span>
+        )}
+      </button>
+      {showPeek && (
+        <div role="tooltip" className="pointer-events-none absolute left-0 top-full mt-1.5 z-50 w-64 rounded-lg border border-[var(--accent-border)] bg-[#151522]/95 px-3 py-2.5 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150">
+          {peek?.now && (
+            <>
+              <div className="text-[9.5px] font-extrabold tracking-[0.14em] uppercase text-zinc-400">{t('tracker.logNow')}</div>
+              <div className="text-[13.5px] font-bold text-white leading-snug mb-1">{peek.now}</div>
+            </>
+          )}
+          {peek?.watch && (
+            <div className="text-[12px] text-amber-200 leading-snug"><span className="text-amber-400 font-bold">{t('tracker.logWatch')}:</span> {peek.watch}</div>
+          )}
+          <div className="text-[11px] text-zinc-500 mt-1.5">{label}{keys ? ` · ${keys}` : ''}</div>
+        </div>
+      )}
+    </div>
   );
 };

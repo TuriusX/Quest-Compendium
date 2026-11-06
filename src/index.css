@@ -363,3 +363,13 @@ html[data-ui="lofi"] .qc-inline-badge { border-radius: 0; font-family: 'Silkscre
   border: 1px solid rgba(255,255,255,.14); border-bottom-width: 2px; color: #e4e4e7; background: #1a1922; }
 /* A pinned answer picked on the quest log: a brief ring as the conversation scrolls to it. */
 .qc-flash { outline: 2px solid var(--accent-color); outline-offset: 4px; border-radius: 8px; transition: outline-color 1.2s steps(4); }
+
+/* The quest log's switch (owner, Nov 6 2026): the logo's cover turns in three pixel steps, and the log swings open from the
+   panel's edge like a book's cover. */
+@keyframes qc-book-flip { 0% { transform: scaleX(1); } 50% { transform: scaleX(0.2); } 100% { transform: scaleX(1); } }
+.qc-book-flip { display: inline-block; animation: qc-book-flip 0.26s steps(3, end); }
+@keyframes qc-log-swing-l { from { transform: perspective(1400px) rotateY(-75deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes qc-log-swing-r { from { transform: perspective(1400px) rotateY(75deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.qc-log-swing-l { transform-origin: right center; animation: qc-log-swing-l 0.45s cubic-bezier(0.3, 0.7, 0.3, 1); }
+.qc-log-swing-r { transform-origin: left center; animation: qc-log-swing-r 0.45s cubic-bezier(0.3, 0.7, 0.3, 1); }
+@media (prefers-reduced-motion: reduce) { .qc-book-flip, .qc-log-swing-l, .qc-log-swing-r { animation: none; } }

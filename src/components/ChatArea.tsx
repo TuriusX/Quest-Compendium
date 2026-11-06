@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { NextQuestionsLine } from './QuestionsPill';
 import { ModelToggle } from './ModelToggle';
+import { createPortal } from 'react-dom';
 import { balancesOf, modelKind, readAnswerModel, saveAnswerModel, startingModel, type AnswerModel } from '../utils/answerModel';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -425,6 +426,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [actionMenu, setActionMenu] = useState<string | null>(null);
   const [answerModel, setAnswerModel] = useState<AnswerModel>(() => startingModel(readAnswerModel(), bal));
   const [modelNote, setModelNote] = useState('');
+  // Pro / Fast is drawn in the top bar's slot (owner, Nov 6 2026); where there's no top bar, by the send button as before.
+  const [modelSlot, setModelSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => { setModelSlot(document.getElementById('qc-model-slot')); }, []);
   const preferredModel: 'pro' | 'flash' = answerModel === 'fast' ? 'flash' : 'pro';
   const noteSwitch = (to: AnswerModel) => {
     setModelNote(t(to === 'fast' ? 'model.switchedToFast' : 'model.switchedToPro'));
@@ -1421,8 +1425,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
 
-            {/* Pro / Fast, with the questions left of each */}
-            <ModelToggle value={answerModel} onChange={chooseModel} pro={bal.pro} fast={bal.fast} disabled={isLoading} balances={bal} showCounts={Number(quota?.resetAt) > 0} />
+            {/* Pro / Fast: in the top bar, or here when there's none */}
+            {(() => {
+              const toggle = <ModelToggle value={answerModel} onChange={chooseModel} pro={bal.pro} fast={bal.fast} disabled={isLoading} balances={bal} showCounts={Number(quota?.resetAt) > 0} quota={quota} />;
+              return modelSlot ? createPortal(toggle, modelSlot) : toggle;
+            })()}
 
             {/* Submit Send Button (follows whether the box has text without re-rendering the conversation) */}
             <HasTextGate ref={hasTextRef}>{(hasText) => (

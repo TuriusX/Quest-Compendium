@@ -2989,7 +2989,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const logKeys = formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L');
   const logColumn = (side: 'left' | 'right') =>
     dockedLogOpen && logView && logSide === side ? (
-      <div className={`w-[300px] flex-shrink-0 h-full min-h-0 ${side === 'left' ? 'border-r' : 'border-l'} border-white/[0.1]`} style={{ WebkitAppRegion: 'no-drag' } as any}>
+      <div className={`w-[300px] flex-shrink-0 h-full min-h-0 ${side === 'left' ? 'border-r qc-log-swing-l' : 'border-l qc-log-swing-r'} border-white/[0.1]`} style={{ WebkitAppRegion: 'no-drag' } as any}>
         <QuestLog
           view={logView}
           sel={logSel}
@@ -3117,6 +3117,12 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           tuckSide={tuckSide}
           questLogVisible={questLogVisible}
           questLogReady={!!trackerPayload}
+          questLogPeek={logView ? {
+            now: logView.now?.text,
+            // The open Now and Next steps; a watch-out only from an answer, not the guide (owner, Nov 6 2026: answers over the guides).
+            steps: (logView.now && !logView.now.done ? 1 : 0) + logView.next.filter((st) => !st.done).length,
+            watch: logView.watch && !logView.watch.fromGuide ? logView.watch.text : undefined,
+          } : undefined}
           theme={settings.theme}
           onSync={syncDiagnostics?.triggerSyncNow}
           playthroughs={playthroughMenu}

@@ -41,13 +41,12 @@ export function clock(ms: number): string {
 }
 
 /**
- * The questions left and the time to the next top-up, at the top of the ⋯ menu (owner, Nov 5 2026: the header's pill is
- * gone; the counts are on the Pro / Fast switch by the question box). Ticks every second while the menu is open.
+ * When the next questions come (ticking) and what the next top-up brings: the foot of the Pro / Fast card in the top bar
+ * (owner, Nov 6 2026; it was the top of the ⋯ menu). Nothing until the server has said.
  */
-export function QuestionsSummary({ userData }: { userData?: any }) {
+export function RefillInfo({ userData }: { userData?: any }) {
   const t = useT();
   const now = useSecond();
-  // Nothing until the server has said (the app's placeholder before it answers isn't a real balance).
   if (!userData || !(Number(userData.resetAt) > 0)) return null;
   const b = balancesOf(userData);
   const u = topUp(b, now);
@@ -60,10 +59,9 @@ export function QuestionsSummary({ userData }: { userData?: any }) {
       ].filter(Boolean).join(' · ') })
     : '';
   return (
-    <div className="px-3 pt-1 pb-2 mb-1 border-b border-white/[0.08] text-[12px] tabular-nums">
-      <div className="font-semibold text-white">{t('model.pro')} {b.pro} <span className="text-zinc-500">·</span> {t('model.fast')} {b.fast}</div>
-      {b.resetAt ? <div className="text-[var(--accent-color)] mt-0.5">{t('pill.nextIn', { time: clock(b.resetAt - now) })}</div> : null}
-      {refill && <div className="text-[11.5px] text-zinc-400 mt-0.5">{refill}</div>}
+    <div className="px-3 pt-2 pb-1 text-[12px] tabular-nums">
+      {b.resetAt ? <div className="text-[var(--accent-color)] font-semibold">{t('pill.nextIn', { time: clock(b.resetAt - now) })}</div> : null}
+      {refill && <div className="text-[11.5px] text-zinc-400 mt-0.5 leading-snug">{refill}</div>}
     </div>
   );
 }
