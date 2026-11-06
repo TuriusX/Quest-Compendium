@@ -1,6 +1,6 @@
 {
   "name": "Quest Compendium",
-  "description": "An AI companion for PC games featuring multimodal game screen analysis, walkthroughs, achievement tracking, playthrough notes, built-in guides, and adaptive roleplay & min-max modes.",
+  "description": "An AI companion for PC games featuring multimodal game screen analysis, walkthroughs, achievement tracking, playthrough notes, built-in guides, and an immersive mode that answers in character.",
   "requestFramePermissions": [
     "microphone",
     "camera"

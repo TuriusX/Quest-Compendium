@@ -211,5 +211,8 @@
   "$39.99/year": "$39.99/年",
   "save 33%": "33%お得",
   "You can try it for free with 2 Pro and 5 Fast questions a day, no credit card needed. Premium is $4.99/month or $39.99/year (save 33%) for 8 Pro and 25 Fast questions a day, with unused questions carrying over (up to 100 of each), plus premium features like on-screen markers and Gemini voices. During the beta, every player gets every feature. See": "クレジットカード不要で、毎日Pro質問2回とFast質問5回を無料でお試しいただけます。Premiumプランは$4.99/月、または$39.99/年（33%お得）で、毎日Pro質問8回とFast質問25回が利用可能。使わなかった分は繰り越せます（それぞれ最大100回まで）。さらに画面上のマーカー機能やGeminiの音声といったプレミアム機能も使い放題。ベータ期間中は、すべてのプレイヤーが全機能を利用できます。詳細は",
-  "Version 0.6.3 beta. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "バージョン 0.6.3 ベータ。無料でお試し：Proの質問が1日2回、Fastの質問が1日5回まで利用可能。クレジットカードは不要です。"
+  "Version 0.6.3 beta. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "バージョン 0.6.3 ベータ。無料でお試し：Proの質問が1日2回、Fastの質問が1日5回まで利用可能。クレジットカードは不要です。",
+  "Standard & Immersive Modes": "スタンダード＆没入モード",
+  "Choose how you want to be helped: Standard for a straight expert guide, or Immersive for the same facts told by a character from the game's world.": "攻略スタイルを選べます。「スタンダード」は率直な専門ガイド、「没入」は同じ情報をゲーム世界の登場人物が語ります。",
+  "Get a thorough answer in Standard or Immersive mode, with a checklist of what to find and, on Windows, markers on the spots it's talking about.": "「スタンダード」または「没入」モードで詳しい回答が得られます。収集アイテムのチェックリストのほか、Windowsでは画面上の該当箇所にマーカーも表示されます。"
 }

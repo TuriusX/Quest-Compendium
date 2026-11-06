@@ -211,5 +211,8 @@
   "$39.99/year": "$39.99/год",
   "save 33%": "скидка 33%",
   "You can try it for free with 2 Pro and 5 Fast questions a day, no credit card needed. Premium is $4.99/month or $39.99/year (save 33%) for 8 Pro and 25 Fast questions a day, with unused questions carrying over (up to 100 of each), plus premium features like on-screen markers and Gemini voices. During the beta, every player gets every feature. See": "Попробуйте бесплатно: 2 Pro-вопроса и 5 Fast-вопросов в день, без привязки карты. Подписка Premium стоит $4.99/месяц или $39.99/год (скидка 33%) и даёт 8 Pro-вопросов и 25 Fast-вопросов ежедневно. Неиспользованные вопросы переносятся на следующий день (до 100 каждого типа), плюс открываются премиум-функции вроде меток на экране и голосов Gemini. Во время беты все функции доступны каждому игроку. Подробнее",
-  "Version 0.6.3 beta. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "Версия 0.6.3 beta. Попробуйте бесплатно: 2 Pro- и 5 Fast-вопросов в день, без привязки карты."
+  "Version 0.6.3 beta. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "Версия 0.6.3 beta. Попробуйте бесплатно: 2 Pro- и 5 Fast-вопросов в день, без привязки карты.",
+  "Standard & Immersive Modes": "Режимы: Стандарт и Погружение",
+  "Choose how you want to be helped: Standard for a straight expert guide, or Immersive for the same facts told by a character from the game's world.": "Выбирайте формат подсказок: «Стандарт» — прямой экспертный гайд, «Погружение» — те же факты от лица персонажа из мира игры.",
+  "Get a thorough answer in Standard or Immersive mode, with a checklist of what to find and, on Windows, markers on the spots it's talking about.": "Получите подробный ответ в режиме «Стандарт» или «Погружение» со списком нужных предметов, а на Windows — еще и с метками на экране прямо в нужных точках."
 }
