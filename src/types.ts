@@ -1,7 +1,8 @@
 import type { DoneItem } from './utils/progressMemory';
 import type { EntryKind } from './utils/entryKind';
 
-export type AiMode = 'standard' | 'roleplay' | 'minmax';
+/** Min/Max was removed (owner, Nov 6 2026); a saved 'minmax' loads as standard. */
+export type AiMode = 'standard' | 'roleplay';
 
 export type ColorTheme = 'purple' | 'red' | 'cyan' | 'blue' | 'amber' | 'luigi' | 'masterchief' | 'gold' | 'pink' | 'silver';
 

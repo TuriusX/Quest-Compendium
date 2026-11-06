@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   hidePanel: () => ipcRenderer.send('hide-panel'),
   // The hidden panel's spine: the theme's accent and its label (electron/spine.cjs).
   setLook: (look) => ipcRenderer.send('set-look', look),
+  // The right-click menu's words (spelling suggestions, Cut, Copy, Paste) in the app's language.
+  setEditLabels: (labels) => ipcRenderer.send('set-edit-labels', labels),
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   // "Next turn" and "Locate me": a fresh screenshot of the game now (an open panel slides away for it), never the snapshot on open.
   captureFresh: () => ipcRenderer.invoke('capture-fresh'),

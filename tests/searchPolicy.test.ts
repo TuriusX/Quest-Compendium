@@ -1,7 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/searchPolicy.test.ts)
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { withProRules, PRO_RULES, PROMPT_PERSONA_END, asksForSearch, stripSearchAsk, isNewRelease, searchMode, isBlankAnswer, wantsSpecifics, EXISTENCE_RULES } from "../searchPolicy";
+import { withProRules, PRO_RULES, PROMPT_PERSONA_END, ROLEPLAY_PERSONA, ROLEPLAY_PERSONA_END, asksForSearch, stripSearchAsk, isNewRelease, searchMode, isBlankAnswer, wantsSpecifics, EXISTENCE_RULES } from "../searchPolicy";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -71,6 +71,9 @@ test("Pro's rules: near the start and at the very end; no rule to search when it
   assert.ok(readFileSync("server.ts", "utf8").includes(PROMPT_PERSONA_END), "the answer prompt still has the line the rules follow");
   assert.ok(readFileSync("server.ts", "utf8").includes("3. MISSING IMAGE HANDLING:"), "the answer prompt still has the vision rule this replaces");
   assert.ok(withProRules("3. MISSING IMAGE HANDLING: say so\n4. next", true).includes("Otherwise don't mention screenshots"));
+  const rp = withProRules(`intro\n${ROLEPLAY_PERSONA("Hades II")}\n\n[NEXT]\nkept`, true, false, false);
+  assert.ok(ROLEPLAY_PERSONA("x").trim().endsWith(ROLEPLAY_PERSONA_END), "the roleplay persona ends with its marker line");
+  assert.ok(rp.indexOf("[ANSWER: THE BEST ANSWER") < rp.indexOf("[NEXT]"), "immersive: the rules come right after the persona too");
   const story = withProRules(`[STORY TIMING]\nleave it out\n\n[NEXT]\nkept`, true);
   assert.ok(!story.includes("old story rule") && story.includes("[NEXT]") && story.includes("rather than leaving it out"));
   assert.ok(readFileSync("server.ts", "utf8").replace(/\r+\n/g, "\n").includes("[STORY TIMING]\nWork out where"), "the answer prompt still has the story rule this replaces");

@@ -1000,7 +1000,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     
     // Global array to prevent Chrome garbage collection of utterances
-    const fallbackToBrowserTTS = (reason: string) => {
+    // `failed`: a Gemini voice was picked but didn't answer; the player is told it's the built-in voice instead of
+    // hearing it with no word why (owner, Nov 6 2026).
+    const fallbackToBrowserTTS = (reason: string, failed = true) => {
       console.warn('[TTS] Falling back to browser native TTS:', reason);
       if (!('speechSynthesis' in window)) {
         setTtsStatusError({ msgId, error: t('err.voice') });
@@ -1008,7 +1010,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         setAudioLoadingId(null);
         return;
       }
-      setTtsStatusError(null);
+      setTtsStatusError(failed ? { msgId, error: t('err.voiceFallback') } : null);
       setAudioLoadingId(null);
       
       window.speechSynthesis.cancel();
@@ -1088,7 +1090,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     // The device's built-in voice (the default, and free): no server call.
     if ((ttsVoice || '').toLowerCase() === 'device') {
       setPlayingAudioId(msgId);
-      fallbackToBrowserTTS('built-in voice selected');
+      fallbackToBrowserTTS('built-in voice selected', false);
       return;
     }
 

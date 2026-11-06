@@ -232,13 +232,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       icon: '🎭',
       experimental: true,
     },
-    { 
-      id: 'minmax', 
-      label: 'Min/Max (100% Completionist)', 
-      desc: 'Laser-focused on optimal builds, missable collectibles, zero filler, and speedrun routes.',
-      icon: '⚡',
-      experimental: true,
-    },
   ];
 
   const voices = [

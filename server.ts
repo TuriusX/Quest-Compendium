@@ -28,7 +28,7 @@ import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
-import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules } from './searchPolicy';
+import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
 import { questionType } from './src/utils/questionType';
@@ -1233,20 +1233,12 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       const guideKey = effectiveGame ? await guideKeyFor(effectiveGame.name, gameAppId, req.body?.tabName, guideHint).catch(() => null) : null;
 
       if (aiMode === 'roleplay') {
-        const gameNameForRoleplay = effectiveGame ? effectiveGame.name : 'the gaming universe you are discussing';
-        systemInstruction += `You are a dynamic, immersive, in-universe gaming companion. Your persona must seamlessly adapt to match the genre, lore, atmosphere, and world of the game (${gameNameForRoleplay}). If the player mentions or asks about a specific game, immediately adopt the persona and vernacular of a knowledgeable character or guide from that specific game universe.
-
-CRITICAL RULE: NEVER refer to yourself as a "book", a "compendium", "tome", "pages", "language model", or an "AI assistant". You are a living entity, in-universe companion, mentor, operative, or guide from the game world. Fully commit to the roleplay.
-
-Stay in character 100% of the time, while ensuring all puzzle solutions, mechanical guidance, boss strategies, build advice, and gameplay tips remain completely accurate, clear, and actionable.`;
+        const gameNameForRoleplay = effectiveGame ? effectiveGame.name : 'the game the player is asking about';
+        systemInstruction += ROLEPLAY_PERSONA(gameNameForRoleplay);
       } else {
         systemInstruction += `You are a helpful and expert gaming guide.
 Your purpose is to give thorough, highly accurate, puzzle-solving, build-optimizing, and progression-guiding advice for video games.
 Provide clear, direct answers without adopting any specific character, persona, or AI identity.`;
-
-        if (aiMode === 'minmax') {
-          systemInstruction += `\n\n[MODE: MIN/MAX 100% COMPLETION]\nGuide the player toward optimal efficiency, 100% trophy/achievement completion, and top-tier build configurations. Do not use fluff or excessive roleplay. Use clear bullet points, stat breakpoints, missable item warnings, and optimized progression routes.`;
-        }
       }
 
       systemInstruction += `\n\nCRITICAL TRUTHFUL VISION GROUNDING:
@@ -1767,7 +1759,7 @@ percentages:
                 { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
               ],
-              temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
+              temperature: 0.7,
               // "Pro" = more thinking on 3.8 Flash. Thinking is billed like answer text, so it's medium, not high.
               thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
             }
@@ -1801,7 +1793,7 @@ percentages:
                 { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
               ],
-              temperature: aiMode === 'roleplay' ? 0.9 : 0.7,
+              temperature: 0.7,
               // The website thinks less before it writes: the first words in 1-9 s instead of 14-28, with answers as full (Nov 3 2026).
               // Pro thinks low (owner, Nov 5 2026: about 15 s is the goal, 30 s the limit): with the Pro rules, search and guide lines it holds up; medium took 36-50 s.
               ...(usePro ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : targetModel === MAIN_MODEL ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {}),
@@ -1823,7 +1815,7 @@ percentages:
           const flashWait = site?.stream ? 75000 : site ? 45000 : 30000;
           if (evalCapture) {
             const fs = await import('node:fs');
-            fs.appendFileSync(String(process.env.QC_EVAL_CAPTURE), JSON.stringify({ id: req.body.evalId, model: answerModel, contents: contentsPayload, systemInstruction: firstSystem, withSearch: !!searchTools, searchMode, temperature: aiMode === 'roleplay' ? 0.9 : 0.7, qtype }) + String.fromCharCode(10));
+            fs.appendFileSync(String(process.env.QC_EVAL_CAPTURE), JSON.stringify({ id: req.body.evalId, model: answerModel, contents: contentsPayload, systemInstruction: firstSystem, withSearch: !!searchTools, searchMode, temperature: 0.7, qtype }) + String.fromCharCode(10));
             return res.json({ text: 'captured', modelUsed: 'eval' });
           }
           let response = await withTimeout(answerCall(firstSystem, searchTools), usePro ? proWait : flashWait, usePro ? 'Pro query' : 'Flash query') as any;

@@ -160,6 +160,7 @@ function SettingsStandalone() {
     try {
       const saved = localStorage.getItem('quest_compendium_settings');
       let parsed = saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+      if (parsed.aiMode !== 'roleplay') parsed = { ...parsed, aiMode: 'standard' }; // Min/Max was removed (Nov 6 2026)
       const validVoices = ['device', 'puck', 'charon', 'fenrir', 'kore', 'aoede'];
       if (!validVoices.includes(parsed.ttsVoice)) {
         parsed = { ...parsed, ttsVoice: 'device' };
@@ -256,6 +257,7 @@ export default function App() {
     try {
       const saved = localStorage.getItem('quest_compendium_settings');
       let parsed = saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+      if (parsed.aiMode !== 'roleplay') parsed = { ...parsed, aiMode: 'standard' }; // Min/Max was removed (Nov 6 2026)
       const validVoices = ['device', 'puck', 'charon', 'fenrir', 'kore', 'aoede'];
       if (!validVoices.includes(parsed.ttsVoice)) {
         parsed = { ...parsed, ttsVoice: 'device' };
@@ -2040,6 +2042,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     root.setProperty('--chat-font-family', fonts[settings.chatFont] || fonts.segoe);
     applyUiStyle(settings.uiStyle, t.color);
     applyLocale(settings.language);
+    // The right-click menu (spelling suggestions, Cut, Copy, Paste) in the same language.
+    (window as any).electronAPI?.setEditLabels?.({ cut: translate('edit.cut'), copy: translate('edit.copy'), paste: translate('edit.paste'), selectAll: translate('edit.selectAll'), addWord: translate('edit.addWord'), noSuggestions: translate('edit.noSuggestions') });
   }, [settings.theme, settings.windowOpacity, settings.tabFontSize, settings.chatFontSize, settings.chatFont, settings.uiStyle, settings.language]);
 
   // Handle Steam Auth Return

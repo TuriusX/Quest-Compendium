@@ -496,6 +496,7 @@ function createWindow() {
   });
 
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
+  attachEditMenu(mainWindow);
   // The app's "[panel] ..." diagnostics go to the desktop:dev output too.
   mainWindow.webContents.on('console-message', (event, level, message) => {
     if (typeof message === 'string' && message.startsWith('[panel]')) console.log(message);
@@ -537,6 +538,39 @@ function createWindow() {
   }
 }
 
+
+// Right-click in a text box: spelling suggestions for a misspelled word (Windows' own spell checker), Add to dictionary,
+// then Cut, Copy, Paste and Select all; on selected text elsewhere, Copy (owner, Nov 6 2026). Words in the app's language.
+let editLabels = { cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select all', addWord: 'Add to dictionary', noSuggestions: 'No spelling suggestions' };
+ipcMain.on('set-edit-labels', (event, labels) => {
+  if (labels && typeof labels === 'object') for (const k of Object.keys(editLabels)) if (typeof labels[k] === 'string' && labels[k]) editLabels[k] = labels[k].slice(0, 60);
+});
+function editMenuItems(wc, p) {
+  const items = [];
+  if (p.isEditable && p.misspelledWord) {
+    for (const w of (p.dictionarySuggestions || []).slice(0, 6)) items.push({ label: w, click: () => wc.replaceMisspelling(w) });
+    if (!items.length) items.push({ label: editLabels.noSuggestions, enabled: false });
+    items.push({ label: editLabels.addWord, click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) });
+    items.push({ type: 'separator' });
+  }
+  const f = p.editFlags || {};
+  if (p.isEditable) {
+    items.push({ label: editLabels.cut, role: 'cut', enabled: !!f.canCut });
+    items.push({ label: editLabels.copy, role: 'copy', enabled: !!f.canCopy });
+    items.push({ label: editLabels.paste, role: 'paste', enabled: !!f.canPaste });
+    items.push({ type: 'separator' });
+    items.push({ label: editLabels.selectAll, role: 'selectAll', enabled: !!f.canSelectAll });
+  } else if (p.selectionText && p.selectionText.trim()) {
+    items.push({ label: editLabels.copy, role: 'copy' });
+  }
+  return items;
+}
+function attachEditMenu(win) {
+  win.webContents.on('context-menu', (event, p) => {
+    const items = editMenuItems(win.webContents, p);
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+  });
+}
 
 app.whenReady().then(() => {
   // Setup System Tray
@@ -1894,6 +1928,7 @@ ipcMain.on('open-settings-window', () => {
     autoHideMenuBar: true,
     icon: path.join(__dirname, isDev ? '../public/app-icon.ico' : '../dist/app-icon.ico')
   });
+  attachEditMenu(settingsWindow);
 
   settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
     return {

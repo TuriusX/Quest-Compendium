@@ -141,6 +141,22 @@ Your previous attempt didn't search. Run a Google Search about this question now
 export const PROMPT_PERSONA_END = 'Provide clear, direct answers without adopting any specific character, persona, or AI identity.';
 
 /**
+ * Immersive mode (owner, Nov 6 2026): the facts of a Standard answer, told by a narrator from the game's world. The old persona
+ * ended up as a plain shorter answer once the answer rules came after it (8 test questions on Fast: 7 wrong claims against
+ * Standard's 5, about 20% shorter, no character left); this one kept the character, was as complete and had 2.
+ */
+export const ROLEPLAY_PERSONA = (game: string) => `You are a companion from the world of ${game}, talking with the player as someone who belongs there. Pick one narrator who fits this world (a kind of person who lives in it, such as a veteran, a scholar, a guide or a rogue native to it; not one of the game's named main characters) and speak as them. If earlier answers in this conversation already had a narrator, stay the same one.
+
+[IMMERSIVE: THE FACTS FIRST, THE CHARACTER IS THE VOICE]
+- Say everything a plain expert guide would: every step, name, place, number, requirement, warning, missable and outcome, with exact in-game names. The character never drops, blurs or replaces a fact, and never hides a mechanic behind in-world vagueness: name the button, the stat, the number.
+- Never invent lore, places, items or people to fit the character. If it isn't true in the game, it isn't said.
+- Keep a guide's shape so the player can scan it and act: a direct answer first, headings, bullets, numbered steps.
+- Make it fun: open with one short in-character line that reacts to what the player is doing; give headings an in-world flavour; let the narrator's personality show in a wry aside or two (at most one per section, never in the middle of a step); end with a short in-character send-off. Use the world's own words, slang and humour.
+- Never call yourself an AI, an assistant, a language model, a book, a compendium or a guide app.`;
+/** The roleplay persona's last line: the answer rules go right after it, as after Standard's. */
+export const ROLEPLAY_PERSONA_END = "- Never call yourself an AI, an assistant, a language model, a book, a compendium or a guide app.";
+
+/**
  * Pro's own rules (owner, Nov 5 2026: a Pro answer should beat asking Gemini Pro yourself). 12 test questions, fact-checked:
  * 3 wrong claims against 7 for plain Gemini Pro and 7 for the app's Pro before this. Without search, the rule to check is left out.
  */
@@ -174,7 +190,8 @@ export const PRO_MISSING_IMAGE = "3. MISSING IMAGE HANDLING: Only if the player 
 export function withProRules(prompt: string, canSearch: boolean, screenshot = false, pro = true): string {
   const rules = PRO_RULES(canSearch, screenshot, pro);
   const system = prompt.replace(/\[STORY TIMING\][\s\S]*?(?=\n\n\[)/, () => PRO_STORY_TIMING).replace(/\[NO SCREENSHOT WITH THIS QUESTION\][\s\S]*?(?=\n\n\[)/, () => PRO_NO_SCREENSHOT).replace(/3\. MISSING IMAGE HANDLING:[^\n]*/, () => PRO_MISSING_IMAGE);
-  const at = system.indexOf(PROMPT_PERSONA_END);
-  const start = at < 0 ? system : `${system.slice(0, at + PROMPT_PERSONA_END.length)}\n\n${rules}${system.slice(at + PROMPT_PERSONA_END.length)}`;
+  const end = system.includes(PROMPT_PERSONA_END) ? PROMPT_PERSONA_END : ROLEPLAY_PERSONA_END;
+  const at = system.indexOf(end);
+  const start = at < 0 ? system : `${system.slice(0, at + end.length)}\n\n${rules}${system.slice(at + end.length)}`;
   return `${start}\n\n${rules}`;
 }
