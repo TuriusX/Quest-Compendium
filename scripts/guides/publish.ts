@@ -228,6 +228,12 @@ function localize(a: GuideArea, t?: any): GuideArea {
 const SITE = 'https://questcompendium.com';
 /** Old page -> the page that replaced it, per guide (pages merged or replaced by rebuilds): 301s in _redirects. */
 const SITE_REDIRECTS: Record<string, Record<string, string>> = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), 'site-redirects.json'), 'utf8'));
+/**
+ * Guides replaced by another guide (guide-moves.json): { old key: { to: new key, pages: { old slug: new slug } } }. While
+ * the new guide has published pages, the old one is left off the site and every old address (each language's, and its
+ * compendium pages) 301s to the new guide: a mapped page to its new page, anything else to the new guide's front page.
+ */
+const GUIDE_MOVES: Record<string, { to: string; why?: string; pages?: Record<string, string> }> = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), 'guide-moves.json'), 'utf8'));
 /** --preview <dir>: a local preview of one game (--only key) with its flagship prototypes, outside the website files. */
 /** Languages with their own guides index (/xx/guides/): the others' "Guides" links go to the English one. */
 const GUIDE_LANGS = new Set<string>(['en']);
@@ -643,9 +649,25 @@ function themeEverywhere(root: string): number {
   return n;
 }
 
+/** The replaced guides that are off the site this run (GUIDE_MOVES whose new guide is live). */
+const RETIRED = new Map<string, { to: string; pages?: Record<string, string> }>();
+/** A replaced guide's addresses: each mapped page to its new page, then everything else under it to the new front page. */
+function retiredLines(live: Set<string>): string[] {
+  const out: string[] = [];
+  for (const [from, m] of RETIRED) {
+    for (const code of Object.keys(LANG_TAG)) {
+      const pre = code === 'en' ? '' : `${code}/`;
+      const best = (slug: string) => [`/${pre}guides/${m.to}/${slug ? `${slug}/` : ''}`, `/guides/${m.to}/${slug ? `${slug}/` : ''}`].find((u) => live.has(`${SITE}${u}`));
+      const front = best('') || `/guides/${m.to}/`;
+      for (const [a, b] of Object.entries(m.pages || {})) out.push(`/${pre}guides/${from}/${a}/ ${best(b) || front} 301`);
+      out.push(`/${pre}guides/${from}/* ${front} 301`);
+    }
+  }
+  return out;
+}
 /** Netlify's _redirects: the moved pages' old URLs, 301 to the pages that replaced them. */
 function writeRedirects(moved: { key: string; from: string; to: string }[], live: Set<string>) {
-  const lines = redirectLines(moved, live, Object.keys(LANG_TAG), SITE);
+  const lines = [...redirectLines(moved, live, Object.keys(LANG_TAG), SITE), ...retiredLines(live)];
   // The admin pages live on the app server: the website's /admin addresses lead there.
   const suggest = CONTRIB_SITE_AUTH
     ? [`/suggest ${SERVER_URL}/suggest 200!`, `/api/contributions ${SERVER_URL}/api/contributions 200!`, `/__/auth/* https://quest-compendium-1bccf.firebaseapp.com/__/auth/:splat 200!`, `/__/firebase/* https://quest-compendium-1bccf.firebaseapp.com/__/firebase/:splat 200!`]
@@ -2620,7 +2642,14 @@ async function main() {
   // Approved guide blueprints: the quest plans (play order, chapters) for the compendium's mission lists.
   for (const d of (await db().collection('guideBlueprints').get()).docs) if ((d.data() as any).status === 'approved') BLUEPRINTS.set(d.id, d.data());
   // Staged rebuilds (guides/{key}--next) are never part of the site; review.ts --gate promotes them.
-  const guides = { docs: (await db().collection('guides').get()).docs.filter((d) => !d.id.endsWith('--next') && (!ONLY || d.id === ONLY)) };
+  const allGuides = (await db().collection('guides').get()).docs.filter((d) => !d.id.endsWith('--next'));
+  // A replaced guide (GUIDE_MOVES) stays on the site until its replacement has published pages.
+  for (const [from, m] of Object.entries(GUIDE_MOVES)) {
+    const target = allGuides.find((d) => d.id === m.to);
+    if (target && (await target.ref.collection('areas').where('status', '==', 'published').limit(1).get()).size) RETIRED.set(from, m);
+  }
+  if (RETIRED.size) console.log(`Replaced guides (left off, their addresses redirected): ${[...RETIRED].map(([k, m]) => `${k} -> ${m.to}`).join(', ')}.`);
+  const guides = { docs: allGuides.filter((d) => !RETIRED.has(d.id) && (!ONLY || d.id === ONLY)) };
   // A preview carries the game's flagship prototypes (guidePrototypes/{key}__{slug}) on their pages.
   const protos = new Map<string, any>();
   if (PREVIEW) for (const d of (await db().collection('guidePrototypes').get()).docs) protos.set(d.id, d.data());

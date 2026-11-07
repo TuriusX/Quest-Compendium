@@ -25,6 +25,10 @@ const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').repla
 const EDITION = /\s+(complete|game of the year|goty|definitive|enhanced|special|deluxe|ultimate|legendary|anniversary|director s cut|remastered|hd)( edition)?$/;
 /** A dump date: Unix seconds, or a date string (the CSV dumps write timestamps either way). Unix seconds out, 0 if none. */
 const when = (v: string) => { const n = Number(v); if (n > 0) return n; const t = Date.parse(String(v || '')); return Number.isFinite(t) && t > 0 ? Math.round(t / 1000) : 0; };
+/** A guide's name without a trailing platform note: "Ocarina of Time (Nintendo Switch 2)" is IGDB's "Ocarina of Time". */
+const plainName = (game: string) => norm(String(game || '').replace(/s*([^)]*)s*$/, ''));
+/** A remake's own year (guides/{key}.edition.year): among same-named IGDB games, the one released that year. */
+const yearOf = (sec: number) => (sec ? new Date(sec * 1000).getUTCFullYear() : 0);
 const ids = (v: string) => String(v || '').replace(/[{}"]/g, '').split(',').map((x) => Number(x)).filter((x) => x > 0);
 
 async function token(clientId: string): Promise<string> {
@@ -110,7 +114,7 @@ async function main() {
   for (const [id, ks] of pinned) for (const k of ks) { game.set(k, id); how.set(k, 'pinned'); }
   // 2. Games: the matched ones' fields, and name candidates for the rest.
   const wantName = new Map<string, string[]>();
-  for (const g of guides) if (norm(g.game)) for (const n of [norm(g.game), norm(g.game).replace(EDITION, '')]) if (n) wantName.set(n, [...new Set([...(wantName.get(n) || []), g.key])]);
+  for (const g of guides) if (norm(g.game)) for (const n of [norm(g.game), norm(g.game).replace(EDITION, ''), plainName(g.game)]) if (n) wantName.set(n, [...new Set([...(wantName.get(n) || []), g.key])]);
   const games = new Map<number, any>();
   const cands = new Map<string, any[]>();
   const matched = new Set([...game.values(), ...[...steamCands.values()].flat()]);
@@ -136,7 +140,7 @@ async function main() {
     if (pick) { game.set(k, pick.id); how.set(k, 'steam'); }
   }
   for (const g of guides) {
-    const exact = norm(g.game), bare = exact.replace(EDITION, '');
+    const exact = norm(g.game), bare = exact.replace(EDITION, ''), plain = plainName(g.game);
     if (!exact) continue;
     // A Steam match that's a bundle or collection ("Kingdom Hearts HD 1.5 + 2.5 Remix" for Kingdom Hearts Final Mix)
     // gives way to the game with the guide's exact name.
@@ -147,8 +151,11 @@ async function main() {
       continue;
     }
     if (game.has(g.key)) continue;
-    const xs = (cands.get(g.key) || []).sort((a, b) => Number(b.n === exact) - Number(a.n === exact) || Number(!!a.viaShort) - Number(!!b.viaShort) || Number(b.type === 0) - Number(a.type === 0) || b.rated - a.rated);
-    if (xs[0] && (xs[0].n === exact || xs[0].n === bare)) { game.set(g.key, xs[0].id); how.set(g.key, 'name'); }
+    // A remake named after its platform ("... (Nintendo Switch 2)") shares the original's name on IGDB: its own year decides.
+    const year = Number(g.edition?.remake && g.edition?.year) || 0;
+    const xs = (cands.get(g.key) || []).sort((a, b) => Number(b.n === exact) - Number(a.n === exact) || (year ? Number(yearOf(b.first) === year) - Number(yearOf(a.first) === year) : 0) || Number(!!a.viaShort) - Number(!!b.viaShort) || Number(b.type === 0) - Number(a.type === 0) || b.rated - a.rated);
+    const ok = xs[0] && (xs[0].n === exact || xs[0].n === bare || (!!year && xs[0].n === plain && yearOf(xs[0].first) === year));
+    if (ok) { game.set(g.key, xs[0].id); how.set(g.key, 'name'); }
   }
   const need = new Set(game.values());
   // 3. Images and names for platforms and genres.

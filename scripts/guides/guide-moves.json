@@ -1,0 +1,40 @@
+{
+  "the-legend-of-zelda-ocarina-of-time": {
+    "to": "the-legend-of-zelda-ocarina-of-time-nintendo-switch-2",
+    "why": "owner, Nov 7 2026: the N64 guide gives way to the 2026 Switch 2 remake's guide, so there's one Ocarina of Time guide",
+    "pages": {
+      "kokiri-forest": "kokiri-forest",
+      "kokiri-forest-adult-era": "sacred-forest-meadow-adult",
+      "inside-the-deku-tree": "inside-the-great-deku-tree",
+      "hyrule-field": "hyrule-field-castle-town",
+      "hyrule-castle": "hyrule-castle",
+      "lon-lon-ranch": "lon-lon-ranch",
+      "kakariko-village": "kakariko-village-graveyard",
+      "kakariko-village-adult-era": "kakariko-village-in-flames",
+      "death-mountain-trail": "death-mountain-trail-goron-city",
+      "death-mountain-trail-adult-era": "death-mountain-trail-goron-city",
+      "goron-city": "death-mountain-trail-goron-city",
+      "goron-city-adult-era": "death-mountain-trail-goron-city",
+      "dodongos-cavern": "dodongos-cavern",
+      "zoras-river": "zoras-river-zoras-domain",
+      "zoras-domain": "zoras-river-zoras-domain",
+      "zoras-domain-adult-era": "ice-cavern",
+      "zoras-fountain": "lake-hylia-zoras-fountain",
+      "zoras-fountain-adult-era": "ice-cavern",
+      "lake-hylia": "lake-hylia-zoras-fountain",
+      "inside-jabu-jabus-belly": "inside-jabu-jabus-belly",
+      "temple-of-time": "temple-of-time-child",
+      "temple-of-time-adult-era": "temple-of-time-adult-awakening",
+      "forest-temple": "forest-temple",
+      "fire-temple": "fire-temple",
+      "ice-cavern": "ice-cavern",
+      "water-temple": "water-temple",
+      "bottom-of-the-well": "bottom-of-the-well",
+      "shadow-temple": "shadow-temple",
+      "gerudo-valley": "gerudo-valley-gerudos-fortress",
+      "gerudos-fortress": "gerudo-valley-gerudos-fortress",
+      "spirit-temple": "spirit-temple",
+      "ganons-castle": "ganons-castle"
+    }
+  }
+}

@@ -33,7 +33,7 @@ import path from 'path';
 import { spawnSync } from 'child_process';
 import { ThinkingLevel } from '@google/genai';
 import {
-  db, gemini, MODEL, arg, searchesIn, sourcesIn, parseItem, ledger, ledgerDollars, usageScope, MISSABLE_STANDARD, stageKey, addChildUsage, slug as slugOf, LAYOUT_CHOICES, isLayout,
+  db, gemini, MODEL, arg, searchesIn, sourcesIn, parseItem, editionOf, editionNote, ledger, ledgerDollars, usageScope, MISSABLE_STANDARD, stageKey, addChildUsage, slug as slugOf, LAYOUT_CHOICES, isLayout,
   type GuideEntry, type GuideStep, type GuideChoice, type GuideAdvice, type GuideFight, type GuideInfo,
 } from './common';
 import { infoForPage } from './areaInfo';
@@ -1295,12 +1295,12 @@ const CAREFUL_PAGE_SEARCHES = 10;
 const CAREFUL_MAX_PAGES = 20;
 
 /** The guide's pages, from one searched call: the layout that fits the game, then the pages in story order. */
-async function packOutline(game: string, layout?: string, note?: string) {
+async function packOutline(game: string, layout?: string, note?: string, edition = '', maxPages = CAREFUL_MAX_PAGES) {
   const prompt = [
-    `List the pages of a player's guide for the video game "${game}", in the order a player meets them. Search guides and wikis for this game first.`,
+    `List the pages of a player's guide for the video game "${game}", in the order a player meets them. Search guides and wikis for this game first.${edition}`,
     layout ? `The guide's outline: ${layout}.` : `First pick the outline that fits the game, one of these:\n${LAYOUT_CHOICES}\nand reply with a line "LAYOUT: <one word>".`,
     ...(note ? [`How the page list must look: ${note}`] : []),
-    `Then one line per page, at most ${CAREFUL_MAX_PAGES} (the main areas, chapters or regions; never a page for a single room, shop or quest):`,
+    `Then one line per page, at most ${maxPages} (the main areas, chapters or regions; never a page for a single room, shop or quest):`,
     'PAGE: page name | when in the story it comes up',
   ].join('\n');
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -1324,7 +1324,7 @@ async function packOutline(game: string, layout?: string, note?: string) {
       if (!sl || pages.some((x) => x.slug === sl)) continue;
       pages.push({ slug: sl, name, story: cut(f[1] || '', 120) });
     }
-    return { layout: picked, pages: pages.slice(0, CAREFUL_MAX_PAGES) };
+    return { layout: picked, pages: pages.slice(0, maxPages) };
   }
   return { layout: layout || 'area', pages: [] as { slug: string; name: string; story: string }[] };
 }
@@ -1337,17 +1337,23 @@ async function packOutline(game: string, layout?: string, note?: string) {
  * verdict, the guide goes live if at least MIN_PAGES passed; otherwise it goes to the review queue. Returns the gate
  * line (or "continues on the next run") for the pipeline.
  */
-export async function packBuildGuide(key: string, game: string, opts: { maxSearches: number; layout?: string; note?: string; newRelease?: boolean; stageOnly?: boolean }) {
+export async function packBuildGuide(key: string, game: string, opts: { maxSearches: number; layout?: string; note?: string; newRelease?: boolean; stageOnly?: boolean; maxPages?: number }) {
   const stageRef = db().collection('guides').doc(stageKey(key));
+  // A remake or remaster (common.ts editionOf, saved on the guide, or on the staged copy for a guide not live yet): the
+  // page list and every page's research keep to what's confirmed for this version.
+  const liveRef = db().collection('guides').doc(key);
+  const edition = await editionOf(game, (await liveRef.get()).exists ? liveRef : stageRef);
+  const edNote = editionNote(edition, game);
+  if (edNote) console.log(`  edition: the ${edition.year ? `${edition.year} ` : ''}${edition.kind} of ${edition.original || 'an earlier game'}`);
   let staged: any = (await stageRef.get()).data();
   const startSearches = ledger.searches;
   // A pack build already under way carries on; anything else staged is replaced.
   if (!staged?.packBuild) {
     if (staged) await discard(key);
-    const o = await packOutline(game, opts.layout, opts.note);
+    const o = await packOutline(game, opts.layout, opts.note, edNote, Math.max(1, Math.min(40, opts.maxPages || CAREFUL_MAX_PAGES)));
     if (!o.pages.length) return { line: 'Gate: failed (nothing was built: no page list from searched sources); the old content stays: rebuild careful.', done: true };
     staged = {
-      game, title: `${game} guide`, stagingFor: key, layout: o.layout, repair: 'careful', createdAt: Date.now(),
+      game, title: `${game} guide`, stagingFor: key, layout: o.layout, repair: 'careful', createdAt: Date.now(), ...(edition.remake ? { edition } : {}),
       areas: o.pages.map((x) => ({ slug: x.slug, name: x.name, story: x.story })),
       packBuild: { done: [], failed: [], scores: {} },
     };
@@ -1369,7 +1375,7 @@ export async function packBuildGuide(key: string, game: string, opts: { maxSearc
     try {
       // The page's facts first (its pack), seeding its items, secrets and overview; then the flagship writing, checks
       // and the capped Pro review.
-      const sp = await sourcePack(key, o.slug, { from: stageKey(key), game });
+      const sp = await sourcePack(key, o.slug, { from: stageKey(key), game, edition: edNote });
       if (sp) {
         const k = sp.pack;
         await stageRef.collection('areas').doc(o.slug).set(JSON.parse(JSON.stringify({

@@ -104,7 +104,8 @@ const PACK_FORMAT = `{"summary": "one sentence", "region": "", "levels": "", "di
  "npcs": [{"name": "", "role": "", "src": 1}], "quests": ["quest name"]}`;
 
 /** The pack for one area: cached, or built from the wiki (its article, and its quests' articles). */
-export async function sourcePack(key: string, slug: string, opts: { rebuild?: boolean; from?: string; game?: string } = {}): Promise<SourcePack | null> {
+/** opts.edition: the remake note (common.ts editionNote), so a remake's pack keeps to facts confirmed for its version. */
+export async function sourcePack(key: string, slug: string, opts: { rebuild?: boolean; from?: string; game?: string; edition?: string } = {}): Promise<SourcePack | null> {
   const ref = db().collection('sourcePacks').doc(`${key}__${slug}`);
   if (!opts.rebuild) {
     const cached = (await ref.get()).data() as SourcePack | undefined;
@@ -114,7 +115,7 @@ export async function sourcePack(key: string, slug: string, opts: { rebuild?: bo
   // The page from the copy being built on (a staged rebuild's pages aren't in the live guide yet).
   const page: any = (await db().collection('guides').doc(opts.from || key).collection('areas').doc(slug).get()).data();
   if (!page) return null;
-  if (!wiki) return searchedPack(key, slug, page, ref, opts.game);
+  if (!wiki) return searchedPack(key, slug, page, ref, opts.game, opts.edition);
   // The area's own article (its name, then without a bracketed note), then its quests' articles.
   const base = String(page.name).replace(/\s*\([^)]*\)\s*$/, '');
   // Wikis often drop a leading "The" ("The Mason's Guild" is "Mason's Guild").
@@ -130,7 +131,7 @@ export async function sourcePack(key: string, slug: string, opts: { rebuild?: bo
     model: MODEL,
     contents: [{ role: 'user', parts: [{ text: [
       `Extract the facts a guide needs about the area "${page.name}" of the video game "${page.game || key}" from these wiki articles. Facts only, as short notes in your own words (never copy sentences); "src" is the article's number.`,
-      'Only what happens in or is found in this area. Leave a field empty rather than guess. Reply with JSON only, in this shape:',
+      'Only what happens in or is found in this area. Leave a field empty rather than guess. Reply with JSON only, in this shape:' + (opts.edition || ''),
       PACK_FORMAT,
       '',
       ...pages.map((p, i) => `[${i + 1}] ${p.title} (${p.url})\n${p.text}`),
@@ -154,7 +155,7 @@ export async function sourcePack(key: string, slug: string, opts: { rebuild?: bo
  * many searches, usually 4-12; asked once more if it ran none), then turned into the pack's JSON without searching. The
  * sites the research cites are the pack's sources.
  */
-async function searchedPack(key: string, slug: string, page: any, ref: FirebaseFirestore.DocumentReference, gameName?: string): Promise<SourcePack | null> {
+async function searchedPack(key: string, slug: string, page: any, ref: FirebaseFirestore.DocumentReference, gameName?: string, edition = ''): Promise<SourcePack | null> {
   // A new guide has no guide document yet: its game's name comes from the caller.
   const game = gameName || String((await db().collection('guides').doc(key).get()).data()?.game || key);
   let res: any;
@@ -170,7 +171,7 @@ async function searchedPack(key: string, slug: string, page: any, ref: FirebaseF
         '- the choices made here, each option and what it leads to',
         '- fights here: enemies, threats, weaknesses, tactics, rewards',
         '- the region, level range, how to get here, connected areas, traders and important people, quests',
-        'Be concrete. Only what happens in or is found in this area.',
+        'Be concrete. Only what happens in or is found in this area.' + edition,
       ].join('\n') }] }],
       config: { tools: [{ googleSearch: {} }], temperature: 0.2, maxOutputTokens: 8000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
