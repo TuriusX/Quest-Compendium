@@ -26,7 +26,7 @@ const EDITION = /\s+(complete|game of the year|goty|definitive|enhanced|special|
 /** A dump date: Unix seconds, or a date string (the CSV dumps write timestamps either way). Unix seconds out, 0 if none. */
 const when = (v: string) => { const n = Number(v); if (n > 0) return n; const t = Date.parse(String(v || '')); return Number.isFinite(t) && t > 0 ? Math.round(t / 1000) : 0; };
 /** A guide's name without a trailing platform note: "Ocarina of Time (Nintendo Switch 2)" is IGDB's "Ocarina of Time". */
-const plainName = (game: string) => norm(String(game || '').replace(/s*([^)]*)s*$/, ''));
+const plainName = (game: string) => norm(String(game || '').replace(/\s*\([^)]*\)\s*$/, ''));
 /** A remake's own year (guides/{key}.edition.year): among same-named IGDB games, the one released that year. */
 const yearOf = (sec: number) => (sec ? new Date(sec * 1000).getUTCFullYear() : 0);
 const ids = (v: string) => String(v || '').replace(/[{}"]/g, '').split(',').map((x) => Number(x)).filter((x) => x > 0);
