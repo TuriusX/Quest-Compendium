@@ -10,7 +10,7 @@ import crypto from 'crypto';
  * The shrinkage guard: a build whose sitemap has far fewer pages than the live site's (a publish that stopped halfway)
  * is never deployed, since a deploy removes every live page the build lacks. More than 2% of the live pages, or any
  * guide that's live but missing from the build, refuses the deploy (QC_DEPLOY_ALLOW_SHRINK=1 overrides, for a
- * deliberate removal).
+ * deliberate removal). Pages the build's _redirects 301 elsewhere count as moved, not removed.
  */
 export async function checkShrink(root: string, site = 'https://questcompendium.com'): Promise<string | null> {
   if (process.env.QC_DEPLOY_ALLOW_SHRINK === '1') return null;
@@ -25,11 +25,18 @@ export async function checkShrink(root: string, site = 'https://questcompendium.
   const local = fs.existsSync(path.join(root, 'sitemap.xml')) ? locs(fs.readFileSync(path.join(root, 'sitemap.xml'), 'utf8')) : [];
   if (!live.length) return null;
   const have = new Set(local);
-  const gone = live.filter((u) => !have.has(u));
+  // A page the build 301s to another (a merged page, or a guide replaced by another: guide-moves.json) moved; it isn't lost.
+  const moves = (fs.existsSync(path.join(root, '_redirects')) ? fs.readFileSync(path.join(root, '_redirects'), 'utf8') : '')
+    .split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => p.length >= 3 && p[2] === '301' && p[0].startsWith('/')).map((p) => p[0]);
+  const redirected = (u: string) => {
+    const p = u.startsWith(site) ? u.slice(site.length) : u;
+    return moves.some((from) => (from.endsWith('/*') ? p.startsWith(from.slice(0, -1)) : p === from));
+  };
+  const gone = live.filter((u) => !have.has(u) && !redirected(u));
   const guideOf = (u: string) => (u.match(/\/guides\/([^/]+)\//) || [])[1];
   const liveGuides = new Set(live.map(guideOf).filter(Boolean));
   const localGuides = new Set(local.map(guideOf).filter(Boolean));
-  const lostGuides = [...liveGuides].filter((g) => !localGuides.has(g));
+  const lostGuides = [...liveGuides].filter((g) => !localGuides.has(g) && !redirected(`${site}/guides/${g}/`));
   if (lostGuides.length || gone.length > live.length * 0.02) {
     return `the build would remove ${gone.length} of ${live.length} live page(s)${lostGuides.length ? ` and ${lostGuides.length} whole guide(s) (${lostGuides.slice(0, 5).join(', ')})` : ''}; not deployed (QC_DEPLOY_ALLOW_SHRINK=1 if that's intended)`;
   }
