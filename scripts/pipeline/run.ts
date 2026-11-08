@@ -552,7 +552,8 @@ async function main() {
   lane = 'upkeep';
   // ---- the walkthrough pages, after upkeep and before everything else (owner, Nov 1 2026): the site audit's November
   // content work (roadmap 22, novemberWork.ts), paid from this pipeline's November cap, with its upkeep lane first; what it
-  // spends is charged here. Does nothing outside November 2026. ----
+  // spends is charged here. After November 2026 only its upkeep and the unchecked pages people find in Google (owner,
+  // Nov 7 2026: the traffic pages stay first in December). ----
   try {
     const { runAuditWork } = await import('../guides/novemberWork');
     lane = 'walkthroughs';
