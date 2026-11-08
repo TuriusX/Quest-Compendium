@@ -22,6 +22,11 @@ import { searchedEvidence } from './entityV2';
 import { coverage, pageText } from './benchmark';
 import { apiLimits, searchesToday, pipelineRoom } from '../../apiLimits';
 
+/** What a suggestion is, in words, for the check's prompt (the site's form: siteFix.ts FIX_KINDS). */
+const KIND_WORDS: Record<string, string> = {
+  correction: 'a correction: something on the page is wrong', missing: 'something missing from the page', detail: 'an extra detail',
+  missable: 'something players can miss for good, or a point of no return', tip: "a player's tip",
+};
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const sentences = (t: string) => String(t || '').split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter((x) => x.length > 3);
 /** A page's text for the absorbed check: an entity page's fields, or an area page's text fields. */
@@ -62,9 +67,9 @@ async function check(id: string, c: any): Promise<string> {
     const res: any = await gemini().models.generateContent({
       model: MODEL,
       contents: [{ role: 'user', parts: [{ text: [
-        `${c.owner ? "The guide's owner sent" : 'A player suggested'} this for the guide section "${where}" of "${game}" (${c.kind === 'correction' ? 'a correction' : c.kind === 'missing' ? 'something missing from the page' : 'an extra detail'}):`, c.text, '',
+        `${c.owner ? "The guide's owner sent" : 'A player suggested'} this for the guide section "${where}" of "${game}" (${KIND_WORDS[c.kind] || 'an extra detail'}${c.lang && c.lang !== 'en' ? `, written in ${c.lang}` : ''}):`, c.text, '',
         verdict === 'unverifiable' && !backed.length ? 'Nothing could be checked against sources. Rewrite it as a short guide note in plain, neutral words (no "I", no opinions), keeping its facts.' : `Sources back these parts: ${backed.join(' ') || '(none)'}${contra.length ? `\nSources contradict these parts: ${contra.join(' ')}` : ''}\nEVIDENCE:\n${ev.evidence.map((e) => `- ${e.text}`).join('\n')}\n\nWrite a short guide note (1-3 sentences, plain, no "I") stating what the evidence backs; for a contradicted part, state what the evidence says instead.`,
-        'Reply with the note only: plain sentences, no heading, no markdown.',
+        'Reply with the note only, in English (the guide is written in English and translated later): plain sentences, no heading, no markdown.',
       ].join('\n') }] }],
       config: { temperature: 0.2, maxOutputTokens: 600, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
@@ -111,9 +116,10 @@ async function main() {
     const [has] = await coverage(game, page.name, page.text, [{ point: String(c.decided?.text || c.text), kind: 'other', core: true }]);
     if (has) { await d.ref.set({ absorbed: { at: Date.now() } }, { merge: true }); absorbed++; }
   }
-  // Declined suggestions are deleted after 90 days (the privacy policy says so).
+  // Declined suggestions are deleted after 90 days (the privacy policy says so), and so are the site's fixes that
+  // sources didn't confirm (dismissed by autoImprove.ts).
   let deleted = 0;
-  for (const d of (await db().collection('contributions').where('status', '==', 'rejected').get()).docs) {
+  for (const d of (await db().collection('contributions').where('status', 'in', ['rejected', 'dismissed']).get()).docs) {
     if (Number(d.data().decided?.at || d.data().at || 0) < Date.now() - 90 * 86_400_000) { await d.ref.delete(); deleted++; }
   }
   if (deleted) console.log(`  ${deleted} declined suggestion(s) older than 90 days deleted`);

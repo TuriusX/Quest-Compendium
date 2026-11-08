@@ -98,7 +98,7 @@ function entryList(p: any): { id: string; line: string }[] {
   ];
 }
 
-const STEP_FORMAT = 'STEP: short title | 2-5 connected sentences in the second person ("When you arrive...", "Then...", "Before leaving...") | entry ids met in this step, separated by commas, or - | key fight ids in this step, or - | one tip, or - | one warning (something you can lose or get wrong here), or -';
+const STEP_FORMAT = 'STEP: short title | 2-5 connected sentences in the second person ("When you arrive...", "Then...", "Before leaving...") | entry ids met in this step, separated by commas, or - | key fight ids in this step, or - | one tip, or - | one warning (something you can lose or get wrong here; at a point of no return, say so and what it locks you out of), or -';
 const NEW_FORMAT = 'NEW: item or secret | name | where: from a findable anchor to the exact spot | how: the exact final step, or - | missable because, or - | the number of the step it belongs to';
 const CHOICE_FORMAT = 'CHOICE: short title | when it comes up | option => what it leads to ;; option => what it leads to (2-4 options) | the option most players should pick, or - | one note (a timer, a point of no return, an approval change), or -';
 
@@ -114,6 +114,7 @@ function researchPrompt(game: string, p: any, neighbours: string[]) {
     'Run several searches: the area\'s page on the game\'s wiki, its walkthrough, the quests that happen here, and the choices made here. Then write notes, only from what the sources say:',
     '- what a player meets here, in order: arrivals, characters, events, fights, puzzles, where each is (landmarks, waypoints)',
     '- items and secrets here, where exactly, and how to get them; which are missable and why',
+    '- points of no return: where going on locks the player out of this area, its quests, items, people or achievements, and what exactly is lost',
     '- the choices made here, each option and what it leads to (who joins, leaves or dies; rewards; what changes later)',
     '- what happens in the NEIGHBOURING areas instead (so the guide does not put it here)',
     'Be concrete (names, checks with their DCs, rewards). Say when sources disagree.',

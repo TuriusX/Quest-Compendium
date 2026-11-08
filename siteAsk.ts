@@ -133,7 +133,7 @@ async function guard(): Promise<void> {
 }
 
 /** App Check is checked on the deployed server once the reCAPTCHA key is set (a local server skips it unless asked to). */
-const appCheckOn = (c: SiteAskConfig) => c.appCheck === 'enforce' && !!c.recaptchaKey && (!isLocalServer() || process.env.QC_SITE_ASK_APPCHECK === '1');
+export const appCheckOn = (c: SiteAskConfig) => c.appCheck === 'enforce' && !!c.recaptchaKey && (!isLocalServer() || process.env.QC_SITE_ASK_APPCHECK === '1');
 
 // ---- the guide's own files (page.json, search.json), cached ten minutes ----
 const files = new Map<string, { at: number; v: any }>();
@@ -395,7 +395,7 @@ const gameKeyOf = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').rep
 
 // ---- limits: devices and networks per day (hashed with the day's salt), the site's dollars per day ----
 const SALT = () => process.env.SITE_ASK_SALT || process.env.CORRECTION_SALT || 'qc-site-ask';
-const hashOf = (day: string, kind: string, v: string) => crypto.createHmac('sha256', `${SALT()}:${day}`).update(`${kind}:${v}`).digest('hex').slice(0, 16);
+export const hashOf = (day: string, kind: string, v: string) => crypto.createHmac('sha256', `${SALT()}:${day}`).update(`${kind}:${v}`).digest('hex').slice(0, 16);
 type Take = { ok: true; left: number } | { ok: false; why: 'device' | 'ip' | 'site' | 'account' };
 /**
  * One guide question, if there's room. Guide questions have their own allowance, never the app's: signed out

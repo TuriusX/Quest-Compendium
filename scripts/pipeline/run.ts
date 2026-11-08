@@ -77,7 +77,7 @@ import { imagesWeekLine } from '../../guideImages';
 import { suggestNightly } from '../guides/suggestImages';
 import { isCorePage } from '../guides/core';
 import { playerWeekLines } from './playerWeek';
-import { siteAskWeekLine } from '../../siteAskStats';
+import { siteAskWeekLine, siteFixWeekLine } from '../../siteAskStats';
 import { autoWeekLines } from '../../autoChanges';
 import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
 import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY } from '../../searchGuard';
@@ -308,7 +308,11 @@ async function main() {
     const ia = demandFirst.indexOf(a.id), ib = demandFirst.indexOf(b.id);
     return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
   });
-  for (const d of byPriority) {
+  // Achievement guides, the most-visited guides first (owner, Nov 7 2026: the audience is completionists and achievement
+  // hunters): system/demand's search impressions and questions, then the players' order above.
+  const guideDemandNow: Record<string, any> = ((await db().collection('system').doc('demand').get()).data() as any)?.guides || {};
+  const achOrder = byPriority.slice().sort((a, b) => demandScore(guideDemandNow[b.id]) - demandScore(guideDemandNow[a.id]));
+  for (const d of achOrder) {
     const info = d.data();
     if (info.appId && !info.hasAchievements && !info.pipeline?.achTried)
       add({ kind: 'achievements', game: String(info.game || d.id), key: d.id, searches: 40, why: 'an achievement guide and roadmap' });
@@ -1063,6 +1067,7 @@ async function main() {
   if (MONDAY) {
     try {
       report.push(await siteAskWeekLine());
+      report.push(await siteFixWeekLine());
     } catch (e: any) {
       console.warn(`Site questions line skipped: ${e?.message}`);
     }

@@ -685,9 +685,10 @@ function writeRedirects(moved: { key: string; from: string; to: string }[], live
 function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string; entries?: { id: string; label: string }[]; ld?: object[]; wide?: boolean }) {
   // A guide or compendium page (/guides/{key}/{slug}/): its approved player suggestions, and the "Suggest an edit" links.
   const at = opts.guide ? (opts.canonical.match(/\/guides\/([a-z0-9-]+)\/([a-z0-9-]+)\/$/) || []) : [];
-  if (at[1] && at[2] && at[2] !== 'achievements') {
+  const fixable = !!(at[1] && at[2] && at[2] !== 'achievements');
+  if (fixable) {
     const isEntity = !!COMP?.entities.some((e) => e.slug === at[2]);
-    opts = { ...opts, body: withContributions(opts.body, at[1], at[2]) + (CONTRIB_ON ? suggestScript(at[1], at[2], isEntity ? 'entity' : 'area') : '') };
+    opts = { ...opts, body: withContributions(opts.body, at[1], at[2]) + (CONTRIB_ON ? suggestScript(at[1], at[2], isEntity ? 'entity' : 'area') : '') + fixBar(at[1], at[2], isEntity ? 'entity' : 'area') };
   }
   // "Spot a mistake?": on an area page, the form can say which entry is wrong (its id goes to the server).
   const entryPicker = opts.entries && opts.entries.length
@@ -780,10 +781,10 @@ function page(opts: { title: string; description: string; depth: number; canonic
   <script src="/assets/account.js" defer></script>
   <footer class="max-w-6xl mx-auto px-5 sm:px-6 py-10 text-xs text-zinc-500 border-t border-white/5">
     ${esc(ui('footerReport'))
-      .replace('{report}', `<button type="button" data-report class="text-[#a87ffb] hover:underline">${esc(ui('reportLink'))}</button>`)
+      .replace('{report}', `<button type="button" ${fixable ? 'data-fix="wrong"' : 'data-report'} class="text-[#a87ffb] hover:underline">${esc(ui('reportLink'))}</button>`)
       .replace('{discord}', '<a href="https://discord.gg/WxdgNMXWyg" class="text-[#a87ffb]">Discord</a>')} ${esc(ui('imagesNote'))} ${igdbCredit()}
   </footer>
-  <dialog id="qc-report" class="rounded-2xl bg-[#121218] text-zinc-200 border border-white/10 p-0 w-[min(92vw,28rem)] backdrop:bg-black/60" data-api="${REPORT_API}" data-lang="${LANG}" data-thanks="${esc(ui('reportThanks'))}" data-error="${esc(ui('reportError'))}">
+  ${fixable ? fixDialog() : `<dialog id="qc-report" class="rounded-2xl bg-[#121218] text-zinc-200 border border-white/10 p-0 m-auto w-[min(92vw,28rem)] backdrop:bg-black/60" data-api="${REPORT_API}" data-lang="${LANG}" data-thanks="${esc(ui('reportThanks'))}" data-error="${esc(ui('reportError'))}">
     <form method="dialog" class="p-5 space-y-3">
       <h2 class="text-base font-bold text-white">${esc(ui('reportTitle'))}</h2>
       <label class="block text-sm text-zinc-400" for="qc-report-text">${esc(ui('reportHint'))}</label>
@@ -797,7 +798,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
         <button value="send" data-report-send class="px-3 py-1.5 text-sm rounded-lg bg-[#a87ffb] text-black font-semibold">${esc(ui('reportSend'))}</button>
       </div>
     </form>
-  </dialog>
+  </dialog>`}
   <script>${SCRIPT}</script>
 </body>
 </html>
@@ -1846,11 +1847,96 @@ function playersAsked(key: string, slug: string): string {
   const xs = (PLAYERS_ASKED.get(`${key}/${slug}`) || []).filter((x) => x.lang === LANG);
   return xs.length ? `<section id="players-asked" class="mt-8 scroll-mt-20"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('playersAsked'))}</h2>${xs.map((x) => `<details class="mt-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5"><summary class="cursor-pointer font-semibold text-white">${esc(x.q)}</summary><p class="mt-1.5 whitespace-pre-line text-zinc-300 leading-relaxed">${esc(x.a)}</p></details>`).join('')}</section>` : '';
 }
-/** assets/ask.js: the box's behaviour (one file for every page, cached by the browser). */
+/** assets/ask.js: the box's behaviour (one file for every page, cached by the browser); assets/fix.js beside it. */
 function writeAskScript() {
   fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
   fs.writeFileSync(path.join(OUT, 'assets', 'ask.js'), ASK_JS);
+  fs.writeFileSync(path.join(OUT, 'assets', 'fix.js'), FIX_JS);
 }
+
+// ---- "Suggest a fix" and "Add a tip" (siteFix.ts on the server; owner, Nov 7 2026) ----
+/** The fix form's kinds (siteFix.ts FIX_KINDS), in the form's order. */
+const FIX_CATS = [['wrong', 'fixCatWrong'], ['missing', 'fixCatMissing'], ['missable', 'fixCatMissable'], ['tip', 'fixCatTip']] as const;
+/**
+ * The small bar at the end of every guide and compendium page: "Suggest a fix" and "Add a tip", both opening the same
+ * short form (fixDialog). Left out of the app (qc-site-only). Its behaviour is assets/fix.js.
+ */
+function fixBar(key: string, slug: string, kind: 'area' | 'entity'): string {
+  const btn = (cat: string, icon: string, label: string) => `<button type="button" data-fix="${cat}" class="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm font-semibold text-zinc-200 hover:border-[#a87ffb]/50 hover:text-white"><span aria-hidden="true">${icon}</span>${esc(label)}</button>`;
+  return `<div data-qc-fixbar data-key="${esc(key)}" data-slug="${esc(slug)}" data-kind="${kind}" class="qc-site-only mt-10 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-white/5 pt-5">
+        <p class="w-full text-sm text-zinc-400 sm:w-auto">${esc(ui('fixPrompt'))}</p>
+        ${btn('', '&#9998;', ui('fixButton'))}
+        ${btn('tip', '&#128161;', ui('tipButton'))}
+      </div><script src="/assets/fix.js" defer></script>`;
+}
+/** The form: one text box and an optional kind. "Thanks, we'll check this" after sending. */
+function fixDialog(): string {
+  const T = { fix: ui('fixTitle'), tip: ui('tipTitle'), thanks: ui('fixThanks'), limit: ui('fixLimit'), error: ui('fixError'), off: ui('fixOff'), short: ui('fixShort') };
+  return `<dialog id="qc-fix" data-api="${esc(SERVER_URL)}" data-lang="${LANG}" data-t="${esc(JSON.stringify(T))}" class="rounded-2xl bg-[#121218] text-zinc-200 border border-white/10 p-0 m-auto w-[min(92vw,28rem)] backdrop:bg-black/60">
+    <form method="dialog" class="p-5 space-y-3">
+      <h2 data-fix-title class="text-base font-bold text-white">${esc(ui('fixTitle'))}</h2>
+      <label class="block text-sm text-zinc-400" for="qc-fix-text">${esc(ui('fixHint'))}</label>
+      <textarea id="qc-fix-text" rows="4" minlength="10" maxlength="1000" required class="w-full rounded-lg bg-black/40 border border-white/10 p-2 text-sm text-zinc-100"></textarea>
+      <fieldset><legend class="text-sm text-zinc-400">${esc(ui('fixKind'))}</legend>
+        <div class="mt-1.5 flex flex-wrap gap-1.5">${FIX_CATS.map(([v, k]) => `<label class="cursor-pointer"><input type="radio" name="qc-fix-cat" value="${v}" class="peer sr-only"><span class="inline-block rounded-full border border-white/10 px-2.5 py-1 text-xs text-zinc-300 peer-checked:border-[#a87ffb] peer-checked:bg-[#a87ffb]/15 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-[#a87ffb]">${esc(ui(k))}</span></label>`).join('')}</div>
+      </fieldset>
+      <p class="text-xs text-zinc-500">${esc(ui('fixNote'))}</p>
+      <p data-fix-status class="text-sm text-zinc-300" role="status" hidden></p>
+      <div class="flex justify-end gap-2">
+        <button value="cancel" formnovalidate class="px-3 py-1.5 text-sm text-zinc-400 hover:text-white">${esc(ui('reportCancel'))}</button>
+        <button value="send" data-fix-send class="px-3 py-1.5 text-sm rounded-lg bg-[#a87ffb] text-black font-semibold disabled:opacity-50">${esc(ui('reportSend'))}</button>
+      </div>
+    </form>
+  </dialog>`;
+}
+const FIX_JS = String.raw`// "Suggest a fix" and "Add a tip" (scripts/guides/publish.ts fixBar / fixDialog; the server's siteFix.ts).
+(function(){
+  var bar=document.querySelector('[data-qc-fixbar]'), dlg=document.getElementById('qc-fix');
+  if(!bar||!dlg||!dlg.showModal) return;
+  var d=bar.dataset, T=JSON.parse(dlg.getAttribute('data-t')), api=dlg.getAttribute('data-api'), cfg=null, ac=null;
+  var GS='https://www.gstatic.com/firebasejs/10.13.0/';
+  var form=dlg.querySelector('form'), ta=dlg.querySelector('textarea'), st=dlg.querySelector('[data-fix-status]'), send=dlg.querySelector('[data-fix-send]'), title=dlg.querySelector('[data-fix-title]');
+  // The same device id as the ask box (a random number kept in this browser, only for the daily limits).
+  var dev='';
+  try{dev=localStorage.getItem('qc-ask-device')||'';}catch(e){}
+  if(!/^[a-f0-9]{24}$/.test(dev)){dev=Array.prototype.map.call(crypto.getRandomValues(new Uint8Array(12)),function(b){return('0'+b.toString(16)).slice(-2);}).join('');try{localStorage.setItem('qc-ask-device',dev);}catch(e){}}
+  // Whether it's on, and the App Check key: asked when the form first opens, not on every page view.
+  function config(){if(!cfg) cfg=fetch(api+'/api/site/fix/config').then(function(r){return r.json();}).catch(function(){return{on:true};});return cfg;}
+  function token(c){
+    if(!c||!c.appCheck) return Promise.resolve('');
+    // One App Check per page: the ask box's, if it already made one (assets/ask.js).
+    if(!ac) ac=window.__qcAppCheck||(window.__qcAppCheck=Promise.all([import(GS+'firebase-app.js'),import(GS+'firebase-app-check.js')]).then(function(m){var app=m[0].initializeApp(c.appCheck.firebase,'qc-fix');return{m:m[1],a:m[1].initializeAppCheck(app,{provider:new m[1].ReCaptchaEnterpriseProvider(c.appCheck.key),isTokenAutoRefreshEnabled:false})};}));
+    return ac.then(function(x){return x.m.getToken(x.a,false);}).then(function(t){return t.token;}).catch(function(){return'';});
+  }
+  function say(t){st.textContent=t;st.hidden=!t;}
+  function open(cat){
+    say('');send.disabled=false;ta.value='';
+    title.textContent=cat==='tip'?T.tip:T.fix;
+    dlg.querySelectorAll('input[name="qc-fix-cat"]').forEach(function(r){r.checked=r.value===cat;});
+    dlg.showModal();ta.focus();config();
+  }
+  document.querySelectorAll('[data-fix]').forEach(function(b){b.addEventListener('click',function(){open(b.getAttribute('data-fix'));});});
+  form.addEventListener('submit',function(e){
+    if(e.submitter&&e.submitter.value==='cancel')return;
+    e.preventDefault();
+    var text=ta.value.trim(); if(text.length<10){say(T.short);return;}
+    var pick=dlg.querySelector('input[name="qc-fix-cat"]:checked');
+    send.disabled=true;
+    var A=window.QC_AUTH, signed=!!(A&&A.state&&A.state.user);
+    config().then(function(c){
+      if(c&&c.on===false) throw 'off';
+      return Promise.all([token(c),signed?A.token():'']);
+    }).then(function(t){
+      var h={'Content-Type':'application/json'};if(t[0])h['X-Firebase-AppCheck']=t[0];if(t[1])h.Authorization='Bearer '+t[1];
+      return fetch(api+'/api/site/fix',{method:'POST',headers:h,body:JSON.stringify({key:d.key,slug:d.slug,kind:d.kind,lang:dlg.getAttribute('data-lang')||'en',text:text,category:pick?pick.value:'',device:dev})});
+    }).then(function(r){return r.json().catch(function(){return{};}).then(function(j){return{ok:r.ok,j:j};});}).then(function(x){
+      if(x.j.off){say(T.off);return;}
+      if(x.j.limit){say(T.limit);return;}
+      if(!x.ok||!x.j.ok){say(T.error);send.disabled=false;return;}
+      say(T.thanks);ta.value='';setTimeout(function(){dlg.close();},2200);
+    }).catch(function(err){say(err==='off'?T.off:T.error);send.disabled=false;});
+  });
+})();`;
 const ASK_JS = String.raw`// "Stuck? Ask about this" (scripts/guides/publish.ts askBox; the server's siteAsk.ts).
 (function(){
   var box=document.querySelector('[data-qc-ask]'); if(!box) return;
@@ -1863,7 +1949,7 @@ const ASK_JS = String.raw`// "Stuck? Ask about this" (scripts/guides/publish.ts 
   // App Check (reCAPTCHA Enterprise): loaded only when someone asks, so pages stay light.
   function token(){
     if(!cfg||!cfg.appCheck) return Promise.resolve('');
-    if(!ac) ac=Promise.all([import(GS+'firebase-app.js'),import(GS+'firebase-app-check.js')]).then(function(m){var app=m[0].initializeApp(cfg.appCheck.firebase,'qc-ask');return{m:m[1],a:m[1].initializeAppCheck(app,{provider:new m[1].ReCaptchaEnterpriseProvider(cfg.appCheck.key),isTokenAutoRefreshEnabled:false})};});
+    if(!ac) ac=window.__qcAppCheck||(window.__qcAppCheck=Promise.all([import(GS+'firebase-app.js'),import(GS+'firebase-app-check.js')]).then(function(m){var app=m[0].initializeApp(cfg.appCheck.firebase,'qc-ask');return{m:m[1],a:m[1].initializeAppCheck(app,{provider:new m[1].ReCaptchaEnterpriseProvider(cfg.appCheck.key),isTokenAutoRefreshEnabled:false})};}));
     return ac.then(function(x){return x.m.getToken(x.a,false);}).then(function(t){return t.token;}).catch(function(){return'';});
   }
   var out=box.querySelector('[data-ask-out]'), form=box.querySelector('form'), input=form.querySelector('input'), btn=form.querySelector('button');

@@ -7,7 +7,10 @@
  *     "Players asked" (the same question 3+ times on a page) and page suggestions ("add to the page", "fuller opening");
  *   - the app's questions (answerFeedback, answerReports: anonymous, with the question and the game), clustered by page;
  *   - areas players are in whose missable list looked thin (the app flags them: missablesFlags), checked against
- *     sources for what can be missed there (config/autoImprove.missablePages, 2 a night);
+ *     sources for what can be missed there and any point of no return (config/autoImprove.missablePages, 2 a night);
+ *     then the most-visited pages (Search Console impressions, system/searchConsolePages), the same check, one page
+ *     every 30 days (topMissablePages, 3 a night). Owner, Nov 7 2026: the audience is completionists and achievement
+ *     hunters, so this runs right after the players' own fixes, ahead of the other kinds of change;
  *   - the pipeline's own checks: cross-page contradictions settled against stored evidence (novemberWork.ts conflicts),
  *     and the guides' own pages (duplicates, thin pages, facts on the wrong page, lists in a poor order).
  *
@@ -44,7 +47,7 @@ import { db, gemini, MODEL, arg, parseJson, ledgerDollars, gameKey } from './com
 import { claimCheck, trusted, sentencesOf, type ClaimSlot, type Evidence, type EvidencePack } from './claimCheck';
 import { searchedEvidence } from './entityV2';
 import { coverage } from './benchmark';
-import { pageImpressions } from './pageStats';
+import { pageImpressions, loadPageStats } from './pageStats';
 import { EDIT_PATH, getAt, listAt, entryKey, norm } from './ownerEdits';
 import { normName } from './rebuildGuard';
 
@@ -53,8 +56,8 @@ const DAY = 86_400_000;
 const cut = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const sha = (s: string) => crypto.createHash('sha1').update(s).digest('hex').slice(0, 20);
 
-type Cfg = { enabled: boolean; maxChanges: number; maxDestructive: number; nightlyDollars: number; monthlyDollars: number; minAsks: number; impressionsKeep: number; reviewPages: number; appClusters: number; missablePages: number };
-const DEFAULTS: Cfg = { enabled: true, maxChanges: 20, maxDestructive: 5, nightlyDollars: 1.5, monthlyDollars: 10, minAsks: 3, impressionsKeep: 10, reviewPages: 3, appClusters: 3, missablePages: 2 };
+type Cfg = { enabled: boolean; maxChanges: number; maxDestructive: number; nightlyDollars: number; monthlyDollars: number; minAsks: number; impressionsKeep: number; reviewPages: number; appClusters: number; missablePages: number; topMissablePages: number };
+const DEFAULTS: Cfg = { enabled: true, maxChanges: 20, maxDestructive: 5, nightlyDollars: 1.5, monthlyDollars: 10, minAsks: 3, impressionsKeep: 10, reviewPages: 3, appClusters: 3, missablePages: 2, topMissablePages: 3 };
 
 type Kind = 'add' | 'opening' | 'asked' | 'correct' | 'merge' | 'move' | 'order';
 const DESTRUCTIVE = new Set<Kind>(['correct', 'merge', 'move']);
@@ -179,7 +182,7 @@ async function ask(prompt: string, maxOut = 1200): Promise<any> {
 }
 
 /** Where checked sentences fit on a page: one field, and only the sentences it doesn't already say. */
-async function placement(p: Page, sentences: string[], hint: 'any' | 'overview'): Promise<{ path: string; add: string } | null> {
+async function placement(p: Page, sentences: string[], hint: 'any' | 'overview', note = ''): Promise<{ path: string; add: string } | null> {
   const fields = fieldsOf(p.data);
   if (hint === 'overview') {
     const ov = fields.find((f) => f.path === 'overview');
@@ -196,6 +199,7 @@ async function placement(p: Page, sentences: string[], hint: 'any' | 'overview')
     `A guide page about "${p.name}" in "${p.game}". Its fields (path: text):`,
     ...fields.slice(0, 60).map((f) => `${f.path} [${f.label}]: ${cut(f.text, 300)}`), '',
     'These checked sentences are missing from it:', ...sentences.map((s) => `- ${s}`), '',
+    ...(note ? [note] : []),
     'Choose the one field they fit best (the overview when nothing fits better) and write what to add at its end: only facts from the sentences, plain guide style, no "players asked". If the page already says all of it, reply with an empty path.',
     'Reply with JSON only: {"path": "...", "add": "..."}',
   ].join('\n'), 800);
@@ -312,31 +316,92 @@ async function corrections() {
 // ---- 2. missing facts: the ask box's and the app's "missing" items (missingFacts.ts), checked by contributions.ts ----
 // Players' reports and suggestions too (owner, Nov 1 2026: nothing waits for him): what sources confirm goes on the page,
 // the rest is left as it is. The owner's own items stay his (contributions.ts).
-const ASKED_SOURCES = ['site', 'site-suggestion', 'app', 'report'];
+const ASKED_SOURCES = ['site', 'site-suggestion', 'app', 'report', 'site-fix'];
 const isAsked = (x: any) => ASKED_SOURCES.includes(String(x.source)) || (!x.source && !x.owner);
+/**
+ * The website's "Suggest a fix" / "Add a tip" (siteFix.ts, owner, Nov 7 2026: no review queue): what sources confirm goes
+ * on the page (a wrong statement replaced when sources contradict it, else the fact, missable or tip added); what they
+ * contradict is dismissed at once, and what they can't confirm is looked at once more a month later, then dismissed.
+ */
+async function dismiss(id: string, why: string) {
+  skipped.push(why);
+  if (!DRY) await db().collection('contributions').doc(id).set({ status: 'dismissed', decided: { by: 'auto (sources checked)', at: Date.now(), why: cut(why, 300) } }, { merge: true });
+}
+/** Where a player's fix or tip should go, said to the placement step. */
+const PLACE_HINT: Record<string, string> = {
+  missable: 'These are about something players can miss for good (or a point of no return): put them in the field about missables or warnings if the page has one, said plainly (what is lost, and when).',
+  tip: 'These are a player tip: put them in the tips, or the field they help most.',
+};
 async function missingFacts() {
   const docs = (await db().collection('contributions').where('status', '==', 'checked').get()).docs.filter((d) => isAsked(d.data()));
   // Also the ones set aside a month ago (sources may have filled in).
   const retry = (await db().collection('contributions').where('status', '==', 'unconfirmed').get()).docs.filter((d) => isAsked(d.data()) && Number(d.data().unconfirmed?.at || 0) < Date.now() - 30 * DAY);
-  for (const d of [...docs, ...retry]) {
+  // The website's fixes first: a player is waiting to see them.
+  const fixFirst = (d: any) => (d.data().source === 'site-fix' ? 0 : 1);
+  for (const d of [...docs.sort((a, b) => fixFirst(a) - fixFirst(b)), ...retry]) {
     if (!can('add')) return;
     const x: any = d.data();
+    const fix = x.source === 'site-fix';
     const p = await loadPage(x.key, x.slug, x.page === 'entity' ? 'entity' : 'area');
-    if (!p) continue;
+    if (!p) { if (fix) await dismiss(d.id, `${x.key}/${x.slug}: the page isn't live any more`); continue; }
     const isRetry = x.status === 'unconfirmed';
-    if (!isRetry && x.check?.verdict !== 'supported') { await setAside('contributions', d.id, `${p.name}: "${cut(x.label, 80)}" (${x.check?.verdict || 'not checked'})`); continue; }
+    const verdict = String(x.check?.verdict || '');
+    // A fix sources contradict is dismissed; one they couldn't fully back still goes on to the check below, where only
+    // what sources support can reach the page.
+    if (fix && !isRetry && verdict === 'contradicted') { await dismiss(d.id, `${p.name}: "${cut(x.text, 80)}" (sources contradict it)`); continue; }
+    if (!isRetry && verdict !== 'supported' && !(fix && verdict === 'unverifiable')) { await setAside('contributions', d.id, `${p.name}: "${cut(x.label, 80)}" (${verdict || 'not checked'})`); continue; }
     const proposal = String(x.check?.proposal || '');
     const seed: Evidence[] = (x.check?.evidence || []).map((e: any, i: number) => ({ id: `c${i}`, text: e.text, sources: e.sources || [], topic: 'check' }));
-    const c = await checked(p, sentencesOf(proposal).slice(0, 6), seed, [], x.label);
-    if (!c.ok.length) { await setAside('contributions', d.id, `${p.name}: "${cut(x.label, 80)}" (sources didn't confirm)`); continue; }
+    const c = await checked(p, sentencesOf(proposal).slice(0, 6), seed, [], fix ? x.text : x.label);
+    if (!c.ok.length) {
+      if (fix && isRetry) await dismiss(d.id, `${p.name}: "${cut(x.text, 80)}" (sources still don't confirm it)`);
+      else await setAside('contributions', d.id, `${p.name}: "${cut(fix ? x.text : x.label, 80)}" (sources didn't confirm)`);
+      continue;
+    }
+    if (fix) {
+      const input = { col: 'contributions', id: d.id };
+      const what = x.kind === 'tip' ? "A player's tip" : x.kind === 'missable' ? 'A player pointed out something missable' : x.kind === 'missing' ? 'A player pointed out something missing' : 'A player suggested a fix';
+      if (x.kind === 'correction' && can('correct') && (await playerCorrection(p, c, `${what}; sources contradict what the page said, so it now says what they say.`, input))) continue;
+      const ok = await addFacts(p, c, 'add', `${what}; added what sources back.`, 'site fixes', input, PLACE_HINT[x.kind]);
+      // Nothing new to place (the page says it already, or it fits nowhere): done, not applied.
+      // (Not when tonight's changes ran out: then it waits for tomorrow.)
+      if (!ok && can('add') && !DRY) await d.ref.set({ status: 'covered', decided: { by: 'auto (the page already says what sources back)', at: Date.now() } }, { merge: true });
+      continue;
+    }
     const app = x.source === 'app';
     await addFacts(p, c, 'add', app ? `An app answer named ${cut(x.name || x.label, 100)} here and the page didn't have it; added what sources back.` : `Players asked "${cut(x.label, 100)}" and the page didn't say; added what sources back.`, app ? 'app answers' : 'site questions', { col: 'contributions', id: d.id });
   }
 }
 
+/**
+ * A player said something on the page is wrong, and sources back what they said instead: the page's sentence those
+ * checked statements contradict, replaced by what sources say. Both sides are checked (the old sentence contradicted,
+ * every new one supported), like the pipeline's own corrections.
+ */
+async function playerCorrection(p: Page, c: Awaited<ReturnType<typeof checked>>, reason: string, input: Change['input']): Promise<boolean> {
+  const fields = fieldsOf(p.data);
+  const j = await ask([
+    `A guide page about "${p.name}" in "${p.game}". A player said part of it is wrong. Sources back these statements:`, ...c.ok.map((s) => `- ${s}`), '',
+    'Its fields (path: text):', ...fields.slice(0, 60).map((f) => `${f.path}: ${cut(f.text, 400)}`), '',
+    'Find the one sentence on the page that these statements contradict, copied exactly as it is in its field, and write it corrected using only what the statements say (same style). If no sentence contradicts them, reply {}.',
+    'Reply with JSON only: {"path": "...", "before": "exact sentence", "after": "corrected sentence"}',
+  ].join('\n'));
+  const path = String(j.path || ''), before = String(j.before || ''), after = cut(j.after, 600);
+  const cur = getAt(p.data, path);
+  if (!cur || !before || !after || !cur.includes(before) || norm(before) === norm(after)) return false;
+  const sig = sigOf('correct', p.key, p.slug, before);
+  if (blocked.has(sig)) return false;
+  const v = await checked(p, [before, ...sentencesOf(after)], c.ev.evidence);
+  if (v.v[0]?.verdict !== 'contradicted' || v.v.slice(1).some((x) => x.verdict !== 'supported')) return false;
+  return !!(await commit({
+    kind: 'correct', key: p.key, slug: p.slug, page: p.page, name: p.name, from: 'site fixes', reason, before, after, evidence: v.used,
+    edits: [{ key: p.key, slug: p.slug, page: p.page, path, op: 'replace', before, after }], input, sig,
+  }));
+}
+
 /** Checked sentences placed on a page as an "append" edit, the placed text checked again. */
-async function addFacts(p: Page, c: Awaited<ReturnType<typeof checked>>, kind: 'add' | 'opening', reason: string, from: string, input?: Change['input']) {
-  const at = await placement(p, c.ok, kind === 'opening' ? 'overview' : 'any');
+async function addFacts(p: Page, c: Awaited<ReturnType<typeof checked>>, kind: 'add' | 'opening', reason: string, from: string, input?: Change['input'], hint = '') {
+  const at = await placement(p, c.ok, kind === 'opening' ? 'overview' : 'any', hint);
   if (!at) return false;
   const sents = sentencesOf(at.add);
   // The placed wording may differ from the checked sentences: it is checked again against the same evidence.
@@ -491,14 +556,31 @@ async function missables() {
   const flags = (await db().collection('missablesFlags').where('status', '==', 'flagged').get()).docs
     .sort((a, b) => (Number(b.data().seen) || 0) - (Number(a.data().seen) || 0))
     .slice(0, CFG.missablePages);
-  const done = async (ref: FirebaseFirestore.DocumentReference, result: string) => {
-    if (!DRY) await ref.set({ status: 'checked', checkedAt: Date.now(), result }, { merge: true });
+  const done = async (ref: FirebaseFirestore.DocumentReference | null, result: string) => {
+    if (ref && !DRY) await ref.set({ status: 'checked', checkedAt: Date.now(), result }, { merge: true });
   };
-  for (const d of flags) {
+  // After the app's flags: the most-visited area pages (all languages together), each checked once every 30 days.
+  const targets: { ref: FirebaseFirestore.DocumentReference | null; key: string; slug: string; x: any }[] = flags.map((d) => ({ ref: d.ref, key: String(d.data().key), slug: String(d.data().slug), x: d.data() }));
+  if (CFG.topMissablePages > 0) {
+    const stats = await loadPageStats();
+    const top = Object.entries(stats).sort((a, b) => Number(b[1][0]) - Number(a[1][0]));
+    let n = 0;
+    for (const [id, v] of top) {
+      if (n >= CFG.topMissablePages) break;
+      const [key, slug] = id.split('/');
+      if (!key || !slug || slug === 'achievements' || targets.some((t) => t.key === key && t.slug === slug)) continue;
+      const tsig = sigOf('missables-top', key, slug);
+      if (!fresh(tsig)) continue;
+      if (!(await loadPage(key, slug, 'area'))) continue;
+      mark(tsig);
+      targets.push({ ref: null, key, slug, x: { impressions: v[0] } });
+      n++;
+    }
+  }
+  for (const { ref: dref, key, slug, x } of targets) {
     if (!can('add')) return;
-    const x: any = d.data();
-    const p = await loadPage(x.key, x.slug, 'area');
-    if (!p) { await done(d.ref, 'page gone'); continue; }
+    const p = await loadPage(key, slug, 'area');
+    if (!p) { await done(dref, 'page gone'); continue; }
     const listed = [
       ...(p.data.items || []).filter((e: any) => e?.missable).map((e: any) => String(e.name || e.text || '')),
       ...(p.data.sections || []).filter((s: any) => s?.check && /miss/i.test(String(s.title || ''))).flatMap((s: any) => (s.entries || []).map((e: any) => String(e?.text || e || ''))),
@@ -507,24 +589,25 @@ async function missables() {
     let found: { evidence: Evidence[] } = { evidence: [] };
     if (searchesLeft) {
       found = await searchedEvidence(
-        `In the video game "${p.game}", in or around "${p.name}": what can be permanently missed there (items, quests, companions, choices, NPCs, or places that become unreachable), and what makes each one missable?`,
+        `In the video game "${p.game}", in or around "${p.name}": what can be permanently missed there (items, quests, companions, choices, NPCs, achievements or trophies, or places that become unreachable), what makes each one missable, and is there a point of no return here (going on locks the player out of what)?`,
         'm', 'missables check',
       ).catch((e) => { if (/search day limit/i.test(String(e?.message))) searchesLeft = false; return { evidence: [] as Evidence[], searches: 0 }; });
     }
     const ev = pack(p.key, p.slug, p.game, p.name, [...found.evidence, ...(await storedEvidence([p]))]);
-    if (!ev.evidence.length) { await done(d.ref, 'no sources'); continue; }
+    if (!ev.evidence.length) { await done(dref, 'no sources'); continue; }
     const j = await ask([
       `The guide page for "${p.name}" in "${p.game}" lists these missables: ${listed.length ? listed.join('; ') : '(none)'}.`,
       'Evidence from sources (id: text):', ...ev.evidence.slice(0, 40).map((e) => `${e.id}: ${cut(e.text, 300)}`), '',
-      'Write up to 5 short sentences, each about one thing that can be permanently missed at this place and that the page doesn\'t list, saying what makes it missable. Only what the evidence says; nothing about other places. Reply with JSON only: {"sentences": ["..."]}',
+      'Write up to 5 short sentences, each about one thing that can be permanently missed at this place (an item, quest, companion, choice or achievement) and that the page doesn\'t list, saying what makes it missable; or about a point of no return here, saying what it locks the player out of. Only what the evidence says; nothing about other places. Reply with JSON only: {"sentences": ["..."]}',
     ].join('\n'), 900);
     const sents = (Array.isArray(j.sentences) ? j.sentences : []).map((s: unknown) => cut(s, 300)).filter(Boolean).slice(0, 5);
-    if (!sents.length) { await done(d.ref, 'nothing missing found'); continue; }
+    if (!sents.length) { await done(dref, 'nothing missing found'); continue; }
     const c = await checked(p, sents, found.evidence);
-    const added = c.ok.length
-      ? await addFacts(p, c, 'add', `Players are in ${p.name} and its missable list looked thin (${x.missables ?? listed.length} for ${x.size ?? '?'} things to find there); added the missables sources back.`, 'missable check')
-      : false;
-    await done(d.ref, added ? 'added' : 'not confirmed by sources');
+    const why = dref
+      ? `Players are in ${p.name} and its missable list looked thin (${x.missables ?? listed.length} for ${x.size ?? '?'} things to find there); added the missables sources back.`
+      : `${p.name} is one of the most-visited pages (${x.impressions} search impressions in 28 days); added the missables and points of no return sources back.`;
+    const added = c.ok.length ? await addFacts(p, c, 'add', why, 'missable check', undefined, PLACE_HINT.missable) : false;
+    await done(dref, added ? 'added' : 'not confirmed by sources');
   }
 }
 
@@ -695,7 +778,8 @@ async function main() {
     setTimeout(() => process.exit(0), 300);
     return;
   }
-  const steps: [string, () => Promise<void>][] = [['corrections', corrections], ['missing facts', missingFacts], ['players asked', playersAsked], ['page suggestions', pageSuggestions], ['app questions', appQuestions], ['missables', missables], ['merges', merges], ['structure', structure]];
+  // Missables and points of no return right after the players' own fixes (owner, Nov 7 2026: completionists first).
+  const steps: [string, () => Promise<void>][] = [['corrections', corrections], ['missing facts', missingFacts], ['missables', missables], ['players asked', playersAsked], ['page suggestions', pageSuggestions], ['app questions', appQuestions], ['merges', merges], ['structure', structure]];
   for (const [name, fn] of steps) {
     if (full() || room() < 0.05) break;
     try { await fn(); } catch (e: any) { console.log(`  ${name}: stopped (${cut(e?.message || e, 160)})`); }

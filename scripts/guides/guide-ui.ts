@@ -328,6 +328,23 @@ export const GUIDE_UI_EN: Record<string, string> = {
   mineContinue: 'Continue: {page}',
   minePct: '{n}% done',
   themeToggle: 'Light or dark mode',
+  fixPrompt: 'Something wrong or missing on this page?',
+  fixButton: 'Suggest a fix',
+  tipButton: 'Add a tip',
+  fixTitle: 'Suggest a fix',
+  tipTitle: 'Add a tip',
+  fixHint: 'What should we fix or add? Name the item, place or step if you can.',
+  fixKind: 'What kind? (optional)',
+  fixCatWrong: 'Wrong info',
+  fixCatMissing: 'Missing item',
+  fixCatMissable: 'Missable',
+  fixCatTip: 'Tip',
+  fixNote: 'We check every suggestion against sources before the guide changes.',
+  fixThanks: "Thanks, we'll check this.",
+  fixLimit: "That's a lot for one day. Thank you! Please try again tomorrow.",
+  fixError: "That didn't send. Try again in a moment.",
+  fixOff: 'Suggestions are paused right now. Please try again later.',
+  fixShort: 'Please write a little more (at least 10 characters).',
 };
 export const SOURCE_STRINGS = GUIDE_UI_EN;
 export const HAND_WRITTEN = {};

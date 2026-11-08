@@ -43,6 +43,7 @@ import { registerDiscord } from './discord';
 import { collectStream, SEARCH_NUMBERS } from './answerStream';
 import { registerSiteAsk, SITE_ABANDONED_DOLLARS, type SiteAnswerOpts, type SiteAnswerOut, appGuideLines } from './siteAsk';
 import { registerSiteAccount } from './siteAccount';
+import { registerSiteFix } from './siteFix';
 import { pingNewSignup } from './signupPing';
 import { STEPS_RULES, extractSteps, cleanObjective, objectiveRules, extractTicked } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
@@ -488,6 +489,16 @@ async function startServer() {
 
   // Signed in on the website: its guide ticks follow the account (siteAccount.ts).
   registerSiteAccount(app, { requireAuth });
+
+  // "Suggest a fix" and "Add a tip" on the website's guide and compendium pages (siteFix.ts): into the corrections pipeline.
+  registerSiteFix(app, {
+    firebaseWebConfig: {
+      apiKey: process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBrS5_3mBHz-defFcezhBFinNgA38KqsfY',
+      authDomain: 'quest-compendium-1bccf.firebaseapp.com',
+      projectId: 'quest-compendium-1bccf',
+      appId: '1:890629309063:web:87293cf13f922fd3edee22',
+    },
+  });
 
   // "Known here": what the game knowledge base already knows about the player's confirmed place. Straight from the
   // database, no AI call, so it never costs a question.
