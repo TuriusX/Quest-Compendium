@@ -11,6 +11,8 @@
  *            --report "text"    fix: a player's mistake report to fix as well
  *            --max-searches N   the search cap for this repair (careful pages, spot-checks); default 300
  *            --max-pages N      careful: pages in the page list (default 20, at most 40)
+ *            --note "text"      careful: how the page list must look, for a guide with no outline note yet
+ *            --layout NAME      careful: the outline (area, chapters, ...), for a guide with no outline yet
  *
  *   fix      A plan from the reviewer's per-page problems (no searches): pages to remove (duplicates, wrong kind of
  *            page), pages to rewrite (with the problem passed to the writer), pages to add (missing areas or
@@ -69,6 +71,8 @@ const reportText = arg('report') && arg('report') !== 'true' ? arg('report')!.sl
 const planOnly = arg('plan-only') === 'true';
 const maxSearches = Math.max(30, Number(arg('max-searches', '300')));
 const maxPages = Number(arg('max-pages', '0')) || undefined;
+const noteArg = arg('note') && arg('note') !== 'true' ? arg('note')!.slice(0, 1200) : '';
+const layoutArg = arg('layout') && arg('layout') !== 'true' ? arg('layout')! : '';
 /** Page passes: gate the staged copy that's already there (no writing), e.g. one an older whole-guide gate failed. */
 const regate = arg('regate') === 'true';
 /** With --regate: grade the changes and report, but change nothing (no drops, no promotion, no review queue). */
@@ -309,7 +313,7 @@ async function main() {
     ready = false;
     const before = { searches: ledger.searches, dollars: ledgerDollars() };
     const r = await packBuildGuide(key, game, {
-      maxSearches, maxPages, layout: live?.outline?.layout || review?.layout, note: String(live?.outline?.note || '') || undefined, newRelease: newer,
+      maxSearches, maxPages, layout: live?.outline?.layout || review?.layout || layoutArg || undefined, note: String(live?.outline?.note || noteArg || '') || undefined, newRelease: newer,
       // The flagship programme's outline step: the page list only, into staging (it builds each page with the evidence method).
       stageOnly: stageOnly && action === 'outline',
     });
