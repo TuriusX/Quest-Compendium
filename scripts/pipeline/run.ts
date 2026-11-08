@@ -1093,7 +1093,10 @@ async function main() {
       const ref = db().collection('system').doc('pipeline');
       const prev: any = ((await ref.get()).data() || {}).uncheckedPages;
       const diff = prev && Number.isFinite(Number(prev.count)) ? unchecked - Number(prev.count) : null;
-      report.push(`🔎 Unchecked pages: ${unchecked.toLocaleString('en-US')} of ${live.toLocaleString('en-US')} live guide pages are still unchecked (written without sources)${diff == null ? '' : diff === 0 ? ', no change since last week' : `, ${diff < 0 ? '' : '+'}${diff} since last week`}.`);
+      // Of them, how many are kept out of Google until verified (searchHold.ts: noindex, owner, Nov 7 2026).
+      const held: any = ((await db().collection('system').doc('searchHold').get()).data() || {}).held;
+      const heldNote = held && Number(held.at) > Date.now() - 3 * 86_400_000 ? `; ${Number(held.count).toLocaleString('en-US')} of them kept out of Google until verified (under 10 search impressions in 28 days)` : '';
+      report.push(`🔎 Unchecked pages: ${unchecked.toLocaleString('en-US')} of ${live.toLocaleString('en-US')} live guide pages are still unchecked (written without sources)${diff == null ? '' : diff === 0 ? ', no change since last week' : `, ${diff < 0 ? '' : '+'}${diff} since last week`}${heldNote}.`);
       await ref.set({ uncheckedPages: { count: unchecked, live, at: Date.now() } }, { merge: true });
     } catch (e: any) {
       console.warn(`Unchecked-pages line skipped: ${e?.message}`);

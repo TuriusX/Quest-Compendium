@@ -27,6 +27,7 @@ import { entityKind, shortGame, areaSeo, entitySeo, searchName, relatedQuests, a
 import { compile, optimize } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 import { GENERATED as GUIDE_UI_GEN } from './guide-ui.generated';
+import { loadHoldState, isHeld, HOLD_DOC, HOLD_IMPRESSIONS, type HoldState } from './searchHold';
 import { waitForGuideLock, isRefusal, lockedLine, releaseGuideLocks, SITE_LOCK } from './guideLock';
 
 // ---- languages ----
@@ -682,7 +683,7 @@ function writeRedirects(moved: { key: string; from: string; to: string }[], live
   console.log(`Redirects: ${lines.length} old URL(s) to the pages that replaced them.`);
 }
 
-function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; guide?: string; area?: string; langs?: string[]; path?: string; entries?: { id: string; label: string }[]; ld?: object[]; wide?: boolean }) {
+function page(opts: { title: string; description: string; depth: number; canonical: string; body: string; draft?: boolean; noindex?: boolean; guide?: string; area?: string; langs?: string[]; path?: string; entries?: { id: string; label: string }[]; ld?: object[]; wide?: boolean }) {
   // A guide or compendium page (/guides/{key}/{slug}/): its approved player suggestions, and the "Suggest an edit" links.
   const at = opts.guide ? (opts.canonical.match(/\/guides\/([a-z0-9-]+)\/([a-z0-9-]+)\/$/) || []) : [];
   const fixable = !!(at[1] && at[2] && at[2] !== 'achievements');
@@ -721,7 +722,7 @@ function page(opts: { title: string; description: string; depth: number; canonic
   <meta name="description" content="${esc(opts.description)}">
   <link rel="canonical" href="${esc(opts.canonical)}">
   ${hreflang}
-  ${opts.draft ? '<meta name="robots" content="noindex, follow">' : ''}
+  ${opts.draft || opts.noindex ? '<meta name="robots" content="noindex, follow">' : ''}
   <meta property="og:title" content="${esc(opts.title)}">
   <meta property="og:description" content="${esc(opts.description)}">
   <meta property="og:image" content="${esc(ogImage)}">${ownPic ? `
@@ -1276,6 +1277,13 @@ function updateVersion() {
 
 /** The search title trials' changes by page (scripts/pipeline/searchTitles.ts): English pages only. */
 let SEARCH_TITLES: Record<string, { title: string; description: string }> = {};
+/**
+ * Weak pages kept out of Google until verified (searchHold.ts, owner, Nov 7 2026): served noindex and left out of the
+ * sitemap, still on the site and in the apps. HOLD_NEW: pages live for the first time tonight (their first-seen day).
+ */
+let HOLD: HoldState | null = null;
+const HOLD_NEW: Record<string, number> = {};
+const HELD = new Set<string>();
 /** The app's releases for "Recent updates" (system/changelog, kept by scripts/pipeline/changelog.ts), newest first. */
 let CHANGELOG: { v: string; date: string; text: string; tr?: Record<string, string> }[] = [];
 // Some stored translations carry HTML entities ("&quot;"); they're decoded here, since esc() escapes the text again.
@@ -1478,6 +1486,10 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
     const a = pageOf(o.slug);
     // A local preview is always marked DRAFT (and kept out of search).
     const draft = a.status !== 'published' || !!PREVIEW;
+    // Unchecked, live long enough and still without search impressions: out of the index until verified.
+    const held = a.status === 'published' && !!HOLD && isHeld(HOLD, key, o.slug, (a as any).verified);
+    if (a.status === 'published' && HOLD && !HOLD.firstSeen[`${key}/${o.slug}`]) HOLD_NEW[`${key}/${o.slug}`] = Date.now();
+    if (held) HELD.add(`${key}/${o.slug}`);
     const adir = path.join(dir, o.slug);
     fs.mkdirSync(adir, { recursive: true });
     let title: string, description: string;
@@ -1514,6 +1526,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
         wide: true,
         body: areaBody(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra), achHere ? (achHere.list || []).filter((x: any) => x.area === o.slug) : []) + entPreview(),
         draft,
+        noindex: held,
         guide: key,
         area: o.slug,
         // The page's entries, for the report form's "which entry?" picker.
@@ -1526,7 +1539,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
         path: `guides/${key}/${o.slug}/`,
       }),
     );
-    if (!draft && !untranslated) {
+    if (!draft && !untranslated && !held) {
       sitemap.push(`${SITE}/${LP}guides/${key}/${o.slug}/`);
       if (Number((a as any).updatedAt)) LASTMOD.set(`${SITE}/${LP}guides/${key}/${o.slug}/`, Number((a as any).updatedAt));
     }
@@ -2707,6 +2720,7 @@ async function main() {
   if (!CONTRIB_ON) CONTRIB_ON = contribCfg.enabled === true;
   CHANGELOG = (((await db().collection('system').doc('changelog').get()).data() || {}).entries || []) as any[];
   SEARCH_TITLES = liveTitles(((await db().collection('system').doc('searchTitles').get()).data() || {}).trials);
+  HOLD = await loadHoldState().catch(() => null);
   {
     const sc: any = (await db().collection('system').doc('searchConsole').get()).data() || {};
     for (const x of [...(Array.isArray(sc.pages) ? sc.pages : []), ...(Array.isArray(sc.pages) ? [] : sc.topPages || [])]) if (x?.key) DEMAND.set(String(x.key), (DEMAND.get(String(x.key)) || 0) + (Number(x.impressions) || 0));
@@ -2903,6 +2917,11 @@ async function main() {
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${[...new Set(sitemap)].map((u) => `  <url><loc>${u}</loc>${LASTMOD.get(u) ? `<lastmod>${new Date(LASTMOD.get(u)!).toISOString().slice(0, 10)}</lastmod>` : ''}</url>`).join('\n')}\n</urlset>\n`,
   );
   fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /_qc/\n\nSitemap: ${SITE}/sitemap.xml\n`);
+  console.log(`Kept out of Google until verified (searchHold.ts): ${HELD.size} unchecked page(s) with under ${HOLD_IMPRESSIONS} impressions, noindex and out of the sitemap.`);
+  if (!PREVIEW && HOLD) {
+    // New pages' first-seen day, and (a full publish) tonight's count for Monday's summary.
+    await HOLD_DOC().set({ firstSeen: HOLD_NEW, ...(ONLY ? {} : { held: { count: HELD.size, at: Date.now() } }) }, { merge: true });
+  }
   if (PREVIEW) {
     // A preview: the site's icons beside it, and its own stylesheet; the website files and the homepage are untouched.
     for (const f of ['icon.svg', 'favicon.ico', 'favicon-96.png', 'favicon-192.png']) if (fs.existsSync(path.resolve('Marketing_Website_Files', f))) fs.copyFileSync(path.resolve('Marketing_Website_Files', f), path.join(OUT, f));

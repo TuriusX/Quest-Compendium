@@ -358,7 +358,37 @@ export async function upkeepQueue(old: Work[]): Promise<Work[]> {
 }
 
 async function main() {
-  if (arg('queue-upkeep') === 'true') {
+  if (arg('front-traffic') === 'true') {
+    // Unchecked pages people find in Google go first (owner, Nov 7 2026, roadmap 27): the queue's items for live
+    // unchecked pages with HOLD_IMPRESSIONS (10) or more search impressions in the last window, most impressions first,
+    // ahead of the rest; such a page not queued at all is added as a re-verification. Pages under that are kept out of
+    // Google until verified instead (searchHold.ts). The work done stays as it was.
+    const { HOLD_IMPRESSIONS } = await import('./searchHold');
+    const { loadPageStats } = await import('./pageStats');
+    const stats = await loadPageStats();
+    const st: any = (await ref().get()).data() || {};
+    const next = Number(st.next || 0);
+    const old: Work[] = st.queue || [];
+    const want = new Map<string, number>();
+    for (const g of (await db().collection('guides').get()).docs) {
+      if (g.id.includes('--')) continue;
+      for (const d of (await g.ref.collection('areas').where('status', '==', 'published').get()).docs) {
+        const n = Number(stats[`${g.id}/${d.id}`]?.[0]) || 0;
+        if ((d.data() as any).verified === false && n >= HOLD_IMPRESSIONS) want.set(`${g.id}/${d.id}`, n);
+      }
+    }
+    const isFront = (w: Work) => (w.kind === 'walkthrough' || w.kind === 'reverify') && want.has(`${w.key}/${w.ref}`);
+    const later = old.slice(next);
+    const front = later.filter(isFront);
+    const queued = new Set(front.map((w) => `${w.key}/${w.ref}`));
+    const added: Work[] = [...want.keys()].filter((k) => !queued.has(k)).map((k) => { const [key, ref] = k.split('/'); return { kind: 'reverify', key, ref, impressions: want.get(k) }; });
+    const firstOnes = [...front, ...added].sort((a, b) => (want.get(`${b.key}/${b.ref}`) || 0) - (want.get(`${a.key}/${a.ref}`) || 0)).map((w) => ({ ...w, impressions: want.get(`${w.key}/${w.ref}`) }));
+    const queue = [...old.slice(0, next), ...firstOnes, ...later.filter((w) => !isFront(w))];
+    const dry = arg('dry') === 'true' || process.argv.includes('--dry-run');
+    if (!dry) await ref().set({ queue }, { merge: true });
+    console.log(`${dry ? '(dry run) ' : ''}Front of the queue: ${firstOnes.length} unchecked page(s) with ${HOLD_IMPRESSIONS}+ impressions (${front.length} moved up, ${added.length} added), ${firstOnes.reduce((n, w) => n + (w.impressions || 0), 0)} impressions; queue from item ${next}: ${queue.length - next} item(s).`);
+    console.log(`  first: ${firstOnes.slice(0, 10).map((w) => `${w.kind} ${w.key}/${w.ref} (${w.impressions})`).join(', ')}`);
+  } else if (arg('queue-upkeep') === 'true') {
     // The upkeep lane (owner, Oct 31 2026): its kinds leave the main queue (what's done stays as it was).
     const st: any = (await ref().get()).data() || {};
     const next = Number(st.next || 0);

@@ -10,7 +10,8 @@ import crypto from 'crypto';
  * The shrinkage guard: a build whose sitemap has far fewer pages than the live site's (a publish that stopped halfway)
  * is never deployed, since a deploy removes every live page the build lacks. More than 2% of the live pages, or any
  * guide that's live but missing from the build, refuses the deploy (QC_DEPLOY_ALLOW_SHRINK=1 overrides, for a
- * deliberate removal). Pages the build's _redirects 301 elsewhere count as moved, not removed.
+ * deliberate removal). Pages the build's _redirects 301 elsewhere count as moved, not removed, and pages still in the
+ * build but left out of its sitemap (noindex, searchHold.ts) count as still there.
  */
 export async function checkShrink(root: string, site = 'https://questcompendium.com'): Promise<string | null> {
   if (process.env.QC_DEPLOY_ALLOW_SHRINK === '1') return null;
@@ -32,7 +33,12 @@ export async function checkShrink(root: string, site = 'https://questcompendium.
     const p = u.startsWith(site) ? u.slice(site.length) : u;
     return moves.some((from) => (from.endsWith('/*') ? p.startsWith(from.slice(0, -1)) : p === from));
   };
-  const gone = live.filter((u) => !have.has(u) && !redirected(u));
+  // A page still in the build but out of its sitemap (held out of Google: noindex, searchHold.ts) is still served.
+  const served = (u: string) => {
+    const p = decodeURIComponent(u.startsWith(site) ? u.slice(site.length) : u).replace(/^\/+/, '');
+    return fs.existsSync(path.join(root, !p || p.endsWith('/') ? `${p}index.html` : p));
+  };
+  const gone = live.filter((u) => !have.has(u) && !redirected(u) && !served(u));
   const guideOf = (u: string) => (u.match(/\/guides\/([^/]+)\//) || [])[1];
   const liveGuides = new Set(live.map(guideOf).filter(Boolean));
   const localGuides = new Set(local.map(guideOf).filter(Boolean));
