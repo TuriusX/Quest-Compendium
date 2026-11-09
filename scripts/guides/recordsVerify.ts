@@ -69,7 +69,7 @@ async function research(key: string, slug: string, game: string, place: string, 
   });
   const res: any = await gemini().models.generateContent({
     model: MODEL,
-    contents: [{ role: 'user', parts: [{ text: `In the video game "${game}", the place "${place}": for each of these, say what the game's guides and wikis say about it (and whether it is really in ${place} at all):\n- ${list.join('\n- ')}\nRun a few searches (at most four). Answer in short factual sentences, one fact per line, only what the sources say; name the place each thing is in.` }] }],
+    contents: [{ role: 'user', parts: [{ text: `In the video game "${game}", the place "${place}": for each of these, say what the game's guides and wikis say about it (and whether it is really in ${place} at all):\n- ${list.join('\n- ')}\nRun a few searches (at most four). Answer in short factual sentences, one fact per line, only what the sources say. Start every line with the name of the thing it is about ("Iguana Egg: in the terrarium by the penthouse entrance"), never "It" or a bare label, and name the place each thing is in.` }] }],
     config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 5000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
   });
   const evidence: Evidence[] = [...(have.evidence || [])];

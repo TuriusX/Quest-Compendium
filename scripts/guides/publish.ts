@@ -1246,6 +1246,9 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
   // Items in route order: as the steps meet them, then the rest as the page lists them.
   const stepOf = new Map<string, number>();
   steps.forEach((s, i) => (s.entries || []).forEach((id) => { if (!stepOf.has(id)) stepOf.set(id, i); }));
+  // A fact the sources contradict (the verify step: disputed) is left out while it's re-checked, as a rebuild would drop it.
+  const disputed = (id: unknown) => rec.get(String(id))?.status === 'disputed';
+  a = { ...a, items: a.items.filter((e) => !disputed(e.id)), secrets: a.secrets.filter((e) => !disputed(e.id)), enemies: a.enemies.filter((e) => !disputed(e.id)), shops: a.shops.filter((e) => !disputed(e.id)), fights: (a.fights || []).filter((f) => !disputed(f.id)) };
   const items = a.items.map(cleanEntry).map((e, i) => ({ e, i, r: rec.get(String(e.id)) }))
     .sort((x, y) => (stepOf.get(x.e.id) ?? 999) - (stepOf.get(y.e.id) ?? 999) || x.i - y.i);
   const th = (s: string) => `<th class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-500 whitespace-nowrap">${esc(s)}</th>`;
@@ -1436,9 +1439,10 @@ function buildFactLists(key: string, visible: { slug: string; name: string }[], 
     const a = byslug.get(o.slug);
     if (!a || a.status !== 'published') continue;
     const rec = new Map<string, any>((recs.get(o.slug) || []).filter((r: any) => r.origin?.from === 'area').map((r: any) => [String(r.origin.entry ?? ''), r]));
-    for (const e of a.items || []) { add('items', { slug: o.slug, area: a.name, e, r: rec.get(String(e.id)) }); if (e.missable) add('missables', { slug: o.slug, area: a.name, e, r: rec.get(String(e.id)) }); }
-    for (const f of a.fights || []) add('bosses', { slug: o.slug, area: a.name, e: f });
-    for (const s of a.shops || []) add('merchants', { slug: o.slug, area: a.name, e: s });
+    const ok = (id: unknown) => rec.get(String(id))?.status !== 'disputed';
+    for (const e of (a.items || []).filter((x) => ok(x.id))) { add('items', { slug: o.slug, area: a.name, e, r: rec.get(String(e.id)) }); if (e.missable) add('missables', { slug: o.slug, area: a.name, e, r: rec.get(String(e.id)) }); }
+    for (const f of (a.fights || []).filter((x) => ok(x.id))) add('bosses', { slug: o.slug, area: a.name, e: f });
+    for (const s of (a.shops || []).filter((x) => ok(x.id))) add('merchants', { slug: o.slug, area: a.name, e: s });
   }
   for (const [id, rows] of [...out]) if (rows.length < 8 || taken.has(id)) out.delete(id);
   if (out.size) FACT_LISTS.set(key, out);
