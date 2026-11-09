@@ -2737,6 +2737,16 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     const list = (xs: string[]) => (xs.length ? `<ul class="space-y-1">${xs.map((x) => `<li>${x}</li>`).join('')}</ul>` : '');
     const dir = path.join(OUT, 'guides', key, e.slug);
     fs.mkdirSync(dir, { recursive: true });
+    // Fact pages (roadmap 29): the facts first; the story and background text in a closed fold below them.
+    const factMode = FACT_KEYS.has(key);
+    const storyHtml = (e.story || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entStory'))}</h2>${e.story!.map((x: any, i: number) => `<h3 id="story-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.heading)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : '';
+    const playHtml = (e.gameplay || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entGameplay'))}</h2>${e.gameplay!.map((x: any, i: number) => `<h3 id="play-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(gameplayHeading(x, person))}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : '';
+    const askedHtml = (() => {
+        // Answers to players' questions are worked into the sections above (qaArrange.ts); only those that fit none
+        // show here. A page from before that step still shows its questions.
+        const asked = e.qaArrangedAt ? e.alsoAsked || [] : e.qa || [];
+        return asked.length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui(e.qaArrangedAt ? 'entAlsoAsked' : 'entQuestions'))}</h2>${asked.map((x: any, i: number) => `<h3 id="q-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.q)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.a, '../', e.slug)}</p>`).join('')}</section>` : '';
+      })();
     const body = `<div class="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_15rem] lg:gap-8">
     <aside class="hidden lg:block"><div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto qc-scroll pr-1"><nav aria-label="${esc(gameName)}"><a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(gameName)}</a><ul>${areaList(key, guideLinks, null, '../')}</ul></nav></div></aside>
     <article class="min-w-0 w-full max-w-3xl mx-auto">
@@ -2762,14 +2772,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
         const ch = visible.find((o) => { const nm = String(byslug.get(o.slug)?.name || o.name).toLowerCase(); return nm !== n && (nm.endsWith(`: ${n}`) || nm.endsWith(` – ${n}`) || nm.endsWith(` - ${n}`)); });
         return ch ? `<p class="mt-4 rounded-xl border border-[#a87ffb]/30 bg-[#a87ffb]/10 px-4 py-3 text-sm text-zinc-200">Playing through the story here? <a class="font-semibold text-[#a87ffb] hover:text-white" href="../${esc(ch.slug)}/">${esc(byslug.get(ch.slug)?.name || ch.name)}: walkthrough, missions and missables &rarr;</a></p>` : '';
       })()}
-      ${(e.story || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entStory'))}</h2>${e.story!.map((x: any, i: number) => `<h3 id="story-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.heading)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : ''}
-      ${(e.gameplay || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entGameplay'))}</h2>${e.gameplay!.map((x: any, i: number) => `<h3 id="play-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(gameplayHeading(x, person))}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : ''}
-      ${(() => {
-        // Answers to players' questions are worked into the sections above (qaArrange.ts); only those that fit none
-        // show here. A page from before that step still shows its questions.
-        const asked = e.qaArrangedAt ? e.alsoAsked || [] : e.qa || [];
-        return asked.length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui(e.qaArrangedAt ? 'entAlsoAsked' : 'entQuestions'))}</h2>${asked.map((x: any, i: number) => `<h3 id="q-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.q)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.a, '../', e.slug)}</p>`).join('')}</section>` : '';
-      })()}
+      ${factMode ? '' : storyHtml + playHtml + askedHtml}
       ${playersAsked(key, e.slug)}
       <dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm">
         ${row('Type', esc(label))}
@@ -2801,9 +2804,12 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
       })()}
       ${e.ref ? refBlocks(e.ref, e.slug) : ''}
       ${(sm.notes || []).length ? `<ul class="mt-4 space-y-1.5 text-sm text-zinc-300">${sm.notes.map((x: string) => `<li class="flex gap-2"><span class="text-[#c4b0ff]">&bull;</span><span>${rich(x, '../', e.slug)}</span></li>`).join('')}</ul>` : ''}
+      ${factMode ? askedHtml : ''}
+      ${factMode && (storyHtml || playHtml) ? `<details class="qc-fold mt-6" id="story"><summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10">${ICON.caret}${ICON.list}<h2 class="flex-1 text-sm sm:text-base font-bold text-white">Story and background</h2></summary><div class="px-1">${storyHtml}${playHtml}</div></details>` : ''}
+      ${factMode && e.review?.total ? `<p class="mt-6 border-t border-white/10 pt-3 text-xs text-zinc-500">${e.review.total} facts on this page checked against sources · ${e.review.supported} supported${(e as any).builtAt ? ` · last checked ${new Date(Number((e as any).promotedFromDraft || (e as any).builtAt)).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}</p>` : ''}
       ${publicSources(e.sources || []).length ? `<p class="mt-6 text-xs text-zinc-500">Sources: ${publicSources(e.sources).map(esc).join(', ')}</p>` : ''}
     </article>
-    ${rail([...(e.story || []).map((x: any, i: number) => [`story-${i + 1}`, x.heading] as [string, string]), ...(e.gameplay || []).map((x: any, i: number) => [`play-${i + 1}`, gameplayHeading(x, person)] as [string, string])])}
+    ${factMode ? '' : rail([...(e.story || []).map((x: any, i: number) => [`story-${i + 1}`, x.heading] as [string, string]), ...(e.gameplay || []).map((x: any, i: number) => [`play-${i + 1}`, gameplayHeading(x, person)] as [string, string])])}
     </div>`;
     const url = `${SITE}/guides/${key}/${e.slug}/`;
     const ld: object[] = [breadcrumb([{ name: ui('navGuides'), url: `${SITE}/guides/` }, { name: shortGame(gameName), url: `${SITE}/guides/${key}/` }, { name: e.name, url }])];

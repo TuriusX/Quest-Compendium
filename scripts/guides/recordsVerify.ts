@@ -110,7 +110,10 @@ async function main() {
   const dry = process.argv.includes('--dry-run');
   const recheck = process.argv.includes('--recheck');
   const t = { pages: 0, records: 0, checked: 0, disputed: 0, unconfirmed: 0 };
-  outer: for (const key of keys) {
+  // Every page to check across the guides, most-searched first, so a stop at the cap leaves the least-wanted ones.
+  type Job = { key: string; game: string; slug: string; recs: GameRecord[]; done: Map<string, any>; impressions: number };
+  const jobs: Job[] = [];
+  for (const key of keys) {
     const game = String(((await db().collection('guides').doc(key).get()).data() as any)?.game || key);
     const all = (await RECORDS().doc(key).collection('records').get()).docs.map((d) => d.data() as GameRecord);
     const done = new Map<string, any>(((await RECORDS().doc(key).collection('verified').get()).docs).map((d) => [d.id, d.data()]));
@@ -122,29 +125,30 @@ async function main() {
       if (prev && prev.sig === contentSig(r) && (prev.status !== 'unconfirmed' || Date.now() - Number(done.get(r.place)?.at || 0) < 30 * 86_400_000)) continue;
       byPlace.set(r.place, [...(byPlace.get(r.place) || []), r]);
     }
-    const places = [...byPlace.entries()].sort((a, b) => (b[1][0].impressions || 0) - (a[1][0].impressions || 0));
-    for (let i = 0; i < places.length; i += 4) {
-      if (ledgerDollars() >= max - 0.15) { console.log(`Stopped at the $${max.toFixed(2)} cap.`); break outer; }
-      const group = places.slice(i, i + 4);
-      if (dry) { group.forEach(([s, rs]) => console.log(`would verify ${key}/${s}: ${rs.length} record(s)`)); t.pages += group.length; t.records += group.reduce((n, [, rs]) => n + rs.length, 0); continue; }
-      let capped = false;
-      await Promise.all(group.map(async ([slug, recs]) => {
-        try {
-          // B rechecks use the stored evidence (no searches); C records get their own research.
-          const v = await verifyPage(key, slug, game, recs, recs.every((r) => r.tier === 'B'));
-          const prev = done.get(slug)?.results || {};
-          await RECORDS().doc(key).collection('verified').doc(slug).set({ at: v.at, dollars: v.dollars, results: { ...prev, ...v.results } });
-          const st = Object.values(v.results);
-          t.pages++; t.records += st.length;
-          t.checked += st.filter((x) => x.status === 'checked').length; t.disputed += st.filter((x) => x.status === 'disputed').length; t.unconfirmed += st.filter((x) => x.status === 'unconfirmed').length;
-          console.log(`${key}/${slug}: ${st.length} record(s): ${st.filter((x) => x.status === 'checked').length} checked, ${st.filter((x) => x.status === 'disputed').length} disputed, ${st.filter((x) => x.status === 'unconfirmed').length} unconfirmed, $${v.dollars.toFixed(4)}`);
-        } catch (e: any) {
-          console.warn(`${key}/${slug} skipped: ${e?.message}`);
-          if (/spending cap/.test(String(e?.message))) capped = true;
-        }
-      }));
-      if (capped) break outer;
-    }
+    for (const [slug, recs] of byPlace) jobs.push({ key, game, slug, recs, done, impressions: recs[0].impressions || 0 });
+  }
+  jobs.sort((x, y) => y.impressions - x.impressions);
+  for (let i = 0; i < jobs.length; i += 4) {
+    if (ledgerDollars() >= max - 0.15) { console.log(`Stopped at the $${max.toFixed(2)} cap.`); break; }
+    const group = jobs.slice(i, i + 4);
+    if (dry) { group.forEach((j) => console.log(`would verify ${j.key}/${j.slug}: ${j.recs.length} record(s), ${j.impressions} impressions`)); t.pages += group.length; t.records += group.reduce((n, j) => n + j.recs.length, 0); continue; }
+    let capped = false;
+    await Promise.all(group.map(async ({ key, game, slug, recs, done }) => {
+      try {
+        // B rechecks use the stored evidence (no searches); C records get their own research.
+        const v = await verifyPage(key, slug, game, recs, recs.every((r) => r.tier === 'B'));
+        const prev = done.get(slug)?.results || {};
+        await RECORDS().doc(key).collection('verified').doc(slug).set({ at: v.at, dollars: v.dollars, results: { ...prev, ...v.results } });
+        const st = Object.values(v.results);
+        t.pages++; t.records += st.length;
+        t.checked += st.filter((x) => x.status === 'checked').length; t.disputed += st.filter((x) => x.status === 'disputed').length; t.unconfirmed += st.filter((x) => x.status === 'unconfirmed').length;
+        console.log(`${key}/${slug}: ${st.length} record(s): ${st.filter((x) => x.status === 'checked').length} checked, ${st.filter((x) => x.status === 'disputed').length} disputed, ${st.filter((x) => x.status === 'unconfirmed').length} unconfirmed`);
+      } catch (e: any) {
+        console.warn(`${key}/${slug} skipped: ${e?.message}`);
+        if (/spending cap/.test(String(e?.message))) capped = true;
+      }
+    }));
+    if (capped) break;
   }
   console.log(`Verified ${t.pages} page(s), ${t.records} record(s): ${t.checked} checked, ${t.disputed} disputed, ${t.unconfirmed} still unconfirmed; $${ledgerDollars().toFixed(4)} in ${ledger.calls} call(s) (${ledger.searches} searches).`);
   setTimeout(() => process.exit(0), 300);
