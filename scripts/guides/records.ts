@@ -28,7 +28,7 @@ import { missableGaps, type GuideArea } from './common';
 
 export type RecordType =
   | 'place' | 'item' | 'secret' | 'enemy' | 'boss' | 'shop' | 'npc' | 'quest' | 'step' | 'choice' | 'tip' | 'advice'
-  | 'checklist' | 'achievement' | 'noreturn' | 'thing' | 'other';
+  | 'checklist' | 'achievement' | 'noreturn' | 'warning' | 'thing' | 'other';
 export type Tier = 'A' | 'B' | 'C';
 export type RecordStatus = 'checked' | 'unconfirmed' | 'disputed';
 
@@ -55,7 +55,9 @@ export type GameRecord = {
   status: RecordStatus;
   gaps?: string[];
   /** Where it came from (for re-imports and the pages that still render the old way). */
-  origin: { from: 'area' | 'entity' | 'achievements' | 'gameFacts'; slug?: string; entry?: string };
+  origin: { from: 'area' | 'entity' | 'achievements' | 'gameFacts' | 'extract'; slug?: string; entry?: string };
+  /** Fields filled from the page's own prose (recordsExtract.ts), each backed by a word-for-word quote. */
+  extracted?: { field: string; quote: string }[];
   /** The page's Search Console impressions in the last window (pageStats), for ordering the verify queue. */
   impressions?: number;
   /** When the record's page was last checked or changed (ms). */
@@ -92,7 +94,7 @@ export const recordHash = (r: GameRecord) => {
   return crypto.createHash('sha1').update(JSON.stringify(rest)).digest('hex').slice(0, 16);
 };
 
-function finish(r: Omit<GameRecord, 'hash'>): GameRecord {
+export function finish(r: Omit<GameRecord, 'hash'>): GameRecord {
   const out = JSON.parse(JSON.stringify(r)) as GameRecord;
   if (!out.gaps?.length) delete out.gaps;
   if (!out.links?.length) delete out.links;
@@ -266,4 +268,45 @@ export function gameFactRecord(key: string, id: string, f: any): GameRecord | nu
     gaps: f.kind === 'missable' ? ['not split into where, final step and lockout'] : [],
     sources: src, tier: t, status: f.disputed ? 'disputed' : statusOf(t), checkedAt: Number(f.at || 0) || undefined, origin: { from: 'gameFacts', entry: id },
   });
+}
+
+/** All the prose of one page's records, in a stable order: what the extraction read, and its signature. */
+export function proseOf(recs: GameRecord[]): { text: string; sig: string } {
+  const parts: string[] = [];
+  for (const r of [...recs].sort((a, b) => a.id.localeCompare(b.id))) {
+    for (const [k, v] of Object.entries(r.prose || {})) parts.push(`[${r.id} ${k}] ${v}`);
+    for (const k of ['tip', 'warn', 'note', 'notes']) { const v = r.fields?.[k]; if (v) parts.push(`[${r.id} ${k}] ${Array.isArray(v) ? v.join(' ') : v}`); }
+  }
+  const text = parts.join('\n');
+  return { text, sig: crypto.createHash('sha1').update(text).digest('hex').slice(0, 16) };
+}
+
+const GAP_OF: Record<string, string> = { lockout: 'no lockout', how: 'no final step', where: 'vague where' };
+const ADD_TYPE: Record<string, RecordType> = { item: 'item', noreturn: 'noreturn', warning: 'warning', npc: 'npc', boss: 'boss', tip: 'tip', other: 'other' };
+/**
+ * One page's extraction (recordsExtract.ts) laid over its records, while the page's prose is the same as when it was
+ * extracted: one-line shorts, fields filled from the prose (each with its quote), and the facts the prose adds as new
+ * records (tier B: rechecked from stored evidence before they count as checked).
+ */
+export function applyExtracted(recs: GameRecord[], x: { sig: string; shorts: any[]; fills: any[]; adds: any[] } | undefined): GameRecord[] {
+  if (!x || !recs.length || proseOf(recs).sig !== x.sig) return recs;
+  const byId = new Map(recs.map((r) => [r.id, r]));
+  for (const s of x.shorts || []) { const r = byId.get(String(s.id)); if (r && s.short) r.short = String(s.short); }
+  for (const f of x.fills || []) {
+    const r = byId.get(String(f.id));
+    if (!r || r.fields[f.field]) continue;
+    r.fields[f.field] = String(f.value);
+    r.extracted = [...(r.extracted || []), { field: String(f.field), quote: String(f.quote) }];
+    if (r.gaps && GAP_OF[f.field]) r.gaps = r.gaps.filter((g) => g !== GAP_OF[f.field]);
+  }
+  const first = recs[0];
+  const pageSources = recs.find((r) => r.type === 'place')?.sources || first.sources;
+  const added = (x.adds || []).map((a: any, i: number) => finish({
+    key: first.key, id: `x.${first.place}.${i}`, type: ADD_TYPE[String(a.type)] || 'other', name: String(a.name), short: a.fields?.text ? firstSentence(a.fields.text) : undefined,
+    place: first.place, placeName: first.placeName, impressions: first.impressions, missable: !!a.missable || a.type === 'noreturn',
+    fields: fieldsOf({ where: a.fields?.where, how: a.fields?.how, lockout: a.fields?.lockout, text: a.fields?.text }),
+    links: a.step ? [String(a.step)] : [], extracted: [{ field: 'all', quote: String(a.quote) }],
+    sources: pageSources, tier: 'B', status: 'unconfirmed', origin: { from: 'extract', slug: first.place, entry: String(i) },
+  }));
+  return [...recs.map((r) => finish(r)), ...added];
 }

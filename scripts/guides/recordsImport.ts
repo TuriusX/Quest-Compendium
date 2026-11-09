@@ -6,7 +6,7 @@
  *   npx tsx scripts/guides/recordsImport.ts [--only KEY] [--dry-run]
  */
 import { db, arg } from './common';
-import { areaRecords, entityRecords, achievementRecords, gameFactRecord, type GameRecord } from './records';
+import { areaRecords, entityRecords, achievementRecords, gameFactRecord, applyExtracted, type GameRecord } from './records';
 import { loadOwnerEdits, applyOwnerEdits } from './ownerEditsPublish';
 import { loadPageStats, statOf } from './pageStats';
 
@@ -48,6 +48,15 @@ async function collect(only = ''): Promise<Map<string, GameRecord[]>> {
       applyOwnerEdits(c.id, String(e.slug), e);
       add(c.id, entityRecords(c.id, e, statOf(stats, c.id, String(e.slug))?.impressions || 0));
     }
+  }
+  // Step 2's extractions (recordsExtract.ts): laid over each page's records while its prose is unchanged.
+  for (const [key, recs] of out) {
+    const ex = new Map<string, any>(((await RECORDS().doc(key).collection('extracted').get().catch(() => null))?.docs || []).map((d) => [d.id, d.data() as any]));
+    if (!ex.size) continue;
+    const byPlace = new Map<string, GameRecord[]>();
+    const rest: GameRecord[] = [];
+    for (const r of recs) (r.place && (r.origin.from === 'area' || r.origin.from === 'entity') ? (byPlace.get(r.place) || byPlace.set(r.place, []).get(r.place)!).push(r) : rest.push(r));
+    out.set(key, [...rest, ...[...byPlace].flatMap(([slug, rs]) => applyExtracted(rs, ex.get(slug)))]);
   }
   for (const g of (await db().collection('gameFacts').get()).docs) {
     if (only && g.id !== only) continue;
