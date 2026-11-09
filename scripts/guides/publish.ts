@@ -1209,6 +1209,205 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   </div>`;
 }
 
+
+/**
+ * Fact pages (roadmap 29, step 4): an area page drawn as a reference tool from the fact database (records.ts) instead
+ * of as an article. On for the guides in config/factPages.guides (or QC_FACT_PAGES=key,key for a preview), English
+ * pages only for now (the records are English). The page's own data stays the base, so the owner's edits and tonight's
+ * changes show at once; the records add what the database knows on top: one-line steps, fields filled from the
+ * page's prose (a missable's lockout), the warnings and points of no return pulled out of it, and each fact's status.
+ * Same address, title, ticks (the same entry ids) and ask box. The old walkthrough text stays in a closed fold below.
+ */
+let FACT_KEYS = new Set<string>();
+const FACT_RECS = new Map<string, Map<string, any[]>>();
+async function loadFactPages(only = ''): Promise<void> {
+  const cfg: any = (await db().collection('config').doc('factPages').get().catch(() => null))?.data() || {};
+  const keys = [...(Array.isArray(cfg.guides) ? cfg.guides : []), ...String(process.env.QC_FACT_PAGES || '').split(',')].map((s: string) => String(s).trim()).filter(Boolean);
+  FACT_KEYS = new Set(keys.filter((k) => !only || k === only));
+  for (const key of FACT_KEYS) {
+    const byPlace = new Map<string, any[]>();
+    for (const d of (await db().collection('gameRecords').doc(key).collection('records').get()).docs) {
+      const r: any = d.data();
+      if (!r.place || r.origin?.from === 'gameFacts' || r.origin?.from === 'achievements') continue;
+      byPlace.set(r.place, [...(byPlace.get(r.place) || []), r]);
+    }
+    FACT_RECS.set(key, byPlace);
+  }
+  if (FACT_KEYS.size) console.log(`Fact pages: ${[...FACT_KEYS].map((k) => `${k} (${FACT_RECS.get(k)?.size || 0} pages with records)`).join(', ')}.`);
+}
+const factPageOn = (key: string, slug: string) => LANG === 'en' && FACT_KEYS.has(key) && !!FACT_RECS.get(key)?.get(slug)?.length;
+
+function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[], prev?: AreaLink, next?: AreaLink, up = '../../../', achs: any[] = []) {
+  const recs = FACT_RECS.get(gameKey)?.get(a.slug) || [];
+  const rec = new Map<string, any>(recs.filter((r) => r.origin?.from === 'area').map((r) => [String(r.origin.entry ?? ''), r]));
+  const place = recs.find((r) => r.type === 'place');
+  UNCONFIRMED = new Set([...(a.items || []), ...(a.secrets || []), ...((a.sections || []) as any[]).flatMap((x: any) => x.entries || [])].filter((e: any) => e?.unconfirmed).map((e: any) => String(e.id)));
+  const steps = a.walkthrough || [];
+  // Items in route order: as the steps meet them, then the rest as the page lists them.
+  const stepOf = new Map<string, number>();
+  steps.forEach((s, i) => (s.entries || []).forEach((id) => { if (!stepOf.has(id)) stepOf.set(id, i); }));
+  const items = a.items.map(cleanEntry).map((e, i) => ({ e, i, r: rec.get(String(e.id)) }))
+    .sort((x, y) => (stepOf.get(x.e.id) ?? 999) - (stepOf.get(y.e.id) ?? 999) || x.i - y.i);
+  const th = (s: string) => `<th class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-500 whitespace-nowrap">${esc(s)}</th>`;
+  const table = (head: string[], rows: string[]) => `<div class="overflow-x-auto"><table class="w-full text-sm"><thead class="border-b border-white/10"><tr>${head.map(th).join('')}</tr></thead><tbody class="divide-y divide-white/5">${rows.join('')}</tbody></table></div>`;
+  const td = (html: string, cls = '') => `<td class="px-3 py-2.5 align-top text-zinc-300 ${cls}">${html}</td>`;
+  const tag = (label: string, tone: 'amber' | 'dim') => ` <span class="ml-1 inline-block rounded border px-1.5 py-px align-middle text-[10px] font-bold uppercase tracking-wide ${tone === 'amber' ? 'border-amber-400/30 bg-amber-400/10 text-amber-300' : 'border-dashed border-zinc-500 text-zinc-400'}">${esc(label)}</span>`;
+  const card = (id: string, title: string, count: string, body: string) => body ? `<section id="${esc(id)}" class="mt-6 scroll-mt-20 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"><div class="flex items-center gap-3 border-b border-white/10 px-4 py-3"><h2 class="flex-1 text-base font-bold text-white">${esc(title)}</h2>${count}</div>${body}</section>` : '';
+  const entryPic = (id: string) => { const pic = stepPicture(gameKey, a.slug, id, 'entry'); return pic ? entryHtml(pic) : ''; };
+
+  // The checklist: every item, its exact spot, the final step, what locks it out (or that it's still being checked).
+  const itemRow = ({ e, r }: { e: GuideEntry; r?: any }) => {
+    const how = e.how || r?.fields?.how;
+    const lockout = e.lockout || r?.fields?.lockout;
+    const gaps: string[] = r?.gaps || [];
+    const html = `<strong class="text-white">${esc(e.name)}</strong>${e.missable ? tag('Missable', 'amber') : ''}${r?.status === 'unconfirmed' && !UNCONFIRMED.has(e.id) ? tag('Not yet confirmed', 'dim') : ''}` +
+      `${e.where ? `<span class="block text-zinc-400 mt-0.5">${esc(e.where)}</span>` : ''}` +
+      `${how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(how)}</span>` : ''}` +
+      `${lockout ? `<span class="block text-xs text-amber-300/90 mt-0.5"><span class="text-amber-200/70">${esc(ui('itemLockout'))}:</span> ${esc(lockout)}</span>` : e.missable && gaps.includes('no lockout') ? `<span class="block text-xs italic text-zinc-500 mt-0.5">What locks it out: being checked</span>` : ''}${entryPic(e.id)}`;
+    return checkRow(e.id, html, true, kindIcon(entryKind({ section: 'items', name: e.name, where: e.where })));
+  };
+  const itemIds = items.map((x) => x.e.id);
+  const missCount = items.filter((x) => x.e.missable).length;
+  const checklist = items.length
+    ? card('checklist', ui('items'), `<span class="text-xs text-zinc-500" data-count="${esc(itemIds.join(','))}">0/${itemIds.length}</span>`, `<span id="dont-miss"></span><span id="items"></span><div class="py-1">${items.map(itemRow).join('')}</div>`)
+    : '';
+
+  // Before you leave: the points of no return and warnings the page states, and how many missables it has.
+  const warns = recs.filter((r) => r.type === 'noreturn' || r.type === 'warning').sort((x, y) => Number(y.type === 'noreturn') - Number(x.type === 'noreturn'));
+  const before = warns.length || missCount
+    ? `<section id="before-you-leave" class="mt-6 scroll-mt-20 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-4">
+        <h2 class="flex items-center gap-2 text-base font-bold text-amber-200">${ICON.warn} Before you leave</h2>
+        <ul class="mt-2 space-y-1.5 text-sm text-zinc-200">
+          ${missCount ? `<li class="flex gap-2"><span class="text-amber-300">&bull;</span><span><strong class="text-white">${missCount} missable${missCount === 1 ? '' : 's'} here</strong>: what locks each one out is under it. <a href="#checklist" class="text-[#a87ffb] hover:text-white">See the checklist</a></span></li>` : ''}
+          ${warns.slice(0, 6).map((w) => `<li class="flex gap-2"><span class="text-amber-300">&bull;</span><span>${esc(w.short || w.fields?.text || w.name)}</span></li>`).join('')}
+        </ul>
+        <p class="qc-site-only mt-2 text-xs text-zinc-500">${esc(ui('appMissables'))} <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white">${esc(ui('appLink'))} &rarr;</a></p>
+      </section>`
+    : '';
+
+  // The route: one line per step, what you pick up there (linked to its checklist row), and its warning.
+  const nameOf = new Map<string, string>([...a.items.map((e) => [e.id, String(e.name || '')] as [string, string]), ...a.secrets.map((e) => [e.id, String(e.name || '') || `${ui('secrets')}: ${String(e.text || '').split(/\s+/).slice(0, 5).join(' ')}…`] as [string, string]), ...(a.fights || []).map((f) => [f.id, f.name] as [string, string])]);
+  const route = steps.length
+    ? card('walkthrough', ui('route'), `<span class="text-xs text-zinc-500">${steps.length} steps</span>`, `<ol class="space-y-0.5 py-2">${steps.map((st, i) => {
+        const r = rec.get(String(st.id));
+        const got = [...(st.entries || []), ...(st.fights || [])].filter((id) => nameOf.get(id));
+        return `<li id="${esc(st.id)}" class="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 px-4 py-2 scroll-mt-20"><span class="flex h-6 w-6 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-xs font-bold text-[#c4b0ff]">${i + 1}</span><div class="min-w-0"><p class="text-sm"><strong class="text-white">${esc(st.title)}.</strong> <span class="text-zinc-400">${esc(r?.short || String(st.text || '').split(/(?<=[.!?])\s/)[0])}</span></p>${(() => { const pic = stepPicture(gameKey, a.slug, st.id, 'step'); return pic ? stepHtml(pic) : ''; })()}${got.length ? `<div class="mt-1.5 flex flex-wrap gap-1.5">${got.map((id) => `<a href="#${(a.fights || []).some((f) => f.id === id) ? '' : 'e-'}${esc(id)}" class="rounded-md border border-white/10 px-1.5 py-0.5 text-[11px] text-zinc-400 hover:border-[#a87ffb]/40 hover:text-white">${esc(nameOf.get(id)!)}</a>`).join('')}</div>` : ''}${st.warn ? `<p class="mt-1 text-xs text-amber-200/90">&#9888; ${esc(st.warn)}</p>` : ''}</div></li>`;
+      }).join('')}</ol>`)
+    : '';
+
+  const choices = (a.choices || []).length
+    ? card('choices', ui('choicesHere'), `<span class="text-xs text-zinc-500">${(a.choices || []).length}</span>`, table(['Choice', 'Options and what happens', ui('recommended')], (a.choices || []).map((c) =>
+        `<tr id="${esc(c.id)}">${td(`<strong class="text-white">${esc(c.title)}</strong>${c.when ? `<span class="block text-xs text-zinc-500 mt-0.5">${esc(c.when)}</span>` : ''}`, 'min-w-[9rem]')}${td(c.options.map((o) => `<span class="block mb-1"><span class="font-semibold text-zinc-100">${esc(o.label)}:</span> ${esc(o.outcome)}</span>`).join('') + (c.note ? `<span class="block text-xs text-amber-200/90">${esc(c.note)}</span>` : ''), 'min-w-[16rem]')}${td(esc(c.recommended || ''), 'text-emerald-200/90 min-w-[7rem]')}</tr>`)))
+    : '';
+
+  const fights = (a.fights || []).length
+    ? card('fights', ui('fights'), `<span class="text-xs text-zinc-500">${(a.fights || []).length}</span>`, table(['Fight', 'Watch for', ui('fightWeak'), ui('fightRewards')], (a.fights || []).map((f) =>
+        `<tr id="${esc(f.id)}">${td(`<strong class="text-white">${esc(f.name)}</strong>${(f as any).unconfirmed ? unconfirmedTag() : ''}${f.enemies ? `<span class="block text-xs text-zinc-500 mt-0.5">${esc(f.enemies)}</span>` : ''}`, 'min-w-[9rem]')}${td(`${esc(f.threats || '')}${f.tactics ? `<span class="block text-xs text-zinc-400 mt-1"><span class="text-zinc-500">${esc(ui('fightTactics'))}:</span> ${esc(f.tactics)}</span>` : ''}`, 'min-w-[14rem]')}${td(esc(f.weaknesses || ''), 'min-w-[10rem]')}${td(esc(f.rewards || ''), 'min-w-[9rem]')}</tr>`)))
+    : '';
+
+  const shops = a.shops.length
+    ? card('shops', ui('shops'), '', table([ui('shops'), 'Sells'], a.shops.map(cleanEntry).map((e) => `<tr id="e-${esc(e.id)}">${td(`<strong class="text-white">${esc(e.name)}</strong>${(e as any).unconfirmed ? unconfirmedTag() : ''}`, 'min-w-[9rem]')}${td(esc(e.sells || ''))}</tr>`)))
+    : '';
+  const foes = a.enemies.map(cleanEntry);
+  const enemies = foes.length
+    ? card('enemies', ui('enemies'), '', table([ui('enemies'), ui('weakTo'), ui('stealDrop'), ''], foes.map((e) => `<tr id="e-${esc(e.id)}">${td(`<strong class="text-white">${esc(e.name)}</strong>`, 'min-w-[8rem]')}${td(esc(e.weakness || ''))}${td(esc(e.steal || ''))}${td(`<span class="text-xs text-zinc-400">${esc(e.notes || '')}</span>`, 'min-w-[12rem]')}</tr>`)))
+    : '';
+  const secrets = a.secrets.length
+    ? card('secrets', ui('secrets'), `<span class="text-xs text-zinc-500" data-count="${esc(a.secrets.map((e) => e.id).join(','))}">0/${a.secrets.length}</span>`, `<div class="py-1">${a.secrets.map((e) => checkRow(e.id, esc(e.text) + entryPic(e.id), true, kindIcon(entryKind({ section: 'secrets', text: e.text })))).join('')}</div>`)
+    : '';
+  const otherSec = (a.sections || []).filter((x) => x.entries.length);
+  const sections = otherSec.map((x, si) => card(`sec-${si + 1}`, x.title, x.check ? `<span class="text-xs text-zinc-500" data-count="${esc(x.entries.map((e) => e.id).join(','))}">0/${x.entries.length}</span>` : '', x.check ? `<div class="py-1">${x.entries.map((e) => checkRow(e.id, esc(e.text), true, kindIcon(entryKind({ section: 'sections', text: e.text })))).join('')}</div>` : `<ul class="list-disc pl-8 pr-4 py-2 space-y-1 text-sm text-zinc-300">${x.entries.map((e) => `<li id="e-${esc(e.id)}">${esc(e.text)}</li>`).join('')}</ul>`)).join('');
+  const achHtml = achs.length
+    ? card('achievements', ui('achHere'), '', `<div class="py-1">${achs.slice().sort((x, y) => Number(!!y.missable) - Number(!!x.missable)).map((x) => `<div class="px-4 py-2 text-sm text-zinc-300"><strong class="text-white">${esc(x.name)}</strong>${x.missable ? tag(ui('achMissable'), 'amber') : ''}${x.rarity != null ? `<span class="ml-2 text-xs text-emerald-300/80">${esc(String(x.rarity))}% of players</span>` : ''}${x.how ? `<span class="block text-zinc-400 text-xs mt-0.5">${esc(x.how)}</span>` : ''}</div>`).join('')}<p class="px-4 pb-2 text-xs"><a class="text-[#a87ffb] hover:text-white" href="../achievements/index.html">${esc(ui('achLink'))} &rarr;</a></p></div>`)
+    : '';
+  const tips = a.tips.length ? card('tips', ui('tips'), '', `<ul class="space-y-1.5 px-4 py-3 text-sm text-zinc-300">${a.tips.map((t, i) => `<li id="tip-${i + 1}" class="flex gap-2 scroll-mt-20"><span class="text-[#a87ffb]">&bull;</span><span>${esc(t)}</span></li>`).join('')}</ul>`) : '';
+
+  // The old text, kept below the reference tools during the pilot (owner, Nov 8 2026), closed.
+  const adv = a.advice;
+  const oldText = (a.overview || steps.length || adv)
+    ? `<details class="qc-fold mt-6" id="full-text"><summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10">${ICON.caret}${ICON.list}<h2 class="flex-1 text-sm sm:text-base font-bold text-white">The full walkthrough text</h2></summary>
+        <div class="mt-3 space-y-4 px-1 text-[15px] leading-relaxed text-zinc-300">
+          ${a.overview ? `<p>${rich(a.overview)}</p>` : ''}
+          ${steps.map((st, i) => `<div><h3 class="font-semibold text-white">${i + 1}. ${esc(st.title)}</h3><p class="mt-1">${rich(st.text)}</p>${st.tip ? `<p class="mt-1 text-sm text-emerald-200/90"><span class="font-semibold text-emerald-300">${esc(ui('stepTip'))}:</span> ${rich(st.tip)}</p>` : ''}</div>`).join('')}
+          ${adv && (adv.matters.length || adv.mistakes.length || adv.skip.length) ? `<div><h3 class="font-semibold text-white">${esc(ui('shortVersion'))}</h3>${[[ui('adviceMatters'), adv.matters], [ui('adviceMistakes'), adv.mistakes], [ui('adviceSkip'), adv.skip]].filter(([, l]) => (l as string[]).length).map(([t, l]) => `<p class="mt-2 text-xs font-bold uppercase tracking-wide text-zinc-500">${esc(t as string)}</p><ul class="mt-1 list-disc pl-5 text-sm">${(l as string[]).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`).join('')}</div>` : ''}
+        </div>
+      </details>`
+    : '';
+
+  // The summary as chips: region, levels, where it leads; the way here as one line.
+  const info = a.info || {};
+  const areaLink = (name: string) => { const l = areas.find((x) => x.name.toLowerCase() === name.toLowerCase()); return l ? `<a class="text-[#a87ffb] hover:text-white" href="../${esc(l.slug)}/index.html">${esc(name)}</a>` : esc(name); };
+  const chip = (label: string, html: string) => `<span class="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-0.5 text-xs text-zinc-400">${esc(label)} <span class="text-zinc-200">${html}</span></span>`;
+  const chips = [info.region && chip(ui('infoRegion'), esc(info.region)), info.levels && chip(ui('infoLevels'), esc(info.levels)), info.connected?.length && chip(ui('infoConnected'), info.connected.map(areaLink).join(' · ')), info.quests?.length && chip(ui('relatedQuests'), String(info.quests.length))].filter(Boolean);
+  const lead = place?.short || String(a.overview || '').split(/(?<=[.!?])\s/)[0] || '';
+  const factCount = recs.filter((r) => r.type !== 'place').length;
+  const checkedCount = recs.filter((r) => r.type !== 'place' && r.status === 'checked').length;
+  const lastChecked = Math.max(0, ...recs.map((r) => Number(r.checkedAt || 0)));
+  const trust = factCount ? `<p class="mt-6 border-t border-white/10 pt-3 text-xs text-zinc-500">${factCount} facts on this page · ${checkedCount} checked${factCount > checkedCount ? ` · ${factCount - checkedCount} still being checked` : ''}${publicSources(a.sources).length ? ` · from ${esc(publicSources(a.sources).slice(0, 5).join(', '))}${publicSources(a.sources).length > 5 ? ' and others' : ''}` : ''}${lastChecked ? ` · last checked ${new Date(lastChecked).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}</p>` : '';
+
+  const sectionLinks: [string, string][] = [
+    ...(before ? [['before-you-leave', 'Before you leave'] as [string, string]] : []),
+    ...(checklist ? [['checklist', ui('items')] as [string, string]] : []),
+    ...(route ? [['walkthrough', ui('route')] as [string, string]] : []),
+    ...(choices ? [['choices', ui('choicesHere')] as [string, string]] : []),
+    ...(fights ? [['fights', ui('fights')] as [string, string]] : []),
+    ...(achHtml ? [['achievements', ui('achHere')] as [string, string]] : []),
+    ...(secrets ? [['secrets', ui('secrets')] as [string, string]] : []),
+    ...(shops ? [['shops', ui('shops')] as [string, string]] : []),
+    ...(enemies ? [['enemies', ui('enemies')] as [string, string]] : []),
+  ];
+  const jump = sectionLinks.length > 2
+    ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex xl:hidden flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">${esc(ui('onThisPage'))}:</span>${sectionLinks.map(([id, label]) => `<a href="#${id}" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(label)}</a>`).join('')}</nav>`
+    : '';
+  const navCard = (x: AreaLink | undefined, dir: 'prev' | 'next') =>
+    x
+      ? `<a href="../${esc(x.slug)}/index.html" class="flex-1 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/40 hover:bg-white/[0.06] px-4 py-3 ${dir === 'next' ? 'text-right' : ''}"><div class="text-[11px] uppercase tracking-wide text-zinc-500">${dir === 'prev' ? `&larr; ${esc(ui('previous'))}` : `${esc(ui('next'))} &rarr;`}</div><div class="text-sm font-semibold text-white truncate">${esc(x.name)}</div></a>`
+      : '<span class="flex-1"></span>';
+  const sidebar = (id: string) => `<nav aria-label="${esc(game)}" class="qc-scroll"><a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>${guideSearchBox(gameKey, `#${id}`, 'mb-2')}<ul id="${id}" class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
+
+  return `
+  <div class="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_15rem] lg:gap-8">
+    <aside class="hidden lg:block"><div class="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto qc-scroll pr-1">${sidebar('qc-areas-side')}</div></aside>
+    <article class="min-w-0 w-full max-w-3xl mx-auto">
+      <p class="qc-site-only text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="${up}${LP}guides/index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(game)}</a></p>
+      <h1 class="text-3xl font-bold text-white leading-tight">${esc(a.name)}</h1>
+      <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
+        <span>${esc(ui('guideOf', { game }))}${a.story ? ` · ${esc(a.story)}` : ''}</span>
+        ${a.verified === true ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))}</span>` : ''}
+      </div>
+      <a href="../index.html" class="qc-site-only lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
+      ${(() => {
+        const pic = pagePicture(gameKey, a.slug);
+        const ov = lead ? `<p class="mt-4 text-zinc-300 leading-relaxed">${rich(lead)}</p>` : '';
+        return pic ? `<div class="mt-5">${heroHtml(pic)}${ov.replace('class="mt-4 ', 'class="')}</div><div class="clear-both"></div>` : ov;
+      })()}
+      ${chips.length ? `<div class="mt-3 flex flex-wrap gap-1.5">${chips.join('')}</div>` : ''}
+      ${info.directions ? `<p class="mt-2 text-xs text-zinc-500"><span class="text-zinc-400">${esc(ui('infoWay'))}:</span> ${esc(info.directions)}${info.coords ? ` (${esc(info.coords)})` : ''}</p>` : ''}
+      ${jump}
+      ${before}
+      ${checklist}
+      ${route}
+      ${choices}
+      ${fights}
+      ${missionsHere(a.slug, areas)}
+      ${peopleCards(a.slug, (a as any).people)}
+      ${shops}
+      ${achHtml}
+      ${secrets}
+      ${sections}
+      ${enemies}
+      ${tips}
+      ${playersAsked(gameKey, a.slug)}
+      ${askBox(gameKey, game, a.slug, 'area', a.name)}
+      ${oldText}
+      ${trust}
+      ${prev || next ? `<div class="mt-8 flex gap-3">${navCard(prev, 'prev')}${navCard(next, 'next')}</div>` : ''}
+      ${cta(up, game)}
+    </article>
+    ${rail(sectionLinks)}
+  </div>`;
+}
+
 /**
  * The homepage's "Free guides" section, between the QC-GUIDES markers in Marketing_Website_Files/index.html: a tile per
  * game with published pages, rewritten on every run so it grows with the guides. Draft-only games are left out.
@@ -1524,7 +1723,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
         canonical: untranslated ? `${SITE}/guides/${key}/${o.slug}/` : url,
         ld,
         wide: true,
-        body: areaBody(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra), achHere ? (achHere.list || []).filter((x: any) => x.area === o.slug) : []) + entPreview(),
+        body: (factPageOn(key, o.slug) ? factAreaBody : areaBody)(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra), achHere ? (achHere.list || []).filter((x: any) => x.area === o.slug) : []) + entPreview(),
         draft,
         noindex: held,
         guide: key,
@@ -2752,7 +2951,8 @@ async function main() {
   const guides = { docs: allGuides.filter((d) => !RETIRED.has(d.id) && (!ONLY || d.id === ONLY)) };
   // A preview carries the game's flagship prototypes (guidePrototypes/{key}__{slug}) on their pages.
   const protos = new Map<string, any>();
-  if (PREVIEW) for (const d of (await db().collection('guidePrototypes').get()).docs) protos.set(d.id, d.data());
+  // QC_NO_PROTOS=1: a preview of the live pages as they are (no flagship prototypes laid over them).
+  if (PREVIEW && !process.env.QC_NO_PROTOS) for (const d of (await db().collection('guidePrototypes').get()).docs) protos.set(d.id, d.data());
   // Pages the nightly improvements folded into another page (autoImprove.ts merges, live until undone on
   // /admin/asked): left out, their old addresses redirecting to the page that has them now.
   const merged = new Map<string, Map<string, string>>();
@@ -2763,6 +2963,8 @@ async function main() {
   }
   // Loaded before the first page they go on: the compendium's pages just below, then the guide pages.
   const ownerEdits = await loadOwnerEdits(ONLY);
+  // Fact pages (roadmap 29): the guides switched to pages drawn from the fact database.
+  await loadFactPages(ONLY || '');
   // The compendium (scripts/guides/compendium.ts): each guide's published entity pages (a preview shows all of them).
   for (const cd of (await db().collection('guideCompendium').get()).docs) {
     if (ONLY && cd.id !== ONLY) continue;
