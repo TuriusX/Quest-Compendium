@@ -1263,7 +1263,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
     const how = e.how || r?.fields?.how;
     const lockout = e.lockout || r?.fields?.lockout;
     const gaps: string[] = r?.gaps || [];
-    const html = `<strong class="text-white">${esc(e.name)}</strong>${e.missable ? tag('Missable', 'amber') : ''}${r?.status === 'disputed' ? tag('Being re-checked', 'dim') : r?.status === 'unconfirmed' && !UNCONFIRMED.has(e.id) ? tag('Not yet confirmed', 'dim') : ''}` +
+    const html = `<strong class="text-white">${esc(e.name)}</strong>${e.missable ? tag('Missable', 'amber') : ''}${r?.status === 'disputed' ? tag('Being re-checked', 'dim') : r?.status === 'unconfirmed' && a.verified !== false && !UNCONFIRMED.has(e.id) ? tag('Not yet confirmed', 'dim') : ''}` +
       `${e.where ? `<span class="block text-zinc-400 mt-0.5">${esc(e.where)}</span>` : ''}` +
       `${how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(how)}</span>` : ''}` +
       `${lockout ? `<span class="block text-xs text-amber-300/90 mt-0.5"><span class="text-amber-200/70">${esc(ui('itemLockout'))}:</span> ${esc(lockout)}</span>` : e.missable && gaps.includes('no lockout') ? `<span class="block text-xs italic text-zinc-500 mt-0.5">What locks it out: being checked</span>` : ''}${entryPic(e.id)}`;
@@ -1386,6 +1386,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
       })()}
       ${chips.length ? `<div class="mt-3 flex flex-wrap gap-1.5">${chips.join('')}</div>` : ''}
       ${info.directions ? `<p class="mt-2 text-xs text-zinc-500"><span class="text-zinc-400">${esc(ui('infoWay'))}:</span> ${esc(info.directions)}${info.coords ? ` (${esc(info.coords)})` : ''}</p>` : ''}
+      ${a.verified === false && factCount ? `<p class="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-400">This page isn't fully checked yet: <strong class="text-zinc-200">${checkedCount} of ${factCount} facts</strong> confirmed against sources so far. The rest are being checked, most-searched pages first.</p>` : ''}
       ${jump}
       ${before}
       ${checklist}
