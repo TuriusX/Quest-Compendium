@@ -1263,8 +1263,9 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
     const how = e.how || r?.fields?.how;
     const lockout = e.lockout || r?.fields?.lockout;
     const gaps: string[] = r?.gaps || [];
+    const where = factWhere(e, r);
     const html = `<strong class="text-white">${esc(e.name)}</strong>${e.missable ? tag('Missable', 'amber') : ''}${r?.status === 'disputed' ? tag('Being re-checked', 'dim') : r?.status === 'unconfirmed' && a.verified !== false && !UNCONFIRMED.has(e.id) ? tag('Not yet confirmed', 'dim') : ''}` +
-      `${e.where ? `<span class="block text-zinc-400 mt-0.5">${esc(e.where)}</span>` : ''}` +
+      `${where ? `<span class="block text-zinc-400 mt-0.5">${esc(where)}</span>` : ''}${spotPending(r)}` +
       `${how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(how)}</span>` : ''}` +
       `${lockout ? `<span class="block text-xs text-amber-300/90 mt-0.5"><span class="text-amber-200/70">${esc(ui('itemLockout'))}:</span> ${esc(lockout)}</span>` : e.missable && gaps.includes('no lockout') ? `<span class="block text-xs italic text-zinc-500 mt-0.5">What locks it out: being checked</span>` : ''}${entryPic(e.id)}`;
     return checkRow(e.id, html, true, kindIcon(entryKind({ section: 'items', name: e.name, where: e.where })));
@@ -1429,6 +1430,10 @@ const FACT_LIST_KINDS = [
   { id: 'merchants', title: (g: string) => `All merchants in ${g}`, lede: 'Every merchant and trader the guide lists, with where they are and what they sell.' },
 ] as const;
 
+/** An item's location on a fact page: the followable one when it has one (an owner's edit makes that lapse), else the page's. */
+function factWhere(e: { where?: string }, r: any): string { return String((r?.located ? r.fields?.where : e.where) || ''); }
+/** Said plainly when a location only names the spot (owner, Nov 9 2026), so a thin one never looks finished. */
+function spotPending(r: any): string { return (r?.gaps || []).includes('vague where') ? '<span class="block text-xs italic text-zinc-500 mt-0.5">Exact spot: being checked</span>' : ''; }
 function buildFactLists(key: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>): void {
   FACT_LISTS.delete(key);
   if (!(LANG === 'en' && FACT_KEYS.has(key))) return;
@@ -1465,10 +1470,10 @@ function renderFactLists(key: string, gameName: string, sitemap: string[]): void
     let head: string[] = [], body = '';
     if (kind.id === 'missables') {
       head = ['', 'Item', 'Area', 'Where and how', 'What locks it out'];
-      body = rows.map((x) => { const lock = x.e.lockout || x.r?.fields?.lockout; const how = x.e.how || x.r?.fields?.how; return `<tr data-fr>${tick(x)}${td(`<strong class="text-white">${esc(x.e.name)}</strong>`, 'min-w-[9rem]')}${areaCell(x, `e-${x.e.id}`)}${td(`${esc(x.e.where || '')}${how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(how)}</span>` : ''}`, 'min-w-[14rem]')}${td(lock ? `<span class="text-amber-300/90">${esc(lock)}</span>` : '<span class="italic text-zinc-500">Being checked</span>', 'min-w-[12rem]')}</tr>`; }).join('');
+      body = rows.map((x) => { const lock = x.e.lockout || x.r?.fields?.lockout; const how = x.e.how || x.r?.fields?.how; return `<tr data-fr>${tick(x)}${td(`<strong class="text-white">${esc(x.e.name)}</strong>`, 'min-w-[9rem]')}${areaCell(x, `e-${x.e.id}`)}${td(`${esc(factWhere(x.e, x.r))}${spotPending(x.r)}${how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(how)}</span>` : ''}`, 'min-w-[14rem]')}${td(lock ? `<span class="text-amber-300/90">${esc(lock)}</span>` : '<span class="italic text-zinc-500">Being checked</span>', 'min-w-[12rem]')}</tr>`; }).join('');
     } else if (kind.id === 'items') {
       head = ['', 'Item', 'Area', 'Where'];
-      body = rows.map((x) => `<tr data-fr>${tick(x)}${td(`<strong class="text-white">${esc(x.e.name)}</strong>${x.e.missable ? missTag : ''}`, 'min-w-[9rem]')}${areaCell(x, `e-${x.e.id}`)}${td(esc(x.e.where || ''), 'min-w-[14rem]')}</tr>`).join('');
+      body = rows.map((x) => `<tr data-fr>${tick(x)}${td(`<strong class="text-white">${esc(x.e.name)}</strong>${x.e.missable ? missTag : ''}`, 'min-w-[9rem]')}${areaCell(x, `e-${x.e.id}`)}${td(`${esc(factWhere(x.e, x.r))}${spotPending(x.r)}`, 'min-w-[14rem]')}</tr>`).join('');
     } else if (kind.id === 'bosses') {
       head = ['Fight', 'Area', 'Watch for', ui('fightWeak'), ui('fightRewards')];
       body = rows.map((x) => `<tr data-fr>${td(`<strong class="text-white">${esc(x.e.name)}</strong>`, 'min-w-[9rem]')}${areaCell(x, String(x.e.id))}${td(esc(x.e.threats || ''), 'min-w-[12rem]')}${td(esc(x.e.weaknesses || ''), 'min-w-[10rem]')}${td(esc(x.e.rewards || ''), 'min-w-[9rem]')}</tr>`).join('');

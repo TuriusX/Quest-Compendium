@@ -945,9 +945,9 @@ async function main() {
     const r = runScript(['scripts/guides/recordsImport.ts']);
     if (!r.ok) report.push('⚠️ Updating the fact database failed (see the job log).');
   }
-  // Fact checks paid from the owner's own fund, not the pipeline's cap (roadmap 29; owner, Nov 9 2026: "spend a little
-  // each night"): system/factWork { budget, spent, nightly }. Runs last, only with search room left for the day, on the
-  // guides' most-searched unchecked facts (recordsVerify.ts); the results go live with the next night's publish.
+  // Exact locations paid from the owner's own fund, not the pipeline's cap (roadmap 29; owner, Nov 9 2026: "spend a little
+  // each night", then switched to locations): system/factWork { budget, spent, nightly }. Runs last, only with search room
+  // left for the day, missables on the most-searched pages first (recordsLocate.ts); the results go live with the next night's publish.
   if (!DRY) {
     try {
       const fwRef = db().collection('system').doc('factWork');
@@ -957,16 +957,16 @@ async function main() {
       const keys: string[] = ((await db().collection('config').doc('factPages').get()).data() as any)?.guides || [];
       if (left > 0.1 && room >= 150 && keys.length) {
         const night = Math.min(left, Number(fw.nightly || 1.5));
-        const r = spawnSync('npx', ['tsx', 'scripts/guides/recordsVerify.ts', '--only', keys.join(','), '--max-dollars', night.toFixed(2)], { encoding: 'utf8', timeout: 45 * 60_000, maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32', env: { ...process.env, PIPELINE_STEP_DOLLARS: night.toFixed(2) } });
+        const r = spawnSync('npx', ['tsx', 'scripts/guides/recordsLocate.ts', '--search', '--only', keys.join(','), '--max-dollars', night.toFixed(2)], { encoding: 'utf8', timeout: 45 * 60_000, maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32', env: { ...process.env, PIPELINE_STEP_DOLLARS: night.toFixed(2) } });
         const out = `${r.stdout || ''}\n${r.stderr || ''}`;
         const usage = out.match(/^Usage: \d+ call\(s\), .*? = \$(\d+(?:\.\d+)?)/m);
         const spent = usage ? Number(usage[1]) : night;
-        const line = (out.match(/^Verified [^\n]*/m) || [''])[0].replace(/; \$[\d.]+ in .*$/, '');
+        const line = (out.match(/^Located [^\n]*/m) || [''])[0].replace(/; \$[\d.]+ in .*$/, '');
         await fwRef.set({ spent: Number(fw.spent || 0) + spent, lastNight: { at: Date.now(), dollars: spent, line } }, { merge: true });
-        report.push(`🗃️ Fact checks (your $${Number(fw.budget).toFixed(2)} fund): ${line || 'nothing checked'}; $${spent.toFixed(2)} tonight, $${Math.max(0, left - spent).toFixed(2)} left.`);
+        report.push(`📍 Exact locations (your $${Number(fw.budget).toFixed(2)} fund): ${line || 'nothing found'}; $${spent.toFixed(2)} tonight, $${Math.max(0, left - spent).toFixed(2)} left.`);
       }
     } catch (e: any) {
-      console.warn(`Fact checks skipped: ${e?.message}`);
+      console.warn(`Exact locations skipped: ${e?.message}`);
     }
   }
 

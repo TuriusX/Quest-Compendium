@@ -54,6 +54,8 @@ export type GameRecord = {
   tier: Tier;
   status: RecordStatus;
   gaps?: string[];
+  /** Set when `fields.where` was replaced by a location a player can follow (recordsLocate.ts); `was` is the old text. */
+  located?: { from: 'page' | 'search'; was: string; quote?: string; sources?: string[] };
   /** Where it came from (for re-imports and the pages that still render the old way). */
   origin: { from: 'area' | 'entity' | 'achievements' | 'gameFacts' | 'extract'; slug?: string; entry?: string };
   /** Fields filled from the page's own prose (recordsExtract.ts), each backed by a word-for-word quote. */
@@ -88,6 +90,22 @@ function fieldsOf(o: Record<string, unknown>): Record<string, string | string[]>
   }
   return out;
 }
+
+/**
+ * How findable a location is. "spot" only names the container or object ("Inside an Ornate Chest under the Scuffed
+ * Rock") and "none" says nothing: both are vague. "side" gives some direction within the place, "route" says how to
+ * walk there or starts from a fast-travel point, "coords" gives map coordinates. The owner's standard (Nov 9 2026): a
+ * player must be able to go from the database to the thing. A pattern check, kept to the records: it doesn't touch the
+ * builders' review (review.ts uses missableGaps), so tightening it starts no paid repairs.
+ */
+const WHERE_COORDS = /\bX\s*[:=]?\s*-?\d+|\(-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\)|coordinates?\b/i;
+const WHERE_ROUTE = /\b(from|starting at|head|walk|go|follow|take|climb|descend|turn)\b.*\b(to|toward|towards|into|past|until|along|up|down)\b|waypoint|fast travel|bonfire|site of grace|save (room|point)|campfire/i;
+const WHERE_SIDE = /\b(north|south|east|west|northeast|northwest|southeast|southwest|north-east|north-west|south-east|south-west|left|right|floor|upstairs|downstairs|basement|entrance|corner|next to|beside|behind|opposite|across from|end of)\b/i;
+export const whereBand = (where: unknown): 'none' | 'spot' | 'side' | 'route' | 'coords' => {
+  const w = String(where || '').trim();
+  return !w ? 'none' : WHERE_COORDS.test(w) ? 'coords' : WHERE_ROUTE.test(w) ? 'route' : WHERE_SIDE.test(w) ? 'side' : 'spot';
+};
+export const vagueWhere = (where: unknown) => ['none', 'spot'].includes(whereBand(where));
 
 export const recordHash = (r: GameRecord) => {
   const { hash: _h, importedAt: _i, impressions: _p, ...rest } = r;
@@ -137,7 +155,8 @@ export function areaRecords(key: string, a: GuideArea & Record<string, any>, imp
   }));
   (a.items || []).forEach((e: any, i: number) => {
     const t = tierOf(e);
-    const gaps = e.missable ? missableGaps(e) : [];
+    // Every item needs a spot a player can find, not only the missables (owner, Nov 9 2026).
+    const gaps = [...new Set([...(e.missable ? missableGaps(e) : []), ...(vagueWhere(e.where) ? ['vague where'] : [])])];
     out.push(finish({ ...base, id: docId('area', slug, e.id || `i${i}`), type: 'item', name: clean(e.name, 160), order: i, missable: !!e.missable,
       fields: fieldsOf({ where: e.where, how: e.how, lockout: e.lockout }), sources: srcOf(e), tier: t, status: statusOf(t), gaps, origin: { from: 'area', slug, entry: e.id } }));
   });
@@ -297,7 +316,7 @@ export function applyExtracted(recs: GameRecord[], x: { sig: string; shorts: any
     if (!r || r.fields[f.field]) continue;
     r.fields[f.field] = String(f.value);
     r.extracted = [...(r.extracted || []), { field: String(f.field), quote: String(f.quote) }];
-    if (r.gaps && GAP_OF[f.field]) r.gaps = r.gaps.filter((g) => g !== GAP_OF[f.field]);
+    if (r.gaps && GAP_OF[f.field] && !(f.field === 'where' && vagueWhere(f.value))) r.gaps = r.gaps.filter((g) => g !== GAP_OF[f.field]);
   }
   const first = recs[0];
   const pageSources = recs.find((r) => r.type === 'place')?.sources || first.sources;
@@ -309,6 +328,26 @@ export function applyExtracted(recs: GameRecord[], x: { sig: string; shorts: any
     sources: pageSources, tier: 'B', status: 'unconfirmed', origin: { from: 'extract', slug: first.place, entry: String(i) },
   }));
   return [...recs.map((r) => finish(r)), ...added];
+}
+
+/** One record's new location (recordsLocate.ts). `was` is the text it replaces: if that changes, the new one lapses. */
+export type LocatedEntry = { was: string; where: string; from: 'page' | 'search'; quote?: string; sources?: string[]; checked?: boolean; unconfirmedSource?: boolean };
+/**
+ * Locations a player can follow (recordsLocate.ts), laid over the records whose old text is unchanged, so an owner's
+ * edit or a rebuild always wins. Goes on before the verify results: those were for the old text, so a record whose
+ * location changed counts only as checked again if the new one was. A location taken from text that isn't itself
+ * checked can't leave its record marked checked.
+ */
+export function applyLocated(recs: GameRecord[], x: { results?: Record<string, LocatedEntry> } | undefined, at?: number): GameRecord[] {
+  if (!x?.results) return recs;
+  return recs.map((r) => {
+    const l = x.results![r.id];
+    if (!l || String(r.fields?.where || '') !== l.was) return r;
+    const next: any = { ...r, fields: { ...r.fields, where: l.where }, gaps: (r.gaps || []).filter((g) => g !== 'vague where'), located: { from: l.from, was: l.was, ...(l.quote ? { quote: l.quote } : {}), ...(l.sources?.length ? { sources: l.sources } : {}) } };
+    if (l.checked) { next.tier = 'A'; next.status = 'checked'; next.checkedAt = at || r.checkedAt; }
+    else if (l.unconfirmedSource && r.status === 'checked') { next.tier = 'B'; next.status = 'unconfirmed'; }
+    return finish(next);
+  });
 }
 
 /** A record's content as the verify step checked it (its type, name and fields): a changed record is checked again. */

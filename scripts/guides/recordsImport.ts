@@ -6,7 +6,7 @@
  *   npx tsx scripts/guides/recordsImport.ts [--only KEY] [--dry-run]
  */
 import { db, arg } from './common';
-import { areaRecords, entityRecords, achievementRecords, gameFactRecord, applyExtracted, applyVerified, type GameRecord } from './records';
+import { areaRecords, entityRecords, achievementRecords, gameFactRecord, applyExtracted, applyLocated, applyVerified, type GameRecord } from './records';
 import { loadOwnerEdits, applyOwnerEdits } from './ownerEditsPublish';
 import { loadPageStats, statOf } from './pageStats';
 
@@ -57,6 +57,12 @@ async function collect(only = ''): Promise<Map<string, GameRecord[]>> {
     const rest: GameRecord[] = [];
     for (const r of recs) (r.place && (r.origin.from === 'area' || r.origin.from === 'entity') ? (byPlace.get(r.place) || byPlace.set(r.place, []).get(r.place)!).push(r) : rest.push(r));
     out.set(key, [...rest, ...[...byPlace].flatMap(([slug, rs]) => applyExtracted(rs, ex.get(slug)))]);
+  }
+  // Locations a player can follow (recordsLocate.ts), while the text each replaces is unchanged. Before the verify results (see applyLocated).
+  for (const [key, recs] of out) {
+    const lo = new Map<string, any>(((await RECORDS().doc(key).collection('located').get().catch(() => null))?.docs || []).map((d) => [d.id, d.data() as any]));
+    if (!lo.size) continue;
+    out.set(key, recs.map((r) => (r.place && lo.has(r.place) ? applyLocated([r], lo.get(r.place), lo.get(r.place).at)[0] : r)));
   }
   // The verify step's results (recordsVerify.ts): checked, disputed or still unconfirmed, while a record is unchanged.
   for (const [key, recs] of out) {
