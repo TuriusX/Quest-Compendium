@@ -78,6 +78,7 @@ import { suggestNightly } from '../guides/suggestImages';
 import { isCorePage } from '../guides/core';
 import { playerWeekLines } from './playerWeek';
 import { siteAskWeekLine, siteFixWeekLine } from '../../siteAskStats';
+import { recordsWeekLine } from '../guides/recordsImport';
 import { autoWeekLines } from '../../autoChanges';
 import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
 import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY } from '../../searchGuard';
@@ -938,6 +939,12 @@ async function main() {
     } else if (p.ok) report.push('(Netlify settings missing, so the site was rebuilt but not deployed.)');
   }
   if (siteLock && !isRefusal(siteLock)) await siteLock.release();
+  // The fact database (records.ts, roadmap 29): brought in step with what was just published. No AI, no cost; only
+  // changed records are written. Nothing reads it yet; Monday's summary counts it.
+  if (changed && !DRY) {
+    const r = runScript(['scripts/guides/recordsImport.ts']);
+    if (!r.ok) report.push('⚠️ Updating the fact database failed (see the job log).');
+  }
 
   // ---- 5. yesterday's activity (stats/{day} from the server) and sign-ups (Firebase Auth) ----
   try {
@@ -1069,6 +1076,8 @@ async function main() {
     try {
       report.push(await siteAskWeekLine());
       report.push(await siteFixWeekLine());
+      const rl = await recordsWeekLine();
+      if (rl) report.push(rl);
     } catch (e: any) {
       console.warn(`Site questions line skipped: ${e?.message}`);
     }
