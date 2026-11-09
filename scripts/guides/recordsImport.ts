@@ -6,7 +6,7 @@
  *   npx tsx scripts/guides/recordsImport.ts [--only KEY] [--dry-run]
  */
 import { db, arg } from './common';
-import { areaRecords, entityRecords, achievementRecords, gameFactRecord, applyExtracted, type GameRecord } from './records';
+import { areaRecords, entityRecords, achievementRecords, gameFactRecord, applyExtracted, applyVerified, type GameRecord } from './records';
 import { loadOwnerEdits, applyOwnerEdits } from './ownerEditsPublish';
 import { loadPageStats, statOf } from './pageStats';
 
@@ -57,6 +57,12 @@ async function collect(only = ''): Promise<Map<string, GameRecord[]>> {
     const rest: GameRecord[] = [];
     for (const r of recs) (r.place && (r.origin.from === 'area' || r.origin.from === 'entity') ? (byPlace.get(r.place) || byPlace.set(r.place, []).get(r.place)!).push(r) : rest.push(r));
     out.set(key, [...rest, ...[...byPlace].flatMap(([slug, rs]) => applyExtracted(rs, ex.get(slug)))]);
+  }
+  // The verify step's results (recordsVerify.ts): checked, disputed or still unconfirmed, while a record is unchanged.
+  for (const [key, recs] of out) {
+    const vd = new Map<string, any>(((await RECORDS().doc(key).collection('verified').get().catch(() => null))?.docs || []).map((d) => [d.id, d.data() as any]));
+    if (!vd.size) continue;
+    out.set(key, recs.map((r) => (r.place && vd.has(r.place) ? applyVerified([r], vd.get(r.place))[0] : r)));
   }
   for (const g of (await db().collection('gameFacts').get()).docs) {
     if (only && g.id !== only) continue;

@@ -1260,7 +1260,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
     const how = e.how || r?.fields?.how;
     const lockout = e.lockout || r?.fields?.lockout;
     const gaps: string[] = r?.gaps || [];
-    const html = `<strong class="text-white">${esc(e.name)}</strong>${e.missable ? tag('Missable', 'amber') : ''}${r?.status === 'unconfirmed' && !UNCONFIRMED.has(e.id) ? tag('Not yet confirmed', 'dim') : ''}` +
+    const html = `<strong class="text-white">${esc(e.name)}</strong>${e.missable ? tag('Missable', 'amber') : ''}${r?.status === 'disputed' ? tag('Being re-checked', 'dim') : r?.status === 'unconfirmed' && !UNCONFIRMED.has(e.id) ? tag('Not yet confirmed', 'dim') : ''}` +
       `${e.where ? `<span class="block text-zinc-400 mt-0.5">${esc(e.where)}</span>` : ''}` +
       `${how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(how)}</span>` : ''}` +
       `${lockout ? `<span class="block text-xs text-amber-300/90 mt-0.5"><span class="text-amber-200/70">${esc(ui('itemLockout'))}:</span> ${esc(lockout)}</span>` : e.missable && gaps.includes('no lockout') ? `<span class="block text-xs italic text-zinc-500 mt-0.5">What locks it out: being checked</span>` : ''}${entryPic(e.id)}`;
@@ -1278,7 +1278,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
     ? `<section id="before-you-leave" class="mt-6 scroll-mt-20 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-4">
         <h2 class="flex items-center gap-2 text-base font-bold text-amber-200">${ICON.warn} Before you leave</h2>
         <ul class="mt-2 space-y-1.5 text-sm text-zinc-200">
-          ${missCount ? `<li class="flex gap-2"><span class="text-amber-300">&bull;</span><span><strong class="text-white">${missCount} missable${missCount === 1 ? '' : 's'} here</strong>: what locks each one out is under it. <a href="#checklist" class="text-[#a87ffb] hover:text-white">See the checklist</a></span></li>` : ''}
+          ${missCount ? `<li class="flex gap-2"><span class="text-amber-300">&bull;</span><span><strong class="text-white">${missCount} missable${missCount === 1 ? '' : 's'} here</strong>: what locks each one out is under it. <a href="#checklist" class="text-[#a87ffb] hover:text-white">See the checklist</a>${FACT_LISTS.get(gameKey)?.has('missables') ? ` · <a href="../missables/" class="text-[#a87ffb] hover:text-white">All missables in ${esc(shortGame(game))}</a>` : ''}</span></li>` : ''}
           ${warns.slice(0, 6).map((w) => `<li class="flex gap-2"><span class="text-amber-300">&bull;</span><span>${esc(w.short || w.fields?.text || w.name)}</span></li>`).join('')}
         </ul>
         <p class="qc-site-only mt-2 text-xs text-zinc-500">${esc(ui('appMissables'))} <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white">${esc(ui('appLink'))} &rarr;</a></p>
@@ -1406,6 +1406,103 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
     </article>
     ${rail(sectionLinks)}
   </div>`;
+}
+
+
+/**
+ * The game's database lists (roadmap 29): for a guide on fact pages, one page per kind of fact across the whole game,
+ * each row linking to its area page: every missable (with where, how and what locks it out), every item, every key
+ * fight and every merchant. Ticks are the area pages' own (the row's area and entry id), so ticking here is ticking
+ * there, and it syncs with the account the same way. A list is made only with 8 or more rows, and only where its
+ * address isn't an area's.
+ */
+type FactRow = { slug: string; area: string; e: any; r?: any };
+const FACT_LISTS = new Map<string, Map<string, FactRow[]>>();
+const FACT_LIST_KINDS = [
+  { id: 'missables', title: (g: string) => `All missables in ${g}`, lede: 'Everything you can permanently miss, in the order you reach it: where it is, how to get it and what locks it out.' },
+  { id: 'items', title: (g: string) => `All items in ${g}`, lede: 'Every item the guide lists, area by area, with where to find it.' },
+  { id: 'bosses', title: (g: string) => `All bosses and key fights in ${g}`, lede: 'Every key fight, in the order you reach it: what to watch for, what it is weak to and what it drops.' },
+  { id: 'merchants', title: (g: string) => `All merchants in ${g}`, lede: 'Every merchant and trader the guide lists, with where they are and what they sell.' },
+] as const;
+
+function buildFactLists(key: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>): void {
+  FACT_LISTS.delete(key);
+  if (!(LANG === 'en' && FACT_KEYS.has(key))) return;
+  const recs = FACT_RECS.get(key) || new Map();
+  const taken = new Set(visible.map((o) => o.slug));
+  const out = new Map<string, FactRow[]>();
+  const add = (id: string, row: FactRow) => out.set(id, [...(out.get(id) || []), row]);
+  for (const o of visible) {
+    const a = byslug.get(o.slug);
+    if (!a || a.status !== 'published') continue;
+    const rec = new Map<string, any>((recs.get(o.slug) || []).filter((r: any) => r.origin?.from === 'area').map((r: any) => [String(r.origin.entry ?? ''), r]));
+    for (const e of a.items || []) { add('items', { slug: o.slug, area: a.name, e, r: rec.get(String(e.id)) }); if (e.missable) add('missables', { slug: o.slug, area: a.name, e, r: rec.get(String(e.id)) }); }
+    for (const f of a.fights || []) add('bosses', { slug: o.slug, area: a.name, e: f });
+    for (const s of a.shops || []) add('merchants', { slug: o.slug, area: a.name, e: s });
+  }
+  for (const [id, rows] of [...out]) if (rows.length < 8 || taken.has(id)) out.delete(id);
+  if (out.size) FACT_LISTS.set(key, out);
+}
+
+function renderFactLists(key: string, gameName: string, sitemap: string[]): void {
+  const lists = FACT_LISTS.get(key);
+  if (!lists) return;
+  const sg = shortGame(gameName);
+  const dir = path.join(OUT, LP, 'guides', key);
+  const th = (s: string) => `<th class="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-500 whitespace-nowrap">${esc(s)}</th>`;
+  const td = (html: string, cls = '') => `<td class="px-3 py-2.5 align-top text-zinc-300 ${cls}">${html}</td>`;
+  const missTag = ` <span class="ml-1 inline-block rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-px align-middle text-[10px] font-bold uppercase tracking-wide text-amber-300">Missable</span>`;
+  const areaCell = (x: FactRow, anchor: string) => td(`<a class="text-[#a87ffb] hover:text-white" href="../${esc(x.slug)}/#${esc(anchor)}">${esc(x.area)}</a>`, 'min-w-[8rem]');
+  const tick = (x: FactRow) => td(`<input type="checkbox" class="h-4 w-4 cursor-pointer accent-[#a87ffb]" data-xt="${esc(`${x.slug}|${x.e.id}`)}" aria-label="${esc(ui('gotIt'))}: ${esc(x.e.name || '')}">`, 'w-8');
+  for (const kind of FACT_LIST_KINDS) {
+    const rows = lists.get(kind.id);
+    if (!rows) continue;
+    let head: string[] = [], body = '';
+    if (kind.id === 'missables') {
+      head = ['', 'Item', 'Area', 'Where and how', 'What locks it out'];
+      body = rows.map((x) => { const lock = x.e.lockout || x.r?.fields?.lockout; const how = x.e.how || x.r?.fields?.how; return `<tr data-fr>${tick(x)}${td(`<strong class="text-white">${esc(x.e.name)}</strong>`, 'min-w-[9rem]')}${areaCell(x, `e-${x.e.id}`)}${td(`${esc(x.e.where || '')}${how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(how)}</span>` : ''}`, 'min-w-[14rem]')}${td(lock ? `<span class="text-amber-300/90">${esc(lock)}</span>` : '<span class="italic text-zinc-500">Being checked</span>', 'min-w-[12rem]')}</tr>`; }).join('');
+    } else if (kind.id === 'items') {
+      head = ['', 'Item', 'Area', 'Where'];
+      body = rows.map((x) => `<tr data-fr>${tick(x)}${td(`<strong class="text-white">${esc(x.e.name)}</strong>${x.e.missable ? missTag : ''}`, 'min-w-[9rem]')}${areaCell(x, `e-${x.e.id}`)}${td(esc(x.e.where || ''), 'min-w-[14rem]')}</tr>`).join('');
+    } else if (kind.id === 'bosses') {
+      head = ['Fight', 'Area', 'Watch for', ui('fightWeak'), ui('fightRewards')];
+      body = rows.map((x) => `<tr data-fr>${td(`<strong class="text-white">${esc(x.e.name)}</strong>`, 'min-w-[9rem]')}${areaCell(x, String(x.e.id))}${td(esc(x.e.threats || ''), 'min-w-[12rem]')}${td(esc(x.e.weaknesses || ''), 'min-w-[10rem]')}${td(esc(x.e.rewards || ''), 'min-w-[9rem]')}</tr>`).join('');
+    } else {
+      head = ['Merchant', 'Area', 'Sells'];
+      body = rows.map((x) => `<tr data-fr>${td(`<strong class="text-white">${esc(x.e.name)}</strong>`, 'min-w-[9rem]')}${areaCell(x, `e-${x.e.id}`)}${td(esc(x.e.sells || ''), 'min-w-[14rem]')}</tr>`).join('');
+    }
+    const ticks = kind.id === 'missables' || kind.id === 'items';
+    const others = FACT_LIST_KINDS.filter((k) => k.id !== kind.id && lists.has(k.id)).map((k) => `<a href="../${k.id}/" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(k.title(sg).replace(` in ${sg}`, ''))}</a>`).join('');
+    const title = kind.title(sg);
+    const url = `${SITE}/${LP}guides/${key}/${kind.id}/`;
+    const html = `
+      <article class="min-w-0 w-full max-w-5xl mx-auto">
+        <p class="qc-site-only text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../index.html">${esc(gameName)}</a></p>
+        <h1 class="text-3xl font-bold text-white leading-tight">${esc(title)}</h1>
+        <p class="mt-2 max-w-2xl text-zinc-400">${esc(kind.lede)}</p>
+        <div class="mt-4 flex flex-wrap items-center gap-2 text-xs">${ticks ? `<span class="text-sm font-semibold text-white" data-xcount>0/${rows.length}</span><span class="text-zinc-500 mr-2">${esc('ticked, the same ticks as on each area page')}</span>` : `<span class="text-sm text-zinc-400 mr-2">${rows.length}</span>`}${others}</div>
+        <input type="search" data-xfilter placeholder="Filter by name or area" class="mt-4 w-full max-w-sm rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">
+        <div class="mt-4 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03]"><table class="w-full text-sm"><thead class="border-b border-white/10"><tr>${head.map(th).join('')}</tr></thead><tbody class="divide-y divide-white/5">${body}</tbody></table></div>
+        ${cta('../../../', gameName)}
+      </article>
+      <script>(function(){var K=${JSON.stringify(key)};
+        function rd(s){try{var v=JSON.parse(localStorage.getItem('qcw:'+K+':'+s)||'[]');return Array.isArray(v)?v.map(String):[]}catch(e){return[]}}
+        function wr(s,v){try{localStorage.setItem('qcw:'+K+':'+s,JSON.stringify(v))}catch(e){}try{window.dispatchEvent(new CustomEvent('qc-tick-saved',{detail:{k:'qcw:'+K+':'+s}}))}catch(e){}}
+        var boxes=[].slice.call(document.querySelectorAll('[data-xt]')),c=document.querySelector('[data-xcount]');
+        function paint(){var n=0;boxes.forEach(function(b){var p=b.getAttribute('data-xt').split('|'),id=p.slice(1).join('|');var on=rd(p[0]).some(function(x){return x.split('+').indexOf(id)>=0;});b.checked=on;if(on)n++;});if(c)c.textContent=n+'/'+boxes.length;}
+        boxes.forEach(function(b){b.addEventListener('change',function(){var p=b.getAttribute('data-xt').split('|'),s=p[0],id=p.slice(1).join('|');var v=rd(s).filter(function(x){return x.split('+').indexOf(id)<0;});if(b.checked)v.push(id);wr(s,v);paint();});});
+        window.addEventListener('qc-ticks-changed',paint);paint();
+        var f=document.querySelector('[data-xfilter]');if(f)f.addEventListener('input',function(){var q=f.value.toLowerCase().trim();document.querySelectorAll('[data-fr]').forEach(function(r){r.hidden=!!q&&r.textContent.toLowerCase().indexOf(q)<0;});});
+      })();</script>`;
+    const ldir = path.join(dir, kind.id);
+    fs.mkdirSync(ldir, { recursive: true });
+    fs.writeFileSync(path.join(ldir, 'index.html'), page({
+      title: `${title} | Quest Compendium`, description: snippet(`${title}: ${kind.lede}`, 158), depth: 3, canonical: url, wide: true, draft: !!PREVIEW, guide: key,
+      ld: [breadcrumb([{ name: ui('navGuides'), url: `${SITE}/${LP}guides/` }, { name: sg, url: `${SITE}/${LP}guides/${key}/` }, { name: title, url }])],
+      body: html, langs: ['en'], path: `guides/${key}/${kind.id}/`,
+    }));
+    if (!PREVIEW) sitemap.push(url);
+  }
 }
 
 /**
@@ -1679,6 +1776,8 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
     const a = pageOf(o.slug);
     return { slug: o.slug, name: a.name, story: a.story, group: groupName(groupOf(o)) || undefined, total: totalOf(a), search: searchWords(a) };
   });
+  // The game's database lists (fact pages only): worked out first, since the area pages link to them.
+  buildFactLists(key, visible, byslug);
   // Only languages that have this page (an untranslated page is English-only).
   const pageLangs = (slug: string) => langs.filter((c) => c === 'en' || allTr[c]?.areas?.[slug]);
   visible.forEach((o, i) => {
@@ -1799,6 +1898,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   }));
   if (achHere?.list?.length) renderAchievements(key, gameName, achHere, links, sitemap, achLangs);
   if (COMP?.entities.length && LANG === 'en') renderEntities(key, gameName, visible, byslug, sitemap);
+  renderFactLists(key, gameName, sitemap);
 }
 
 /** The achievement guide page: roadmap, then every achievement (missable first), with ticks saved in the browser. */

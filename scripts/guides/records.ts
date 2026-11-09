@@ -310,3 +310,22 @@ export function applyExtracted(recs: GameRecord[], x: { sig: string; shorts: any
   }));
   return [...recs.map((r) => finish(r)), ...added];
 }
+
+/** A record's content as the verify step checked it (its type, name and fields): a changed record is checked again. */
+export const contentSig = (r: Pick<GameRecord, 'type' | 'name' | 'fields'>) =>
+  crypto.createHash('sha1').update(JSON.stringify([r.type, r.name, r.fields])).digest('hex').slice(0, 16);
+
+/**
+ * The verify step's results (recordsVerify.ts) laid over the records whose content is unchanged since: checked
+ * records become tier A, a contradicted one is "disputed" with the evidence's correction in `dispute`.
+ */
+export function applyVerified(recs: GameRecord[], v: { at?: number; results?: Record<string, { sig: string; status: string; fix?: string }> } | undefined): GameRecord[] {
+  if (!v?.results) return recs;
+  return recs.map((r) => {
+    const x = v.results![r.id];
+    if (!x || x.sig !== contentSig(r)) return r;
+    if (x.status === 'checked') return finish({ ...r, tier: 'A', status: 'checked', checkedAt: Number(v.at) || r.checkedAt });
+    if (x.status === 'disputed') return finish({ ...r, status: 'disputed', ...(x.fix ? { dispute: x.fix } : {}) } as any);
+    return r;
+  });
+}
