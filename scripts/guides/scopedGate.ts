@@ -20,7 +20,7 @@ import { estimateCost } from '../../usage';
 import { call, reviewerFor, passMark, type Review } from './review';
 import type { ReviewTier } from './reviewerQuota';
 
-export type PassAction = 'fights' | 'missables' | 'info' | 'queries' | 'correction';
+export type PassAction = 'fights' | 'missables' | 'info' | 'queries' | 'correction' | 'disputes';
 /** The fields each pass may change on a page. */
 export const PASS_FIELDS: Record<PassAction, string[]> = {
   fights: ['fights'],
@@ -29,9 +29,13 @@ export const PASS_FIELDS: Record<PassAction, string[]> = {
   queries: ['items', 'secrets', 'seoTitle', 'seoDescription'],
   // Player corrections (corrections.ts): an entry rewritten, or a missing fight added.
   correction: ['fights', 'items', 'secrets', 'sections'],
+  // Facts the sources contradicted (disputeSettle.ts): corrected or removed, and the walkthrough wording that stated them.
+  disputes: ['fights', 'items', 'secrets', 'sections', 'enemies', 'shops', 'tips', 'walkthrough', 'overview'],
 };
 /** Passes that rewrite existing entries (which must not be lost or renamed). */
 const REWRITES: PassAction[] = ['missables', 'queries', 'correction'];
+/** Passes whose changed items, secrets and sections the reviewer grades. */
+const GRADED: PassAction[] = [...REWRITES, 'disputes'];
 /** Page fields that only record what a run did. */
 const bookkeeping = (k: string) => ['status', 'staged', 'updatedAt', 'order', 'heldReason', 'unpublishedAt'].includes(k) || /Checked$/.test(k);
 /** At most this share of the changes may be taken out (wrong, invented or worse) for the pass to go live. */
@@ -48,7 +52,7 @@ const entryName = (e: any) => cut(e?.name || String(e?.text || '').split(/[:.]/)
 type Change = { page: string; slug: string; kind: string; id: string; name: string; text: string; before?: string };
 
 /** Check 1: what changed outside the pass's own fields (each a short reason; empty = nothing got worse). */
-export function regressions(action: PassAction, live: Map<string, any>, staged: Map<string, any>, liveOrder: string[], stagedOrder: string[]): string[] {
+export function regressions(action: PassAction, live: Map<string, any>, staged: Map<string, any>, liveOrder: string[], stagedOrder: string[], removals: Set<string> = new Set()): string[] {
   const out: string[] = [];
   const allowed = new Set(PASS_FIELDS[action]);
   for (const [slug, lp] of live) {
@@ -64,6 +68,12 @@ export function regressions(action: PassAction, live: Map<string, any>, staged: 
     if (action === 'correction') {
       const now = new Set((sp.fights || []).map((f: any) => String(f.id)));
       for (const f of lp.fights || []) if (!now.has(String(f.id))) out.push(`${name}: key fight "${cut(f.name, 60)}" lost`);
+    }
+    if (action === 'disputes') {
+      // Only the entries this run decided to remove may go, and nothing is renamed.
+      const lists = (p: any) => [...['items', 'secrets', 'enemies', 'shops', 'fights'].flatMap((f) => p[f] || []), ...(p.sections || []).flatMap((x: any) => x.entries || [])];
+      const now = new Set(lists(sp).map((e: any) => String(e.id)));
+      for (const e of lists(lp)) if (!now.has(String(e.id)) && !removals.has(`${slug}|${e.id}`)) out.push(`${name}: "${entryName(e)}" lost`);
     }
     if (REWRITES.includes(action)) {
       for (const f of ['items', 'secrets'] as const) {
@@ -100,17 +110,28 @@ export function changesOf(action: PassAction, live: Map<string, any>, staged: Ma
     const sp = staged.get(slug);
     if (!sp) continue;
     const page = cut(lp.name || slug, 60);
-    if ((action === 'fights' || action === 'correction') && !same(lp.fights, sp.fights)) {
+    if ((action === 'fights' || action === 'correction' || action === 'disputes') && !same(lp.fights, sp.fights)) {
       const was = new Map((lp.fights || []).map((f: any) => [String(f.id), f]));
       for (const f of sp.fights || []) if (!same(was.get(String(f.id)), f)) out.push({ page, slug, kind: 'fight', id: String(f.id), name: cut(f.name, 100), text: fightText(f) + (f.sources?.length ? ` [sources: ${f.sources.slice(0, 3).join(', ')}]` : '') });
     }
     if (action === 'info' && sp.info && !same(lp.info, sp.info)) out.push({ page, slug, kind: 'info', id: 'info', name: 'summary box', text: infoText(sp.info), ...(lp.info ? { before: infoText(lp.info) } : {}) });
-    if (REWRITES.includes(action)) {
+    if (action === 'disputes') {
+      for (const f of ['enemies', 'shops'] as const) {
+        const was = new Map((lp[f] || []).map((e: any) => [String(e.id), e]));
+        for (const e of sp[f] || []) { const b: any = was.get(String(e.id)); if (b && same(b, e)) continue; const t = (x: any) => cut([x.weakness && `weak: ${x.weakness}`, x.steal && `drops: ${x.steal}`, x.notes, x.sells && `sells: ${x.sells}`].filter(Boolean).join('; '), 300); out.push({ page, slug, kind: f, id: String(e.id), name: entryName(e), text: t(e) + (e.sources?.length ? ` [sources: ${e.sources.slice(0, 3).join(', ')}]` : ''), ...(b ? { before: t(b) } : {}) }); }
+      }
+      const old = new Set((lp.tips || []).map((t: any) => String(t)));
+      (sp.tips || []).forEach((t: any, i: number) => { if (!old.has(String(t))) out.push({ page, slug, kind: 'tips', id: String(i), name: 'tip', text: cut(t, 400) }); });
+      const steps = new Map((lp.walkthrough || []).map((x: any) => [String(x.id), x]));
+      for (const x of sp.walkthrough || []) { const b: any = steps.get(String(x.id)); const body = (y: any) => cut([y.text, y.tip, y.warn].filter(Boolean).join(' / '), 600); if (b && body(b) !== body(x)) out.push({ page, slug, kind: 'step', id: String(x.id), name: cut(x.title || 'step', 60), text: body(x), before: body(b) }); }
+      if (cut(lp.overview, 2000) !== cut(sp.overview, 2000)) out.push({ page, slug, kind: 'overview', id: 'overview', name: 'overview', text: cut(sp.overview, 600), before: cut(lp.overview, 600) });
+    }
+    if (GRADED.includes(action)) {
       const before = new Map((lp.items || []).map((e: any) => [String(e.id), e]));
       for (const e of sp.items || []) {
         const b: any = before.get(String(e.id));
         if (b && same(b, e)) continue;
-        out.push({ page, slug, kind: 'item', id: String(e.id), name: entryName(e), text: itemText(e), ...(b ? { before: itemText(b) } : {}) });
+        out.push({ page, slug, kind: 'item', id: String(e.id), name: entryName(e), text: itemText(e) + (action === 'disputes' && e.sources?.length ? ` [sources: ${e.sources.slice(0, 3).join(', ')}]` : ''), ...(b ? { before: itemText(b) } : {}) });
       }
       const sBefore = new Map((lp.secrets || []).map((e: any) => [String(e.id), e]));
       for (const e of sp.secrets || []) {
@@ -140,6 +161,7 @@ const WHAT: Record<PassAction, string> = {
   info: 'each page got a summary box (region, levels, quests, services and people, enemy types) and directions',
   queries: 'entries were rewritten or added to answer what players search for, with clearer search titles and descriptions',
   correction: 'entries players reported as wrong were corrected, and fights players reported missing were added, each checked against sources',
+  disputes: 'facts that sources contradicted were corrected from at least two outside sites (listed after each where given), and the walkthrough wording that stated them was changed to match',
 };
 
 type Verdict = { verdict: 'ok' | 'vague' | 'wrong' | 'invented' | 'worse'; reason: string };
@@ -150,6 +172,7 @@ async function judge(game: string, released: string, newer: boolean, action: Pas
     `You are checking one repair of a video game guide before it goes live. Game: "${game}" (released ${released}). In this repair, ${WHAT[action]}.`,
     'Judge ONLY the changes listed below. The rest of the guide (its outline, coverage, page choice and every other entry) is not part of this check.',
     ...(REWRITES.includes(action) ? [MISSABLE_STANDARD] : []),
+    ...(action === 'disputes' ? ['An item can be listed on a page while its location is in another area: the owner wants a real item to keep its row with its true location. Judge whether the location is right for that item, not whether it matches the page it is listed on.'] : []),
     'Give each change a verdict:',
     '- ok: right for this game and this place, and specific enough to act on',
     '- vague: plausible but too generic to act on (no names, positions, steps or numbers)',
@@ -211,6 +234,10 @@ async function dropChanges(key: string, live: Map<string, any>, staged: Map<stri
     };
     revert('items', 'item');
     revert('secrets', 'secret');
+    for (const f of ['enemies', 'shops'] as const) if (ids(f).size) { const bad = ids(f); const was = new Map((lp[f] || []).map((e: any) => [String(e.id), e])); patch[f] = (sp[f] || []).map((e: any) => (bad.has(String(e.id)) && was.has(String(e.id)) ? was.get(String(e.id)) : e)); }
+    if (ids('tips').size) patch.tips = lp.tips ?? [];
+    if (ids('overview').size) patch.overview = lp.overview ?? '';
+    if (ids('step').size) { const bad = ids('step'); const was = new Map((lp.walkthrough || []).map((x: any) => [String(x.id), x])); patch.walkthrough = (sp.walkthrough || []).map((x: any) => (bad.has(String(x.id)) && was.has(String(x.id)) ? was.get(String(x.id)) : x)); }
     if (cs.some((c) => c.kind.startsWith('section:'))) {
       patch.sections = (sp.sections || []).map((x: any) => {
         const bad = ids(`section:${x.title}`);
@@ -229,7 +256,7 @@ async function dropChanges(key: string, live: Map<string, any>, staged: Map<stri
  * Review a page pass's staged copy (guides/{key}--next) on its changes. Returns a Review for gateGuide (pageCount is the
  * guide's, so the 5-page rule still applies) and what it cost. dryRun: grade and report, but change nothing.
  */
-export async function scopedReview(key: string, game: string, action: PassAction, tier: ReviewTier, opts: { dryRun?: boolean } = {}): Promise<{ review: Review; dollars: number; dropped: number; changes: number; regressions: string[] }> {
+export async function scopedReview(key: string, game: string, action: PassAction, tier: ReviewTier, opts: { dryRun?: boolean; removals?: Set<string> } = {}): Promise<{ review: Review; dollars: number; dropped: number; changes: number; regressions: string[] }> {
   const live = liveKey(key);
   const liveRef = db().collection('guides').doc(live);
   const stageRef = db().collection('guides').doc(stageKey(live));
@@ -239,7 +266,7 @@ export async function scopedReview(key: string, game: string, action: PassAction
   const livePages = new Map(liveSnap.docs.filter((d) => ['published', 'draft'].includes(d.data().status)).map((d) => [d.id, d.data() as any]));
   const stagedPages = new Map(stageSnap.docs.map((d) => [d.id, d.data() as any]));
   const order = (x: any) => (x.areas || []).map((o: any) => String(o.slug));
-  const regs = regressions(action, livePages, stagedPages, order(li).filter((s: string) => livePages.has(s)), order(si));
+  const regs = regressions(action, livePages, stagedPages, order(li).filter((s: string) => livePages.has(s)), order(si), opts.removals);
   const changes = changesOf(action, livePages, stagedPages);
   const rel = await guideRelease(game, li);
   const newer = releasedAfter(rel, REVIEWER_CUTOFF, !!li?.pipeline?.newRelease);
@@ -262,7 +289,11 @@ export async function scopedReview(key: string, game: string, action: PassAction
   const vague = changes.filter((_c, i) => verdicts[i]?.verdict === 'vague');
   const score = changes.length ? Math.round(scoreSum / changes.length) : 0;
   const droppedShare = changes.length ? bad.length / changes.length : 0;
-  const pass = changes.length > bad.length && !regs.length && score >= mark && droppedShare <= MAX_DROPPED;
+  // A disputes pass is judged on each change's verdict, not the overall score: Fallout 4's seven changes were all "ok" and
+  // still scored 68. A wrong or invented one is taken out either way. One that only removed entries has nothing to grade:
+  // its removals were each reviewed against the evidence.
+  const onlyRemovals = action === 'disputes' && !changes.length && !!opts.removals?.size;
+  const pass = onlyRemovals ? !regs.length : changes.length > bad.length && !regs.length && (action === 'disputes' || score >= mark) && droppedShare <= MAX_DROPPED;
   if (bad.length && !opts.dryRun) await dropChanges(live, livePages, stagedPages, bad);
 
   const line = (c: Change) => `${c.page}: ${c.name}`;

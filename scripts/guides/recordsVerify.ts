@@ -9,8 +9,8 @@
  *   otherwise                            -> stays unconfirmed (tried; tried again after 30 days)
  *
  * Saved in gameRecords/{key}/verified/{slug} with each record's content signature; recordsImport.ts lays it over the
- * records while their content is unchanged. Nothing on a page is deleted here: a disputed fact is shown as being
- * re-checked and goes to the nightly corrections like a player's fix would.
+ * records while their content is unchanged. Nothing on a page is deleted here: a disputed fact is left out of pages and answers until disputeSettle.ts settles it, shown as being
+ * re-checked.
  *
  *   npx tsx scripts/guides/recordsVerify.ts --only KEY[,KEY] [--max-dollars N] [--recheck] [--dry-run]
  */
@@ -25,7 +25,7 @@ const VERIFY_TYPES = new Set(['item', 'secret', 'shop', 'enemy', 'boss', 'checkl
 const f = (r: GameRecord, k: string) => { const v = r.fields?.[k]; return Array.isArray(v) ? v.join('; ') : String(v || ''); };
 
 /** The records as a claim page: entries (location, how, missable), fights, and the rest as statements. */
-function claimPageOf(recs: GameRecord[]): { page: ClaimPage; owner: Map<string, string> } {
+export function claimPageOf(recs: GameRecord[]): { page: ClaimPage; owner: Map<string, string> } {
   const owner = new Map<string, string>();
   const page: ClaimPage = { steps: [], entries: [], choices: [], advice: [], services: [], fights: [] };
   for (const r of recs) {
