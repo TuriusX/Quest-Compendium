@@ -20,7 +20,7 @@
  *    claims it couldn't support are removed from the page in any case.
  */
 import { ThinkingLevel } from '@google/genai';
-import { db, gemini, MODEL, searchesIn } from './common';
+import { OWN_SITE, db, gemini, MODEL, searchesIn } from './common';
 import { PRO_MODEL, takePro } from './reviewerQuota';
 
 export type Evidence = { id: string; text: string; sources: string[]; topic: string };
@@ -46,9 +46,9 @@ export const LOW_TRUST = /(^|\.)(reddit\.com|youtube\.com|youtu\.be|steamcommuni
 /**
  * Sites never used as evidence at all: none (owner, Nov 8 2026: "I don't want anything blocked"). Fandom was blocked
  * until then (its robots.txt disallows AI crawlers and its terms forbid AI use) and Fextralife from Oct 11 to Oct 19,
- * 2026. Kept as a pattern that matches nothing, so a site could be blocked again in one place.
+ * 2026. The one exception is our own site (owner, Nov 10 2026): it's not a block but a loop, the site citing itself.
  */
-export const BLOCKED = /(?!)/;
+export const BLOCKED = OWN_SITE;
 export const trustedSites = (sites: string[]) => sites.filter((s) => !LOW_TRUST.test(s) && !BLOCKED.test(s));
 /** The pack with low-trust-only evidence left out (and low-trust sites off each line). */
 export function trusted(p: EvidencePack): EvidencePack {
@@ -64,7 +64,7 @@ export function supportedSegments(res: any): { text: string; sites: string[] }[]
   const out: { text: string; sites: string[] }[] = [];
   for (const s of gm.groundingSupports || []) {
     const text = String(s?.segment?.text || '').replace(/^[*\-\s#]+/, '').replace(/\*\*/g, '').trim();
-    const sites = [...new Set<string>((s?.groundingChunkIndices || []).map(site).filter(Boolean))];
+    const sites = [...new Set<string>((s?.groundingChunkIndices || []).map(site).filter((x: string) => x && !BLOCKED.test(x)))];
     if (text.length >= 12 && sites.length) out.push({ text, sites });
   }
   return out;

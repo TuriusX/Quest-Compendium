@@ -42,6 +42,13 @@ export function rollingDayCap(monthCap: number, spentBeforeToday: number, daysLe
   return Math.max(0, monthCap - Math.max(0, spentBeforeToday)) / Math.max(1, daysLeft);
 }
 
+/** The month the core programme's cap starts rolling (owner, Nov 10 2026). Before it, its fixed daily limit. */
+export const CORE_ROLLS_FROM = '2026-12';
+/** The core programme's cap for today: from December 2026 what's left of its month over the days left, so unspent money carries forward. */
+export function coreDayCap(c: { fixed: number; month: string; monthly: number; spentMonth: number; spentToday: number; dayOfMonth: number; daysInMonth: number }) {
+  return c.month < CORE_ROLLS_FROM ? c.fixed : rollingDayCap(c.monthly, c.spentMonth - c.spentToday, c.daysInMonth - c.dayOfMonth + 1);
+}
+
 /**
  * What upkeep may still spend today: its share of today's cap, or its share of the month so far when that's more. One
  * re-verification costs more than a day's share, so what upkeep doesn't use builds up until one fits.

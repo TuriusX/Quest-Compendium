@@ -40,6 +40,7 @@ import { acquireGuideLock, isRefusal, lockedLine } from './guideLock';
 import { apiLimits, searchesToday, pipelineRoom, SearchDayWait } from '../../apiLimits';
 import { ProQuotaWait } from './reviewerQuota';
 import { isTransient } from './claimCheck';
+import { coreDayCap, CORE_ROLLS_FROM } from '../pipeline/budgetRules';
 
 export const CORE_MONTHLY_DEFAULT = 30;
 export const CORE_DAILY_DEFAULT = 6;
@@ -107,10 +108,12 @@ function plannedCore(comp: any, cap: number): any[] {
 export async function coreBudget() {
   const st: any = (await cref().get()).data() || {};
   const monthly = Number.isFinite(Number(st.monthly)) ? Number(st.monthly) : CORE_MONTHLY_DEFAULT;
-  const daily = Number.isFinite(Number(st.daily)) ? Number(st.daily) : CORE_DAILY_DEFAULT;
   const spentMonth = st.month === month() ? Number(st.spentMonth || 0) : 0;
   const spentToday = st.day === today() ? Number(st.spentToday || 0) : 0;
-  return { monthly, daily, spentMonth, spentToday, room: Math.max(0, Math.min(monthly - spentMonth, daily - spentToday)), monthRoom: Math.max(0, monthly - spentMonth) };
+  const [y, m, d] = today().split('-').map(Number);
+  const fixed = Number.isFinite(Number(st.daily)) ? Number(st.daily) : CORE_DAILY_DEFAULT;
+  const daily = coreDayCap({ fixed, month: month(), monthly, spentMonth, spentToday, dayOfMonth: d, daysInMonth: new Date(Date.UTC(y, m, 0)).getUTCDate() });
+  return { monthly, daily, rolls: month() >= CORE_ROLLS_FROM, spentMonth, spentToday, room: Math.max(0, Math.min(monthly - spentMonth, daily - spentToday)), monthRoom: Math.max(0, monthly - spentMonth) };
 }
 
 /** Charge spending to the shared budget (and to a guide), resetting the month and day counters when they turn. */
@@ -295,7 +298,7 @@ export async function runBoost(): Promise<void> {
   let next = Number(bo.next || 0);
   // Today's room is core's daily cap, shared with the programme (whatever ran today already counts).
   let todaySpent = st.day === today() ? Number(st.spentToday || 0) : 0;
-  const daily = Number.isFinite(Number(st.daily)) ? Number(st.daily) : CORE_DAILY_DEFAULT;
+  const daily = (await coreBudget()).daily;
   // The most a page has cost lately: a page is started only if even that much keeps the fund within its total.
   let worst = Math.max(0.6, ...((bo.log || []) as any[]).slice(-10).map((x) => Number(x.dollars || 0)));
   const timeUp = () => Date.now() - RUN_STARTED > MINUTES * 60_000;
@@ -308,7 +311,7 @@ export async function runBoost(): Promise<void> {
     const a: any = (await db().collection('guides').doc(w.key).collection('areas').doc(w.ref).get()).data();
     if (!a || a.status !== 'published' || a.verified === true) { next++; continue; }
     if (spent + worst > budget) { stop = `the $${budget} fund is used up as far as it safely goes ($${spent.toFixed(2)} spent; the next page could cost up to $${worst.toFixed(2)}). Say if it should go further`; break; }
-    if (todaySpent + worst > daily) { stop = `today's $${daily} is used`; break; }
+    if (todaySpent + worst > daily) { stop = `today's $${daily.toFixed(2)} is used`; break; }
     if (timeUp()) { stop = 'out of time for tonight'; break; }
     const r = await doOne(w);
     if (r.status === 'busy') { stop = `${w.key} was in use`; break; }
@@ -458,7 +461,7 @@ ${r.stopped}; the next run carries on.`); if (wentLive) await publishSiteForCore
       const pages = await pagesToBuild(key, failedP, retry, cfg.keep.has(key));
       for (const p of pages) {
         const b = await coreBudget();
-        if (b.room < PAGE_COST * 1.5) { stopped = stop(b.monthRoom < PAGE_COST * 1.5 ? `This month's $${b.monthly} is used up` : `Today's $${b.daily} is used up`); break; }
+        if (b.room < PAGE_COST * 1.5) { stopped = stop(b.monthRoom < PAGE_COST * 1.5 ? `This month's $${b.monthly} is used up` : `Today's $${b.daily.toFixed(2)} is used up`); break; }
         if (timeUp()) { stopped = stop('Time limit for this run'); break; }
         if (pipelineRoom(await apiLimits(), await searchesToday(true)) < 15) { stopped = stop("Today's pipeline searches are used up"); break; }
         const scope = { dollars: 0, searches: 0 };
@@ -514,7 +517,7 @@ ${r.stopped}; the next run carries on.`); if (wentLive) await publishSiteForCore
       const ents = await entitiesToBuild(key, comp, failedE, retry, cfg.cap);
       for (const e of ents) {
         const b = await coreBudget();
-        if (b.room < ENTITY_COST * 1.5) { stopped = stop(b.monthRoom < ENTITY_COST * 1.5 ? `This month's $${b.monthly} is used up` : `Today's $${b.daily} is used up`); break; }
+        if (b.room < ENTITY_COST * 1.5) { stopped = stop(b.monthRoom < ENTITY_COST * 1.5 ? `This month's $${b.monthly} is used up` : `Today's $${b.daily.toFixed(2)} is used up`); break; }
         if (timeUp()) { stopped = stop('Time limit for this run'); break; }
         if (pipelineRoom(await apiLimits(), await searchesToday(true)) < 10) { stopped = stop("Today's pipeline searches are used up"); break; }
         const scope = { dollars: 0, searches: 0 };

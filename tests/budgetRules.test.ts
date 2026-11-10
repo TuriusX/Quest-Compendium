@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/budgetRules.test.ts)
 import assert from "node:assert/strict";
-import { afterFailedTry, stopPage, worstCost, startNeed, rollingDayCap, upkeepRoom, guideWalkCheck, BIG_STEP_MIN, RETRY_DAYS, TRANSLATE_SHARE, WALK_START, WALK_FAIL_STOP } from "../scripts/pipeline/budgetRules";
+import { afterFailedTry, stopPage, worstCost, startNeed, rollingDayCap, coreDayCap, upkeepRoom, guideWalkCheck, BIG_STEP_MIN, RETRY_DAYS, TRANSLATE_SHARE, WALK_START, WALK_FAIL_STOP } from "../scripts/pipeline/budgetRules";
 import { parseSteamAchievements } from "../scripts/guides/steamAchievements";
 import { languageWeights, rankTranslations } from "../scripts/guides/translateBackfill";
 import { namesToLookUp } from "../scripts/guides/officialNames";
@@ -105,6 +105,15 @@ test("official names to look up: places first, then what's named most; no generi
   const names = namesToLookUp([{ name: "Port Hanshan", items: [{ name: "Storage Locker" }, { name: "Garage Pass" }, { name: "Garage Pass" }], fights: [{ name: "Benezia" }] }]);
   assert.deepEqual(names, ["Port Hanshan", "Garage Pass", "Benezia"]);
   assert.equal(namesToLookUp(Array.from({ length: 200 }, (_, i) => ({ name: `Place ${i}` }))).length, 60);
+});
+
+test("the core programme keeps its fixed cap through November, then rolls with unspent money carried forward", () => {
+  const c = { fixed: 6, monthly: 30, spentToday: 0 };
+  assert.equal(coreDayCap({ ...c, month: "2026-11", spentMonth: 0, dayOfMonth: 30, daysInMonth: 30 }), 6);
+  assert.ok(Math.abs(coreDayCap({ ...c, month: "2026-12", spentMonth: 0, dayOfMonth: 1, daysInMonth: 31 }) - 30 / 31) < 1e-9);
+  assert.equal(coreDayCap({ ...c, month: "2026-12", spentMonth: 5, dayOfMonth: 16, daysInMonth: 31 }), 25 / 16);
+  assert.equal(coreDayCap({ ...c, month: "2026-12", spentMonth: 5, spentToday: 1, dayOfMonth: 16, daysInMonth: 31 }), 26 / 16);
+  assert.equal(coreDayCap({ ...c, month: "2026-12", spentMonth: 30, dayOfMonth: 20, daysInMonth: 31 }), 0);
 });
 
 console.log(`\n${passed} tests passed`);

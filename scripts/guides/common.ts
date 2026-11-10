@@ -296,12 +296,14 @@ export const searchesIn = (response: any): number => {
   return Array.isArray(q) ? q.length : 0;
 };
 
+/** Our own site can turn up in search results: it can never be a source for what it already says (owner, Nov 10 2026). */
+export const OWN_SITE = /quest\s*compendium/i;
 export const sourcesIn = (response: any): string[] => {
   const chunks = response?.candidates?.[0]?.groundingMetadata?.groundingChunks;
   const out: string[] = [];
   if (Array.isArray(chunks)) for (const c of chunks) {
     const t = String(c?.web?.title || c?.web?.domain || '').trim();
-    if (t && !out.includes(t)) out.push(t);
+    if (t && !OWN_SITE.test(t) && !out.includes(t)) out.push(t);
   }
   return out;
 };

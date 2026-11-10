@@ -39,7 +39,7 @@ import { playerSearchesToday, monthlyBudgetOk, countSearches, recordPlayerSearch
 import { clientIp } from './guestGuard';
 import { isLocalServer } from './testTraffic';
 import { registerAutoChanges } from './autoChanges';
-import { GUIDE_REFERENCE, type GuideRef } from './guidesApi';
+import { GUIDE_REFERENCE, disputedOn, withoutDisputed, recheckLine, type GuideRef } from './guidesApi';
 import { visiblePart, nextPiece } from './answerStream';
 
 const SITE = () => (process.env.QC_SITE_URL || 'https://questcompendium.com').replace(/\/$/, '');
@@ -167,7 +167,7 @@ function pageLines(p: any, base: string, prefix: string, budget: number, refs: R
   const href = `${base}${p.slug}/`;
   let n = 0;
   const tag = (label: string, anchor = '') => { const t = `${prefix}${++n}`; refs[t] = { label: cut(label || p.name, 80), href: anchor ? `${href}#${anchor}` : href }; return `[${t}]`; };
-  const lines: string[] = [];
+  const lines: string[] = p.rechecking?.length ? [recheckLine(p.rechecking)] : [];
   if (p.overview) lines.push(`${tag(p.name)} ${cut(p.overview, 500)}`);
   for (const s of p.walkthrough || []) lines.push(`${tag(s.title || p.name, s.id)} Step: ${cut([s.title, s.text].filter(Boolean).join(': '), 400)}`);
   for (const e of p.items || []) lines.push(`${tag(e.name, e.id ? `e-${e.id}` : '')} Item: ${cut([e.name, e.where && `where: ${e.where}`, e.how && `how: ${e.how}`, e.missable && `missable${e.lockout ? `: ${e.lockout}` : ''}`, e.unconfirmed && 'not yet confirmed'].filter(Boolean).join('; '), 300)}`);
@@ -205,17 +205,20 @@ async function context(key: string, slug: string, kind: string, lang: string, q:
   const refs: Record<string, Ref> = {};
   const base = guideBase(key, lang);
   const pagePath = (s: string, entity: boolean) => (entity ? guideBase(key, 'en') : base) + `${s}/page.json`;
-  const self = slug ? (await siteJson(pagePath(slug, kind === 'entity'))) || (lang !== 'en' && kind !== 'entity' ? await siteJson(`${guideBase(key, 'en')}${slug}/page.json`) : null) : null;
+  // Disputed facts aren't reference until they're settled (owner, Nov 10 2026), in any language: translations keep the ids.
+  const settled = async (p: any, s: string, entity: boolean) => { if (!p || entity) return p; const d = await disputedOn(key, s); return d.ids.length || d.tips.length ? { ...withoutDisputed(p, d), rechecking: d.names } : p; };
+  const self = slug ? await settled((await siteJson(pagePath(slug, kind === 'entity'))) || (lang !== 'en' && kind !== 'entity' ? await siteJson(`${guideBase(key, 'en')}${slug}/page.json`) : null), slug, kind === 'entity') : null;
   const guide = await siteJson(`${base}guide.json`) || await siteJson(`${guideBase(key, 'en')}guide.json`);
   const index: any[] = (await siteJson(`${base}search.json`)) || (await siteJson(`${guideBase(key, 'en')}search.json`)) || [];
   const qw = new Set(words(q));
-  const scored = index.map((x) => {
+  const candidates = index.map((x) => {
     const w = words(`${x.l} ${x.c || ''}`);
     let s = 0;
     for (const t of new Set(w)) if (qw.has(t)) s += 1;
     return { x, s: s + (s && x.p ? 0.5 : 0) };
   }).filter((y) => y.s > 0 && !(slug && String(y.x.h).includes(`/${slug}/`))).sort((a, b) => b.s - a.s).slice(0, 25);
   let n = 0;
+  const scored = (await Promise.all(candidates.map(async (y) => { const m = String(y.x.h).match(/\/guides\/[^/]+\/([^/#]+)\/#e-(.+)$/); return m && (await disputedOn(key, m[1])).ids.includes(m[2]) ? null : y; }))).filter(Boolean) as typeof candidates;
   const matchLines = scored.map(({ x }) => { const t = `r${++n}`; refs[t] = { label: cut(x.l, 80), href: x.h }; return `- [${t}] ${x.k}: ${cut(x.l, 120)}${x.c ? ` (${cut(x.c, 80)})` : ''}`; }).join('\n');
   // The pages those entries are on, most matches first: two of them in full (shortened).
   const pageCount = new Map<string, number>();
@@ -225,7 +228,7 @@ async function context(key: string, slug: string, kind: string, lang: string, q:
   const otherPages: { slug: string; text: string }[] = [];
   for (const [i, s] of others.entries()) {
     const isArea = (guide?.areas || []).some((a: any) => a.slug === s);
-    const p = await siteJson(pagePath(s, !isArea));
+    const p = await settled(await siteJson(pagePath(s, !isArea)), s, !isArea);
     if (p) {
       const text = `[PAGE: ${p.name}]\n${pageLines(p, isArea ? base : guideBase(key, 'en'), `o${i + 1}_`, 1500, refs)}`;
       otherText.push(text);

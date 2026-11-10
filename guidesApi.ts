@@ -542,7 +542,7 @@ export async function guideAreasWithPages(game: string, appId?: number): Promise
     const list = (v: any) => (Array.isArray(v) ? v : []).map((e: any) => ({ id: String(e?.id || ''), name: e?.name, text: e?.text, where: e?.where }));
     const pages: Record<string, any> = {};
     for (const a of areas) {
-      const d = published.get(a.slug) || {};
+      const d: any = withoutDisputed(published.get(a.slug) || {}, await disputedOn(key, a.slug));
       pages[a.slug] = {
         key, slug: a.slug, name: a.name, story: a.story, overview: '', tips: [],
         items: list(d.items), secrets: list(d.secrets), enemies: list(d.enemies), shops: list(d.shops),
@@ -632,7 +632,50 @@ export async function passedAreaNames(game: string | undefined, appId?: number, 
   }
 }
 
+/**
+ * Facts the sources contradict (gameRecords status "disputed", owner Nov 10 2026): until settled they aren't given to
+ * answers as reference. `names` is what's left for one line telling the model not to repeat what the page's walkthrough
+ * text says about them. Goes straight to the records, cached with the rest; if it can't be read, answers carry on.
+ */
+export type Disputed = { ids: string[]; tips: string[]; names: string[] };
+const NOT_DISPUTED: Disputed = { ids: [], tips: [], names: [] };
+export async function disputedOn(key: string, slug: string): Promise<Disputed> {
+  try {
+    const all = await cached(`disputed:${key}`, async () => {
+      const snap = await getFirestore().collection('gameRecords').doc(key).collection('records').where('status', '==', 'disputed').get();
+      const out: Record<string, Disputed> = {};
+      for (const d of snap.docs) {
+        const r: any = d.data();
+        if (!r.place || r.origin?.from !== 'area') continue;
+        const x = (out[r.place] ||= { ids: [], tips: [], names: [] });
+        if (r.type === 'tip') { x.tips.push(String(r.prose?.text || r.name || '').replace(/…$/, '').slice(0, 50).toLowerCase()); continue; }
+        if (r.origin?.entry != null) x.ids.push(String(r.origin.entry));
+        if (x.names.length < 12) x.names.push(String(r.name || '').replace(/…$/, '').slice(0, 60));
+      }
+      return out;
+    });
+    return all[slug] || NOT_DISPUTED;
+  } catch {
+    return NOT_DISPUTED;
+  }
+}
+/** The page without its disputed entries and tips. */
+export function withoutDisputed<T extends Record<string, any>>(a: T, d: Disputed): T {
+  if (!d.ids.length && !d.tips.length) return a;
+  const keep = (l: any) => (Array.isArray(l) ? l.filter((e: any) => !d.ids.includes(String(e?.id))) : l);
+  return {
+    ...a, items: keep(a.items), secrets: keep(a.secrets), enemies: keep(a.enemies), shops: keep(a.shops), fights: keep(a.fights),
+    ...(Array.isArray(a.tips) ? { tips: a.tips.filter((t: any) => !d.tips.some((x) => x && String(t).toLowerCase().startsWith(x))) } : {}),
+    ...(Array.isArray(a.sections) ? { sections: a.sections.map((x: any) => ({ ...x, entries: keep(x.entries) })) } : {}),
+  };
+}
+/** The one line for the model: the walkthrough text may still name them. */
+export const recheckLine = (names: string[]) =>
+  `Being re-checked (sources disagree with the guide): ${names.join('; ')}. Do not repeat what these notes or pages say about them; if asked, answer only from what you are sure of, or search.`;
+
 export type GuidePageForPlace = {
+  /** Disputed facts on this page, by name (left out of the entries below). */
+  rechecking?: string[];
   /** The guide and the area page (player corrections are filed under these). */
   key: string;
   slug: string;
@@ -692,7 +735,9 @@ export async function guidePageFor(game: string | undefined, place: string | und
     const [minScore, standing] = await Promise.all([groundingMinScore(), guideStanding(key)]);
     return await cached(`page:${key}:${area.slug}:${minScore}`, async () => {
       const doc = await getFirestore().collection('guides').doc(key).collection('areas').doc(area.slug).get();
-      const a: any = doc.exists ? doc.data() : null;
+      const raw: any = doc.exists ? doc.data() : null;
+      const off = await disputedOn(key, area.slug);
+      const a: any = raw ? withoutDisputed(raw, off) : null;
       // Only a page that passed review (see pagePassed): anything else never reaches an answer.
       if (!a || !pagePassed(a, standing, minScore)) return null;
       return {
@@ -706,6 +751,7 @@ export async function guidePageFor(game: string | undefined, place: string | und
         tips: Array.isArray(a.tips) ? a.tips : [],
         sections: Array.isArray(a.sections) ? a.sections : [],
         fights: Array.isArray(a.fights) ? a.fights.filter((x: any) => x && x.name) : [],
+        ...(off.names.length ? { rechecking: off.names } : {}),
         ...(a.info && typeof a.info === 'object' ? { info: a.info } : {}),
         ...(a.flagship ? { flagship: true } : {}),
         ...(Array.isArray(a.walkthrough) && a.walkthrough.length ? { walkthrough: a.walkthrough.slice(0, 30) } : {}),
@@ -738,7 +784,7 @@ export const GUIDE_REFERENCE =
 
 /** The page as short notes for the AI, kept to a sensible size. */
 export function guideNotesForPrompt(pg: GuidePageForPlace): string {
-  const lines: string[] = [];
+  const lines: string[] = pg.rechecking?.length ? [recheckLine(pg.rechecking)] : [];
   if (pg.overview) lines.push(pg.overview);
   for (const x of pg.sections) for (const e of x.entries.slice(0, 8)) lines.push(`${x.title}: ${e.text}`);
   for (const e of pg.items.slice(0, 15)) lines.push(`Item: ${e.name}${!blankish(e.where) ? ` (${e.where})` : ''}${!blankish(e.how) ? `; how: ${e.how}` : ''}${e.missable ? ` [missable${!blankish(e.lockout) ? `: ${e.lockout}` : ''}]` : ''}`);
@@ -773,7 +819,7 @@ export type GuideRef = { key: string; slug: string; area: string; entry?: string
  */
 export function guideGroundingForPrompt(pg: GuidePageForPlace): { text: string; refs: Record<string, GuideRef> } {
   const refs: Record<string, GuideRef> = {};
-  const lines: string[] = [];
+  const lines: string[] = pg.rechecking?.length ? [recheckLine(pg.rechecking)] : [];
   let n = 0;
   const tag = (name: string, entry?: string, kind?: GuideRef['kind'] | null) => {
     const t = `g${++n}`;

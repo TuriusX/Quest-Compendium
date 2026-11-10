@@ -1235,6 +1235,14 @@ async function loadFactPages(only = ''): Promise<void> {
   }
   if (FACT_KEYS.size) console.log(`Fact pages: ${[...FACT_KEYS].map((k) => `${k} (${FACT_RECS.get(k)?.size || 0} pages with records)`).join(', ')}.`);
 }
+/** A translated page keeps the old layout: the facts the English fact page leaves out go from it too, until they're settled (owner, Nov 10 2026). */
+function translatedSettled(key: string, a: any): any {
+  if (LANG === 'en') return a;
+  const ids = new Set((FACT_RECS.get(key)?.get(a.slug) || []).filter((r: any) => r.status === 'disputed' && r.origin?.from === 'area').map((r: any) => String(r.origin.entry)));
+  if (!ids.size) return a;
+  const keep = (l: any[]) => (l || []).filter((e: any) => !ids.has(String(e?.id)));
+  return { ...a, items: keep(a.items), secrets: keep(a.secrets), enemies: keep(a.enemies), shops: keep(a.shops), fights: keep(a.fights), sections: (a.sections || []).map((x: any) => ({ ...x, entries: keep(x.entries) })) };
+}
 const factPageOn = (key: string, slug: string) => LANG === 'en' && FACT_KEYS.has(key) && !!FACT_RECS.get(key)?.get(slug)?.length;
 
 function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[], prev?: AreaLink, next?: AreaLink, up = '../../../', achs: any[] = []) {
@@ -1832,7 +1840,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
         canonical: untranslated ? `${SITE}/guides/${key}/${o.slug}/` : url,
         ld,
         wide: true,
-        body: (factPageOn(key, o.slug) ? factAreaBody : areaBody)(gameName, key, a, links, links[i - 1], links[i + 1], '../'.repeat(3 + extra), achHere ? (achHere.list || []).filter((x: any) => x.area === o.slug) : []) + entPreview(),
+        body: (factPageOn(key, o.slug) ? factAreaBody : areaBody)(gameName, key, translatedSettled(key, a), links, links[i - 1], links[i + 1], '../'.repeat(3 + extra), achHere ? (achHere.list || []).filter((x: any) => x.area === o.slug) : []) + entPreview(),
         draft,
         noindex: held,
         guide: key,

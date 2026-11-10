@@ -48,6 +48,7 @@ import {
   LAYOUTS, LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, guideRelease, releasedAfter, stageKey, MISSABLE_STANDARD, parseItem,
   INFO_FORMAT, WAY_FORMAT, parseInfoFields, parseWayFields, hasInfo, type GuideInfo,
   type GuideArea, type GuideEntry, type GuideSection, type GuideFight, type Layout,
+  OWN_SITE,
 } from './common';
 import { stageCopy } from './promote';
 import { getGameFacts, saveGameFacts } from '../../searchGuard';
@@ -154,7 +155,7 @@ function realSourcesByLine(text: string, response: any): Set<string>[] {
   const site = (i: number) => {
     const w = chunks[i]?.web || {};
     const t = String(w.title || w.domain || '').toLowerCase().trim();
-    return t;
+    return OWN_SITE.test(t) ? '' : t;
   };
   const out = lines.map(() => new Set<string>());
   for (const sup of gm.groundingSupports || []) {

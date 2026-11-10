@@ -26,7 +26,7 @@
  * Logs "N searches used" and "cost ≈ $x" for the pipeline.
  */
 import { ThinkingLevel } from '@google/genai';
-import { db, gemini, MODEL, arg, parseJson, searchesIn, stageKey, type GuideFight } from './common';
+import { db, gemini, MODEL, arg, parseJson, searchesIn, stageKey, OWN_SITE, type GuideFight } from './common';
 import { fightKnown } from '../../missingFights';
 import { parseFightLines, FIGHT_FORMAT } from './fights';
 import { estimateCost } from '../../usage';
@@ -116,7 +116,7 @@ async function sourceCheck(game: string, area: string, kind: string, entry: any,
   const verdict = n === 0 ? 'unclear' : v.startsWith('confirm') ? 'confirmed' : v.startsWith('contradict') ? 'contradicted' : 'unclear';
   const agree = [...line('AGREE').matchAll(/\d+/g)].map((m) => Number(m[0])).filter((x) => x >= 1 && x <= reports.length);
   const chunks = res?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-  const sources = [...new Set(chunks.map((c: any) => String(c?.web?.title || c?.web?.domain || '')).filter(Boolean))].slice(0, 6) as string[];
+  const sources = [...new Set(chunks.map((c: any) => String(c?.web?.title || c?.web?.domain || '')).filter((x: string) => x && !OWN_SITE.test(x)))].slice(0, 6) as string[];
   return { verdict, agree, rewrite: { where: line('WHERE'), how: line('HOW'), notes: line('NOTES'), text: line('TEXT') }, evidence: line('EVIDENCE'), sources, searches: n };
 }
 
@@ -149,7 +149,7 @@ async function fightSourceCheck(game: string, area: string, g: any, reports: Rep
   const verdict = n === 0 ? 'unclear' : v.startsWith('confirm') ? 'confirmed' : v.startsWith('contradict') ? 'contradicted' : 'unclear';
   const agree = [...line('AGREE').matchAll(/\d+/g)].map((m) => Number(m[0])).filter((x) => x >= 1 && x <= reports.length);
   const chunks = res?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-  const sources = [...new Set(chunks.map((c: any) => String(c?.web?.title || c?.web?.domain || '')).filter(Boolean))].slice(0, 6) as string[];
+  const sources = [...new Set(chunks.map((c: any) => String(c?.web?.title || c?.web?.domain || '')).filter((x: string) => x && !OWN_SITE.test(x)))].slice(0, 6) as string[];
   const fight = parseFightLines(text, sources)[0];
   return { verdict: fight || verdict !== 'confirmed' ? verdict : 'unclear', agree, rewrite: fight ? { fight } : {}, evidence: line('EVIDENCE'), sources, searches: n };
 }

@@ -1186,7 +1186,7 @@ async function main() {
       // The core programme's last day (every unit it built: quest pages, rebuilds, pages), first in the summary.
       const dayLog = ((coreSt.pageLog || []) as any[]).filter((x) => Number(x.at) >= Date.now() - 24 * 3600_000);
       const dayCost = dayLog.reduce((a, x) => a + Number(x.dollars || 0), 0);
-      RUN.head.push(`📚 Core programme, last day: ${dayLog.length} page(s) built, ${dayLog.filter((x) => /passed|published/.test(String(x.status))).length} passed, $${dayCost.toFixed(2)}. ${new Date().toLocaleString('en-US', { month: 'long', timeZone: 'America/Chicago' })}: $${b.spentMonth.toFixed(2)} of $${b.monthly} spent, $${Math.max(0, b.monthly - b.spentMonth).toFixed(2)} left ($${b.daily} a day).`);
+      RUN.head.push(`📚 Core programme, last day: ${dayLog.length} page(s) built, ${dayLog.filter((x) => /passed|published/.test(String(x.status))).length} passed, $${dayCost.toFixed(2)}. ${new Date().toLocaleString('en-US', { month: 'long', timeZone: 'America/Chicago' })}: $${b.spentMonth.toFixed(2)} of $${b.monthly} spent, $${Math.max(0, b.monthly - b.spentMonth).toFixed(2)} left ($${b.daily.toFixed(2)} ${b.rolls ? 'today; unspent money carries forward' : 'a day'}).`);
       // "Left": what's left at the current method's real cost per page that went live (core.ts realRates).
       const doneGuides = e.rows.filter((r) => !!coreSt.perGuide?.[r.key]?.done || r.left === 0);
       const next = e.rows.find((r) => !coreSt.perGuide?.[r.key]?.done && r.left > 0);
