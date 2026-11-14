@@ -540,7 +540,7 @@ async function startServer() {
   // "Locate me" (the tracker and the PlaceBar): its own daily limit, never the player's questions.
   registerLocateMe(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST, updateUserDoc: updateFirestoreDocREST, loadGuide: guideAreasWithPages });
   registerSpot(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST });
-  registerRefine(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed, onChecked: (game, checked, kept) => void recordMarkerCheck(game, checked, kept) });
+  registerRefine(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed, onChecked: (game, checked, kept, details) => void recordMarkerCheck(game, checked, kept, details) });
 
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {

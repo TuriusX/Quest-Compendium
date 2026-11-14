@@ -34,6 +34,7 @@
   const DARK = 10; // average brightness (0-255) of a screen that's gone black: a transition, never gameplay
   const BRIGHT = 245; // ... or gone white
   const GAP_MS = 300; // screen capture only sends frames when something changes: a gap this long needs a whole-screen check
+  const START_TRIES = 24; // frames to keep trying to match the screenshot at the start (1-1.5 s)
   const WHOLE_CHECK_EVERY = 30; // frames between whole-screen checks while tracking (about half a second at 60 fps)
   // 3D games: turning the camera looks like a small slide from one frame to the next, so camera tracking alone never
   // notices the view has changed. The item itself does: once it stops matching under its marker, that marker ends.
@@ -392,6 +393,11 @@
     let cameraLost = 0;
     let started = false;
     let gone = false;
+    // The answer arrives a few seconds after its screenshot: the first frames may still show the app's own panel, a
+    // passing effect or a menu closing. Keep trying to match the screenshot for a moment before deciding the scene
+    // changed. `unplaced`: gave up at the start (the app then offers the markers on the screenshot instead).
+    let startTries = 0;
+    let unplaced = false;
 
     /** Where our markers (dot + label) are drawn, in 0-1 screen fractions, for when they appear in captures. */
     function markerRects() {
@@ -437,9 +443,13 @@
         if (!registerFrames(prevWhole, frame, w, h, selfVisible ? exclude.concat(markerRects()) : exclude)) gone = true;
       }
       if (!started) {
-        started = true;
-        // If the screen can't be matched to the screenshot at all, it's a different scene: show nothing.
-        if (!registerStart(frame)) gone = true;
+        if (registerStart(frame)) started = true;
+        else if (++startTries >= START_TRIES) {
+          // The screen still can't be matched to the screenshot: a different scene. Show nothing here.
+          started = true;
+          gone = true;
+          unplaced = true;
+        } else return markers.map((m) => ({ x: m.x / w, y: m.y / h, visible: false, score: 0 }));
       } else if (prev) {
         // 1a. Frame to frame: how far did the scene move since the previous frame? (reliable, but tiny errors add up)
         const stepMoves = [];
@@ -636,6 +646,10 @@
       /** True after a scene change (camera tracking broke), or if nothing could be found at the start. */
       get gone() {
         return gone;
+      },
+      /** True when the screen never matched the screenshot (the scene changed before the answer arrived). */
+      get unplaced() {
+        return unplaced;
       },
       /** True while the camera can't be followed (the page ends the markers if this lasts, even with no new frames). */
       get lost() {

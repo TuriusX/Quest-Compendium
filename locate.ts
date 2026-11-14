@@ -26,8 +26,37 @@ export interface LocateDeps {
   now?: () => number;
   /** Whether this player gets marker AI features (Premium, or everyone during the beta). Default: yes. */
   allowed?: (req: Request) => Promise<boolean>;
-  /** The close-up check looked at `checked` markers and kept `kept` (marker drop counts per game). */
-  onChecked?: (game: string, checked: number, kept: number) => void;
+  /**
+   * The close-up check looked at `checked` markers and kept `kept` (marker drop counts per game). `details`: each marker
+   * it removed or moved far, with why, for the Quality page (no screenshots or crops are kept).
+   */
+  onChecked?: (game: string, checked: number, kept: number, details?: MarkerCheckDetail[]) => void;
+}
+
+/** What the close-up check made of one marker. */
+export type MarkerOutcome = 'kept' | 'moved' | 'not there' | 'no person';
+export interface MarkerCheckDetail {
+  label: string;
+  category: string;
+  guide: boolean;
+  outcome: Exclude<MarkerOutcome, 'kept'>;
+  client: string;
+  appVersion: string;
+}
+
+/** Found this far (0-1 of the close-up) from the close-up's centre, a marker was on the wrong thing next to it. */
+const MOVED_FAR = 0.25;
+/**
+ * Each checked marker's outcome: not found ("not there"), found by the first look but the blind look saw no one there
+ * ("no person"), found far from where the answer put it ("moved"), else kept.
+ */
+export function markerOutcomes(count: number, firstLook: { index: number; x: number; y: number }[], noOne: Set<number>): MarkerOutcome[] {
+  return Array.from({ length: count }, (_, i) => {
+    const f = firstLook.find((x) => x.index === i);
+    if (!f) return 'not there';
+    if (noOne.has(i)) return 'no person';
+    return Math.hypot(f.x - 0.5, f.y - 0.5) > MOVED_FAR ? 'moved' : 'kept';
+  });
 }
 
 export interface LocateTarget {
@@ -39,6 +68,8 @@ const MAX_TARGETS = 6;
 // These replies are a short JSON list, so default thinking was nearly all the cost (often 3,000+ thinking tokens to
 // answer "[]"). LOW is the lowest level gemini-3.8-flash accepts (MINIMAL is rejected with a 400).
 const LOCATE_THINKING = { thinkingLevel: ThinkingLevel.LOW };
+/** The precision pass checks every marker an answer can have: 5, or 8 in a fight. */
+export const REFINE_MAX_CROPS = 8;
 const MAX_IMAGE_CHARS = 4_000_000; // ~3 MB of base64: a 1280x720 JPEG is far smaller
 
 const envNum = (v: string | undefined, d: number) => {
@@ -171,15 +202,19 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
   app.post('/api/refine', deps.requireAuth as any, async (req: Request, res: Response) => {
     if (deps.allowed && !(await deps.allowed(req))) return res.status(403).json({ error: 'Part of Premium.', premiumRequired: true, found: [] });
     const crops = (Array.isArray(req.body?.crops) ? req.body.crops : [])
-      .slice(0, 5)
+      .slice(0, REFINE_MAX_CROPS)
       .map((c: any) => ({
         image: String(c?.image ?? ''),
         label: String(c?.label ?? '').trim().slice(0, 40),
         where: String(c?.where ?? '').trim().slice(0, 100),
         category: /^[a-z]{2,12}$/.test(String(c?.category ?? '')) ? String(c.category) : '',
+        guide: c?.guide === true,
       }))
       .filter((c: any) => c.label && DATA_URL_RE.test(c.image) && c.image.length <= MAX_IMAGE_CHARS);
     if (!crops.length) return res.json({ found: [] });
+    // Which app asked (desktop, web, deck) and its version, kept with the removals so a bad release shows up.
+    const client = /^(desktop|web|deck)$/.test(String(req.body?.client ?? '')) ? String(req.body.client) : 'desktop';
+    const appVersion = String(req.body?.appVersion ?? '').replace(/[^0-9A-Za-z.+-]/g, '').slice(0, 24);
 
     const user = (req as any).user ?? {};
     const uid = String(user.uid ?? '');
@@ -232,6 +267,8 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
       ]);
       logUsage('precision', model, response);
       let found = parseLocateReply(response?.text ?? '', crops.length);
+      const firstLook = found;
+      const noOne = new Set<number>();
 
       // Blind second look at people and enemies. Told what to expect, a model will happily see "an old man" in a
       // cushioned chair; asked cold what's in the middle of the picture, it says "a chair". So, without naming the
@@ -264,7 +301,6 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
           logUsage('precision-people', model, blind);
           const rows = JSON.parse(String(blind?.text ?? '[]').replace(/```json|```/g, '').trim());
           if (Array.isArray(rows)) {
-            const noOne = new Set<number>();
             for (const r of rows) {
               const k = Number(r?.i);
               if (Number.isInteger(k) && people[k] && r?.character === false) {
@@ -278,9 +314,17 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
           console.warn('[refine] people check skipped:', e?.message); // keep the first check's result
         }
       }
-      // Markers the check looked at and couldn't find are dropped by the app: counted per game.
-      if (deps.onChecked) deps.onChecked(game, crops.length, new Set(found.map((f: any) => f.index)).size);
-      return res.json({ found });
+      // Markers the check looked at and couldn't find are dropped by the app: counted per game, and each removed or
+      // badly placed one is noted (what it was, its kind, why) for the Quality page.
+      if (deps.onChecked) {
+        const details = markerOutcomes(crops.length, firstLook, noOne)
+          .map((outcome, i) => ({ outcome, c: crops[i] }))
+          .filter((d): d is { outcome: MarkerCheckDetail['outcome']; c: any } => d.outcome !== 'kept')
+          .map(({ outcome, c }) => ({ label: c.label, category: c.category, guide: c.guide, outcome, client, appVersion }));
+        deps.onChecked(game, crops.length, new Set(found.map((f: any) => f.index)).size, details);
+      }
+      // `checked`: how many markers were looked at, so the app only removes those (older servers checked 5).
+      return res.json({ found, checked: crops.length });
     } catch (err: any) {
       console.warn('[refine] failed:', err?.message);
       return res.status(502).json({ error: 'Could not refine the markers.', found: [] });

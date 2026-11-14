@@ -104,6 +104,7 @@ export function AnnotatedShot({
   compact = false,
   referenced,
   onTrack,
+  unplaced = false,
 }: {
   msgId: string;
   imageUrl?: string;
@@ -126,6 +127,8 @@ export function AnnotatedShot({
   referenced?: Set<number>;
   /** Desktop: show these objectives in the on-screen tracker (the panel hides, the tracker takes its place). */
   onTrack?: () => void;
+  /** Desktop: the game screen no longer matched the screenshot, so the markers couldn't be placed on it. */
+  unplaced?: boolean;
 }) {
   const t = useT();
   const [large, setLarge] = useState(false);
@@ -278,6 +281,23 @@ export function AnnotatedShot({
             </button>
           )}
         </div>
+        {unplaced && left > 0 && (
+          <p className="text-[11.5px] leading-snug text-zinc-400">
+            {t('chat.markersUnplaced')}{' '}
+            {imageUrl && !(menu && showShot) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenu(true);
+                  setShowShot(true);
+                }}
+                className="font-semibold text-[var(--accent-color)] hover:underline cursor-pointer"
+              >
+                {t('chat.markersOnShot')}
+              </button>
+            )}
+          </p>
+        )}
         {menu && (
           <div className="p-2.5 rounded-xl bg-black/30 border border-white/[0.08] space-y-2 animate-in fade-in duration-100">
             {(onTrack || imageUrl) && (

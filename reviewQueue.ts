@@ -321,15 +321,23 @@ ${ADMIN_THEME_BUTTON}</header>
       ? '<table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;padding:4px">Game</th><th style="text-align:right;padding:4px">Checked</th><th style="text-align:right;padding:4px">Dropped</th><th style="text-align:right;padding:4px">Drop rate</th></tr>'
         + mk.map((m) => '<tr><td style="padding:4px;border-top:1px solid var(--line)">' + esc(m.game) + '</td><td style="text-align:right;padding:4px;border-top:1px solid var(--line)">' + m.checked + '</td><td style="text-align:right;padding:4px;border-top:1px solid var(--line)">' + m.dropped + '</td><td style="text-align:right;padding:4px;border-top:1px solid var(--line)"><b>' + m.rate + '%</b></td></tr>').join('') + '</table>'
       : '<p class="dim">No checks counted yet.</p>') + '</div>';
+    // The latest markers the check removed or found far off: what, which game, why, from which app version.
+    const rm = qual.markerRemovals || { list: [], total: 0 };
+    const split = (pairs) => (pairs || []).map(([k, n]) => esc(k) + ' ' + n).join(' · ');
+    const removals = '<div class="card"><b>What the close-up check removed or moved</b> <span class="dim">(latest ' + rm.total + ')</span>' + (rm.list.length
+      ? '<div class="dim" style="margin:4px 0">Why: ' + split(rm.byOutcome) + '<br>Kind: ' + split(rm.byKind) + '<br>App: ' + split(rm.byVersion) + '</div>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;padding:4px">Marker</th><th style="text-align:left;padding:4px">Game</th><th style="text-align:left;padding:4px">Why</th><th style="text-align:left;padding:4px">App</th><th style="text-align:right;padding:4px">When</th></tr>'
+        + rm.list.map((r) => '<tr><td style="padding:4px;border-top:1px solid var(--line)">' + esc(r.label) + ' <span class="dim">' + esc(r.guide ? 'guide entry' : r.category || '') + '</span></td><td style="padding:4px;border-top:1px solid var(--line)">' + esc(r.game) + '</td><td style="padding:4px;border-top:1px solid var(--line)">' + esc(r.outcome) + '</td><td style="padding:4px;border-top:1px solid var(--line)" class="dim">' + esc(r.client + ' ' + (r.appVersion || '')) + '</td><td style="text-align:right;padding:4px;border-top:1px solid var(--line)" class="dim">' + new Date(r.at).toLocaleDateString() + '</td></tr>').join('') + '</table>'
+      : '<p class="dim">Nothing recorded yet.</p>') + '</div>';
     const downs = (qual.recentDown || []).map((r) => '<div class="card"><div class="row"><span class="game">' + esc(r.game || 'No game') + '</span>'
       + (r.reason ? '<span class="chip wrong">' + esc(WHY[r.reason] || r.reason) + '</span>' : '')
-      + '<span class="dim">' + esc([r.qtype, r.model, r.markers ? 'markers shown' : '', r.client].filter(Boolean).join(' · ')) + '</span>'
+      + '<span class="dim">' + esc([r.qtype, r.model, r.markers ? 'markers shown' : '', [r.client, r.appVersion].filter(Boolean).join(' ')].filter(Boolean).join(' · ')) + '</span>'
       + '<span class="dim">' + new Date(r.at).toLocaleString() + '</span></div>'
       + (r.question ? '<div class="guide"><b>Asked:</b> ' + esc(r.question) + '</div>' : '')
       + '<details><summary>The answer</summary><div class="answer">' + esc(r.answer || '') + '</div></details></div>').join('');
     $('quality').innerHTML = '<div class="card"><b>Last 30 days:</b> ' + (t.up || 0) + ' 👍, ' + (t.down || 0) + ' 👎' + (t.rate != null ? ', <b>' + t.rate + '%</b> 👍' : '') + (reasons ? '<div class="dim">What was wrong: ' + reasons + '</div>' : '') + '</div>'
       + tbl('Per question type', qual.byType, 'Type') + tbl('Per model', qual.byModel, 'Model') + tbl('With and without markers', qual.byMarkers, 'Markers') + tbl('Per game', qual.byGame, 'Game')
-      + markers + '<h3>Recent 👎</h3>' + (downs || '<p class="dim">None.</p>');
+      + markers + removals + '<h3>Recent 👎</h3>' + (downs || '<p class="dim">None.</p>');
     if (tab === 'quality') $('msg').textContent = 'Answer quality from players’ votes, and marker drops from the close-up check.';
   }
   // Suggestions (contributions.ts): players' corrections and details, checked against sources each night; Approve puts

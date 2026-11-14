@@ -117,14 +117,15 @@ test("nothing is held (owner, Nov 1 2026): a whole staged page without a list ca
   assert.equal(rebuildVerdict(old, fields, 0).hold, false);
 });
 
-test("an entry's own sources decide; banned and low-trust sites and our own site don't count", () => {
+test("an entry's own sources decide; low-trust sites and our own site don't count, wikis do (nothing blocked since Nov 8)", () => {
   const old = { status: "published", verified: false, items: [
-    { name: "Golden Gun", sources: ["prey.fandom.com", "reddit.com", "questcompendium.com"] },
+    { name: "Golden Gun", sources: ["reddit.com", "questcompendium.com"] },
     { name: "Q-Beam", sources: ["https://www.ign.com/wikis/prey"] },
+    { name: "Disruptor", sources: ["prey.fandom.com"] },
   ] };
   const v = rebuildVerdict(old, { items: [] }, 0);
   assert.equal(v.hold, true);
-  assert.deepEqual(v.lost.map((x) => [x.name, x.sourced]), [["Golden Gun", false], ["Q-Beam", true]]);
+  assert.deepEqual(v.lost.map((x) => [x.name, x.sourced]), [["Golden Gun", false], ["Q-Beam", true], ["Disruptor", true]]);
 });
 
 test("a walkthrough cut to under two thirds of its steps is a loss; secrets compared by their words", () => {

@@ -30,6 +30,9 @@ const BetaFeedbackModal = React.lazy(() => import('./components/BetaFeedbackModa
 import { db } from './lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
+import { settleCheck, type CheckFound } from './utils/markerCheck';
+declare const __APP_BUILD__: { version: string } | undefined;
+const APP_VERSION = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__.version : 'dev';
 import { playBlipSound } from './utils/audio';
 import { samePlace, placeAfterMove, singleArea, dropDoingIfMoved } from './utils/placeName';
 import { addDone, doneForRequest, areaMovedPast, endedFight, type DoneKind } from './utils/progressMemory';
@@ -743,9 +746,10 @@ export default function App() {
   }, [settings.controllerEnabled, settings.controllerToggle, settings.controllerCustom, settings.controllerTalk, settings.controllerTick, settings.controllerNext, settings.controllerLocate]);
 
   // Snapshot on open (desktop): capture the game before the overlay takes focus.
+  const noFollowText = tr('markers.noFollow');
   useEffect(() => {
-    (window as any).electronAPI?.setOverlayOptions?.({ snapshotOnOpen: settings.snapshotOnOpen !== false, stickyPointers: settings.stickyPointers !== false, markersInRecordings: settings.markersInRecordings !== false, markerLifetimeMs: Math.max(0, settings.markerLifetime ?? 120) * 1000 });
-  }, [settings.snapshotOnOpen, settings.stickyPointers, settings.markersInRecordings, settings.markerLifetime]);
+    (window as any).electronAPI?.setOverlayOptions?.({ snapshotOnOpen: settings.snapshotOnOpen !== false, stickyPointers: settings.stickyPointers !== false, markersInRecordings: settings.markersInRecordings !== false, markerLifetimeMs: Math.max(0, settings.markerLifetime ?? 120) * 1000, noFollowText });
+  }, [settings.snapshotOnOpen, settings.stickyPointers, settings.markersInRecordings, settings.markerLifetime, noFollowText]);
 
   /** Update one message wherever it is (used by the marker features). */
   // Bumps the tab's lastActive: a sync keeps whichever copy of a tab is newer, so an edit made after the answer was
@@ -1495,18 +1499,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         // A ticked step goes on the "already done" list.
         const tabOf = tabs.find((t) => t.messages.some((m) => m.id === msgId));
         if (e.done && tabOf) rememberDone(tabOf, [{ text: msg.steps[index].text, kind: 'step' }]);
-      } else if (id.startsWith('a:')) {
-        // An answer's marker: a:<message id>:<index>, the same as its checklist under the answer.
-        const cut = id.lastIndexOf(':');
-        const msgId = id.slice(2, cut);
-        const index = Number(id.slice(cut + 1));
-        const msg = tabs.flatMap((t) => t.messages).find((m) => m.id === msgId);
-        if (!msg?.points?.length || !Number.isInteger(index) || index < 0 || index >= msg.points.length) return;
-        const done = msg.donePoints ?? [];
-        const next = e.done ? [...new Set([...done, index])].sort((x, y) => x - y) : done.filter((d) => d !== index);
-        updateMessageById(msgId, (m) => ({ ...m, donePoints: next }));
-        if (next.length >= msg.points.length) api?.hideScreenPointers?.();
-        else if (markersActiveFor(msgId)) api?.setPointersHidden?.(msgId, next);
       } else if (id.startsWith('q:') || id.startsWith('w:')) {
         // Loaded guide steps: q:<quest slug>:<step id> (the quest page's ticks), w:<area slug>:<step id> (the
         // walkthrough's, on its area). Kept with the guide's other ticks, so they sync with the account.
@@ -1674,8 +1666,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
    * Zoom in on spots of a screenshot and ask the fast model to pinpoint each described object in its close-up.
    * Returns the objects it found (0-1 in the full screenshot); objects it couldn't find are left out.
    */
-  /** Close-up check of each marker. Returns null when the check couldn't run (so nothing is removed on errors). */
-  const pinpoint = async (image: string, items: { x: number; y: number; label: string; where: string; category?: string }[], game: string, token: string | null): Promise<{ index: number; x: number; y: number }[] | null> => {
+  /**
+   * Close-up check of each marker. Returns null when the check couldn't run (so nothing is removed on errors).
+   * `checked`: how many of the items the server looked at (the first N; older servers check 5).
+   */
+  const pinpoint = async (image: string, items: { x: number; y: number; label: string; where: string; category?: string; guide?: boolean }[], game: string, token: string | null): Promise<{ found: CheckFound[]; checked: number } | null> => {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const el = new Image();
       el.onload = () => resolve(el);
@@ -1695,21 +1690,24 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       const y0 = Math.max(0, Math.min(H - side, Math.round(p.y * H - side / 2)));
       ctx.imageSmoothingEnabled = false; // keep pixel art crisp when zooming in
       ctx.drawImage(img, x0, y0, side, side, 0, 0, 768, 768);
-      return { index, x0, y0, image: canvas.toDataURL('image/jpeg', 0.85), label: p.label, where: p.where, category: p.category };
+      return { index, x0, y0, image: canvas.toDataURL('image/jpeg', 0.85), label: p.label, where: p.where, category: p.category, guide: !!p.guide };
     });
     const res = await fetch(`${getApiBaseUrl()}/api/refine`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ crops: crops.map((c) => ({ image: c.image, label: c.label, where: c.where, category: c.category })), game }),
+      // Which app and version asked, and which markers are guide entries: kept with any removals (Quality page).
+      body: JSON.stringify({ crops: crops.map((c) => ({ image: c.image, label: c.label, where: c.where, category: c.category, ...(c.guide ? { guide: true } : {}) })), game, client: (window as any).electronAPI ? 'desktop' : 'web', appVersion: APP_VERSION }),
     });
     if (!res.ok) return null;
     const data = await res.json();
-    return (Array.isArray(data.found) ? data.found : [])
+    const found = (Array.isArray(data.found) ? data.found : [])
       .map((f: { index: number; x: number; y: number }) => {
         const c = crops[f.index];
         return c ? { index: c.index, x: (c.x0 + f.x * side) / W, y: (c.y0 + f.y * side) / H } : null;
       })
-      .filter(Boolean) as { index: number; x: number; y: number }[];
+      .filter(Boolean) as CheckFound[];
+    const checked = Number.isInteger(data.checked) ? Math.min(data.checked, crops.length) : Math.min(5, crops.length);
+    return { found, checked };
   };
 
   // Where the player is in each game, kept in settings so it outlives any one compendium.
@@ -1796,52 +1794,34 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   };
 
   const refineMarkers = async (msgId: string, image: string, points: ScreenPoint[], game: string, token: string | null) => {
-    const log = (m: string) => (window as any).electronAPI?.markerLog?.(m);
+    const api = (window as any).electronAPI;
+    const log = (m: string) => api?.markerLog?.(m);
+    // The markers are on screen dimmed ("checking") until this settles them, whatever happens.
+    let moves: CheckFound[] = [];
+    let removed: number[] = [];
     try {
-      const found = await pinpoint(image, points.map((p) => ({ x: p.x, y: p.y, label: p.label, where: p.where || '', category: p.category })), game, token);
-      if (!found) {
+      const res = await pinpoint(image, points.map((p) => ({ x: p.x, y: p.y, label: p.label, where: p.where || '', category: p.category, guide: !!p.guideId })), game, token);
+      if (!res) {
         log('precision pass skipped (check unavailable)');
         return;
       }
       // Markers the strict close-up check couldn't find aren't really on screen (the AI expected something from its
       // memory of the place, like an NPC from another visit or stairs that aren't there): remove them. Only markers the
-      // check actually looked at (the first five) can be removed.
-      const unseen = points.map((p, i) => i).filter((i) => i < 5 && !found.some((f) => f.index === i));
-      if (unseen.length) {
-        const kept = points
-          .map((p, i) => {
-            const mv = found.find((f) => f.index === i);
-            return mv ? { ...p, x: mv.x, y: mv.y } : p;
-          })
-          .filter((_, i) => !unseen.includes(i));
-        log(`precision pass: removed ${unseen.length} marker(s) the close-up check couldn't see`);
-        // Described in words instead of a marker: what it is and where the answer said it is.
-        const removedLabels = unseen.map((i) => (points[i].where ? `${points[i].label} (${points[i].where})` : points[i].label));
-        updateMessageById(msgId, (m) => ({
-          ...m,
-          points: kept.length ? kept : undefined,
-          donePoints: [],
-          removedMarkers: [...(m.removedMarkers || []), ...removedLabels],
-        }));
-        const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
-        const combat = !!tabs.flatMap((t) => t.messages).find((m) => m.id === msgId)?.combat;
-        if (kept.length) (window as any).electronAPI?.showScreenPointers?.(kept, accent, { refImage: image, sessionId: msgId, hidden: [], combat });
-        else (window as any).electronAPI?.hideScreenPointers?.();
-        return;
-      }
-      const moves = found.filter((m) => Math.hypot(m.x - points[m.index].x, m.y - points[m.index].y) > 0.004);
-      log(`precision pass: ${moves.length} of ${points.length} marker(s) adjusted`);
-      if (!moves.length) return;
+      // check actually looked at can be removed. Ticks carry over to the new numbering.
+      const s = settleCheck(points, res.found, res.checked, tabsRef.current.flatMap((t) => t.messages).find((m) => m.id === msgId)?.donePoints ?? []);
+      moves = s.moves;
+      removed = s.removed;
+      log(`precision pass: ${s.moves.length} of ${points.length} marker(s) adjusted, ${s.removed.length} removed`);
+      if (!s.moves.length && !s.removed.length) return;
       updateMessageById(msgId, (m) => ({
         ...m,
-        points: (m.points ?? []).map((p, i) => {
-          const mv = moves.find((x) => x.index === i);
-          return mv ? { ...p, x: mv.x, y: mv.y } : p;
-        }),
+        points: s.kept.length ? s.kept : undefined,
+        ...(s.removed.length ? { donePoints: s.done, removedMarkers: [...(m.removedMarkers || []), ...s.removedLabels] } : {}),
       }));
-      (window as any).electronAPI?.movePointers?.(msgId, moves);
     } catch (e: any) {
       log(`precision pass skipped: ${e?.message ?? e}`);
+    } finally {
+      api?.settlePointers?.(msgId, moves, removed);
     }
   };
 
@@ -1860,7 +1840,13 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   useEffect(() => {
     const api = (window as any).electronAPI;
     if (!api?.onLocateRequest) return;
-    api.onPointersState?.(({ id, active }: { id: string; active: boolean }) => setPointersActive(id, active));
+    api.onPointersState?.(({ id, active, unplaced }: { id: string; active: boolean; unplaced?: boolean }) => {
+      setPointersActive(id, active);
+      // Couldn't be placed (the scene changed): the answer says so and offers them on the screenshot. Placed later
+      // (Show, back in the same spot): the note goes.
+      if (unplaced) updateMessageById(id, (m) => (m.markersUnplaced ? m : { ...m, markersUnplaced: true }));
+      else if (active) updateMessageById(id, (m) => (m.markersUnplaced ? { ...m, markersUnplaced: false } : m));
+    });
     api.onLocateRequest(async ({ id, image, occupied }: { id: string; image: string; occupied?: { x: number; y: number }[] }) => {
       const tab = tabsRef.current.find((t) => t.messages.some((m) => m.id === id));
       const msg = tab?.messages.find((m) => m.id === id);
@@ -1926,7 +1912,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         });
         // Gate 2: a close-up of the spot must independently find the described object there.
         const confirmed = clear.length
-          ? (await pinpoint(image, clear.map((f) => ({ x: f.x, y: f.y, label: pending[f.index].label, where: pending[f.index].hint || '' })), tab.activeSteamGame?.name || locateGameRef.current?.name || '', token)) ?? []
+          ? (await pinpoint(image, clear.map((f) => ({ x: f.x, y: f.y, label: pending[f.index].label, where: pending[f.index].hint || '' })), tab.activeSteamGame?.name || locateGameRef.current?.name || '', token))?.found ?? []
           : [];
         const fresh = confirmed
           .filter((c) => Math.hypot(c.x - clear[c.index].x, (c.y - clear[c.index].y) * 0.5625) < 0.08)
@@ -2670,6 +2656,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           hidden: [],
           watchNearby: !!aiMessage.nearby?.length,
           combat: !!aiMessage.combat,
+          // The precision pass below checks them first: dimmed until it settles them.
+          checking: !!imageBase64,
         });
       } else if (aiMessage.noFight) {
         // The fight is over and this answer marks nothing: the old fight's markers go.

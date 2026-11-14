@@ -1618,6 +1618,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               lifetime={markerLifetime ?? 120}
                               onChangeLifetime={onChangeMarkerLifetime}
                               removed={msg.removedMarkers}
+                              unplaced={!!msg.markersUnplaced}
                               compact={compact}
                               referenced={compact ? markerMentions(msg.text, points) : undefined}
                               onTrack={compact && onTrackOnScreen ? () => onTrackOnScreen(msg.id) : undefined}
@@ -1992,7 +1993,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {!isUser && voteAsk === msg.id && msg.vote === 'down' && (
                     <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]" role="group" aria-label={t('vote.whatWrong')}>
                       <span className="text-zinc-400 mr-0.5">{t('vote.whatWrong')}</span>
-                      {VOTE_REASONS.map((r) => (
+                      {/* "Marker off" only when the answer showed markers (or a Spot it result). */}
+                      {VOTE_REASONS.filter((r) => r !== 'marker' || !!msg.points?.length || !!msg.removedMarkers?.length || msg.kind === 'spot').map((r) => (
                         <button
                           key={r}
                           type="button"

@@ -89,6 +89,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addPointers: (id, points, refImage, startIndex) => ipcRenderer.send('pointers-add', { id, points, refImage, startIndex }),
   locateDone: (id, remaining) => ipcRenderer.send('pointers-locate-done', { id, remaining }),
   movePointers: (id, moves) => ipcRenderer.send('pointers-move', { id, moves }),
+  settlePointers: (id, moves, removed) => ipcRenderer.send('pointers-settle', { id, moves, removed }),
   markerLog: (message) => ipcRenderer.send('pointers-log', message),
   onPointersState: (callback) => { ipcRenderer.removeAllListeners('pointers-state'); ipcRenderer.on('pointers-state', (event, s) => callback(s)); },
   onLocateRequest: (callback) => { ipcRenderer.removeAllListeners('locate-request'); ipcRenderer.on('locate-request', (event, r) => callback(r)); },

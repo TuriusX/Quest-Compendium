@@ -28,7 +28,7 @@
  */
 
 function createFocusHelper() {
-  const noop = { available: false, take: () => null, restore: () => {}, other: () => null, describe: () => '', windowInFolder: () => null, foregroundInfo: () => null };
+  const noop = { available: false, take: () => null, restore: () => {}, other: () => null, describe: () => '', windowInFolder: () => null, foregroundInfo: () => null, rectOf: () => null, windowOfPid: () => null };
   if (process.platform !== 'win32') return noop;
   let api;
   try {
@@ -121,12 +121,34 @@ function createFocusHelper() {
   function windowInFolder(dir) {
     if (!dir) return null;
     const prefix = dir.replace(/[\\/]+$/, '').toLowerCase() + '\\';
+    return largestWindow((h) => exePathOf(h).toLowerCase().startsWith(prefix));
+  }
+
+  /** The largest visible, titled top-level window of the process `pid` (a detected game), or null. */
+  function windowOfPid(pid) {
+    if (!pid || pid === process.pid) return null;
+    return largestWindow((h) => pidOf(h) === pid);
+  }
+
+  /** A window's rectangle in physical screen pixels, or null when it's gone. */
+  function rectOf(hwnd) {
+    try {
+      if (!hwnd || !api.IsWindow(hwnd)) return null;
+      const r = {};
+      api.GetWindowRect(hwnd, r);
+      return { x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top };
+    } catch {
+      return null;
+    }
+  }
+
+  function largestWindow(matches) {
     let best = null, bestArea = 0;
     const cb = api.koffi.register((hwnd) => {
       try {
         const h = asNum(hwnd);
         if (!api.IsWindowVisible(h) || isOurs(h) || !titleOf(h)) return 1;
-        if (!exePathOf(h).toLowerCase().startsWith(prefix)) return 1;
+        if (!matches(h)) return 1;
         const r = {};
         api.GetWindowRect(h, r);
         const area = Math.max(0, r.right - r.left) * Math.max(0, r.bottom - r.top);
@@ -212,6 +234,8 @@ function createFocusHelper() {
     /** A window for the logs: its title, process name and handle. */
     describe,
     windowInFolder,
+    windowOfPid,
+    rectOf,
 
     /**
      * Hand focus back to `previous` if our app still has it (called before the panel moves or hides).

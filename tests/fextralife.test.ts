@@ -9,11 +9,12 @@ function test(name: string, fn: () => void) {
   catch (e: any) { console.log("FAIL  " + name + "   -> " + String(e.message).split("\n")[0]); process.exitCode = 1; }
 }
 
-test("Fextralife counts as a source again (owner, Oct 19 2026); Fandom still doesn't", () => {
+test("Fextralife (Oct 19 2026) and Fandom (Nov 8 2026) count as sources; only our own site never does (Nov 10 2026)", () => {
   assert.equal(BLOCKED.test("fextralife.com"), false);
   assert.equal(BLOCKED.test("eldenring.wiki.fextralife.com"), false);
-  assert.equal(BLOCKED.test("witcher.fandom.com"), true);
-  assert.deepEqual(trustedSites(["eldenring.wiki.fextralife.com", "witcher.fandom.com", "ign.com"]), ["eldenring.wiki.fextralife.com", "ign.com"]);
+  assert.equal(BLOCKED.test("witcher.fandom.com"), false);
+  assert.equal(BLOCKED.test("questcompendium.com"), true);
+  assert.deepEqual(trustedSites(["eldenring.wiki.fextralife.com", "witcher.fandom.com", "questcompendium.com", "ign.com"]), ["eldenring.wiki.fextralife.com", "witcher.fandom.com", "ign.com"]);
 });
 
 test("the game's Fextralife wiki is guessed from its name", () => {

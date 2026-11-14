@@ -43,9 +43,34 @@ function voterOf(req: Request): string {
   return `ip:${crypto.createHash('sha256').update(`${process.env.CORRECTION_SALT || 'qc-corrections'}:ip:${ip}`).digest('hex').slice(0, 20)}`;
 }
 
-/** The close-up check looked at `checked` markers and kept `kept`: counted per game and day. */
-export async function recordMarkerCheck(game: string, checked: number, kept: number): Promise<void> {
+/** How many removed or badly placed markers the Quality page keeps (newest first). */
+export const MARKER_REMOVALS_KEPT = 200;
+export interface MarkerRemoval { at: number; game: string; label: string; category: string; guide: boolean; outcome: string; client: string; appVersion: string }
+
+/** Adds the newest removals in front and keeps the latest MARKER_REMOVALS_KEPT. */
+export function addRemovals(list: MarkerRemoval[] | undefined, fresh: MarkerRemoval[]): MarkerRemoval[] {
+  return [...fresh, ...(Array.isArray(list) ? list : [])].slice(0, MARKER_REMOVALS_KEPT);
+}
+
+/**
+ * The close-up check looked at `checked` markers and kept `kept`: counted per game and day. `details`: the markers it
+ * removed or found far off, with why (system/markerRemovals keeps the latest 200; no screenshots or crops are kept).
+ */
+export async function recordMarkerCheck(game: string, checked: number, kept: number, details: Omit<MarkerRemoval, 'at' | 'game'>[] = []): Promise<void> {
   if (!checked) return;
+  if (details.length) {
+    const at = Date.now();
+    const fresh = details.map((d) => ({ at, game: cut(game, 160) || 'Unknown', label: cut(d.label, 40), category: cut(d.category, 12), guide: d.guide === true, outcome: cut(d.outcome, 12), client: cut(d.client, 8), appVersion: cut(d.appVersion, 24) }));
+    const ref = db().collection('system').doc('markerRemovals');
+    try {
+      await db().runTransaction(async (tx) => {
+        const cur: any = (await tx.get(ref)).data() || {};
+        tx.set(ref, { list: addRemovals(cur.list, fresh), updatedAt: at });
+      });
+    } catch (e: any) {
+      console.warn('[markers] removal details not saved:', e?.message);
+    }
+  }
   const day = new Date().toISOString().slice(0, 10);
   const dropped = Math.max(0, checked - kept);
   try {
@@ -96,7 +121,7 @@ export function registerAnswerFeedback(app: Express, deps: { requireAuth: Mw; op
       await col().doc(id).set({
         vote, reason, qtype, game: cut(b.game, 160), model: cut(b.model, 80), markers: b.markers === true,
         ...(b.kind === 'spot' ? { kind: 'spot' } : {}),
-        client: cut(b.client, 20) || 'desktop', question: cut(b.question, 1000),
+        client: cut(b.client, 20) || 'desktop', appVersion: cut(b.appVersion, 24) || null, question: cut(b.question, 1000),
         // The answer is kept for 👎s only (the Quality tab shows them).
         answer: vote === 'down' ? cut(b.answer, 6000) : null,
         voterKey: voter, at: Date.now(),
@@ -129,6 +154,10 @@ export function registerAnswerFeedback(app: Express, deps: { requireAuth: Mw; op
         return { id: d.id, ...r };
       });
       const up = rows.filter((r) => r.vote === 'up').length, down = rows.filter((r) => r.vote === 'down').length;
+      // The latest removed or badly placed markers, and how they split by why and by kind.
+      const removals: MarkerRemoval[] = ((await db().collection('system').doc('markerRemovals').get()).data() as any)?.list || [];
+      const countBy = (key: (r: MarkerRemoval) => string) => Object.entries(removals.reduce((m: Record<string, number>, r) => ((m[key(r) || 'unknown'] = (m[key(r) || 'unknown'] || 0) + 1), m), {})).sort((a, b) => b[1] - a[1]);
+      const markerRemovals = { list: removals.slice(0, 60), total: removals.length, byOutcome: countBy((r) => r.outcome), byKind: countBy((r) => (r.guide ? 'guide entry' : r.category)), byVersion: countBy((r) => `${r.client} ${r.appVersion || '?'}`) };
       const markers = (await db().collection('markerStats').orderBy('checked', 'desc').limit(40).get()).docs.map((d) => {
         const m: any = d.data();
         return { key: d.id, game: m.game, checked: m.checked || 0, dropped: m.dropped || 0, checks: m.checks || 0, rate: m.checked ? Math.round(((m.dropped || 0) / m.checked) * 100) : 0 };
@@ -142,6 +171,7 @@ export function registerAnswerFeedback(app: Express, deps: { requireAuth: Mw; op
         reasons: Object.fromEntries(FEEDBACK_REASONS.map((x) => [x, rows.filter((r) => r.vote === 'down' && r.reason === x).length])),
         recentDown: rows.filter((r) => r.vote === 'down').slice(0, 40),
         markers,
+        markerRemovals,
       });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || 'Could not load the numbers.' });

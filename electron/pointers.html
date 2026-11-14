@@ -49,6 +49,12 @@
                              box-shadow: 0 0 0 2px rgba(0, 0, 0, .55), 0 0 18px rgba(255, 90, 79, .75), 0 6px 18px rgba(0, 0, 0, .6); }
   body.combat .m.kill .num { width: 28px; height: 28px; font-size: 18px; color: #fff; align-self: center; }
   body.combat .m.kill.r1 .tag { font-size: 20px; }
+  /* Being checked (the precision pass): dimmed with a dashed edge and a blinking number, so a marker that then slides
+     or fades out reads as "not confirmed yet", not as a jump. Solid once checked. */
+  body.checking .m .tag { opacity: .85; border-style: dashed; background: rgba(16, 12, 28, .8); }
+  body.checking .num { animation: blink 1s steps(2) infinite; }
+  .m.gone { opacity: 0 !important; transition: opacity .3s steps(3); }
+  @keyframes blink { 50% { opacity: .35; } }
   @keyframes pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
 </style>
 </head>
@@ -62,7 +68,11 @@
   const CHECK_NEW_AREA = 0.33; // ask about nearby items again once this much of the screen is new
   let finished = false;
   let stream = null;
-  let hidden = new Set(); // markers the player switched off in the answer's list
+  let hidden = new Set(); // markers the player switched off in the answer's list (indexes of the markers drawn here)
+  let removed = new Set(); // markers the precision pass couldn't see: faded out for good
+  // The answer's list loses the removed markers, so its numbers no longer match ours: list index -> marker index here.
+  let listToEl = null;
+  const elIndex = (i) => (listToEl ? (i >= 0 && i < listToEl.length ? listToEl[i] : -1) : i);
   let live = null; // sticky-mode state, so markers can be added while tracking
   let pendingAdds = []; // found items that arrived before tracking started
 
@@ -195,7 +205,7 @@
     const GLIDE_MS = 110; // how quickly a marker settles onto a corrected spot
     let lastDraw = 0;
     const visible = opts.points.map(() => false);
-    live = { tracker, ctx, w, h, els, target, shown, visible };
+    live = { tracker, ctx, w, h, els, target, shown, visible, calm };
     // Found items that arrived while tracking was starting up (or that were found earlier and shown again).
     const queued = pendingAdds;
     pendingAdds = [];
@@ -260,10 +270,13 @@
           target[i].y = r.y;
           if (r.visible !== visible[i]) log(`marker ${i + 1} ${r.visible ? 'shown' : 'hidden'}`);
           visible[i] = r.visible;
-          els[i].classList.toggle('hidden', !r.visible || hidden.has(i));
+          els[i].classList.toggle('hidden', !r.visible || hidden.has(i) || removed.has(i));
         }
         if (tracker.gone) {
-          log('scene changed (or nothing left to track): fading out');
+          if (tracker.unplaced) {
+            log('the screen no longer matches the answer\'s screenshot: markers not placed');
+            if (window.qcBridge && window.qcBridge.unplaced) window.qcBridge.unplaced();
+          } else log('scene changed (or nothing left to track): fading out');
           return finish();
         }
         if (!tracker.lost) lastTracked = now;
@@ -359,19 +372,45 @@
     requestAnimationFrame(draw);
   }
 
-  /** Markers the player switched off (indexes into the answer's list). */
+  /** One item picked in the answer's list (its index there): its marker stands out. */
   window.qcHighlight = (index) => {
     const els = document.querySelectorAll('.m');
-    els.forEach((el, i) => el.classList.toggle('hl', i === index));
-    document.body.classList.toggle('focus', index >= 0 && index < els.length);
+    const at = elIndex(index);
+    els.forEach((el, i) => el.classList.toggle('hl', i === at));
+    document.body.classList.toggle('focus', at >= 0 && at < els.length);
   };
 
+  /** Markers the player switched off (indexes into the answer's list). */
   window.qcSetHidden = (list) => {
-    hidden = new Set(Array.isArray(list) ? list : []);
+    hidden = new Set((Array.isArray(list) ? list : []).map(elIndex).filter((i) => i >= 0));
     document.querySelectorAll('.m').forEach((el, i) => {
       if (hidden.has(i)) el.classList.add('hidden');
-      else if (!live) el.classList.remove('hidden');
+      else if (!live && !removed.has(i)) el.classList.remove('hidden');
     });
+  };
+
+  /**
+   * The precision pass is done: slide markers onto the exact object, fade out the ones it couldn't see, number the rest
+   * like the answer's list, and turn them solid. Runs once; a safety timer runs it empty if the check never reports.
+   */
+  let settled = false;
+  window.qcSettle = ({ moves, removed: gone } = {}) => {
+    if (settled) return;
+    settled = true;
+    const els = Array.from(document.querySelectorAll('.m'));
+    if (Array.isArray(moves) && moves.length) window.qcMovePoints({ moves: moves.filter((m) => !(gone || []).includes(m.index)) });
+    if (Array.isArray(gone) && gone.length) {
+      gone.forEach((i) => { if (els[i]) { removed.add(i); els[i].classList.add('gone', 'hidden'); } });
+      listToEl = els.map((_, i) => i).filter((i) => !removed.has(i));
+      // Renumber what's left so marker 2 on screen is item 2 in the answer (fight targets keep their kill order).
+      listToEl.forEach((elI, n) => {
+        const num = els[elI].querySelector('.num');
+        if (num && !els[elI].classList.contains('kill')) num.textContent = String(n + 1);
+      });
+      log(`precision pass removed ${gone.length} marker(s)`);
+      if (listToEl.length === 0) return finish();
+    }
+    document.body.classList.remove('checking');
   };
 
   /** Items found as the player walked: add markers that track like the others. */
@@ -383,7 +422,7 @@
       return;
     }
     const img = await loadImage(refImage);
-    const { tracker, ctx, w, h, els, target, shown, visible } = live;
+    const { tracker, ctx, w, h, els, target, shown, visible, calm } = live;
     // Items from an area check start where the camera movement since that screenshot puts them.
     const since = add.fromCheck ? live.checkCam : null;
     log(`adding ${points.length} found item(s) (${points.map((p) => p.label).join(', ')}), ${since ? 'placed from camera movement' : 'searching the screen'}`);
@@ -425,6 +464,22 @@
     }
   };
 
+  // Markers that don't follow the camera: a plain timer.
+  let fixedTimer = null;
+  function startFixed(ms) {
+    if (fixedTimer) clearTimeout(fixedTimer);
+    fixedTimer = ms > 0 ? setTimeout(finish, ms) : null;
+  }
+
+  /** A short line at the top of the screen for a few seconds. */
+  function toast(text) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = text;
+    document.body.append(el);
+    setTimeout(() => el.remove(), 5000);
+  }
+
   /** How long markers stay (0 = until hidden or the scene changes). Restarts the clock. */
   window.qcSetLifetime = (ms) => {
     if (live && live.opts) {
@@ -440,6 +495,11 @@
     if (Array.isArray(opts.extra)) pendingAdds.push(...opts.extra);
     document.documentElement.style.setProperty('--accent', opts.accent || '#a87ffb');
     document.body.classList.toggle('combat', !!opts.combat);
+    if (opts.checking) {
+      document.body.classList.add('checking');
+      // The check normally answers in 2-4 s; if it never does, the markers turn solid anyway.
+      setTimeout(() => window.qcSettle({}), 15000);
+    }
     const els = buildMarkers(opts.points || []);
     els.forEach((el, i) => hidden.has(i) && el.classList.add('hidden'));
     if (opts.sticky && opts.sourceId && opts.refImage && window.QCTracker) {
@@ -451,7 +511,10 @@
         els.forEach((el) => el.classList.remove('hidden'));
       }
     }
-    setTimeout(finish, opts.fixedMs || 8000);
+    // Not following the camera: they drift off their things as soon as the camera moves, so they go after a few
+    // seconds. If following was wanted, say why they don't.
+    startFixed(opts.fixedMs || 8000);
+    if (opts.wantSticky) toast(opts.noFollowText || "Markers won't follow the camera here");
   };
 </script>
 </body>

@@ -97,6 +97,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { createControllerService } = require('./controller.cjs');
 const { createFocusHelper } = require('./focus.cjs');
+const { pickCaptureDisplay } = require('./gameScreen.cjs');
 const tracker = require('./tracker.cjs');
 const { initUpdater } = require('./updater.cjs');
 const spine = require('./spine.cjs');
@@ -281,6 +282,7 @@ let focusBeforeOverlay = null;
 // *before* it opens and takes focus. Questions asked during that visit use this clean snapshot.
 let snapshotOnOpen = true;
 let stickyPointers = true; // markers follow what they point at as the game scrolls
+let markerNoFollowText = '';
 let markersInRecordings = true; // markers show up in screenshots / OBS / Game Bar
 let overlaySession = 0;
 let openSnapshot = null; // { image: dataUrl, session, at }
@@ -1318,6 +1320,8 @@ ipcMain.on('set-dock-position', (event, pos) => {
 ipcMain.on('set-overlay-options', (event, opts) => {
   if (opts && typeof opts.snapshotOnOpen === 'boolean') snapshotOnOpen = opts.snapshotOnOpen;
   if (opts && typeof opts.stickyPointers === 'boolean') stickyPointers = opts.stickyPointers;
+  // The overlay's one line of its own, in the app's language: markers that can't follow the camera.
+  if (opts && typeof opts.noFollowText === 'string') markerNoFollowText = opts.noFollowText.slice(0, 120);
   if (opts && typeof opts.markersInRecordings === 'boolean') {
     markersInRecordings = opts.markersInRecordings;
     tracker.setVisibleInRecordings(markersInRecordings); // the objectives tracker follows the markers
@@ -1356,12 +1360,41 @@ ipcMain.on('toggle-slide', () => {
 
 
 
-/** Capture the screen the cursor is on (the game), as a JPEG data URL. Returns null on failure. */
+/**
+ * The screen showing the running game's window (a detected program, else a Steam game's window from its install
+ * folder), or null. With two monitors the mouse is often on the other screen, so this comes first.
+ */
+let gameWindowCache = { key: '', hwnd: null };
+function gameDisplay() {
+  try {
+    const key = programGame && programGame.pid ? `pid:${programGame.pid}` : activeSteamGame ? `steam:${lastRunningAppId}` : '';
+    if (!key) return null;
+    let rect = gameWindowCache.key === key ? focusHelper.rectOf(gameWindowCache.hwnd) : null;
+    if (!rect) {
+      const hwnd = key.startsWith('pid:') ? focusHelper.windowOfPid(programGame.pid) : focusHelper.windowInFolder(gameInstallDir(lastRunningAppId));
+      gameWindowCache = { key, hwnd };
+      rect = hwnd ? focusHelper.rectOf(hwnd) : null;
+    }
+    if (!rect) return null;
+    // Window rectangles are physical pixels; displays are in DIP (they differ with scaling, per screen).
+    const dip = process.platform === 'win32' && typeof screen.screenToDipRect === 'function' ? screen.screenToDipRect(null, rect) : rect;
+    return pickCaptureDisplay(screen.getAllDisplays(), dip, null);
+  } catch (err) {
+    console.warn('[capture] game screen lookup failed:', err && err.message);
+    return null;
+  }
+}
+
+/** Capture the screen showing the game (else the one the cursor is on), as a JPEG data URL. Returns null on failure. */
 async function captureScreenImage() {
-  // Never capture our own on-screen pointers in the next screenshot.
-  closeScreenPointers();
+  // Never capture our own on-screen pointers in the next screenshot. They stay on screen for the player (the next
+  // question is often about the same spot): kept out of this capture only, and replaced if its answer marks things.
+  const markerWin = pointerWindow && !pointerWindow.isDestroyed() ? pointerWindow : null;
+  const hideMarkers = !!markerWin && markersInRecordings; // otherwise they're already kept out of every capture
+  if (hideMarkers) markerWin.setContentProtection(true);
   // ...or the objectives tracker (hidden for the capture, then back; a moment for the screen to redraw without it).
-  if (tracker.hideForCapture()) await new Promise((resolve) => setTimeout(resolve, 80));
+  const trackerHidden = tracker.hideForCapture();
+  if (trackerHidden || hideMarkers) await new Promise((resolve) => setTimeout(resolve, 80));
   let base64Image = null;
   try {
     let sources = [];
@@ -1392,9 +1425,9 @@ async function captureScreenImage() {
     }
 
     if (sources && sources.length > 0) {
-      // Pick the display where the cursor is currently located (the active monitor)
+      // The screen showing the game; the one under the mouse when no game window is known.
       const cursorPoint = screen.getCursorScreenPoint();
-      const activeDisplay = screen.getDisplayNearestPoint(cursorPoint);
+      const activeDisplay = gameDisplay() || screen.getDisplayNearestPoint(cursorPoint);
       
       // Match by display_id if available, otherwise fallback to active display or first screen
       let targetSource = sources.find(s => s.display_id === activeDisplay.id.toString());
@@ -1416,14 +1449,15 @@ async function captureScreenImage() {
     }
   } finally {
     tracker.showAfterCapture();
+    if (hideMarkers && !markerWin.isDestroyed()) markerWin.setContentProtection(!markersInRecordings);
   }
   lastCaptureImage = base64Image || lastCaptureImage;
   return base64Image;
 }
 
 /** Close the on-screen pointers, if any. */
-function sendPointerState(id, active) {
-  if (id && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('pointers-state', { id, active });
+function sendPointerState(id, active, extra = {}) {
+  if (id && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('pointers-state', { id, active, ...extra });
 }
 
 const NEARBY_CHECKS = false;
@@ -1500,7 +1534,10 @@ function showScreenPointers(points, accent, opts = {}) {
   const display = lastCaptureDisplay || screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const { x, y, width, height } = display.bounds;
   const refImage = typeof opts.refImage === 'string' && opts.refImage.startsWith('data:image/') ? opts.refImage : lastCaptureImage;
-  const sticky = (typeof opts.sticky === 'boolean' ? opts.sticky : stickyPointers) && !!lastCaptureSourceId && !!refImage;
+  const wantSticky = typeof opts.sticky === 'boolean' ? opts.sticky : stickyPointers;
+  const sticky = wantSticky && !!lastCaptureSourceId && !!refImage;
+  // A fight's markers never outlast one turn's worth of play: 3 minutes at most (the next question hides them sooner).
+  const lifetimeMs = combat ? combatLifetime(markerLifetimeMs) : markerLifetimeMs;
   const sessionId = typeof opts.sessionId === 'string' ? opts.sessionId : null;
   // "Found nearby" area checks are off: they rarely found anything and cost an AI call each time.
   const watchNearby = NEARBY_CHECKS && sticky && opts.watchNearby === true;
@@ -1515,9 +1552,13 @@ function showScreenPointers(points, accent, opts = {}) {
     sourceId: lastCaptureSourceId,
     refImage: sticky ? refImage : null,
     selfVisible: markersInRecordings,
-    // A fight's markers never outlast one turn's worth of play: 3 minutes at most (the next question hides them sooner).
-    lifetimeMs: combat ? combatLifetime(markerLifetimeMs) : markerLifetimeMs,
+    lifetimeMs,
+    // Following the camera was wanted but isn't possible here: the markers stay put, and the page says so once.
+    wantSticky,
+    noFollowText: markerNoFollowText,
     combat,
+    // The precision pass is about to check these: drawn dimmed until it settles them (no jumps once they're solid).
+    checking: opts.checking === true,
     // Our own overlay panel doesn't move with the game: keep the camera tracker from using it as background.
     // The objectives tracker doesn't move with the game either.
     exclude: (() => {
@@ -1532,6 +1573,8 @@ function showScreenPointers(points, accent, opts = {}) {
       } catch (_) { /* window closing */ }
       return out;
     })(),
+    // Markers that can't follow the camera drift off their things as soon as the camera moves: a few seconds only,
+    // whatever the display time (Noah, Nov 10 2026).
     fixedMs: 8000,
   };
   const win = new BrowserWindow({
@@ -1567,7 +1610,8 @@ function showScreenPointers(points, accent, opts = {}) {
       if (pointerTimer) clearTimeout(pointerTimer);
       pointerTimer = null;
       if (pointerSession && pointerSession.win === win) {
-        sendPointerState(pointerSession.id, false);
+        // `unplaced`: the screen never matched the answer's screenshot, so nothing was shown (the app says so).
+        sendPointerState(pointerSession.id, false, pointerSession.unplaced ? { unplaced: true } : {});
         pointerSession = null;
       }
     }
@@ -1701,9 +1745,31 @@ ipcMain.on('pointers-move', (event, { id, moves } = {}) => {
   if (!session || session.id !== id || !pointerWindow || pointerWindow.isDestroyed()) return;
   const valid = (Array.isArray(moves) ? moves : [])
     .filter((m) => m && Number.isInteger(m.index) && Number.isFinite(m.x) && Number.isFinite(m.y) && m.x >= 0 && m.x <= 1 && m.y >= 0 && m.y <= 1)
-    .slice(0, 5);
+    .slice(0, COMBAT_MARKERS);
   if (!valid.length) return;
   const js = `window.qcMovePoints(${JSON.stringify({ moves: valid })})`;
+  if (!session.ready) session.queueJs = [...(session.queueJs || []), js];
+  else pointerWindow.webContents.executeJavaScript(js).catch(() => {});
+});
+
+// The marker page couldn't match the screen to the answer's screenshot (the scene changed before the answer came).
+ipcMain.on('pointers-unplaced', (event) => {
+  const session = pointerSession;
+  if (!session || event.sender !== (session.win && !session.win.isDestroyed() && session.win.webContents)) return;
+  session.unplaced = true;
+  console.log('[markers] the screen no longer matches the screenshot: markers not placed');
+});
+
+// Precision pass finished: dimmed markers turn solid, slide onto the exact object, and the ones it couldn't see fade
+// out. Sent even when the check couldn't run (nothing moved or removed), so markers never stay dimmed.
+ipcMain.on('pointers-settle', (event, { id, moves, removed } = {}) => {
+  const session = pointerSession;
+  if (!session || session.id !== id || !pointerWindow || pointerWindow.isDestroyed()) return;
+  const cleanMoves = (Array.isArray(moves) ? moves : [])
+    .filter((m) => m && Number.isInteger(m.index) && Number.isFinite(m.x) && Number.isFinite(m.y) && m.x >= 0 && m.x <= 1 && m.y >= 0 && m.y <= 1)
+    .slice(0, COMBAT_MARKERS);
+  const cleanRemoved = (Array.isArray(removed) ? removed : []).filter((n) => Number.isInteger(n) && n >= 0 && n < COMBAT_MARKERS);
+  const js = `window.qcSettle(${JSON.stringify({ moves: cleanMoves, removed: cleanRemoved })})`;
   if (!session.ready) session.queueJs = [...(session.queueJs || []), js];
   else pointerWindow.webContents.executeJavaScript(js).catch(() => {});
 });
