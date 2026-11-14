@@ -1,7 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/visualAnswers.test.ts)
 import assert from "node:assert/strict";
 import { shortCount, pickStart, topicKey, mapStore, visualFor, visualId, sameGameName, RULES_V } from "../visualAnswer";
-import { statKind, pacificDay, visualStatsLine } from "../visualServer";
+import { statKind, pacificDay, visualStatsLine, isStandInQuestion } from "../visualServer";
 
 let passed = 0;
 async function test(name: string, fn: () => void | Promise<void>) {
@@ -32,6 +32,26 @@ await test("the question's own game wins over the compendium's (owner, Nov 14 20
   assert.deepEqual(looked, ["Elden Ring"]);
   assert.ok([...m.keys()].every((k: string) => k.startsWith("elden-ring|")), [...m.keys()].join(", "));
   assert.equal(r.game, "Elden Ring");
+});
+
+await test("a screenshot-only question takes its topic from the answer, and its saved key is that topic, not the stand-in text (owner, Nov 14 2026)", async () => {
+  assert.equal(isStandInQuestion("Please analyze this game screenshot and give helpful tips, secrets, or my current objectives."), true);
+  assert.equal(isStandInQuestion("Bitte analysiere diesen Screenshot und gib mir nützliche Tipps, Geheimnisse oder meine aktuellen Ziele."), true);
+  assert.equal(isStandInQuestion("Voice message"), true);
+  assert.equal(isStandInQuestion("how do I get the Nagakiba"), false);
+  const m = new Map();
+  const r = await visualFor(fakeAi({ question: "How do I beat Margit, the Fell Omen?", game: "Elden Ring", kind: "picture", confidence: "high", subject: "Margit, the Fell Omen" }) as any, {
+    game: "Elden Ring", gameKey: "elden-ring", question: "Please analyze this game screenshot and give helpful tips, secrets, or my current objectives.",
+    answer: "Margit is weak to bleed...", youtubeKey: "k", wiki: {}, store: mapStore(m), shotOnly: true,
+  });
+  assert.ok(r.steps.some((s) => s.includes('meant "How do I beat Margit, the Fell Omen?"')), r.steps.join(" / "));
+  assert.ok([...m.keys()].some((k: string) => k.includes("q how do i beat margit")) && ![...m.keys()].some((k: string) => k.includes("analyze")), [...m.keys()].join(", "));
+  // General tips with no one main thing: nothing, and nothing saved.
+  const none = await visualFor(fakeAi({ question: "", kind: "video", confidence: "high", search: "x" }) as any, {
+    game: "Elden Ring", gameKey: "elden-ring", question: "Voice message", answer: "Some general tips...", youtubeKey: "k", wiki: {}, store: mapStore(), shotOnly: true,
+  });
+  assert.equal(none.visual.kind, "none");
+  assert.equal(none.keys.length, 0);
 });
 
 await test("start time: a chapter when the watched moment falls inside it, else the watched moment", () => {

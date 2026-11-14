@@ -15,6 +15,28 @@ import crypto from 'crypto';
 import type { Express, Request, Response } from 'express';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { visualFor, visualId, YouTubeQuotaOut, type Cost, type Visual, type VisualStore } from './visualAnswer';
+import { GENERATED } from './src/locales.generated';
+
+/**
+ * The app's stand-in question when the player sent only a screenshot or a voice message (ChatArea: chat.defaultShotQ,
+ * chat.defaultQ, chat.voiceMessage), in every language: such a question gets its topic from the answer (owner, Nov 14
+ * 2026). The app says so itself from 0.7.4 (shotOnly); this also covers 0.7.3. English, Spanish and Portuguese are in
+ * src/i18n.tsx (React), so they're listed here.
+ */
+const STAND_IN_KEYS = ['chat.defaultShotQ', 'chat.defaultQ', 'chat.voiceMessage'];
+const STAND_INS = new Set<string>([
+  'Please analyze this game screenshot and give helpful tips, secrets, or my current objectives.',
+  'What should I do here? Please give gameplay tips, secrets, or next steps.',
+  'Voice message',
+  'Analiza esta captura del juego y dame consejos útiles, secretos u objetivos actuales.',
+  '¿Qué debo hacer aquí? Dame consejos de juego, secretos o próximos pasos.',
+  'Mensaje de voz',
+  'Analise esta captura do jogo e me dê dicas úteis, segredos ou os objetivos atuais.',
+  'O que eu devo fazer aqui? Me dê dicas de gameplay, segredos ou próximos passos.',
+  'Mensagem de voz',
+  ...Object.values(GENERATED).flatMap((l) => STAND_IN_KEYS.map((k) => l[k]).filter(Boolean)),
+].map((s) => s.trim().toLowerCase()));
+export const isStandInQuestion = (q: string) => STAND_INS.has(String(q || '').trim().toLowerCase());
 
 type Gen = Parameters<typeof visualFor>[0];
 
@@ -85,8 +107,9 @@ export const visualAnswersOn = (env: NodeJS.ProcessEnv = process.env) => env.VIS
  * The visual for one answer, counted for /stats: used by the app's /api/visual and the website's ask box
  * (siteAsk.ts /api/site/visual). `visual` is null when nothing helps or nothing confident was found.
  */
-export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'log' | 'guideKeyFor' | 'env'>, o: { game: string; guideKey?: string; question: string; answer: string; client: string; appVersion?: string }): Promise<{ visual: Visual | null; ref: string | null; cost: number }> {
+export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'log' | 'guideKeyFor' | 'env'>, o: { game: string; guideKey?: string; question: string; answer: string; client: string; appVersion?: string; shotOnly?: boolean }): Promise<{ visual: Visual | null; ref: string | null; cost: number }> {
   const env = deps.env ?? process.env;
+  const shotOnly = o.shotOnly === true || isStandInQuestion(o.question);
   const keyOf = async (game: string) => (await deps.guideKeyFor(game)) || game.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const wikiOf = async (gameKey: string) => {
     const src: any = (await getFirestore().collection('guideImageSources').doc(gameKey).get()).data() || {};
@@ -95,7 +118,7 @@ export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'l
   const gameKey = String(o.guideKey || '').replace(/[^a-z0-9-]/g, '').slice(0, 120) || (await keyOf(o.game));
   const key = String(env.YOUTUBE_API_KEY || '');
   const r = await visualFor(deps.getGeminiClient(), {
-    game: o.game, gameKey, question: o.question, answer: o.answer, youtubeKey: key,
+    game: o.game, gameKey, question: o.question, answer: o.answer, youtubeKey: key, shotOnly,
     wiki: await wikiOf(gameKey),
     store: firestoreStore(), log: deps.log,
     beforeSearch: key ? searchBudget(Number(env.YOUTUBE_DAILY_SEARCHES) || 100) : async () => { throw new YouTubeQuotaOut('no YouTube key'); },
@@ -106,7 +129,7 @@ export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'l
   const client = String(o.client || 'web').replace(/[^a-z]/g, '').slice(0, 8) || 'web';
   // One line per visual (owner, Nov 14 2026: why did a question get none?): the app, the game, the kind chosen, the result
   // and the steps. No player id or question beyond the first 80 characters.
-  console.log(`[visual] ${client}${o.appVersion ? ` ${String(o.appVersion).replace(/[^0-9a-z.\-]/gi, '').slice(0, 20)}` : ''} | ${r.game} | "${o.question.replace(/\s+/g, ' ').slice(0, 80)}" | chose ${r.kindChosen || '?'} -> ${v.kind}${v.kind === 'video' ? ` ${v.videoId}` : ''}${r.cached ? ' (saved)' : ''} | ${r.youtubeSearches} search(es) $${r.cost.toFixed(4)} | ${r.steps.join(' / ').replace(/\s+/g, ' ').slice(0, 900)}`);
+  console.log(`[visual] ${client}${o.appVersion ? ` ${String(o.appVersion).replace(/[^0-9a-z.\-]/gi, '').slice(0, 20)}` : ''} | ${r.game} | ${shotOnly ? '(screenshot only) ' : ''}"${o.question.replace(/\s+/g, ' ').slice(0, 80)}" | chose ${r.kindChosen || '?'} -> ${v.kind}${v.kind === 'video' ? ` ${v.videoId}` : ''}${r.cached ? ' (saved)' : ''} | ${r.youtubeSearches} search(es) $${r.cost.toFixed(4)} | ${r.steps.join(' / ').replace(/\s+/g, ' ').slice(0, 900)}`);
   void countVisual({
     answers: 1, [`shown_${statKind(v)}`]: 1, cached: r.cached ? 1 : 0, quotaOut: r.quotaOut ? 1 : 0,
     youtubeSearches: r.youtubeSearches, cost: Math.round(r.cost * 1e6) / 1e6, [`client_${client}`]: 1,
@@ -133,7 +156,7 @@ export function registerVisualAnswers(app: Express, deps: VisualDeps): void {
     if (!w || t >= w.reset) hourly.set(uid, (w = { n: 0, reset: t + 3600_000 }));
     if (w.n++ >= perUserHourly) return res.json({ visual: null, limited: true });
     try {
-      const r = await answerVisual(deps, { game, guideKey: String(req.body?.guideKey || ''), question, answer, client: String(req.body?.client || 'web'), appVersion: String(req.body?.appVersion || '') });
+      const r = await answerVisual(deps, { game, guideKey: String(req.body?.guideKey || ''), question, answer, client: String(req.body?.client || 'web'), appVersion: String(req.body?.appVersion || ''), shotOnly: req.body?.shotOnly === true });
       res.json({ visual: r.visual, ref: r.ref });
     } catch (e: any) {
       console.warn('[visual] failed:', e?.message || e);

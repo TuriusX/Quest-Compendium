@@ -53,12 +53,23 @@ async function ask(ai: Gen, cost: Cost, parts: any[], maxOut = 500, label = 'vis
 
 // ---- 1. Choose --------------------------------------------------------------------------------------------------
 
-export async function choose(ai: Gen, cost: Cost, game: string, question: string, answer: string) {
+export async function choose(ai: Gen, cost: Cost, game: string, question: string, answer: string, shotOnly = false) {
+  // Owner, Nov 14 2026: a screenshot (or voice message) with no typed question gets a visual too, its topic decided by
+  // what the answer is about: the model first says what the player most likely meant to ask, then decides from that.
+  const head = shotOnly
+    ? `A player of "${game}" sent only a screenshot of their game (no typed question). The answer they got:\n` +
+      `"""${answer.slice(0, 2500)}"""\n\n` +
+      'First work out the ONE question the player most likely meant, from what the answer is mainly about (the boss ' +
+      'they are fighting, the place they are trying to reach, the puzzle in front of them, the item they are looking ' +
+      'for): e.g. "How do I beat Margit, the Fell Omen?". If the answer is general tips with no one main thing, there is ' +
+      'no such question: then it is "none". Then, for that question:\n' +
+      'Would one visual under this answer help them, and which kind?\n'
+    : `A player asked: "${question}" (their app was open on "${game}", but the question may be about another game).\n` +
+      `The answer they got:\n"""${answer.slice(0, 2500)}"""\n\n` +
+      'Would one visual under this answer help them, and which kind? Decide from what the QUESTION asks, not from what ' +
+      'the answer happens to describe.\n';
   const prompt =
-    `A player asked: "${question}" (their app was open on "${game}", but the question may be about another game).\n` +
-    `The answer they got:\n"""${answer.slice(0, 2500)}"""\n\n` +
-    'Would one visual under this answer help them, and which kind? Decide from what the QUESTION asks, not from what ' +
-    'the answer happens to describe.\n' +
+    head +
     '- "video": the player asks HOW TO DO something that is movement or timing: getting from one place to another, ' +
     'beating a boss or enemy, getting through a platforming section, solving a puzzle ("how do I solve / get to / get ' +
     'through / beat ..."). A puzzle is always a video, never a picture.\n' +
@@ -69,7 +80,8 @@ export async function choose(ai: Gen, cost: Cost, game: string, question: string
     'enemy, a chest, lever or door, a place), and "how do I get X" only when X is simply picked up or bought at one spot.\n' +
     '- "none": lore and story ("who is / who are / why ..."), builds, stats, choices, opinions, general advice.\n' +
     'Be strict: if the question is not clearly one of the first two, it is "none".\n' +
-    'Reply with JSON only: {"game": "the game the question is about, by its usual name", ' +
+    'Reply with JSON only: {' + (shotOnly ? '"question": "the one question the player most likely meant, in their words; else empty", ' : '') +
+    '"game": "the game the question is about, by its usual name", ' +
     '"kind": "video" | "picture" | "none", "confidence": "high" | "medium" | "low", ' +
     '"subject": "the one thing itself, by its exact in-game name only (\\"Skeleton Key\\", \\"Keira Metz\\", ' +
     '\\"Malenia, Blade of Miquella\\"), never words like location, map, route or guide", ' +
@@ -77,8 +89,10 @@ export async function choose(ai: Gen, cost: Cost, game: string, question: string
     '"search": "for a video: a short YouTube search: the game name plus the start and end places, boss or puzzle as ' +
     'the game names them; else empty", "why": "one short sentence"}';
   const j = await ask(ai, cost, [{ text: prompt }], 300, 'visual-choose');
-  const kind: VisualKind = ['video', 'picture'].includes(j?.kind) && j?.confidence === 'high' ? j.kind : 'none';
-  return { kind, game: String(j?.game || '').trim().slice(0, 120), subject: String(j?.subject || '').slice(0, 80), place: String(j?.place || '').slice(0, 80), search: String(j?.search || '').slice(0, 120), why: String(j?.why || '').slice(0, 200), confidence: String(j?.confidence || '') };
+  const meant = shotOnly ? String(j?.question || '').trim().slice(0, 200) : '';
+  // A screenshot with no one main thing in its answer: nothing.
+  const kind: VisualKind = ['video', 'picture'].includes(j?.kind) && j?.confidence === 'high' && (!shotOnly || meant) ? j.kind : 'none';
+  return { kind, meant, game: String(j?.game || '').trim().slice(0, 120), subject: String(j?.subject || '').slice(0, 80), place: String(j?.place || '').slice(0, 80), search: String(j?.search || '').slice(0, 120), why: String(j?.why || '').slice(0, 200), confidence: String(j?.confidence || '') };
 }
 
 // ---- 2. Video ---------------------------------------------------------------------------------------------------
@@ -325,6 +339,8 @@ export const visualId = (v: Visual) => (v.kind === 'video' ? v.videoId : v.kind 
 
 export async function visualFor(ai: Gen, o: {
   game: string; gameKey: string; question: string; answer: string; youtubeKey: string;
+  /** The player sent only a screenshot or voice message (the question is the app's stand-in text): the topic comes from the answer. */
+  shotOnly?: boolean;
   wiki: { fextralife?: string; fandom?: string }; store?: VisualStore; log?: Cost['log'];
   beforeSearch?: () => Promise<void>;
   /** The question is about another game than the app's (asked from another game's compendium): its guide and wikis. */
@@ -333,7 +349,11 @@ export async function visualFor(ai: Gen, o: {
   const t0 = Date.now();
   const cost: Cost = { d: 0, log: o.log };
   const out: VideoOut = { searches: 0, steps: [], beforeSearch: o.beforeSearch };
-  const c = await choose(ai, cost, o.game, o.question, o.answer);
+  const c = await choose(ai, cost, o.game, o.question, o.answer, !!o.shotOnly);
+  // A screenshot-only question: from here on, the question the player most likely meant (also the saved key, so two
+  // different screenshots never share the app's stand-in text as their key).
+  const question = o.shotOnly ? c.meant : o.question;
+  if (o.shotOnly) out.steps.push(`screenshot only: meant "${c.meant}"`);
   // Owner, Nov 14 2026: "how do I get the Nagakiba in Elden Ring" asked from a Baldur's Gate 3 compendium was looked for
   // in BG3's pictures and wikis. The game the question names wins.
   let game = o.game, gameKey = o.gameKey, wiki = o.wiki;
@@ -344,7 +364,7 @@ export async function visualFor(ai: Gen, o: {
   out.steps.push(`choose: ${c.kind} (${c.confidence}) subject "${c.subject}"${c.place ? `, place "${c.place}"` : ''}${c.search ? `, search "${c.search}"` : ''}: ${c.why}`);
   // Saved results: under the question itself and under the topic (the same thing asked in other words), with the rules'
   // version, so a "nothing found" saved under older rules is looked for again.
-  const keys = c.kind === 'none' ? [] : [topicKey(gameKey, `${RULES_V} q ${o.question}`), topicKey(gameKey, `${RULES_V} ${c.kind} ${c.subject || c.search}`)];
+  const keys = c.kind === 'none' ? [] : [topicKey(gameKey, `${RULES_V} q ${question}`), topicKey(gameKey, `${RULES_V} ${c.kind} ${c.subject || c.search}`)];
   const done = (visual: Visual, cached = false, extra: Partial<VisualResult> = {}) => ({ visual, cost: cost.d, ms: Date.now() - t0, cached, steps: out.steps, youtubeSearches: out.searches, keys, game, kindChosen: c.kind, ...extra });
   if (c.kind === 'none') return done({ kind: 'none', why: c.why });
   const hit = o.store ? await o.store.get(keys) : null;
@@ -355,11 +375,11 @@ export async function visualFor(ai: Gen, o: {
   out.excluded = excluded;
   let visual: Visual | null = null;
   try {
-    if (c.kind === 'video') visual = await findVideo(ai, cost, o.youtubeKey, game, o.question, o.answer, c.search || `${game} ${c.subject}`, out);
+    if (c.kind === 'video') visual = await findVideo(ai, cost, o.youtubeKey, game, question, o.answer, c.search || `${game} ${c.subject}`, out);
     else {
       // Pictures come from the game's wikis only, checked (owner, Nov 14 2026: not from our own guides, whose pictures
       // aren't good enough for this): the thing itself first, then for a where-question the place it's in.
-      for (const name of [c.subject, c.place].filter(Boolean)) if (!visual) visual = await wikiPicture(ai, cost, wiki, game, o.question, name, out.steps, !!c.place);
+      for (const name of [c.subject, c.place].filter(Boolean)) if (!visual) visual = await wikiPicture(ai, cost, wiki, game, question, name, out.steps, !!c.place);
       if (visual && excluded.has(visualId(visual))) { out.steps.push('the picture found was marked "Not right" before'); visual = null; }
     }
   } catch (e: any) {

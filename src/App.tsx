@@ -30,6 +30,7 @@ const BetaFeedbackModal = React.lazy(() => import('./components/BetaFeedbackModa
 import { db } from './lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { getApiBaseUrl, DEFAULT_CLOUD_URL } from './utils/api';
+import { markAsked } from './utils/newVersionReload';
 import { settleCheck, type CheckFound } from './utils/markerCheck';
 declare const __APP_BUILD__: { version: string } | undefined;
 const APP_VERSION = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__.version : 'dev';
@@ -1797,12 +1798,13 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
    * Visual answers (owner, Nov 14 2026): after the answer has arrived, one video or picture for it, if one helps
    * (visualServer.ts). The answer itself never waits for this or changes; nothing found (or the feature off) adds nothing.
    */
-  const fetchVisual = async (msgId: string, question: string, answer: string, game: string, token: string | null) => {
+  const fetchVisual = async (msgId: string, question: string, answer: string, game: string, token: string | null, shotOnly = false) => {
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/visual`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ game, guideKey: trackerGameRef.current.guideKey || undefined, question, answer, client: (window as any).electronAPI ? 'desktop' : 'web', appVersion: APP_VERSION }),
+        // shotOnly: no typed question (a screenshot or voice message): the server takes the topic from the answer.
+        body: JSON.stringify({ game, guideKey: trackerGameRef.current?.guideKey || undefined, question, answer, client: (window as any).electronAPI ? 'desktop' : 'web', appVersion: APP_VERSION, ...(shotOnly ? { shotOnly: true } : {}) }),
       });
       if (!res.ok) return;
       const data = await res.json();
@@ -2394,6 +2396,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
 
   const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash', quick?: string) => {
     if (!activeTab) return;
+    markAsked(); // a new web app version no longer reloads this page
 
     if (!user) {
       syncDiagnostics.addEvent?.('CHAT_NO_USER', 'Attempted to send chat message with no authenticated or guest user', true);
@@ -2703,8 +2706,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         refineMarkers(aiMessage.id, imageBase64, aiMessage.points, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token);
       }
       // A video or picture under the answer, if one helps (after the answer, never instead of it).
+      // A screenshot or voice message with no typed question gets one too (owner, Nov 14 2026): its question is the app's
+      // stand-in text, so the server takes the topic from what the answer is about.
       if (text && aiMessage.text && !limitText) {
-        void fetchVisual(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token);
+        const shotOnly = !!audioBase64 || (!!imageBase64 && (text === tr('chat.defaultShotQ') || text === tr('chat.defaultQ')));
+        void fetchVisual(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly);
       }
 
       const readArea: string = data.placeRead && typeof data.placeRead.area === 'string' ? data.placeRead.area.trim().slice(0, 80) : '';
