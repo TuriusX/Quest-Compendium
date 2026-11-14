@@ -1795,6 +1795,41 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     if (past) rememberDone(t, [{ text: past, kind: 'area' }]);
   };
 
+  /**
+   * Visual answers (owner, Nov 14 2026): after the answer has arrived, one video or picture for it, if one helps
+   * (visualServer.ts). The answer itself never waits for this or changes; nothing found (or the feature off) adds nothing.
+   */
+  const fetchVisual = async (msgId: string, question: string, answer: string, game: string, token: string | null) => {
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/visual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ game, guideKey: trackerGameRef.current.guideKey || undefined, question, answer, client: (window as any).electronAPI ? 'desktop' : 'web' }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.visual && (data.visual.kind === 'video' || data.visual.kind === 'picture')) {
+        updateMessageById(msgId, (m) => ({ ...m, visual: data.visual, visualRef: typeof data.ref === 'string' ? data.ref : undefined }));
+      }
+    } catch {
+      /* no visual: the answer is complete without one */
+    }
+  };
+
+  /** Played, opened (counted for /stats) or "Not right" for a visual shown in the quest log. */
+  const sendVisualEvent = async (type: 'played' | 'opened' | 'wrong', ref?: string) => {
+    try {
+      const token = user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken().catch(() => null) : (user as any)?.isGuest ? String((user as any).uid) : null;
+      await fetch(`${getApiBaseUrl()}/api/visual/event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ type, ...(ref ? { ref } : {}) }),
+      });
+    } catch {
+      /* counting only */
+    }
+  };
+
   const refineMarkers = async (msgId: string, image: string, points: ScreenPoint[], game: string, token: string | null) => {
     const log = (m: string) => (window as any).electronAPI?.markerLog?.(m);
     try {
@@ -2679,6 +2714,10 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       if (aiMessage.points?.length && imageBase64 && settings.showPointersOnScreen !== false) {
         refineMarkers(aiMessage.id, imageBase64, aiMessage.points, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token);
       }
+      // A video or picture under the answer, if one helps (after the answer, never instead of it).
+      if (text && aiMessage.text && !limitText) {
+        void fetchVisual(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token);
+      }
 
       const readArea: string = data.placeRead && typeof data.placeRead.area === 'string' ? data.placeRead.area.trim().slice(0, 80) : '';
       const readStory: string = readArea && typeof data.placeRead.story === 'string' ? data.placeRead.story.trim().slice(0, 100) : '';
@@ -3016,6 +3055,12 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           locateKeys={formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K')}
           onConfirmPlace={() => { const n = logView.place?.name; if (n) trackerEventRef.current({ type: 'confirm-place', name: n }); }}
           onOpenEntry={(id) => trackerEventRef.current({ type: 'open-entry', item: id })}
+          visualFor={(id) => { const m = activeTab?.messages.find((x) => x.id === id); return m && !m.visualHidden ? m.visual : undefined; }}
+          onVisualEvent={(id, type) => {
+            const m = activeTab?.messages.find((x) => x.id === id);
+            void sendVisualEvent(type, m?.visualRef);
+            if (type === 'wrong') setTimeout(() => updateMessageById(id, (x) => ({ ...x, visualHidden: true })), 5000);
+          }}
         />
       </div>
     ) : null;

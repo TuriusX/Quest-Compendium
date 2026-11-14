@@ -38,6 +38,7 @@ import {
   Pin,
 } from './icons';
 import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions, unmarkedLine } from './ScreenPointers';
+import { VisualCard, type VisualEvent } from './VisualCard';
 import { areaFindsFor, markersActiveFor } from './pointerStore';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
 import { getApiBaseUrl, DEFAULT_PREVIEW_URL } from '../utils/api';
@@ -909,6 +910,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   };
 
   /** A 👍 / 👎 (or 'none': taken back) on an answer, with what it was about, for the Quality numbers. */
+  /** Visual answers: played, opened (counted for /stats) or "Not right" (that visual isn't picked for this question again). */
+  const sendVisualEvent = async (type: VisualEvent, ref?: string) => {
+    try {
+      const token = auth.currentUser ? await auth.currentUser.getIdToken().catch(() => null) : null;
+      await fetch(`${getApiBaseUrl()}/api/visual/event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ type, ...(ref ? { ref } : {}) }),
+      });
+    } catch {
+      /* counting only */
+    }
+  };
+
   const sendVote = async (msg: ChatMessage, vote: 'up' | 'down' | 'none', reason?: string) => {
     try {
       const msgs = activeTab?.messages ?? [];
@@ -1791,6 +1806,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       text={!isUser && markersOn && msg.points?.length ? withMarkerBadges(msg.text, msg.points) : msg.text}
                     />
                   </div>
+                  {/* Visual answers (Nov 14 2026): the video or picture found for this answer, under its text. */}
+                  {!isUser && msg.visual && !msg.visualHidden && (
+                    <VisualCard visual={msg.visual} compact={isDesktopApp} onEvent={(type) => {
+                      void sendVisualEvent(type, msg.visualRef);
+                      // "Not right": its thanks line shows for a few seconds, then the card is gone for good.
+                      if (type === 'wrong') setTimeout(() => onUpdateMessage?.(msg.id, { visualHidden: true }), 5000);
+                    }} />
+                  )}
                   {isDesktopApp && markerCard(true)}
                   {!isUser && onSetNow && (() => {
                     // The quest log: this answer is the current objective (its progress), or the latest answer about a goal

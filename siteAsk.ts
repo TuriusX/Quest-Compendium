@@ -498,7 +498,16 @@ async function learn(id: string, x: { key: string; slug: string; kind: string; l
 }
 
 type SiteAccount = { uid: string; premium: boolean };
-export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswerOpts) => Promise<SiteAnswerOut>; gemini: () => GoogleGenAI; requireAuth: any; firebaseWebConfig: Record<string, string>; siteAccount?: (req: Request) => Promise<SiteAccount | { error: 'auth' } | null> }) {
+/** Visual answers on the website (visualServer.ts): whether they're on, finding one, and its played/opened/"Not right". */
+type SiteVisualDeps = {
+  on: () => boolean;
+  find: (o: { game: string; guideKey?: string; question: string; answer: string; client: string }) => Promise<{ visual: unknown; ref: string | null; cost: number }>;
+  event: (type: 'played' | 'opened' | 'wrong', ref: string) => Promise<void>;
+};
+/** How long after an answer its visual may be asked for (one visual per answer, while the page is open). */
+const VISUAL_WINDOW_MS = 10 * 60 * 1000;
+
+export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswerOpts) => Promise<SiteAnswerOut>; gemini: () => GoogleGenAI; requireAuth: any; firebaseWebConfig: Record<string, string>; siteAccount?: (req: Request) => Promise<SiteAccount | { error: 'auth' } | null>; visual?: SiteVisualDeps }) {
   // The box asks whether it's on (and for the App Check key) when a page opens.
   app.get('/api/site/ask/config', async (_req: Request, res: Response) => {
     void guard().catch((e) => console.warn('[site-ask] guard', e?.message));
@@ -592,7 +601,9 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
       // What a question teaches needs a guide page to teach, and a question about a screenshot makes no sense without it.
       if (key && !image) void learn(doc.id, { key, slug: slug || out.ctx.placeSlug, kind: slug || !out.ctx.placeSlug ? kind : 'area', lang, q, answer: out.a.text, covered: out.a.covered, searched: out.a.searches, aboutPage: out.a.aboutPage, elsewhere: out.a.elsewhere, missing: out.a.missing, missingPage: out.a.missingPage }, c).catch((e) => console.warn('[site-ask] learn', e?.message));
       console.log(`[site-time] context=${contextMs}ms first=${firstText}ms total=${Date.now() - t0}ms${preview ? ' preview' : ''}`);
-      finish(200, { answer: out.a.text, sources: out.a.sources, covered: out.a.covered, searched: out.a.searches > 0, ...(noGuide ? { noGuide: true } : {}), left, ...(acct ? { account: true } : {}), ...(preview ? { timing: { context: contextMs, first: firstText, total: Date.now() - t0, dollars, searches: out.a.searches } } : {}) });
+      // `vid`: the saved question, so the box can then ask for a video or picture for this answer (/api/site/visual).
+      finish(200, { answer: out.a.text, sources: out.a.sources, covered: out.a.covered, searched: out.a.searches > 0, ...(noGuide ? { noGuide: true } : {}), left,
+        ...(deps.visual?.on() && !image ? { vid: doc.id, game: out.ctx.game } : {}), ...(acct ? { account: true } : {}), ...(preview ? { timing: { context: contextMs, first: firstText, total: Date.now() - t0, dollars, searches: out.a.searches } } : {}) });
     } catch (e: any) {
       console.error('[site-ask]', e?.message);
       finish(500, { error: 'failed' });
@@ -601,6 +612,54 @@ export function registerSiteAsk(app: Express, deps: { fullAnswer?: (o: SiteAnswe
   app.post('/api/site/ask', async (req: Request, res: Response) => {
     const preview = previewKeyOk(req.headers['x-qc-preview'], (await siteAskConfig()).previewKey);
     return previewScope.run(preview, () => ask(req, res, preview));
+  });
+
+  // ---- Visual answers under the box's answers (owner, Nov 14 2026; visualServer.ts) ----
+  // Only for a question this box just answered (its saved id, within 10 minutes, once): the server reads the question and
+  // answer itself, so nothing else can be looked up through it. Its cost counts in the site's dollars a day, and stops
+  // with them, like the answers.
+  const siteVisual = async (req: Request, res: Response, preview: boolean) => {
+    const v = deps.visual;
+    const c = await siteAskConfig();
+    if (!v || !v.on() || (!c.enabled && !preview)) return res.json({ visual: null });
+    if (appCheckOn(c) && !preview) {
+      try { await getAppCheck().verifyToken(String(req.headers['x-firebase-appcheck'] || '')); } catch { return res.status(401).json({ error: 'check' }); }
+    }
+    const vid = String(req.body?.vid || '');
+    if (!/^[A-Za-z0-9]{10,40}$/.test(vid)) return res.status(400).json({ error: 'bad request' });
+    const ref = col('siteQuestions').doc(vid);
+    // Once per answer: the first ask claims it.
+    const q: any = await getFirestore().runTransaction(async (tx) => {
+      const d: any = (await tx.get(ref)).data();
+      if (!d || d.visualAsked || Date.now() - (Number(d.at) || 0) > VISUAL_WINDOW_MS || d.hadImage) return null;
+      tx.set(ref, { visualAsked: true }, { merge: true });
+      return d;
+    });
+    if (!q) return res.json({ visual: null });
+    const day: any = (await col('siteAskDays').doc(dayOf()).get()).data() || {};
+    if (!q.premium && (Number(day.dollars) || 0) >= c.dailyDollars) return res.json({ visual: null });
+    try {
+      const game = cut(req.body?.game || q.game || '', 120);
+      const out = await v.find({ game, guideKey: String(q.key || '').startsWith('noguide:') ? '' : String(q.key || ''), question: String(q.q || ''), answer: String(q.answer || ''), client: 'site' });
+      const dollars = Math.round(out.cost * 10000) / 10000;
+      if (dollars) await col('siteAskDays').doc(dayOf()).set(q.premium ? { premiumDollars: FieldValue.increment(dollars) } : { dollars: FieldValue.increment(dollars) }, { merge: true });
+      await ref.set({ visual: out.visual ? (out.visual as any).kind : 'none', visualDollars: dollars }, { merge: true });
+      res.json({ visual: out.visual, ref: out.ref });
+    } catch (e: any) {
+      console.warn('[site-visual]', e?.message);
+      res.json({ visual: null });
+    }
+  };
+  app.post('/api/site/visual', async (req: Request, res: Response) => {
+    const preview = previewKeyOk(req.headers['x-qc-preview'], (await siteAskConfig()).previewKey);
+    return previewScope.run(preview, () => siteVisual(req, res, preview));
+  });
+  // Played, opened or "Not right" from the box (a "Not right" drops a visual only once two visitors have said so).
+  app.post('/api/site/visual/event', async (req: Request, res: Response) => {
+    const type = String(req.body?.type || '');
+    if (!deps.visual || !['played', 'opened', 'wrong'].includes(type)) return res.status(400).json({ ok: false });
+    await deps.visual.event(type as any, String(req.body?.ref || '')).catch(() => {});
+    res.json({ ok: true });
   });
 
   // ---- /admin/asked: the log of the guides' nightly improvements, with undo (autoChanges.ts) ----

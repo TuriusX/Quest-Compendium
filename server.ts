@@ -22,6 +22,7 @@ import { cleanTag, recordSignupSource, recordVisit } from './visitSources';
 import { recordGroundingMiss, registerBlueprints } from './blueprints';
 import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
+import { registerVisualAnswers, answerVisual, visualAnswersOn, visualEvent } from './visualServer';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
 import { registerSpot } from './spot';
 import { deckUpdateNote } from './deckNotice';
@@ -467,6 +468,12 @@ async function startServer() {
     requireAuth,
     // The app's own answers for the website (owner, Nov 3 2026), behind config/siteAsk.fullAnswers.
     fullAnswer: (o) => siteAnswer(o),
+    // Visual answers under the box's answers (Nov 14 2026; visualServer.ts), when VISUAL_ANSWERS=1.
+    visual: {
+      on: () => visualAnswersOn(),
+      find: (o) => answerVisual({ getGeminiClient: getGeminiClient as any, log: (label, model, res) => logUsage(label, model, res), guideKeyFor: (game) => guideKeyFor(game) }, o),
+      event: (type, ref) => visualEvent(type, ref, 2),
+    },
     // A signed-in player on the website: who they are and whether they're Premium (the guide's own allowance, siteAsk.ts;
     // never the app's). null: not signed in; { error }: a token that doesn't check out.
     siteAccount: async (req: any) => {
@@ -541,6 +548,8 @@ async function startServer() {
   registerLocateMe(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST, updateUserDoc: updateFirestoreDocREST, loadGuide: guideAreasWithPages });
   registerSpot(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST });
   registerRefine(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed, onChecked: (game, checked, kept) => void recordMarkerCheck(game, checked, kept) });
+  // Visual answers (owner, Nov 14 2026): one video or picture under an answer, after it arrives. Off unless VISUAL_ANSWERS=1.
+  registerVisualAnswers(app, { requireAuth, getGeminiClient: getGeminiClient as any, log: (label, model, res) => logUsage(label, model, res), guideKeyFor: (game) => guideKeyFor(game) });
 
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {

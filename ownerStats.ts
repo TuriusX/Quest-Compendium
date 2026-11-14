@@ -20,6 +20,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth, type UserRecord } from 'firebase-admin/auth';
 import { siteAskWindow } from './siteAskStats';
 import { improverMonth } from './autoChanges';
+import { visualAnswersOn, visualStatsFor, visualStatsLine } from './visualServer';
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 const DAY_TZ = 'America/Chicago';
@@ -204,6 +205,8 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   parts.push(`**Site** (${window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours'}): ${site.questions} question(s) in the guide pages' ask box, ${site.uncovered} the guide couldn't answer · $${site.dollars.toFixed(2)}`);
   // What an answer costs, day by day (the effect of the Oct 31 answer rules: guide as reference, search with screenshots).
   parts.push(answerCostLine(await answerCostDays(now, owners)));
+  // Visual answers (visualServer.ts, Nov 14 2026): once they're on (counted per UTC day; your own answers included).
+  if (visualAnswersOn()) parts.push(visualStatsLine(await visualStatsFor(window === '30d' ? 30 : window === '7d' ? 7 : 1), window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'today'));
   // The nightly guide improver (autoImprove.ts): month to date against its own cap.
   const imp = await improverMonth(now);
   parts.push(`**Guide improvements this month:** $${imp.dollars.toFixed(2)} of the $${imp.cap} cap${imp.capAt ? ' (reached: stopped until the 1st)' : ''}`);
