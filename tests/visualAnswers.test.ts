@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/visualAnswers.test.ts)
 import assert from "node:assert/strict";
-import { shortCount, pickStart, topicKey, mapStore, visualFor, visualId } from "../visualAnswer";
+import { shortCount, pickStart, topicKey, mapStore, visualFor, visualId, sameGameName, RULES_V } from "../visualAnswer";
 import { statKind, pacificDay, visualStatsLine } from "../visualServer";
 
 let passed = 0;
@@ -18,6 +18,22 @@ await test("source-quality numbers for the ranking prompt are short (owner, Nov 
   assert.equal(shortCount(812), "812");
 });
 
+await test("the question's own game wins over the compendium's (owner, Nov 14 2026: the Nagakiba asked from a BG3 compendium)", async () => {
+  assert.equal(sameGameName("ELDEN RING", "Elden Ring"), true);
+  assert.equal(sameGameName("The Witcher 3: Wild Hunt - Complete Edition", "Witcher 3"), true);
+  assert.equal(sameGameName("Elden Ring", "Baldur's Gate 3"), false);
+  const looked: string[] = [];
+  const m = new Map();
+  // "Picture" so no search runs; the saved keys show which game's guide it used.
+  const r = await visualFor(fakeAi({ game: "Elden Ring", kind: "picture", confidence: "high", subject: "Nagakiba" }) as any, {
+    game: "Baldur's Gate 3", gameKey: "baldur-s-gate-3", question: "how do I get the Nagakiba in Elden Ring", answer: "...", youtubeKey: "k", wiki: {},
+    store: mapStore(m), otherGame: async (name) => { looked.push(name); return { gameKey: "elden-ring", wiki: {} }; },
+  }).catch((e) => ({ error: e })) as any;
+  assert.deepEqual(looked, ["Elden Ring"]);
+  assert.ok([...m.keys()].every((k: string) => k.startsWith("elden-ring|")), [...m.keys()].join(", "));
+  assert.equal(r.game, "Elden Ring");
+});
+
 await test("start time: a chapter when the watched moment falls inside it, else the watched moment", () => {
   assert.equal(pickStart(257, 350), 257); // BG3: the chapter that contains the button
   assert.equal(pickStart(206, 42), 42);   // Malenia: the watched start comes before that chapter
@@ -29,7 +45,7 @@ await test("start time: a chapter when the watched moment falls inside it, else 
 await test("saved results are keyed by the question and the topic; the same thing asked again costs no search", async () => {
   const store = mapStore();
   const video = { kind: "video" as const, videoId: "abc", title: "t", channel: "c", seconds: 60, start: 0, why: "", thumb: "" };
-  await store.set([topicKey("elden-ring", "q how do I beat Malenia?"), topicKey("elden-ring", "video Malenia, Blade of Miquella")], video);
+  await store.set([topicKey("elden-ring", `${RULES_V} q how do I beat Malenia?`), topicKey("elden-ring", `${RULES_V} video Malenia, Blade of Miquella`)], video);
   let searched = 0;
   const r = await visualFor(fakeAi({ kind: "video", confidence: "high", subject: "Malenia, Blade of Miquella", search: "x" }) as any, {
     game: "Elden Ring", gameKey: "elden-ring", question: "Malenia tips?", answer: "...", youtubeKey: "k", wiki: {}, store,

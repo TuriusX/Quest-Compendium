@@ -85,19 +85,28 @@ export const visualAnswersOn = (env: NodeJS.ProcessEnv = process.env) => env.VIS
  * The visual for one answer, counted for /stats: used by the app's /api/visual and the website's ask box
  * (siteAsk.ts /api/site/visual). `visual` is null when nothing helps or nothing confident was found.
  */
-export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'log' | 'guideKeyFor' | 'env'>, o: { game: string; guideKey?: string; question: string; answer: string; client: string }): Promise<{ visual: Visual | null; ref: string | null; cost: number }> {
+export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'log' | 'guideKeyFor' | 'env'>, o: { game: string; guideKey?: string; question: string; answer: string; client: string; appVersion?: string }): Promise<{ visual: Visual | null; ref: string | null; cost: number }> {
   const env = deps.env ?? process.env;
-  const gameKey = String(o.guideKey || '').replace(/[^a-z0-9-]/g, '').slice(0, 120) || (await deps.guideKeyFor(o.game)) || o.game.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  const src: any = (await getFirestore().collection('guideImageSources').doc(gameKey).get()).data() || {};
+  const keyOf = async (game: string) => (await deps.guideKeyFor(game)) || game.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const wikiOf = async (gameKey: string) => {
+    const src: any = (await getFirestore().collection('guideImageSources').doc(gameKey).get()).data() || {};
+    return { fextralife: src.fextralife?.domain || '', fandom: src.wiki?.domain || '' };
+  };
+  const gameKey = String(o.guideKey || '').replace(/[^a-z0-9-]/g, '').slice(0, 120) || (await keyOf(o.game));
   const key = String(env.YOUTUBE_API_KEY || '');
   const r = await visualFor(deps.getGeminiClient(), {
     game: o.game, gameKey, question: o.question, answer: o.answer, youtubeKey: key,
-    wiki: { fextralife: src.fextralife?.domain || '', fandom: src.wiki?.domain || '' },
+    wiki: await wikiOf(gameKey),
     store: firestoreStore(), log: deps.log,
     beforeSearch: key ? searchBudget(Number(env.YOUTUBE_DAILY_SEARCHES) || 100) : async () => { throw new YouTubeQuotaOut('no YouTube key'); },
+    // A question about another game than the compendium's: that game's guide key and wikis.
+    otherGame: async (name) => { const k = await keyOf(name); return { gameKey: k, wiki: await wikiOf(k) }; },
   });
   const v = r.visual;
   const client = String(o.client || 'web').replace(/[^a-z]/g, '').slice(0, 8) || 'web';
+  // One line per visual (owner, Nov 14 2026: why did a question get none?): the app, the game, the kind chosen, the result
+  // and the steps. No player id or question beyond the first 80 characters.
+  console.log(`[visual] ${client}${o.appVersion ? ` ${String(o.appVersion).replace(/[^0-9a-z.\-]/gi, '').slice(0, 20)}` : ''} | ${r.game} | "${o.question.replace(/\s+/g, ' ').slice(0, 80)}" | chose ${r.kindChosen || '?'} -> ${v.kind}${v.kind === 'video' ? ` ${v.videoId}` : ''}${r.cached ? ' (saved)' : ''} | ${r.youtubeSearches} search(es) $${r.cost.toFixed(4)} | ${r.steps.join(' / ').replace(/\s+/g, ' ').slice(0, 900)}`);
   void countVisual({
     answers: 1, [`shown_${statKind(v)}`]: 1, cached: r.cached ? 1 : 0, quotaOut: r.quotaOut ? 1 : 0,
     youtubeSearches: r.youtubeSearches, cost: Math.round(r.cost * 1e6) / 1e6, [`client_${client}`]: 1,
@@ -124,7 +133,7 @@ export function registerVisualAnswers(app: Express, deps: VisualDeps): void {
     if (!w || t >= w.reset) hourly.set(uid, (w = { n: 0, reset: t + 3600_000 }));
     if (w.n++ >= perUserHourly) return res.json({ visual: null, limited: true });
     try {
-      const r = await answerVisual(deps, { game, guideKey: String(req.body?.guideKey || ''), question, answer, client: String(req.body?.client || 'web') });
+      const r = await answerVisual(deps, { game, guideKey: String(req.body?.guideKey || ''), question, answer, client: String(req.body?.client || 'web'), appVersion: String(req.body?.appVersion || '') });
       res.json({ visual: r.visual, ref: r.ref });
     } catch (e: any) {
       console.warn('[visual] failed:', e?.message || e);

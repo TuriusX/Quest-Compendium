@@ -9,8 +9,8 @@
  *               (cheap calls, not the search bucket); the Fast model ranks the best match, any method (clear and
  *               complete first, then source quality, then getting to the point), WATCHES the top pick from its link
  *               (it must show it completely; it gives the start time) and keeps 2-3 alternatives with a note each.
- *   3. picture: our own approved guide pictures first (guideImages, placement.answer), else the main picture of the
- *               game's wiki page for that name (Fextralife, then Fandom), checked by the Fast model, with a credit.
+ *   3. picture: the main picture of the game's wiki page for that name (Fextralife, then Fandom), checked by the Fast
+ *               model, with a credit. Never our own guides' pictures (owner, Nov 14 2026: not good enough for this).
  *   4. saved:   each result under the question and under game + topic (visualCache), "nothing" too for a week, so a
  *               repeat costs nothing. "Not right" from a player drops it and keeps it from being picked again.
  * The server side (POST /api/visual, the day's counts for /stats) is in visualServer.ts.
@@ -19,7 +19,6 @@
  */
 import { ThinkingLevel } from '@google/genai';
 import sharp from 'sharp';
-import { getFirestore } from 'firebase-admin/firestore';
 import { estimateCost } from './usage';
 import { fextralifeImage } from './scripts/guides/suggestImages';
 
@@ -28,7 +27,7 @@ export type Visual =
   | { kind: 'video'; videoId: string; title: string; channel: string; seconds: number; start: number; why: string; thumb: string; note?: string; alts?: VideoAlt[] }
   | { kind: 'picture'; source: 'ours' | 'wiki'; url: string; alt: string; credit?: string; link?: string; why: string; map?: boolean }
   | { kind: 'none'; why: string };
-export type VisualResult = { visual: Visual; cost: number; ms: number; cached: boolean; steps: string[]; youtubeSearches: number; quotaOut?: boolean };
+export type VisualResult = { visual: Visual; cost: number; ms: number; cached: boolean; steps: string[]; youtubeSearches: number; quotaOut?: boolean; kindChosen?: VisualKind };
 
 type Gen = { models: { generateContent: (r: any) => Promise<any> } };
 const FAST = process.env.VISUAL_MODEL || 'gemini-3.8-flash';
@@ -56,17 +55,22 @@ async function ask(ai: Gen, cost: Cost, parts: any[], maxOut = 500, label = 'vis
 
 export async function choose(ai: Gen, cost: Cost, game: string, question: string, answer: string) {
   const prompt =
-    `A player of "${game}" asked: "${question}"\nThe answer they got:\n"""${answer.slice(0, 2500)}"""\n\n` +
+    `A player asked: "${question}" (their app was open on "${game}", but the question may be about another game).\n` +
+    `The answer they got:\n"""${answer.slice(0, 2500)}"""\n\n` +
     'Would one visual under this answer help them, and which kind? Decide from what the QUESTION asks, not from what ' +
     'the answer happens to describe.\n' +
     '- "video": the player asks HOW TO DO something that is movement or timing: getting from one place to another, ' +
     'beating a boss or enemy, getting through a platforming section, solving a puzzle ("how do I solve / get to / get ' +
     'through / beat ..."). A puzzle is always a video, never a picture.\n' +
+    '  Also "how do I get / unlock / find / obtain X" when, by the answer, getting X takes a QUESTLINE (several steps ' +
+    'or NPC visits), a ROUTE (a path through an area), a PUZZLE or a FIGHT (a boss or enemy that drops it): owner, ' +
+    'Nov 14 2026, "how do I get the Nagakiba" is Yura\'s questline, so a video. The subject is X itself.\n' +
     '- "picture": the player asks what something LOOKS LIKE, or WHERE EXACTLY a thing is (an item, a character, an ' +
-    'enemy, a chest, lever or door, a place).\n' +
+    'enemy, a chest, lever or door, a place), and "how do I get X" only when X is simply picked up or bought at one spot.\n' +
     '- "none": lore and story ("who is / who are / why ..."), builds, stats, choices, opinions, general advice.\n' +
     'Be strict: if the question is not clearly one of the first two, it is "none".\n' +
-    'Reply with JSON only: {"kind": "video" | "picture" | "none", "confidence": "high" | "medium" | "low", ' +
+    'Reply with JSON only: {"game": "the game the question is about, by its usual name", ' +
+    '"kind": "video" | "picture" | "none", "confidence": "high" | "medium" | "low", ' +
     '"subject": "the one thing itself, by its exact in-game name only (\\"Skeleton Key\\", \\"Keira Metz\\", ' +
     '\\"Malenia, Blade of Miquella\\"), never words like location, map, route or guide", ' +
     '"place": "for a where-question: the in-game name of the area it is in, as the answer names it; else empty", ' +
@@ -74,7 +78,7 @@ export async function choose(ai: Gen, cost: Cost, game: string, question: string
     'the game names them; else empty", "why": "one short sentence"}';
   const j = await ask(ai, cost, [{ text: prompt }], 300, 'visual-choose');
   const kind: VisualKind = ['video', 'picture'].includes(j?.kind) && j?.confidence === 'high' ? j.kind : 'none';
-  return { kind, subject: String(j?.subject || '').slice(0, 80), place: String(j?.place || '').slice(0, 80), search: String(j?.search || '').slice(0, 120), why: String(j?.why || '').slice(0, 200), confidence: String(j?.confidence || '') };
+  return { kind, game: String(j?.game || '').trim().slice(0, 120), subject: String(j?.subject || '').slice(0, 80), place: String(j?.place || '').slice(0, 80), search: String(j?.search || '').slice(0, 120), why: String(j?.why || '').slice(0, 200), confidence: String(j?.confidence || '') };
 }
 
 // ---- 2. Video ---------------------------------------------------------------------------------------------------
@@ -177,6 +181,8 @@ async function videoSearch(ai: Gen, cost: Cost, key: string, game: string, quest
     `A player of "${game}" asked: "${question}". The answer they got (what the places and names mean):\n` +
     `"""${answer.slice(0, 1500)}"""\n\nWhich of these YouTube videos show what they asked (the same route, boss or ` +
     'puzzle, in this game; not a different game, a remake, a mod, a different boss, or a general guide where it is a small part)? ' +
+    'For "how do I get X", a guide to the whole questline, route or fight that gets X matches, even when it covers more ' +
+    'than the last step (owner, Nov 14 2026: a Yura questline video for the Nagakiba). ' +
     'Any method counts, a cheese or exploit included: rank purely by which is the BEST match for the question.\n' +
     'Rank by, in this order:\n' +
     '1. How clearly and completely it shows what was asked (most important).\n' +
@@ -222,7 +228,10 @@ async function watch(ai: Gen, cost: Cost, game: string, question: string, answer
     `A player of "${game}" asked: "${question}". The answer they got:\n"""${answer.slice(0, 1200)}"""\n\n` +
     'Watch this video. Does it COMPLETELY and CLEARLY show what the QUESTION asks, in this game (any method, a cheese ' +
     'included)? "complete" is about the question only: false if it skips part of the asked route, fight or puzzle, or ' +
-    'is too fast or unclear to follow; extra steps the answer adds beyond the question do not have to be in it. If yes, ' +
+    'is too fast or unclear to follow; extra steps the answer adds beyond the question do not have to be in it. ' +
+    'For "how do I get X": a video of the whole questline, route or fight that ends with getting X counts as complete ' +
+    'even when it also covers more (other quest steps, other rewards); then the start is where that questline, route ' +
+    'or fight begins. If yes, ' +
     'at what second does the part that answers the question start (0 if from the beginning; skip intros, sponsor ' +
     'segments and unrelated parts)? Reply with JSON only: {"shows": true | false, "complete": true | false, "start": seconds, "what": "what the video shows, one sentence"}';
   try {
@@ -243,19 +252,6 @@ async function watch(ai: Gen, cost: Cost, game: string, question: string, answer
 
 // ---- 3. Picture -------------------------------------------------------------------------------------------------
 
-const norm = (s: string) => s.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-
-/** Our own approved pictures: one whose page or entry has the subject's name, allowed under answers. */
-export async function ourPicture(gameKey: string, subject: string) {
-  const snap = await getFirestore().collection('guideImages').where('game', '==', gameKey).where('status', '==', 'approved').get();
-  const want = norm(subject);
-  const hits = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))
-    .filter((x) => x.placement?.answer !== false && (norm(x.target?.name || '') === want || norm(x.target?.name || '').replace(/^the /, '') === want.replace(/^the /, '')))
-    .sort((a, b) => (a.rank ?? 9) - (b.rank ?? 9));
-  const x = hits[0];
-  if (!x) return null;
-  return { kind: 'picture' as const, source: 'ours' as const, id: x.id, url: `https://questcompendium.com/img/g/${x.id}/w600.webp`, alt: String(x.alt || x.target?.name || subject), why: `our approved picture of ${x.target?.name}` };
-}
 
 async function fandomImage(domain: string, title: string) {
   const api = (q: string) => fetch(`https://${domain}/api.php?format=json&formatversion=2&${q}`, { headers: { 'User-Agent': UA } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
@@ -302,6 +298,16 @@ export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: strin
 
 // ---- The whole step -----------------------------------------------------------------------------------------------
 
+/** The rules' version in saved results' keys (2: Nov 14 2026, "how do I get X" questlines and the question's own game). */
+export const RULES_V = 'r2';
+/** Two names for the same game ("ELDEN RING" / "Elden Ring", "The Witcher 3: Wild Hunt" / "Witcher 3")? */
+export function sameGameName(a: string, b: string): boolean {
+  const n = (s: string) => s.toLowerCase().replace(/[™®©]/g, '').replace(/\b(the|game of the year|goty|complete|definitive|remastered|special|enhanced|edition)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+  const x = n(a), y = n(b);
+  if (!x || !y) return true;
+  return x === y || x.startsWith(y) || y.startsWith(x) || x.split(':')[0] === y.split(':')[0];
+}
+
 /** What a video search may use: a hook before each YouTube search (the day's budget) and videos never to pick again. */
 export type VideoOut = { searches: number; steps: string[]; beforeSearch?: () => Promise<void>; excluded?: Set<string> };
 
@@ -321,15 +327,25 @@ export async function visualFor(ai: Gen, o: {
   game: string; gameKey: string; question: string; answer: string; youtubeKey: string;
   wiki: { fextralife?: string; fandom?: string }; store?: VisualStore; log?: Cost['log'];
   beforeSearch?: () => Promise<void>;
-}): Promise<VisualResult & { keys: string[] }> {
+  /** The question is about another game than the app's (asked from another game's compendium): its guide and wikis. */
+  otherGame?: (name: string) => Promise<{ gameKey: string; wiki: { fextralife?: string; fandom?: string } } | null>;
+}): Promise<VisualResult & { keys: string[]; game: string }> {
   const t0 = Date.now();
   const cost: Cost = { d: 0, log: o.log };
   const out: VideoOut = { searches: 0, steps: [], beforeSearch: o.beforeSearch };
   const c = await choose(ai, cost, o.game, o.question, o.answer);
+  // Owner, Nov 14 2026: "how do I get the Nagakiba in Elden Ring" asked from a Baldur's Gate 3 compendium was looked for
+  // in BG3's pictures and wikis. The game the question names wins.
+  let game = o.game, gameKey = o.gameKey, wiki = o.wiki;
+  if (c.game && sameGameName(c.game, o.game) === false && o.otherGame) {
+    const other = await o.otherGame(c.game).catch(() => null);
+    if (other) { game = c.game; gameKey = other.gameKey; wiki = other.wiki; out.steps.push(`about another game: ${game} (${gameKey})`); }
+  }
   out.steps.push(`choose: ${c.kind} (${c.confidence}) subject "${c.subject}"${c.place ? `, place "${c.place}"` : ''}${c.search ? `, search "${c.search}"` : ''}: ${c.why}`);
-  // Saved results: under the question itself and under the topic (the same thing asked in other words).
-  const keys = c.kind === 'none' ? [] : [topicKey(o.gameKey, `q ${o.question}`), topicKey(o.gameKey, `${c.kind} ${c.subject || c.search}`)];
-  const done = (visual: Visual, cached = false, extra: Partial<VisualResult> = {}) => ({ visual, cost: cost.d, ms: Date.now() - t0, cached, steps: out.steps, youtubeSearches: out.searches, keys, ...extra });
+  // Saved results: under the question itself and under the topic (the same thing asked in other words), with the rules'
+  // version, so a "nothing found" saved under older rules is looked for again.
+  const keys = c.kind === 'none' ? [] : [topicKey(gameKey, `${RULES_V} q ${o.question}`), topicKey(gameKey, `${RULES_V} ${c.kind} ${c.subject || c.search}`)];
+  const done = (visual: Visual, cached = false, extra: Partial<VisualResult> = {}) => ({ visual, cost: cost.d, ms: Date.now() - t0, cached, steps: out.steps, youtubeSearches: out.searches, keys, game, kindChosen: c.kind, ...extra });
   if (c.kind === 'none') return done({ kind: 'none', why: c.why });
   const hit = o.store ? await o.store.get(keys) : null;
   // A saved visual is used until a player marks it "Not right" (then it's dropped and its id excluded); a saved
@@ -339,11 +355,11 @@ export async function visualFor(ai: Gen, o: {
   out.excluded = excluded;
   let visual: Visual | null = null;
   try {
-    if (c.kind === 'video') visual = await findVideo(ai, cost, o.youtubeKey, o.game, o.question, o.answer, c.search || `${o.game} ${c.subject}`, out);
+    if (c.kind === 'video') visual = await findVideo(ai, cost, o.youtubeKey, game, o.question, o.answer, c.search || `${game} ${c.subject}`, out);
     else {
-      // A where-question: our own picture of the place first (where to go), then the thing itself (what to look for).
-      for (const name of [c.place, c.subject].filter(Boolean)) if (!visual) visual = await ourPicture(o.gameKey, name);
-      for (const name of [c.subject, c.place].filter(Boolean)) if (!visual) visual = await wikiPicture(ai, cost, o.wiki, o.game, o.question, name, out.steps, !!c.place);
+      // Pictures come from the game's wikis only, checked (owner, Nov 14 2026: not from our own guides, whose pictures
+      // aren't good enough for this): the thing itself first, then for a where-question the place it's in.
+      for (const name of [c.subject, c.place].filter(Boolean)) if (!visual) visual = await wikiPicture(ai, cost, wiki, game, o.question, name, out.steps, !!c.place);
       if (visual && excluded.has(visualId(visual))) { out.steps.push('the picture found was marked "Not right" before'); visual = null; }
     }
   } catch (e: any) {

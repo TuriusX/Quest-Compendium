@@ -1802,7 +1802,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       const res = await fetch(`${getApiBaseUrl()}/api/visual`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ game, guideKey: trackerGameRef.current.guideKey || undefined, question, answer, client: (window as any).electronAPI ? 'desktop' : 'web' }),
+        body: JSON.stringify({ game, guideKey: trackerGameRef.current.guideKey || undefined, question, answer, client: (window as any).electronAPI ? 'desktop' : 'web', appVersion: APP_VERSION }),
       });
       if (!res.ok) return;
       const data = await res.json();
