@@ -131,6 +131,12 @@ export interface ChatMessage {
   removedMarkers?: string[];
   /** Desktop: the game screen no longer matched this answer's screenshot, so its markers couldn't be placed on it. */
   markersUnplaced?: boolean;
+  /** Visual answers (Nov 14 2026): the video (with 2-3 alternatives) or picture found for this answer, after it arrived. */
+  visual?: import('./components/VisualCard').VisualData;
+  /** Names the saved visual on the server, for "Not right". */
+  visualRef?: string;
+  /** The player marked the visual "Not right": it isn't shown again. */
+  visualHidden?: boolean;
   /** How many facts this answer taught (or re-confirmed for) the game knowledge base. */
   factsSaved?: number;
   /** Corrections to the guide this answer made (candidates to verify): "That's right" on it confirms their area. */

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, Pin, Check, AlertTriangle, ChevronRight, ChevronDown, ChevronLeft, ExternalLink, Crosshair, MapPin } from './icons';
 import { useT } from '../i18n';
 import type { LogStep, LogView } from '../utils/questLogView';
+import { VisualCard, type VisualData, type VisualEvent } from './VisualCard';
 
 /**
  * The docked quest log (owner, Oct 30 2026): a column folded out of the panel's inner side, inside the overlay window.
@@ -40,6 +41,12 @@ export type QuestLogProps = {
   locateKeys?: string;
   /** Open an entry's guide page ("Open in guide"). */
   onOpenEntry?: (id: string) => void;
+  /**
+   * Visual answers (Nov 14 2026): the video or picture its answer already found, shown when one of that answer's steps is
+   * opened (no new question, nothing looked up again).
+   */
+  visualFor?: (msgId: string) => VisualData | undefined;
+  onVisualEvent?: (msgId: string, type: VisualEvent) => void;
 };
 
 const stepIds = (v: LogView) => [v.now, ...v.next].filter((s): s is LogStep => !!s && s.tick).map((s) => s.id);
@@ -97,6 +104,15 @@ export function QuestLog(p: QuestLogProps) {
   );
   const details = (s: LogStep) =>
     openId === s.id && (s.detail || s.sub) ? <div className="mt-1 text-[12px] leading-snug text-zinc-400">{s.detail || s.sub}</div> : null;
+  // The Now answer's video or picture, under whichever of its steps is open (they share one answer).
+  const answerMsg = v.now?.source === 'question' ? v.now.msgId : undefined;
+  const answerVisual = answerMsg ? p.visualFor?.(answerMsg) : undefined;
+  const visualOf = (s: LogStep) =>
+    openId === s.id && answerVisual && answerMsg ? (
+      <div data-qc-log-visual="" className="mt-1">
+        <VisualCard visual={answerVisual} compact onEvent={(type) => p.onVisualEvent?.(answerMsg, type)} />
+      </div>
+    ) : null;
   const label = (text: string, src?: React.ReactNode, amber = false) => (
     <div className={`flex items-baseline gap-2 mb-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] font-mono ${amber ? 'text-amber-300/90' : 'text-zinc-500'}`}>
       {text}
@@ -267,6 +283,7 @@ export function QuestLog(p: QuestLogProps) {
                   {details(n)}
                 </button>
               </div>
+              {visualOf(n)}
               {n.seen && (
                 <div data-qc-log-seen="" className="mt-2 flex items-center gap-1.5 text-[11.5px] text-zinc-500 min-w-0">
                   <Crosshair className="w-3 h-3 flex-shrink-0 text-[var(--accent-color)]" />
@@ -306,14 +323,17 @@ export function QuestLog(p: QuestLogProps) {
             {label(t('tracker.logNext'))}
             <div className="flex flex-col gap-0.5">
               {v.next.map((s) => (
-                <div key={s.id} className={`flex gap-2.5 items-start px-2 py-1.5 rounded ${p.sel === s.id ? 'bg-white/[0.04] outline outline-1 outline-white/[0.14]' : ''}`}>
-                  {tickBtn(s)}
-                  <button type="button" onClick={() => setOpenId((o) => (o === s.id ? null : s.id))} className="text-left min-w-0 outline-none focus-visible:underline">
-                    <div className="text-[13.5px] leading-snug text-zinc-200">{s.text}</div>
-                    {s.sub && <div className="text-[12px] text-zinc-500 mt-px">{s.sub}</div>}
-                    {details(s)}
-                  </button>
-                </div>
+                <React.Fragment key={s.id}>
+                  <div className={`flex gap-2.5 items-start px-2 py-1.5 rounded ${p.sel === s.id ? 'bg-white/[0.04] outline outline-1 outline-white/[0.14]' : ''}`}>
+                    {tickBtn(s)}
+                    <button type="button" onClick={() => setOpenId((o) => (o === s.id ? null : s.id))} aria-expanded={openId === s.id} className="text-left min-w-0 outline-none focus-visible:underline">
+                      <div className="text-[13.5px] leading-snug text-zinc-200">{s.text}</div>
+                      {s.sub && <div className="text-[12px] text-zinc-500 mt-px">{s.sub}</div>}
+                      {details(s)}
+                    </button>
+                  </div>
+                  {visualOf(s) && <div className="px-2 pb-1">{visualOf(s)}</div>}
+                </React.Fragment>
               ))}
             </div>
           </div>

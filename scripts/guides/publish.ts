@@ -2162,13 +2162,22 @@ function askBox(key: string, game: string, slug: string, kind: 'area' | 'entity'
     thinking: ui('askThinking'), from: ui('askFrom'), notCovered: ui('askNotCovered'), notCoveredSearched: ui('askNotCoveredSearched'), limit: ui('askLimit'), signIn: ui('askSignIn'),
     capped: ui('askCapped'), getApp: ui('askGetApp'), error: ui('askError'), left: ui('askLeft'), leftOne: ui('askLeftOne'),
     limitFree: ui('askLimitFree'), signInAsk: ui('askSignInAsk'), accountOut: ui('askAccountOut'), accountOutFree: ui('askAccountOutFree'), premium: ui('askPremium'), leftAcct: ui('askLeftAccount'),
+    // Visual answers (Nov 14 2026): the video or picture under an answer, when the server finds one that helps.
+    vPlay: ui('askVisPlay'), vStartsAt: ui('askVisStartsAt'), vVideo: ui('askVisVideo'), vPicture: ui('askVisPicture'), vMap: ui('askVisMap'),
+    vNotRight: ui('askVisNotRight'), vNotRightTitle: ui('askVisNotRightTitle'), vThanks: ui('askVisThanks'), vLarger: ui('askVisLarger'), vOthers: ui('askVisOthers'),
+    vShorter: ui('askVisShorter'), vLonger: ui('askVisLonger'), vSource: ui('askVisSource'),
+    vKinds: { guide: ui('askVisKindGuide'), walkthrough: ui('askVisKindWalkthrough'), quick: ui('askVisKindQuick'), cheese: ui('askVisKindCheese'), run: ui('askVisKindRun') },
   };
   const download = `/${LP}index.html?from=guide#download`;
   return `<div hidden data-qc-ask data-key="${esc(key)}" data-slug="${esc(slug)}" data-kind="${kind}" data-lang="${LANG}" data-game="${esc(game)}" data-page="${esc(page)}" data-api="${esc(SERVER_URL)}" data-app="${esc(`${SERVER_URL}/?from=guide`)}" data-download="${esc(download)}" data-t="${esc(JSON.stringify(T))}" class="qc-site-only mt-5 rounded-xl border border-[#a87ffb]/30 bg-[#a87ffb]/[0.06] px-3.5 py-2.5">
         <form class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5"><label for="qc-ask-q" class="w-full text-sm font-semibold text-[#c4b0ff] sm:w-auto">${esc(ui('askTitle'))}</label><input id="qc-ask-q" name="q" maxlength="300" autocomplete="off" placeholder="${esc(ui('askPlaceholder'))}" class="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:border-[#a87ffb] focus:outline-none"><button class="rounded-lg bg-[#a87ffb] px-3 py-1.5 text-sm font-semibold text-black hover:bg-white disabled:opacity-50">${esc(ui('askButton'))}</button></form>
         <div data-ask-out aria-live="polite"></div>
-        <template data-ask-answer><div class="mt-2.5 border-t border-white/10 pt-2.5"><p data-q class="text-xs text-zinc-500"></p><div data-a class="mt-1 whitespace-pre-line text-sm leading-relaxed text-zinc-200"></div><button type="button" data-more hidden class="mt-1 text-sm font-semibold text-[#a87ffb] hover:text-white">${esc(ui('askShowFull'))}</button><p data-note class="mt-1.5 text-xs text-amber-200/90"></p><p data-src class="mt-1.5 text-xs text-zinc-400"></p><p class="mt-1.5 text-xs text-zinc-500">${esc(ui('askOverlay'))} <a class="font-semibold text-[#a87ffb] hover:text-white" href="${esc(download)}">${esc(ui('askGetApp'))}</a></p></div></template>
+        <template data-ask-answer><div class="mt-2.5 border-t border-white/10 pt-2.5"><p data-q class="text-xs text-zinc-500"></p><div data-a class="mt-1 whitespace-pre-line text-sm leading-relaxed text-zinc-200"></div><button type="button" data-more hidden class="mt-1 text-sm font-semibold text-[#a87ffb] hover:text-white">${esc(ui('askShowFull'))}</button><div data-vis></div><p data-note class="mt-1.5 text-xs text-amber-200/90"></p><p data-src class="mt-1.5 text-xs text-zinc-400"></p><p class="mt-1.5 text-xs text-zinc-500">${esc(ui('askOverlay'))} <a class="font-semibold text-[#a87ffb] hover:text-white" href="${esc(download)}">${esc(ui('askGetApp'))}</a></p></div></template>
         <template data-ask-msg><p class="mt-2 text-xs text-zinc-400"></p></template>
+        <template data-ask-video><div data-qc-visual="video" class="mt-3 w-full max-w-[640px] overflow-hidden rounded-xl border border-white/10 bg-black/30"><div data-v-frame class="relative aspect-video w-full bg-black"><button type="button" data-v-play class="group absolute inset-0 h-full w-full"><img data-v-thumb alt="" class="absolute inset-0 h-full w-full object-cover opacity-90 group-hover:opacity-100"><span aria-hidden="true" class="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#a87ffb] pl-0.5 text-lg text-black shadow-lg group-hover:scale-105">&#9654;</span><span data-v-len class="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 font-mono text-[11px] text-white"></span><span data-v-start class="absolute bottom-2 left-2 rounded bg-black/80 px-1.5 py-0.5 text-[11px] text-white"></span></button></div><div class="px-3 py-2.5"><p data-v-title class="line-clamp-2 text-[13px] font-medium leading-snug text-zinc-100"></p><div class="mt-1 flex items-center justify-between gap-3 text-[11px]"><span data-v-meta class="min-w-0 flex-1 truncate text-zinc-400"></span><span class="flex shrink-0 items-center gap-3"><button type="button" data-v-wrong class="text-zinc-500 hover:text-zinc-300"></button><a data-v-yt target="_blank" rel="noopener" class="font-semibold text-[#a87ffb] hover:text-white">YouTube &#8599;</a></span></div></div><div data-v-others class="border-t border-white/10 px-2 pb-2 pt-1.5"><p data-v-others-title class="px-1 pb-1 text-[10.5px] uppercase tracking-wider text-zinc-500"></p><div data-v-rows class="flex flex-col gap-1"></div></div></div></template>
+        <template data-ask-vrow><button type="button" class="group flex w-full items-center gap-2.5 rounded-lg p-1 text-left hover:bg-white/5"><span class="relative aspect-video w-[88px] shrink-0 overflow-hidden rounded bg-black"><img data-r-thumb alt="" class="h-full w-full object-cover"><span data-r-len class="absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 font-mono text-[9.5px] text-white"></span></span><span class="flex min-w-0 flex-1 flex-col gap-0.5"><span data-r-title class="line-clamp-2 text-[12px] leading-snug text-zinc-200 group-hover:text-white"></span><span data-r-meta class="truncate text-[11px] text-zinc-500"></span></span></button></template>
+        <template data-ask-picture><div data-qc-visual="picture" class="mt-3 w-full max-w-[640px] overflow-hidden rounded-xl border border-white/10 bg-black/30"><a data-p-open target="_blank" rel="noopener" class="block bg-black"><img data-p-img class="mx-auto max-h-[300px] w-full object-contain"></a><div class="flex items-center justify-between gap-3 px-3 py-2 text-[11px]"><span data-p-meta class="min-w-0 flex-1 truncate text-zinc-400"></span><span class="flex shrink-0 items-center gap-3"><button type="button" data-v-wrong class="text-zinc-500 hover:text-zinc-300"></button><a data-p-src target="_blank" rel="noopener" class="font-semibold text-[#a87ffb] hover:text-white"></a></span></div></div></template>
+        <template data-ask-vthanks><p class="mt-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-400"></p></template>
         <template data-ask-link><a class="font-semibold text-[#a87ffb] hover:text-white"></a></template>
       </div><script src="/assets/ask.js" defer></script>`;
 }
@@ -2318,7 +2327,72 @@ const ASK_JS = String.raw`// "Stuck? Ask about this" (scripts/guides/publish.ts 
       // A long answer doesn't push the guide off the page: all of it is there, folded, one tap from being read.
       var a=el.querySelector('[data-a]'), more=el.querySelector('[data-more]'), fade='linear-gradient(#000 70%,transparent)';
       if(a.scrollHeight>420){a.style.maxHeight='18rem';a.style.overflow='hidden';a.style.webkitMaskImage=fade;a.style.maskImage=fade;more.hidden=false;more.addEventListener('click',function(){a.removeAttribute('style');more.remove();});}else more.remove();
+      if(j.vid) visual(j.vid,j.game||d.game,el.querySelector('[data-vis]'));
     }).catch(function(){msg(T.error);}).then(function(){btn.disabled=false;});
+  }
+  // ---- Visual answers (Nov 14 2026; the server's visualServer.ts): a video or picture under the answer, if one helps.
+  function mmss(s){s=Math.max(0,Math.floor(s||0));var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=('0'+s%60).slice(-2);return h?h+':'+('0'+m).slice(-2)+':'+x:m+':'+x;}
+  function vEvent(type,ref){fetch(api+'/api/site/visual/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:type,ref:ref||''})}).catch(function(){});}
+  function wrongBtn(card,ref){
+    var b=card.querySelector('[data-v-wrong]');b.textContent=T.vNotRight;b.title=T.vNotRightTitle;
+    b.addEventListener('click',function(){vEvent('wrong',ref);var p=tpl('vthanks');p.textContent=T.vThanks;card.replaceWith(p);});
+  }
+  function visual(vid,game,slot){
+    if(!slot) return;
+    token().then(function(t){
+      return fetch(api+'/api/site/visual',{method:'POST',headers:{'Content-Type':'application/json','X-Firebase-AppCheck':t},body:JSON.stringify({vid:vid,game:game})});
+    }).then(function(r){return r.json();}).then(function(x){
+      var v=x&&x.visual;if(!v)return;
+      if(v.kind==='picture'){
+        var c=tpl('picture');
+        var img=c.querySelector('[data-p-img]');img.src=v.url;img.alt=v.alt||'';
+        var open=c.querySelector('[data-p-open]');open.href=v.url;open.title=T.vLarger;open.addEventListener('click',function(){vEvent('opened',x.ref);});
+        c.querySelector('[data-p-meta]').textContent=(v.map?T.vMap:T.vPicture)+' · '+(v.alt||'');
+        var s=c.querySelector('[data-p-src]');
+        if(v.source==='wiki'&&v.link){s.href=v.link;s.textContent=String(v.credit||T.vSource).split(':')[0]+' ↗';}else s.remove();
+        wrongBtn(c,x.ref);slot.replaceChildren(c);return;
+      }
+      if(v.kind!=='video')return;
+      var card=tpl('video'),all=[v].concat(v.alts||[]),cur=v;
+      var kind=function(o){return(o.note&&T.vKinds[o.note])||'';};
+      function show(o,play){
+        cur=o;var st=Math.max(0,Math.round(o.start||0)),frame=card.querySelector('[data-v-frame]');
+        card.querySelector('[data-v-title]').textContent=o.title;
+        card.querySelector('[data-v-meta]').textContent=[kind(o)||T.vVideo,o.channel].filter(Boolean).join(' · ');
+        card.querySelector('[data-v-yt]').href='https://www.youtube.com/watch?v='+o.videoId+(st?'&t='+st+'s':'');
+        if(play){
+          var f=document.createElement('iframe');
+          f.src='https://www.youtube-nocookie.com/embed/'+o.videoId+'?start='+st+'&rel=0&modestbranding=1&autoplay=1&playsinline=1';
+          f.title=o.title;f.allow='accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen';f.allowFullscreen=true;
+          f.className='absolute inset-0 h-full w-full';frame.replaceChildren(f);vEvent('played',x.ref);
+        }else{
+          var b=card.querySelector('[data-v-play]');b.setAttribute('aria-label',T.vPlay.replace('{title}',o.title));
+          card.querySelector('[data-v-thumb]').src='https://i.ytimg.com/vi/'+o.videoId+'/hqdefault.jpg';
+          card.querySelector('[data-v-len]').textContent=mmss(o.seconds);
+          var sEl=card.querySelector('[data-v-start]');if(st)sEl.textContent=T.vStartsAt.replace('{time}',mmss(st));else sEl.remove();
+          b.addEventListener('click',function(){show(cur,true);});
+        }
+        rows();
+      }
+      // The other videos from the same search: clicking one plays it here, in the same player.
+      function rows(){
+        var others=all.filter(function(o){return o.videoId!==cur.videoId;}).slice(0,3),box2=card.querySelector('[data-v-others]');
+        if(!box2)return;
+        if(!others.length){box2.remove();return;}
+        box2.querySelector('[data-v-others-title]').textContent=T.vOthers;
+        box2.querySelector('[data-v-rows]').replaceChildren.apply(box2.querySelector('[data-v-rows]'),others.map(function(o){
+          var r=tpl('vrow');r.setAttribute('aria-label',T.vPlay.replace('{title}',o.title));
+          r.querySelector('[data-r-thumb]').src=o.thumb||('https://i.ytimg.com/vi/'+o.videoId+'/mqdefault.jpg');
+          r.querySelector('[data-r-len]').textContent=mmss(o.seconds);
+          r.querySelector('[data-r-title]').textContent=o.title;
+          var rel=o.seconds<cur.seconds*0.8?T.vShorter:o.seconds>cur.seconds*1.25?T.vLonger:'';
+          r.querySelector('[data-r-meta]').textContent=[kind(o),rel,o.channel].filter(Boolean).join(' · ');
+          r.addEventListener('click',function(){show(o,true);});
+          return r;
+        }));
+      }
+      wrongBtn(card,x.ref);show(v,false);slot.replaceChildren(card);
+    }).catch(function(){});
   }
   form.addEventListener('submit',function(ev){
     ev.preventDefault();

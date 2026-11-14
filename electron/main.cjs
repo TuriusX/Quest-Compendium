@@ -635,6 +635,15 @@ app.whenReady().then(() => {
     callback({ responseHeaders });
   });
 
+  // Visual answers (Nov 14 2026): YouTube's embedded player refuses pages without a web address ("Error 153: Video
+  // player configuration error"), and the installed app's pages are files. Its player requests say they come from the
+  // site, as the website's own player does; nothing else is changed.
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://www.youtube-nocookie.com/*', 'https://www.youtube.com/embed/*'] }, (details, callback) => {
+    const requestHeaders = Object.assign({}, details.requestHeaders);
+    if (!requestHeaders.Referer && !requestHeaders.referer) requestHeaders.Referer = 'https://questcompendium.com/';
+    callback({ requestHeaders });
+  });
+
   if (!isDev) {
     createWindow();
   } else {
