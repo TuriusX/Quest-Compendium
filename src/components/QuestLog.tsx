@@ -233,8 +233,8 @@ export function QuestLog(p: QuestLogProps) {
           </div>
         )}
 
-        {/* Nothing asked yet: an invitation. */}
-        {v.invite && !v.done && !w && (
+        {/* Nothing asked yet and nothing else to show: an invitation (the area's steps carry the same quick questions). */}
+        {v.invite && !v.done && !w && !v.here && !p.facts && (
           <div className="rounded-md border border-dashed border-[var(--accent-border)] bg-[var(--accent-dim)]/40 p-3">
             <div className="font-bold text-[14px]">{t('tracker.logInvite')}</div>
             <p className="mt-0.5 mb-2 text-[12.5px] text-zinc-400 leading-snug">{t('tracker.logInviteSub')}</p>

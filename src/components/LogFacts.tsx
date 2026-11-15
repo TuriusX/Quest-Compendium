@@ -61,7 +61,6 @@ export function LogFacts(p: {
   useEffect(() => () => clearHover(), []);
   const isOpen = (id: string) => open[id] !== false;
   const toggle = (id: string) => setOpen((o) => { const n = { ...o, [id]: !isOpen(id) }; try { localStorage.setItem(OPEN_KEY, JSON.stringify(n)); } catch { /* remembered for this session only */ } return n; });
-  const unconf = <span className="ml-1.5 inline-block rounded-full border border-dashed border-zinc-500 px-1.5 text-[10px] text-zinc-400 align-middle">{t('logfacts.unconfirmed')}</span>;
   const missTag = (lost?: string) => (
     <span className="ml-1.5 inline-block rounded border border-amber-400/40 bg-amber-400/10 px-1 text-[9.5px] font-bold uppercase tracking-wide text-amber-300 align-middle">{t('logfacts.missable')}</span>
   );
@@ -104,7 +103,6 @@ export function LogFacts(p: {
                     className="font-semibold text-white text-left hover:underline decoration-white/30 underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-white rounded cursor-pointer">{g.name}</button>
                   {g.rarity && <span className="ml-1.5 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: rarityColor(g.rarity) }}>{g.rarity}</span>}
                   {(g.missable || g.lost) && missTag(g.lost)}
-                  {g.confirmed === false && unconf}
                   {/* One line per item (owner, Nov 15 2026): what it does, where and how are in its card (hover or click the name). */}
                   {(g.lost || g.lockout) && <div className="text-[11.5px] text-amber-300/90">{g.lost ? t('logfacts.goneAt', { when: g.lost }) : g.lockout}</div>}
                 </div>
@@ -120,9 +118,9 @@ export function LogFacts(p: {
               </button>
               {all.people && (
                 <ul className="flex flex-col gap-1 text-[12.5px] leading-snug">
-                  {w.quests.map((q) => <li key={q.id}><span className="font-semibold text-white">{q.name}</span>{q.confirmed === false && unconf}<span className="text-zinc-400">{[q.giver && ` · ${t('logfacts.from', { who: q.giver })}`, q.reward && ` · ${t('logfacts.reward', { what: q.reward })}`].filter(Boolean).join('')}</span></li>)}
-                  {w.people.map((x) => <li key={x.id}><span className="font-semibold text-white">{x.name}</span>{x.confirmed === false && unconf}{x.why && <span className="text-zinc-400"> · {x.why}</span>}</li>)}
-                  {w.todo.map((x) => <li key={x.id}><span className="font-semibold text-white">{x.name}</span>{x.confirmed === false && unconf}{x.why && <span className="text-zinc-400"> · {x.why}</span>}</li>)}
+                  {w.quests.map((q) => <li key={q.id}><span className="font-semibold text-white">{q.name}</span><span className="text-zinc-400">{[q.giver && ` · ${t('logfacts.from', { who: q.giver })}`, q.reward && ` · ${t('logfacts.reward', { what: q.reward })}`].filter(Boolean).join('')}</span></li>)}
+                  {w.people.map((x) => <li key={x.id}><span className="font-semibold text-white">{x.name}</span>{x.why && <span className="text-zinc-400"> · {x.why}</span>}</li>)}
+                  {w.todo.map((x) => <li key={x.id}><span className="font-semibold text-white">{x.name}</span>{x.why && <span className="text-zinc-400"> · {x.why}</span>}</li>)}
                 </ul>
               )}
             </>

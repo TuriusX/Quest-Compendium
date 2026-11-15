@@ -93,7 +93,8 @@ export function ItemCard({ item, anchor, gameKey, color, onClose, onEnter, onLea
         )}
         {(item.confirmed === false || (pic && !reported)) && (
           <div className="flex items-center gap-2 pt-0.5">
-            {item.confirmed === false && <span className="rounded-full border border-dashed border-zinc-500 px-1.5 text-[10px] text-zinc-400">{t('logfacts.unconfirmed')}</span>}
+            {/* How sure we are, quietly (owner, Nov 15 2026): no badge, a footnote only on what isn't checked yet. */}
+            {item.confirmed === false && <span className="text-[10.5px] italic text-zinc-500">{t('card.unchecked')}</span>}
             {pic && !reported && (
               <button type="button" onClick={wrong} title={t('card.wrongPicture')} className="ml-auto inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300">
                 <ThumbsDown className="w-3 h-3" /> {t('visual.notRight')}
