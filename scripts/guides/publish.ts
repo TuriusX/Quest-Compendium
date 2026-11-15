@@ -1326,12 +1326,14 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
     : '';
 
   // Before you leave: the points of no return and warnings the page states, and how many missables it has.
+  const actLink = (() => { const sp = LANG === 'en' ? SPINES.get(gameKey) : undefined; const i = sp ? sp.spine.acts.findIndex((x) => x.steps.some((s) => (s.areas || []).includes(a.slug))) : -1; return sp && i >= 0 ? { name: sp.spine.acts[i].name, href: `../story-order/${slugOf(sp.spine.acts[i].name) || `part-${i + 1}`}/` } : null; })();
   const warns = recs.filter((r) => r.type === 'noreturn' || r.type === 'warning').sort((x, y) => Number(y.type === 'noreturn') - Number(x.type === 'noreturn'));
-  const before = warns.length || missCount
+  const before = warns.length || missCount || actLink
     ? `<section id="before-you-leave" class="mt-6 scroll-mt-20 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07] p-4">
         <h2 class="flex items-center gap-2 text-base font-bold text-amber-200">${ICON.warn} Before you leave</h2>
         <ul class="mt-2 space-y-1.5 text-sm text-zinc-200">
           ${missCount ? `<li class="flex gap-2"><span class="text-amber-300">&bull;</span><span><strong class="text-white">${missCount} missable${missCount === 1 ? '' : 's'} here</strong>: what locks each one out is under it. <a href="#checklist" class="text-[#a87ffb] hover:text-white">See the checklist</a>${FACT_LISTS.get(gameKey)?.has('missables') ? ` · <a href="../missables/" class="text-[#a87ffb] hover:text-white">All missables in ${esc(shortGame(game))}</a>` : ''}</span></li>` : ''}
+          ${actLink ? `<li class="flex gap-2"><span class="text-amber-300">&#9670;</span><span><a href="${actLink.href}" class="text-[#a87ffb] hover:text-white">${esc(actLink.name)} in order</a>: every point of no return and what to get before it.</span></li>` : ''}
           ${warns.slice(0, 6).map((w) => `<li class="flex gap-2"><span class="text-amber-300">&bull;</span><span>${esc(w.short || w.fields?.text || w.name)}</span></li>`).join('')}
         </ul>
         <p class="qc-site-only mt-2 text-xs text-zinc-500">${esc(ui('appMissables'))} <a href="/${LP}?from=guide#download" class="text-[#a87ffb] hover:text-white">${esc(ui('appLink'))} &rarr;</a></p>
@@ -2031,6 +2033,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           ${askBox(key, gameName, '', 'front', shortGame(gameName))}
           <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, one(links.length, 'statAreas'))}${stat(totalChecks, one(totalChecks, 'statThings'))}${stat(missables, one(missables, 'statMissables'))}${checked ? stat(checked === checkedTotal ? ui('statAll') : ui('statOf', { n: checked, total: checkedTotal }), one(checkedTotal, 'statChecked')) : ''}</div>
           ${achHere ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${esc(ui('achCount', { n: (achHere.list || []).length }))} · ${(achHere.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
+          ${LANG === 'en' && SPINES.has(key) ? `<div class="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-4 py-3"><span class="block font-semibold text-white">&#9670; The story in order, with every missable</span><span class="block text-xs text-zinc-400">Each point of no return, and what to get before it.</span><span class="mt-2 flex flex-wrap gap-1.5">${SPINES.get(key)!.spine.acts.map((x, i) => `<a href="story-order/${esc(slugOf(x.name) || `part-${i + 1}`)}/" class="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-xs font-semibold text-[#a87ffb] hover:text-white">${esc(x.name)}</a>`).join('')}</span></div>` : ''}
           <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
           ${compIndexHtml(key, links, visible, byslug, !!achHere)}
           ${playersAsked(key, '')}
