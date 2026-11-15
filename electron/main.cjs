@@ -450,18 +450,25 @@ function slideOut() {
   if (!mainWindow) return;
   isAppVisible = false;
   // Hand focus back to the game so it gets the controller again: the window recorded when the panel opened, else (the
-  // panel opened itself at startup) the detected running game's window.
-  let handBack = focusBeforeOverlay;
-  const detected = !handBack ? focusHelper.windowInFolder(gameInstallDir(lastRunningAppId)) : null;
-  if (detected) handBack = detected;
-  focusHelper.restore(mainWindow, handBack, { detected: !!detected });
+  // panel opened itself at startup) the detected running game's window. Done once the panel has slid away, not before
+  // (Noah, Nov 15 2026: about half a second before the slide started): finding and focusing the game's window blocks
+  // this process, which held up the animation. The panel keeps focus while it slides, so the hand-back works the same.
+  const recorded = focusBeforeOverlay;
+  const giveBack = () => {
+    if (isAppVisible || !mainWindow || mainWindow.isDestroyed()) return; // opened again meanwhile
+    let handBack = recorded;
+    const detected = !handBack ? focusHelper.windowInFolder(gameInstallDir(lastRunningAppId)) : null;
+    if (detected) handBack = detected;
+    focusHelper.restore(mainWindow, handBack, { detected: !!detected });
+  };
   focusBeforeOverlay = null;
   openSnapshot = null; // the snapshot only lives for one visit
   if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(true);
-    animateWindow(coords.x, coords.y, 150).then(parkPanel);
+    animateWindow(coords.x, coords.y, 150).then(() => { giveBack(); parkPanel(); });
   } else {
     // Undocked: the panel goes and the book spine stays where it was (a click brings the panel back there).
+    giveBack();
     mainWindow.hide();
     spine.show();
   }
