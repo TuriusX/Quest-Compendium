@@ -17,6 +17,11 @@
  * searched first), apply per guide, then re-import the records, sync the translations and report.
  *
  *   PIPELINE_STEP_DOLLARS=10 npx tsx scripts/guides/disputeSettle.ts [--only KEY[,KEY]] [--pages N] [--decide-only] [--dry-run]
+ *
+ * --weekly (owner, Nov 15 2026): the weekly run from the guide improvement fund (system/improveFund, about $6 a week,
+ * $8 hard stop a run, never past the fund's total). Pages settled before are decided again for their new disputed facts
+ * only; only those are applied, then merged into the page's settled record. Logged in improveFund.log (kind "settle")
+ * and improveFund.lastSettle (the Monday summary's line).
  */
 import { spawnSync } from 'child_process';
 import fs from 'fs';
@@ -342,15 +347,22 @@ function outcomeLive(a: any, r: GameRecord | undefined, d: Decision): Outcome {
 }
 
 async function main() {
-  const limit = Number(process.env.PIPELINE_STEP_DOLLARS || 0);
+  let limit = Number(process.env.PIPELINE_STEP_DOLLARS || 0);
   if (!limit) throw new Error('PIPELINE_STEP_DOLLARS is required: this run has a hard stop');
   const dry = process.argv.includes('--dry-run');
   const decideOnly = process.argv.includes('--decide-only');
   const maxPages = Number(arg('pages', '0')) || 0;
   const keys = String(arg('only') || '').split(',').map((s) => s.trim()).filter(Boolean);
   const all = keys.length ? keys : (((await db().collection('config').doc('factPages').get()).data() as any)?.guides as string[]);
+  const weekly = process.argv.includes('--weekly');
   const fund: any = (await FUND().get()).data() || { budget: 10, spent: 0 };
-  const earlier = Number(fund.spent || 0);
+  // A weekly run charges the improvement fund: its own spend starts at 0, and it never goes past what the fund has left.
+  const IMPROVE = () => db().collection('system').doc('improveFund');
+  const imp: any = weekly ? (await IMPROVE().get()).data() || {} : null;
+  const impLeft = imp ? Math.max(0, Number(imp.budget || 0) - Number(imp.spent || 0)) : Infinity;
+  if (weekly && impLeft < 0.5) { console.log(`The improvement fund has $${impLeft.toFixed(2)} left: no settle run.`); process.exit(0); }
+  const earlier = weekly ? 0 : Number(fund.spent || 0);
+  if (weekly) limit = Math.min(limit, impLeft);
   const reserve = 1.5; // the final reviews and the translations, after the decisions.
   console.log(`Fund: $${earlier.toFixed(2)} of $${Number(fund.budget || 10).toFixed(2)} spent before this run; this run may spend $${limit.toFixed(2)}.`);
 
@@ -366,7 +378,11 @@ async function main() {
   console.log(`${pages.reduce((n, p) => n + p.facts.length, 0)} disputed fact(s) on ${pages.length} page(s); ${skippedByHand} edited by hand and left alone.`);
   const done = new Map<string, Settled>();
   for (const key of new Set(pages.map((p) => p.key))) for (const d of (await RECORDS().doc(key).collection('settled').get()).docs) done.set(`${key}/${d.id}`, d.data() as Settled);
-  const todo = pages.filter((p) => p.facts.length && !done.has(`${p.key}/${p.slug}`)).slice(0, maxPages || undefined);
+  const fresh = new Map<string, Settled>();
+  const todo = pages
+    .map((p) => { const prev = done.get(`${p.key}/${p.slug}`); return prev ? { ...p, facts: p.facts.filter((f) => !prev.decisions?.[f.id]) } : p; })
+    .filter((p) => p.facts.length)
+    .slice(0, maxPages || undefined);
   if (dry) { console.log(`Would decide ${todo.length} page(s).`); process.exit(0); }
   let searchAllowed = true, capped = false;
   for (let i = 0; i < todo.length && !capped; i += 4) {
@@ -374,8 +390,12 @@ async function main() {
     await Promise.all(todo.slice(i, i + 4).map(async (p) => {
       try {
         const s = await decidePage(p, searchAllowed);
-        await RECORDS().doc(p.key).collection('settled').doc(p.slug).set(JSON.parse(JSON.stringify(s)));
-        done.set(`${p.key}/${p.slug}`, s);
+        // A page settled before keeps its earlier decisions; only this run's are applied (fresh).
+        const prev = done.get(`${p.key}/${p.slug}`);
+        fresh.set(`${p.key}/${p.slug}`, s);
+        const merged: Settled = prev ? { ...prev, at: s.at, dollars: Number(prev.dollars || 0) + s.dollars, decisions: { ...prev.decisions, ...s.decisions }, prose: [...(prev.prose || []), ...s.prose] } : s;
+        await RECORDS().doc(p.key).collection('settled').doc(p.slug).set(JSON.parse(JSON.stringify(merged)));
+        done.set(`${p.key}/${p.slug}`, merged);
         const c = (o: Outcome) => Object.values(s.decisions).filter((d) => d.outcome === o).length;
         console.log(`${p.key}/${p.slug}: corrected ${c('correct')}, relocated ${c('relocate')}, removed ${c('remove')}, kept ${c('keep')}, unsettled ${c('unsettled')}; ${s.prose.length} text edit(s); $${s.dollars.toFixed(4)}`);
       } catch (e: any) {
@@ -386,14 +406,15 @@ async function main() {
     }));
   }
   console.log(`Decisions done: $${ledgerDollars().toFixed(4)} so far (${ledger.searches} searches).`);
-  await FUND().set({ budget: 10, spent: earlier + ledgerDollars(), at: Date.now() }, { merge: true });
+  if (!weekly) await FUND().set({ budget: 10, spent: earlier + ledgerDollars(), at: Date.now() }, { merge: true });
   if (decideOnly) { setTimeout(() => process.exit(0), 300); return; }
 
   // Apply, guide by guide.
   const lines: string[] = [];
   const touched = new Set<string>();
   for (const key of new Set(pages.map((p) => p.key))) {
-    const list = pages.filter((p) => p.key === key).map((p) => ({ slug: p.slug, s: done.get(`${key}/${p.slug}`)! })).filter((x) => x.s && !x.s.applied && Object.values(x.s.decisions).some((d) => ['correct', 'relocate', 'remove'].includes(d.outcome)));
+    // This run's decisions where it made any (a page settled before is applied only for its new facts), else a page's unapplied ones.
+    const list = pages.filter((p) => p.key === key).map((p) => ({ slug: p.slug, s: fresh.get(`${key}/${p.slug}`) || done.get(`${key}/${p.slug}`)! })).filter((x) => x.s && (fresh.has(`${key}/${x.slug}`) || !x.s.applied) && Object.values(x.s.decisions).some((d) => ['correct', 'relocate', 'remove'].includes(d.outcome)));
     if (!list.length) continue;
     const game = pages.find((p) => p.key === key)!.game;
     try {
@@ -401,7 +422,7 @@ async function main() {
       lines.push(`${key}: ${line}`);
       console.log(`${key}: ${line}`);
       touched.add(key);
-      for (const { slug, s } of list) await RECORDS().doc(key).collection('settled').doc(slug).set({ ...JSON.parse(JSON.stringify(s)), applied: true, gate: line.slice(0, 300) });
+      for (const { slug } of list) { const m = done.get(`${key}/${slug}`)!; m.applied = true; await RECORDS().doc(key).collection('settled').doc(slug).set({ ...JSON.parse(JSON.stringify(m)), gate: line.slice(0, 300) }); }
     } catch (e: any) {
       console.warn(`${key} not applied: ${e?.message}`);
     }
@@ -409,20 +430,21 @@ async function main() {
 
   // The records, and what really went live.
   const counts: Record<string, number> = { correct: 0, relocate: 0, remove: 0, keep: 0, unsettled: 0 };
+  const thisRun = new Set<string>([...fresh.values()].flatMap((s) => Object.keys(s.decisions)));
   for (const key of new Set(pages.map((p) => p.key))) {
     const before = new Map<string, GameRecord>(pages.filter((p) => p.key === key).flatMap((p) => p.recs.map((r) => [r.id, r] as [string, GameRecord])));
     await importRecords({ only: key });
     for (const p of pages.filter((x) => x.key === key)) {
       const s = done.get(`${key}/${p.slug}`);
-      if (!s) { for (const _r of p.facts) counts.unsettled++; continue; }
+      if (!s) { if (!weekly) for (const _r of p.facts) counts.unsettled++; continue; }
       const live: any = (await db().collection('guides').doc(key).collection('areas').doc(p.slug).get()).data() || {};
       const now = new Map((await RECORDS().doc(key).collection('records').where('place', '==', p.slug).get()).docs.map((d) => [d.id, d.data() as GameRecord]));
       const results: Record<string, any> = {};
       for (const d of Object.values(s.decisions)) {
-        if (d.final) { counts[d.final]++; continue; } // settled by an earlier run
+        if (d.final) { if (!weekly) counts[d.final]++; continue; } // settled by an earlier run
         const was = before.get(d.id);
         d.final = outcomeLive(live, was, d);
-        counts[d.final]++;
+        if (!weekly || thisRun.has(d.id)) counts[d.final]++;
         if (d.final === 'keep' && was) results[d.id] = { sig: contentSig(was), status: 'checked', claims: 1, supported: 1, settled: true };
         if (d.final === 'correct' || d.final === 'relocate') {
           const r = [...now.values()].find((x) => was && x.type === was.type && String(x.origin?.entry) === String(was.origin?.entry) && x.origin?.from === 'area');
@@ -456,7 +478,11 @@ async function main() {
     if (r.status === 0) await ref.set({ translationsDue: null }, { merge: true });
   }
   const total = earlier + ledgerDollars() + translateDollars;
-  await FUND().set({ budget: 10, spent: total, at: Date.now(), counts, gates: lines }, { merge: true });
+  if (weekly) {
+    const cur: any = (await IMPROVE().get()).data() || {};
+    const line = `corrected ${counts.correct}, relocated ${counts.relocate}, removed ${counts.remove}, kept ${counts.keep}, unsettled ${counts.unsettled}`;
+    await IMPROVE().set({ spent: Number(cur.spent || 0) + total, lastSettle: { at: Date.now(), dollars: total, counts, line }, log: [...(cur.log || []), { at: Date.now(), kind: 'settle', dollars: total, line }].slice(-200) }, { merge: true });
+  } else await FUND().set({ budget: 10, spent: total, at: Date.now(), counts, gates: lines }, { merge: true });
   fs.writeFileSync('scratchpad/dispute-settle.json', JSON.stringify({ counts, lines }, null, 1));
   console.log(`Settled: corrected ${counts.correct}, relocated ${counts.relocate}, removed ${counts.remove}, kept ${counts.keep}, unsettled ${counts.unsettled}; fund spent $${total.toFixed(4)}.`);
   setTimeout(() => process.exit(0), 300);

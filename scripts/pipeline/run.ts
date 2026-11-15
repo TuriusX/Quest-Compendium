@@ -970,6 +970,26 @@ async function main() {
     } catch (e: any) {
       console.warn(`Fact checks skipped: ${e?.message}`);
     }
+    // Mondays: the contradicted facts settled from the same fund (owner, Nov 15 2026: about $6 a week, $8 hard stop a
+    // run, never past the fund's total; disputeSettle.ts --weekly corrects, relocates, removes or keeps each one, and
+    // logs kind "settle"). Its counts are the Monday summary's line.
+    if (MONDAY) {
+      try {
+        const fund: any = (await db().collection('system').doc('improveFund').get()).data() || {};
+        const left = Number(fund.budget || 0) - Number(fund.spent || 0);
+        if (fund.settle !== false && left > 0.5) {
+          const cap = Math.min(8, left);
+          const r = spawnSync('npx', ['tsx', 'scripts/guides/disputeSettle.ts', '--weekly'], { encoding: 'utf8', timeout: 120 * 60_000, maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32', env: { ...process.env, PIPELINE_STEP_DOLLARS: cap.toFixed(2) } });
+          const after: any = (await db().collection('system').doc('improveFund').get()).data() || {};
+          const s = after.lastSettle;
+          report.push(r.status === 0 && s && Date.now() - Number(s.at || 0) < 6 * 3600_000
+            ? `🧹 Contradicted facts settled this week (your improvement fund): ${s.line}; $${Number(s.dollars || 0).toFixed(2)}.`
+            : `⚠️ The weekly settle of contradicted facts didn't finish (exit ${r.status}); see the job log.`);
+        }
+      } catch (e: any) {
+        console.warn(`Weekly settle skipped: ${e?.message}`);
+      }
+    }
   }
   // Exact locations paid from the owner's own fund, not the pipeline's cap (roadmap 29; owner, Nov 9 2026: "spend a little
   // each night", then switched to locations): system/factWork { budget, spent, nightly }. Runs last, only with search room
