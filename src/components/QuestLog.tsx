@@ -38,6 +38,8 @@ export type QuestLogProps = {
   helpMsgFor?: (stepId: string) => string | undefined;
   /** The database sections (LogFacts: Worth getting here, Achievements here), under Now, Next and the warning. */
   facts?: React.ReactNode;
+  /** The area has Worth getting here: its missables are badged there, so the separate missables box doesn't show (owner, Nov 15 2026). */
+  foldMissables?: boolean;
   onConfirmPlace?: () => void;
   /** The player says where they are (the guide's areas, "Yes" to a suggestion, "Still here"). */
   onPickPlace?: (name: string) => void;
@@ -362,7 +364,7 @@ export function QuestLog(p: QuestLogProps) {
                 ))}
               </div>
             )}
-            {v.here.missables.length > 0 && (
+            {v.here.missables.length > 0 && !p.foldMissables && (
               <div className="mt-2 rounded-md border border-amber-300/35 bg-amber-300/[0.07] px-3 py-2">
                 <div className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] font-mono text-amber-300/90">{t('tracker.secMissable')}</div>
                 <ul className="flex flex-col gap-1">
@@ -388,7 +390,8 @@ export function QuestLog(p: QuestLogProps) {
 
         {v.watch && (
           <div>
-            {label(t('tracker.logWatch'), v.watch.fromGuide ? <span className="ml-auto normal-case tracking-normal font-sans font-semibold text-[11px] text-amber-300/70">{t('tracker.secMissable')}</span> : undefined, true)}
+            {/* Watch out: what's about to be lost, without a "(from the guide)" label (owner, Nov 15 2026). */}
+            {label(t('tracker.logWatch'), undefined, true)}
             <div className="flex gap-2.5 rounded-md border border-amber-300/35 bg-amber-300/[0.09] px-3 py-2.5">
               <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-300" />
               <div className="text-[13px] leading-snug text-[#f3e6c8] min-w-0">

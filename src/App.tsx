@@ -3128,6 +3128,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           onLocate={() => void runHelpHere()}
           onPickPlace={moveToArea}
           locateKeys={formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K')}
+          foldMissables={!!(trackerGame.guideArea?.page as any)?.worth}
           facts={(() => {
             // Item 30, step 2: the area's database sections (English pages carry them), only beside what the log already shows.
             const ga = trackerGame.guideArea;
