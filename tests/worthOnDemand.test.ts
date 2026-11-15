@@ -1,7 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/worthOnDemand.test.ts)
 // "Worth getting here" on demand (Nov 15 2026): any game, guide or not.
 import assert from "node:assert/strict";
-import { mainArea } from "../worthOnDemand";
+import { mainArea, ASKS_WHATS_WORTH, allEntries } from "../worthOnDemand";
 import { freeLocatePrompt, parseFreeLocateReply, isConfident, seenTextNamesArea } from "../locateMe";
 import { applyWorth, finish, type GameRecord } from "../scripts/guides/records";
 
@@ -61,6 +61,13 @@ test("guide text stands only when checked; otherwise the sourced line wins (and 
   assert.notEqual(a.hash, unchecked.hash, "changed records get a new hash");
   assert.equal(b.fields.why, "checked text", "checked guide text stays");
   assert.equal(b.fields.rank, "2", "it still gets its rank");
+});
+
+test("which answers may add to an area's list, and the pass's entries come first", () => {
+  for (const q of ["What's worth getting here?", "best gear in this area", "anything missable here?", "what should I pick up here", "good loot around here?"]) assert.ok(ASKS_WHATS_WORTH.test(q), q);
+  for (const q of ["how do I beat Hornet", "where do I go next", "what does this charm do"]) assert.ok(!ASKS_WHATS_WORTH.test(q), q);
+  const e = (name: string) => ({ type: "item" as const, name, rank: 1, fields: {}, sources: [] });
+  assert.deepEqual(allEntries({ entries: [e("A")], fromAnswers: [e("B")] }).map((x) => x.name), ["A", "B"]);
 });
 
 console.log(`\n${passed} passed`);

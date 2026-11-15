@@ -23,7 +23,7 @@ import crypto from 'crypto';
 import type { Express, Request, Response } from 'express';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { worthArea } from './scripts/guides/worthIt';
-import { applyWorth, finish, type GameRecord } from './scripts/guides/records';
+import { applyWorth, type GameRecord, type WorthEntry } from './scripts/guides/records';
 import { wikiFor, cardFor } from './scripts/guides/itemCards';
 import { usageScope, searchForPlayers, slug as slugOf } from './scripts/guides/common';
 import { SearchDayWait } from './apiLimits';
@@ -80,7 +80,8 @@ export async function worthStatus(a: AreaRef): Promise<WorthStatus> {
     // Crashed twice: left failed (never a loop). Once: "never tried", so it gets its one retry.
     if (sameVersion && Number(fill.attempts || 0) >= 2) return 'failed';
   }
-  const wd: any = w.data();
+  // Only the area's own pass (it sets `at`) decides: items answers added (fromAnswers) never stop it from running.
+  const wd: any = w.exists && (w.data() as any)?.at ? w.data() : null;
   if (wd && (wd.entries?.length ? true : false) && (sameVersion || !a.guided)) return 'ready';
   if (fill && sameVersion) {
     if (fill.status === 'empty') return 'empty';
@@ -149,10 +150,11 @@ export async function fillArea(a: AreaRef, uid: string, by: 'player' | 'night'):
       const spine: any = a.guided ? (await REC(a.key).collection('spine').doc('main').get()).data() : null;
       const act = String((spine?.acts || []).find((x: any) => (x.steps || []).some((s: any) => (s.areas || []).includes(a.slug)))?.name || '');
       const { entries, dropped } = await worthArea(a.key, a.slug, a.game, a.name, act, have);
-      await REC(a.key).collection('worth').doc(a.slug).set(JSON.parse(JSON.stringify({ entries, dropped, at: Date.now(), dollars: Math.round(scope.dollars * 10000) / 10000, placeName: a.name, by: 'demand', version: a.version })));
-      if (!entries.length) return { entries: 0, items: 0, pics: 0 };
+      const prev: any = (await REC(a.key).collection('worth').doc(a.slug).get()).data() || {};
+      await REC(a.key).collection('worth').doc(a.slug).set(JSON.parse(JSON.stringify({ entries, dropped, at: Date.now(), dollars: Math.round(scope.dollars * 10000) / 10000, placeName: a.name, by: 'demand', version: a.version, ...(prev.fromAnswers ? { fromAnswers: prev.fromAnswers } : {}) })));
+      if (!entries.length && !(prev.fromAnswers || []).length) return { entries: 0, items: 0, pics: 0 };
       // The records, as the next import would lay them (recordsImport.ts), written now so the list shows at once.
-      const next = applyWorth(have.map((r) => ({ ...r })), { entries }, { key: a.key, place: a.slug, placeName: a.name });
+      const next = applyWorth(have.map((r) => ({ ...r })), { entries: allEntries({ entries, fromAnswers: prev.fromAnswers }) }, { key: a.key, place: a.slug, placeName: a.name });
       const before = new Map(have.map((r) => [r.id, r.hash]));
       const writes = next.filter((r) => before.get(r.id) !== r.hash);
       const col = REC(a.key).collection('records');
@@ -199,6 +201,57 @@ export async function fillArea(a: AreaRef, uid: string, by: 'player' | 'night'):
     console.warn(`[worth] ${a.game} / ${a.name} failed: ${e?.message || e}`);
     return 'failed';
   }
+}
+
+/** An area's list as records see it: the pass's entries first (they win), then what answers added. */
+export function allEntries(w: { entries?: WorthEntry[]; fromAnswers?: WorthEntry[] } | undefined): WorthEntry[] {
+  return [...(w?.entries || []), ...(w?.fromAnswers || [])];
+}
+
+/** Questions about what's worth getting in a place (the answers that may add to its list). */
+export const ASKS_WHATS_WORTH = /\b(worth|best (gear|items?|loot|weapons?|armou?r|equipment|rewards?)|good (gear|items?|loot)|loot|missable|what (should|can) i (get|grab|pick up|find|loot)|items? (here|in this area|around here)|(get|find|pick up) here)\b/i;
+
+/**
+ * Answers top it up (owner, Nov 15 2026): an answer about what's worth getting in a sure area, that searched, adds the
+ * items its search backs (factsBackedBySearch) that the list doesn't have, unconfirmed, with their cards. Kept apart
+ * from the pass's own entries (fromAnswers): the pass still runs for the area, and its entries win.
+ */
+export async function topUpFromAnswer(a: AreaRef | null, facts: { subject?: string; fact?: string; kind?: string; status?: string }[], sources: string[]): Promise<number> {
+  if (!a) return 0;
+  const items = facts.filter((f) => f.subject && f.status !== 'disputed' && ['item', 'secret', 'missable'].includes(String(f.kind || '')));
+  if (!items.length) return 0;
+  const ref = REC(a.key).collection('worth').doc(a.slug);
+  const key = (s: string) => placeKey(s, '');
+  const added = await db().runTransaction(async (tx) => {
+    const cur: any = (await tx.get(ref)).data() || {};
+    const have = new Set(allEntries(cur).map((e) => key(e.name)));
+    const fresh: WorthEntry[] = [];
+    for (const f of items) {
+      const name = String(f.subject).replace(/\s+/g, ' ').trim().slice(0, 120);
+      if (!name || have.has(key(name))) continue;
+      have.add(key(name));
+      fresh.push({ type: 'item', name, rank: 100 + (cur.fromAnswers || []).length + fresh.length, fields: { kind: f.kind === 'secret' ? 'secret' : 'gear', why: String(f.fact || '').slice(0, 300), ...(f.kind === 'missable' ? { lockout: 'missable' } : {}) }, sources: sources.slice(0, 4) });
+    }
+    if (!fresh.length) return [] as WorthEntry[];
+    tx.set(ref, { fromAnswers: [...(cur.fromAnswers || []), ...fresh].slice(-40), placeName: cur.placeName || a.name, answersAt: Date.now() }, { merge: true });
+    return fresh;
+  });
+  if (!added.length) return 0;
+  // Their records and cards now, so the list shows them at once.
+  const recs = (await REC(a.key).collection('records').where('place', '==', a.slug).get()).docs.map((d) => d.data() as GameRecord);
+  const next = applyWorth(recs.map((r) => ({ ...r })), { entries: added }, { key: a.key, place: a.slug, placeName: a.name });
+  const before = new Map(recs.map((r) => [r.id, r.hash]));
+  const writes = next.filter((r) => before.get(r.id) !== r.hash);
+  const b = db().batch();
+  for (const r of writes.slice(0, 400)) b.set(REC(a.key).collection('records').doc(r.id), { ...r, importedAt: Date.now() });
+  await b.commit();
+  const wiki = await wikiFor(a.key, a.game).catch(() => null);
+  const cost = { d: 0 } as any;
+  await Promise.all(writes.filter((r) => r.type === 'item' || r.type === 'secret').map((r) => cardFor(a.key, a.game, wiki, r, cost).catch(() => null)));
+  await tally({ dollars: cost.d || 0, items: writes.length });
+  forgetAreaFacts(a.key, a.slug);
+  console.log(`[worth] ${a.game} / ${a.name}: ${added.length} item(s) added from an answer`);
+  return added.length;
 }
 
 /** The area's facts (areaFacts) with its status, for the app. */

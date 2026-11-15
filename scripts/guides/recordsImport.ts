@@ -75,7 +75,8 @@ async function collect(only = ''): Promise<Map<string, GameRecord[]>> {
     for (const slug of wo.keys()) if (!byPlace.has(slug)) byPlace.set(slug, []);
     const next = [...rest, ...[...byPlace].flatMap(([slug, rs]) => {
       const w = wo.get(slug);
-      return applyWorth(rs, w, { key, place: slug, placeName: String(w?.placeName || rs[0]?.placeName || slug) });
+      // The pass's own entries first (they win), then items answers added (worthOnDemand.ts topUpFromAnswer).
+      return applyWorth(rs, { entries: [...(w?.entries || []), ...(w?.fromAnswers || [])] }, { key, place: slug, placeName: String(w?.placeName || rs[0]?.placeName || slug) });
     })];
     if (next.length) out.set(key, next);
   }

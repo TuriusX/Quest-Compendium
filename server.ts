@@ -24,7 +24,7 @@ import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerVisualAnswers, answerVisual, visualAnswersOn, visualEvent } from './visualServer';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
-import { registerWorthRoutes, areaRef as worthAreaRef, worthTicket } from './worthOnDemand';
+import { registerWorthRoutes, areaRef as worthAreaRef, worthTicket, topUpFromAnswer, ASKS_WHATS_WORTH } from './worthOnDemand';
 import { registerSpot } from './spot';
 import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
@@ -2136,9 +2136,12 @@ percentages:
       // The player's area is sure (read on screen, confirmed, or settled by the answer) and has no "Worth getting here"
       // yet: a ticket the app redeems to fill it (worthOnDemand.ts; any game, guide or not).
       const sureArea = placeRead?.area || (place?.confirmed ? place.name : '') || (placeParsed.place?.sure ? placeParsed.place.name : '');
-      const worth = !site && sureArea && effectiveGame?.name
-        ? await worthTicket(await worthAreaRef(String(effectiveGame.name), sureArea, gameAppId || undefined, guideKey || null).catch(() => null), String((req as any).user?.uid || userId || '')).catch(() => null)
-        : null;
+      const sureRef = !site && sureArea && effectiveGame?.name ? await worthAreaRef(String(effectiveGame.name), sureArea, gameAppId || undefined, guideKey || null).catch(() => null) : null;
+      const worth = sureRef ? await worthTicket(sureRef, String((req as any).user?.uid || userId || '')).catch(() => null) : null;
+      // An answer about what's worth getting here, that searched: the items its search backs join the area's list.
+      if (sureRef && searchesUsed > 0 && ASKS_WHATS_WORTH.test(String(question || ''))) {
+        void topUpFromAnswer(sureRef, factsBackedBySearch(factsParsed.facts, groundedSeen), searchSourcesSeen).catch((e) => console.warn('[worth] top-up failed:', e?.message));
+      }
       return res.json({
         ...(worth ? { worth } : {}),
         text: responseText.trim() + (deckNote ? `
