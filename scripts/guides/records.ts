@@ -57,7 +57,7 @@ export type GameRecord = {
   /** Set when `fields.where` was replaced by a location a player can follow (recordsLocate.ts); `was` is the old text. */
   located?: { from: 'page' | 'search'; was: string; quote?: string; sources?: string[] };
   /** Where it came from (for re-imports and the pages that still render the old way). */
-  origin: { from: 'area' | 'entity' | 'achievements' | 'gameFacts' | 'extract'; slug?: string; entry?: string };
+  origin: { from: 'area' | 'entity' | 'achievements' | 'gameFacts' | 'extract' | 'worth'; slug?: string; entry?: string };
   /** Fields filled from the page's own prose (recordsExtract.ts), each backed by a word-for-word quote. */
   extracted?: { field: string; quote: string }[];
   /** The page's Search Console impressions in the last window (pageStats), for ordering the verify queue. */
@@ -328,6 +328,39 @@ export function applyExtracted(recs: GameRecord[], x: { sig: string; shorts: any
     sources: pageSources, tier: 'B', status: 'unconfirmed', origin: { from: 'extract', slug: first.place, entry: String(i) },
   }));
   return [...recs.map((r) => finish(r)), ...added];
+}
+
+/** One area's "worth it here" pass (worthIt.ts): what a player wants from the place, ranked, each with its sources. */
+export type WorthEntry = { type: 'item' | 'quest' | 'npc' | 'tip'; name: string; rank: number; fields: Record<string, string>; sources: string[] };
+const nameKey = (s: string) => String(s || '').toLowerCase().normalize('NFKC').replace(/[‘’ʼ`]/g, "'").replace(/^the\s+/, '').replace(/[^a-z0-9']+/g, ' ').trim();
+/**
+ * An area's "worth it here" pass laid over its records (owner, Nov 15 2026: the guides listed only missables, not the
+ * gear, quests and people a player wants). A thing the page already has gets its rank and why-it's-worth-it (fields it
+ * lacks only); anything new comes in as its own record, tier B (its evidence is stored, so the recheck needs no search)
+ * and unconfirmed until checked. Missable stays a flag on whichever record has a lockout.
+ */
+export function applyWorth(recs: GameRecord[], x: { entries: WorthEntry[] } | undefined): GameRecord[] {
+  if (!x?.entries?.length || !recs.length) return recs;
+  const first = recs[0];
+  const byName = new Map<string, GameRecord>();
+  for (const r of recs) if (['item', 'secret', 'npc', 'quest', 'shop', 'boss', 'checklist'].includes(r.type)) byName.set(nameKey(r.name), r);
+  const added: GameRecord[] = [];
+  for (const e of x.entries) {
+    const have = byName.get(nameKey(e.name));
+    if (have) {
+      for (const [k, v] of Object.entries({ ...e.fields, rank: String(e.rank) })) if (v && !have.fields[k]) have.fields[k] = v;
+      continue;
+    }
+    const id = `w.${first.place}.${nameKey(e.name).replace(/\s+/g, '-').slice(0, 60)}`;
+    if (added.some((r) => r.id === id)) continue;
+    added.push(finish({
+      key: first.key, id, type: e.type, name: e.name, short: e.fields.why ? firstSentence(e.fields.why) : undefined,
+      place: first.place, placeName: first.placeName, impressions: first.impressions, missable: false,
+      fields: fieldsOf({ ...e.fields, rank: String(e.rank) }), links: [],
+      sources: e.sources, tier: 'B', status: 'unconfirmed', origin: { from: 'worth', slug: first.place, entry: id },
+    }));
+  }
+  return [...recs, ...added];
 }
 
 /** One record's new location (recordsLocate.ts). `was` is the text it replaces: if that changes, the new one lapses. */

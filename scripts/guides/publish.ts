@@ -17,7 +17,7 @@ import { landscapeOf, wideSet, coverSet, ogImageOf, platformList, ttbShown, TTB_
 import { loadSitePictures, pagePicture, stepPicture, shareImage, heroHtml, stepHtml, entryHtml, picturesOf, pictureJson, cardHtml } from './sitePictures';
 import { compIndex } from '../../src/utils/compIndex';
 import { loadOwnerEdits, applyOwnerEdits, translateOwnerEdits, saveOwnerEditStates } from './ownerEditsPublish';
-import { db, gameKey, arg, cleanEntry, type GuideArea, type GuideEntry } from './common';
+import { db, gameKey, arg, cleanEntry, slug as slugOf, type GuideArea, type GuideEntry } from './common';
 import { GUIDE_UI_EN } from './guide-ui';
 import { mergeSameSpot } from '../../src/utils/trackerPayload';
 import { entryKind, entryIconSvg, type EntryKind } from '../../src/utils/entryKind';
@@ -1234,7 +1234,24 @@ async function loadFactPages(only = ''): Promise<void> {
     FACT_RECS.set(key, byPlace);
   }
   if (FACT_KEYS.size) console.log(`Fact pages: ${[...FACT_KEYS].map((k) => `${k} (${FACT_RECS.get(k)?.size || 0} pages with records)`).join(', ')}.`);
+  // Story order pages (scripts/guides/spine.ts): on for the guides in config/spinePages.guides (or QC_SPINE_PAGES for a preview).
+  const sp: any = (await db().collection('config').doc('spinePages').get().catch(() => null))?.data() || {};
+  const spineKeys = [...(Array.isArray(sp.guides) ? sp.guides : []), ...String(process.env.QC_SPINE_PAGES || '').split(',')].map((s: string) => String(s).trim()).filter((k) => k && FACT_KEYS.has(k));
+  for (const key of spineKeys) {
+    const ref = db().collection('gameRecords').doc(key).collection('spine');
+    const [main, links] = await Promise.all([ref.doc('main').get(), ref.doc('links').get()]);
+    if (main.exists) SPINES.set(key, { spine: main.data() as any, links: ((links.data() as any)?.links || {}) });
+  }
+  if (SPINES.size) console.log(`Story order pages: ${[...SPINES.keys()].join(', ')}.`);
+  // The "Worth it here" block (worthIt.ts): on for the guides in config/worthPages.guides (or QC_WORTH_PAGES for a preview).
+  const wp: any = (await db().collection('config').doc('worthPages').get().catch(() => null))?.data() || {};
+  WORTH_KEYS = new Set([...(Array.isArray(wp.guides) ? wp.guides : []), ...String(process.env.QC_WORTH_PAGES || '').split(',')].map((s: string) => String(s).trim()).filter((k) => k && FACT_KEYS.has(k)));
 }
+let WORTH_KEYS = new Set<string>();
+/** Each game's English lists (missables, items...), kept for llms.txt: FACT_LISTS is reset by the translated passes. */
+const LIST_IDS = new Map<string, string[]>();
+/** Each game's story order and its missables' links (spine.ts), for the "in order" pages. */
+const SPINES = new Map<string, { spine: { acts: { id: string; name: string; steps: { id: string; kind: 'beat' | 'lock'; name: string; text: string; areas?: string[] }[] }[] }; links: Record<string, { lost: string; if?: string }> }>();
 /** A translated page keeps the old layout: the facts the English fact page leaves out go from it too, until they're settled (owner, Nov 10 2026). */
 function translatedSettled(key: string, a: any): any {
   if (LANG === 'en') return a;
@@ -1282,6 +1299,30 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
   const missCount = items.filter((x) => x.e.missable).length;
   const checklist = items.length
     ? card('checklist', ui('items'), `<span class="text-xs text-zinc-500" data-count="${esc(itemIds.join(','))}">0/${itemIds.length}</span>`, `<span id="dont-miss"></span><span id="items"></span><div class="py-1">${items.map(itemRow).join('')}</div>`)
+    : '';
+
+  // Worth it here (worthIt.ts; owner, Nov 15 2026): the best gear and spells ranked, the quests that start here, the
+  // people worth talking to and what not to skip, whether or not they can be missed. Missable is a badge on whatever
+  // has a lockout. A thing the page lists keeps its own tick; the rest tick under their record id.
+  const ranked = (t: string) => recs.filter((r) => r.type === t && r.fields?.rank && r.status !== 'disputed').sort((x, y) => Number(x.fields.rank) - Number(y.fields.rank));
+  const gear = recs.filter((r) => (r.type === 'item' || r.type === 'secret') && r.fields?.rank && r.status !== 'disputed').sort((x, y) => Number(x.fields.kind === 'spell') - Number(y.fields.kind === 'spell') || Number(x.fields.rank) - Number(y.fields.rank));
+  const quests = ranked('quest'), people = ranked('npc'), todo = ranked('tip').filter((r) => r.origin?.from === 'worth');
+  const worthRow = (r: any) => {
+    const id = r.origin?.from === 'area' ? String(r.origin.entry ?? '') : String(r.id);
+    const lock = r.fields?.lockout;
+    const html = `<strong class="text-white">${esc(r.name)}</strong>${r.fields?.rarity ? `<span class="ml-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#c4b0ff]">${esc(String(r.fields.rarity))}</span>` : ''}${r.missable || lock ? tag('Missable', 'amber') : ''}${r.status !== 'checked' ? tag('Not yet confirmed', 'dim') : ''}` +
+      `${r.fields?.why ? `<span class="block text-zinc-300 mt-0.5">${esc(String(r.fields.why))}</span>` : ''}${factWhere({}, { ...r, located: true }) ? `<span class="block text-xs text-zinc-400 mt-0.5">${esc(factWhere({}, { ...r, located: true }))}</span>` : ''}` +
+      `${r.fields?.how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(String(r.fields.how))}</span>` : ''}${lock ? `<span class="block text-xs text-amber-300/90 mt-0.5"><span class="text-amber-200/70">${esc(ui('itemLockout'))}:</span> ${esc(String(lock))}</span>` : ''}`;
+    return checkRow(id, html, true, kindIcon(entryKind({ section: 'items', name: r.name, where: String(r.fields?.where || '') })));
+  };
+  const line = (r: any, head: string, tail: string) => `<li class="flex gap-2 px-4 py-1.5"><span class="text-[#a87ffb]">&bull;</span><span><strong class="text-white">${esc(head)}</strong>${r.status !== 'checked' ? tag('Not yet confirmed', 'dim') : ''}${tail ? `<span class="block text-zinc-400 text-[13px]">${esc(tail)}</span>` : ''}</span></li>`;
+  const sub = (title: string) => `<p class="px-4 pt-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">${esc(title)}</p>`;
+  const worth = WORTH_KEYS.has(gameKey) && gear.length + quests.length + people.length + todo.length
+    ? card('worth-it', 'Worth it here', `<span class="text-xs text-zinc-500">${gear.length ? `${gear.length} to get` : ''}${quests.length ? ` · ${quests.length} quest${quests.length === 1 ? '' : 's'}` : ''}</span>`,
+      `${gear.length ? `${sub('Best gear and spells, best first')}<div class="py-1">${gear.map(worthRow).join('')}</div>` : ''}` +
+      `${quests.length ? `${sub('Quests that start here')}<ul class="pb-1">${quests.map((r) => line(r, r.name, [r.fields.giver && `From ${r.fields.giver}`, r.fields.startsAt, r.fields.rewards && `Reward: ${r.fields.rewards}`].filter(Boolean).join(' · '))).join('')}</ul>` : ''}` +
+      `${people.length ? `${sub('People worth talking to')}<ul class="pb-1">${people.map((r) => line(r, r.name, [r.fields.why, r.fields.where].filter(Boolean).join(' · '))).join('')}</ul>` : ''}` +
+      `${todo.length ? `${sub("Don't skip")}<ul class="pb-2">${todo.map((r) => line(r, r.name, String(r.fields.why || ''))).join('')}</ul>` : ''}`)
     : '';
 
   // Before you leave: the points of no return and warnings the page states, and how many missables it has.
@@ -1358,6 +1399,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
   const trust = factCount ? `<p class="mt-6 border-t border-white/10 pt-3 text-xs text-zinc-500">${factCount} facts on this page · ${checkedCount} checked${factCount > checkedCount ? ` · ${factCount - checkedCount} still being checked` : ''}${publicSources(a.sources).length ? ` · from ${esc(publicSources(a.sources).slice(0, 5).join(', '))}${publicSources(a.sources).length > 5 ? ' and others' : ''}` : ''}${lastChecked ? ` · last checked ${new Date(lastChecked).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}</p>` : '';
 
   const sectionLinks: [string, string][] = [
+    ...(worth ? [['worth-it', 'Worth it here'] as [string, string]] : []),
     ...(before ? [['before-you-leave', 'Before you leave'] as [string, string]] : []),
     ...(checklist ? [['checklist', ui('items')] as [string, string]] : []),
     ...(route ? [['walkthrough', ui('route')] as [string, string]] : []),
@@ -1397,6 +1439,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
       ${info.directions ? `<p class="mt-2 text-xs text-zinc-500"><span class="text-zinc-400">${esc(ui('infoWay'))}:</span> ${esc(info.directions)}${info.coords ? ` (${esc(info.coords)})` : ''}</p>` : ''}
       ${a.verified === false && factCount ? `<p class="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-400">This page isn't fully checked yet: <strong class="text-zinc-200">${checkedCount} of ${factCount} facts</strong> confirmed against sources so far. The rest are being checked, most-searched pages first.</p>` : ''}
       ${jump}
+      ${worth}
       ${before}
       ${checklist}
       ${route}
@@ -1460,6 +1503,100 @@ function buildFactLists(key: string, visible: { slug: string; name: string }[], 
   }
   for (const [id, rows] of [...out]) if (rows.length < 8 || taken.has(id)) out.delete(id);
   if (out.size) FACT_LISTS.set(key, out);
+  LIST_IDS.set(key, [...out.keys()]);
+}
+
+/**
+ * "Act 1 in order, with every missable" (owner, Nov 15 2026; plan "One database for the app and the site"): one page per
+ * act from the game's story order (spine.ts). The beats run down the page with their areas; each point of no return is
+ * a ◆ with the missables it locks out, where to get each one first, and its tick (the area page's own tick). A missable
+ * lost only by a condition ("if Grat is killed"), or whose lockout isn't known yet, is listed under the beat where it
+ * becomes reachable. Facts not yet confirmed say so. English, fact-page guides with config/spinePages on.
+ */
+function renderStoryOrder(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, sitemap: string[]): void {
+  const sp = SPINES.get(key);
+  if (!sp || LANG !== 'en' || !sp.spine.acts?.length) return;
+  const sg = shortGame(gameName);
+  const live = new Map(visible.filter((o) => byslug.get(o.slug)?.status === 'published').map((o) => [o.slug, byslug.get(o.slug)!.name]));
+  const recs = FACT_RECS.get(key) || new Map<string, any[]>();
+  const isMiss = (r: any) => r.status !== 'disputed' && ['item', 'secret', 'checklist'].includes(r.type) && (r.missable || r.fields?.lockout);
+  const all: any[] = [...recs.values()].flat().filter((r) => isMiss(r) && live.has(r.place));
+  const beatOf = new Map<string, string>();
+  for (const a of sp.spine.acts) for (const s of a.steps) for (const p of s.areas || []) if (!beatOf.has(p)) beatOf.set(p, s.id);
+  const areaIdx = new Map(visible.map((o, i) => [o.slug, i]));
+  const byArea = (x: any, y: any) => (areaIdx.get(x.place) ?? 0) - (areaIdx.get(y.place) ?? 0) || (x.order ?? 0) - (y.order ?? 0);
+  const actSlug = (a: { name: string }, i: number) => slugOf(a.name) || `part-${i + 1}`;
+  const unc = '<span class="ml-1.5 inline-block rounded-full border border-dashed border-zinc-500 px-1.5 text-[10.5px] text-zinc-400 align-middle">not yet confirmed</span>';
+  // "if Grat is killed" reads as "Lost if Grat is killed"; anything else ("shoving her into the chasm") as "Lost by: ...".
+  const lostBy = (c: string, also = false) => { const s = c.replace(/^(?:lost|also lost)\s*:?\s*/i, '').trim(); return /^(if|when|once|unless|after|before|by|during|on)\b/i.test(s) ? `${also ? 'Also lost' : 'Lost'} ${s}` : `${also ? 'Also lost' : 'Lost'}: ${s}`; };
+  // The same item listed by two areas (a merchant's stock seen from two places): once, with both areas.
+  const once = (rs: any[]) => { const seen = new Map<string, any>(); for (const r of rs) { const k = String(r.name || '').toLowerCase().trim(); const had = seen.get(k); if (had) { (had._also = had._also || []).push(r.place); } else seen.set(k, { ...r }); } return [...seen.values()]; };
+  const item = (r: any, why = '') => {
+    const entry = r.origin?.from === 'area' ? String(r.origin.entry ?? '') : '';
+    const box = entry ? `<input type="checkbox" class="mt-1 h-4 w-4 flex-none cursor-pointer accent-[#a87ffb]" data-xt="${esc(`${r.place}|${entry}`)}" aria-label="${esc(ui('gotIt'))}: ${esc(r.name)}">` : '<span class="mt-1 h-4 w-4 flex-none"></span>';
+    const where = String(r.fields?.where || '');
+    const area = [`<a class="text-[#a87ffb] hover:text-white" href="../../${esc(r.place)}/${entry ? `#e-${esc(entry)}` : ''}">${esc(live.get(r.place) || r.placeName || r.place)}</a>`, ...((r._also || []) as string[]).filter((p, i, a) => p !== r.place && a.indexOf(p) === i).map((p) => `<a class="text-[#a87ffb] hover:text-white" href="../../${esc(p)}/">${esc(live.get(p) || p)}</a>`)].join(', ');
+    return `<li class="flex gap-2.5" data-fr>${box}<div class="min-w-0"><strong class="text-white">${esc(r.name)}</strong>${r.status === 'checked' ? '' : unc}<span class="block text-[13px] text-zinc-400">${area}${where ? ` · ${esc(where)}` : ''}</span>${why ? `<span class="block text-[12.5px] text-amber-300/90">${esc(why)}</span>` : ''}</div></li>`;
+  };
+  const acts = sp.spine.acts;
+  const dir = path.join(OUT, LP, 'guides', key, 'story-order');
+  acts.forEach((act, ai) => {
+    const mine = all.filter((r) => acts.findIndex((a) => a.steps.some((s) => (s.areas || []).includes(r.place))) === ai);
+    const lockIds = new Set(act.steps.filter((s) => s.kind === 'lock').map((s) => s.id));
+    // Items lost at a later act's point of no return still belong to the act where they're found: listed under the act's
+    // last lock ("Leaving Act 1"), the moment after which they can't be reached from here any more.
+    const lastLock = [...act.steps].reverse().find((s) => s.kind === 'lock')?.id;
+    const lockOf = (r: any) => { const l = sp.links[r.id]?.lost; return l && lockIds.has(l) ? l : l && l !== 'unknown' ? lastLock : undefined; };
+    const checked = mine.filter((r) => r.status === 'checked').length;
+    const steps = act.steps.map((s, si) => {
+      if (s.kind === 'beat') {
+        const n = act.steps.slice(0, si + 1).filter((x) => x.kind === 'beat').length;
+        const areas = (s.areas || []).filter((p) => live.has(p)).map((p) => `<a class="text-[#a87ffb] hover:text-white" href="../../${esc(p)}/">${esc(live.get(p)!)}</a>`).join(' · ');
+        const here = once(mine.filter((r) => beatOf.get(r.place) === s.id && !lockOf(r)).sort(byArea));
+        const cond = (r: any) => sp.links[r.id]?.if || '';
+        const watch = here.filter((r) => cond(r));
+        const rest = here.filter((r) => !cond(r));
+        const list = (watch.length ? `<p class="mt-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Missable here, watch for</p><ul class="mt-1.5 grid gap-2">${watch.map((r) => item(r, lostBy(cond(r)))).join('')}</ul>` : '') +
+          (rest.length ? `<details class="mt-3 group"><summary class="cursor-pointer text-[12.5px] text-zinc-400 hover:text-white">${rest.length} more marked missable here; what locks ${rest.length === 1 ? 'it' : 'them'} out is being checked</summary><ul class="mt-2 grid gap-2">${rest.map((r) => item(r, r.fields?.lockout ? lostBy(String(r.fields.lockout)) : '')).join('')}</ul></details>` : '');
+        return `<li class="relative pl-8"><span class="absolute left-[3px] top-4 h-3.5 w-3.5 rounded-full border-2 border-[#a87ffb] bg-[#0b0a10]"></span><div class="rounded-xl border border-white/10 bg-white/[0.03] p-4"><h2 class="text-base font-semibold text-white">${n}. ${esc(s.name)}</h2>${s.text ? `<p class="mt-0.5 text-sm text-zinc-400">${esc(s.text)}</p>` : ''}${areas ? `<p class="mt-1.5 text-[13px]">${areas}</p>` : ''}${list}</div></li>`;
+      }
+      const lost = once(mine.filter((r) => lockOf(r) === s.id).sort(byArea));
+      return `<li class="relative pl-8" id="${esc(s.id)}"><span class="absolute left-[2px] top-4 h-4 w-4 rotate-45 rounded-[3px] bg-amber-400"></span><div class="rounded-xl border border-amber-400/30 bg-amber-400/[0.07] p-4"><h2 class="text-base font-semibold text-amber-300">◆ ${esc(s.name)}</h2>${s.text ? `<p class="mt-0.5 text-sm text-amber-100/70">${esc(s.text)}</p>` : ''}${lost.length ? `<p class="mt-3 text-[11px] font-semibold uppercase tracking-wide text-amber-300/80">Get these first (${lost.length})</p><ul class="mt-1.5 grid gap-2">${lost.map((r) => item(r, sp.links[r.id]?.if ? lostBy(sp.links[r.id].if!, true) : '')).join('')}</ul>` : '<p class="mt-2 text-[13px] text-zinc-500">No missable items tied to this yet.</p>'}</div></li>`;
+    }).join('');
+    const nav = acts.map((a, i) => i === ai ? `<span class="rounded-md bg-[#a87ffb]/15 px-2 py-1 font-semibold text-[#a87ffb]">${esc(a.name)}</span>` : `<a href="../${esc(actSlug(a, i))}/" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(a.name)}</a>`).join('');
+    const lists = FACT_LIST_KINDS.filter((k) => FACT_LISTS.get(key)?.has(k.id)).map((k) => `<a href="../../${k.id}/" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(k.title(sg).replace(` in ${sg}`, ''))}</a>`).join('');
+    const ticks = mine.filter((r) => r.origin?.from === 'area').length;
+    const title = `${sg}: ${act.name} in order, with every missable`;
+    const lede = `The main story of ${act.name} in the order you play it. Each ◆ is a point of no return: under it is everything it locks out, and where to get each one first.`;
+    const url = `${SITE}/${LP}guides/${key}/story-order/${actSlug(act, ai)}/`;
+    const html = `
+      <article class="min-w-0 w-full max-w-3xl mx-auto">
+        <p class="qc-site-only text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../../../index.html">${esc(ui('navGuides'))}</a> / <a class="hover:text-white" href="../../index.html">${esc(gameName)}</a></p>
+        <h1 class="text-3xl font-bold text-white leading-tight text-balance">${esc(title)}</h1>
+        <p class="mt-2 max-w-2xl text-zinc-400">${esc(lede)}</p>
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs"><span class="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-0.5 text-emerald-300">✓ ${checked} of ${mine.length} missables checked against sources</span>${ticks ? `<span class="text-sm font-semibold text-white" data-xcount>0/${ticks}</span><span class="text-zinc-500">ticked, the same ticks as on each area page</span>` : ''}</div>
+        <div class="mt-3 flex flex-wrap gap-2 text-xs">${nav}${lists ? `<span class="mx-1 text-zinc-600">|</span>${lists}` : ''}</div>
+        <ol class="relative mt-6 grid gap-4 before:absolute before:left-[9px] before:top-3 before:bottom-3 before:w-0.5 before:bg-white/10">${steps}</ol>
+        ${cta('../../../../', gameName)}
+      </article>
+      <script>(function(){var K=${JSON.stringify(key)};
+        function rd(s){try{var v=JSON.parse(localStorage.getItem('qcw:'+K+':'+s)||'[]');return Array.isArray(v)?v.map(String):[]}catch(e){return[]}}
+        function wr(s,v){try{localStorage.setItem('qcw:'+K+':'+s,JSON.stringify(v))}catch(e){}try{window.dispatchEvent(new CustomEvent('qc-tick-saved',{detail:{k:'qcw:'+K+':'+s}}))}catch(e){}}
+        var boxes=[].slice.call(document.querySelectorAll('[data-xt]')),c=document.querySelector('[data-xcount]');
+        function paint(){var n=0;boxes.forEach(function(b){var p=b.getAttribute('data-xt').split('|'),id=p.slice(1).join('|');var on=rd(p[0]).some(function(x){return x.split('+').indexOf(id)>=0;});b.checked=on;if(on)n++;});if(c)c.textContent=n+'/'+boxes.length;}
+        boxes.forEach(function(b){b.addEventListener('change',function(){var p=b.getAttribute('data-xt').split('|'),s=p[0],id=p.slice(1).join('|');var v=rd(s).filter(function(x){return x.split('+').indexOf(id)<0;});if(b.checked)v.push(id);wr(s,v);paint();});});
+        window.addEventListener('qc-ticks-changed',paint);paint();
+      })();</script>`;
+    const adir = path.join(dir, actSlug(act, ai));
+    fs.mkdirSync(adir, { recursive: true });
+    fs.writeFileSync(path.join(adir, 'index.html'), page({
+      title: `${title} | Quest Compendium`, description: snippet(`${title}. ${lede}`, 158), depth: 4, canonical: url, wide: true, draft: !!PREVIEW, guide: key,
+      ld: [breadcrumb([{ name: ui('navGuides'), url: `${SITE}/${LP}guides/` }, { name: sg, url: `${SITE}/${LP}guides/${key}/` }, { name: `${act.name} in order`, url }])],
+      body: html, langs: ['en'], path: `guides/${key}/story-order/${actSlug(act, ai)}/`,
+    }));
+    if (!PREVIEW) sitemap.push(url);
+  });
+  console.log(`Story order: ${key}, ${acts.length} act page(s), ${all.length} missables.`);
 }
 
 function renderFactLists(key: string, gameName: string, sitemap: string[]): void {
@@ -1917,6 +2054,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   if (achHere?.list?.length) renderAchievements(key, gameName, achHere, links, sitemap, achLangs);
   if (COMP?.entities.length && LANG === 'en') renderEntities(key, gameName, visible, byslug, sitemap);
   renderFactLists(key, gameName, sitemap);
+  renderStoryOrder(key, gameName, visible, byslug, sitemap);
 }
 
 /** The achievement guide page: roadmap, then every achievement (missable first), with ticks saved in the browser. */
@@ -3324,6 +3462,37 @@ async function main() {
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${[...new Set(sitemap)].map((u) => `  <url><loc>${u}</loc>${LASTMOD.get(u) ? `<lastmod>${new Date(LASTMOD.get(u)!).toISOString().slice(0, 10)}</lastmod>` : ''}</url>`).join('\n')}\n</urlset>\n`,
   );
   fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /_qc/\n\nSitemap: ${SITE}/sitemap.xml\n`);
+  // /llms.txt (owner, Nov 15 2026): a plain-text map of the site for AI assistants (llmstxt.org): what it is, every
+  // guide with its lists and story order pages, and the app. Full publishes only, so it never lists a single game.
+  if (!ONLY && games.length) {
+    const byName = games.filter((g) => g.published > 0).sort((x, y) => x.game.localeCompare(y.game));
+    const extra = (key: string) => [
+      ...(SPINES.get(key)?.spine.acts || []).map((a, i) => `[${a.name} in order](${SITE}/guides/${key}/story-order/${slugOf(a.name) || `part-${i + 1}`}/)`),
+      ...FACT_LIST_KINDS.filter((k) => LIST_IDS.get(key)?.includes(k.id)).map((k) => `[${k.id}](${SITE}/guides/${key}/${k.id}/)`),
+    ];
+    const lines = [
+      '# Quest Compendium',
+      '',
+      '> Free, source-checked video game guides (area by area: items, missables, quests, bosses, merchants and points of no return), and an AI game companion app for Windows, the Steam Deck and the web that answers questions about the game you are playing.',
+      '',
+      'Each guide page lists what is in an area with where to find it, how to get it and what locks it out, and says which facts have been checked against sources and which are still being checked. Guide pages are plain HTML.',
+      '',
+      '## Guides',
+      '',
+      `- [All guides](${SITE}/guides/): ${byName.length} games`,
+      ...byName.map((g) => { const x = extra(g.key); return `- [${g.game}](${SITE}/guides/${g.key}/): ${g.published} area page${g.published === 1 ? '' : 's'}${x.length ? `; ${x.join(', ')}` : ''}`; }),
+      '',
+      '## The app',
+      '',
+      `- [Quest Compendium](${SITE}/): an AI companion that sees your game screen and answers in an overlay; free to try with 2 Pro and 5 Fast questions a day, no credit card`,
+      `- [Pricing](${SITE}/#pricing): Premium is $4.99/month or $39.99/year for 8 Pro and 25 Fast questions a day, unused questions carry over`,
+      `- [Steam Deck plugin](${SITE}/#steam-deck)`,
+      `- [Recent updates](${SITE}/updates/)`,
+      '',
+    ];
+    fs.writeFileSync(path.join(OUT, 'llms.txt'), lines.join('\n'));
+    console.log(`llms.txt: ${byName.length} guides.`);
+  }
   console.log(`Kept out of Google until verified (searchHold.ts): ${HELD.size} unchecked page(s) with under ${HOLD_IMPRESSIONS} impressions, noindex and out of the sitemap.`);
   if (!PREVIEW && HOLD) {
     // New pages' first-seen day, and (a full publish) tonight's count for Monday's summary.

@@ -119,7 +119,7 @@ async function main() {
     const done = new Map<string, any>(((await RECORDS().doc(key).collection('verified').get()).docs).map((d) => [d.id, d.data()]));
     const byPlace = new Map<string, GameRecord[]>();
     for (const r of all) {
-      if (!r.place || !VERIFY_TYPES.has(r.type) || !(r.origin.from === 'area' || r.origin.from === 'entity' || r.origin.from === 'extract')) continue;
+      if (!r.place || !VERIFY_TYPES.has(r.type) || !(r.origin.from === 'area' || r.origin.from === 'entity' || r.origin.from === 'extract' || r.origin.from === 'worth')) continue;
       if (!(r.tier === 'C' || (recheck && r.tier === 'B'))) continue;
       const prev = done.get(r.place)?.results?.[r.id];
       if (prev && prev.sig === contentSig(r) && (prev.status !== 'unconfirmed' || Date.now() - Number(done.get(r.place)?.at || 0) < 30 * 86_400_000)) continue;
