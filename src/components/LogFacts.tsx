@@ -105,8 +105,7 @@ export function LogFacts(p: {
                   {g.rarity && <span className="ml-1.5 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: rarityColor(g.rarity) }}>{g.rarity}</span>}
                   {(g.missable || g.lost) && missTag(g.lost)}
                   {g.confirmed === false && unconf}
-                  {g.why && <div className="text-[12px] text-zinc-400">{g.why}</div>}
-                  {/* Where and how are in the item card (hover or click its name). */}
+                  {/* One line per item (owner, Nov 15 2026): what it does, where and how are in its card (hover or click the name). */}
                   {(g.lost || g.lockout) && <div className="text-[11.5px] text-amber-300/90">{g.lost ? t('logfacts.goneAt', { when: g.lost }) : g.lockout}</div>}
                 </div>
               </div>
