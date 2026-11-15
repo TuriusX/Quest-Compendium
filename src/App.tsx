@@ -3060,6 +3060,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const previewUpdate = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /[?&]previewUpdate/.test(location.search);
   // Tuck the panel away without the shortcut: exactly what the shortcut does (focus back to the game, quest log as is).
   const tuckAway = () => (window as any).electronAPI?.hidePanel?.();
+  // Hide just the chat (owner, Nov 15 2026): the panel folds down to the docked quest log; the log's edge tab brings it back.
+  const [chatHidden, setChatHidden] = useState(false);
   const tuckSide: 'left' | 'right' = String(settings.dockPosition).endsWith('left') ? 'left' : 'right';
 
   // Docking Layout Container classes
@@ -3100,10 +3102,21 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // (Ctrl+Shift+L, the controller's View, the bookmark).
   const logSide: 'left' | 'right' = settings.dockPosition !== 'undocked' && tuckSide === 'left' ? 'right' : 'left';
   const dockedLogOpen = isDesktop && questLogAttached && questLogVisible && !!logView;
+  // Without the docked log there's nothing to fold down to: the chat comes back.
+  useEffect(() => { if (!dockedLogOpen && chatHidden) setChatHidden(false); }, [dockedLogOpen, chatHidden]);
   const logKeys = formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L');
   const logColumn = (side: 'left' | 'right') =>
     dockedLogOpen && logView && logSide === side ? (
-      <div className={`w-[300px] flex-shrink-0 h-full min-h-0 ${side === 'left' ? 'border-r qc-log-swing-l' : 'border-l qc-log-swing-r'} border-white/[0.1]`} style={{ WebkitAppRegion: 'no-drag' } as any}>
+      <div className={`${chatHidden ? 'w-full' : 'w-[300px]'} relative flex-shrink-0 h-full min-h-0 ${side === 'left' ? 'border-r qc-log-swing-l' : 'border-l qc-log-swing-r'} border-white/[0.1]`} style={{ WebkitAppRegion: 'no-drag' } as any}>
+        {chatHidden && (
+          // The chat folded away: a slim tab on the log's edge (where the chat was) brings it back.
+          <button type="button" data-qc-show-chat onClick={() => setChatHidden(false)} title={tr('header.showChat')} aria-label={tr('header.showChat')}
+            className={`absolute top-1/2 -translate-y-1/2 ${side === 'left' ? 'right-0 rounded-l-md' : 'left-0 rounded-r-md'} z-[60] w-4 h-16 flex items-center justify-center bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[var(--accent-color)] hover:bg-[var(--accent-color)] hover:text-black cursor-pointer`}>
+            <svg viewBox="0 0 12 12" width="10" height="10" shape-rendering="crispEdges" aria-hidden="true" style={side === 'left' ? { transform: 'scaleX(-1)' } : undefined}>
+              <path fill="currentColor" d="M4 2h2v2h2v2h2v2H8v2H6v2H4v-2h2V8h2V6H6V4H4z" />
+            </svg>
+          </button>
+        )}
         <QuestLog
           view={logView}
           sel={logSel}
@@ -3164,9 +3177,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       let totalWidth = 550;
       if (isAchDrawerOpen) totalWidth += achDrawerWidth;
       if (dockedLogOpen) totalWidth += 300;
+      // The chat hidden: just the quest log.
+      if (chatHidden && dockedLogOpen) totalWidth = 300;
       (window as any).electronAPI.resizeWindow(totalWidth);
     }
-  }, [isAchDrawerOpen, achDrawerWidth, dockedLogOpen]);
+  }, [isAchDrawerOpen, achDrawerWidth, dockedLogOpen, chatHidden]);
   // The log opened with the panel focused (Ctrl+Shift+L, View, the bookmark): the keyboard goes to Now.
   const wasLogOpen = useRef(false);
   useEffect(() => {
@@ -3208,7 +3223,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       >
         {tuckStrip('left')}
         {logColumn('left')}
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col relative">
+        <div className={`flex-1 min-w-0 min-h-0 flex flex-col relative ${chatHidden && dockedLogOpen ? 'hidden' : ''}`}>
         {/* "Mouse unlocked": the panel opened with the show/hide shortcut (the first 10 times) */}
         {mouseToast && (
           <div role="status" aria-live="polite" className="pointer-events-none absolute bottom-48 left-1/2 -translate-x-1/2 z-[80] max-w-[90%] animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -3252,6 +3267,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           onToggleQuestLog={isDesktop ? toggleQuestLog : undefined}
           questLogKeys={formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L')}
           onTuckAway={isDesktop ? tuckAway : undefined}
+          onHideChat={dockedLogOpen ? () => setChatHidden(true) : undefined}
           tuckSide={tuckSide}
           questLogVisible={questLogVisible}
           questLogReady={!!trackerPayload}

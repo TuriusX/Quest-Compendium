@@ -30,7 +30,7 @@ export const rarityColor = (r: string, fallback = '#c4b0ff') => RARITY.find(([re
 
 const OPEN_KEY = 'qc_log_open';
 const readOpen = (): Record<string, boolean> => { try { return JSON.parse(localStorage.getItem(OPEN_KEY) || '{}') || {}; } catch { return {}; } };
-const SHOW = 5;
+const SHOW = 10;
 
 export function LogFacts(p: {
   facts: AreaFacts;
