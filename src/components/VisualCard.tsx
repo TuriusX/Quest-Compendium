@@ -6,16 +6,20 @@
  * player starting at the matched moment. Under it, 2-3 other videos from the same search as compact rows; clicking one
  * plays it in the same player, inside the app. Picture: click to see it larger; a credit and link only for wiki
  * pictures (never under the owner's own pictures).
+ * Wiki page (owner, Nov 14 2026): a question about one named thing gets a link card to its wiki page, under its picture
+ * or on its own when no picture was good enough.
  * "Not right" hides it and tells the server (that video or picture isn't picked for this question again).
  */
 import React, { useState } from 'react';
-import { Play, ExternalLink, X, Maximize2, ThumbsDown } from 'lucide-react';
+import { Play, ExternalLink, X, Maximize2, ThumbsDown, BookOpen } from 'lucide-react';
 import { useT } from '../i18n';
 
 export type VideoChoice = { videoId: string; title: string; channel: string; seconds: number; start: number; thumb?: string; note?: string };
+export type WikiPage = { url: string; title: string; site: string };
 export type VisualData =
   | (VideoChoice & { kind: 'video'; alts?: VideoChoice[] })
-  | { kind: 'picture'; source: 'ours' | 'wiki'; url: string; alt: string; credit?: string; link?: string; map?: boolean };
+  | { kind: 'picture'; source: 'ours' | 'wiki'; url: string; alt: string; credit?: string; link?: string; map?: boolean; page?: WikiPage }
+  | { kind: 'link'; page: WikiPage };
 export type VisualEvent = 'played' | 'opened' | 'wrong';
 
 export const mmss = (s: number) => {
@@ -111,22 +115,44 @@ export function VisualCard({ visual, compact, onEvent }: { visual: VisualData; c
     );
   }
 
+  // The thing's wiki page as a card: its name, the wiki, and it opens the full page.
+  const pageCard = (p: WikiPage, alone: boolean) => (
+    <a href={p.url} target="_blank" rel="noreferrer" onClick={() => onEvent?.('opened')} data-qc-wiki
+      className={`group flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.04] ${alone ? '' : 'border-t border-white/[0.08]'}`}>
+      <span className="shrink-0 w-8 h-8 rounded-lg bg-[var(--accent-color)]/15 text-[var(--accent-color)] flex items-center justify-center"><BookOpen className="w-4 h-4" /></span>
+      <span className="min-w-0 flex-1 flex flex-col">
+        <span className="text-[12.5px] text-zinc-100 font-medium truncate group-hover:text-white">{p.title}</span>
+        <span className="text-[11px] text-zinc-400 truncate">{t('visual.wikiOpen', { site: p.site })}</span>
+      </span>
+      <ExternalLink className="w-3.5 h-3.5 shrink-0 text-zinc-500 group-hover:text-[var(--accent-color)]" />
+    </a>
+  );
+  if (visual.kind === 'link') {
+    return (
+      <div className={shell} data-qc-visual="link">
+        {pageCard(visual.page, true)}
+        {wrongBtn && <div className="px-3 pb-2 -mt-1 flex justify-end">{wrongBtn}</div>}
+      </div>
+    );
+  }
   if (visual.kind !== 'picture') return null;
   return (
     <div className={shell} data-qc-visual="picture">
       <button type="button" onClick={() => { setBig(true); onEvent?.('opened'); }} className="group relative block w-full bg-[#0c0d13]" aria-label={t('visual.larger')}>
-        <img src={visual.url} alt={visual.alt} className={`mx-auto w-full ${compact ? 'max-h-[220px]' : 'max-h-[300px]'} object-contain`} />
+        {/* At its own size up to the card's width: a wiki's 150px item icon isn't stretched into a blur. */}
+        <img src={visual.url} alt={visual.alt} className={`block mx-auto max-w-full ${compact ? 'max-h-[220px]' : 'max-h-[300px]'} object-contain`} />
         <span className="absolute right-2 top-2 p-1 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100"><Maximize2 className="w-3.5 h-3.5" /></span>
       </button>
       <div className="px-3 py-2 flex items-center justify-between gap-3">
         <span className={meta}><span className="truncate">{visual.map ? t('visual.map') : t('visual.picture')} · {visual.alt}</span></span>
         <span className="flex items-center gap-3 shrink-0">
           {wrongBtn}
-          {visual.source === 'wiki' && visual.link && (
+          {visual.source === 'wiki' && visual.link && !visual.page && (
             <a href={visual.link} target="_blank" rel="noreferrer" className={linkCls} title={visual.credit}>{(visual.credit || t('visual.source')).split(':')[0]} <ExternalLink className="w-3 h-3" /></a>
           )}
         </span>
       </div>
+      {visual.page && pageCard(visual.page, false)}
       {big && (
         <div className="fixed inset-0 z-[100] bg-black/85 flex items-center justify-center p-6" onClick={() => setBig(false)}>
           <img src={visual.url} alt={visual.alt} className="max-w-full max-h-full object-contain rounded-lg" />

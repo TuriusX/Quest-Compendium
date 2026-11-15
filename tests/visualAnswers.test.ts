@@ -54,6 +54,22 @@ await test("a screenshot-only question takes its topic from the answer, and its 
   assert.equal(none.keys.length, 0);
 });
 
+await test("a question about one named thing looks for its picture and wiki page, saved under its own key (owner, Nov 14 2026: \"Give me a description of the Nagakiba\")", async () => {
+  const m = new Map();
+  const r = await visualFor(fakeAi({ game: "Elden Ring", kind: "thing", confidence: "high", subject: "Nagakiba" }) as any, {
+    game: "Elden Ring", gameKey: "elden-ring", question: "Give me a description of the Nagakiba", answer: "...", youtubeKey: "k", wiki: {}, store: mapStore(m),
+  });
+  assert.ok(r.steps.some((s) => s.startsWith("choose: thing")), r.steps.join(" / "));
+  assert.ok(r.steps.includes("wiki page: none found"), r.steps.join(" / "));
+  assert.equal(r.visual.kind, "none"); // no wiki known for it here: nothing to show
+  assert.ok([...m.keys()].some((k: string) => k.includes(`${RULES_V} thing nagakiba`)), [...m.keys()].join(", "));
+  // A wiki page alone counts as shown in /stats.
+  assert.equal(statKind({ kind: "link", page: { url: "u", title: "Aerondight", site: "Fextralife" }, why: "" }), "link");
+  const line = visualStatsLine({ days: [{ answers: 2, shown_link: 1, shown_none: 1 }], searchesToday: 0, searchLimit: 100 }, "today");
+  assert.match(line, /2 answer\(s\) looked at, 1 got one \(50%\)/);
+  assert.match(line, /wiki page only 1/);
+});
+
 await test("start time: a chapter when the watched moment falls inside it, else the watched moment", () => {
   assert.equal(pickStart(257, 350), 257); // BG3: the chapter that contains the button
   assert.equal(pickStart(206, 42), 42);   // Malenia: the watched start comes before that chapter

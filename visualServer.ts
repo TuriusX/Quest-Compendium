@@ -206,12 +206,12 @@ export async function visualEvent(type: 'played' | 'opened' | 'wrong', refId: st
 export function visualStatsLine(s: { days: Record<string, any>[]; searchesToday: number; searchLimit: number }, label: string): string {
   const sum = (k: string) => s.days.reduce((n, d) => n + (Number(d[k]) || 0), 0);
   const answers = sum('answers');
-  const shown = sum('shown_video') + sum('shown_ours') + sum('shown_wiki');
+  const shown = sum('shown_video') + sum('shown_ours') + sum('shown_wiki') + sum('shown_link');
   const pct = (n: number) => (answers ? ` (${Math.round((100 * n) / answers)}%)` : '');
   const cost = sum('cost');
   return [
     `**Visual answers** (${label}): ${answers} answer(s) looked at, ${shown} got one${pct(shown)}`,
-    `Video ${sum('shown_video')} · our picture ${sum('shown_ours')} · wiki picture ${sum('shown_wiki')} · nothing ${sum('shown_none')} · saved one reused ${sum('cached')}`,
+    `Video ${sum('shown_video')} · our picture ${sum('shown_ours')} · wiki picture ${sum('shown_wiki')}${sum('shown_link') ? ` · wiki page only ${sum('shown_link')}` : ''} · nothing ${sum('shown_none')} · saved one reused ${sum('cached')}`,
     `Cost: $${cost.toFixed(2)}${answers ? ` ($${(cost / answers).toFixed(4)} per answer)` : ''} · played ${sum('played')} · pictures opened ${sum('opened')} · "Not right" ${sum('wrong')}`,
     `YouTube searches today: ${s.searchesToday} of ${s.searchLimit}${sum('quotaOut') ? ` · ${sum('quotaOut')} answer(s) got no video because the day's searches were used up` : ''}`,
   ].join('\n');

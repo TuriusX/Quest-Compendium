@@ -1808,7 +1808,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       });
       if (!res.ok) return;
       const data = await res.json();
-      if (data?.visual && (data.visual.kind === 'video' || data.visual.kind === 'picture')) {
+      if (data?.visual && (data.visual.kind === 'video' || data.visual.kind === 'picture' || data.visual.kind === 'link')) {
         updateMessageById(msgId, (m) => ({ ...m, visual: data.visual, visualRef: typeof data.ref === 'string' ? data.ref : undefined }));
       }
     } catch {

@@ -25,8 +25,12 @@ import { fextralifeImage } from './scripts/guides/suggestImages';
 export type VisualKind = 'video' | 'picture' | 'none';
 export type Visual =
   | { kind: 'video'; videoId: string; title: string; channel: string; seconds: number; start: number; why: string; thumb: string; note?: string; alts?: VideoAlt[] }
-  | { kind: 'picture'; source: 'ours' | 'wiki'; url: string; alt: string; credit?: string; link?: string; why: string; map?: boolean }
+  | { kind: 'picture'; source: 'ours' | 'wiki'; url: string; alt: string; credit?: string; link?: string; why: string; map?: boolean; page?: WikiPage }
+  /** A question about one named thing with no picture good enough: its wiki page alone (owner, Nov 14 2026). */
+  | { kind: 'link'; page: WikiPage; why: string }
   | { kind: 'none'; why: string };
+/** A wiki page shown as a link card under the answer: the thing's name, the wiki and the page. */
+export type WikiPage = { url: string; title: string; site: string };
 export type VisualResult = { visual: Visual; cost: number; ms: number; cached: boolean; steps: string[]; youtubeSearches: number; quotaOut?: boolean; kindChosen?: VisualKind };
 
 type Gen = { models: { generateContent: (r: any) => Promise<any> } };
@@ -78,11 +82,16 @@ export async function choose(ai: Gen, cost: Cost, game: string, question: string
     'Nov 14 2026, "how do I get the Nagakiba" is Yura\'s questline, so a video. The subject is X itself.\n' +
     '- "picture": the player asks what something LOOKS LIKE, or WHERE EXACTLY a thing is (an item, a character, an ' +
     'enemy, a chest, lever or door, a place), and "how do I get X" only when X is simply picked up or bought at one spot.\n' +
-    '- "none": lore and story ("who is / who are / why ..."), builds, stats, choices, opinions, general advice.\n' +
-    'Be strict: if the question is not clearly one of the first two, it is "none".\n' +
+    '- "thing": the player asks ABOUT one specific NAMED thing: an item, weapon, armor, spell, NPC, enemy, boss or place, ' +
+    'by its name ("describe X", "give me a description of X", "what is X", "what does X do", "X stats", "who is X" for a ' +
+    'named character): they get its picture and a link to its wiki page (owner, Nov 14 2026: "Give me a description ' +
+    'of the Nagakiba"). If the question is also about GETTING X, beating X or getting to X, the video rules above win.\n' +
+    '- "none": general lore and story with no one named thing ("why did ...", "what happened to ..."), builds, ' +
+    'comparisons of several things, choices, opinions, general advice.\n' +
+    'Be strict: if the question is not clearly one of the first three, it is "none".\n' +
     'Reply with JSON only: {' + (shotOnly ? '"question": "the one question the player most likely meant, in their words; else empty", ' : '') +
     '"game": "the game the question is about, by its usual name", ' +
-    '"kind": "video" | "picture" | "none", "confidence": "high" | "medium" | "low", ' +
+    '"kind": "video" | "picture" | "thing" | "none", "confidence": "high" | "medium" | "low", ' +
     '"subject": "the one thing itself, by its exact in-game name only (\\"Skeleton Key\\", \\"Keira Metz\\", ' +
     '\\"Malenia, Blade of Miquella\\"), never words like location, map, route or guide", ' +
     '"place": "for a where-question: the in-game name of the area it is in, as the answer names it; else empty", ' +
@@ -91,8 +100,10 @@ export async function choose(ai: Gen, cost: Cost, game: string, question: string
   const j = await ask(ai, cost, [{ text: prompt }], 300, 'visual-choose');
   const meant = shotOnly ? String(j?.question || '').trim().slice(0, 200) : '';
   // A screenshot with no one main thing in its answer: nothing.
-  const kind: VisualKind = ['video', 'picture'].includes(j?.kind) && j?.confidence === 'high' && (!shotOnly || meant) ? j.kind : 'none';
-  return { kind, meant, game: String(j?.game || '').trim().slice(0, 120), subject: String(j?.subject || '').slice(0, 80), place: String(j?.place || '').slice(0, 80), search: String(j?.search || '').slice(0, 120), why: String(j?.why || '').slice(0, 200), confidence: String(j?.confidence || '') };
+  // "thing": a question about one named thing is a picture of it plus its wiki page (the page alone when no picture fits).
+  const thing = j?.kind === 'thing';
+  const kind: VisualKind = ['video', 'picture', 'thing'].includes(j?.kind) && j?.confidence === 'high' && (!shotOnly || meant) ? (thing ? 'picture' : j.kind) : 'none';
+  return { kind, thing: thing && kind === 'picture', meant, game: String(j?.game || '').trim().slice(0, 120), subject: String(j?.subject || '').slice(0, 80), place: String(j?.place || '').slice(0, 80), search: String(j?.search || '').slice(0, 120), why: String(j?.why || '').slice(0, 200), confidence: String(j?.confidence || '') };
 }
 
 // ---- 2. Video ---------------------------------------------------------------------------------------------------
@@ -267,31 +278,72 @@ async function watch(ai: Gen, cost: Cost, game: string, question: string, answer
 // ---- 3. Picture -------------------------------------------------------------------------------------------------
 
 
+/**
+ * The thing's own wiki page (Fextralife first, then the game's main Fandom wiki), whether or not it has a usable picture.
+ * Fextralife redirects a missing page elsewhere, so only a page that answers directly counts.
+ */
+export async function wikiPage(src: { fextralife?: string; fandom?: string }, subject: string): Promise<WikiPage | null> {
+  if (!subject.trim()) return null;
+  if (src.fextralife) {
+    const at = (t: string) => `https://${src.fextralife}/${encodeURIComponent(t.trim().replace(/ /g, '+')).replace(/%2B/g, '+').replace(/%2C/g, ',').replace(/%27/g, "'")}`;
+    const caps = subject.replace(/\b([a-z])/g, (m) => m.toUpperCase());
+    // The same page under another spelling ("+" or "_", a leading "The" dropped) counts; a redirect anywhere else is
+    // Fextralife's answer for a page that doesn't exist.
+    const norm = (u: string) => decodeURIComponent(new URL(u).pathname).toLowerCase().replace(/[+_ ]+/g, ' ').replace(/^\/(the )?/, '').trim();
+    const bare = subject.replace(/^the\s+/i, '');
+    for (const first of [...new Set([at(subject), at(caps), at(bare)])]) {
+      let url = first, r: Response | null = null;
+      for (let hop = 0; hop < 3; hop++) {
+        r = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'manual' }).catch(() => null);
+        const to = r && r.status >= 300 && r.status < 400 ? r.headers.get('location') : null;
+        if (!to) break;
+        const next = new URL(to, url).toString();
+        if (new URL(next).host !== src.fextralife || norm(next) !== norm(first)) { r = null; break; }
+        url = next;
+      }
+      if (r?.status !== 200) continue;
+      const html = await r.text().catch(() => '');
+      const title = ((html.match(/<meta property="og:title" content="([^"]+)"/) || [])[1] || subject).replace(/\s*\|.*$/, '')
+        .replace(/&#0?39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+      return { url, title, site: 'Fextralife' };
+    }
+  }
+  if (src.fandom) {
+    for (const t of [...new Set([subject, subject.replace(/^the\s+/i, '')])]) {
+    const j: any = await fetch(`https://${src.fandom}/api.php?format=json&formatversion=2&action=query&redirects=1&titles=${encodeURIComponent(t)}`, { headers: { 'User-Agent': UA } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const p = j?.query?.pages?.[0];
+    if (p && !p.missing && !p.invalid) return { url: `https://${src.fandom}/wiki/${encodeURIComponent(String(p.title).replace(/ /g, '_'))}`, title: String(p.title), site: 'Fandom' };
+    }
+  }
+  return null;
+}
+
 async function fandomImage(domain: string, title: string) {
   const api = (q: string) => fetch(`https://${domain}/api.php?format=json&formatversion=2&${q}`, { headers: { 'User-Agent': UA } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   const pick = (j: any) => { const p = j?.query?.pages?.[0]; return p && !p.missing && p.original?.source ? { url: String(p.original.source), page: `https://${domain}/wiki/${encodeURIComponent(String(p.title).replace(/ /g, '_'))}`, title: String(p.title) } : null; };
   return pick(await api(`action=query&prop=pageimages&piprop=original&redirects=1&titles=${encodeURIComponent(title)}`));
 }
 
-async function jpegOf(url: string): Promise<string | null> {
+async function jpegOf(url: string, minWidth = 200): Promise<string | null> {
   try {
     const r = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'follow' });
     if (!r.ok) return null;
     const buf = Buffer.from(await r.arrayBuffer());
     const m = await sharp(buf).metadata();
-    if (!m.width || m.width < 200) return null;
+    if (!m.width || m.width < minWidth) return null;
     return (await sharp(buf).flatten({ background: '#1a1a1a' }).resize({ width: 768, withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer()).toString('base64');
   } catch { return null; }
 }
 
-export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: string; fandom?: string }, game: string, question: string, subject: string, steps: string[], where = false) {
+export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: string; fandom?: string }, game: string, question: string, subject: string, steps: string[], where = false, icon = false) {
   const tries: { url: string; page: string; title: string; site: string }[] = [];
   if (src.fextralife) { const f = await fextralifeImage(src.fextralife, subject).catch(() => null); if (f) tries.push({ ...f, site: 'Fextralife' }); }
   if (src.fandom) { const f = await fandomImage(src.fandom, subject); if (f) tries.push({ ...f, site: 'Fandom' }); }
   steps.push(`wiki: ${tries.length} page picture(s) for "${subject}"`);
   for (const t of tries) {
-    const jpeg = await jpegOf(t.url);
-    if (!jpeg) continue;
+    // A named thing's picture is often the wiki's item icon (150px on BG3's wiki): smaller ones count there.
+    const jpeg = await jpegOf(t.url, icon ? 120 : 200);
+    if (!jpeg) { steps.push(`${t.site} picture too small or unreadable`); continue; }
     const prompt =
       `This is the main picture of the wiki page "${t.title}" for the video game "${game}". A player asked: "${question}".\n` +
       (where
@@ -304,7 +356,7 @@ export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: strin
     const j = await ask(ai, cost, [{ inlineData: { mimeType: 'image/jpeg', data: jpeg } }, { text: prompt }], 200, 'visual-picture');
     steps.push(`check ${t.site}: ${j?.ok ? 'yes' : 'no'} (${j?.confidence || '?'}) ${j?.what || ''}`);
     if (j?.ok === true && j?.confidence === 'high') {
-      return { kind: 'picture' as const, source: 'wiki' as const, url: t.url, alt: String(j.what || subject), credit: `${t.site}: ${t.title}`, link: t.page, why: String(j.what || ''), ...(/map/i.test(String(j.what || '')) ? { map: true } : {}) };
+      return { kind: 'picture' as const, source: 'wiki' as const, url: t.url, alt: String(j.what || subject), credit: `${t.site}: ${t.title}`, link: t.page, page: { url: t.page, title: t.title, site: t.site }, why: String(j.what || ''), ...(/map/i.test(String(j.what || '')) ? { map: true } : {}) };
     }
   }
   return null;
@@ -312,8 +364,9 @@ export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: strin
 
 // ---- The whole step -----------------------------------------------------------------------------------------------
 
-/** The rules' version in saved results' keys (2: Nov 14 2026, "how do I get X" questlines and the question's own game). */
-export const RULES_V = 'r2';
+/** The rules' version in saved results' keys (2: Nov 14 2026, "how do I get X" questlines and the question's own game;
+ * 3: questions about a named thing get its picture and wiki page). */
+export const RULES_V = 'r3';
 /** Two names for the same game ("ELDEN RING" / "Elden Ring", "The Witcher 3: Wild Hunt" / "Witcher 3")? */
 export function sameGameName(a: string, b: string): boolean {
   const n = (s: string) => s.toLowerCase().replace(/[™®©]/g, '').replace(/\b(the|game of the year|goty|complete|definitive|remastered|special|enhanced|edition)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -335,7 +388,7 @@ export const mapStore = (m = new Map<string, any>()): VisualStore => ({
   async set(keys, visual, excluded) { for (const k of keys) m.set(k, { visual, at: Date.now(), excluded }); },
 });
 
-export const visualId = (v: Visual) => (v.kind === 'video' ? v.videoId : v.kind === 'picture' ? v.url : '');
+export const visualId = (v: Visual) => (v.kind === 'video' ? v.videoId : v.kind === 'picture' ? v.url : v.kind === 'link' ? v.page.url : '');
 
 export async function visualFor(ai: Gen, o: {
   game: string; gameKey: string; question: string; answer: string; youtubeKey: string;
@@ -361,10 +414,10 @@ export async function visualFor(ai: Gen, o: {
     const other = await o.otherGame(c.game).catch(() => null);
     if (other) { game = c.game; gameKey = other.gameKey; wiki = other.wiki; out.steps.push(`about another game: ${game} (${gameKey})`); }
   }
-  out.steps.push(`choose: ${c.kind} (${c.confidence}) subject "${c.subject}"${c.place ? `, place "${c.place}"` : ''}${c.search ? `, search "${c.search}"` : ''}: ${c.why}`);
+  out.steps.push(`choose: ${c.thing ? 'thing (picture + wiki page)' : c.kind} (${c.confidence}) subject "${c.subject}"${c.place ? `, place "${c.place}"` : ''}${c.search ? `, search "${c.search}"` : ''}: ${c.why}`);
   // Saved results: under the question itself and under the topic (the same thing asked in other words), with the rules'
   // version, so a "nothing found" saved under older rules is looked for again.
-  const keys = c.kind === 'none' ? [] : [topicKey(gameKey, `${RULES_V} q ${question}`), topicKey(gameKey, `${RULES_V} ${c.kind} ${c.subject || c.search}`)];
+  const keys = c.kind === 'none' ? [] : [topicKey(gameKey, `${RULES_V} q ${question}`), topicKey(gameKey, `${RULES_V} ${c.thing ? 'thing' : c.kind} ${c.subject || c.search}`)];
   const done = (visual: Visual, cached = false, extra: Partial<VisualResult> = {}) => ({ visual, cost: cost.d, ms: Date.now() - t0, cached, steps: out.steps, youtubeSearches: out.searches, keys, game, kindChosen: c.kind, ...extra });
   if (c.kind === 'none') return done({ kind: 'none', why: c.why });
   const hit = o.store ? await o.store.get(keys) : null;
@@ -379,8 +432,15 @@ export async function visualFor(ai: Gen, o: {
     else {
       // Pictures come from the game's wikis only, checked (owner, Nov 14 2026: not from our own guides, whose pictures
       // aren't good enough for this): the thing itself first, then for a where-question the place it's in.
-      for (const name of [c.subject, c.place].filter(Boolean)) if (!visual) visual = await wikiPicture(ai, cost, wiki, game, question, name, out.steps, !!c.place);
+      for (const name of (c.thing ? [c.subject] : [c.subject, c.place]).filter(Boolean)) if (!visual) visual = await wikiPicture(ai, cost, wiki, game, question, name, out.steps, !c.thing && !!c.place, c.thing);
       if (visual && excluded.has(visualId(visual))) { out.steps.push('the picture found was marked "Not right" before'); visual = null; }
+      // A question about one named thing (owner, Nov 14 2026): its wiki page goes with the picture, and shows alone when
+      // no picture was good enough.
+      if (c.thing && !visual) {
+        const page = await wikiPage(wiki, c.subject).catch(() => null);
+        out.steps.push(page ? `wiki page: ${page.site} "${page.title}" (no picture good enough)` : 'wiki page: none found');
+        if (page && !excluded.has(page.url)) visual = { kind: 'link', page, why: `the wiki page for ${page.title}` };
+      }
     }
   } catch (e: any) {
     // The day's free YouTube searches are used up: no video this time, and nothing saved (it's looked for again later).

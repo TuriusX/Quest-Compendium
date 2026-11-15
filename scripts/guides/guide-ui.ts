@@ -230,6 +230,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   askVisPicture: "Picture",
   askVisMap: "Map",
   askVisNotRight: "Not right",
+  askVisWikiOpen: "Open on the {site} wiki",
   askVisNotRightTitle: "Not the right video or picture",
   askVisThanks: "Thanks: it won't be shown for this question again.",
   askVisLarger: "See it larger",
