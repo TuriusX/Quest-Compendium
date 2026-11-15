@@ -38,8 +38,6 @@ export type QuestLogProps = {
   helpMsgFor?: (stepId: string) => string | undefined;
   /** The database sections (LogFacts: Worth getting here, Achievements here), under Now, Next and the warning. */
   facts?: React.ReactNode;
-  /** A rough time range for a guide step ("10–20 min"; item 30, step 4), by the step's id. */
-  timeFor?: (stepId: string) => string | undefined;
   onConfirmPlace?: () => void;
   /** The player says where they are (the guide's areas, "Yes" to a suggestion, "Still here"). */
   onPickPlace?: (name: string) => void;
@@ -119,7 +117,6 @@ export function QuestLog(p: QuestLogProps) {
         <VisualCard visual={answerVisual} compact onEvent={(type) => p.onVisualEvent?.(answerMsg, type)} />
       </div>
     ) : null;
-  const time = (id: string) => { const x = p.timeFor?.(id); return x ? <span data-qc-time="" title={t('logfacts.timeTitle')} className="ml-1.5 inline-block whitespace-nowrap rounded-full border border-[var(--accent-border)] px-1.5 align-middle text-[10.5px] font-semibold text-[var(--accent-color)]">{x}</span> : null; };
   const label = (text: string, src?: React.ReactNode, amber = false) => (
     <div className={`flex items-baseline gap-2 mb-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] font-mono ${amber ? 'text-amber-300/90' : 'text-zinc-500'}`}>
       {text}
@@ -285,7 +282,7 @@ export function QuestLog(p: QuestLogProps) {
               <div className="flex gap-2.5 items-start">
                 {tickBtn(n, true)}
                 <button type="button" onClick={() => setOpenId((o) => (o === n.id ? null : n.id))} className="text-left min-w-0 outline-none focus-visible:underline">
-                  <div className="font-bold text-[16.5px] leading-tight tracking-[-0.005em] text-white">{n.text}{time(n.id)}</div>
+                  <div className="font-bold text-[16.5px] leading-tight tracking-[-0.005em] text-white">{n.text}</div>
                   {n.sub && <div className="mt-1 text-[12.5px] leading-snug text-zinc-400">{n.sub}</div>}
                   {details(n)}
                 </button>
@@ -334,7 +331,7 @@ export function QuestLog(p: QuestLogProps) {
                   <div className={`flex gap-2.5 items-start px-2 py-1.5 rounded ${p.sel === s.id ? 'bg-white/[0.04] outline outline-1 outline-white/[0.14]' : ''}`}>
                     {tickBtn(s)}
                     <button type="button" onClick={() => setOpenId((o) => (o === s.id ? null : s.id))} aria-expanded={openId === s.id} className="text-left min-w-0 outline-none focus-visible:underline">
-                      <div className="text-[13.5px] leading-snug text-zinc-200">{s.text}{time(s.id)}</div>
+                      <div className="text-[13.5px] leading-snug text-zinc-200">{s.text}</div>
                       {s.sub && <div className="text-[12px] text-zinc-500 mt-px">{s.sub}</div>}
                       {details(s)}
                     </button>
@@ -357,7 +354,7 @@ export function QuestLog(p: QuestLogProps) {
                   <div key={s.id} className={`flex gap-2.5 items-start px-2 py-1 rounded ${p.sel === s.id ? 'bg-white/[0.04] outline outline-1 outline-white/[0.14]' : ''}`}>
                     {tickBtn(s)}
                     <button type="button" onClick={() => setOpenId((o) => (o === s.id ? null : s.id))} className="text-left min-w-0 outline-none focus-visible:underline">
-                      <div className="text-[13.5px] leading-snug text-zinc-200">{s.text}{time(s.id)}</div>
+                      <div className="text-[13.5px] leading-snug text-zinc-200">{s.text}</div>
                       {s.sub && <div className="text-[12px] text-zinc-500 mt-px">{s.sub}</div>}
                       {details(s)}
                     </button>

@@ -3143,13 +3143,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
               />
             );
           })()}
-          timeFor={(stepId) => {
-            // Item 30, step 4: the area's rough step times (w:<area>:<step>), as a range.
-            const m = /^w:([^:]+):(.+)$/.exec(stepId);
-            const ga = trackerGame.guideArea;
-            const tt = m && ga?.slug === m[1] ? (ga.page as any)?.times?.[m[2]] : null;
-            return tt ? tr('logfacts.minutes', { lo: tt.lo, hi: tt.hi }) : undefined;
-          }}
           helpMsgFor={(stepId) => [...(activeTab?.messages || [])].reverse().find((m) => m.kind === 'help' && m.helpFor === stepId && m.visual && !m.visualHidden)?.id}
           onConfirmPlace={() => { const n = logView.place?.name; if (n) trackerEventRef.current({ type: 'confirm-place', name: n }); }}
           onOpenEntry={(id) => trackerEventRef.current({ type: 'open-entry', item: id })}

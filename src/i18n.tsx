@@ -865,8 +865,6 @@ const en: Dict = {
   "chat.markersMore": "More about these markers",
   "tracker.look": "Text size and look",
   "prem.title": "Premium",
-  "logfacts.minutes": "{lo}–{hi} min",
-  "logfacts.timeTitle": "Rough time for this step: from the guide when it gives one, otherwise an estimate",
   "visual.pin": "Pin",
   "visual.pinTitle": "Pin beside the game: a small window that stays on top while you play",
   "logfacts.worth": "Worth getting here",

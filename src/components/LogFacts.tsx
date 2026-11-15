@@ -23,6 +23,10 @@ export type AreaFacts = {
   achievements?: { name: string; how?: string; missable?: boolean; lost?: string; if?: string; rarity?: string }[];
 };
 
+const RARITY: [RegExp, string][] = [[/legendary|artifact|mythic|unique|exotic/i, '#f59e0b'], [/very\s*rare|epic/i, '#a855f7'], [/\brare\b/i, '#3b82f6'], [/uncommon/i, '#22c55e'], [/\bcommon\b/i, '#9ca3af']];
+/** A rarity's loot color ("Very Rare" purple, "Rare" blue...), or the default for a spell level and the like. */
+export const rarityColor = (r: string, fallback = '#c4b0ff') => RARITY.find(([re]) => re.test(r))?.[1] || fallback;
+
 const OPEN_KEY = 'qc_log_open';
 const readOpen = (): Record<string, boolean> => { try { return JSON.parse(localStorage.getItem(OPEN_KEY) || '{}') || {}; } catch { return {}; } };
 const SHOW = 5;
@@ -77,7 +81,7 @@ export function LogFacts(p: {
                 </button>
                 <div className={`min-w-0 text-[13px] leading-snug ${on ? 'opacity-50' : ''}`}>
                   <span className="font-semibold text-white">{g.name}</span>
-                  {g.rarity && <span className="ml-1.5 text-[10.5px] font-bold uppercase tracking-wide text-[#c4b0ff]">{g.rarity}</span>}
+                  {g.rarity && <span className="ml-1.5 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: rarityColor(g.rarity) }}>{g.rarity}</span>}
                   {(g.missable || g.lost) && missTag(g.lost)}
                   {g.confirmed === false && unconf}
                   {g.why && <div className="text-[12px] text-zinc-400">{g.why}</div>}

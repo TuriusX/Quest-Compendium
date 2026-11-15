@@ -1232,10 +1232,6 @@ async function loadFactPages(only = ''): Promise<void> {
       byPlace.set(r.place, [...(byPlace.get(r.place) || []), r]);
     }
     FACT_RECS.set(key, byPlace);
-    // Rough step times (stepTimes.ts; item 30, step 4), shown on the route.
-    const times = new Map<string, Record<string, { lo: number; hi: number; from: string }>>();
-    for (const d of (await db().collection('gameRecords').doc(key).collection('times').get().catch(() => null))?.docs || []) times.set(d.id, ((d.data() as any)?.steps || {}));
-    STEP_TIMES.set(key, times);
   }
   if (FACT_KEYS.size) console.log(`Fact pages: ${[...FACT_KEYS].map((k) => `${k} (${FACT_RECS.get(k)?.size || 0} pages with records)`).join(', ')}.`);
   // Story order pages (scripts/guides/spine.ts): on for the guides in config/spinePages.guides (or QC_SPINE_PAGES for a preview).
@@ -1252,7 +1248,6 @@ async function loadFactPages(only = ''): Promise<void> {
   WORTH_KEYS = new Set([...(Array.isArray(wp.guides) ? wp.guides : []), ...String(process.env.QC_WORTH_PAGES || '').split(',')].map((s: string) => String(s).trim()).filter((k) => k && FACT_KEYS.has(k)));
 }
 let WORTH_KEYS = new Set<string>();
-const STEP_TIMES = new Map<string, Map<string, Record<string, { lo: number; hi: number; from: string }>>>();
 /** Each game's English lists (missables, items...), kept for llms.txt: FACT_LISTS is reset by the translated passes. */
 const LIST_IDS = new Map<string, string[]>();
 /** Each game's story order and its missables' links (spine.ts), for the "in order" pages. */
@@ -1315,7 +1310,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
   const worthRow = (r: any) => {
     const id = r.origin?.from === 'area' ? String(r.origin.entry ?? '') : String(r.id);
     const lock = r.fields?.lockout;
-    const html = `<strong class="text-white">${esc(r.name)}</strong>${r.fields?.rarity ? `<span class="ml-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#c4b0ff]">${esc(String(r.fields.rarity))}</span>` : ''}${r.missable || lock ? tag('Missable', 'amber') : ''}${r.status !== 'checked' ? tag('Not yet confirmed', 'dim') : ''}` +
+    const html = `<strong class="text-white">${esc(r.name)}</strong>${r.fields?.rarity ? `<span class="ml-1.5 text-[11px] font-semibold uppercase tracking-wide" style="color:${rarityColor(String(r.fields.rarity))}">${esc(String(r.fields.rarity))}</span>` : ''}${r.missable || lock ? tag('Missable', 'amber') : ''}${r.status !== 'checked' ? tag('Not yet confirmed', 'dim') : ''}` +
       `${r.fields?.why ? `<span class="block text-zinc-300 mt-0.5">${esc(String(r.fields.why))}</span>` : ''}${factWhere({}, { ...r, located: true }) ? `<span class="block text-xs text-zinc-400 mt-0.5">${esc(factWhere({}, { ...r, located: true }))}</span>` : ''}` +
       `${r.fields?.how ? `<span class="block text-xs text-zinc-400 mt-0.5"><span class="text-zinc-500">${esc(ui('itemHow'))}:</span> ${esc(String(r.fields.how))}</span>` : ''}${lock ? `<span class="block text-xs text-amber-300/90 mt-0.5"><span class="text-amber-200/70">${esc(ui('itemLockout'))}:</span> ${esc(String(lock))}</span>` : ''}`;
     return checkRow(id, html, true, kindIcon(entryKind({ section: 'items', name: r.name, where: String(r.fields?.where || '') })));
@@ -1351,7 +1346,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
     ? card('walkthrough', ui('route'), `<span class="text-xs text-zinc-500">${steps.length} steps</span>`, `<ol class="space-y-0.5 py-2">${steps.map((st, i) => {
         const r = rec.get(String(st.id));
         const got = [...(st.entries || []), ...(st.fights || [])].filter((id) => nameOf.get(id));
-        return `<li id="${esc(st.id)}" class="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 px-4 py-2 scroll-mt-20"><span class="flex h-6 w-6 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-xs font-bold text-[#c4b0ff]">${i + 1}</span><div class="min-w-0"><p class="text-sm"><strong class="text-white">${esc(st.title)}.</strong>${(() => { const tt = STEP_TIMES.get(gameKey)?.get(a.slug)?.[String(st.id)]; return tt ? ` <span class="ml-0.5 inline-block whitespace-nowrap rounded-full border border-[#a87ffb]/40 px-1.5 text-[11px] font-semibold text-[#c4b0ff]" title="${tt.from === 'guide' ? 'From the guide' : 'A rough estimate'}">${tt.lo}–${tt.hi} min</span>` : ''; })()} <span class="text-zinc-400">${esc(r?.short || String(st.text || '').split(/(?<=[.!?])\s/)[0])}</span></p>${(() => { const pic = stepPicture(gameKey, a.slug, st.id, 'step'); return pic ? stepHtml(pic) : ''; })()}${got.length ? `<div class="mt-1.5 flex flex-wrap gap-1.5">${got.map((id) => `<a href="#${(a.fights || []).some((f) => f.id === id) ? '' : 'e-'}${esc(id)}" class="rounded-md border border-white/10 px-1.5 py-0.5 text-[11px] text-zinc-400 hover:border-[#a87ffb]/40 hover:text-white">${esc(nameOf.get(id)!)}</a>`).join('')}</div>` : ''}${st.warn ? `<p class="mt-1 text-xs text-amber-200/90">&#9888; ${esc(st.warn)}</p>` : ''}</div></li>`;
+        return `<li id="${esc(st.id)}" class="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 px-4 py-2 scroll-mt-20"><span class="flex h-6 w-6 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-xs font-bold text-[#c4b0ff]">${i + 1}</span><div class="min-w-0"><p class="text-sm"><strong class="text-white">${esc(st.title)}.</strong> <span class="text-zinc-400">${esc(r?.short || String(st.text || '').split(/(?<=[.!?])\s/)[0])}</span></p>${(() => { const pic = stepPicture(gameKey, a.slug, st.id, 'step'); return pic ? stepHtml(pic) : ''; })()}${got.length ? `<div class="mt-1.5 flex flex-wrap gap-1.5">${got.map((id) => `<a href="#${(a.fights || []).some((f) => f.id === id) ? '' : 'e-'}${esc(id)}" class="rounded-md border border-white/10 px-1.5 py-0.5 text-[11px] text-zinc-400 hover:border-[#a87ffb]/40 hover:text-white">${esc(nameOf.get(id)!)}</a>`).join('')}</div>` : ''}${st.warn ? `<p class="mt-1 text-xs text-amber-200/90">&#9888; ${esc(st.warn)}</p>` : ''}</div></li>`;
       }).join('')}</ol>`)
     : '';
 
@@ -1520,6 +1515,10 @@ function buildFactLists(key: string, visible: { slug: string; name: string }[], 
  * lost only by a condition ("if Grat is killed"), or whose lockout isn't known yet, is listed under the beat where it
  * becomes reachable. Facts not yet confirmed say so. English, fact-page guides with config/spinePages on.
  */
+const RARITY: [RegExp, string][] = [[/legendary|artifact|mythic|unique|exotic/i, '#f59e0b'], [/very\s*rare|epic/i, '#a855f7'], [/\brare\b/i, '#3b82f6'], [/uncommon/i, '#22c55e'], [/\bcommon\b/i, '#9ca3af']];
+/** A rarity's loot color ("Very Rare" purple, "Rare" blue...), or the default for a spell level and the like. */
+const rarityColor = (r: string, fallback = '#c4b0ff') => RARITY.find(([re]) => re.test(r))?.[1] || fallback;
+
 function renderStoryOrder(key: string, gameName: string, visible: { slug: string; name: string }[], byslug: Map<string, GuideArea>, sitemap: string[]): void {
   const sp = SPINES.get(key);
   if (!sp || LANG !== 'en' || !sp.spine.acts?.length) return;
