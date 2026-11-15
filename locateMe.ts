@@ -295,7 +295,7 @@ export function registerLocateMe(app: Express, deps: Deps) {
     }
     if (used >= limit) {
       return res.status(429).json({
-        error: `You've used today's ${limit} "Locate me" checks. They reset at midnight UTC; your questions aren't affected.`,
+        error: `You've used today's ${limit} "Help me here" checks. They reset at midnight UTC; your questions aren't affected.`,
         locateLimitReached: true,
         limit,
         locatesLeft: 0,

@@ -875,7 +875,10 @@ export default function App() {
     setHoldTick((n) => n + 1);
   };
   const locateNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The last note Locate me showed (Help me here repeats a failure in the conversation, where it's always seen). */
+  const lastLocateNote = useRef('');
   const showLocateNote = (text: string) => {
+    if (text) lastLocateNote.current = text;
     setLocateNote(text);
     if (locateNoteTimer.current) clearTimeout(locateNoteTimer.current);
     if (text) locateNoteTimer.current = setTimeout(() => setLocateNote(''), 8000);
@@ -899,16 +902,18 @@ export default function App() {
       img.src = dataUrl;
     });
   const pendingAutoLocate = useRef<string | null>(null);
-  const runLocate = async (autoArg?: unknown) => {
+  /** The place an unsure Locate me suggested (Help me here says so). */
+  const lastUnsure = useRef('');
+  const runLocate = async (autoArg?: unknown): Promise<string | null> => {
     // A click passes its event: only an explicit true is an automatic check.
     const auto = autoArg === true;
     const api = (window as any).electronAPI;
     const tab = activeTab;
     const guideAreas = trackerGameRef.current.areas || [];
-    if (locatingRef.current || !tab) return;
+    if (locatingRef.current || !tab) return null;
     if (!api?.captureFresh || !guideAreas.length) {
       if (!auto) showLocateNote(tr('place.locateNoGuide'));
-      return;
+      return null;
     }
     // The quiet capture for an automatic check: null means not now (the game isn't in view, or the panel is open
     // without a snapshot of the game): it runs when the game is back in view.
@@ -917,7 +922,7 @@ export default function App() {
       const r = api.locateCapture ? await api.locateCapture().catch(() => null) : null;
       if (!r?.image) {
         pendingAutoLocate.current = tab.id;
-        return;
+        return null;
       }
       quiet = r.image;
     }
@@ -950,17 +955,18 @@ export default function App() {
       if (!res.ok) {
         // An automatic check that couldn't run says nothing: the log is already asking "Where are you?".
         if (!auto) showLocateNote(data?.locateLimitReached ? tr('place.locateLimit', { n: data?.limit ?? '' }) : tr('place.locateFail'));
-        return;
+        return null;
       }
       if (!data?.area || data.area === 'unknown') {
         if (!auto) showLocateNote(tr('place.locateUnknown'));
-        return;
+        return null;
       }
       // Older servers don't say "confident": a read was.
       const confident = data.confident === true || (data.confident === undefined && data.evidence === 'read');
       if (!confident) {
         setWhereFor({ tabId: tab.id, suggestion: String(data.area), ...(data.doing && typeof data.doing === 'object' ? { doing: data.doing } : {}) });
-        return;
+        lastUnsure.current = String(data.area);
+        return null;
       }
       const story = typeof data.story === 'string' ? data.story.trim() : '';
       // What the player is doing, as the screen showed it (or nothing: an older "doing" in the same area is dropped).
@@ -976,8 +982,10 @@ export default function App() {
         // In case the area's page never loads (offline): let go after a few seconds anyway.
         setTimeout(() => releaseLocateHold(), 5000);
       }
+      return place.name;
     } catch {
       showLocateNote(tr('place.locateFail'));
+      return null;
     } finally {
       // No new place (a failure, or nothing recognised): nothing to wait for.
       if (locateHold.current && !locateHold.current.target) locateHold.current = null;
@@ -985,6 +993,63 @@ export default function App() {
       setLocating(false);
     }
   };
+  /**
+   * Help me here (owner, Nov 15 2026; roadmap item 30): one press (Ctrl+Shift+H, L3+R3, or the quest log's button) runs
+   * Locate me, lets the quest log set Now from what the screen shows, fetches the visual for that objective (a video
+   * or picture under a short note), then says what it did. Locate me's own daily allowance covers it; the visual is
+   * cached per objective, so pressing again costs nothing new.
+   */
+  const helpingRef = useRef(false);
+  const runHelpHere = async () => {
+    const tab = activeTab;
+    if (helpingRef.current || !tab) return;
+    helpingRef.current = true;
+    lastUnsure.current = '';
+    lastLocateNote.current = '';
+    // The outcome as a short note in the conversation, so a press never looks like it did nothing.
+    const say = (text: string, extra: Partial<ChatMessage> = {}) => {
+      const msg: ChatMessage = { id: `help_${Date.now()}`, role: 'assistant', kind: 'help', modelUsed: tr('help.label'), timestamp: Date.now(), text, ...extra };
+      setTabs((prev) => prev.map((x) => (x.id === tab.id ? { ...x, messages: [...x.messages, msg], lastActive: Date.now() } : x)));
+      return msg.id;
+    };
+    try {
+      // Right after a start or a tab switch the game's guide may still be loading: wait a few seconds for its areas.
+      for (let i = 0; i < 16 && !(trackerGameRef.current.areas || []).length; i++) await new Promise((r) => setTimeout(r, 250));
+      const placeName = await runLocate(false);
+      if (!placeName) {
+        // Why it couldn't: unsure (with its guess), or what Locate me said (no guide, its daily limit, not recognised).
+        const why = lastUnsure.current ? tr('help.unsure', { place: lastUnsure.current }) : lastLocateNote.current || tr('place.locateUnknown');
+        showLocateNote(why);
+        say(why);
+        return;
+      }
+      // The log settles on the new place (and its Now) once that area's guide page has loaded.
+      let now: LogView['now'] = null;
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        const v = logViewRef.current;
+        if (v && !v.locating && v.place?.name === placeName) { now = v.now; if (now) break; }
+      }
+      const goal = now ? String(now.text || now.goal || '').trim() : '';
+      const noteId = say(goal ? tr('help.done', { place: placeName, goal }) : tr('help.doneNoGoal', { place: placeName }), now ? { helpFor: now.id } : {});
+      showLocateNote(goal ? tr('help.doneShort', { goal }) : tr('help.doneNoGoalShort', { place: placeName }));
+      if (goal) {
+        const token = user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken().catch(() => null) : (user as any)?.isGuest ? String((user as any).uid) : null;
+        const game = tab.activeSteamGame?.name || activeGame?.name || tab.name;
+        await fetchVisual(noteId, `How do I ${goal.replace(/[.?!]+$/, '')}?`, [goal, now?.detail || now?.sub || ''].filter(Boolean).join('. '), game, token);
+      }
+    } finally {
+      helpingRef.current = false;
+    }
+  };
+  const runHelpRef = useRef(runHelpHere);
+  runHelpRef.current = runHelpHere;
+  useEffect(() => {
+    const on = () => void runHelpRef.current();
+    window.addEventListener('qc-help-here', on);
+    return () => window.removeEventListener('qc-help-here', on);
+  }, []);
+
   /**
    * "Spot it (landmarks, NPCs, chests)" (roadmap item 7): a guide entry looked for on a fresh screenshot (spot.ts, the
    * cheapest model; no question used, its own daily limit). Found: a marker in the guide's style over the game, ticked
@@ -1159,7 +1224,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       else if (tab && pendingAutoLocate.current === tab.id) setTimeout(() => void runLocateRef.current(true), 800);
     });
     // Locate me from anywhere: its shortcut (Ctrl+Shift+K) and the controller's button.
-    api?.onLocateKey?.(() => void runLocateRef.current(false));
+    // The Locate me shortcut (Ctrl+Shift+K) is Help me here now (owner, Nov 15 2026; roadmap item 30).
+    api?.onLocateKey?.(() => void runHelpRef.current());
   }, []);
   // The guide's missable list for where the player is looks thin: the area is flagged for the nightly improver to check
   // against sources (guidesApi.ts missables-thin; once a week per area from this device). Only the area is sent.
@@ -1381,6 +1447,20 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   }, [userData?.isPremium]);
   // The plan the Premium screen starts on: monthly, or yearly when a link asks for it (?plan=year).
   const [paywallInterval, setPaywallInterval] = useState<'month' | 'year'>('month');
+  // Subscribe for everyone not on Premium (owner, Nov 15 2026), at the right end of the game-detected row under the top
+  // bar (the top bar has no room for it next to the game's name). Guests get the same Premium card, which asks them to sign in.
+  const subscribeBtn = user && userData && !userData.isPremium ? (
+    <button
+      type="button"
+      data-qc-subscribe
+      onClick={() => { playBlipSound(settings.soundEnabled); setIsPaywallOpen(true); }}
+      title={tr('prem.headerTitle')}
+      className="h-5 px-2 rounded-md bg-[var(--accent-color)] text-black hover:brightness-110 cursor-pointer flex items-center gap-1 text-[11px] font-bold whitespace-nowrap shadow-[0_0_10px_var(--accent-dim)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+    >
+      <Sparkles className="w-3 h-3" />
+      {tr('prem.header')}
+    </button>
+  ) : null;
   // Premium asked for from outside (the website's "Get Premium", the Deck's QR code: ?premium=1), or by a guest who
   // then signed in: the plan / Premium screen, after sign-in for a guest.
   useEffect(() => {
@@ -1544,7 +1624,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       const o = stepsOfferRef.current;
       if (o) setOfferDismissed(`${o.kind}:${o.slug}`);
     } else if (e.type === 'locate') {
-      runLocate(false);
+      void runHelpRef.current();
     } else if (e.type === 'next-turn') {
       runNextTurn();
     } else if (e.type === 'open-entry' && typeof e.item === 'string') {
@@ -3044,9 +3124,10 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           onLoadSteps={() => trackerEventRef.current({ type: 'load-steps' })}
           onDismissOffer={() => trackerEventRef.current({ type: 'dismiss-offer' })}
           onGotoArea={moveToArea}
-          onLocate={() => runLocate(false)}
+          onLocate={() => void runHelpHere()}
           onPickPlace={moveToArea}
           locateKeys={formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K')}
+          helpMsgFor={(stepId) => [...(activeTab?.messages || [])].reverse().find((m) => m.kind === 'help' && m.helpFor === stepId && m.visual && !m.visualHidden)?.id}
           onConfirmPlace={() => { const n = logView.place?.name; if (n) trackerEventRef.current({ type: 'confirm-place', name: n }); }}
           onOpenEntry={(id) => trackerEventRef.current({ type: 'open-entry', item: id })}
           visualFor={(id) => { const m = activeTab?.messages.find((x) => x.id === id); return m && !m.visualHidden ? m.visual : undefined; }}
@@ -3206,7 +3287,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 ) : undefined}
               />
             )}
-            {((detection.running && (!detection.open || detection.choose || detection.switched)) || (!detection.running && detection.confirm)) && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} />}
+            {((detection.running && (!detection.open || detection.choose || detection.switched)) || (!detection.running && detection.confirm)) && <DetectionLine d={detection} soundEnabled={settings.soundEnabled} extra={subscribeBtn} />}
             <MigrationNotice
               spaces={spaces}
               soundEnabled={settings.soundEnabled}
@@ -3214,7 +3295,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
               onKeepSeparate={(gameId) => setSpaces((cur) => (cur ? splitMerged(cur, gameId) : cur))}
             />
           </>
-        ) : <DetectionLine d={detection} soundEnabled={settings.soundEnabled} />)}
+        ) : <DetectionLine d={detection} soundEnabled={settings.soundEnabled} extra={subscribeBtn} />)}
         {/* Updates (desktop), under the header: "Version X is ready" and, after one installs, a one-time "What's new". A dev server shows
             both with sample notes at ?previewUpdate (for screenshots). */}
         {(isDesktop || previewUpdate) && (
@@ -3405,7 +3486,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 onOpenPremium={() => setIsPaywallOpen(true)}
                 onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
                 onSetPlace={handleSetPlace}
-                onLocate={isDesktop && trackerGame.areas.length ? () => runLocate(false) : undefined}
+                onLocate={isDesktop && trackerGame.areas.length ? () => void runHelpHere() : undefined}
                 locating={locating}
                 locateNote={locateNote}
                 onTrackOnScreen={isDesktop ? handleTrackOnScreen : undefined}

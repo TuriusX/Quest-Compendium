@@ -100,7 +100,8 @@ function OfferTab({ name, o, soundEnabled }: { name: string; o: NonNullable<Dete
   );
 }
 
-export function DetectionLine({ d, soundEnabled = true }: { d: Detection; soundEnabled?: boolean }) {
+/** extra: drawn at the row's right end (owner, Nov 15 2026: Subscribe sits here, not in the crowded top bar). */
+export function DetectionLine({ d, soundEnabled = true, extra }: { d: Detection; soundEnabled?: boolean; extra?: React.ReactNode }) {
   const t = useT();
   if (!d.available) return null;
   if (!d.running && d.confirm) return <ConfirmProgram key={d.confirm.via + (d.confirm.guess || '')} c={d.confirm} soundEnabled={soundEnabled} />;
@@ -161,6 +162,7 @@ export function DetectionLine({ d, soundEnabled = true }: { d: Detection; soundE
           <span className="truncate min-w-0">{t('detect.none')}</span>
         </>
       )}
+      {extra && <span className={`flex-shrink-0 ${d.running && (!d.open || d.choose) ? '' : 'ml-auto'}`}>{extra}</span>}
     </div>
   );
 }

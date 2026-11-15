@@ -92,7 +92,9 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
   /** A "Spot it" result (roadmap item 7), not an answer: its 👍 / 👎 are counted on their own. */
-  kind?: 'spot';
+  kind?: 'spot' | 'help';
+  /** Help me here (roadmap item 30): the quest log step this note's visual is for. */
+  helpFor?: string;
   imageUrl?: string;
   bannerImageUrl?: string;
   modelUsed?: string;

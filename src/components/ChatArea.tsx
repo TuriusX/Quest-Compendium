@@ -1668,7 +1668,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     // One small grey line: "Fast · 10:38" (there's only one speaker; Spot it says so)
                     <span className="text-zinc-500 font-sans">
                       {[
-                        msg.kind === 'spot' ? msg.modelUsed : modelKind(msg.modelUsed) ? t(`model.${modelKind(msg.modelUsed)}`) : '',
+                        msg.kind === 'spot' || msg.kind === 'help' ? msg.modelUsed : modelKind(msg.modelUsed) ? t(`model.${modelKind(msg.modelUsed)}`) : '',
                         new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                       ].filter(Boolean).join(' · ')}
                     </span>

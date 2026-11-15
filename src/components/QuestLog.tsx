@@ -34,6 +34,8 @@ export type QuestLogProps = {
   onDismissOffer?: () => void;
   onGotoArea?: (name: string) => void;
   onLocate?: () => void;
+  /** A Help me here note that has a visual for this step (Now set from the screen, not from a question). */
+  helpMsgFor?: (stepId: string) => string | undefined;
   onConfirmPlace?: () => void;
   /** The player says where they are (the guide's areas, "Yes" to a suggestion, "Still here"). */
   onPickPlace?: (name: string) => void;
@@ -105,7 +107,7 @@ export function QuestLog(p: QuestLogProps) {
   const details = (s: LogStep) =>
     openId === s.id && (s.detail || s.sub) ? <div className="mt-1 text-[12px] leading-snug text-zinc-400">{s.detail || s.sub}</div> : null;
   // The Now answer's video or picture, under whichever of its steps is open (they share one answer).
-  const answerMsg = v.now?.source === 'question' ? v.now.msgId : undefined;
+  const answerMsg = v.now?.source === 'question' ? v.now.msgId : v.now ? p.helpMsgFor?.(v.now.id) : undefined;
   const answerVisual = answerMsg ? p.visualFor?.(answerMsg) : undefined;
   const visualOf = (s: LogStep) =>
     openId === s.id && answerVisual && answerMsg ? (
