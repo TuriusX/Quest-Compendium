@@ -62,6 +62,7 @@
  * wait. Existing guides keep improving (repairs, corrections, translations, revisits). system/pipeline.newGuides = true
  * (or PIPELINE_NEW_GUIDES=on) turns new guides back on. The core guides (scripts/guides/core.ts) get the depth.
  */
+import { worthSummaryLine } from '../../worthOnDemand';
 import { TRANSLATE_SHARE, STEP_MARGIN, BIG_STEP_MIN, WALK_START, RETRY_DAYS, MAX_TRIES, afterFailedTry, rollingDayCap, upkeepRoom } from './budgetRules';
 import { spawnSync } from 'child_process';
 import fs from 'fs';
@@ -1013,6 +1014,27 @@ async function main() {
       }
     } catch (e: any) {
       console.warn(`Exact locations skipped: ${e?.message}`);
+    }
+  }
+
+  // "Worth getting here" on demand (owner, Nov 15 2026; worthOnDemand.ts): areas players reached that no app filled
+  // (older apps) are filled overnight with the pipeline's search room, each once. No dollar cap (owner); yesterday's
+  // spend and counts go in the summary, with a warning above $5 (worthSummaryLine).
+  if (!DRY) {
+    try {
+      const room = pipelineRoom(await apiLimits(), await searchesToday(true));
+      if (room >= 40) {
+        const r = spawnSync('npx', ['tsx', 'scripts/guides/worthNightly.ts'], { encoding: 'utf8', timeout: 60 * 60_000, maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32' });
+        const out = `${r.stdout || ''}\n${r.stderr || ''}`;
+        const line = (out.match(/^Worth overnight: [^\n]*/m) || [''])[0];
+        if (line && !/^Worth overnight: 0 area\(s\) filled, 0 with nothing sourced, 0 failed/.test(line)) report.push(`🧭 ${line}`);
+        if (r.status !== 0) report.push(`⚠️ The overnight "Worth getting here" fill didn't finish (exit ${r.status}); see the job log.`);
+      }
+      const yday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+      const w = await worthSummaryLine(yday);
+      if (w) report.push(w);
+    } catch (e: any) {
+      console.warn(`Worth on demand skipped: ${e?.message}`);
     }
   }
 

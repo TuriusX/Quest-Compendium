@@ -15,6 +15,7 @@ import { db, gemini, arg } from './common';
 import { RECORDS } from './recordsImport';
 import { wikiPage, wikiPicture, type Cost } from '../../visualAnswer';
 import type { GameRecord } from './records';
+import { fextralifeDomain } from './suggestImages';
 
 const UA = 'QuestCompendium/1.0 (+https://questcompendium.com)';
 
@@ -31,15 +32,38 @@ async function keep(url: string, page: string): Promise<string | null> {
   } catch { return null; }
 }
 
+/**
+ * The game's wikis for cards (guideImageSources), or null when none is known. Any game, guide or not: given its name,
+ * a game never looked at gets its Fextralife wiki found from the name (free; remembered either way).
+ */
+export async function wikiFor(key: string, game?: string): Promise<{ fextralife: string; fandom: string } | null> {
+  const src: any = (await db().collection('guideImageSources').doc(key).get()).data() || {};
+  const fx = src.fextralife === undefined && game ? await fextralifeDomain(key, game, src).catch(() => '') : src.fextralife?.domain || '';
+  const wiki = { fextralife: fx, fandom: src.wiki?.domain || '' };
+  return wiki.fextralife || wiki.fandom ? wiki : null;
+}
+
+/**
+ * One item's card: its wiki page and a checked picture (copied to our store), saved in gameRecords/{key}/cards/{id}.
+ * No wiki known for the game: the card keeps the page the sources cited (`cited`), without a picture.
+ */
+export async function cardFor(key: string, game: string, wiki: { fextralife: string; fandom: string } | null, r: GameRecord, cost: Cost, cited?: { url: string; title: string; site: string } | null): Promise<{ page: boolean; pic: boolean }> {
+  const steps: string[] = [];
+  const pic = wiki ? await wikiPicture(gemini() as any, cost, wiki, game, `Show me ${r.name}`, r.name, steps, false, true) : null;
+  const page = pic?.page || (wiki ? await wikiPage(wiki, r.name).catch(() => null) : null) || cited || null;
+  const hash = pic ? await keep(pic.url, pic.page.url) : null;
+  await RECORDS().doc(key).collection('cards').doc(r.id).set({ place: r.place, page: page || null, pic: hash, what: pic?.alt || '', at: Date.now() });
+  return { page: !!page, pic: !!hash };
+}
+
 async function main() {
   const key = String(arg('only') || '');
   if (!key) throw new Error('--only KEY is required');
   const max = Number(arg('max-dollars', '1')) || 1;
   const dry = process.argv.includes('--dry-run'), redo = process.argv.includes('--redo');
   const game = String(((await db().collection('guides').doc(key).get()).data() as any)?.game || key);
-  const src: any = (await db().collection('guideImageSources').doc(key).get()).data() || {};
-  const wiki = { fextralife: src.fextralife?.domain || '', fandom: src.wiki?.domain || '' };
-  if (!wiki.fextralife && !wiki.fandom) throw new Error(`no wiki known for ${key} (guideImageSources)`);
+  const wiki = await wikiFor(key);
+  if (!wiki) throw new Error(`no wiki known for ${key} (guideImageSources)`);
   const items = (await RECORDS().doc(key).collection('records').get()).docs.map((d) => d.data() as GameRecord)
     .filter((r) => r.place && (r.type === 'item' || r.type === 'secret') && r.fields?.rank && r.status !== 'disputed');
   const done = new Set((await RECORDS().doc(key).collection('cards').get()).docs.map((d) => d.id));
@@ -51,15 +75,11 @@ async function main() {
   for (let i = 0; i < todo.length; i += 4) {
     if (cost.d >= max - 0.02) { console.log(`Stopped at the $${max.toFixed(2)} cap.`); break; }
     await Promise.all(todo.slice(i, i + 4).map(async (r) => {
-      const steps: string[] = [];
       try {
-        const pic = await wikiPicture(gemini() as any, cost, wiki, game, `Show me ${r.name}`, r.name, steps, false, true);
-        const page = pic?.page || (await wikiPage(wiki, r.name).catch(() => null));
-        const hash = pic ? await keep(pic.url, pic.page.url) : null;
-        if (page) pages++;
-        if (hash) pics++;
+        const c = await cardFor(key, game, wiki, r, cost);
+        if (c.page) pages++;
+        if (c.pic) pics++;
         n++;
-        await RECORDS().doc(key).collection('cards').doc(r.id).set({ place: r.place, page: page || null, pic: hash, what: pic?.alt || '', at: Date.now() });
       } catch (e: any) { console.warn(`${r.name}: ${e?.message}`); }
     }));
   }

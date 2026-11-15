@@ -563,6 +563,11 @@ export function registerGuidesApi(app: Express): void {
  *                 condition that does
  * Each with its status, so the app labels what isn't confirmed yet. Disputed facts are left out.
  */
+/** A new list for an area (worthOnDemand.ts): its cached facts go, so the next read has it. */
+export function forgetAreaFacts(key: string, slug: string): void {
+  cache.delete(`areaFacts:${key}:${slug}`);
+}
+
 export async function areaFacts(key: string, slug: string): Promise<Record<string, unknown> | null> {
   const ref = getFirestore().collection('gameRecords').doc(key);
   const [snap, main, links, times, cardSnap] = await Promise.all([

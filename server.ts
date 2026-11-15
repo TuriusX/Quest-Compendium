@@ -24,6 +24,7 @@ import { registerWebSearch } from './webSearch';
 import { registerLocate, registerRefine } from './locate';
 import { registerVisualAnswers, answerVisual, visualAnswersOn, visualEvent } from './visualServer';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
+import { registerWorthRoutes, areaRef as worthAreaRef, worthTicket } from './worthOnDemand';
 import { registerSpot } from './spot';
 import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
@@ -408,6 +409,8 @@ async function startServer() {
   registerWebSearch(app, { requireAuth, getGeminiClient, searchBudget: { allowed: async () => (await playerSearchesToday()) && monthlyBudgetOk(), record: recordPlayerSearches } });
   // Published guides as JSON for the Steam Deck plugin, which shows them natively (public, read-only).
   registerGuidesApi(app);
+  // "Worth getting here" on demand, for any game (worthOnDemand.ts): an area's list, and filling one with a ticket.
+  registerWorthRoutes(app, { requireAuth });
   // Player corrections to the guides: candidates from conversations, and the Corrections tab of /admin/reviews.
   registerCorrections(app, { requireAuth, isAdmin });
   // Reports on AI answers (Store policy 11.16): saved for review, shown on the Reports tab of /admin/reviews.
@@ -2130,7 +2133,14 @@ percentages:
       logDebug(`[API Chat] Sending response for uid: ${(req as any).user?.uid}, modelUsed: ${modelUsed}`);
       // An older Steam Deck plugin (below config/deck.minPluginVersion): a short update note once a day (deckNotice.ts).
       const deckNote = site ? '' : await deckUpdateNote(req.headers['user-agent'], String(userId || ''), !!isGuest, language).catch(() => '');
+      // The player's area is sure (read on screen, confirmed, or settled by the answer) and has no "Worth getting here"
+      // yet: a ticket the app redeems to fill it (worthOnDemand.ts; any game, guide or not).
+      const sureArea = placeRead?.area || (place?.confirmed ? place.name : '') || (placeParsed.place?.sure ? placeParsed.place.name : '');
+      const worth = !site && sureArea && effectiveGame?.name
+        ? await worthTicket(await worthAreaRef(String(effectiveGame.name), sureArea, gameAppId || undefined, guideKey || null).catch(() => null), String((req as any).user?.uid || userId || '')).catch(() => null)
+        : null;
       return res.json({
+        ...(worth ? { worth } : {}),
         text: responseText.trim() + (deckNote ? `
 
 *${deckNote}*` : ''),

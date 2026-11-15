@@ -43,6 +43,7 @@ import { isTestTraffic } from './testTraffic';
 import { matchGuideArea } from './src/utils/guideMatch';
 import { nameKey, samePlace, storyPhrase } from './src/utils/placeName';
 import { areaFromDoing } from './src/utils/questLogView';
+import { areaRef, worthTicket } from './worthOnDemand';
 
 type GuideWithPages = { areas: { slug: string; name: string; story: string }[]; pages: Record<string, any> } | null;
 type Deps = {
@@ -160,6 +161,28 @@ export function locateMePrompt(game: string, areas: { name: string; story: strin
 }
 
 /**
+ * Help me here for a game without a guide (owner, Nov 15 2026: nothing may depend on a guide): the same check, but the
+ * model names the area itself, the main area as the game calls it (a region, town or dungeon, not a room), since there's
+ * no list to pick from. A read still only counts when the text on screen names that area.
+ */
+export function freeLocatePrompt(game: string): string {
+  return locateMePrompt(game, [])
+    .replace(/Which of these areas is the player in right now\?/, 'Which area of the game is the player in right now? Name it as the game itself names it: the main area (a region, town, dungeon or zone), not a room or a building in it.')
+    .replace(/Pick one name exactly as written, or "unknown"/, 'Give that one name, or "unknown"')
+    .replace(/ somewhere not in the list\)/, ' nothing that names or shows the place)')
+    .replace(/Areas \(name: story beat\):\n\n/, '')
+    .replace(/ and no other listed area fits/, ' and nothing else could be meant')
+    .replace(/<a name from the list, or unknown>/, "<the area's name, or unknown>");
+}
+/** The free reply: the model's own area name (checked for being a place at all), parsed like a listed one. */
+export function parseFreeLocateReply(text: string): LocateMeReply {
+  let named = '';
+  try { named = String(JSON.parse(String(text || '').replace(/^```(?:json)?\s*|\s*```$/g, ''))?.area ?? '').replace(/\s+/g, ' ').trim().slice(0, 80); } catch { named = ''; }
+  const ok = named && !/^(unknown|none|n\/?a)$/i.test(named) ? [named] : [];
+  return parseLocateMeReply(text, ok);
+}
+
+/**
  * Does the text read off the screen really name this area? The area's own name ("Ravaged Beach", or with detail:
  * "Overgrown Ruins - Dank Crypt"), or one of its sub-locations by the guide's matching ("Dank Crypt" is in the
  * Overgrown Ruins' entries). Another area's name, or text the guide doesn't place in this area, doesn't count.
@@ -264,7 +287,9 @@ export function registerLocateMe(app: Express, deps: Deps) {
       .slice(0, MAX_AREAS)
       .map((a: any) => ({ name: String(a?.name ?? '').trim().slice(0, 80), story: String(a?.story ?? '').trim().slice(0, 160) }))
       .filter((a: { name: string }) => a.name);
-    if (!game || !areas.length) return res.status(400).json({ error: 'The game and its guide areas are required.' });
+    // A guide's areas, when the game has one, are a list to pick from; without them the model names the area itself.
+    if (!game) return res.status(400).json({ error: 'The game is required.' });
+    const free = !areas.length;
     const auto = req.body?.auto === true;
     // Apps from 0.6.9 handle a suggestion from what the player is doing (older ones would take it as a guess).
     const wantsDoing = req.body?.doing === true;
@@ -303,7 +328,7 @@ export function registerLocateMe(app: Express, deps: Deps) {
     }
 
     // No "last known place" in the question: it would pull the answer toward it (a resumed save is often elsewhere).
-    const prompt = locateMePrompt(game, areas);
+    const prompt = free ? freeLocatePrompt(game) : locateMePrompt(game, areas);
     try {
       const response: any = await deps.getGeminiClient().models.generateContent({
         model: MODEL,
@@ -311,11 +336,11 @@ export function registerLocateMe(app: Express, deps: Deps) {
         config: { responseMimeType: 'application/json', temperature: 0.1, maxOutputTokens: 2000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
       });
       logUsage(auto ? 'locate-auto' : 'locate-me', MODEL, response);
-      const result = parseLocateMeReply(response?.text ?? '', areas.map((a) => a.name));
+      const result = free ? parseFreeLocateReply(response?.text ?? '') : parseLocateMeReply(response?.text ?? '', areas.map((a) => a.name));
       // A read only counts if the text really names that area (or one of its sub-locations in the guide).
       if (result.evidence === 'read') {
-        const guide = await deps.loadGuide(guideKey || game).catch(() => null);
-        const guideAreas = guide?.areas?.length ? guide.areas : areas.map((a) => ({ slug: '', name: a.name, story: a.story }));
+        const guide = free ? null : await deps.loadGuide(guideKey || game).catch(() => null);
+        const guideAreas = guide?.areas?.length ? guide.areas : free ? [{ slug: '', name: result.area, story: '' }] : areas.map((a) => ({ slug: '', name: a.name, story: a.story }));
         if (!seenTextNamesArea(result.seenText, result.area, guideAreas, guide?.pages)) {
           console.log(`[locate-me] "${result.seenText}" doesn't name ${result.area}: counted as a guess`);
           result.evidence = 'guessed';
@@ -324,7 +349,7 @@ export function registerLocateMe(app: Express, deps: Deps) {
       // The place couldn't be told, but what the player is doing fits one area of the guide (a boss only fought there):
       // offered as a suggestion ("Looks like Stormveil Castle?"), never set by itself.
       let fromDoing = false;
-      if (wantsDoing && result.area === 'unknown' && result.doing) {
+      if (!free && wantsDoing && result.area === 'unknown' && result.doing) {
         const guide = await deps.loadGuide(guideKey || game).catch(() => null);
         const named = guide ? areaFromDoing(guide.areas, guide.pages, result.doing) : null;
         if (named && areas.some((a) => a.name === named)) {
@@ -337,7 +362,9 @@ export function registerLocateMe(app: Express, deps: Deps) {
       if (isGuest) guestCounts.set(uid, { day: today, used: used + 1 });
       else await deps.updateUserDoc(idToken, uid, { locateDate: today, locatesUsed: used + 1 }).catch(() => {});
       countForStats(uid, auto, confident, billedUsage(MODEL, response).tokenDollars);
-      return res.json({ ...result, confident, ...(fromDoing ? { fromDoing: true } : {}), locatesLeft: Math.max(0, limit - used - 1) });
+      // A sure place with no "Worth getting here" yet: a ticket the app redeems to fill it (worthOnDemand.ts).
+      const worth = confident ? await worthTicket(await areaRef(game, result.area, undefined, guideKey || null).catch(() => null), uid).catch(() => null) : null;
+      return res.json({ ...result, confident, ...(fromDoing ? { fromDoing: true } : {}), ...(worth ? { worth } : {}), locatesLeft: Math.max(0, limit - used - 1) });
     } catch (err: any) {
       console.warn('[locate-me] failed:', err?.message);
       return res.status(502).json({ error: "Couldn't check the screenshot. Try again in a moment." });

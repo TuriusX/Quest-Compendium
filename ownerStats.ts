@@ -15,6 +15,7 @@
  * Left out everywhere: the owner's accounts (ADMIN_EMAILS, config/players.ownerHashes, stats/{day}.owners) and test
  * traffic (never recorded: testTraffic.ts) and test accounts (an e2e / test address, or config/players.testUids).
  */
+import { worthDays, ALERT_DOLLARS } from './worthOnDemand';
 import crypto from 'crypto';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth, type UserRecord } from 'firebase-admin/auth';
@@ -207,6 +208,14 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   parts.push(answerCostLine(await answerCostDays(now, owners)));
   // Visual answers (visualServer.ts, Nov 14 2026): once they're on (counted per UTC day; your own answers included).
   if (visualAnswersOn()) parts.push(visualStatsLine(await visualStatsFor(window === '30d' ? 30 : window === '7d' ? 7 : 1), window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'today'));
+  // "Worth getting here" on demand (worthOnDemand.ts, Nov 15 2026): areas filled for players and what they cost, by
+  // UTC day. No cap; the nightly summary warns above $5 a day.
+  const wd: Awaited<ReturnType<typeof worthDays>> = await worthDays(window === '30d' ? 30 : 7).catch(() => []);
+  if (wd.length) {
+    const sum = wd.reduce((s: { dollars: number; areas: number; empty: number; failed: number }, r) => ({ dollars: s.dollars + r.dollars, areas: s.areas + r.areas, empty: s.empty + r.empty, failed: s.failed + r.failed }), { dollars: 0, areas: 0, empty: 0, failed: 0 });
+    parts.push(`**Worth getting here on demand** (last ${wd.length} day(s) with fills): ${sum.areas} area(s), ${sum.empty} with nothing sourced, ${sum.failed} failed · $${sum.dollars.toFixed(2)}${sum.areas ? ` ($${(sum.dollars / Math.max(1, sum.areas)).toFixed(3)} an area)` : ''}\n` +
+      wd.map((r) => `${r.day.slice(5)} ${r.areas} area(s) $${r.dollars.toFixed(2)}${r.dollars > ALERT_DOLLARS ? ' ⚠️' : ''}`).join(' · '));
+  }
   // The nightly guide improver (autoImprove.ts): month to date against its own cap.
   const imp = await improverMonth(now);
   parts.push(`**Guide improvements this month:** $${imp.dollars.toFixed(2)} of the $${imp.cap} cap${imp.capAt ? ' (reached: stopped until the 1st)' : ''}`);

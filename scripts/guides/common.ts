@@ -6,8 +6,8 @@ import { parseSteamAchievements } from './steamAchievements';
 import dotenv from 'dotenv';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { apiLimits, searchesToday, recordSearchDay, pipelineRoom, SearchDayWait } from '../../apiLimits';
-import { pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY, recordMonthly } from '../../searchGuard';
+import { apiLimits, searchesToday, recordSearchDay, pipelineRoom, playerSearchOk, SearchDayWait } from '../../apiLimits';
+import { pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY, recordMonthly, monthlyBudgetOk } from '../../searchGuard';
 import { GoogleGenAI } from '@google/genai';
 import { AsyncLocalStorage } from 'async_hooks';
 import { billedUsage, withOutputCap, maybeBilledFailure, worstCaseDollars } from '../../usage';
@@ -41,6 +41,12 @@ async function recordLocal(dollars: number, searches: number) {
  * are added to that scope as well as to the process ledger.
  */
 export const usageScope = new AsyncLocalStorage<{ dollars: number; searches: number }>();
+/**
+ * Searches made for a player who is waiting (the on-demand "Worth getting here", worthOnDemand.ts): inside
+ * searchForPlayers.run('players', ...) they use the players' room for the day and month and count as theirs, not the
+ * pipeline's share.
+ */
+export const searchForPlayers = new AsyncLocalStorage<'players'>();
 const STEP_LIMIT = Number(process.env.PIPELINE_STEP_DOLLARS || 0);
 let ledgerPrinted = false;
 const printLedgerOnExit = () => {
@@ -70,7 +76,11 @@ export function gemini(): GoogleGenAI {
   (client.models as any).generateContent = async (request: any) => {
     if (STEP_LIMIT && ledgerDollars() >= STEP_LIMIT) throw new Error(`spending cap: this step has spent its $${STEP_LIMIT.toFixed(2)}`);
     // Google's daily search limit (config/apiLimits): the pipeline's share used up, a searching call waits for tomorrow.
-    if ((request?.config?.tools || []).some((t: any) => t && t.googleSearch)) {
+    const forPlayers = searchForPlayers.getStore() === 'players';
+    if (forPlayers && (request?.config?.tools || []).some((t: any) => t && t.googleSearch)) {
+      const [l, d] = await Promise.all([apiLimits(), searchesToday()]);
+      if (!playerSearchOk(l, d) || !(await monthlyBudgetOk())) throw new SearchDayWait(`search day limit: the day's ${l.searchDaily} searches (or the month's budget) are used up`);
+    } else if ((request?.config?.tools || []).some((t: any) => t && t.googleSearch)) {
       const [l, d] = await Promise.all([apiLimits(), searchesToday()]);
       if (pipelineRoom(l, d) <= 0) throw new SearchDayWait(`search day limit: the pipeline's ${l.pipelineSearchDaily} searches for today are used up (${d.pipeline} pipeline, ${d.total} of ${l.searchDaily} in all)`);
       // The month's share (the pipeline and the flagship builds together; players keep their own reserve).
@@ -94,7 +104,7 @@ export function gemini(): GoogleGenAI {
     }
     const u = billedUsage(String(request?.model || ''), res);
     // Every search counts toward today's total and the month's (searchGuard.ts), here, once, and before the call returns.
-    if (u.searches) await Promise.all([recordSearchDay(u.searches, 'pipeline'), recordMonthly(u.searches)]);
+    if (u.searches) await Promise.all([recordSearchDay(u.searches, forPlayers ? 'players' : 'pipeline'), recordMonthly(u.searches, forPlayers ? 'players' : undefined)]);
     ledger.calls++; ledger.input += u.input; ledger.output += u.output; ledger.thinking += u.thinking; ledger.searches += u.searches;
     ledger.tokenDollars += u.tokenDollars; ledger.searchDollars += u.searchDollars;
     if (!u.priced) ledger.unpriced++;

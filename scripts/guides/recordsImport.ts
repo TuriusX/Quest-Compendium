@@ -58,14 +58,26 @@ async function collect(only = ''): Promise<Map<string, GameRecord[]>> {
     for (const r of recs) (r.place && (r.origin.from === 'area' || r.origin.from === 'entity') ? (byPlace.get(r.place) || byPlace.set(r.place, []).get(r.place)!).push(r) : rest.push(r));
     out.set(key, [...rest, ...[...byPlace].flatMap(([slug, rs]) => applyExtracted(rs, ex.get(slug)))]);
   }
-  // What's worth it in each area (worthIt.ts): ranks and why for what the page has, the rest as new records.
-  for (const [key, recs] of out) {
-    const wo = new Map<string, any>(((await RECORDS().doc(key).collection('worth').get().catch(() => null))?.docs || []).map((d) => [d.id, d.data() as any]));
-    if (!wo.size) continue;
+  // What's worth it in each area (worthIt.ts, and the on-demand fill, worthOnDemand.ts): ranks and why for what the page
+  // has, the rest as new records. Every game's lists, guide or not (owner, Nov 15 2026: nothing may depend on a guide):
+  // an area no guide page has, or a game with no guide at all, keeps its list as records of its own.
+  const worthBy = new Map<string, Map<string, any>>();
+  for (const d of (await db().collectionGroup('worth').get().catch(() => null))?.docs || []) {
+    const key = d.ref.parent.parent?.id || '';
+    if (!key || d.ref.parent.parent?.parent.id !== 'gameRecords' || (only && key !== only)) continue;
+    (worthBy.get(key) || worthBy.set(key, new Map()).get(key)!).set(d.id, d.data());
+  }
+  for (const [key, wo] of worthBy) {
+    const recs = out.get(key) || [];
     const byPlace = new Map<string, GameRecord[]>();
     const rest: GameRecord[] = [];
     for (const r of recs) (r.place && (r.origin.from === 'area' || r.origin.from === 'extract') ? (byPlace.get(r.place) || byPlace.set(r.place, []).get(r.place)!).push(r) : rest.push(r));
-    out.set(key, [...rest, ...[...byPlace].flatMap(([slug, rs]) => applyWorth(rs, wo.get(slug)))]);
+    for (const slug of wo.keys()) if (!byPlace.has(slug)) byPlace.set(slug, []);
+    const next = [...rest, ...[...byPlace].flatMap(([slug, rs]) => {
+      const w = wo.get(slug);
+      return applyWorth(rs, w, { key, place: slug, placeName: String(w?.placeName || rs[0]?.placeName || slug) });
+    })];
+    if (next.length) out.set(key, next);
   }
   // Locations a player can follow (recordsLocate.ts), while the text each replaces is unchanged. Before the verify results (see applyLocated).
   for (const [key, recs] of out) {

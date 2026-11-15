@@ -339,16 +339,23 @@ const nameKey = (s: string) => String(s || '').toLowerCase().normalize('NFKC').r
  * lacks only); anything new comes in as its own record, tier B (its evidence is stored, so the recheck needs no search)
  * and unconfirmed until checked. Missable stays a flag on whichever record has a lockout.
  */
-export function applyWorth(recs: GameRecord[], x: { entries: WorthEntry[] } | undefined): GameRecord[] {
-  if (!x?.entries?.length || !recs.length) return recs;
-  const first = recs[0];
+export function applyWorth(recs: GameRecord[], x: { entries: WorthEntry[] } | undefined, base?: { key: string; place: string; placeName: string }): GameRecord[] {
+  // An area with no records yet (the on-demand fill, worthOnDemand.ts) takes its key and place from `base`.
+  if (!x?.entries?.length || (!recs.length && !base)) return recs;
+  const first: Pick<GameRecord, 'key' | 'place' | 'placeName' | 'impressions'> = recs[0] || base!;
   const byName = new Map<string, GameRecord>();
   for (const r of recs) if (['item', 'secret', 'npc', 'quest', 'shop', 'boss', 'checklist'].includes(r.type)) byName.set(nameKey(r.name), r);
   const added: GameRecord[] = [];
+  const changed = new Set<GameRecord>();
   for (const e of x.entries) {
     const have = byName.get(nameKey(e.name));
     if (have) {
-      for (const [k, v] of Object.entries({ ...e.fields, rank: String(e.rank) })) if (v && !have.fields[k]) have.fields[k] = v;
+      changed.add(have);
+      // Guide text stands only when it's as good as an answer (owner, Nov 15 2026): checked against sources. Otherwise
+      // the sourced line from the search wins.
+      const keepGuide = have.status === 'checked';
+      for (const [k, v] of Object.entries({ ...e.fields, rank: String(e.rank) })) if (v && (!have.fields[k] || !keepGuide || k === 'rank')) have.fields[k] = v;
+      if (!keepGuide && e.sources?.length) have.sources = [...new Set([...(e.sources || []), ...(have.sources || [])])];
       continue;
     }
     const id = `w.${first.place}.${nameKey(e.name).replace(/\s+/g, '-').slice(0, 60)}`;
@@ -360,7 +367,9 @@ export function applyWorth(recs: GameRecord[], x: { entries: WorthEntry[] } | un
       sources: e.sources, tier: 'B', status: 'unconfirmed', origin: { from: 'worth', slug: first.place, entry: id },
     }));
   }
-  return [...recs, ...added];
+  // Changed records get their hash again (the import writes a record only when its hash changed).
+  const again = (r: GameRecord) => { const { hash: _h, ...rest } = r; return finish(rest); };
+  return [...recs.map((r) => (changed.has(r) ? again(r) : r)), ...added];
 }
 
 /** One record's new location (recordsLocate.ts). `was` is the text it replaces: if that changes, the new one lapses. */

@@ -199,7 +199,7 @@ export function fextralifeGuesses(game: string): string[] {
   const out = [main, noThe(main), words, noThe(words), main.slice(0, 2), noThe(main).slice(0, 2), sub.slice(0, 1), sub].map((w) => w.join('')).filter((x) => x.length >= 3);
   return [...new Set(out)].map((x) => `${x}.wiki.fextralife.com`);
 }
-async function fextralifeDomain(key: string, game: string, src: any): Promise<string> {
+export async function fextralifeDomain(key: string, game: string, src: any): Promise<string> {
   if (src.fextralife !== undefined) return src.fextralife?.domain || '';
   let found = '';
   for (const d of fextralifeGuesses(game)) {

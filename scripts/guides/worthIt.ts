@@ -25,7 +25,7 @@ const TYPE: Record<string, WorthEntry['type']> = { ITEM: 'item', SPELL: 'item', 
 function prompt(game: string, place: string, act: string, have: GameRecord[]): string {
   const known = have.filter((r) => ['item', 'secret', 'npc', 'quest', 'shop'].includes(r.type)).map((r) => cut(r.name, 60));
   return [
-    `In the video game "${game}" (${act}), the area "${place}". A player wants to know what is worth getting and doing here, not only what can be missed. Search the game's wikis and guides (at most four searches), then list:`,
+    `In the video game "${game}"${act ? ` (${act})` : ''}, the area "${place}". A player wants to know what is worth getting and doing here, not only what can be missed. Search the game's wikis and guides (at most four searches), then list:`,
     '- ITEM: the best gear found or bought here (weapons, armor, accessories), most valuable first, at most 8. Rarity and what makes it good.',
     '- SPELL: spell scrolls, books or abilities worth having that are found here, at most 3.',
     '- QUEST: every quest that starts here: who gives it, where, and its notable reward.',
@@ -71,6 +71,28 @@ function parse(text: string, segs: { text: string; sites: string[] }[]): { entri
   return { entries, dropped };
 }
 
+/**
+ * One area's pass: the searched call, the sourced lines kept, their text into the area's evidence pack, and the result
+ * saved in gameRecords/{key}/worth/{slug}. Shared by this script and the on-demand fill (worthOnDemand.ts).
+ */
+export async function worthArea(key: string, slug: string, game: string, place: string, act: string, have: GameRecord[]): Promise<{ entries: WorthEntry[]; dropped: number }> {
+  const res: any = await gemini().models.generateContent({
+    model: MODEL,
+    contents: [{ role: 'user', parts: [{ text: prompt(game, place, act, have) }] }],
+    config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 6000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+  });
+  const segs = supportedSegments(res).map((x) => ({ ...x, sites: x.sites.filter((s) => !/questcompendium/i.test(s)) })).filter((x) => x.sites.length);
+  const { entries, dropped } = parse(String(res?.text || ''), segs);
+  // The sourced text into the area's evidence pack (the fact check reads it without searching again).
+  const ref = db().collection('evidencePacks').doc(`${key}__${slug}`);
+  const pack: EvidencePack = ((await ref.get()).data() as EvidencePack | undefined) || { key, slug, game, area: place, evidence: [], sites: [], servicesComplete: false, searches: 0, at: 0 } as any;
+  const evidence: Evidence[] = [...(pack.evidence || [])];
+  const sites = new Set<string>(pack.sites || []);
+  for (const s of segs) { if (evidence.some((e) => e.text === s.text)) continue; evidence.push({ id: `e${evidence.length + 1}`, text: cut(s.text, 400), sources: s.sites.slice(0, 4), topic: 'worth' } as any); s.sites.forEach((x) => sites.add(x)); }
+  await ref.set(JSON.parse(JSON.stringify({ ...pack, evidence, sites: [...sites], searches: (pack.searches || 0) + searchesIn(res), at: Date.now() })));
+  return { entries, dropped };
+}
+
 async function main() {
   const key = String(arg('only') || '');
   if (!key) throw new Error('--only KEY is required');
@@ -99,20 +121,7 @@ async function main() {
       const place = have.find((r) => r.type === 'place')?.name || have[0]?.placeName || slug;
       const before = ledgerDollars();
       try {
-        const res: any = await gemini().models.generateContent({
-          model: MODEL,
-          contents: [{ role: 'user', parts: [{ text: prompt(game, place, actOf.get(slug) || '', have) }] }],
-          config: { tools: [{ googleSearch: {} }], temperature: 0.1, maxOutputTokens: 6000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
-        });
-        const segs = supportedSegments(res).map((x) => ({ ...x, sites: x.sites.filter((s) => !/questcompendium/i.test(s)) })).filter((x) => x.sites.length);
-        const { entries, dropped } = parse(String(res?.text || ''), segs);
-        // The sourced text into the area's evidence pack (the fact check reads it without searching again).
-        const ref = db().collection('evidencePacks').doc(`${key}__${slug}`);
-        const pack: EvidencePack = ((await ref.get()).data() as EvidencePack | undefined) || { key, slug, game, area: place, evidence: [], sites: [], servicesComplete: false, searches: 0, at: 0 } as any;
-        const evidence: Evidence[] = [...(pack.evidence || [])];
-        const sites = new Set<string>(pack.sites || []);
-        for (const s of segs) { if (evidence.some((e) => e.text === s.text)) continue; evidence.push({ id: `e${evidence.length + 1}`, text: cut(s.text, 400), sources: s.sites.slice(0, 4), topic: 'worth' } as any); s.sites.forEach((x) => sites.add(x)); }
-        await ref.set(JSON.parse(JSON.stringify({ ...pack, evidence, sites: [...sites], searches: (pack.searches || 0) + searchesIn(res), at: Date.now() })));
+        const { entries, dropped } = await worthArea(key, slug, game, place, actOf.get(slug) || '', have);
         await RECORDS().doc(key).collection('worth').doc(slug).set(JSON.parse(JSON.stringify({ entries, dropped, at: Date.now(), dollars: Math.round((ledgerDollars() - before) * 10000) / 10000 })));
         const c = (t: string) => entries.filter((e) => e.type === t).length;
         console.log(`${slug}: ${c('item')} gear/spells, ${c('quest')} quests, ${c('npc')} people, ${c('tip')} to do; ${dropped} unsourced line(s) left out.`);
