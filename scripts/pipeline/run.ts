@@ -945,6 +945,32 @@ async function main() {
     const r = runScript(['scripts/guides/recordsImport.ts']);
     if (!r.ok) report.push('⚠️ Updating the fact database failed (see the job log).');
   }
+  // The guide improvement fund (owner, Nov 15 2026: $150, hard stop): the fact check (recordsVerify.ts, --recheck so
+  // facts with stored sources are rechecked without new searches) across every guide, most-searched pages first, with
+  // the search room the pipeline leaves; paid from system/improveFund { budget, spent, nightly }, not the pipeline's cap.
+  // The results go live with the next night's publish.
+  if (!DRY) {
+    try {
+      const ifRef = db().collection('system').doc('improveFund');
+      const fund: any = (await ifRef.get()).data() || {};
+      const left = Number(fund.budget || 0) - Number(fund.spent || 0);
+      const room = pipelineRoom(await apiLimits(), await searchesToday(true));
+      const keys: string[] = ((await db().collection('config').doc('factPages').get()).data() as any)?.guides || [];
+      if (fund.factCheck !== false && left > 0.25 && room >= 100 && keys.length) {
+        const night = Math.min(left, Number(fund.nightly || 8));
+        const r = spawnSync('npx', ['tsx', 'scripts/guides/recordsVerify.ts', '--recheck', '--only', keys.join(','), '--max-dollars', night.toFixed(2)], { encoding: 'utf8', timeout: 90 * 60_000, maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32', env: { ...process.env, PIPELINE_STEP_DOLLARS: night.toFixed(2) } });
+        const out = `${r.stdout || ''}\n${r.stderr || ''}`;
+        const usage = out.match(/^Usage: \d+ call\(s\), .*? = \$(\d+(?:\.\d+)?)/m);
+        const spent = usage ? Number(usage[1]) : night;
+        const line = (out.match(/^Verified [^\n]*/m) || [''])[0].replace(/; \$[\d.]+ in .*$/, '');
+        const log = [...(fund.log || []), { at: Date.now(), kind: 'factCheck', dollars: spent, line }].slice(-60);
+        await ifRef.set({ spent: Number(fund.spent || 0) + spent, lastNight: { at: Date.now(), dollars: spent, line }, log }, { merge: true });
+        report.push(`✅ Fact checks (your $${Number(fund.budget).toFixed(0)} improvement fund): ${line || 'nothing checked'}; $${spent.toFixed(2)} tonight, $${Math.max(0, left - spent).toFixed(2)} left.`);
+      }
+    } catch (e: any) {
+      console.warn(`Fact checks skipped: ${e?.message}`);
+    }
+  }
   // Exact locations paid from the owner's own fund, not the pipeline's cap (roadmap 29; owner, Nov 9 2026: "spend a little
   // each night", then switched to locations): system/factWork { budget, spent, nightly }. Runs last, only with search room
   // left for the day, missables on the most-searched pages first (recordsLocate.ts); the results go live with the next night's publish.
