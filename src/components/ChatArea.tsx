@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { NextQuestionsLine } from './QuestionsPill';
 import { ModelToggle } from './ModelToggle';
 import { createPortal } from 'react-dom';
@@ -55,8 +55,6 @@ import { Walkthrough, walkthroughDone, OPEN_TOUR_EVENT } from './Walkthrough';
 import { SignInCard } from './SignInCard';
 import { PremiumCard } from './PremiumCard';
 import { isPhone } from '../utils/source';
-import { samePlace, tipMatches, useAchievementGuide } from '../utils/achievementGuide';
-import { useLocale } from '../i18n';
 import { quickChips, quickLabelKey, type QuickId } from '../utils/quickQuestions';
 import { displayGameName } from '../utils/gameName';
 import { showFirstRunHints } from '../utils/sessions';
@@ -335,15 +333,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   // Ask (the conversation) or Guide (the game's guide, open at where you are). The question box works in both; asking
   // switches back to the answer. The guide stays loaded once opened, so switching back and forth keeps your place.
-  // The status strip: where you are, what's missable here (from the achievement guide, spoiler-safe), and the
-  // Ask/Guide switch. The missable nudge shows once per place and can be dismissed.
-  const localeNow = useLocale();
-  const achGuideHere = useAchievementGuide(activeGame?.name, activeGame?.appId, localeNow);
-  const placeNow = activeTab?.place?.name || '';
-  const missHere = useMemo(() => {
-    if (!achGuideHere || !placeNow) return [];
-    return achGuideHere.list.filter((a) => a.missable && a.areaName && samePlace(a.areaName, placeNow) && !activeGame?.achievements?.some((x) => x.unlocked && tipMatches(a, x.name)));
-  }, [achGuideHere, placeNow, activeGame?.achievements]);
+  // The status strip: where you are and the Ask/Guide switch.
   const [showTour, setShowTour] = useState(() => !walkthroughDone());
   // The ⋯ menu's "Quick tour" opens it again.
   useEffect(() => {
@@ -1506,17 +1496,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </button>
             ))}
           </div>
-          {/* What can be missed here (opens the guide at the missables) */}
-          {missHere.length > 0 && (
-            <button
-              type="button"
-              onClick={() => missHere[0].area && window.dispatchEvent(new CustomEvent('qc-open-guide', { detail: { slug: missHere[0].area } }))}
-              className="flex-shrink-0 self-center mx-2 flex items-center gap-1 px-1.5 h-6 rounded-md bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-200 font-semibold hover:bg-amber-500/25 cursor-pointer"
-              title={t('strip.missableHint')}
-            >
-              ⚠ {t('strip.missable', { n: missHere.length })}
-            </button>
-          )}
+          {/* (The "⚠ N missable" chip that sat here was removed: owner, Nov 15 2026, the app shouldn't be overfocused on
+              missables; they show as badges in the quest log's Worth getting here and in its Watch out warning.) */}
         </div>
       )}
 
