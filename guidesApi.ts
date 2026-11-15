@@ -462,6 +462,36 @@ export function registerGuidesApi(app: Express): void {
     }
   });
 
+  // Item cards' pictures (itemCards.ts): wiki pictures copied to our store, so players' apps never load them from the wiki.
+  app.get('/api/wiki-pic/:hash', async (req, res) => {
+    try {
+      const hash = String(req.params.hash).replace(/[^a-f0-9]/g, '').slice(0, 40);
+      const d: any = hash ? (await getFirestore().collection('wikiPics').doc(hash).get()).data() : null;
+      if (!d?.data) return res.status(404).end();
+      res.setHeader('Content-Type', String(d.mime || 'image/jpeg'));
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.end(Buffer.from(String(d.data), 'base64'));
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+  // "Not right" on an item card's picture: hidden after two reports (one player can't remove a good picture alone).
+  app.post('/api/guides/:key/card-wrong', async (req, res) => {
+    try {
+      const key = gameKey(String(req.params.key));
+      const id = String(req.body?.id || '').slice(0, 200);
+      if (!id) return res.status(400).json({ error: 'id required' });
+      const ref = getFirestore().collection('gameRecords').doc(key).collection('cards').doc(id);
+      const cur: any = (await ref.get()).data();
+      if (!cur) return res.status(404).json({ error: 'no card' });
+      const wrong = Number(cur.wrong || 0) + 1;
+      await ref.set({ wrong, ...(wrong >= 2 ? { picHidden: true } : {}) }, { merge: true });
+      res.json({ ok: true });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
   // Just an area's database facts (the Deck reads its pages from the website's files, which don't carry them).
   app.get('/api/guides/:key/:slug/facts', async (req, res) => {
     try {
@@ -535,12 +565,15 @@ export function registerGuidesApi(app: Express): void {
  */
 export async function areaFacts(key: string, slug: string): Promise<Record<string, unknown> | null> {
   const ref = getFirestore().collection('gameRecords').doc(key);
-  const [snap, main, links, times] = await Promise.all([
+  const [snap, main, links, times, cardSnap] = await Promise.all([
     ref.collection('records').where('place', '==', slug).get(),
     ref.collection('spine').doc('main').get(),
     ref.collection('spine').doc('links').get(),
     ref.collection('times').doc(slug).get(),
+    ref.collection('cards').where('place', '==', slug).get(),
   ]);
+  // Item cards (itemCards.ts): the wiki page and a checked picture for each item in Worth getting here.
+  const cards = new Map(cardSnap.docs.map((d) => [d.id, d.data() as any]));
   // Rough time ranges on the walkthrough's steps (stepTimes.ts; item 30, step 4): { stepId: { lo, hi, from } }.
   const stepTimes = ((times.data() as any)?.steps || {}) as Record<string, { lo: number; hi: number; from: string }>;
   const recs = snap.docs.map((d) => d.data() as any).filter((r) => r.status !== 'disputed');
@@ -556,6 +589,11 @@ export async function areaFacts(key: string, slug: string): Promise<Record<strin
     why: f(r, 'why') || undefined, where: f(r, 'where') || undefined, how: f(r, 'how') || undefined,
     missable: !!(r.missable || f(r, 'lockout')), lockout: f(r, 'lockout') || undefined,
     lost: lockName.get(link[r.id]?.lost || '') || undefined, confirmed: r.status === 'checked',
+    ...(cards.get(r.id) ? { card: {
+      rid: String(r.id),
+      page: cards.get(r.id).page || undefined,
+      pic: cards.get(r.id).pic && !cards.get(r.id).picHidden ? `/api/wiki-pic/${cards.get(r.id).pic}` : undefined,
+    } } : {}),
   });
   const worth = {
     // Gear first, then spells, each best first (as the site's block).

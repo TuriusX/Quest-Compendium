@@ -3138,6 +3138,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
               <LogFacts
                 facts={{ slug: ga.slug, worth: pg.worth, achievements: pg.achievements }}
                 game={activeGame?.name || activeTab?.name || ''}
+                gameKey={ga.key}
                 done={ga.done}
                 onTick={(id, done) => trackerEventRef.current({ type: 'tick', item: id, done })}
                 steam={activeGame?.achievements?.length ? { list: activeGame.achievements, unlocked: activeGame.unlockedAchievements, total: activeGame.totalAchievements } : null}
