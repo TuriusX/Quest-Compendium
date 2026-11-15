@@ -45,19 +45,21 @@ export function LogFacts(p: {
   const [open, setOpen] = useState<Record<string, boolean>>(readOpen);
   const [all, setAll] = useState<Record<string, boolean>>({});
   // The item card: hover shows it after a moment, click keeps it open (Esc or a click elsewhere closes it).
-  const [card, setCard] = useState<{ item: CardItem; rect: DOMRect; kept: boolean } | null>(null);
+  const [card, setCard] = useState<{ item: CardItem; rect: DOMRect; kept: boolean; doc: Document } | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearHover = () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); hoverTimer.current = null; };
   // The card opens beside the quest log (its whole column), level with the item, never over the list itself.
   const anchorOf = (el: HTMLElement) => { const r = el.getBoundingClientRect(); const col = (el.closest('[data-qc-log-worth]') as HTMLElement | null)?.getBoundingClientRect(); return col ? new DOMRect(col.left, r.top, col.width + 14, r.height) : r; };
-  const showSoon = (item: CardItem, el: HTMLElement) => { clearHover(); hoverTimer.current = setTimeout(() => setCard((c) => (c?.kept ? c : { item, rect: anchorOf(el), kept: false })), 350); };
+  const showSoon = (item: CardItem, el: HTMLElement) => { clearHover(); hoverTimer.current = setTimeout(() => setCard((c) => (c?.kept ? c : { item, rect: anchorOf(el), kept: false, doc: el.ownerDocument })), 350); };
   const hideSoon = () => { clearHover(); hoverTimer.current = setTimeout(() => setCard((c) => (c?.kept ? c : null)), 200); };
   useEffect(() => {
     if (!card?.kept) return;
     const away = (e: MouseEvent) => { const el = e.target as HTMLElement; if (!el.closest?.('[data-qc-item-card]') && !el.closest?.('[data-qc-item-name]')) setCard(null); };
-    window.addEventListener('mousedown', away);
-    return () => window.removeEventListener('mousedown', away);
-  }, [card?.kept]);
+    // The log's own window (docked: the panel; popped out: its window).
+    const w = card.doc.defaultView || window;
+    w.addEventListener('mousedown', away);
+    return () => w.removeEventListener('mousedown', away);
+  }, [card?.kept, card?.doc]);
   useEffect(() => () => clearHover(), []);
   const isOpen = (id: string) => open[id] !== false;
   const toggle = (id: string) => setOpen((o) => { const n = { ...o, [id]: !isOpen(id) }; try { localStorage.setItem(OPEN_KEY, JSON.stringify(n)); } catch { /* remembered for this session only */ } return n; });
@@ -99,7 +101,7 @@ export function LogFacts(p: {
                 <div className={`min-w-0 text-[13px] leading-snug ${on ? 'opacity-50' : ''}`}>
                   <button type="button" data-qc-item-name={g.id}
                     onMouseEnter={(e) => showSoon(g, e.currentTarget)} onMouseLeave={hideSoon}
-                    onClick={(e) => { clearHover(); const r = anchorOf(e.currentTarget); setCard((c) => (c?.kept && c.item.id === g.id ? null : { item: g, rect: r, kept: true })); }}
+                    onClick={(e) => { clearHover(); const r = anchorOf(e.currentTarget); const doc = e.currentTarget.ownerDocument; setCard((c) => (c?.kept && c.item.id === g.id ? null : { item: g, rect: r, kept: true, doc })); }}
                     className="font-semibold text-white text-left hover:underline decoration-white/30 underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-white rounded cursor-pointer">{g.name}</button>
                   {g.rarity && <span className="ml-1.5 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: rarityColor(g.rarity) }}>{g.rarity}</span>}
                   {(g.missable || g.lost) && missTag(g.lost)}
@@ -174,7 +176,7 @@ export function LogFacts(p: {
       {worth}
       {ach}
       {card && (
-        <ItemCard item={card.item} anchor={card.rect} gameKey={p.gameKey} color={card.item.rarity ? rarityColor(card.item.rarity, '#ffffff') : '#ffffff'}
+        <ItemCard item={card.item} anchor={card.rect} doc={card.doc} gameKey={p.gameKey} color={card.item.rarity ? rarityColor(card.item.rarity, '#ffffff') : '#ffffff'}
           onClose={() => setCard(null)} onEnter={clearHover} onLeave={() => { if (!card.kept) hideSoon(); }} />
       )}
     </>

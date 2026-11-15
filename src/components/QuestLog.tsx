@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Pin, Check, AlertTriangle, ChevronRight, ChevronDown, ChevronLeft, ExternalLink, Crosshair, MapPin } from './icons';
+import { X, Pin, Check, AlertTriangle, ChevronRight, ChevronDown, ChevronLeft, ExternalLink, PanelRightClose, Crosshair, MapPin } from './icons';
 import { useT } from '../i18n';
 import type { LogStep, LogView } from '../utils/questLogView';
 import { VisualCard, type VisualData, type VisualEvent } from './VisualCard';
@@ -26,6 +26,11 @@ export type QuestLogProps = {
   onHideWatch: (id: string) => void;
   onClose: () => void;
   onPopOut: () => void;
+  /** Drawn in its own window over the game (popped out): the header drags it, and its button puts it back. */
+  popped?: boolean;
+  /** The log pops out to the left (the panel is docked right): the pop-out arrow points that way. */
+  popLeft?: boolean;
+  onPutBack?: () => void;
   onAsk: (text?: string) => void;
   onOpenPin: (msgId: string) => void;
   onUnpin: (msgId: string) => void;
@@ -168,12 +173,16 @@ export function QuestLog(p: QuestLogProps) {
       className="h-full flex flex-col min-h-0 bg-gradient-to-b from-[#121119] to-[#0f0f15] text-zinc-100"
     >
       {/* Header: the log's name, then pop out. Closing is the logo in the panel's header (owner, Nov 6 2026), Ctrl+Shift+L or the menu. */}
-      <div className="flex items-center gap-1.5 pl-3.5 pr-2 py-2.5 border-b border-white/[0.07]">
+      <div className="flex items-center gap-1.5 pl-3.5 pr-2 py-2.5 border-b border-white/[0.07]" style={p.popped ? ({ WebkitAppRegion: 'drag' } as any) : undefined}>
         <span className="font-mono font-extrabold text-[12px] tracking-[0.14em] uppercase">{t('tracker.logTitle')}</span>
         <span className="flex-1" />
-        <button type="button" onClick={p.onPopOut} title={t('tracker.popOut')} aria-label={t('tracker.popOut')}
-          className="w-6 h-6 rounded border border-white/10 text-zinc-400 hover:text-white hover:border-[var(--accent-border)] flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-white">
-          <ExternalLink className="w-3.5 h-3.5" />
+        {/* Detach / Attach, in words (owner, Nov 15 2026: the bare icon wasn't clear). */}
+        <button type="button" data-qc-log-popout={p.popped ? 'back' : 'out'} onClick={p.popped ? p.onPutBack : p.onPopOut}
+          title={t(p.popped ? 'tracker.attach' : 'tracker.popOut')}
+          style={{ WebkitAppRegion: 'no-drag' } as any}
+          className="h-6 pl-1.5 pr-2 rounded border border-white/10 text-[11.5px] font-semibold text-zinc-300 hover:text-white hover:border-[var(--accent-border)] hover:bg-white/[0.05] flex items-center gap-1 outline-none focus-visible:ring-2 focus-visible:ring-white">
+          {p.popped ? <PanelRightClose className="w-3.5 h-3.5" /> : <ExternalLink className="w-3.5 h-3.5" style={p.popLeft ? { transform: 'scaleX(-1)' } : undefined} />}
+          {t(p.popped ? 'tracker.putBackShort' : 'tracker.popOutShort')}
         </button>
       </div>
 

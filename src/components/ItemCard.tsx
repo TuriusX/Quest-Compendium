@@ -16,12 +16,16 @@ export type CardItem = {
   card?: { rid: string; page?: { url: string; title: string; site: string }; pic?: string };
 };
 
-export function ItemCard({ item, anchor, gameKey, color, onClose, onEnter, onLeave }: {
+export function ItemCard({ item, anchor, doc, gameKey, color, onClose, onEnter, onLeave }: {
   item: CardItem; anchor: DOMRect; gameKey: string; color: string;
+  /** The document the log is in: the panel's, or the popped-out log's window. */
+  doc?: Document;
   onClose: () => void; onEnter?: () => void; onLeave?: () => void;
 }) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
+  const d = doc || document;
+  const view = d.defaultView || window;
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: anchor.right + 10, top: anchor.top - 8 });
   const [picGone, setPicGone] = useState(false);
   const [reported, setReported] = useState(false);
@@ -30,22 +34,22 @@ export function ItemCard({ item, anchor, gameKey, color, onClose, onEnter, onLea
     const el = ref.current;
     if (!el) return;
     const place = () => {
-      const w = el.offsetWidth, h = el.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
+      const w = el.offsetWidth, h = el.offsetHeight, vw = view.innerWidth, vh = view.innerHeight;
       const left = anchor.right + 10 + w <= vw - 8 ? anchor.right + 10 : Math.max(8, anchor.left - 10 - w);
       const top = Math.max(8, Math.min(anchor.top - 8, vh - h - 8));
       setPos((p) => (p.left === left && p.top === top ? p : { left, top }));
     };
     place();
     // The picture loads after the card shows: it's placed again whenever its size changes, so it never runs off screen.
-    const ro = new ResizeObserver(place);
+    const ro = new view.ResizeObserver(place);
     ro.observe(el);
     return () => ro.disconnect();
   }, [anchor, item.id, picGone]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, [onClose]);
+    view.addEventListener('keydown', key);
+    return () => view.removeEventListener('keydown', key);
+  }, [onClose, view]);
 
   const pic = !picGone && item.card?.pic ? `${getApiBaseUrl()}${item.card.pic}` : '';
   const page = item.card?.page;
@@ -106,6 +110,7 @@ export function ItemCard({ item, anchor, gameKey, color, onClose, onEnter, onLea
       </div>
       {page && (
         <a href={page.url} target="_blank" rel="noreferrer" data-qc-wiki
+          onClick={(e) => { const api = (window as any).electronAPI; if (api?.openExternal) { e.preventDefault(); api.openExternal(page.url); } }}
           className="group flex items-center gap-3 px-3.5 py-2.5 border-t border-white/[0.08] hover:bg-white/[0.04]">
           <span className="shrink-0 w-7 h-7 rounded-lg bg-[var(--accent-color)]/15 text-[var(--accent-color)] flex items-center justify-center"><BookOpen className="w-3.5 h-3.5" /></span>
           <span className="min-w-0 flex-1 flex flex-col">
@@ -116,6 +121,6 @@ export function ItemCard({ item, anchor, gameKey, color, onClose, onEnter, onLea
         </a>
       )}
     </div>,
-    document.body,
+    d.body,
   );
 }

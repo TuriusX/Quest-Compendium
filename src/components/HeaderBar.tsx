@@ -56,8 +56,6 @@ interface HeaderBarProps {
   questLogVisible?: boolean;
   /** Tuck the panel away (desktop): the same as the show/hide shortcut. */
   onTuckAway?: () => void;
-  /** Hide just the chat: the panel folds down to the quest log (shown while the log is docked and out). */
-  onHideChat?: () => void;
   /** The dock's screen edge, for the tuck chevron's direction. */
   tuckSide?: 'left' | 'right';
   /** There's something to put on the quest log (a known place, or an answer with steps). */
@@ -107,7 +105,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   questLogKeys,
   questLogVisible = false,
   onTuckAway,
-  onHideChat,
   tuckSide = 'right',
   questLogReady = true,
   questLogPeek,
@@ -206,38 +203,22 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         {/* Tuck the panel away (the quest log has its own bookmark on the panel's edge, and is in the ⋯ menu). */}
         {isDesktop && (
           <>
-            {/* Two arrows toward the screen edge: › hides just the chat (the quest log stays out), » hides everything (Esc). */}
-            {(onHideChat || onTuckAway) && (
-              <span className="flex items-center rounded-lg border border-white/[0.08]" style={{ WebkitAppRegion: "no-drag" } as any}>
-                {onHideChat && (
-                  <button
-                    type="button"
-                    data-qc-hide-chat
-                    onClick={onHideChat}
-                    title={t('header.hideChat')}
-                    aria-label={t('header.hideChat')}
-                    className="p-1.5 rounded-l-lg text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer"
-                  >
-                    <svg viewBox="0 0 12 12" width="16" height="16" shape-rendering="crispEdges" aria-hidden="true" style={tuckSide === 'left' ? { transform: 'scaleX(-1)' } : undefined}>
-                      <path fill="currentColor" d="M4 2h2v2h2v2h2v2H8v2H6v2H4v-2h2V8h2V6H6V4H4z" />
-                    </svg>
-                  </button>
-                )}
-                {onTuckAway && (
-                  <button
-                    type="button"
-                    data-qc-hide-all
-                    onClick={onTuckAway}
-                    title={t('header.tuckAway')}
-                    aria-label={t('header.tuckAway')}
-                    className={`p-1.5 ${onHideChat ? 'rounded-r-lg border-l border-white/[0.08]' : 'rounded-lg'} text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer`}
-                  >
-                    <svg viewBox="0 0 12 12" width="16" height="16" shape-rendering="crispEdges" aria-hidden="true" style={tuckSide === 'left' ? { transform: 'scaleX(-1)' } : undefined}>
-                      <path fill="currentColor" d="M0 2h2v2h2v2h2v2H4v2H2v2H0v-2h2V8h2V6H2V4H0zM6 2h2v2h2v2h2v2h-2v2H8v2H6v-2h2V8h2V6H8V4H6z" />
-                    </svg>
-                  </button>
-                )}
-              </span>
+            {/* Tuck away: the panel slides to the screen edge (Esc does the same). Hiding just the chat is the tab on the
+                seam between the quest log and the chat (App). */}
+            {onTuckAway && (
+              <button
+                type="button"
+                data-qc-hide-all
+                style={{ WebkitAppRegion: "no-drag" } as any}
+                onClick={onTuckAway}
+                title={t('header.tuckAway')}
+                aria-label={t('header.tuckAway')}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-[var(--accent-color)] hover:bg-white/10 transition-all cursor-pointer"
+              >
+                <svg viewBox="0 0 12 12" width="16" height="16" shape-rendering="crispEdges" aria-hidden="true" style={tuckSide === 'left' ? { transform: 'scaleX(-1)' } : undefined}>
+                  <path fill="currentColor" d="M1 2h2v2h2v2h2v2H5v2H3v2H1v-2h2V8h2V6H3V4H1zM9 1h2v10H9z" />
+                </svg>
+              </button>
             )}
 
           </>

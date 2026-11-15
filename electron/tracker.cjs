@@ -319,7 +319,8 @@ function reveal() {
   revealPending = false; clearTimeout(revealTimer);
   if (!alive() || captureHidden || win.isVisible()) return;
   // Attached: in place (and invisible if the panel is away) before it's shown, so it never flashes elsewhere.
-  if (isAttached()) { attachHidden = shouldHideAttached(); applyOpacity(); follow(); }
+  attachHidden = shouldHideAttached(); applyOpacity();
+  if (isAttached()) follow();
   win.showInactive();
   afterShow();
   if (isAttached()) syncAttach();
@@ -334,7 +335,9 @@ function attachSettings() {
   return { attached: on, side, attachOffer: false };
 }
 const shouldHideAttached = () => {
-  if (!isAttached()) return false;
+  // Popped out (owner, Nov 15 2026): the app draws the log in its own window (logWindow.cjs); this window only shows
+  // as the edge ribbon (put away) and for heads-ups beside it.
+  if (!isAttached()) return !!current && settingsFor(current.gameKey).view !== 'away' && headsUntil <= Date.now();
   const a = anchor();
   if (!a) return true; // nothing to stick to
   if (headsUntil > Date.now()) return false; // a heads-up beside the spine
@@ -391,7 +394,8 @@ function follow() {
 function syncAttach() {
   if (!alive()) return;
   if (!isAttached()) {
-    if (attachHidden) { attachHidden = false; applyOpacity(); }
+    const hideNow = shouldHideAttached();
+    if (hideNow !== attachHidden) { attachHidden = hideNow; applyOpacity(); }
     return;
   }
   const hideNow = shouldHideAttached();
@@ -670,6 +674,7 @@ function backToSpot() {
 function avoidPanel() {
   if (!alive() || !win.isVisible()) return;
   if (isAttached()) { follow(); return; }
+  if (attachHidden) return; // popped out: the app's window is the log; this one is out of sight
   const p = deps.getPanelRect ? deps.getPanelRect() : null;
   const t = win.getBounds();
   if (!p || !overlaps(t, p)) { win.moveTop(); return; }
@@ -958,9 +963,9 @@ function onMessage(event, msg) {
         openPanel();
         syncAttach();
       } else {
-        // Popped out: back to its own spot (or the default spot on the panel's screen), visible over the game.
-        attachHidden = false;
-        applyOpacity();
+        // Popped out: the app opens its own window for the log; this one stays out of sight (syncAttach) but keeps its
+        // spot for the ribbon.
+        syncAttach();
         const st = settingsFor(gameKey);
         const p = deps.getPanelRect ? deps.getPanelRect() : null;
         const wa = (p ? deps.screen.getDisplayMatching(p) : display()).workArea;

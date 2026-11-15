@@ -99,6 +99,10 @@ const { createControllerService } = require('./controller.cjs');
 const { createFocusHelper } = require('./focus.cjs');
 const { pickCaptureDisplay } = require('./gameScreen.cjs');
 const tracker = require('./tracker.cjs');
+const logWindow = require('./logWindow.cjs');
+/** Around a screenshot for the AI: the quest log (popped out or its ribbon) out of the picture, then back. */
+const hideLogsForCapture = () => { const a = tracker.hideForCapture(); const b = logWindow.hideForCapture(); return a || b; };
+const showLogsAfterCapture = () => { tracker.showAfterCapture(); logWindow.showAfterCapture(); };
 // Pin beside the game (roadmap item 30, step 3): a video or picture in a small always-on-top window.
 require('./pin.cjs').register();
 const { initUpdater } = require('./updater.cjs');
@@ -523,7 +527,11 @@ function createWindow() {
   // log goes with it.
   mainWindow.on('move', () => tracker.follow());
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  // The popped-out quest log: the app draws it into a window of its own (electron/logWindow.cjs).
+  mainWindow.webContents.on('did-create-window', (w, details) => { logWindow.adopt(w, details); });
+  mainWindow.webContents.setWindowOpenHandler((details) => {
+    const log = logWindow.openOptions(details);
+    if (log) return log;
     return {
       action: 'allow',
       overrideBrowserWindowOptions: {
@@ -695,6 +703,8 @@ app.whenReady().then(() => {
   });
   tracker.setMouseTip(tipMode());
   tracker.setVisibleInRecordings(markersInRecordings);
+  logWindow.init({ app, screen, getPanelRect: () => panelRect(), tell: tellApp });
+  logWindow.setVisibleInRecordings(markersInRecordings);
   // Updates for the direct-download app (electron/updater.cjs; the Store updates its own package).
   initUpdater({ app, ipcMain, getMainWindow: () => mainWindow });
   tracker.setScale(currentUiScale);
@@ -721,7 +731,7 @@ app.whenReady().then(() => {
       return { position: currentDockPosition, panelHeight: b ? b.height : wa.height, workArea: wa, panelRect: b };
     },
     getTrackerBounds: () => tracker.getBounds(),
-    raiseTracker: () => tracker.raise(),
+    raiseTracker: () => { tracker.raise(); logWindow.raise(); },
     onShown: () => tracker.anchorChanged(),
     // The attached quest log tucked in: its uncollected count on the book.
     getBadge: () => tracker.badgeCount(),
@@ -894,6 +904,8 @@ function onVoiceKey() {
 
 // The panel slides away (hold-to-talk sends and goes back to the game; the answer is read aloud).
 ipcMain.on('hide-panel', () => { if (isAppVisible) slideOut(); });
+// The popped-out quest log's Ask / open buttons: the panel comes out to answer.
+ipcMain.on('show-panel', () => { if (!isAppVisible) slideIn(); });
 
 // The quest log's tick / cycle shortcuts (Settings: trackerTickShortcut, trackerNextShortcut). They're global, so they
 // are registered only while the log is on screen (a log put away or no game: the keys stay free for other apps), and
@@ -1336,6 +1348,7 @@ ipcMain.on('set-overlay-options', (event, opts) => {
   if (opts && typeof opts.markersInRecordings === 'boolean') {
     markersInRecordings = opts.markersInRecordings;
     tracker.setVisibleInRecordings(markersInRecordings); // the objectives tracker follows the markers
+    logWindow.setVisibleInRecordings(markersInRecordings);
   }
   if (opts && Number.isFinite(opts.markerLifetimeMs) && opts.markerLifetimeMs >= 0) {
     markerLifetimeMs = opts.markerLifetimeMs;
@@ -1404,7 +1417,7 @@ async function captureScreenImage() {
   const hideMarkers = !!markerWin && markersInRecordings; // otherwise they're already kept out of every capture
   if (hideMarkers) markerWin.setContentProtection(true);
   // ...or the objectives tracker (hidden for the capture, then back; a moment for the screen to redraw without it).
-  const trackerHidden = tracker.hideForCapture();
+  const trackerHidden = hideLogsForCapture();
   if (trackerHidden || hideMarkers) await new Promise((resolve) => setTimeout(resolve, 80));
   let base64Image = null;
   try {
@@ -1459,7 +1472,7 @@ async function captureScreenImage() {
       }
     }
   } finally {
-    tracker.showAfterCapture();
+    showLogsAfterCapture();
     if (hideMarkers && !markerWin.isDestroyed()) markerWin.setContentProtection(!markersInRecordings);
   }
   lastCaptureImage = base64Image || lastCaptureImage;
@@ -1581,6 +1594,8 @@ function showScreenPointers(points, accent, opts = {}) {
       try {
         const tb = tracker.getBounds();
         if (tb) out.push(frac(tb));
+        const lb = logWindow.getBounds();
+        if (lb) out.push(frac(lb));
       } catch (_) { /* window closing */ }
       return out;
     })(),
@@ -1680,7 +1695,7 @@ ipcMain.on('pointers-highlight', (event, { id, index } = {}) => {
 async function captureForLocate(session) {
   const win = session.win;
   // The objectives tracker stays out of it too (the image goes to the AI).
-  const trackerHidden = tracker.hideForCapture();
+  const trackerHidden = hideLogsForCapture();
   try {
     if (win && !win.isDestroyed()) win.setContentProtection(true);
     if (trackerHidden) await new Promise((resolve) => setTimeout(resolve, 80));
@@ -1693,7 +1708,7 @@ async function captureForLocate(session) {
     return null;
   } finally {
     if (win && !win.isDestroyed()) win.setContentProtection(!markersInRecordings);
-    tracker.showAfterCapture();
+    showLogsAfterCapture();
   }
 }
 
@@ -1828,7 +1843,7 @@ async function startOwnerCapture() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   closeScreenPointers();
-  const trackerHidden = tracker.hideForCapture();
+  const trackerHidden = hideLogsForCapture();
   const panelShown = mainWindow.isVisible();
   const opacity = mainWindow.getOpacity();
   if (panelShown) mainWindow.setOpacity(0);
@@ -1844,7 +1859,7 @@ async function startOwnerCapture() {
     if (src && src.thumbnail && !src.thumbnail.isEmpty()) image = 'data:image/png;base64,' + src.thumbnail.toPNG().toString('base64');
   } finally {
     if (panelShown && !mainWindow.isDestroyed()) mainWindow.setOpacity(opacity || 1);
-    tracker.showAfterCapture();
+    showLogsAfterCapture();
   }
   if (!image) return;
   // What the app thinks the picture shows (what was just asked about, the current objective, where the player is), and

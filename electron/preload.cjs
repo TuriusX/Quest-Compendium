@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleSlide: () => ipcRenderer.send('toggle-slide'),
   // Hold to talk: after sending, the panel slides away and the answer is read aloud.
   hidePanel: () => ipcRenderer.send('hide-panel'),
+  showPanel: () => ipcRenderer.send('show-panel'),
   // The hidden panel's spine: the theme's accent and its label (electron/spine.cjs).
   setLook: (look) => ipcRenderer.send('set-look', look),
   // The right-click menu's words (spelling suggestions, Cut, Copy, Paste) in the app's language.

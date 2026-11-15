@@ -78,6 +78,7 @@ import { setTickScope } from './utils/guideProgress';
 import { readTombstones } from './hooks/tabMerge';
 import { MigrationNotice, WhichGamePrompt } from './components/SpacesNotice';
 import { GameLine } from './components/GameLine';
+import { PopWindow } from './components/PopWindow';
 import { QuestLog } from './components/QuestLog';
 import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, doSteps, isNowQuestion, isCuriosityQuestion, heldIds, HELD_DAYS, type LogView, type Foe } from './utils/questLogView';
 import { missablesThin } from './utils/missablesCheck';
@@ -1559,6 +1560,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       if (a === 'hide' && typeof e.id === 'string' && e.id) hideWatchRef.current(e.id);
       else if (a === 'whats-next') window.dispatchEvent(new CustomEvent('qc-ask', { detail: { text: tr('tracker.logWhatsNext') } }));
       else if (a === 'ask') setTimeout(() => document.querySelector<HTMLElement>('[data-qc-ask-input]')?.focus(), 250);
+      return;
+    }
+    if (e.type === 'log-snap') {
+      // The popped-out log dropped back against the panel's side: docked again.
+      (window as any).electronAPI?.trackerAttach?.(true);
       return;
     }
     if (e.type === 'visibility') {
@@ -3060,7 +3066,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const previewUpdate = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /[?&]previewUpdate/.test(location.search);
   // Tuck the panel away without the shortcut: exactly what the shortcut does (focus back to the game, quest log as is).
   const tuckAway = () => (window as any).electronAPI?.hidePanel?.();
-  // Hide just the chat (owner, Nov 15 2026): the panel folds down to the docked quest log; the log's edge tab brings it back.
+  // Hide just the chat (owner, Nov 15 2026): the panel folds down to the docked quest log; the seam tab brings it back.
+  // (The purple tuck strip on the panel's outer edge is gone: the header's arrow and Esc do the same.)
   const [chatHidden, setChatHidden] = useState(false);
   const tuckSide: 'left' | 'right' = String(settings.dockPosition).endsWith('left') ? 'left' : 'right';
 
@@ -3078,96 +3085,93 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     return () => window.removeEventListener('keydown', onKey);
   }, [isDesktop]);
 
-  // The tuck-away tab, built into the frame: a slim strip down the docked edge (the screen edge), its own column so
-  // nothing of the content is under it, with the pull-tab in the middle. Desktop, docked only.
-  const tuckStrip = (edge: 'left' | 'right') =>
-    isDesktop && settings.dockPosition !== 'undocked' && tuckSide === edge ? (
-      <div className={`qc-tuck-strip flex-shrink-0 w-3.5 h-full flex items-center justify-center bg-black/30 ${edge === 'left' ? 'border-r' : 'border-l'} border-white/[0.06]`}>
-        <button
-          type="button"
-          onClick={tuckAway}
-          title={tr('header.tuckHandle')}
-          aria-label={tr('header.tuckHandle')}
-          className="w-full h-16 flex items-center justify-center cursor-pointer text-[var(--accent-color)] bg-[var(--accent-dim)] border-y border-[var(--accent-border)] hover:bg-[var(--accent-color)] hover:text-black transition-colors"
-          style={{ WebkitAppRegion: 'no-drag' } as any}
-        >
-          <svg viewBox="0 0 6 10" width="6" height="10" shape-rendering="crispEdges" aria-hidden="true" className={edge === 'left' ? 'scale-x-[-1]' : ''}>
-            <path fill="currentColor" d="M0 0h2v2h2v2h2v2H4v2H2v2H0V8h2V6h2V4H2V2H0z" />
-          </svg>
-        </button>
-      </div>
-    ) : null;
 
   // The docked quest log (owner, Oct 30 2026): a column inside the panel, on its inner side, out while the log is
   // (Ctrl+Shift+L, the controller's View, the bookmark).
   const logSide: 'left' | 'right' = settings.dockPosition !== 'undocked' && tuckSide === 'left' ? 'right' : 'left';
   const dockedLogOpen = isDesktop && questLogAttached && questLogVisible && !!logView;
+  // Popped out (owner, Nov 15 2026): the same log, in its own window over the game (PopWindow, electron/logWindow.cjs).
+  const poppedLogOpen = isDesktop && !questLogAttached && questLogVisible && !!logView;
   // Without the docked log there's nothing to fold down to: the chat comes back.
   useEffect(() => { if (!dockedLogOpen && chatHidden) setChatHidden(false); }, [dockedLogOpen, chatHidden]);
   const logKeys = formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L');
+  // The quest log itself: the same in the docked column and popped out in its own window (owner, Nov 15 2026).
+  const questLogEl = (popped: boolean) => !logView ? null : (
+    <QuestLog
+      view={logView}
+      sel={logSel}
+      cleared={logCleared ? { id: logCleared.ids[0], text: logCleared.text, from: logCleared.from } : null}
+      keysLabel={logKeys}
+      onTick={tickLog}
+      onUndo={undoLog}
+      onSelect={setLogSel}
+      onHideWatch={hideWatch}
+      onClose={() => { toggleQuestLog(); setTimeout(() => document.querySelector<HTMLElement>('[data-qc-ask-input]')?.focus(), 50); }}
+      onPopOut={() => (window as any).electronAPI?.trackerAttach?.(false)}
+      popped={popped}
+      popLeft={logSide === 'left'}
+      onPutBack={() => (window as any).electronAPI?.trackerAttach?.(true)}
+      onAsk={(text) => {
+        if (popped) (window as any).electronAPI?.showPanel?.();
+        if (text) window.dispatchEvent(new CustomEvent('qc-ask', { detail: { text } }));
+        else document.querySelector<HTMLElement>('[data-qc-ask-input]')?.focus();
+      }}
+      onOpenPin={(id) => { if (popped) (window as any).electronAPI?.showPanel?.(); window.dispatchEvent(new CustomEvent('qc-scroll-to-msg', { detail: { id } })); }}
+      onUnpin={togglePin}
+      onClearNow={() => patchLog(() => ({ now: undefined }))}
+      onLoadSteps={() => trackerEventRef.current({ type: 'load-steps' })}
+      onDismissOffer={() => trackerEventRef.current({ type: 'dismiss-offer' })}
+      onGotoArea={moveToArea}
+      onLocate={() => void runHelpHere()}
+      onPickPlace={moveToArea}
+      locateKeys={formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K')}
+      foldMissables={!!(trackerGame.guideArea?.page as any)?.worth}
+      facts={(() => {
+        // Item 30, step 2: the area's database sections (English pages carry them), only beside what the log already shows.
+        const ga = trackerGame.guideArea;
+        const pg: any = ga?.page;
+        if (!ga || !pg || (!pg.worth && !pg.achievements)) return null;
+        return (
+          <LogFacts
+            facts={{ slug: ga.slug, worth: pg.worth, achievements: pg.achievements }}
+            game={activeGame?.name || activeTab?.name || ''}
+            gameKey={ga.key}
+            done={ga.done}
+            onTick={(id, done) => trackerEventRef.current({ type: 'tick', item: id, done })}
+            steam={activeGame?.achievements?.length ? { list: activeGame.achievements, unlocked: activeGame.unlockedAchievements, total: activeGame.totalAchievements } : null}
+          />
+        );
+      })()}
+      helpMsgFor={(stepId) => [...(activeTab?.messages || [])].reverse().find((m) => m.kind === 'help' && m.helpFor === stepId && m.visual && !m.visualHidden)?.id}
+      onConfirmPlace={() => { const n = logView.place?.name; if (n) trackerEventRef.current({ type: 'confirm-place', name: n }); }}
+      onOpenEntry={(id) => { if (popped) (window as any).electronAPI?.showPanel?.(); trackerEventRef.current({ type: 'open-entry', item: id }); }}
+      visualFor={(id) => { const m = activeTab?.messages.find((x) => x.id === id); return m && !m.visualHidden ? m.visual : undefined; }}
+      onVisualEvent={(id, type) => {
+        const m = activeTab?.messages.find((x) => x.id === id);
+        void sendVisualEvent(type, m?.visualRef);
+        if (type === 'wrong') setTimeout(() => updateMessageById(id, (x) => ({ ...x, visualHidden: true })), 5000);
+      }}
+    />
+  );
   const logColumn = (side: 'left' | 'right') =>
     dockedLogOpen && logView && logSide === side ? (
       <div className={`${chatHidden ? 'w-full' : 'w-[300px]'} relative flex-shrink-0 h-full min-h-0 ${side === 'left' ? 'border-r qc-log-swing-l' : 'border-l qc-log-swing-r'} border-white/[0.1]`} style={{ WebkitAppRegion: 'no-drag' } as any}>
-        {chatHidden && (
-          // The chat folded away: a slim tab on the log's edge (where the chat was) brings it back.
-          <button type="button" data-qc-show-chat onClick={() => setChatHidden(false)} title={tr('header.showChat')} aria-label={tr('header.showChat')}
-            className={`absolute top-1/2 -translate-y-1/2 ${side === 'left' ? 'right-0 rounded-l-md' : 'left-0 rounded-r-md'} z-[60] w-4 h-16 flex items-center justify-center bg-[var(--accent-dim)] border border-[var(--accent-border)] text-[var(--accent-color)] hover:bg-[var(--accent-color)] hover:text-black cursor-pointer`}>
-            <svg viewBox="0 0 12 12" width="10" height="10" shape-rendering="crispEdges" aria-hidden="true" style={side === 'left' ? { transform: 'scaleX(-1)' } : undefined}>
-              <path fill="currentColor" d="M4 2h2v2h2v2h2v2H8v2H6v2H4v-2h2V8h2V6H6V4H4z" />
-            </svg>
-          </button>
-        )}
-        <QuestLog
-          view={logView}
-          sel={logSel}
-          cleared={logCleared ? { id: logCleared.ids[0], text: logCleared.text, from: logCleared.from } : null}
-          keysLabel={logKeys}
-          onTick={tickLog}
-          onUndo={undoLog}
-          onSelect={setLogSel}
-          onHideWatch={hideWatch}
-          onClose={() => { toggleQuestLog(); setTimeout(() => document.querySelector<HTMLElement>('[data-qc-ask-input]')?.focus(), 50); }}
-          onPopOut={() => (window as any).electronAPI?.trackerAttach?.(false)}
-          onAsk={(text) => {
-            if (text) window.dispatchEvent(new CustomEvent('qc-ask', { detail: { text } }));
-            else document.querySelector<HTMLElement>('[data-qc-ask-input]')?.focus();
-          }}
-          onOpenPin={(id) => window.dispatchEvent(new CustomEvent('qc-scroll-to-msg', { detail: { id } }))}
-          onUnpin={togglePin}
-          onClearNow={() => patchLog(() => ({ now: undefined }))}
-          onLoadSteps={() => trackerEventRef.current({ type: 'load-steps' })}
-          onDismissOffer={() => trackerEventRef.current({ type: 'dismiss-offer' })}
-          onGotoArea={moveToArea}
-          onLocate={() => void runHelpHere()}
-          onPickPlace={moveToArea}
-          locateKeys={formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K')}
-          foldMissables={!!(trackerGame.guideArea?.page as any)?.worth}
-          facts={(() => {
-            // Item 30, step 2: the area's database sections (English pages carry them), only beside what the log already shows.
-            const ga = trackerGame.guideArea;
-            const pg: any = ga?.page;
-            if (!ga || !pg || (!pg.worth && !pg.achievements)) return null;
-            return (
-              <LogFacts
-                facts={{ slug: ga.slug, worth: pg.worth, achievements: pg.achievements }}
-                game={activeGame?.name || activeTab?.name || ''}
-                gameKey={ga.key}
-                done={ga.done}
-                onTick={(id, done) => trackerEventRef.current({ type: 'tick', item: id, done })}
-                steam={activeGame?.achievements?.length ? { list: activeGame.achievements, unlocked: activeGame.unlockedAchievements, total: activeGame.totalAchievements } : null}
-              />
-            );
-          })()}
-          helpMsgFor={(stepId) => [...(activeTab?.messages || [])].reverse().find((m) => m.kind === 'help' && m.helpFor === stepId && m.visual && !m.visualHidden)?.id}
-          onConfirmPlace={() => { const n = logView.place?.name; if (n) trackerEventRef.current({ type: 'confirm-place', name: n }); }}
-          onOpenEntry={(id) => trackerEventRef.current({ type: 'open-entry', item: id })}
-          visualFor={(id) => { const m = activeTab?.messages.find((x) => x.id === id); return m && !m.visualHidden ? m.visual : undefined; }}
-          onVisualEvent={(id, type) => {
-            const m = activeTab?.messages.find((x) => x.id === id);
-            void sendVisualEvent(type, m?.visualRef);
-            if (type === 'wrong') setTimeout(() => updateMessageById(id, (x) => ({ ...x, visualHidden: true })), 5000);
-          }}
-        />
+        {/* The seam tab (owner, Nov 15 2026): on the line between the quest log and the chat. It points to the screen
+            edge to fold the chat away (only the log stays out), and back to bring the chat out again. */}
+        {(() => {
+          const towardChat = side === 'left'; // the chat is on the log's right when the log is on the left
+          const pointsRight = towardChat ? !chatHidden : chatHidden;
+          const label = tr(chatHidden ? 'header.showChat' : 'header.hideChat');
+          return (
+            <button type="button" data-qc-chat-tab={chatHidden ? 'show' : 'hide'} onClick={() => setChatHidden((h) => !h)} title={label} aria-label={label}
+              className={`absolute top-1/2 ${towardChat ? `right-0 ${chatHidden ? 'rounded-l-md border-r-0' : 'translate-x-1/2 rounded-md'}` : `left-0 ${chatHidden ? 'rounded-r-md border-l-0' : '-translate-x-1/2 rounded-md'}`} -translate-y-1/2 z-[60] w-3.5 h-14 flex items-center justify-center bg-[#16151f] border border-white/[0.14] text-zinc-400 hover:text-[var(--accent-color)] hover:border-[var(--accent-border)] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-white`}>
+              <svg viewBox="0 0 12 12" width="9" height="9" shape-rendering="crispEdges" aria-hidden="true" style={pointsRight ? undefined : { transform: 'scaleX(-1)' }}>
+                <path fill="currentColor" d="M4 2h2v2h2v2h2v2H8v2H6v2H4v-2h2V8h2V6H6V4H4z" />
+              </svg>
+            </button>
+          );
+        })()}
+        {questLogEl(false)}
       </div>
     ) : null;
 
@@ -3221,7 +3225,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           boxShadow: '0 0 35px var(--accent-glow)'
         }}
       >
-        {tuckStrip('left')}
         {logColumn('left')}
         <div className={`flex-1 min-w-0 min-h-0 flex flex-col relative ${chatHidden && dockedLogOpen ? 'hidden' : ''}`}>
         {/* "Mouse unlocked": the panel opened with the show/hide shortcut (the first 10 times) */}
@@ -3267,7 +3270,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           onToggleQuestLog={isDesktop ? toggleQuestLog : undefined}
           questLogKeys={formatShortcut(settings.questLogShortcut || 'CmdOrCtrl+Shift+L')}
           onTuckAway={isDesktop ? tuckAway : undefined}
-          onHideChat={dockedLogOpen ? () => setChatHidden(true) : undefined}
           tuckSide={tuckSide}
           questLogVisible={questLogVisible}
           questLogReady={!!trackerPayload}
@@ -3627,7 +3629,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         </div>
         </div>
         {logColumn('right')}
-        {tuckStrip('right')}
       </div>
 
       {/* Settings Modal */}
@@ -3685,6 +3686,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       )}
 
       {/* Controller support: focus navigation, quick questions, on-screen keyboard, button hints */}
+      {poppedLogOpen && <PopWindow name="qc-log" title={tr('tracker.logTitle')}>{questLogEl(true)}</PopWindow>}
       <ControllerLayer enabled={settings.controllerEnabled !== false} talkButton={settings.controllerTalk || 'y'} hintMode={settings.hintMode === true} logAttached={questLogAttached && (questLogVisible || questLogTucked) && !isBrowserMode} />
 
       {/* Quick Game Search & Switcher Modal */}
