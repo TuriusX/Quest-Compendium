@@ -462,6 +462,19 @@ export function registerGuidesApi(app: Express): void {
     }
   });
 
+  // Just an area's database facts (the Deck reads its pages from the website's files, which don't carry them).
+  app.get('/api/guides/:key/:slug/facts', async (req, res) => {
+    try {
+      const key = gameKey(String(req.params.key));
+      const slug = String(req.params.slug).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 120);
+      const lang = langOf(req.query.lang);
+      const extra = !lang || lang === 'en' ? await cached(`areaFacts:${key}:${slug}`, () => areaFacts(key, slug)).catch(() => null) : null;
+      send(res, { key, slug, ...(extra || {}) });
+    } catch (e) {
+      fail(res, e);
+    }
+  });
+
   app.get('/api/guides/:key/:slug', async (req, res) => {
     try {
       const key = gameKey(String(req.params.key));
@@ -501,11 +514,62 @@ export function registerGuidesApi(app: Express): void {
         };
       });
       if (!page) return res.status(404).json({ error: 'This page isn\'t available.' });
-      send(res, localizePage(page, await translation(key, langOf(req.query.lang))));
+      const lang = langOf(req.query.lang);
+      // The quest log's database sections (roadmap item 30, step 2; English, like the site's fact pages): only added to
+      // the page, never in place of anything on it.
+      const extra = !lang || lang === 'en' ? await cached(`areaFacts:${key}:${slug}`, () => areaFacts(key, slug)).catch(() => null) : null;
+      send(res, { ...localizePage(page, await translation(key, lang)), ...(extra || {}) });
     } catch (e) {
       fail(res, e);
     }
   });
+}
+
+/**
+ * An area's facts from the database for the quest log (owner, Nov 15 2026; roadmap item 30, step 2):
+ *   worth         what's worth getting and doing here (worthIt.ts), best first: gear and spells (rarity, why, where, how,
+ *                 missable), quests that start here (giver, reward), people worth talking to, things not to skip
+ *   achievements  the area's achievements, each with the point of no return that ends it (story order, spine.ts) or the
+ *                 condition that does
+ * Each with its status, so the app labels what isn't confirmed yet. Disputed facts are left out.
+ */
+export async function areaFacts(key: string, slug: string): Promise<Record<string, unknown> | null> {
+  const ref = getFirestore().collection('gameRecords').doc(key);
+  const [snap, main, links, times] = await Promise.all([
+    ref.collection('records').where('place', '==', slug).get(),
+    ref.collection('spine').doc('main').get(),
+    ref.collection('spine').doc('links').get(),
+    ref.collection('times').doc(slug).get(),
+  ]);
+  // Rough time ranges on the walkthrough's steps (stepTimes.ts; item 30, step 4): { stepId: { lo, hi, from } }.
+  const stepTimes = ((times.data() as any)?.steps || {}) as Record<string, { lo: number; hi: number; from: string }>;
+  const recs = snap.docs.map((d) => d.data() as any).filter((r) => r.status !== 'disputed');
+  if (!recs.length) return Object.keys(stepTimes).length ? { times: stepTimes } : null;
+  const lockName = new Map<string, string>();
+  for (const a of ((main.data() as any)?.acts || [])) for (const s of a.steps || []) if (s.kind === 'lock') lockName.set(s.id, String(s.name));
+  const link: Record<string, { lost?: string; if?: string }> = (links.data() as any)?.links || {};
+  const f = (r: any, k: string) => (Array.isArray(r.fields?.[k]) ? r.fields[k].join('; ') : String(r.fields?.[k] ?? ''));
+  const tick = (r: any) => (r.origin?.from === 'area' ? String(r.origin.entry ?? '') : String(r.id));
+  const ranked = recs.filter((r) => f(r, 'rank')).sort((x, y) => Number(f(x, 'rank')) - Number(f(y, 'rank')));
+  const item = (r: any) => ({
+    id: tick(r), name: String(r.name), kind: f(r, 'kind') || (r.type === 'secret' ? 'secret' : 'gear'), rarity: f(r, 'rarity') || undefined,
+    why: f(r, 'why') || undefined, where: f(r, 'where') || undefined, how: f(r, 'how') || undefined,
+    missable: !!(r.missable || f(r, 'lockout')), lockout: f(r, 'lockout') || undefined,
+    lost: lockName.get(link[r.id]?.lost || '') || undefined, confirmed: r.status === 'checked',
+  });
+  const worth = {
+    // Gear first, then spells, each best first (as the site's block).
+    gear: ranked.filter((r) => r.type === 'item' || r.type === 'secret').sort((x, y) => Number(f(x, 'kind') === 'spell') - Number(f(y, 'kind') === 'spell')).map(item),
+    quests: ranked.filter((r) => r.type === 'quest').map((r) => ({ id: tick(r), name: String(r.name), giver: f(r, 'giver') || undefined, reward: f(r, 'rewards') || undefined, confirmed: r.status === 'checked' })),
+    people: ranked.filter((r) => r.type === 'npc').map((r) => ({ id: tick(r), name: String(r.name), why: f(r, 'why') || undefined, where: f(r, 'where') || undefined, confirmed: r.status === 'checked' })),
+    todo: ranked.filter((r) => r.type === 'tip' && r.origin?.from === 'worth').map((r) => ({ id: tick(r), name: String(r.name), why: f(r, 'why') || undefined, confirmed: r.status === 'checked' })),
+  };
+  const achievements = recs.filter((r) => r.type === 'achievement').map((r) => ({
+    name: String(r.name), how: f(r, 'how') || r.short || undefined, missable: !!r.missable,
+    lost: lockName.get(link[r.id]?.lost || '') || undefined, if: link[r.id]?.if || undefined, rarity: f(r, 'rarity') || undefined,
+  }));
+  const any = worth.gear.length + worth.quests.length + worth.people.length + worth.todo.length;
+  return { ...(any ? { worth } : {}), ...(achievements.length ? { achievements } : {}), ...(Object.keys(stepTimes).length ? { times: stepTimes } : {}) };
 }
 
 // ---- the guide page for where the player is (used by answers and "Known here") ----

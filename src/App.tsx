@@ -23,6 +23,7 @@ const SettingsModal = React.lazy(() => import('./components/SettingsModal').then
 const QuickGameSearchModal = React.lazy(() => import('./components/QuickGameSearchModal').then(module => ({ default: module.QuickGameSearchModal })));
 const GameScreenModal = React.lazy(() => import('./components/GameScreenModal').then(module => ({ default: module.GameScreenModal })));
 const AuthModal = React.lazy(() => import('./components/AuthModal').then(module => ({ default: module.AuthModal })));
+import { LogFacts } from './components/LogFacts';
 const PaywallModal = React.lazy(() => import('./components/PaywallModal').then(module => ({ default: module.PaywallModal })));
 const RenameModal = React.lazy(() => import('./components/RenameModal').then(module => ({ default: module.RenameModal })));
 const UpdateRequiredModal = React.lazy(() => import('./components/UpdateRequiredModal').then(module => ({ default: module.UpdateRequiredModal })));
@@ -3127,6 +3128,28 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           onLocate={() => void runHelpHere()}
           onPickPlace={moveToArea}
           locateKeys={formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K')}
+          facts={(() => {
+            // Item 30, step 2: the area's database sections (English pages carry them), only beside what the log already shows.
+            const ga = trackerGame.guideArea;
+            const pg: any = ga?.page;
+            if (!ga || !pg || (!pg.worth && !pg.achievements)) return null;
+            return (
+              <LogFacts
+                facts={{ slug: ga.slug, worth: pg.worth, achievements: pg.achievements }}
+                game={activeGame?.name || activeTab?.name || ''}
+                done={ga.done}
+                onTick={(id, done) => trackerEventRef.current({ type: 'tick', item: id, done })}
+                steam={activeGame?.achievements?.length ? { list: activeGame.achievements, unlocked: activeGame.unlockedAchievements, total: activeGame.totalAchievements } : null}
+              />
+            );
+          })()}
+          timeFor={(stepId) => {
+            // Item 30, step 4: the area's rough step times (w:<area>:<step>), as a range.
+            const m = /^w:([^:]+):(.+)$/.exec(stepId);
+            const ga = trackerGame.guideArea;
+            const tt = m && ga?.slug === m[1] ? (ga.page as any)?.times?.[m[2]] : null;
+            return tt ? tr('logfacts.minutes', { lo: tt.lo, hi: tt.hi }) : undefined;
+          }}
           helpMsgFor={(stepId) => [...(activeTab?.messages || [])].reverse().find((m) => m.kind === 'help' && m.helpFor === stepId && m.visual && !m.visualHidden)?.id}
           onConfirmPlace={() => { const n = logView.place?.name; if (n) trackerEventRef.current({ type: 'confirm-place', name: n }); }}
           onOpenEntry={(id) => trackerEventRef.current({ type: 'open-entry', item: id })}

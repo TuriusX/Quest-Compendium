@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src https: data:; frame-src https://www.youtube-nocookie.com; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Pinned</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0a10; color: #e4e4e7; font: 12px/1.3 system-ui, sans-serif; overflow: hidden; }
+  body { display: flex; flex-direction: column; border: 1px solid rgba(168,127,251,.45); box-sizing: border-box; }
+  .bar { flex: 0 0 26px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 8px; background: #14121c; -webkit-app-region: drag; user-select: none; }
+  .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #c4b0ff; font-weight: 600; }
+  .bar input, .bar button { -webkit-app-region: no-drag; }
+  .bar input { width: 64px; accent-color: #a87ffb; }
+  .bar button { border: 0; background: transparent; color: #a1a1aa; font-size: 15px; line-height: 1; cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+  .bar button:hover { color: #fff; background: rgba(255,255,255,.08); }
+  .see { color: #8b84a8; font-size: 11px; }
+  main { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; background: #000; }
+  iframe { width: 100%; height: 100%; border: 0; }
+  img { max-width: 100%; max-height: 100%; object-fit: contain; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <span class="title" id="t"></span>
+    <span class="see" title="See-through">◐</span>
+    <input id="o" type="range" min="30" max="100" value="100" title="See-through" aria-label="See-through">
+    <button id="x" title="Close" aria-label="Close">✕</button>
+  </div>
+  <main id="m"></main>
+<script>
+  const q = new URLSearchParams(location.search);
+  document.getElementById('t').textContent = q.get('title') || '';
+  document.title = q.get('title') || 'Pinned';
+  const m = document.getElementById('m');
+  if (q.get('kind') === 'picture') {
+    const img = document.createElement('img');
+    img.src = q.get('url') || '';
+    img.alt = q.get('title') || '';
+    m.appendChild(img);
+  } else {
+    const f = document.createElement('iframe');
+    const id = (q.get('id') || '').replace(/[^\w-]/g, '');
+    const start = Math.max(0, parseInt(q.get('start') || '0', 10) || 0);
+    f.src = 'https://www.youtube-nocookie.com/embed/' + id + '?start=' + start + '&rel=0&modestbranding=1&autoplay=1&playsinline=1';
+    f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    f.allowFullscreen = true;
+    m.appendChild(f);
+  }
+  document.getElementById('x').onclick = () => window.pin.close();
+  document.getElementById('o').oninput = (e) => window.pin.opacity(Number(e.target.value) / 100);
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.pin.close(); });
+</script>
+</body>
+</html>

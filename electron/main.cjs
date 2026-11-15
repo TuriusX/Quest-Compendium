@@ -99,6 +99,8 @@ const { createControllerService } = require('./controller.cjs');
 const { createFocusHelper } = require('./focus.cjs');
 const { pickCaptureDisplay } = require('./gameScreen.cjs');
 const tracker = require('./tracker.cjs');
+// Pin beside the game (roadmap item 30, step 3): a video or picture in a small always-on-top window.
+require('./pin.cjs').register();
 const { initUpdater } = require('./updater.cjs');
 const spine = require('./spine.cjs');
 const focusHelper = createFocusHelper();

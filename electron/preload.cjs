@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // An automatic Locate me's quiet screenshot ({ image } or null: not now).
   locateCapture: () => ipcRenderer.invoke('locate-capture'),
   onGameInView: (callback) => { ipcRenderer.removeAllListeners('game-in-view'); ipcRenderer.on('game-in-view', (event, e) => callback(e)); },
+  // Pin a video or picture beside the game (electron/pin.cjs): { kind: 'video', videoId, start, title } or { kind: 'picture', url, alt }.
+  pinVisual: (item) => ipcRenderer.invoke('pin-visual', item),
   onLocateKey: (callback) => { ipcRenderer.removeAllListeners('locate-key'); ipcRenderer.on('locate-key', () => callback()); },
   closeApp: () => ipcRenderer.send('close-app'),
   openSettingsWindow: () => ipcRenderer.send('open-settings-window'),

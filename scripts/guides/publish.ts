@@ -1232,6 +1232,10 @@ async function loadFactPages(only = ''): Promise<void> {
       byPlace.set(r.place, [...(byPlace.get(r.place) || []), r]);
     }
     FACT_RECS.set(key, byPlace);
+    // Rough step times (stepTimes.ts; item 30, step 4), shown on the route.
+    const times = new Map<string, Record<string, { lo: number; hi: number; from: string }>>();
+    for (const d of (await db().collection('gameRecords').doc(key).collection('times').get().catch(() => null))?.docs || []) times.set(d.id, ((d.data() as any)?.steps || {}));
+    STEP_TIMES.set(key, times);
   }
   if (FACT_KEYS.size) console.log(`Fact pages: ${[...FACT_KEYS].map((k) => `${k} (${FACT_RECS.get(k)?.size || 0} pages with records)`).join(', ')}.`);
   // Story order pages (scripts/guides/spine.ts): on for the guides in config/spinePages.guides (or QC_SPINE_PAGES for a preview).
@@ -1248,6 +1252,7 @@ async function loadFactPages(only = ''): Promise<void> {
   WORTH_KEYS = new Set([...(Array.isArray(wp.guides) ? wp.guides : []), ...String(process.env.QC_WORTH_PAGES || '').split(',')].map((s: string) => String(s).trim()).filter((k) => k && FACT_KEYS.has(k)));
 }
 let WORTH_KEYS = new Set<string>();
+const STEP_TIMES = new Map<string, Map<string, Record<string, { lo: number; hi: number; from: string }>>>();
 /** Each game's English lists (missables, items...), kept for llms.txt: FACT_LISTS is reset by the translated passes. */
 const LIST_IDS = new Map<string, string[]>();
 /** Each game's story order and its missables' links (spine.ts), for the "in order" pages. */
@@ -1346,7 +1351,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
     ? card('walkthrough', ui('route'), `<span class="text-xs text-zinc-500">${steps.length} steps</span>`, `<ol class="space-y-0.5 py-2">${steps.map((st, i) => {
         const r = rec.get(String(st.id));
         const got = [...(st.entries || []), ...(st.fights || [])].filter((id) => nameOf.get(id));
-        return `<li id="${esc(st.id)}" class="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 px-4 py-2 scroll-mt-20"><span class="flex h-6 w-6 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-xs font-bold text-[#c4b0ff]">${i + 1}</span><div class="min-w-0"><p class="text-sm"><strong class="text-white">${esc(st.title)}.</strong> <span class="text-zinc-400">${esc(r?.short || String(st.text || '').split(/(?<=[.!?])\s/)[0])}</span></p>${(() => { const pic = stepPicture(gameKey, a.slug, st.id, 'step'); return pic ? stepHtml(pic) : ''; })()}${got.length ? `<div class="mt-1.5 flex flex-wrap gap-1.5">${got.map((id) => `<a href="#${(a.fights || []).some((f) => f.id === id) ? '' : 'e-'}${esc(id)}" class="rounded-md border border-white/10 px-1.5 py-0.5 text-[11px] text-zinc-400 hover:border-[#a87ffb]/40 hover:text-white">${esc(nameOf.get(id)!)}</a>`).join('')}</div>` : ''}${st.warn ? `<p class="mt-1 text-xs text-amber-200/90">&#9888; ${esc(st.warn)}</p>` : ''}</div></li>`;
+        return `<li id="${esc(st.id)}" class="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 px-4 py-2 scroll-mt-20"><span class="flex h-6 w-6 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-xs font-bold text-[#c4b0ff]">${i + 1}</span><div class="min-w-0"><p class="text-sm"><strong class="text-white">${esc(st.title)}.</strong>${(() => { const tt = STEP_TIMES.get(gameKey)?.get(a.slug)?.[String(st.id)]; return tt ? ` <span class="ml-0.5 inline-block whitespace-nowrap rounded-full border border-[#a87ffb]/40 px-1.5 text-[11px] font-semibold text-[#c4b0ff]" title="${tt.from === 'guide' ? 'From the guide' : 'A rough estimate'}">${tt.lo}–${tt.hi} min</span>` : ''; })()} <span class="text-zinc-400">${esc(r?.short || String(st.text || '').split(/(?<=[.!?])\s/)[0])}</span></p>${(() => { const pic = stepPicture(gameKey, a.slug, st.id, 'step'); return pic ? stepHtml(pic) : ''; })()}${got.length ? `<div class="mt-1.5 flex flex-wrap gap-1.5">${got.map((id) => `<a href="#${(a.fights || []).some((f) => f.id === id) ? '' : 'e-'}${esc(id)}" class="rounded-md border border-white/10 px-1.5 py-0.5 text-[11px] text-zinc-400 hover:border-[#a87ffb]/40 hover:text-white">${esc(nameOf.get(id)!)}</a>`).join('')}</div>` : ''}${st.warn ? `<p class="mt-1 text-xs text-amber-200/90">&#9888; ${esc(st.warn)}</p>` : ''}</div></li>`;
       }).join('')}</ol>`)
     : '';
 

@@ -11,7 +11,7 @@
  * "Not right" hides it and tells the server (that video or picture isn't picked for this question again).
  */
 import React, { useState } from 'react';
-import { Play, ExternalLink, X, Maximize2, ThumbsDown, BookOpen } from 'lucide-react';
+import { Play, ExternalLink, X, Maximize2, ThumbsDown, BookOpen, Pin } from 'lucide-react';
 import { useT } from '../i18n';
 
 export type VideoChoice = { videoId: string; title: string; channel: string; seconds: number; start: number; thumb?: string; note?: string };
@@ -47,6 +47,13 @@ export function VisualCard({ visual, compact, onEvent }: { visual: VisualData; c
     </button>
   );
   if (wrong) return <div className={`${shell} px-3 py-2 text-[12px] text-zinc-400`}>{t('visual.thanks')}</div>;
+  // Pin beside the game (desktop; roadmap item 30, step 3): the video or picture in its own small always-on-top window.
+  const pinApi = typeof window !== 'undefined' ? (window as any).electronAPI?.pinVisual : undefined;
+  const pinBtn = (item: Record<string, unknown>, stop?: () => void) => pinApi && (
+    <button type="button" data-qc-pin-visual onClick={() => { stop?.(); void pinApi(item); onEvent?.('played'); }} className={linkCls} title={t('visual.pinTitle')}>
+      <Pin className="w-3 h-3" /> {t('visual.pin')}
+    </button>
+  );
 
   if (visual.kind === 'video' && current) {
     const v = current;
@@ -84,7 +91,7 @@ export function VisualCard({ visual, compact, onEvent }: { visual: VisualData; c
           <div className="text-[12.5px] text-zinc-100 font-medium leading-snug line-clamp-2">{v.title}</div>
           <div className="flex items-center justify-between gap-3">
             <span className={meta}><span className="truncate">{[kindLabel(v) || t('visual.video'), v.channel].filter(Boolean).join(' · ')}</span></span>
-            <span className="flex items-center gap-3 shrink-0">{wrongBtn}<a href={watch} target="_blank" rel="noreferrer" className={linkCls}>YouTube <ExternalLink className="w-3 h-3" /></a></span>
+            <span className="flex items-center gap-3 shrink-0">{wrongBtn}{pinBtn({ kind: 'video', videoId: v.videoId, start, title: v.title }, () => setPlaying(false))}<a href={watch} target="_blank" rel="noreferrer" className={linkCls}>YouTube <ExternalLink className="w-3 h-3" /></a></span>
           </div>
         </div>
         {others.length > 0 && (
@@ -147,6 +154,7 @@ export function VisualCard({ visual, compact, onEvent }: { visual: VisualData; c
         <span className={meta}><span className="truncate">{visual.map ? t('visual.map') : t('visual.picture')} · {visual.alt}</span></span>
         <span className="flex items-center gap-3 shrink-0">
           {wrongBtn}
+          {pinBtn({ kind: 'picture', url: visual.url, alt: visual.alt })}
           {visual.source === 'wiki' && visual.link && !visual.page && (
             <a href={visual.link} target="_blank" rel="noreferrer" className={linkCls} title={visual.credit}>{(visual.credit || t('visual.source')).split(':')[0]} <ExternalLink className="w-3 h-3" /></a>
           )}

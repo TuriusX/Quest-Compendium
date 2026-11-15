@@ -32,7 +32,7 @@ const f = (r: GameRecord, k: string) => { const v = r.fields?.[k]; return Array.
 const json = (t: string): any => { try { const s = String(t || ''); return JSON.parse(s.slice(s.indexOf('{'), s.lastIndexOf('}') + 1)); } catch { return null; } };
 export const SPINE = (key: string) => RECORDS().doc(key).collection('spine');
 /** The missable facts the spine links: items and secrets marked missable, and anything with lockout wording. */
-export const isMissable = (r: GameRecord) => r.status !== 'disputed' && (r.type === 'item' || r.type === 'secret' || r.type === 'checklist') && (!!(r as any).missable || !!f(r, 'lockout'));
+export const isMissable = (r: GameRecord) => r.status !== 'disputed' && (((r.type === 'item' || r.type === 'secret' || r.type === 'checklist') && (!!(r as any).missable || !!f(r, 'lockout'))) || (r.type === 'achievement' && !!(r as any).missable));
 const lockSig = (r: GameRecord) => contentSig({ ...r, fields: { lockout: f(r, 'lockout'), where: f(r, 'where') } } as any);
 
 async function call(prompt: string, maxOut = 12000, thinking: ThinkingLevel = ThinkingLevel.LOW): Promise<any> {
@@ -107,13 +107,16 @@ async function linkAct(game: string, act: SpineAct, later: SpineStep[], recs: Ga
       '- "lost": the ONE point of no return whose event the "loses it" wording describes (also when the wording names a consequence of that event, such as a merchant leaving once a questline ends). If the wording only says when, the first point of no return after which it is gone.',
       '- "if": when the wording also (or only) names a condition the player causes against one character or object (killing, shoving or silencing someone, destroying something, a dialogue choice, a failed check), that condition in a few words, e.g. "if Grat is killed", "if Gekh is shoved into the abyss". Otherwise leave it out.',
       '- "lost" is "unknown" only when the item has no wording, or the wording names nothing but such a condition.',
+      '- An ACHIEVEMENT (marked so) has no "loses it" wording: from how it is earned, pick the point of no return after which it can no longer be earned in this playthrough; "unknown" if none of them ends it (only a choice or a condition does).',
       'Return JSON: {"links":{"item id":{"lost":"lock id or unknown","if":"condition"}, ...}} with every item id.',
       '',
       'POINTS OF NO RETURN:',
       ...locks.map((s) => `${s.id}: ${s.name}: ${s.text}`),
       '',
       'ITEMS:',
-      ...batch.map((r) => `${r.id}: ${cut(r.name, 70)} | where: ${cut(f(r, 'where'), 120)} | loses it: ${cut(f(r, 'lockout'), 200) || '(no wording)'}`),
+      ...batch.map((r) => r.type === 'achievement'
+        ? `${r.id}: ACHIEVEMENT ${cut(r.name, 70)} | earned: ${cut(f(r, 'how') || r.short, 220)}`
+        : `${r.id}: ${cut(r.name, 70)} | where: ${cut(f(r, 'where'), 120)} | loses it: ${cut(f(r, 'lockout'), 200) || '(no wording)'}`),
     ].join('\n');
     const j = await call(prompt, 12000);
     const ids = new Set(locks.map((s) => s.id));
