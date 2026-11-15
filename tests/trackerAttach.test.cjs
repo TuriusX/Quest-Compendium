@@ -98,7 +98,9 @@ async function test(name, fn) {
     handlers['tracker-msg']({ sender: win.webContents }, { type: 'attach', on: false });
     await new Promise((r) => setTimeout(r, 450)); // the store saves after 400 ms
     assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'tracker.json'), 'utf8')).g1.attach, false);
-    assert.equal(win.opacity, 1, 'popped out: its own window over the game');
+    // Popped out (Nov 15 2026): the app draws the log in its own window; this one stays out of sight.
+    assert.equal(win.opacity, 0, 'popped out: the app draws it, this window is out of sight');
+    assert.ok(env.told.some((p) => p.type === 'visibility' && p.visible === true && p.attached === false), 'the app is told to draw it popped out');
     tracker.hide();
   });
 
@@ -207,14 +209,20 @@ async function test(name, fn) {
     tracker.hide();
   });
 
-  await test('pop out and put back (from the app or the window); popped out it stays over the game', async () => {
+  await test('pop out and put back (from the app or the window); popped out the app draws it, also with the panel away', async () => {
     const { tracker, win, env, handlers, dir } = await setup({ existing: false });
     env.panel = { x: 1370, y: 0, width: 550, height: 800 };
     tracker.panelShown();
     assert.equal(await handlers['tracker-attach'](null, false), true, "the docked log's ⇱");
-    assert.equal(win.opacity, 1);
+    assert.equal(win.opacity, 0, 'popped out: the app draws it');
     env.panel = null; tracker.panelHidden();
-    assert.equal(win.opacity, 1, 'popped out: stays over the game');
+    assert.equal(tracker.isLogVisible(), true, 'popped out: still out with the panel away');
+    assert.equal(win.opacity, 0);
+    // Put away while popped out: this window is the edge ribbon again.
+    await tracker.toggle(null);
+    assert.equal(win.opacity, 1, 'put away: the ribbon shows');
+    await tracker.toggle(null);
+    assert.equal(win.opacity, 0, 'out again: the app draws it');
     handlers['tracker-msg']({ sender: win.webContents }, { type: 'attach', on: true }); // its ⤓
     await new Promise((r) => setTimeout(r, 450));
     assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'tracker.json'), 'utf8')).g1.attach, true);
