@@ -421,7 +421,7 @@
     <span class="ptxt"><span class="name" id="placeName"></span><span class="approx" id="approx"></span><span class="story" id="placeStory"></span></span>
     <span class="arr off" id="nextArea">›</span>
     <span class="pctl">
-      <span class="ic" id="bLocate" title="Locate me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.5"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></span>
+      <span class="ic" id="bLocate" title="Help me here"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.5"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></span>
       <span class="ic ok" id="placeConfirm" title="Confirm where you are"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span>
     </span>
   </div>
@@ -491,14 +491,14 @@
     confirmHint: 'Confirm where you are', away: 'Send to the screen edge', awayEdge: 'Send to the edge',
     size: 'Text size', alpha: 'Transparency', backdrop: 'Soft dark backdrop', tabHint: 'Bring the objectives back',
     itemTodo: 'Click: collected', itemDone: 'Click: not collected yet',
-    empty: 'Nothing to track here yet', secAnswer: 'From your last answer', secMissable: 'Missable here (from the guide)',
-    locatingBig: 'Looking at your screen…', whereTitle: 'Where are you?', whereSub: 'Locate me looks at your screen (the map, your journal, place names) to find where you are in the guide.',
+    empty: 'Nothing to track here yet', secAnswer: 'From your last answer', secMissable: 'Missable here',
+    locatingBig: 'Looking at your screen…', whereTitle: 'Where are you?', whereSub: 'Help me here looks at your screen (the map, your journal, place names) to find where you are in the guide, sets what you are doing as Now, and finds a video or picture for it.',
     whereLooksLike: 'Looks like {place}?', whereYes: 'Yes', whereNo: 'No', whereLast: 'Last time: {place}', whereStill: 'Still here', wherePick: "Pick from the guide's areas",
-    inPlace: 'In {place} (from the guide)', hereSub: "What you're doing here isn't clear yet. Ask a question, or press Locate me with your journal or objective on screen.", seenOnScreen: 'On your screen: {what}', fromGuideStep: 'From the guide: {step}',
+    inPlace: 'In {place}', hereSub: "What you're doing here isn't clear yet. Ask a question, or press Help me here with your journal or objective on screen.", seenOnScreen: 'On your screen: {what}', fromGuideStep: 'Step details: {step}',
     secNoReturn: 'Point of no return', secCollect: 'To collect', secAch: 'Achievements here', more: '+{n} more',
-    next: 'Next: {area}', closest: 'From the guide: {area} (closest match)', showHidden: 'Show {n} hidden', hideEntry: 'Hide',
+    next: 'Next: {area}', closest: '{area} (closest match)', showHidden: 'Show {n} hidden', hideEntry: 'Hide',
     limitHint: 'Click: show 3, 6 or all', prevArea: 'Previous area', nextArea: 'Next area', areaList: 'All areas in the guide',
-    locate: 'Locate me', locating: 'Locating…',
+    locate: 'Help me here', locating: 'Locating…',
     nextTurn: 'Next turn (asks a question)', nextTurnHint: 'Takes a new screenshot and asks what to do this turn',
     hintPanel: '{keys}: open the Compendium. This log stays where you put it.', hintPanelNoKeys: 'Click Next or the place to open the Compendium. This log stays where you put it.',
     hintOpen: '{keys}: open the Compendium. This log stays where you put it.', hintOpenNoKeys: 'Click Next or the place to open the Compendium. This log stays where you put it.',
@@ -513,7 +513,7 @@
     loadSteps: "Load the guide's steps", loadStepsHint: "The guide covers this quest: its steps become your objectives (no question used)",
     unloadSteps: "Back to your answer's objectives", dismissOffer: 'Not now', part: 'Part {n} of {total}',
     logNow: 'Now', logNext: 'Next', logWatch: 'Watch out', logFromGuide: 'From the guide', logFromQuestion: 'Your question',
-    logShowMore: 'Show more from the guide', logShowLess: 'Show less', logPinned: 'Pinned', logDone: 'Done: {goal}',
+    logShowMore: 'Show more', logShowLess: 'Show less', logPinned: 'Pinned', logDone: 'Done: {goal}',
     logWhatsNext: "What's next?", logInvite: 'What are you trying to do?', logInviteSub: "Ask, and the answer's steps become your checklist here.",
     logAsk: 'Ask', logUndo: 'Undo', logTicked: 'Ticked: {step}', logHideWatch: 'Hide this warning for this save', putBack: 'Put back in the overlay',
     logProgress: '{n} of {total}', logTick: 'Tick', logTitle: 'Quest log',
@@ -641,7 +641,7 @@
       const n = lg.now;
       const mine = n.source === 'question';
       const prog = n.total ? `<div class="lprog">${Array.from({ length: Math.min(n.total, 12) }, (_, i) => `<i${i < n.doneCount ? ' class="d"' : ''}></i>`).join('')}${esc(L('logProgress', { n: n.doneCount, total: n.total }))}<span class="g">${esc(n.goal)}</span></div>` : '';
-      h += `<div><div class="llab">${esc(L('logNow'))}<span class="src${mine ? ' mine' : ''}">${esc(mine ? L('logFromQuestion') : L('logFromGuide'))}</span></div>
+      h += `<div><div class="llab">${esc(L('logNow'))}${mine ? `<span class="src mine">${esc(L('logFromQuestion'))}</span>` : ''}</div>
         <div class="lnow${mine ? '' : ' guide'}">${box(n)}<div><span class="lt">${esc(n.text)}</span>${sub(n)}${prog}${n.seen ? `<span class="lseen">⌖ ${esc(L('seenOnScreen').replace('{what}', n.seen))}</span>` : ''}${n.guide ? `<span class="lseen" title="${esc(n.guide.detail || '')}">📖 ${esc(L('fromGuideStep').replace('{step}', n.guide.title))}</span>` : ''}</div></div></div>`;
     }
     const cleared = state.cleared && state.cleared.until > Date.now() ? state.cleared : null;

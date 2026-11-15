@@ -270,7 +270,7 @@ export function QuestLog(p: QuestLogProps) {
           <div>
             {label(t('tracker.logNow'), (
               <span className={`ml-auto normal-case tracking-normal font-sans font-semibold text-[11px] ${mine ? 'text-[var(--accent-color)]' : 'text-zinc-400'}`}>
-                {mine ? t('tracker.logFromQuestion') : t('tracker.logFromGuide')}
+                {/* Only a question's Now says where it came from; the guide's blends in (owner, Nov 15 2026). */}{mine ? t('tracker.logFromQuestion') : null}
                 {mine && <button type="button" onClick={p.onClearNow} title={t('tracker.logClearNow')} aria-label={t('tracker.logClearNow')} className="ml-1.5 align-[-2px] text-zinc-500 hover:text-white"><X className="inline w-3 h-3" /></button>}
               </span>
             ))}

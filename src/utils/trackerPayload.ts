@@ -117,9 +117,9 @@ export const trackerLabels = (t: (key: string) => string): Record<string, string
 
 /** Section titles when a translation is missing (the page has the same English fallbacks for its other words). */
 const SECTION_EN: Record<TrackerSectionId, string> = {
-  guide: 'From the guide',
+  guide: 'Here',
   answer: 'From your last answer',
-  missable: 'Missable here (from the guide)',
+  missable: 'Missable here',
   noreturn: 'Point of no return',
   collect: 'To collect',
   ach: 'Achievements here',
@@ -402,7 +402,7 @@ export function buildTrackerPayload(
       ...(loadedSteps?.warning ? { warning: loadedSteps.warning } : {}),
       // The place isn't one of the guide's areas by name: say which area this is and that it's the closest match.
       ...(guideArea && guideArea.via && guideArea.via !== 'name'
-        ? { source: (L.closest || 'From the guide: {area} (closest match)').replace('{area}', guideArea.name) }
+        ? { source: (L.closest || '{area} (closest match)').replace('{area}', guideArea.name) }
         : {}),
       ...(labels ? { labels } : {}),
     },
