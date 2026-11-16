@@ -187,6 +187,8 @@ export function registerGuestGuard(app: Express, deps: GuestGuardDeps): { limits
     if (!GUEST_ID.test(token)) {
       return res.status(401).json({ error: 'Unauthorized: Invalid guest session' });
     }
+    // A local prompt capture for a test (QC_EVAL_CAPTURE, never on Cloud Run, test guests only) calls no model: no limits.
+    if (process.env.QC_EVAL_CAPTURE && !process.env.K_SERVICE && /^guest_(dev|local|test)(_|$)/.test(token)) return next();
     const ip = clientIp(req, limits.proxyHops);
     const session = touchSession(ip, token);
     const refused = session !== 'ok' ? (session === 'busy' ? 'busy' : 'ip') : take(chat, ip, 1, limits.chatPerIpDaily, limits.chatGlobalDaily, limits.chatPerIpPerMin);

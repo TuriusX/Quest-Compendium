@@ -26,10 +26,11 @@ import { registerVisualAnswers, answerVisual, visualAnswersOn, visualEvent } fro
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
 import { registerWorthRoutes, areaRef as worthAreaRef, worthTicket, topUpFromAnswer, ASKS_WHATS_WORTH } from './worthOnDemand';
 import { answerSourceLinks, groundingLinks } from './sourceLinks';
+import { answerFactsOn, factsForQuestion, tallyFacts } from './answerFacts';
 import { registerSpot } from './spot';
 import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
-import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor } from './guidesApi';
+import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor, baseGameKey } from './guidesApi';
 import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
@@ -1597,7 +1598,28 @@ percentages:
       const appSearchMode: SearchMode = !effectiveGame?.name
         ? 'ask'
         : searchModeFor({ newRelease, dated: release?.source !== 'unknown', type: qtype, covered: Boolean(guidePage?.verified), screenshot: !!imageBase64, specifics: wantsSpecifics(String(question || '')) });
-      const searchMode: SearchMode = (site || usePro || fastApp) && appSearchMode === 'ask' ? 'offer' : appSearchMode;
+      let searchMode: SearchMode = (site || usePro || fastApp) && appSearchMode === 'ask' ? 'offer' : appSearchMode;
+      // Checked facts (answerFacts.ts, roadmap 31 step 1; config/answerFacts.on, off by default): when the question names
+      // things the database has checked, they go in as reference and the first try runs without the web search (the
+      // model asks for one when they don't cover what was asked). Never for a new release (searchMode 'force').
+      let factsUsed = 0;
+      // (A local capture for the gate test may choose: evalFacts true or false.)
+      const factsOn = evalCapture && typeof req.body.evalFacts === 'boolean' ? req.body.evalFacts : await answerFactsOn();
+      // Pro only: in the gate test (Nov 16 2026, 10 questions naming checked facts) Pro with facts made 2 wrong claims
+      // against 6, median 14 s against 21, 17% cheaper; Fast with facts made 9 against 2 (it filled in details past the
+      // facts without searching, also when told not to), so Fast keeps searching as before.
+      if (searchMode === 'offer' && !site && usePro && effectiveGame?.name && String(question || '').trim() && factsOn) {
+        try {
+          const f = await withTimeout(factsForQuestion(guideKey || baseGameKey(effectiveGame.name), String(question), guidePage?.slug || ''), 3000, 'Checked facts') as Awaited<ReturnType<typeof factsForQuestion>>;
+          if (f.count) {
+            systemInstruction += `\n\n${f.text}`;
+            searchMode = 'ask';
+            factsUsed = f.count;
+          }
+        } catch (e: any) {
+          console.log('[chat] no checked facts:', String(e?.message || e).slice(0, 120));
+        }
+      }
       const searchOk = evalCapture ? true : site ? site.maySearch : searchMode === 'force'
         ? (await playerSearchesToday()) && (await monthlyBudgetOk())
         : await searchAllowed({ ...searchCtx, fullAccess: hasFullAccess(isPremium) });
@@ -1843,7 +1865,7 @@ percentages:
           const flashWait = site?.stream ? 75000 : site ? 45000 : 30000;
           if (evalCapture) {
             const fs = await import('node:fs');
-            fs.appendFileSync(String(process.env.QC_EVAL_CAPTURE), JSON.stringify({ id: req.body.evalId, model: answerModel, contents: contentsPayload, systemInstruction: firstSystem, withSearch: !!searchTools, searchMode, temperature: 0.7, qtype }) + String.fromCharCode(10));
+            fs.appendFileSync(String(process.env.QC_EVAL_CAPTURE), JSON.stringify({ id: req.body.evalId, model: answerModel, contents: contentsPayload, systemInstruction: firstSystem, retrySystem: systemInstruction, withSearch: !!searchTools, searchMode, factsUsed, temperature: 0.7, qtype }) + String.fromCharCode(10));
             return res.json({ text: 'captured', modelUsed: 'eval' });
           }
           let response = await withTimeout(answerCall(firstSystem, searchTools), usePro ? proWait : flashWait, usePro ? 'Pro query' : 'Flash query') as any;
@@ -1881,6 +1903,7 @@ percentages:
             }
           }
           searchesUsed += countSearches(response);
+          if (factsUsed) void tallyFacts(searchAsked || countSearches(response) > 0).catch(() => {});
           searchSourcesSeen = searchSources(response); groundingLinksSeen = groundingLinks(response);
           groundedSeen = groundedText(response);
           responseText = response.text || '';
