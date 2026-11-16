@@ -6,7 +6,7 @@
  *   npx tsx scripts/guides/recordsImport.ts [--only KEY] [--dry-run]
  */
 import { db, arg } from './common';
-import { areaRecords, entityRecords, achievementRecords, gameFactRecord, applyExtracted, applyWorth, applyLocated, applyVerified, type GameRecord } from './records';
+import { areaRecords, entityRecords, achievementRecords, gameFactRecord, applyExtracted, applyWorth, applyLocated, applyVerified, applyNumbers, type GameRecord } from './records';
 import { loadOwnerEdits, applyOwnerEdits } from './ownerEditsPublish';
 import { loadPageStats, statOf } from './pageStats';
 
@@ -91,6 +91,12 @@ async function collect(only = ''): Promise<Map<string, GameRecord[]>> {
     const vd = new Map<string, any>(((await RECORDS().doc(key).collection('verified').get().catch(() => null))?.docs || []).map((d) => [d.id, d.data() as any]));
     if (!vd.size) continue;
     out.set(key, recs.map((r) => (r.place && vd.has(r.place) ? applyVerified([r], vd.get(r.place))[0] : r)));
+  }
+  // The numbers re-check (numericRecheck.ts): numbers corrected from the thing's own wiki article, while unchanged.
+  for (const [key, recs] of out) {
+    const nm = new Map<string, any>(((await RECORDS().doc(key).collection('numbers').get().catch(() => null))?.docs || []).map((d) => [d.id, d.data() as any]));
+    if (!nm.size) continue;
+    out.set(key, recs.map((r) => (nm.has(r.place || '_') ? applyNumbers([r], nm.get(r.place || '_'))[0] : r)));
   }
   for (const g of (await db().collection('gameFacts').get()).docs) {
     if (only && g.id !== only) continue;

@@ -397,6 +397,22 @@ export const contentSig = (r: Pick<GameRecord, 'type' | 'name' | 'fields'>) =>
   crypto.createHash('sha1').update(JSON.stringify([r.type, r.name, r.fields])).digest('hex').slice(0, 16);
 
 /**
+ * The numbers re-check (numericRecheck.ts, owner Nov 16 2026): a checked fact's numbers compared with the thing's own
+ * wiki article. Laid over records whose content is unchanged since (sig): a corrected one takes the corrected fields
+ * (the old text kept in `numCheck.was` for undo), a confirmed one just records where it was confirmed.
+ */
+export type NumberResult = { sig: string; status: 'confirmed' | 'corrected'; fixes?: Record<string, string>; was?: Record<string, string>; source: string; quote?: string; at: number };
+export function applyNumbers(recs: GameRecord[], v: { results?: Record<string, NumberResult> } | undefined): GameRecord[] {
+  if (!v?.results) return recs;
+  return recs.map((r) => {
+    const x = v.results![r.id];
+    if (!x || x.sig !== contentSig(r)) return r;
+    const numCheck = { status: x.status, source: x.source, ...(x.quote ? { quote: x.quote } : {}), at: x.at, ...(x.was ? { was: x.was } : {}) };
+    return finish({ ...r, fields: x.status === 'corrected' && x.fixes ? { ...r.fields, ...x.fixes } : r.fields, numCheck } as any);
+  });
+}
+
+/**
  * The verify step's results (recordsVerify.ts) laid over the records whose content is unchanged since: checked
  * records become tier A, a contradicted one is "disputed" with the evidence's correction in `dispute`.
  */
