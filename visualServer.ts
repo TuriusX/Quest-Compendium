@@ -15,6 +15,7 @@ import crypto from 'crypto';
 import type { Express, Request, Response } from 'express';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { visualFor, visualId, communityWikis, YouTubeQuotaOut, type Cost, type Visual, type VisualStore } from './visualAnswer';
+import { communityWikisFor, type CommunityWiki } from './scripts/guides/suggestImages';
 import { GENERATED } from './src/locales.generated';
 
 /**
@@ -111,9 +112,14 @@ export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'l
   const env = deps.env ?? process.env;
   const shotOnly = o.shotOnly === true || isStandInQuestion(o.question);
   const keyOf = async (game: string) => (await deps.guideKeyFor(game)) || game.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  const wikiOf = async (gameKey: string) => {
+  const wikiOf = async (gameKey: string, game = o.game) => {
     const src: any = (await getFirestore().collection('guideImageSources').doc(gameKey).get()).data() || {};
-    return { fextralife: src.fextralife?.domain || '', fandom: src.wiki?.domain || '', more: communityWikis(gameKey) };
+    // Community wikis: the override, else found once from the name (a first lookup waits at most 6 s and finishes in
+    // the background, remembered for the next answer).
+    const found = communityWikis(gameKey).length ? Promise.resolve(communityWikis(gameKey))
+      : communityWikisFor(gameKey, game, src, deps.getGeminiClient()).catch(() => [] as CommunityWiki[]);
+    const more = await Promise.race([found, new Promise<CommunityWiki[]>((r) => setTimeout(() => r([]), 6000))]);
+    return { fextralife: src.fextralife?.domain || '', fandom: src.wiki?.domain || '', more };
   };
   const gameKey = String(o.guideKey || '').replace(/[^a-z0-9-]/g, '').slice(0, 120) || (await keyOf(o.game));
   const key = String(env.YOUTUBE_API_KEY || '');
@@ -123,7 +129,7 @@ export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'l
     store: firestoreStore(), log: deps.log,
     beforeSearch: key ? searchBudget(Number(env.YOUTUBE_DAILY_SEARCHES) || 100) : async () => { throw new YouTubeQuotaOut('no YouTube key'); },
     // A question about another game than the compendium's: that game's guide key and wikis.
-    otherGame: async (name) => { const k = await keyOf(name); return { gameKey: k, wiki: await wikiOf(k) }; },
+    otherGame: async (name) => { const k = await keyOf(name); return { gameKey: k, wiki: await wikiOf(k, name) }; },
   });
   const v = r.visual;
   const client = String(o.client || 'web').replace(/[^a-z]/g, '').slice(0, 8) || 'web';

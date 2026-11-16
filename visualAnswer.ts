@@ -19,8 +19,8 @@
  */
 import { ThinkingLevel } from '@google/genai';
 import sharp from 'sharp';
-import { estimateCost } from './usage';
-import { fextralifeImage } from './scripts/guides/suggestImages';
+import { estimateCost, SEARCH_DOLLARS } from './usage';
+import { fextralifeImage, pagePicture } from './scripts/guides/suggestImages';
 
 export type VisualKind = 'video' | 'picture' | 'none';
 export type Visual =
@@ -351,8 +351,8 @@ async function articleOf(w: MoreWiki, title: string): Promise<{ url: string; tit
 /** A wiki article's main picture (its og:image), never a logo. */
 async function mediaWikiImage(w: MoreWiki, title: string) {
   const a = await articleOf(w, title);
-  const og = a ? ((a.html.match(/<meta property="og:image" content="([^"]+)"/) || [])[1] || '').replace(/&amp;/g, '&') : '';
-  return a && og && !/logo|wiki\.png|site-logo/i.test(og) ? { url: og, page: a.url, title: a.title } : null;
+  const pic = a ? pagePicture(a.html, title, a.url) : '';
+  return a && pic && !/wiki\.png|site-logo/i.test(pic) ? { url: pic, page: a.url, title: a.title } : null;
 }
 
 async function fandomImage(domain: string, title: string) {
@@ -372,24 +372,71 @@ async function jpegOf(url: string, minWidth = 200): Promise<string | null> {
   } catch { return null; }
 }
 
-export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: string; fandom?: string; more?: MoreWiki[] }, game: string, question: string, subject: string, steps: string[], where = false, icon = false) {
+/** Where a grounding redirect link leads (followed once, not loaded). */
+async function realUrl(uri: string): Promise<string> {
+  if (!/^https:\/\//.test(uri)) return '';
+  if (!/vertexaisearch|grounding-api-redirect/.test(uri)) return uri;
+  try { return (await fetch(uri, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(5000) })).headers.get('location') || ''; } catch { return ''; }
+}
+const siteOf = (url: string) => { try { return new URL(url).host.replace(/^www\./, ''); } catch { return ''; } };
+
+/**
+ * The last resort when no wiki has a usable picture (owner, Nov 16 2026: any source, credited and linked): one web
+ * search for pages about the thing, and each page's own picture of it (pagePicture: named after it or the page's main
+ * picture; never icons or site furniture), at most three pages. The same vision check follows.
+ */
+async function webTries(ai: Gen, cost: Cost, game: string, subject: string, steps: string[]): Promise<{ url: string; page: string; title: string; site: string }[]> {
+  try {
+    const res: any = await ai.models.generateContent({
+      model: FAST,
+      contents: [{ role: 'user', parts: [{ text: `Find web pages about "${subject}" in the video game "${game}": a wiki, guide or fan page about it that shows its picture. Reply with the pages' addresses only.` }] }],
+      config: { tools: [{ googleSearch: {} }], temperature: 0, maxOutputTokens: 2000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    });
+    const searches = (res?.candidates?.[0]?.groundingMetadata?.webSearchQueries || []).length;
+    cost.d += (estimateCost(FAST, res) || 0) + searches * SEARCH_DOLLARS;
+    cost.log?.('visual-web', FAST, res);
+    const links = ((res?.candidates?.[0]?.groundingMetadata?.groundingChunks || []) as any[]).map((c) => String(c?.web?.uri || '')).filter(Boolean);
+    const pages = [...new Set((await Promise.all(links.slice(0, 8).map(realUrl))).filter((u) => u && !/youtube\.com|youtu\.be|questcompendium/i.test(u)))].slice(0, 3);
+    const out: { url: string; page: string; title: string; site: string }[] = [];
+    for (const page of pages) {
+      const r = await fetch(page, { headers: { 'User-Agent': UA }, redirect: 'follow', signal: AbortSignal.timeout(8000) }).catch(() => null);
+      if (!r?.ok) continue;
+      const html = await r.text().catch(() => '');
+      const url = pagePicture(html, subject, r.url || page);
+      const title = ((html.match(/<meta property="og:title" content="([^"]+)"/) || html.match(/<title>([^<]+)<\/title>/) || [])[1] || subject)
+        .replace(/&#0?39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim().slice(0, 120);
+      if (url) out.push({ url, page: r.url || page, title, site: siteOf(r.url || page) });
+    }
+    steps.push(`web: ${pages.length} page(s), ${out.length} picture(s) for "${subject}"`);
+    return out;
+  } catch (e: any) { steps.push(`web search failed: ${String(e?.message || e).slice(0, 80)}`); return []; }
+}
+
+export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: string; fandom?: string; more?: MoreWiki[] }, game: string, question: string, subject: string, steps: string[], where = false, icon = false, web = true) {
   const tries: { url: string; page: string; title: string; site: string }[] = [];
   if (src.fextralife) { const f = await fextralifeImage(src.fextralife, subject).catch(() => null); if (f) tries.push({ ...f, site: 'Fextralife' }); }
   if (src.fandom) { const f = await fandomImage(src.fandom, subject); if (f) tries.push({ ...f, site: 'Fandom' }); }
   for (const w of src.more || []) { const f = await mediaWikiImage(w, subject); if (f) tries.push({ ...f, site: w.site }); }
   steps.push(`wiki: ${tries.length} page picture(s) for "${subject}"`);
-  for (const t of tries) {
+  const found = await checkTries(tries);
+  if (found || !web) return found;
+  // No wiki picture passed: the web, under the same check.
+  const seen = new Set(tries.map((t) => t.url));
+  return checkTries((await webTries(ai, cost, game, subject, steps)).filter((t) => !seen.has(t.url)));
+
+  async function checkTries(list: typeof tries) {
+  for (const t of list) {
     // A named thing's picture is often the wiki's item icon (150px on BG3's wiki): smaller ones count there.
     const jpeg = await jpegOf(t.url, icon ? 120 : 200);
     if (!jpeg) { steps.push(`${t.site} picture too small or unreadable`); continue; }
     const prompt =
-      `This is the main picture of the wiki page "${t.title}" for the video game "${game}". A player asked: "${question}".\n` +
+      `This is the picture from the page "${t.title}" (${t.site}) about the video game "${game}". A player asked: "${question}".\n` +
       (where
         ? `They asked WHERE it is. Does it clearly show where "${subject}" is (an in-game map marking its spot, or the ` +
           'spot itself in the game), or "' + subject + '" itself as it looks in the game? Not a logo, concept sketch, ' +
           'collage, real-world photo or a different thing. Reply with JSON only: '
         : `Does it clearly show "${subject}" itself, as it looks in the game, so the player would recognise it? Not a map, ` +
-          'logo, concept sketch, collage, real-world photo or a different thing. Reply with JSON only: ') +
+          'logo, stat or damage icon, concept sketch, collage, AI-generated art, real-world photo or a different thing. Reply with JSON only: ') +
       '{"ok": true | false, "confidence": "high" | "medium" | "low", "what": "what it shows, one short sentence"}';
     const j = await ask(ai, cost, [{ inlineData: { mimeType: 'image/jpeg', data: jpeg } }, { text: prompt }], 200, 'visual-picture');
     steps.push(`check ${t.site}: ${j?.ok ? 'yes' : 'no'} (${j?.confidence || '?'}) ${j?.what || ''}`);
@@ -398,6 +445,7 @@ export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: strin
     }
   }
   return null;
+  }
 }
 
 // ---- The whole step -----------------------------------------------------------------------------------------------

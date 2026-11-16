@@ -15,7 +15,7 @@ import { db, gemini, arg } from './common';
 import { RECORDS } from './recordsImport';
 import { wikiPage, wikiPicture, communityWikis, type Cost, type MoreWiki } from '../../visualAnswer';
 import type { GameRecord } from './records';
-import { fextralifeDomain } from './suggestImages';
+import { fextralifeDomain, communityWikisFor } from './suggestImages';
 
 const UA = 'QuestCompendium/1.0 (+https://questcompendium.com)';
 
@@ -39,18 +39,21 @@ async function keep(url: string, page: string): Promise<string | null> {
 export async function wikiFor(key: string, game?: string): Promise<CardWikis | null> {
   const src: any = (await db().collection('guideImageSources').doc(key).get()).data() || {};
   const fx = src.fextralife === undefined && game ? await fextralifeDomain(key, game, src).catch(() => '') : src.fextralife?.domain || '';
-  const wiki = { fextralife: fx, fandom: src.wiki?.domain || '', more: communityWikis(key) };
+  // Community wikis: the hand-filled override, else found from the name once (remembered).
+  const more = communityWikis(key).length ? communityWikis(key) : await communityWikisFor(key, game || key, src, gemini()).catch(() => []);
+  const wiki = { fextralife: fx, fandom: src.wiki?.domain || '', more };
   return wiki.fextralife || wiki.fandom || wiki.more.length ? wiki : null;
 }
 export type CardWikis = { fextralife: string; fandom: string; more?: MoreWiki[] };
 
 /**
  * One item's card: its wiki page and a checked picture (copied to our store), saved in gameRecords/{key}/cards/{id}.
- * No wiki known for the game: the card keeps the page the sources cited (`cited`), without a picture.
+ * No wiki known for the game: the web search still looks for a picture (wikiPicture's last resort, credited and linked
+ * to its page), and the card keeps the page the sources cited (`cited`) when nothing better.
  */
 export async function cardFor(key: string, game: string, wiki: CardWikis | null, r: GameRecord, cost: Cost, cited?: { url: string; title: string; site: string } | null): Promise<{ page: boolean; pic: boolean }> {
   const steps: string[] = [];
-  const pic = wiki ? await wikiPicture(gemini() as any, cost, wiki, game, `Show me ${r.name}`, r.name, steps, false, true) : null;
+  const pic = await wikiPicture(gemini() as any, cost, wiki || { fextralife: '', fandom: '' }, game, `Show me ${r.name}`, r.name, steps, false, true);
   const page = pic?.page || (wiki ? await wikiPage(wiki, r.name).catch(() => null) : null) || cited || null;
   const hash = pic ? await keep(pic.url, pic.page.url) : null;
   await RECORDS().doc(key).collection('cards').doc(r.id).set({ place: r.place, page: page || null, pic: hash, what: pic?.alt || '', at: Date.now() });
@@ -63,15 +66,15 @@ async function main() {
   const max = Number(arg('max-dollars', '1')) || 1;
   const dry = process.argv.includes('--dry-run'), redo = process.argv.includes('--redo');
   const game = String(((await db().collection('guides').doc(key).get()).data() as any)?.game || key);
-  const wiki = await wikiFor(key);
-  if (!wiki) throw new Error(`no wiki known for ${key} (guideImageSources)`);
+  const wiki = await wikiFor(key, game);
+  if (!wiki) console.log(`No wiki known for ${key}: pictures from the web search only.`);
   const items = (await RECORDS().doc(key).collection('records').get()).docs.map((d) => d.data() as GameRecord)
     .filter((r) => r.place && (r.type === 'item' || r.type === 'secret') && r.fields?.rank && r.status !== 'disputed');
   // --redo: every item again; --nopic: also the cards that have no picture yet; default: items with no card.
   const nopic = process.argv.includes('--nopic');
   const cards = new Map((await RECORDS().doc(key).collection('cards').get()).docs.map((d) => [d.id, d.data() as any]));
   const todo = items.filter((r) => redo || !cards.has(r.id) || (nopic && !cards.get(r.id)?.pic));
-  console.log(`${game}: ${items.length} items in Worth getting here, ${todo.length} to do; wiki ${wiki.fextralife || wiki.fandom}.`);
+  console.log(`${game}: ${items.length} items in Worth getting here, ${todo.length} to do; wikis ${[wiki?.fextralife, wiki?.fandom, ...(wiki?.more || []).map((w) => w.site)].filter(Boolean).join(', ') || 'none (web only)'}.`);
   if (dry) return void setTimeout(() => process.exit(0), 200);
   const cost: Cost = { d: 0 };
   let pages = 0, pics = 0, n = 0;
