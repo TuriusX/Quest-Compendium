@@ -320,29 +320,39 @@ export async function wikiPage(src: { fextralife?: string; fandom?: string; more
     }
   }
   for (const w of src.more || []) {
-    const j: any = await fetch(`${w.api}?format=json&formatversion=2&action=query&redirects=1&titles=${encodeURIComponent(subject)}`, { headers: { 'User-Agent': UA } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    const p = j?.query?.pages?.[0];
-    if (p && !p.missing && !p.invalid) return { url: `${w.page}${encodeURIComponent(String(p.title).replace(/ /g, '_'))}`, title: String(p.title), site: w.site };
+    const p = await articleOf(w, subject);
+    if (p) return { url: p.url, title: p.title, site: w.site };
   }
   return null;
 }
 
 /**
- * Community wikis beyond Fextralife and Fandom (owner, Nov 16 2026: any wiki may supply pictures), by game key: a
- * MediaWiki's api.php and its page path. bg3.wiki has a clean 144px icon for every BG3 item. (wiki.gg refuses the
- * app's requests, so it isn't used.)
+ * Community wikis beyond Fextralife and Fandom (owner, Nov 16 2026: any wiki may supply pictures), by game key: the
+ * wiki's article path. bg3.wiki has a clean 144px icon for every BG3 item. Read from the article page itself: these
+ * wikis' robots.txt disallow api.php for bots (bg3.wiki /w/api.php, wiki.gg /api.php) and allow /wiki/ pages.
  */
-export type MoreWiki = { api: string; page: string; site: string };
+export type MoreWiki = { page: string; site: string };
 const COMMUNITY_WIKIS: Record<string, MoreWiki[]> = {
-  'baldur-s-gate-3': [{ api: 'https://bg3.wiki/w/api.php', page: 'https://bg3.wiki/wiki/', site: 'bg3.wiki' }],
+  'baldur-s-gate-3': [{ page: 'https://bg3.wiki/wiki/', site: 'bg3.wiki' }],
 };
 export const communityWikis = (key: string): MoreWiki[] => COMMUNITY_WIKIS[key] || [];
 
-/** A MediaWiki page's main picture (pageimages), from any wiki's api.php. */
+/** A wiki's article for a name (MediaWiki shows a redirect's target with a 200; a missing page is a 404). */
+async function articleOf(w: MoreWiki, title: string): Promise<{ url: string; title: string; html: string } | null> {
+  const url = `${w.page}${encodeURIComponent(title.trim().replace(/ /g, '_'))}`;
+  const r = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'follow' }).catch(() => null);
+  if (!r || r.status !== 200) return null;
+  const html = await r.text().catch(() => '');
+  const name = ((html.match(/<meta property="og:title" content="([^"]+)"/) || [])[1] || (html.match(/<title>([^<]+)<\/title>/) || [])[1] || title)
+    .replace(/\s*[-|–].*$/, '').replace(/&#0?39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim();
+  return { url: r.url || url, title: name || title, html };
+}
+
+/** A wiki article's main picture (its og:image), never a logo. */
 async function mediaWikiImage(w: MoreWiki, title: string) {
-  const j: any = await fetch(`${w.api}?format=json&formatversion=2&action=query&prop=pageimages&piprop=original&redirects=1&titles=${encodeURIComponent(title)}`, { headers: { 'User-Agent': UA } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-  const p = j?.query?.pages?.[0];
-  return p && !p.missing && p.original?.source ? { url: String(p.original.source), page: `${w.page}${encodeURIComponent(String(p.title).replace(/ /g, '_'))}`, title: String(p.title) } : null;
+  const a = await articleOf(w, title);
+  const og = a ? ((a.html.match(/<meta property="og:image" content="([^"]+)"/) || [])[1] || '').replace(/&amp;/g, '&') : '';
+  return a && og && !/logo|wiki\.png|site-logo/i.test(og) ? { url: og, page: a.url, title: a.title } : null;
 }
 
 async function fandomImage(domain: string, title: string) {
