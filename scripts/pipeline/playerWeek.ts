@@ -8,7 +8,7 @@
  *     free players ran out (the owner then revisits the free limits).
  * From the daily stats (stats/{day}, Central time: players, guests, costs, limitHit, owners) and the month's player
  * costs (playerCosts/{month}/players). Left out: the owner's accounts (ADMIN_EMAILS on the server, marked in
- * stats/{day}.owners, and config/players.ownerHashes) and test traffic (test guest ids and local servers, never recorded: testTraffic.ts).
+ * stats/{day}.owners, and config/players.ownerHashes), test accounts (config/players.testUids) and test traffic (test guest ids and local servers, never recorded: testTraffic.ts).
  */
 import crypto from 'crypto';
 import { db } from '../guides/common';
@@ -70,8 +70,10 @@ export async function playerWeekLines(today = Date.now()): Promise<string[]> {
   const month = new Date(today).toISOString().slice(0, 7);
   const monthCosts = (await db().collection('playerCosts').doc(month).collection('players').get()).docs
     .map((d) => ({ hash: hashOf(d.id), dollars: Number((d.data() as any).dollars) || 0 }));
-  // The owner's accounts: config/players.ownerHashes (set once from ADMIN_EMAILS), plus any the server marks.
-  const ownerHashes = (((await db().collection('config').doc('players').get()).data() || {}) as any).ownerHashes || [];
+  // The owner's accounts: config/players.ownerHashes (set once from ADMIN_EMAILS), plus any the server marks, and the
+  // owner's test accounts (config/players.testUids, as in /stats).
+  const players = (((await db().collection('config').doc('players').get()).data() || {}) as any);
+  const ownerHashes = [...(players.ownerHashes || []), ...((players.testUids || []) as string[]).map(hashOf)];
   const w = playerWeek(days, monthCosts, today, ownerHashes);
   const n = (s: Set<string>) => s.size;
   const lines = [
@@ -92,6 +94,6 @@ export async function playerWeekLines(today = Date.now()): Promise<string[]> {
     w.freePlayers && w.hitShare > ALERT_LIMIT_SHARE ? `${Math.round(w.hitShare * 100)}% of free players ran out of questions (over ${Math.round(ALERT_LIMIT_SHARE * 100)}%)` : '',
   ].filter(Boolean);
   if (alerts.length) lines.unshift(`⚠️ Time to revisit the free limits: ${alerts.join('; ')}.`);
-  lines.push(`(Left out: your own account${w.owners > 1 ? 's' : ''}, from ADMIN_EMAILS on the server, ${w.owners} anonymous id(s) so far; and test traffic: test guest ids and local servers.)`);
+  lines.push(`(Left out: your own and test accounts (ADMIN_EMAILS on the server and config/players), ${w.owners} anonymous id(s) so far; and test traffic: test guest ids and local servers.)`);
   return lines;
 }
