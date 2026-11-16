@@ -206,17 +206,22 @@ export function useCloudSync(
 
   // Listen to custom quest_auth_change events (e.g., entering or leaving guest mode)
   useEffect(() => {
-    const handleAuthChange = () => {
+    const handleAuthChange = (e?: Event) => {
+      // Another tab's storage changes arrive as 'storage' events: only the guest session matters here (key null is a
+      // cleared storage). Reacting to every key made two open guest tabs ping-pong: each saved its tabs, the other
+      // rebuilt its guest, fetched the status and saved its own tabs again (hundreds of requests a second).
+      if (e instanceof StorageEvent && e.key !== null && e.key !== 'quest_guest_session') return;
       if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('quest_guest_session');
         if (saved) {
-          setGuestUser({
+          // The same guest keeps the same object, so nothing downstream runs again.
+          setGuestUser((prev: any) => (prev?.uid === saved ? prev : {
             uid: saved,
             email: null,
             displayName: 'Guest Explorer',
             getIdToken: async () => saved,
             isGuest: true
-          });
+          }));
         } else {
           setGuestUser(null);
         }
