@@ -126,7 +126,8 @@ export function questionsChartSvg(days: QuestionDay[], releases: Release[], titl
   parts.push(`<polyline fill="none" stroke="${C.avg}" stroke-width="3" stroke-linejoin="round" points="${avg.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}"/>`);
   // Dates: about ten along the axis, the last day always.
   const every = Math.max(1, Math.ceil(days.length / 10));
-  days.forEach((d, i) => { if (i % every === 0 || i === days.length - 1) parts.push(`<text x="${x(i)}" y="${T + ph + 22}" ${font} font-size="13" fill="${C.dim}" text-anchor="middle">${label(d.day)}</text>`); });
+  // (A regular date too close to the last one is skipped, so the two don't overlap.)
+  days.forEach((d, i) => { if ((i % every === 0 && days.length - 1 - i >= Math.ceil(every / 2)) || i === days.length - 1) parts.push(`<text x="${x(i)}" y="${T + ph + 22}" ${font} font-size="13" fill="${C.dim}" text-anchor="middle">${label(d.day)}</text>`); });
   parts.push(`<line x1="${L}" y1="${T + ph}" x2="${W - R}" y2="${T + ph}" stroke="${C.dim}" stroke-width="1"/>`);
   const total = days.reduce((n, d) => n + d.signedIn + d.guests, 0);
   parts.push(`<text x="${L}" y="${H - 52}" ${font} font-size="13" fill="${C.dim}">${esc(`${total} questions in ${days.length} days (Central time), without your accounts and test accounts. Dashed lines: app releases (named: x.y.0 and the newest).`)}</text>`);

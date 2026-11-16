@@ -80,7 +80,7 @@ export function accountsChartSvg(days: AccountDay[], releases: Release[], title:
     p.push(`<circle cx="${x(e)}" cy="${y(last)}" r="5" fill="${C.line}"/><text x="${x(e) + 10}" y="${y(last) + 6}" ${font} font-size="18" font-weight="700" fill="${C.text}">${last}</text>`);
   }
   const every = Math.max(1, Math.ceil(days.length / 10));
-  days.forEach((d, i) => { if (i % every === 0 || i === days.length - 1) p.push(`<text x="${x(i)}" y="${bTop + barsH + 22}" ${font} font-size="13" fill="${C.dim}" text-anchor="middle">${label(d.day)}</text>`); });
+  days.forEach((d, i) => { if ((i % every === 0 && days.length - 1 - i >= Math.ceil(every / 2)) || i === days.length - 1) p.push(`<text x="${x(i)}" y="${bTop + barsH + 22}" ${font} font-size="13" fill="${C.dim}" text-anchor="middle">${label(d.day)}</text>`); });
   const newIn = days.reduce((n, d) => n + d.added, 0);
   p.push(`<text x="${L}" y="${H - 52}" ${font} font-size="13" fill="${C.dim}">${esc(`${last} real accounts (not yours, not test accounts); ${newIn} new in these ${days.length} days (Central time). Dashed lines: app releases (named: x.y.0 and the newest).`)}</text>`);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${p.join('')}</svg>`;

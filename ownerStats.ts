@@ -64,7 +64,7 @@ export async function realAccounts(w?: Who): Promise<number[]> {
   return out;
 }
 
-type Activity = { questions: number; players: number; guests: number; apps: Record<string, number>; approx: boolean };
+type Activity = { questions: number; players: number; guests: number; apps: Record<string, number>; approx: boolean; ids: Set<string> };
 
 /** Questions, players and platforms in [from, to): hourly counts, else (before they began) the daily ones. */
 async function activity(from: number, to: number, w: Who, owners: Set<string>): Promise<Activity> {
@@ -99,7 +99,54 @@ async function activity(from: number, to: number, w: Who, owners: Set<string>): 
       for (const [a, n] of Object.entries((st.apps || {}) as Record<string, number>)) apps[a] = (apps[a] || 0) + (Number(n) || 0);
     }
   }
-  return { questions, players: players.size, guests: guests.size, apps, approx };
+  return { questions, players: players.size, guests: guests.size, apps, approx, ids: new Set([...players, ...guests]) };
+}
+
+/** How many of `ids` were seen before `from` (in the daily counts): the window's returning players. */
+async function returningOf(ids: Set<string>, from: number): Promise<number> {
+  if (!ids.size) return 0;
+  const start = dayOf(from);
+  const seen = new Set<string>();
+  for (const d of (await getFirestore().collection('stats').get()).docs) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d.id) || d.id >= start) continue;
+    const s: any = d.data();
+    for (const h of [...(s.players || []), ...(s.guests || [])]) if (ids.has(h)) seen.add(h);
+  }
+  return seen.size;
+}
+
+/** The games asked about most in [from, to) (answerGames/{UTC day}: questions per game; your own included). */
+async function topGames(from: number, to: number, n = 5): Promise<{ name: string; q: number }[]> {
+  const ids: string[] = [];
+  for (let t = from; t < to + DAY; t += DAY) ids.push(new Date(t).toISOString().slice(0, 10));
+  const docs = await Promise.all([...new Set(ids)].map((id) => getFirestore().collection('answerGames').doc(id).get()));
+  const by = new Map<string, { name: string; q: number }>();
+  for (const d of docs) for (const [k, g] of Object.entries((d.data() || {}) as Record<string, any>)) {
+    const cur = by.get(k) || { name: String(g?.name || k), q: 0 };
+    cur.q += Number(g?.q) || 0;
+    by.set(k, cur);
+  }
+  return [...by.values()].filter((g) => g.q).sort((a, b) => b.q - a.q).slice(0, n);
+}
+
+/**
+ * Answer feedback in [from, to): thumbs up and down (answerFeedback; a signed-in vote is keyed by the player's hash, so
+ * yours and test accounts' are left out) and reports (answerReports, with the ones still open).
+ */
+async function feedbackIn(from: number, to: number, owners: Set<string>): Promise<{ up: number; down: number; reports: number; open: number }> {
+  const db = getFirestore();
+  const [fb, rep] = await Promise.all([
+    db.collection('answerFeedback').where('at', '>=', from).get(),
+    db.collection('answerReports').where('createdAt', '>=', from).get(),
+  ]);
+  const votes = fb.docs.map((d) => d.data() as any).filter((x) => x.at < to && !owners.has(String(x.voterKey || '')));
+  const reports = rep.docs.map((d) => d.data() as any).filter((x) => x.createdAt < to);
+  return {
+    up: votes.filter((v) => v.vote === 'up').length,
+    down: votes.filter((v) => v.vote === 'down').length,
+    reports: reports.length,
+    open: reports.filter((r) => r.status === 'open').length,
+  };
 }
 
 /** The players' answer cost by day (Central days, the last `days`): questions, dollars, and how many searched. */
@@ -124,8 +171,9 @@ export async function answerCostDays(now: number, owners: Set<string>, days = 7)
 export function answerCostLine(rows: { day: string; q: number; dollars: number; searched: number | null }[]): string {
   const per = (r: { q: number; dollars: number }) => (r.q ? `$${(r.dollars / r.q).toFixed(3)}` : '–');
   const all = rows.reduce((a, r) => ({ q: a.q + r.q, dollars: a.dollars + r.dollars }), { q: 0, dollars: 0 });
-  const days = rows.map((r) => `${r.day.slice(5)} ${per(r)} (${r.q}q${r.searched !== null && r.q ? `, ${Math.round((100 * r.searched) / r.q)}% searched` : ''})`).join(' · ');
-  return `**Answer cost per question** (last ${rows.length} days, new answer rules from Nov 1): ${per(all)} on average\n${days}`;
+  // Day by day for the last 7 at most (a month of days would crowd the reply); the average covers them all.
+  const days = rows.slice(-7).map((r) => `${r.day.slice(5)} ${per(r)} (${r.q}q${r.searched !== null && r.q ? `, ${Math.round((100 * r.searched) / r.q)}% searched` : ''})`).join(' · ');
+  return `**Answer cost per question** (last ${rows.length} days: ${all.q} questions, $${all.dollars.toFixed(2)}): ${per(all)} on average\n${days}`;
 }
 
 /** Locate me checks in [from, to) (locateMe.ts statsHours.loc): all, automatic, the ones that found the place, cost. */
@@ -148,13 +196,15 @@ const APP_NAMES: [string, string][] =[['desktop', 'desktop'], ['deck', 'Deck'], 
 const change = (now: number, before: number) => (before ? ` (${now >= before ? '+' : ''}${Math.round(((now - before) / before) * 100)}%)` : now ? ' (new)' : '');
 const money = (n: number) => `$${n.toFixed(2)}`;
 
-function block(title: string, a: Activity, signups: number, prev?: { a: Activity; signups: number }, fromSite = 0): string {
+function block(title: string, a: Activity, signups: number, prev?: { a: Activity; signups: number }, fromSite = 0, returning = -1): string {
   const vs = (now: number, before?: number) => (prev && before !== undefined ? ` vs ${before}${change(now, before)}` : '');
   const plat = APP_NAMES.map(([k, label]) => `${label} ${a.apps[k] || 0}`).join(' · ');
+  const all = a.players + a.guests;
   return [
     `**${title}**${a.approx || prev?.a.approx ? ' ≈' : ''}`,
-    `Questions: ${a.questions}${vs(a.questions, prev?.a.questions)}`,
-    `Players: ${a.players + a.guests} (${a.players} signed in, ${a.guests} guest${a.guests === 1 ? '' : 's'})${vs(a.players + a.guests, prev ? prev.a.players + prev.a.guests : undefined)}`,
+    `Questions: ${a.questions}${vs(a.questions, prev?.a.questions)}${all ? ` · ${(a.questions / all).toFixed(1)} a player` : ''}`,
+    `Players: ${all} (${a.players} signed in, ${a.guests} guest${a.guests === 1 ? '' : 's'})${vs(all, prev ? prev.a.players + prev.a.guests : undefined)}`,
+    ...(returning >= 0 && all ? [`New vs returning: ${all - returning} new, ${returning} returning`] : []),
     `By platform (questions): ${plat}`,
     `New sign-ups: ${signups}${fromSite ? ` (${fromSite} from the site)` : ''}${vs(signups, prev?.signups)}`,
   ].join('\n');
@@ -173,6 +223,8 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   // The owner's anonymous ids: config/players.ownerHashes and the ones the server marked in the daily counts.
   const owners = new Set<string>(w.ownerHashes);
   for (const d of ownerDays.docs) for (const h of ((d.data() as any).owners || [])) owners.add(h);
+  // Test accounts (config/players.testUids) are left out of the activity, costs and checks too, not only sign-ups.
+  for (const uid of w.testUids) owners.add(playerHash(uid));
   const span = (ms: number) => activity(now - ms, now, w, owners);
   const before = (ms: number) => activity(now - 2 * ms, now - ms, w, owners);
   const longMs = (window === '30d' ? 30 : 7) * DAY;
@@ -187,34 +239,43 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   const signedUp = (from: number, to: number) => created.filter((t) => t >= from && t < to).length;
   const parts: string[] = [];
   const fromSite = (from: number, to: number) => siteCreated.filter((t) => t >= from && t < to).length;
-  if (day) parts.push(block('Last 24 hours', day, signedUp(now - DAY, now), undefined, fromSite(now - DAY, now)));
+  const [dayBack, longBack] = await Promise.all([day ? returningOf(day.ids, now - DAY) : -1, long ? returningOf(long.ids, now - longMs) : -1]);
+  if (day) parts.push(block('Last 24 hours', day, signedUp(now - DAY, now), undefined, fromSite(now - DAY, now), dayBack));
   if (long && prev) {
     const n = longMs / DAY;
-    parts.push(block(`Last ${n} days (vs the ${n} before)`, long, signedUp(now - longMs, now), { a: prev, signups: signedUp(now - 2 * longMs, now - longMs) }, fromSite(now - longMs, now)));
+    parts.push(block(`Last ${n} days (vs the ${n} before)`, long, signedUp(now - longMs, now), { a: prev, signups: signedUp(now - 2 * longMs, now - longMs) }, fromSite(now - longMs, now), longBack));
   }
   // The website's ask box, apart from the players' numbers above (siteAsk.ts).
   const siteMs = window === '30d' ? 30 * DAY : window === '7d' ? 7 * DAY : DAY;
+  const winLabel = window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours';
+  // What players asked about, and what they thought of the answers (the longer window when there are two).
+  const talkMs = window === '24h' ? DAY : longMs, talkLabel = window === '24h' ? 'last 24 hours' : `last ${longMs / DAY} days`;
+  const [games, fb] = await Promise.all([topGames(now - talkMs, now).catch(() => []), feedbackIn(now - talkMs, now, owners).catch(() => null)]);
+  if (games.length) parts.push(`**Top games** (${talkLabel}, by questions, yours included): ${games.map((g) => `${g.name} ${g.q}`).join(' · ')}`);
+  if (fb) parts.push(`**Answer feedback** (${talkLabel}): 👍 ${fb.up} · 👎 ${fb.down}${fb.up + fb.down ? ` (${Math.round((100 * fb.up) / (fb.up + fb.down))}% positive)` : ''} · ${fb.reports} report(s)${fb.open ? `, ${fb.open} still open` : ''}`);
   const site = await siteAskWindow(now - siteMs, now);
   // The homepage's app (scripts/guides/homeApp.ts): tries, sign-ups and Premium starts from it.
   const homeUsers = async (field: string, value: string) => (await getFirestore().collection('users').where(field, '==', value).get()).docs.map((d) => d.data() as any);
   const homeSignups = (await homeUsers('signupSource', 'homepage')).length;
   const homePremium = (await homeUsers('premiumFrom', 'homepage')).filter((u) => Number(u.premiumFromAt) >= now - siteMs).length;
-  parts.push(`**Homepage app** (${window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours'}): ${site.home} tries (${site.homeShots} with a screenshot, ${site.homeNoGuide} about a game with no guide), ${homePremium} Premium start(s); ${homeSignups} sign-ups from it in all`);
+  parts.push(`**Homepage app** (${winLabel}): ${site.home} tries (${site.homeShots} with a screenshot, ${site.homeNoGuide} about a game with no guide), ${homePremium} Premium start(s); ${homeSignups} sign-ups from it in all`);
   // Locate me in the app (by hand and automatic: locateMe.ts), counted since Oct 31 2026.
   const loc = await locates(now - siteMs, now, owners);
-  parts.push(`**Locate me** (${window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours'}): ${loc.n} check(s), ${loc.auto} automatic, ${loc.found} found the place · $${loc.dollars.toFixed(2)}${loc.n ? ` ($${(loc.dollars / loc.n).toFixed(4)} each)` : ''}`);
-  parts.push(`**Site** (${window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'last 24 hours'}): ${site.questions} question(s) in the guide pages' ask box, ${site.uncovered} the guide couldn't answer · $${site.dollars.toFixed(2)}`);
+  parts.push(`**Locate me** (${winLabel}): ${loc.n} check(s), ${loc.auto} automatic, ${loc.found} found the place · $${loc.dollars.toFixed(2)}${loc.n ? ` ($${(loc.dollars / loc.n).toFixed(4)} each)` : ''}`);
+  parts.push(`**Site** (${winLabel}): ${site.questions} question(s) in the guide pages' ask box, ${site.uncovered} the guide couldn't answer · $${site.dollars.toFixed(2)}`);
   // What an answer costs, day by day (the effect of the Oct 31 answer rules: guide as reference, search with screenshots).
-  parts.push(answerCostLine(await answerCostDays(now, owners)));
+  parts.push(answerCostLine(await answerCostDays(now, owners, window === '30d' ? 30 : 7)));
   // Visual answers (visualServer.ts, Nov 14 2026): once they're on (counted per UTC day; your own answers included).
   if (visualAnswersOn()) parts.push(visualStatsLine(await visualStatsFor(window === '30d' ? 30 : window === '7d' ? 7 : 1), window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'today'));
   // "Worth getting here" on demand (worthOnDemand.ts, Nov 15 2026): areas filled for players and what they cost, by
   // UTC day. No cap; the nightly summary warns above $5 a day.
-  const wd: Awaited<ReturnType<typeof worthDays>> = await worthDays(window === '30d' ? 30 : 7).catch(() => []);
+  // The UTC days the window touches (the tally is kept by UTC day), with the 24-hour window counting today and yesterday.
+  const worthFrom = new Date(now - Math.max(siteMs, DAY)).toISOString().slice(0, 10);
+  const wd: Awaited<ReturnType<typeof worthDays>> = (await worthDays(31).catch(() => [])).filter((r) => r.day >= worthFrom);
   if (wd.length) {
     const sum = wd.reduce((s: { dollars: number; areas: number; empty: number; failed: number }, r) => ({ dollars: s.dollars + r.dollars, areas: s.areas + r.areas, empty: s.empty + r.empty, failed: s.failed + r.failed }), { dollars: 0, areas: 0, empty: 0, failed: 0 });
-    parts.push(`**Worth getting here on demand** (last ${wd.length} day(s) with fills): ${sum.areas} area(s), ${sum.empty} with nothing sourced, ${sum.failed} failed · $${sum.dollars.toFixed(2)}${sum.areas ? ` ($${(sum.dollars / Math.max(1, sum.areas)).toFixed(3)} an area)` : ''}\n` +
-      wd.map((r) => `${r.day.slice(5)} ${r.areas} area(s) $${r.dollars.toFixed(2)}${r.dollars > ALERT_DOLLARS ? ' ⚠️' : ''}`).join(' · '));
+    parts.push(`**Worth getting here on demand** (${winLabel}, UTC days): ${sum.areas} area(s), ${sum.empty} with nothing sourced, ${sum.failed} failed · $${sum.dollars.toFixed(2)}${sum.areas ? ` ($${(sum.dollars / Math.max(1, sum.areas)).toFixed(3)} an area)` : ''}\n` +
+      wd.slice(-7).map((r) => `${r.day.slice(5)} ${r.areas} area(s) $${r.dollars.toFixed(2)}${r.dollars > ALERT_DOLLARS ? ' ⚠️' : ''}`).join(' · '));
   }
   // The nightly guide improver (autoImprove.ts): month to date against its own cap.
   const imp = await improverMonth(now);
@@ -223,5 +284,5 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   const cost = costs.docs.filter((d) => !owners.has(playerHash(d.id))).reduce((n, d) => n + (Number((d.data() as any).dollars) || 0), 0);
   parts.push(`**Premium subscribers:** ${subs}\n**Player AI cost this month:** ${money(cost)}\n**Accounts:** ${created.length}`);
   const approx = parts.some((p) => p.includes(' ≈'));
-  return parts.join('\n\n') + `\n\n-# Without your accounts and test traffic.${approx ? ' ≈: part of the window is from the daily counts (before hourly counting began), so whole days and your own platform use may be in it.' : ''}`;
+  return parts.join('\n\n') + `\n\n-# Without your accounts, test accounts and test traffic.${approx ? ' ≈: part of the window is from the daily counts (before hourly counting began), so whole days and your own platform use may be in it.' : ''}`;
 }

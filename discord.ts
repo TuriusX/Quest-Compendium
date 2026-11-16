@@ -230,6 +230,16 @@ async function confirmButtonPressed(i: any): Promise<any> {
   return { type: 7, data: { content: `${content}\n✅ Confirmed by a Guide Moderator: it skips the 3-reporter rule, but sources still check it.`, components: [], allowed_mentions: { parse: [] } } };
 }
 
+/**
+ * The /stats numbers as an embed: room for 4096 characters (a plain message stops at 2000, which cut off the last
+ * lines), the "-#" note at the end as its footer.
+ */
+const statsEmbed = (text: string) => {
+  const m = text.match(/\n+-# ([^\n]+)\s*$/);
+  const body = (m ? text.slice(0, m.index) : text).trim();
+  return { title: '📊 Quest Compendium stats', description: body.length > 4090 ? `${body.slice(0, 4089)}…` : body, color: 0xa87ffb, ...(m ? { footer: { text: m[1].slice(0, 2000) } } : {}), timestamp: new Date().toISOString() };
+};
+
 const isOwner = (i: any) => !!process.env.DISCORD_OWNER_ID && String(i.member?.user?.id || i.user?.id || '') === process.env.DISCORD_OWNER_ID;
 
 /**
@@ -245,7 +255,8 @@ async function statsChart(i: any): Promise<void> {
   const days = range === '90d' ? 90 : range === 'all' ? 0 : 30;
   const form = new FormData();
   try {
-    if (range.startsWith('a')) {
+    // Accounts charts are a30d / a90d / aall ("all" also starts with "a": it's the questions chart, all time).
+    if (['a30d', 'a90d', 'aall'].includes(range)) {
       // Accounts over time (accountsChart.ts).
       const span = range === 'a90d' ? 90 : range === 'aall' ? 0 : 30;
       const { png, days: rows } = await accountsChart({ days: span });
@@ -275,14 +286,15 @@ async function statsCommand(i: any): Promise<any> {
   const owner = process.env.DISCORD_OWNER_ID || '';
   if (!owner || userId !== owner) return reply('Not allowed.', { ephemeral: true });
   const window = String(opt(i.data, 'window')?.value || '') as '24h' | '7d' | '30d' | '';
-  const text = statsText(window).then((t) => t.slice(0, 1990)).catch((e: any) => {
+  // The numbers as an embed; an error as plain text.
+  const message = statsText(window).then((t) => ({ content: '', embeds: [statsEmbed(t)] })).catch((e: any) => {
     console.error('[discord] /stats', e?.message);
-    return `Couldn't read the numbers: ${String(e?.message || e).slice(0, 200)}`;
+    return { content: `Couldn't read the numbers: ${String(e?.message || e).slice(0, 200)}`, embeds: [] as any[] };
   });
-  const quick = await Promise.race([text, new Promise<null>((r) => setTimeout(() => r(null), 2500))]);
-  if (quick !== null) return reply(quick, { ephemeral: true });
+  const quick = await Promise.race([message, new Promise<null>((r) => setTimeout(() => r(null), 2500))]);
+  if (quick !== null) return { type: 4, data: { ...quick, allowed_mentions: { parse: [] }, flags: 64 } };
   const app = process.env.DISCORD_APP_ID || '';
-  void text.then((content) => fetch(`${API}/webhooks/${app}/${i.token}/messages/@original`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content, allowed_mentions: { parse: [] } }) }))
+  void message.then((m) => fetch(`${API}/webhooks/${app}/${i.token}/messages/@original`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...m, allowed_mentions: { parse: [] } }) }))
     .catch((e) => console.error('[discord] /stats reply', e?.message));
   return { type: 5, data: { flags: 64 } };
 }
