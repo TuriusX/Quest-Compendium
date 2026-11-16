@@ -865,6 +865,7 @@ const en: Dict = {
   "chat.markersMore": "More about these markers",
   "tracker.look": "Text size and look",
   "prem.title": "Premium",
+  "answer.sources": "Sources",
   "logfacts.finding": "Finding what's worth getting here…",
   "header.hideChat": "Hide the chat (keep the quest log)",
   "header.showChat": "Show the chat",

@@ -49,7 +49,7 @@ import { QuestLogo } from './QuestLogo';
 import { ReportAnswerModal, type ReportTarget } from './ReportAnswerModal';
 import { PlaceBar } from './PlaceBar';
 import { QcGuidesView } from './QcGuidesView';
-import { GuideRefs } from './GuideRefs';
+import { SourceLinks } from './SourceLinks';
 import { GlainIcon } from './GlainIcon';
 import { Walkthrough, walkthroughDone, OPEN_TOUR_EVENT } from './Walkthrough';
 import { SignInCard } from './SignInCard';
@@ -2017,9 +2017,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     </div>
                   )}
 
-                  {/* "From the guide": the answer used checked guide entries; each opens the guide at that entry, with its picture
-                      where the owner turned "App answer" on (GuideRefs) */}
-                  {!isUser && msg.guideRefs && msg.guideRefs.length > 0 && <GuideRefs refs={msg.guideRefs} />}
+                  {/* Sources (owner, Nov 16 2026): the pages the answer read, or the wiki pages of what it's about; links to our
+                      own guide aren't shown under answers any more (the Guide tab has it). */}
+                  {!isUser && msg.sourceLinks && msg.sourceLinks.length > 0 && <SourceLinks links={msg.sourceLinks} skip={(msg.visual as any)?.page?.url} />}
 
                   {/* Every marker was dropped by the close-up check: what they were and where, in words */}
                   {!isUser && msg.removedMarkers && msg.removedMarkers.length > 0 && !(msg.points && msg.points.length) && (

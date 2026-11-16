@@ -152,6 +152,8 @@ export interface ChatMessage {
   voteReason?: 'place' | 'info' | 'marker' | 'unhelpful';
   /** Guide entries the answer used (a checked or flagship page): the "From the guide" badge links to them. */
   guideRefs?: { key: string; slug: string; area: string; entry?: string; name: string; kind?: EntryKind | 'step' | 'area' }[];
+  /** Sources under the answer (Nov 16 2026): the pages it read, or the wiki pages of what it's about (SourceLinks). */
+  sourceLinks?: { url: string; title: string; site: string }[];
   /** Hidden after an "offensive or harmful" report, until the player taps "Show anyway". */
   collapsed?: boolean;
   /** The compendium tab this message came from, when several were merged into one game (a divider shows the name). */

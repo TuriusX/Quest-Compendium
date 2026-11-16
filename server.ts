@@ -25,6 +25,7 @@ import { registerLocate, registerRefine } from './locate';
 import { registerVisualAnswers, answerVisual, visualAnswersOn, visualEvent } from './visualServer';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
 import { registerWorthRoutes, areaRef as worthAreaRef, worthTicket, topUpFromAnswer, ASKS_WHATS_WORTH } from './worthOnDemand';
+import { answerSourceLinks, groundingLinks } from './sourceLinks';
 import { registerSpot } from './spot';
 import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
@@ -1522,6 +1523,8 @@ percentages:
       const searchCtx = { uid: userId, isGuest, userData };
       let searchesUsed = 0;
       let searchSourcesSeen: string[] = [];
+      // The pages the answer's search read (their links), for the sources under the answer (sourceLinks.ts).
+      let groundingLinksSeen: { uri: string; title: string }[] = [];
       let groundedSeen: string[] = [];
       const knownFacts = factsForPrompt(await getGameFacts(effectiveGame?.name), {
         text: [question || '', ...history.slice(-4).map((m: any) => (typeof m?.text === 'string' ? m.text : ''))].join('\n'),
@@ -1792,7 +1795,7 @@ percentages:
           const response = await withTimeout(primaryCall, 30000, 'Deep-thinking Gemini 3.8 Flash query') as any;
           logUsage('chat', targetModel, response);
           searchesUsed += countSearches(response);
-          searchSourcesSeen = searchSources(response);
+          searchSourcesSeen = searchSources(response); groundingLinksSeen = groundingLinks(response);
           groundedSeen = groundedText(response);
           responseText = response.text || '';
           logDebug(`[API Chat] primaryCall succeeded, response length: ${responseText.length}`);
@@ -1878,7 +1881,7 @@ percentages:
             }
           }
           searchesUsed += countSearches(response);
-          searchSourcesSeen = searchSources(response);
+          searchSourcesSeen = searchSources(response); groundingLinksSeen = groundingLinks(response);
           groundedSeen = groundedText(response);
           responseText = response.text || '';
 
@@ -1918,7 +1921,7 @@ percentages:
           const retryResponse = await withTimeout(retryPromise, 25000, 'Flash Fallback query') as any;
           logUsage('chat-fallback', 'gemini-3.8-flash', retryResponse);
           searchesUsed += countSearches(retryResponse);
-          searchSourcesSeen = searchSources(retryResponse);
+          searchSourcesSeen = searchSources(retryResponse); groundingLinksSeen = groundingLinks(retryResponse);
           groundedSeen = groundedText(retryResponse);
           responseText = retryResponse.text || '';
           modelUsed = 'Gemini 3.8 Flash (Fallback)';
@@ -2148,8 +2151,18 @@ percentages:
       if (sureRef && searchesUsed > 0 && ASKS_WHATS_WORTH.test(String(question || ''))) {
         void topUpFromAnswer(sureRef, factsBackedBySearch(factsParsed.facts, groundedSeen), searchSourcesSeen).catch((e) => console.warn('[worth] top-up failed:', e?.message));
       }
+      // Sources under the answer (owner, Nov 16 2026): the pages it read, else the wiki pages of what it used or of the
+      // place (sourceLinks.ts), never our own guide. Free; a few seconds at most.
+      const sourceLinks = site ? [] : await answerSourceLinks({
+        read: groundingLinksSeen,
+        game: String(effectiveGame?.name || ''),
+        gameKey: guideKey || undefined,
+        names: guideParsed.used.map((r: any) => String(r?.name || '')).filter(Boolean),
+        area: sureArea && (qtype === 'location' || qtype === 'missable' || ASKS_WHATS_WORTH.test(String(question || ''))) ? sureArea : undefined,
+      }).catch(() => []);
       return res.json({
         ...(worth ? { worth } : {}),
+        ...(sourceLinks.length ? { sourceLinks } : {}),
         text: responseText.trim() + (deckNote ? `
 
 *${deckNote}*` : ''),
