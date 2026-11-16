@@ -15,7 +15,7 @@ import { db, gemini, arg } from './common';
 import { RECORDS } from './recordsImport';
 import { wikiPage, wikiPicture, communityWikis, type Cost, type MoreWiki } from '../../visualAnswer';
 import type { GameRecord } from './records';
-import { fextralifeDomain, communityWikisFor } from './suggestImages';
+import { fextralifeDomain, communityWikisFor, rememberPictureSite } from './suggestImages';
 
 const UA = 'QuestCompendium/1.0 (+https://questcompendium.com)';
 
@@ -24,7 +24,12 @@ async function keep(url: string, page: string): Promise<string | null> {
   try {
     const r = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'follow' });
     if (!r.ok) return null;
-    const jpeg = await sharp(Buffer.from(await r.arrayBuffer())).flatten({ background: '#1a1a1a' }).resize({ width: 600, withoutEnlargement: true }).jpeg({ quality: 84 }).toBuffer();
+    const buf = Buffer.from(await r.arrayBuffer());
+    const w = (await sharp(buf).metadata()).width || 0;
+    // A small icon (76-150px on some wikis) is enlarged smoothly to 192px so the card doesn't show it tiny or blocky.
+    const jpeg = await sharp(buf).flatten({ background: '#1a1a1a' })
+      .resize(w && w < 192 ? { width: 192, kernel: 'lanczos3' } : { width: 600, withoutEnlargement: true })
+      .jpeg({ quality: 88 }).toBuffer();
     if (jpeg.length > 700_000) return null;
     const hash = crypto.createHash('sha1').update(url).digest('hex').slice(0, 24);
     await db().collection('wikiPics').doc(hash).set({ mime: 'image/jpeg', data: jpeg.toString('base64'), src: url, page, at: Date.now() });
@@ -41,10 +46,13 @@ export async function wikiFor(key: string, game?: string): Promise<CardWikis | n
   const fx = src.fextralife === undefined && game ? await fextralifeDomain(key, game, src).catch(() => '') : src.fextralife?.domain || '';
   // Community wikis: the hand-filled override, else found from the name once (remembered).
   const more = communityWikis(key).length ? communityWikis(key) : await communityWikisFor(key, game || key, src, gemini()).catch(() => []);
-  const wiki = { fextralife: fx, fandom: src.wiki?.domain || '', more };
-  return wiki.fextralife || wiki.fandom || wiki.more.length ? wiki : null;
+  // Sites that gave this game good pictures from the web before (rememberPictureSite): opened first next time.
+  const wiki = { fextralife: fx, fandom: src.wiki?.domain || '', more, prefer: (src.pictureSites || []) as string[] };
+  return wiki.fextralife || wiki.fandom || wiki.more.length || wiki.prefer.length ? wiki : null;
 }
-export type CardWikis = { fextralife: string; fandom: string; more?: MoreWiki[] };
+export type CardWikis = { fextralife: string; fandom: string; more?: MoreWiki[]; prefer?: string[] };
+/** Wiki hosts already known for a game: a picture from anywhere else came from the web. */
+const knownHost = (w: CardWikis | null, site: string) => !!w && [w.fextralife, w.fandom, ...(w.more || []).map((m) => m.site)].some((h) => h && (site === h || /^(Fextralife|Fandom)$/.test(site)));
 
 /**
  * One item's card: its wiki page and a checked picture (copied to our store), saved in gameRecords/{key}/cards/{id}.
@@ -56,6 +64,8 @@ export async function cardFor(key: string, game: string, wiki: CardWikis | null,
   const pic = await wikiPicture(gemini() as any, cost, wiki || { fextralife: '', fandom: '' }, game, `Show me ${r.name}`, r.name, steps, false, true);
   const page = pic?.page || (wiki ? await wikiPage(wiki, r.name).catch(() => null) : null) || cited || null;
   const hash = pic ? await keep(pic.url, pic.page.url) : null;
+  // A good picture from the web: its site is remembered for this game (a wiki joins the game's wikis).
+  if (hash && pic && !knownHost(wiki, pic.page.site)) await rememberPictureSite(key, pic.page.site).catch(() => {});
   await RECORDS().doc(key).collection('cards').doc(r.id).set({ place: r.place, page: page || null, pic: hash, what: pic?.alt || '', at: Date.now() });
   return { page: !!page, pic: !!hash };
 }

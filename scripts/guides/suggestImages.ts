@@ -262,6 +262,22 @@ export async function communityWikisFor(key: string, game: string, src: any, ai?
   return found;
 }
 
+/**
+ * A site that just gave a good picture from the web (owner, Nov 16 2026: the list grows by itself): a public MediaWiki
+ * joins the game's community wikis (tried for every item from then on), any other site goes on its pictureSites
+ * (opened first among the web's pages next time), at most 10, newest first.
+ */
+export async function rememberPictureSite(key: string, site: string): Promise<void> {
+  const host = String(site || '').toLowerCase().replace(/^www\./, '');
+  if (!key || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host) || /fextralife|fandom\.com/.test(host)) return;
+  const ref = SOURCES().doc(key);
+  const src: any = (await ref.get()).data() || {};
+  if ((src.community || []).some((w: CommunityWiki) => w.site === host) || (src.pictureSites || [])[0] === host) return;
+  const wiki = await mediaWikiAt(host).catch(() => null);
+  if (wiki) await ref.set({ community: [...(src.community || []), wiki] }, { merge: true });
+  else await ref.set({ pictureSites: [host, ...(src.pictureSites || []).filter((h: string) => h !== host)].slice(0, 10) }, { merge: true });
+}
+
 /** A Fextralife page's main picture (its og:image), under the page's own name. */
 export async function fextralifeImage(domain: string, title: string): Promise<{ url: string; page: string; title: string } | null> {
   const at = (t: string) => `https://${domain}/${encodeURIComponent(t.replace(/ /g, '+')).replace(/%2B/g, '+').replace(/%2C/g, ',')}`;

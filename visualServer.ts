@@ -15,7 +15,7 @@ import crypto from 'crypto';
 import type { Express, Request, Response } from 'express';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { visualFor, visualId, communityWikis, YouTubeQuotaOut, type Cost, type Visual, type VisualStore } from './visualAnswer';
-import { communityWikisFor, type CommunityWiki } from './scripts/guides/suggestImages';
+import { communityWikisFor, rememberPictureSite, type CommunityWiki } from './scripts/guides/suggestImages';
 import { GENERATED } from './src/locales.generated';
 
 /**
@@ -119,7 +119,7 @@ export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'l
     const found = communityWikis(gameKey).length ? Promise.resolve(communityWikis(gameKey))
       : communityWikisFor(gameKey, game, src, deps.getGeminiClient()).catch(() => [] as CommunityWiki[]);
     const more = await Promise.race([found, new Promise<CommunityWiki[]>((r) => setTimeout(() => r([]), 6000))]);
-    return { fextralife: src.fextralife?.domain || '', fandom: src.wiki?.domain || '', more };
+    return { fextralife: src.fextralife?.domain || '', fandom: src.wiki?.domain || '', more, prefer: (src.pictureSites || []) as string[] };
   };
   const gameKey = String(o.guideKey || '').replace(/[^a-z0-9-]/g, '').slice(0, 120) || (await keyOf(o.game));
   const key = String(env.YOUTUBE_API_KEY || '');
@@ -132,6 +132,11 @@ export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'l
     otherGame: async (name) => { const k = await keyOf(name); return { gameKey: k, wiki: await wikiOf(k, name) }; },
   });
   const v = r.visual;
+  // A picture from the web (not one of the game's known wikis): its site is remembered for the game.
+  if (v.kind === 'picture' && !r.cached && (v as any).page?.site && !/^(Fextralife|Fandom)$/.test((v as any).page.site)) {
+    const w = await wikiOf(gameKey).catch(() => null);
+    if (w && !(w.more || []).some((m) => m.site === (v as any).page.site)) void rememberPictureSite(gameKey, (v as any).page.site).catch(() => {});
+  }
   const client = String(o.client || 'web').replace(/[^a-z]/g, '').slice(0, 8) || 'web';
   // One line per visual (owner, Nov 14 2026: why did a question get none?): the app, the game, the kind chosen, the result
   // and the steps. No player id or question beyond the first 80 characters.

@@ -385,18 +385,34 @@ const siteOf = (url: string) => { try { return new URL(url).host.replace(/^www\.
  * search for pages about the thing, and each page's own picture of it (pagePicture: named after it or the page's main
  * picture; never icons or site furniture), at most three pages. The same vision check follows.
  */
-async function webTries(ai: Gen, cost: Cost, game: string, subject: string, steps: string[]): Promise<{ url: string; page: string; title: string; site: string }[]> {
+/**
+ * Which found pages to open first: sites that gave this game good pictures before (`prefer`), then wikis, then guide
+ * sites, then anything else, forums and Reddit last (rarely a clean picture of the thing itself). Nothing is excluded.
+ */
+export function rankPages(urls: string[], prefer: string[] = []): string[] {
+  const score = (u: string) => {
+    const h = siteOf(u);
+    if (prefer.some((p) => h === p || h.endsWith(`.${p}`))) return 0;
+    if (/wiki|fandom\.com|fextralife/.test(h)) return 1;
+    if (/ign\.com|game8\.|gamerant|thegamer|powerpyx|gamefaqs|polygon|pcgamer|rockpapershotgun|eurogamer|gamesradar|pushsquare|nintendolife/.test(h)) return 2;
+    if (/reddit\.com|steamcommunity|discord|forum|boards\.|quora|facebook|twitter|x\.com|tiktok|instagram|pinterest/.test(h)) return 4;
+    return 3;
+  };
+  return urls.map((u, i) => ({ u, i, s: score(u) })).sort((a, b) => a.s - b.s || a.i - b.i).map((x) => x.u);
+}
+
+async function webTries(ai: Gen, cost: Cost, game: string, subject: string, steps: string[], prefer: string[] = []): Promise<{ url: string; page: string; title: string; site: string }[]> {
   try {
     const res: any = await ai.models.generateContent({
       model: FAST,
-      contents: [{ role: 'user', parts: [{ text: `Find web pages about "${subject}" in the video game "${game}": a wiki, guide or fan page about it that shows its picture. Reply with the pages' addresses only.` }] }],
+      contents: [{ role: 'user', parts: [{ text: `Find web pages about "${subject}" in the video game "${game}" that show what it looks like in the game: its page on a wiki or fan wiki first, else an official site, press kit or guide page about it. Reply with the pages' addresses only.` }] }],
       config: { tools: [{ googleSearch: {} }], temperature: 0, maxOutputTokens: 2000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     const searches = (res?.candidates?.[0]?.groundingMetadata?.webSearchQueries || []).length;
     cost.d += (estimateCost(FAST, res) || 0) + searches * SEARCH_DOLLARS;
     cost.log?.('visual-web', FAST, res);
     const links = ((res?.candidates?.[0]?.groundingMetadata?.groundingChunks || []) as any[]).map((c) => String(c?.web?.uri || '')).filter(Boolean);
-    const pages = [...new Set((await Promise.all(links.slice(0, 8).map(realUrl))).filter((u) => u && !/youtube\.com|youtu\.be|questcompendium/i.test(u)))].slice(0, 3);
+    const pages = rankPages([...new Set((await Promise.all(links.slice(0, 10).map(realUrl))).filter((u) => u && !/youtube\.com|youtu\.be|questcompendium/i.test(u)))], prefer).slice(0, 3);
     const out: { url: string; page: string; title: string; site: string }[] = [];
     for (const page of pages) {
       const r = await fetch(page, { headers: { 'User-Agent': UA }, redirect: 'follow', signal: AbortSignal.timeout(8000) }).catch(() => null);
@@ -412,22 +428,31 @@ async function webTries(ai: Gen, cost: Cost, game: string, subject: string, step
   } catch (e: any) { steps.push(`web search failed: ${String(e?.message || e).slice(0, 80)}`); return []; }
 }
 
-export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: string; fandom?: string; more?: MoreWiki[] }, game: string, question: string, subject: string, steps: string[], where = false, icon = false, web = true) {
+/**
+ * The thing's picture: the game's wikis (Fextralife, Fandom, its community wikis), then the web; every candidate under
+ * the same vision check, credited and linked. `web`: true (the web when no wiki picture passes), false (wikis only),
+ * 'only' (the web alone, for comparing the two routes). `src.prefer`: sites that gave this game good pictures before,
+ * opened first among the web's pages.
+ */
+export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: string; fandom?: string; more?: MoreWiki[]; prefer?: string[] }, game: string, question: string, subject: string, steps: string[], where = false, icon = false, web: boolean | 'only' = true) {
   const tries: { url: string; page: string; title: string; site: string }[] = [];
-  if (src.fextralife) { const f = await fextralifeImage(src.fextralife, subject).catch(() => null); if (f) tries.push({ ...f, site: 'Fextralife' }); }
-  if (src.fandom) { const f = await fandomImage(src.fandom, subject); if (f) tries.push({ ...f, site: 'Fandom' }); }
-  for (const w of src.more || []) { const f = await mediaWikiImage(w, subject); if (f) tries.push({ ...f, site: w.site }); }
-  steps.push(`wiki: ${tries.length} page picture(s) for "${subject}"`);
-  const found = await checkTries(tries);
-  if (found || !web) return found;
-  // No wiki picture passed: the web, under the same check.
+  if (web !== 'only') {
+    if (src.fextralife) { const f = await fextralifeImage(src.fextralife, subject).catch(() => null); if (f) tries.push({ ...f, site: 'Fextralife' }); }
+    if (src.fandom) { const f = await fandomImage(src.fandom, subject); if (f) tries.push({ ...f, site: 'Fandom' }); }
+    for (const w of src.more || []) { const f = await mediaWikiImage(w, subject); if (f) tries.push({ ...f, site: w.site }); }
+    steps.push(`wiki: ${tries.length} page picture(s) for "${subject}"`);
+    const found = await checkTries(tries);
+    if (found || !web) return found;
+  }
+  // No wiki picture passed (or the web alone): the web, under the same check.
   const seen = new Set(tries.map((t) => t.url));
-  return checkTries((await webTries(ai, cost, game, subject, steps)).filter((t) => !seen.has(t.url)));
+  return checkTries((await webTries(ai, cost, game, subject, steps, src.prefer || [])).filter((t) => !seen.has(t.url)));
 
   async function checkTries(list: typeof tries) {
   for (const t of list) {
-    // A named thing's picture is often the wiki's item icon (150px on BG3's wiki): smaller ones count there.
-    const jpeg = await jpegOf(t.url, icon ? 120 : 200);
+    // A named thing's picture is often the wiki's item icon (150px on BG3's wiki, 76-85px on Hollow Knight's): a clear
+    // small icon beats no picture (owner, Nov 16 2026), so icons count from 64px.
+    const jpeg = await jpegOf(t.url, icon ? 64 : 200);
     if (!jpeg) { steps.push(`${t.site} picture too small or unreadable`); continue; }
     const prompt =
       `This is the picture from the page "${t.title}" (${t.site}) about the video game "${game}". A player asked: "${question}".\n` +
