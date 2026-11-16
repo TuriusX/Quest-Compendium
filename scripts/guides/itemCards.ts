@@ -88,9 +88,15 @@ async function main() {
   if (dry) return void setTimeout(() => process.exit(0), 200);
   const cost: Cost = { d: 0 };
   let pages = 0, pics = 0, n = 0;
-  for (let i = 0; i < todo.length; i += 4) {
-    if (cost.d >= max - 0.02) { console.log(`Stopped at the $${max.toFixed(2)} cap.`); break; }
-    await Promise.all(todo.slice(i, i + 4).map(async (r) => {
+  // The cap is a hard stop: a batch starts only when even its worst case fits (an item with a web search can cost about
+  // $0.045), shrinking to one item at a time near the cap (Nov 16 2026: four at a time went $0.06 past a $0.15 cap).
+  const WORST = 0.045;
+  for (let i = 0; i < todo.length;) {
+    const size = Math.min(4, Math.floor((max - cost.d) / WORST));
+    if (size < 1) { console.log(`Stopped before the $${max.toFixed(2)} cap.`); break; }
+    const batch = todo.slice(i, i + size);
+    i += size;
+    await Promise.all(batch.map(async (r) => {
       try {
         const c = await cardFor(key, game, wiki, r, cost);
         if (c.page) pages++;
