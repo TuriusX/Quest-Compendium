@@ -1,7 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/worthOnDemand.test.ts)
 // "Worth getting here" on demand (Nov 15 2026): any game, guide or not.
 import assert from "node:assert/strict";
-import { mainArea, ASKS_WHATS_WORTH, allEntries } from "../worthOnDemand";
+import { mainArea, ASKS_WHATS_WORTH, allEntries, areaSlug } from "../worthOnDemand";
 import { freeLocatePrompt, parseFreeLocateReply, isConfident, seenTextNamesArea } from "../locateMe";
 import { applyWorth, finish, type GameRecord } from "../scripts/guides/records";
 
@@ -16,6 +16,14 @@ test("an area is the main place, without its detail", () => {
   assert.equal(mainArea("  Greenpath  "), "Greenpath");
   assert.equal(mainArea("サウスフィガロ、レリック屋"), "サウスフィガロ");
   assert.equal(mainArea('"Emerald Grove".'), "Emerald Grove");
+});
+
+test("one area however its name is written (articles, case, punctuation, a trailing 'area')", () => {
+  const one = areaSlug("Emerald Grove");
+  assert.equal(one, "emerald-grove");
+  for (const v of ["The Emerald Grove", "emerald grove", "Emerald Grove.", "EMERALD GROVE", "Emerald Grove area", "the Emerald Grove, Druid Chamber", "  Emerald  Grove "]) assert.equal(areaSlug(v), one, v);
+  assert.equal(areaSlug("Lake & Shore"), areaSlug("Lake and Shore"));
+  assert.notEqual(areaSlug("Druid Grove"), one, "another name is matched by resolveAlias, not by spelling");
 });
 
 test("Help me here without a guide: the model names the area, and a read must name it", () => {

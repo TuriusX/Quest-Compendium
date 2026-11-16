@@ -22,7 +22,7 @@ async function main() {
     const st = await worthStatus(a);
     if (st !== 'missing') { skipped++; await d.ref.delete(); continue; }
     if (dry) { console.log(`would fill ${a.game} / ${a.name}`); continue; }
-    const r = await fillArea(a, '', 'night');
+    const r = (await fillArea(a, '', 'night')).status;
     if (r === 'ready') filled++;
     else if (r === 'empty') empty++;
     else if (r === 'failed') failed++;

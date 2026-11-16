@@ -25,7 +25,8 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { worthArea } from './scripts/guides/worthIt';
 import { applyWorth, type GameRecord, type WorthEntry } from './scripts/guides/records';
 import { wikiFor, cardFor } from './scripts/guides/itemCards';
-import { usageScope, searchForPlayers, slug as slugOf } from './scripts/guides/common';
+import { usageScope, searchForPlayers, slug as slugOf, gemini, MODEL } from './scripts/guides/common';
+import { ThinkingLevel } from '@google/genai';
 import { SearchDayWait } from './apiLimits';
 import { guideKeyFor, baseGameKey, guideAreasByKey, areaFacts, forgetAreaFacts } from './guidesApi';
 import { placeKey } from './src/utils/placeName';
@@ -50,6 +51,17 @@ export function mainArea(place: string): string {
   return first.replace(/^["“'‘]+|["”'’.]+$/g, '').trim();
 }
 
+/**
+ * An area's address from its name: one per place however it's written ("The Emerald Grove", "Emerald Grove.",
+ * "Emerald Grove area" -> emerald-grove). Articles, "&"/"and", punctuation, case and a trailing "area"/"region"/"zone"
+ * don't make another area. Names that differ in words (another name for the same place) are matched by resolveAlias.
+ */
+export function areaSlug(name: string): string {
+  let n = placeKey(mainArea(name).replace(/&/g, ' and '), '').replace(/\s+/g, ' ').trim();
+  n = n.replace(/^(the|a|an) /, '').replace(/ (area|region|zone|district|map)$/, '').trim();
+  return slugOf(n, 80);
+}
+
 /** Which area a place is in, for a game (guide or not). Null for something that isn't a place. */
 export async function areaRef(game: string, place: string, appId?: number, guideHint?: string | null): Promise<AreaRef | null> {
   const g = String(game || '').trim().slice(0, 120);
@@ -65,9 +77,59 @@ export async function areaRef(game: string, place: string, appId?: number, guide
     }
   }
   const key = guideKey || baseGameKey(g);
-  const slug = slugOf(name.replace(/^the\s+/i, ''), 80);
+  const slug = areaSlug(name);
   if (!key || !slug) return null;
+  // Another name for an area the game already has (resolveAlias decided it once): that area.
+  const al: any = (await REC(key).collection('worthAlias').doc(slug).get().catch(() => null))?.data();
+  if (al?.to?.slug) return { ...al.to, game: String(al.to.game || g) } as AreaRef;
   return { key, slug, name, game: g, guided: false, version: 0 };
+}
+
+/** Is `name` another name for one of `known` in this game? The exact known name, or '' (a small unsearched call). */
+export type AliasJudge = (game: string, name: string, known: string[]) => Promise<string>;
+export const aiAliasJudge: AliasJudge = async (game, name, known) => {
+  const res: any = await gemini().models.generateContent({
+    model: MODEL,
+    contents: [{ role: 'user', parts: [{ text:
+      `In the video game "${game}", is the place "${name}" one of these areas under another name, or a place inside one of ` +
+      `them (a building, room or spot within that area)? A neighbouring area or a different region doesn't count.\n` +
+      `${known.map((k) => `- ${k}`).join('\n')}\n` +
+      `Reply with that area's name exactly as listed, or "none" if it's a different place or you're not sure.` }] }],
+    config: { temperature: 0, maxOutputTokens: 400, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+  });
+  const said = String(res?.text || '').replace(/^["'\s-]+|["'.\s]+$/g, '').trim();
+  return known.find((k) => k.toLowerCase() === said.toLowerCase()) || '';
+};
+
+/**
+ * Before an area's first pass: is its name another name for an area this game already has (a guide area, or one
+ * filled before), or a place inside one? Then that area is used, and the name is remembered as its alias (worthAlias/{slug}), so one place
+ * gets one list and one pass however players or answers name it. Decided once per name.
+ */
+export async function resolveAlias(a: AreaRef, judge: AliasJudge = aiAliasJudge): Promise<AreaRef> {
+  if (a.guided) return a;
+  const aliasRef = REC(a.key).collection('worthAlias').doc(a.slug);
+  const al: any = (await aliasRef.get()).data();
+  if (al) return al.to?.slug ? { ...al.to } : a;
+  // The game's other areas: its guide's, and the ones filled (or being filled) before.
+  const known = new Map<string, AreaRef>();
+  const ga = await guideAreasByKey(a.key).catch(() => null);
+  const info: any = ga ? (await db().collection('guides').doc(a.key).get()).data() || {} : {};
+  for (const x of ga?.areas || []) known.set(x.name, { key: a.key, slug: x.slug, name: x.name, game: String(info.game || ga?.game || a.game), guided: true, version: Number(info.rebuiltAt || info.updatedAt || info.createdAt || 0) });
+  for (const d of (await REC(a.key).collection('worthFill').get()).docs) {
+    const f: any = d.data();
+    if (d.id !== a.slug && f?.name && !known.has(f.name)) known.set(String(f.name), { key: a.key, slug: d.id, name: String(f.name), game: String(f.game || a.game), guided: false, version: 0 });
+  }
+  let to: AreaRef | null = null;
+  if (known.size) {
+    const scope = { dollars: 0, searches: 0 };
+    const pick = await usageScope.run(scope, () => judge(a.game, a.name, [...known.keys()].slice(0, 200))).catch(() => '');
+    await tally({ dollars: scope.dollars });
+    to = pick ? known.get(pick) || null : null;
+  }
+  await aliasRef.set(JSON.parse(JSON.stringify({ name: a.name, to, at: Date.now() })));
+  if (to) console.log(`[worth] ${a.game}: "${a.name}" is ${to.name}`);
+  return to || a;
 }
 
 /** Where an area stands: a list (ready), nothing sourced (empty), being filled, never tried (missing), or failed. */
@@ -120,7 +182,13 @@ async function tally(patch: Partial<Record<'dollars' | 'areas' | 'empty' | 'fail
  * Fill one area, once: the lock, the pass, the records, the cards. `uid` counts toward the account's 30 a day ('' for
  * the overnight lane). Returns the area's status afterwards ('limited': the account's new areas for today are used up).
  */
-export async function fillArea(a: AreaRef, uid: string, by: 'player' | 'night'): Promise<WorthStatus | 'limited'> {
+export type FillDeps = { pass?: typeof worthArea; judge?: AliasJudge; cards?: boolean };
+export async function fillArea(given: AreaRef, uid: string, by: 'player' | 'night', deps: FillDeps = {}): Promise<{ status: WorthStatus | 'limited'; area: AreaRef }> {
+  const a = await resolveAlias(given, deps.judge);
+  const status = await fillOne(a, uid, by, deps);
+  return { status, area: a };
+}
+async function fillOne(a: AreaRef, uid: string, by: 'player' | 'night', deps: FillDeps): Promise<WorthStatus | 'limited'> {
   const fillRef = REC(a.key).collection('worthFill').doc(a.slug);
   const userRef = uid ? db().collection('worthFillUsers').doc(uid) : null;
   const claim = await db().runTransaction(async (tx) => {
@@ -149,7 +217,7 @@ export async function fillArea(a: AreaRef, uid: string, by: 'player' | 'night'):
       // The story order's act, when the game's guide has one.
       const spine: any = a.guided ? (await REC(a.key).collection('spine').doc('main').get()).data() : null;
       const act = String((spine?.acts || []).find((x: any) => (x.steps || []).some((s: any) => (s.areas || []).includes(a.slug)))?.name || '');
-      const { entries, dropped } = await worthArea(a.key, a.slug, a.game, a.name, act, have);
+      const { entries, dropped } = await (deps.pass || worthArea)(a.key, a.slug, a.game, a.name, act, have);
       const prev: any = (await REC(a.key).collection('worth').doc(a.slug).get()).data() || {};
       await REC(a.key).collection('worth').doc(a.slug).set(JSON.parse(JSON.stringify({ entries, dropped, at: Date.now(), dollars: Math.round(scope.dollars * 10000) / 10000, placeName: a.name, by: 'demand', version: a.version, ...(prev.fromAnswers ? { fromAnswers: prev.fromAnswers } : {}) })));
       if (!entries.length && !(prev.fromAnswers || []).length) return { entries: 0, items: 0, pics: 0 };
@@ -167,10 +235,10 @@ export async function fillArea(a: AreaRef, uid: string, by: 'player' | 'night'):
       await REC(a.key).set({ updatedAt: Date.now() }, { merge: true });
       // Cards for the gear (its wiki page and a checked picture), four at a time.
       const gear = next.filter((r) => (r.type === 'item' || r.type === 'secret') && r.fields?.rank);
-      const wiki = await wikiFor(a.key, a.game).catch(() => null);
+      const wiki = deps.cards === false ? null : await wikiFor(a.key, a.game).catch(() => null);
       let pics = 0;
       const cost = { d: 0 } as any;
-      for (let i = 0; i < gear.length; i += 4) {
+      for (let i = 0; deps.cards !== false && i < gear.length; i += 4) {
         await Promise.all(gear.slice(i, i + 4).map(async (r) => {
           const c = await cardFor(a.key, a.game, wiki, r, cost).catch(() => null);
           if (c?.pic) pics++;
@@ -284,7 +352,8 @@ export function registerWorthRoutes(app: Express, deps: { requireAuth: any }): v
       if (!t || t.uid !== uid || Number(t.exp || 0) < Date.now()) return res.status(404).json({ error: 'This ticket is not valid.' });
       await ref.delete().catch(() => {});
       const a: AreaRef = { key: t.key, slug: t.slug, name: t.name, game: t.game, guided: !!t.guided, version: Number(t.version || 0) };
-      res.json(await factsFor(a, await fillArea(a, uid, 'player')));
+      const r = await fillArea(a, uid, 'player');
+      res.json(await factsFor(r.area, r.status));
     } catch (e: any) {
       res.status(500).json({ error: String(e?.message || e) });
     }
