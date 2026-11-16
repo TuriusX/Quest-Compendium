@@ -930,6 +930,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           markers: !!(markersOn && msg.points && msg.points.length), question, answer: msg.text,
           client: isDesktopApp ? 'desktop' : 'web', appVersion: BUILD.version,
           ...(msg.kind ? { kind: msg.kind } : {}),
+          // The saved visual the answer showed: the vote raises or lowers it for its subject (living database step 2).
+          ...(msg.visualRef ? { visualRef: msg.visualRef } : {}),
         }),
       });
     } catch {

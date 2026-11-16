@@ -20,6 +20,7 @@ import { QUESTION_TYPES } from './src/utils/questionType';
 import { apiLimits, searchesToday, quotaDay } from './apiLimits';
 import { answerFactsOn, flagFactsFromVote } from './answerFacts';
 import { guideKeyFor, baseGameKey } from './guidesApi';
+import { visualVote } from './visualServer';
 
 type Mw = (req: Request, res: Response, next: NextFunction) => any;
 
@@ -129,6 +130,9 @@ export function registerAnswerFeedback(app: Express, deps: { requireAuth: Mw; op
         voterKey: voter, at: Date.now(),
       });
       res.json({ ok: true });
+      // The visual the answer showed (apps from 0.7.8 / Deck 0.17.6 send visualRef): a 👍 counts like a play, a 👎 like
+      // half a "Not right" (two 👎s drop it), on the saved visual only, with no player kept (visualServer.ts visualVote).
+      if ((vote === 'up' || vote === 'down') && /^[0-9a-f]{40}$/.test(String(b.visualRef || ''))) void visualVote(String(b.visualRef), vote).catch(() => {});
       // Living database step 2: a 👎 on a Pro answer sends the checked facts it used to the front of the nightly
       // re-checks (answerFacts.ts flagFactsFromVote: the same lookup from the question; nothing about the player).
       if (vote === 'down' && /pro/i.test(String(b.model || '')) && b.kind !== 'spot' && String(b.game || '').trim()) {

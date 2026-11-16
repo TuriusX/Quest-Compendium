@@ -220,6 +220,23 @@ export async function visualEvent(type: 'played' | 'opened' | 'wrong', refId: st
 }
 
 /**
+ * A 👍 or 👎 on an answer that showed a saved visual: a 👍 counts as a play (it stays longer); two 👎s count as one
+ * "Not right" (visualEvent decides whether it's dropped). Counts on the saved visual only.
+ */
+export async function visualVote(refId: string, vote: 'up' | 'down'): Promise<void> {
+  if (!/^[0-9a-f]{40}$/.test(refId)) return;
+  void countVisual({ [vote === 'up' ? 'votedUp' : 'votedDown']: 1 }).catch(() => {});
+  const ref = getFirestore().collection(C.cache).doc(refId);
+  if (vote === 'up') { await ref.update({ plays: FieldValue.increment(1) }).catch(() => {}); return; }
+  const d: any = (await ref.get()).data();
+  if (!d?.visual || d.visual.kind === 'none') return;
+  const downs = (Number(d.downVotes) || 0) + 1;
+  if (downs % 2) { await ref.update({ downVotes: downs }).catch(() => {}); return; }
+  await ref.update({ downVotes: downs }).catch(() => {});
+  await visualEvent('wrong', refId, 1);
+}
+
+/**
  * The /stats section (ownerStats.ts): visuals shown by kind, how often a saved one was reused, cost per answer, plays,
  * opens and "Not right", and today's YouTube searches against the free limit. `label` is the window ("last 7 days").
  */
