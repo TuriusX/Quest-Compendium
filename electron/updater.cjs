@@ -21,13 +21,33 @@ function initUpdater({ app, ipcMain, getMainWindow }) {
   const state = { state: 'idle', version: '' };
   ipcMain.handle('get-update-state', () => state);
   ipcMain.on('install-update', () => {});
+  // Settings' "Check for updates": { state: 'current' | 'downloading' | 'ready' | 'failed' | 'store' | 'dev', version,
+  // current }. 'downloading': a newer version was found and is coming down; "Version X is ready" follows when it's done.
+  let autoUpdater = null;
+  ipcMain.handle('check-for-updates', async () => {
+    const current = app.getVersion();
+    if (process.windowsStore === true) return { state: 'store', current };
+    if (!autoUpdater) return { state: 'dev', current };
+    if (state.state === 'ready') return { state: 'ready', version: state.version, current };
+    try {
+      const r = await autoUpdater.checkForUpdates();
+      const v = String((r && r.updateInfo && r.updateInfo.version) || '');
+      // currentVersion is electron-updater's SemVer of the installed app.
+      const newer = !!v && !!autoUpdater.currentVersion && autoUpdater.currentVersion.compare(v) < 0;
+      console.log(`[update] checked by hand: installed ${current}, latest ${v || '?'}`);
+      return newer ? { state: 'downloading', version: v, current } : { state: 'current', version: v, current };
+    } catch (err) {
+      console.warn('[update] check by hand failed:', err && (err.message || err));
+      return { state: 'failed', current };
+    }
+  });
   if (process.windowsStore === true) return console.log('[update] Store build: the Store updates it');
   if (!app.isPackaged && !feed) return console.log('[update] dev build: no update checks');
 
-  let autoUpdater;
   try {
     ({ autoUpdater } = require('electron-updater'));
   } catch (err) {
+    autoUpdater = null;
     return console.warn('[update] electron-updater unavailable:', err && err.message);
   }
   autoUpdater.autoDownload = true;

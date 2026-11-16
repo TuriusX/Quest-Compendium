@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUpdateState: () => ipcRenderer.invoke('get-update-state'),
   onAppUpdate: (callback) => { ipcRenderer.removeAllListeners('app-update'); ipcRenderer.on('app-update', (event, s) => callback(s)); },
   installUpdate: () => ipcRenderer.send('install-update'),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   getActiveGame: () => ipcRenderer.invoke('get-active-game'),
   fetchAchievementsLocally: (appId, steamId) => ipcRenderer.invoke('fetch-achievements-locally', appId, steamId),
   fetchSteamProfileLocally: (steamId) => ipcRenderer.invoke('fetch-steam-profile-locally', steamId),

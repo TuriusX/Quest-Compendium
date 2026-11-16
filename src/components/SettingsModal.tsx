@@ -37,6 +37,7 @@ import { playBlipSound } from '../utils/audio';
 import { logOut } from '../lib/firebase';
 import { getApiBaseUrl, setApiBaseUrl, testBackendHealth, DEFAULT_CLOUD_URL } from '../utils/api';
 import { LOCALES, normalizeLocale, useT } from '../i18n';
+import { UpdateCheck } from './AppUpdates';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -1138,6 +1139,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {activeTab === 'account' && (
               <div className="space-y-3 animate-in slide-in-from-right-4 fade-in duration-300">
+                {/* The installed version and Check for updates (desktop only; a Store install says the Store updates it). */}
+                <UpdateCheck />
                 {/* Your plan: Free / Guest with See Premium, or Premium with when it renews (or ends) and Manage or cancel. */}
                 {plan && onOpenPlan && (
                   <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[var(--accent-dim)] border border-[var(--accent-border)]">

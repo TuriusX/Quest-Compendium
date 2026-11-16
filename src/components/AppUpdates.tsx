@@ -12,6 +12,55 @@ export function newerVersion(a: string, b: string): boolean {
 }
 
 /**
+ * Settings' "Check for updates" (desktop): asks now (electron/updater.cjs check-for-updates) and says what it found:
+ * up to date, a newer version downloading ("Version X is ready" follows, with Restart to update), ready already,
+ * couldn't check, or, installed from the Microsoft Store, that the Store keeps it up to date.
+ */
+export const UpdateCheck: React.FC = () => {
+  const t = useT();
+  const api = typeof window !== 'undefined' ? (window as any).electronAPI : null;
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState('');
+  if (!api) return null;
+  const current = String(api.appVersion || '');
+  const store = api.isStoreBuild === true;
+  const go = async () => {
+    setBusy(true);
+    setSaid('');
+    let r: any = null;
+    try { r = await api.checkForUpdates?.(); } catch { r = null; }
+    setBusy(false);
+    const v = String(r?.version || '');
+    setSaid(
+      r?.state === 'current' ? t('update.current', { v: r.current || current })
+        : r?.state === 'downloading' ? t('update.found', { v })
+        : r?.state === 'ready' ? t('update.ready', { v })
+        : r?.state === 'store' ? t('update.store')
+        : r?.state === 'dev' ? t('update.dev')
+        : t('update.failed'),
+    );
+  };
+  return (
+    <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-white">{t('update.version', { v: current || '?' })}</div>
+        <div className="text-[11px] text-zinc-400" role="status">{said || (store ? t('update.store') : '')}</div>
+      </div>
+      {!store && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void go()}
+          className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+        >
+          {busy ? t('update.checking') : t('update.check')}
+        </button>
+      )}
+    </div>
+  );
+};
+
+/**
  * Updates in the desktop app (electron/updater.cjs):
  *   - a new version downloaded in the background: a small non-blocking bar, "Version 0.5.7 is ready." with Restart to
  *     update and Later (it installs when the app closes anyway);
