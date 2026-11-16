@@ -79,6 +79,7 @@ import { readTombstones } from './hooks/tabMerge';
 import { MigrationNotice, WhichGamePrompt } from './components/SpacesNotice';
 import { GameLine } from './components/GameLine';
 import { PopWindow } from './components/PopWindow';
+import { useWorthHere } from './hooks/useWorthHere';
 import { QuestLog } from './components/QuestLog';
 import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, doSteps, isNowQuestion, isCuriosityQuestion, heldIds, HELD_DAYS, type LogView, type Foe } from './utils/questLogView';
 import { missablesThin } from './utils/missablesCheck';
@@ -822,6 +823,21 @@ export default function App() {
   const trackerGame = useTrackerGuide(activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined, logPlace?.name, logPlace?.story, useLocale(), Number(activeTab?.activeSteamGame?.appId || activeGame?.appId) || 0, activeTab?.name, activeTab?.guideKey);
   const trackerGameRef = useRef(trackerGame);
   trackerGameRef.current = trackerGame;
+  // "Worth getting here" for the player's area, any game, guide or not (owner, Nov 15 2026; hooks/useWorthHere): the
+  // fact database's list for a sure place, filled on demand with a ticket from Help me here or an answer.
+  const worthLocale = useLocale();
+  const { here: worthHere, redeem: redeemWorth } = useWorthHere(
+    activeTab ? activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name : undefined,
+    logPlace && (logPlace.sure || logPlace.confirmed) ? logPlace.name : undefined,
+    {
+      appId: Number(activeTab?.activeSteamGame?.appId || activeGame?.appId) || undefined,
+      guideKey: activeTab?.guideKey || trackerGame.guideKey || null,
+      english: !worthLocale || worthLocale === 'en',
+      token: async () => (user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken().catch(() => null) : (user as any)?.isGuest ? String((user as any).uid) : null),
+    },
+  );
+  const redeemWorthRef = useRef(redeemWorth);
+  redeemWorthRef.current = redeemWorth;
   // "Which game?": only while this compendium is the running collection's, and neither its pick nor its name says which.
   if (runningOpen && activeTab && collection?.appId === runningAppId && collection.games.length > 1 && !activeTab.guideKey && !trackerGame.guideKey) {
     detection.choose = { games: collection.games, onPick: (key) => chooseCollectionGame(activeTab.id, key) };
@@ -913,10 +929,8 @@ export default function App() {
     const tab = activeTab;
     const guideAreas = trackerGameRef.current.areas || [];
     if (locatingRef.current || !tab) return null;
-    if (!api?.captureFresh || !guideAreas.length) {
-      if (!auto) showLocateNote(tr('place.locateNoGuide'));
-      return null;
-    }
+    // Any game (owner, Nov 15 2026): with a guide its areas are a list to pick from; without one the check names the area.
+    if (!api?.captureFresh) return null;
     // The quiet capture for an automatic check: null means not now (the game isn't in view, or the panel is open
     // without a snapshot of the game): it runs when the game is back in view.
     let quiet: string | null = null;
@@ -979,6 +993,8 @@ export default function App() {
       setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, place, lastActive: Date.now() } : t)));
       rememberGameProgress(tab, place);
       noteAreaChange(tab, tab.place?.name, place.name);
+      // The area has no "Worth getting here" yet: its ticket (filled once the quest log is on the area).
+      if (data.worth && typeof data.worth === 'object') redeemWorthRef.current(data.worth);
       if (locateHold.current) {
         locateHold.current.target = place.name;
         // In case the area's page never loads (offline): let go after a few seconds anyway.
@@ -1015,8 +1031,9 @@ export default function App() {
       return msg.id;
     };
     try {
-      // Right after a start or a tab switch the game's guide may still be loading: wait a few seconds for its areas.
-      for (let i = 0; i < 16 && !(trackerGameRef.current.areas || []).length; i++) await new Promise((r) => setTimeout(r, 250));
+      // Right after a start or a tab switch the game's guide may still be loading: wait a few seconds for the lookup (a
+      // game without a guide goes ahead as soon as that's known).
+      for (let i = 0; i < 16 && !trackerGameRef.current.looked; i++) await new Promise((r) => setTimeout(r, 250));
       const placeName = await runLocate(false);
       if (!placeName) {
         // Why it couldn't: unsure (with its guess), or what Locate me said (no guide, its daily limit, not recognised).
@@ -1172,9 +1189,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         foes: trackerGame.guideArea?.page
           ? { slug: trackerGame.guideArea.slug, list: [...(((trackerGame.guideArea.page as any).fights as Foe[]) || []), ...(((trackerGame.guideArea.page as any).enemies as Foe[]) || [])] }
           : null,
-        // The place isn't known (a game with a guide): "Where are you?", with what an unsure check or answer thought,
+        // The place isn't known: "Where are you?" (any game, Nov 15 2026), with what an unsure check or answer thought,
         // and where this playthrough was last time.
-        where: !placeCurrent && trackerGame.areas.length
+        where: !placeCurrent && trackerGame.looked
           ? {
               locating,
               suggestion: (whereFor?.tabId === activeTab.id ? whereFor.suggestion : '') || (activeTab.place?.name && !activeTab.place.confirmed && !activeTab.place.sure ? activeTab.place.name : undefined) || undefined,
@@ -1204,13 +1221,13 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const runLocateRef = useRef(runLocate);
   runLocateRef.current = runLocate;
   useEffect(() => {
-    if (!activeTab || !runningOpen || !dueAt || placeCurrent || !trackerGame.areas.length) return;
+    if (!activeTab || !runningOpen || !dueAt || placeCurrent || !trackerGame.looked) return;
     if ((autoTried.current[activeTab.id] || 0) >= dueAt) return;
     autoTried.current[activeTab.id] = dueAt;
     // A moment for a game that just started (or a tab just switched to) to settle.
     const t = setTimeout(() => void runLocateRef.current(true), 1500);
     return () => clearTimeout(t);
-  }, [activeTab?.id, runningOpen, dueAt, placeCurrent, trackerGame.areas.length]);
+  }, [activeTab?.id, runningOpen, dueAt, placeCurrent, trackerGame.looked]);
   const runningTabRef = useRef(runningTab);
   runningTabRef.current = runningTab;
   const activeTabRef = useRef(activeTab);
@@ -2693,6 +2710,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       }
 
       const data = await res.json();
+      // The answer settled the player's area, which has no "Worth getting here" yet: its ticket.
+      if (data.worth && typeof data.worth === 'object') setTimeout(() => redeemWorthRef.current(data.worth), 0);
 
       if (data.userData && typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('quest_quota_updated', { detail: data.userData }));
@@ -3125,19 +3144,24 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       onLocate={() => void runHelpHere()}
       onPickPlace={moveToArea}
       locateKeys={formatShortcut(settings.locateShortcut || 'CmdOrCtrl+Shift+K')}
-      foldMissables={!!(trackerGame.guideArea?.page as any)?.worth}
+      foldMissables={!!worthHere.worth || !!(trackerGame.guideArea?.page as any)?.worth}
       facts={(() => {
-        // Item 30, step 2: the area's database sections (English pages carry them), only beside what the log already shows.
-        const ga = trackerGame.guideArea;
-        const pg: any = ga?.page;
-        if (!ga || !pg || (!pg.worth && !pg.achievements)) return null;
+        // The area's database sections (item 30; any game, guide or not, from Nov 15 2026: hooks/useWorthHere), only
+        // beside what the log already shows. Being found: one quiet line.
+        const w = worthHere;
+        if (w.status === 'filling') return <LogFacts facts={{ slug: w.slug || '', worth: undefined, achievements: undefined } as any} game="" gameKey="" done={w.done} onTick={() => {}} finding />;
+        if (w.status !== 'ready' || !w.key || !w.slug) return null;
         return (
           <LogFacts
-            facts={{ slug: ga.slug, worth: pg.worth, achievements: pg.achievements }}
+            facts={{ slug: w.slug, worth: w.worth, achievements: w.achievements }}
             game={activeGame?.name || activeTab?.name || ''}
-            gameKey={ga.key}
-            done={ga.done}
-            onTick={(id, done) => trackerEventRef.current({ type: 'tick', item: id, done })}
+            gameKey={w.key}
+            done={w.done}
+            onTick={(id, done) => {
+              // g:<area>:<item id>, saved with the game's other ticks (the guide page's, when it has one).
+              const rest = id.slice(2), cut = rest.indexOf(':');
+              if (cut > 0) for (const e of rest.slice(cut + 1).split('+')) setEntryDone(w.key!, rest.slice(0, cut), e, done);
+            }}
             steam={activeGame?.achievements?.length ? { list: activeGame.achievements, unlocked: activeGame.unlockedAchievements, total: activeGame.totalAchievements } : null}
           />
         );
@@ -3522,7 +3546,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 onOpenPremium={() => setIsPaywallOpen(true)}
                 onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
                 onSetPlace={handleSetPlace}
-                onLocate={isDesktop && trackerGame.areas.length ? () => void runHelpHere() : undefined}
+                onLocate={isDesktop ? () => void runHelpHere() : undefined}
                 locating={locating}
                 locateNote={locateNote}
                 onTrackOnScreen={isDesktop ? handleTrackOnScreen : undefined}

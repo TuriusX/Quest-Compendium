@@ -40,6 +40,8 @@ export function LogFacts(p: {
   done: Set<string>;
   onTick: (id: string, done: boolean) => void;
   steam?: { list?: Achievement[]; unlocked?: number; total?: number } | null;
+  /** The area's list is being found right now (worthOnDemand.ts): one quiet line in its place. */
+  finding?: boolean;
 }) {
   const t = useT();
   const [open, setOpen] = useState<Record<string, boolean>>(readOpen);
@@ -170,9 +172,20 @@ export function LogFacts(p: {
     </div>
   ) : null;
 
-  if (!worth && !ach) return null;
+  // Being found (owner, Nov 15 2026): the section's heading and one quiet line, until the list is in.
+  const finding = !worth && p.finding ? (
+    <div data-qc-log-finding="">
+      {head('worth', t('logfacts.worth'), '')}
+      <div className="flex items-center gap-2 text-[12.5px] text-zinc-400">
+        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-color)] animate-pulse" aria-hidden="true" />
+        {t('logfacts.finding')}
+      </div>
+    </div>
+  ) : null;
+  if (!worth && !ach && !finding) return null;
   return (
     <>
+      {finding}
       {worth}
       {ach}
       {card && (

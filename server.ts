@@ -2135,7 +2135,13 @@ percentages:
       const deckNote = site ? '' : await deckUpdateNote(req.headers['user-agent'], String(userId || ''), !!isGuest, language).catch(() => '');
       // The player's area is sure (read on screen, confirmed, or settled by the answer) and has no "Worth getting here"
       // yet: a ticket the app redeems to fill it (worthOnDemand.ts; any game, guide or not).
-      const sureArea = placeRead?.area || (place?.confirmed ? place.name : '') || (placeParsed.place?.sure ? placeParsed.place.name : '');
+      // As the facts above: a confirmed place counts only while this answer agrees the player is still there.
+      const sureArea = placeRead?.area || (() => {
+        const a = (place?.name || '').toLowerCase(), b = (placeParsed.place?.name || '').toLowerCase();
+        const same = !b || a === b || a.startsWith(`${b},`) || b.startsWith(`${a},`);
+        if (place?.confirmed && same) return place.name;
+        return placeParsed.place?.sure ? placeParsed.place.name : '';
+      })();
       const sureRef = !site && sureArea && effectiveGame?.name ? await worthAreaRef(String(effectiveGame.name), sureArea, gameAppId || undefined, guideKey || null).catch(() => null) : null;
       const worth = sureRef ? await worthTicket(sureRef, String((req as any).user?.uid || userId || '')).catch(() => null) : null;
       // An answer about what's worth getting here, that searched: the items its search backs join the area's list.

@@ -18,22 +18,27 @@ export function useTrackerGuide(gameName: string | undefined, placeName: string 
   achievementGuide: AchievementGuide | null;
   /** The guide's areas in order, known before the place is (Locate me picks from them). */
   areas: { name: string; story: string }[];
+  /** Whether the guide lookup for this game is done (a guide found or not): Help me here waits for it, never for a guide. */
+  looked: boolean;
 } {
   const [guide, setGuide] = useState<{ key: string; areas: GuideAreaInfo[] } | null>(null);
   const [page, setPage] = useState<{ slug: string; page: GuidePage } | null>(null);
   // Every area page of the guide, loaded only when the place isn't an area by name (for the sub-location match).
   const [allPages, setAllPages] = useState<{ key: string; pages: Record<string, GuidePage | null> } | null>(null);
   const [doneTick, setDoneTick] = useState(0);
+  const [lookedFor, setLookedFor] = useState('');
 
   useEffect(() => {
     setGuide(null);
+    setLookedFor('');
     if (!gameName) return;
     let alive = true;
     // The Steam app id finds the guide whatever Steam calls the game now; the compendium's own name says which game of
     // a collection it is (server: guidesApi.ts guideKeyFor).
     guideApi(`/api/guides/find?game=${encodeURIComponent(gameName)}${appId ? `&appId=${appId}` : ''}${altName && altName !== gameName ? `&alt=${encodeURIComponent(altName)}` : ''}${chosenKey ? `&key=${encodeURIComponent(chosenKey)}` : ''}`, lang)
       .then((g) => alive && setGuide(g?.key && Array.isArray(g.areas) ? { key: g.key, areas: g.areas } : null))
-      .catch(() => alive && setGuide(null));
+      .catch(() => alive && setGuide(null))
+      .finally(() => alive && setLookedFor(gameName));
     return () => {
       alive = false;
     };
@@ -106,5 +111,5 @@ export function useTrackerGuide(gameName: string | undefined, placeName: string 
         }
       : null;
   const areas = useMemo(() => (guide?.areas || []).map((a) => ({ name: a.name, story: a.story || '' })), [guide]);
-  return { guideKey: guide?.key || null, guideArea, achievementGuide, areas };
+  return { guideKey: guide?.key || null, guideArea, achievementGuide, areas, looked: !!gameName && lookedFor === gameName };
 }
