@@ -218,9 +218,17 @@ export async function fextralifeImage(domain: string, title: string): Promise<{ 
   let html = await get(page);
   const caps = title.replace(/\b([a-z])/g, (m) => m.toUpperCase());
   if (!html && caps !== title) html = await get((page = at(caps)));
-  // The page's picture: its og:image, else the article's first picture (never the wiki's logo).
-  const first = (html.match(/<img[^>]*class="mw-file-element"[^>]*>/g) || []).map((t) => (t.match(/src="([^"]+)"/) || [])[1] || '').find((u) => u && !/logo/i.test(u)) || '';
-  const og = (html.match(/<meta property="og:image" content="([^"]+)"/) || [])[1] || first;
+  // The page's picture. Fextralife's og:image is often a stat icon (BG3: the damage dice or the armour-class badge,
+  // 35-60px) while the item's own art sits in the article, so: the article picture whose file is named after the
+  // thing ("Longsword_weapons_..._150px.png"), else the og:image, else the article's first picture; never a stat icon
+  // or the wiki's logo.
+  const file = (u: string) => decodeURIComponent((u.split('?')[0].split('/').pop() || '')).toLowerCase().replace(/^\d+px-/, '');
+  const statIcon = (u: string) => /logo|dice|\d+d\d+|\bac[_ -]|_ac_|\d+ac_|ac_icon|icon_armor|qualities|damage_type/i.test(file(u));
+  const words = title.toLowerCase().replace(/^the\s+/, '').split(/[^a-z0-9]+/).filter((w) => w.length > 2 || /\d/.test(w));
+  const named = (u: string) => { const f = file(u).replace(/[^a-z0-9]+/g, ' '); return words.length > 0 && words.every((w) => f.includes(w)); };
+  const article = (html.match(/<img[^>]*class="mw-file-element"[^>]*>/g) || []).map((t) => ((t.match(/src="([^"]+)"/) || [])[1] || '').replace(/&amp;/g, '&')).filter((u) => u && !statIcon(u));
+  const ogRaw = ((html.match(/<meta property="og:image" content="([^"]+)"/) || [])[1] || '').replace(/&amp;/g, '&');
+  const og = article.find(named) || (ogRaw && !statIcon(ogRaw) ? ogRaw : '') || article[0] || '';
   const name = ((html.match(/<meta property="og:title" content="([^"]+)"/) || [])[1] || title).replace(/\s*\|.*$/, '')
     .replace(/&#0?39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&');
   // Only the page's own picture (a file of this wiki), never the site's default.

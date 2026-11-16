@@ -240,7 +240,8 @@ async function fillOne(a: AreaRef, uid: string, by: 'player' | 'night', deps: Fi
       const cost = { d: 0 } as any;
       for (let i = 0; deps.cards !== false && i < gear.length; i += 4) {
         await Promise.all(gear.slice(i, i + 4).map(async (r) => {
-          const c = await cardFor(a.key, a.game, wiki, r, cost).catch(() => null);
+          // A failed card is logged (it used to vanish silently, leaving the item without one); itemCards.ts --missing retries.
+          const c = await cardFor(a.key, a.game, wiki, r, cost).catch((e: any) => { console.warn(`[worth] card for ${r.name} failed: ${e?.message}`); return null; });
           if (c?.pic) pics++;
         }));
       }
@@ -315,7 +316,7 @@ export async function topUpFromAnswer(a: AreaRef | null, facts: { subject?: stri
   await b.commit();
   const wiki = await wikiFor(a.key, a.game).catch(() => null);
   const cost = { d: 0 } as any;
-  await Promise.all(writes.filter((r) => r.type === 'item' || r.type === 'secret').map((r) => cardFor(a.key, a.game, wiki, r, cost).catch(() => null)));
+  await Promise.all(writes.filter((r) => r.type === 'item' || r.type === 'secret').map((r) => cardFor(a.key, a.game, wiki, r, cost).catch((e: any) => { console.warn(`[worth] card for ${r.name} failed: ${e?.message}`); return null; })));
   await tally({ dollars: cost.d || 0, items: writes.length });
   forgetAreaFacts(a.key, a.slug);
   console.log(`[worth] ${a.game} / ${a.name}: ${added.length} item(s) added from an answer`);

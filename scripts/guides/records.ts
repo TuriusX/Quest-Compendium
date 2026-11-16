@@ -332,7 +332,7 @@ export function applyExtracted(recs: GameRecord[], x: { sig: string; shorts: any
 
 /** One area's "worth it here" pass (worthIt.ts): what a player wants from the place, ranked, each with its sources. */
 export type WorthEntry = { type: 'item' | 'quest' | 'npc' | 'tip'; name: string; rank: number; fields: Record<string, string>; sources: string[] };
-const nameKey = (s: string) => String(s || '').toLowerCase().normalize('NFKC').replace(/[‘’ʼ`]/g, "'").replace(/^the\s+/, '').replace(/[^a-z0-9']+/g, ' ').trim();
+export const nameKey = (s: string) => String(s || '').toLowerCase().normalize('NFKC').replace(/[‘’ʼ`]/g, "'").replace(/^the\s+/, '').replace(/[^a-z0-9']+/g, ' ').trim();
 /**
  * An area's "worth it here" pass laid over its records (owner, Nov 15 2026: the guides listed only missables, not the
  * gear, quests and people a player wants). A thing the page already has gets its rank and why-it's-worth-it (fields it

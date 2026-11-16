@@ -48,10 +48,14 @@ async function ask(ai: Gen, cost: Cost, parts: any[], maxOut = 500, label = 'vis
   const res = await ai.models.generateContent({
     model: FAST,
     contents: [{ role: 'user', parts }],
-    config: { temperature: 0, maxOutputTokens: maxOut, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    // The model's thinking counts against maxOutputTokens: with only the reply's budget (200 for the picture check, 300
+    // for choose) the thinking often used it all and the reply came back empty, read as "no" (Nov 16 2026: most wiki
+    // pictures and many visuals lost that way). The thinking gets its own room on top; only what's used is paid.
+    config: { temperature: 0, maxOutputTokens: maxOut + 2000, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
   });
   cost.d += estimateCost(FAST, res) || 0;
   cost.log?.(label, FAST, res);
+  if (!res.text) console.warn(`[visual] ${label}: empty reply (${(res as any)?.candidates?.[0]?.finishReason || '?'})`);
   return parse(res.text || '');
 }
 
@@ -282,7 +286,7 @@ async function watch(ai: Gen, cost: Cost, game: string, question: string, answer
  * The thing's own wiki page (Fextralife first, then the game's main Fandom wiki), whether or not it has a usable picture.
  * Fextralife redirects a missing page elsewhere, so only a page that answers directly counts.
  */
-export async function wikiPage(src: { fextralife?: string; fandom?: string }, subject: string): Promise<WikiPage | null> {
+export async function wikiPage(src: { fextralife?: string; fandom?: string; more?: MoreWiki[] }, subject: string): Promise<WikiPage | null> {
   if (!subject.trim()) return null;
   if (src.fextralife) {
     const at = (t: string) => `https://${src.fextralife}/${encodeURIComponent(t.trim().replace(/ /g, '+')).replace(/%2B/g, '+').replace(/%2C/g, ',').replace(/%27/g, "'")}`;
@@ -315,7 +319,30 @@ export async function wikiPage(src: { fextralife?: string; fandom?: string }, su
     if (p && !p.missing && !p.invalid) return { url: `https://${src.fandom}/wiki/${encodeURIComponent(String(p.title).replace(/ /g, '_'))}`, title: String(p.title), site: 'Fandom' };
     }
   }
+  for (const w of src.more || []) {
+    const j: any = await fetch(`${w.api}?format=json&formatversion=2&action=query&redirects=1&titles=${encodeURIComponent(subject)}`, { headers: { 'User-Agent': UA } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const p = j?.query?.pages?.[0];
+    if (p && !p.missing && !p.invalid) return { url: `${w.page}${encodeURIComponent(String(p.title).replace(/ /g, '_'))}`, title: String(p.title), site: w.site };
+  }
   return null;
+}
+
+/**
+ * Community wikis beyond Fextralife and Fandom (owner, Nov 16 2026: any wiki may supply pictures), by game key: a
+ * MediaWiki's api.php and its page path. bg3.wiki has a clean 144px icon for every BG3 item. (wiki.gg refuses the
+ * app's requests, so it isn't used.)
+ */
+export type MoreWiki = { api: string; page: string; site: string };
+const COMMUNITY_WIKIS: Record<string, MoreWiki[]> = {
+  'baldur-s-gate-3': [{ api: 'https://bg3.wiki/w/api.php', page: 'https://bg3.wiki/wiki/', site: 'bg3.wiki' }],
+};
+export const communityWikis = (key: string): MoreWiki[] => COMMUNITY_WIKIS[key] || [];
+
+/** A MediaWiki page's main picture (pageimages), from any wiki's api.php. */
+async function mediaWikiImage(w: MoreWiki, title: string) {
+  const j: any = await fetch(`${w.api}?format=json&formatversion=2&action=query&prop=pageimages&piprop=original&redirects=1&titles=${encodeURIComponent(title)}`, { headers: { 'User-Agent': UA } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const p = j?.query?.pages?.[0];
+  return p && !p.missing && p.original?.source ? { url: String(p.original.source), page: `${w.page}${encodeURIComponent(String(p.title).replace(/ /g, '_'))}`, title: String(p.title) } : null;
 }
 
 async function fandomImage(domain: string, title: string) {
@@ -335,10 +362,11 @@ async function jpegOf(url: string, minWidth = 200): Promise<string | null> {
   } catch { return null; }
 }
 
-export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: string; fandom?: string }, game: string, question: string, subject: string, steps: string[], where = false, icon = false) {
+export async function wikiPicture(ai: Gen, cost: Cost, src: { fextralife?: string; fandom?: string; more?: MoreWiki[] }, game: string, question: string, subject: string, steps: string[], where = false, icon = false) {
   const tries: { url: string; page: string; title: string; site: string }[] = [];
   if (src.fextralife) { const f = await fextralifeImage(src.fextralife, subject).catch(() => null); if (f) tries.push({ ...f, site: 'Fextralife' }); }
   if (src.fandom) { const f = await fandomImage(src.fandom, subject); if (f) tries.push({ ...f, site: 'Fandom' }); }
+  for (const w of src.more || []) { const f = await mediaWikiImage(w, subject); if (f) tries.push({ ...f, site: w.site }); }
   steps.push(`wiki: ${tries.length} page picture(s) for "${subject}"`);
   for (const t of tries) {
     // A named thing's picture is often the wiki's item icon (150px on BG3's wiki): smaller ones count there.
@@ -394,10 +422,10 @@ export async function visualFor(ai: Gen, o: {
   game: string; gameKey: string; question: string; answer: string; youtubeKey: string;
   /** The player sent only a screenshot or voice message (the question is the app's stand-in text): the topic comes from the answer. */
   shotOnly?: boolean;
-  wiki: { fextralife?: string; fandom?: string }; store?: VisualStore; log?: Cost['log'];
+  wiki: { fextralife?: string; fandom?: string; more?: MoreWiki[] }; store?: VisualStore; log?: Cost['log'];
   beforeSearch?: () => Promise<void>;
   /** The question is about another game than the app's (asked from another game's compendium): its guide and wikis. */
-  otherGame?: (name: string) => Promise<{ gameKey: string; wiki: { fextralife?: string; fandom?: string } } | null>;
+  otherGame?: (name: string) => Promise<{ gameKey: string; wiki: { fextralife?: string; fandom?: string; more?: MoreWiki[] } } | null>;
 }): Promise<VisualResult & { keys: string[]; game: string }> {
   const t0 = Date.now();
   const cost: Cost = { d: 0, log: o.log };

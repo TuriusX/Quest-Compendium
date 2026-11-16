@@ -7,13 +7,13 @@
  *
  * Saved in gameRecords/{key}/cards/{recordId} { place, page: { url, title, site } | null, pic: hash | null, what, at }.
  *
- *   npx tsx scripts/guides/itemCards.ts --only KEY [--max-dollars 1] [--redo] [--dry-run]
+ *   npx tsx scripts/guides/itemCards.ts --only KEY [--max-dollars 1] [--nopic | --redo] [--dry-run]
  */
 import crypto from 'crypto';
 import sharp from 'sharp';
 import { db, gemini, arg } from './common';
 import { RECORDS } from './recordsImport';
-import { wikiPage, wikiPicture, type Cost } from '../../visualAnswer';
+import { wikiPage, wikiPicture, communityWikis, type Cost, type MoreWiki } from '../../visualAnswer';
 import type { GameRecord } from './records';
 import { fextralifeDomain } from './suggestImages';
 
@@ -36,18 +36,19 @@ async function keep(url: string, page: string): Promise<string | null> {
  * The game's wikis for cards (guideImageSources), or null when none is known. Any game, guide or not: given its name,
  * a game never looked at gets its Fextralife wiki found from the name (free; remembered either way).
  */
-export async function wikiFor(key: string, game?: string): Promise<{ fextralife: string; fandom: string } | null> {
+export async function wikiFor(key: string, game?: string): Promise<CardWikis | null> {
   const src: any = (await db().collection('guideImageSources').doc(key).get()).data() || {};
   const fx = src.fextralife === undefined && game ? await fextralifeDomain(key, game, src).catch(() => '') : src.fextralife?.domain || '';
-  const wiki = { fextralife: fx, fandom: src.wiki?.domain || '' };
-  return wiki.fextralife || wiki.fandom ? wiki : null;
+  const wiki = { fextralife: fx, fandom: src.wiki?.domain || '', more: communityWikis(key) };
+  return wiki.fextralife || wiki.fandom || wiki.more.length ? wiki : null;
 }
+export type CardWikis = { fextralife: string; fandom: string; more?: MoreWiki[] };
 
 /**
  * One item's card: its wiki page and a checked picture (copied to our store), saved in gameRecords/{key}/cards/{id}.
  * No wiki known for the game: the card keeps the page the sources cited (`cited`), without a picture.
  */
-export async function cardFor(key: string, game: string, wiki: { fextralife: string; fandom: string } | null, r: GameRecord, cost: Cost, cited?: { url: string; title: string; site: string } | null): Promise<{ page: boolean; pic: boolean }> {
+export async function cardFor(key: string, game: string, wiki: CardWikis | null, r: GameRecord, cost: Cost, cited?: { url: string; title: string; site: string } | null): Promise<{ page: boolean; pic: boolean }> {
   const steps: string[] = [];
   const pic = wiki ? await wikiPicture(gemini() as any, cost, wiki, game, `Show me ${r.name}`, r.name, steps, false, true) : null;
   const page = pic?.page || (wiki ? await wikiPage(wiki, r.name).catch(() => null) : null) || cited || null;
@@ -66,8 +67,10 @@ async function main() {
   if (!wiki) throw new Error(`no wiki known for ${key} (guideImageSources)`);
   const items = (await RECORDS().doc(key).collection('records').get()).docs.map((d) => d.data() as GameRecord)
     .filter((r) => r.place && (r.type === 'item' || r.type === 'secret') && r.fields?.rank && r.status !== 'disputed');
-  const done = new Set((await RECORDS().doc(key).collection('cards').get()).docs.map((d) => d.id));
-  const todo = items.filter((r) => redo || !done.has(r.id));
+  // --redo: every item again; --nopic: also the cards that have no picture yet; default: items with no card.
+  const nopic = process.argv.includes('--nopic');
+  const cards = new Map((await RECORDS().doc(key).collection('cards').get()).docs.map((d) => [d.id, d.data() as any]));
+  const todo = items.filter((r) => redo || !cards.has(r.id) || (nopic && !cards.get(r.id)?.pic));
   console.log(`${game}: ${items.length} items in Worth getting here, ${todo.length} to do; wiki ${wiki.fextralife || wiki.fandom}.`);
   if (dry) return void setTimeout(() => process.exit(0), 200);
   const cost: Cost = { d: 0 };

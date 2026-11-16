@@ -25,15 +25,15 @@ const TYPE: Record<string, WorthEntry['type']> = { ITEM: 'item', SPELL: 'item', 
 function prompt(game: string, place: string, act: string, have: GameRecord[]): string {
   const known = have.filter((r) => ['item', 'secret', 'npc', 'quest', 'shop'].includes(r.type)).map((r) => cut(r.name, 60));
   return [
-    `In the video game "${game}"${act ? ` (${act})` : ''}, the area "${place}". A player wants to know what is worth getting and doing here, not only what can be missed. Search the game's wikis and guides (at most four searches), then list:`,
-    '- ITEM: the best gear found or bought here (weapons, armor, accessories), most valuable first, at most 8. Rarity and what makes it good.',
+    `In the video game "${game}"${act ? ` (${act})` : ''}, the area "${place}". A player wants to know what is worth getting and doing here, not only what can be missed. Search the game's wikis and guides (at most four searches), then list ONLY what really matters to a player at this point in the game. Fewer is better than filler: a short list is fine, and so is listing nothing in a group.`,
+    '- ITEM: gear found or bought here that stands out (weapons, armor, accessories), most valuable first, at most 6. Basic or common gear (plain weapons and armor any shop sells) only with a real reason, given as its REASON: a quest needs it, it can be missed, or it is a clear upgrade at this point in the game.',
     '- SPELL: spell scrolls, books or abilities worth having that are found here, at most 3.',
     '- QUEST: every quest that starts here: who gives it, where, and its notable reward.',
-    '- NPC: the people here worth talking to, at most 6, and why (a quest, a merchant, a companion, information, a reward).',
-    '- DO: at most 4 key things to do here that a player should not skip (not already covered above).',
+    '- NPC: people here a player can talk to, trade with or recruit and should not miss, at most 5, and why (a quest, a merchant, a companion, a reward). Not enemies, creatures or bosses.',
+    '- DO: at most 3 key things to do here that a player should not skip (not already covered above).',
     '',
     'One line each, in exactly this form (fields separated by " | ", a field left empty if no source says it):',
-    'ITEM | name | rarity | why it is worth it (one short sentence) | where exactly in this area | how to get it',
+    'ITEM | name | rarity | why it is worth it (one short sentence) | where exactly in this area | how to get it | REASON: standout, quest, missable or upgrade',
     'SPELL | name | level or rarity | why | where | how',
     'QUEST | name | giver | where it starts | reward',
     'NPC | name | where in the area | why talk to them',
@@ -42,6 +42,25 @@ function prompt(game: string, place: string, act: string, have: GameRecord[]): s
     'Only things in this area. Only what the sources say; leave out anything they do not. No headings, no other text.',
     known.length ? `The guide already lists: ${known.join(', ')}. Include those too if they belong in the list (so they get ranked), with the same names.` : '',
   ].join('\n');
+}
+
+/**
+ * The importance bar (owner, Nov 16 2026: only what matters in context, fewer is better than filler), in code as well
+ * as in the prompt: every entry needs its reason; common gear only with a real one (a quest, missable, an upgrade);
+ * a name that's a sentence fragment ("A friendly intellect devourer named Us can be extracted from") is a parse slip.
+ */
+export function worthKeeping(kind: string, p: string[]): boolean {
+  const name = p[1] || '';
+  if (name.split(/\s+/).length > 7 || /\b(can|could|is|are|be|from|to|with|of|named)$/i.test(name.trim())) return false;
+  if (kind === 'ITEM' || kind === 'SPELL') {
+    if (!p[3]) return false;
+    const reason = String(p[6] || '').toLowerCase();
+    const plain = !p[2] || /^(common|normal|basic|standard|none|-)$/i.test(p[2].trim());
+    if (kind === 'ITEM' && plain && !/quest|missable|upgrade/.test(reason)) return false;
+  }
+  if (kind === 'NPC' && !p[3]) return false;
+  if (kind === 'DO' && !p[2]) return false;
+  return true;
 }
 
 /** The lines of the answer that a trusted source backs, as entries. */
@@ -58,10 +77,11 @@ function parse(text: string, segs: { text: string; sites: string[] }[]): { entri
     const nl = norm(line), nn = norm(parts[1]);
     const sites = [...new Set(segs.filter((s) => { const ns = norm(s.text); return ns.length >= 12 && (nl.includes(ns) || ns.includes(nn)); }).flatMap((s) => trustedSites(s.sites)))];
     if (!sites.length) { dropped++; continue; }
-    const r = (rank[kind] = (rank[kind] || 0) + 1);
     const p = parts.map((s) => cut(s, 300));
+    if (!worthKeeping(kind, p)) { dropped++; continue; }
+    const r = (rank[kind] = (rank[kind] || 0) + 1);
     const fields: Record<string, string> =
-      kind === 'ITEM' || kind === 'SPELL' ? { kind: kind === 'SPELL' ? 'spell' : 'gear', rarity: p[2], why: p[3], where: p[4], how: p[5] } :
+      kind === 'ITEM' || kind === 'SPELL' ? { kind: kind === 'SPELL' ? 'spell' : 'gear', rarity: p[2], why: p[3], where: p[4], how: p[5], reason: (String(p[6] || '').toLowerCase().match(/standout|quest|missable|upgrade/) || [''])[0] } :
       kind === 'QUEST' ? { giver: p[2], startsAt: p[3], rewards: p[4], text: `${p[1]} starts here${p[2] ? `, given by ${p[2]}` : ''}${p[3] ? ` (${p[3]})` : ''}${p[4] ? `; reward: ${p[4]}` : ''}.` } :
       kind === 'NPC' ? { where: p[2], why: p[3], text: `${p[1]}${p[2] ? ` (${p[2]})` : ''}: ${p[3]}` } :
       { why: p[2], text: `${p[1]}${p[2] ? `: ${p[2]}` : ''}` };

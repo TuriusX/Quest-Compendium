@@ -14,7 +14,7 @@
 import crypto from 'crypto';
 import type { Express, Request, Response } from 'express';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { visualFor, visualId, YouTubeQuotaOut, type Cost, type Visual, type VisualStore } from './visualAnswer';
+import { visualFor, visualId, communityWikis, YouTubeQuotaOut, type Cost, type Visual, type VisualStore } from './visualAnswer';
 import { GENERATED } from './src/locales.generated';
 
 /**
@@ -113,7 +113,7 @@ export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'l
   const keyOf = async (game: string) => (await deps.guideKeyFor(game)) || game.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const wikiOf = async (gameKey: string) => {
     const src: any = (await getFirestore().collection('guideImageSources').doc(gameKey).get()).data() || {};
-    return { fextralife: src.fextralife?.domain || '', fandom: src.wiki?.domain || '' };
+    return { fextralife: src.fextralife?.domain || '', fandom: src.wiki?.domain || '', more: communityWikis(gameKey) };
   };
   const gameKey = String(o.guideKey || '').replace(/[^a-z0-9-]/g, '').slice(0, 120) || (await keyOf(o.game));
   const key = String(env.YOUTUBE_API_KEY || '');
