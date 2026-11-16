@@ -71,7 +71,75 @@ async function judge(game: string, r: GameRecord, fields: Record<string, string>
   try { return JSON.parse(String(res?.text || '').match(/\{[\s\S]*\}/)?.[0] || 'null'); } catch { return null; }
 }
 
+/** A whole fact against its source (the 👎 re-check): every claim, not only the numbers. */
+const RULES_ALL = 'Check EVERY claim in the fact (where, how, what it does, numbers, missable) against what the source says about this same thing. ' +
+  '"confirmed": the source agrees with all of it. "corrected": the source clearly says something different and you can fix it; give in "fixes" each field that changes, with its FULL corrected text. ' +
+  '"disputed": the source contradicts it but you can\'t give a clear fix. "not_covered": the source doesn\'t say. Reply with JSON only: {"verdict": "confirmed" | "corrected" | "disputed" | "not_covered", "fixes": {"<field>": "<full corrected text>"}, "quote": "<the source\'s words, short>", "site": "<the source site>"}';
+async function judgeAll(game: string, r: GameRecord, fields: Record<string, string>, article: { site: string; text: string } | null): Promise<(Omit<Verdict, 'verdict'> & { verdict: Verdict['verdict'] | 'disputed' }) | null> {
+  const prompt = article
+    ? `${ASK(game, r, fields)}SOURCE: the article on ${article.site}:\n"""${article.text}"""\n\n${RULES_ALL}`
+    : `${ASK(game, r, fields)}Use Google Search to check it on the game's wikis (two searches at most). ${RULES_ALL}`;
+  const res: any = await gemini().models.generateContent({
+    model: MODEL, contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: { temperature: 0, maxOutputTokens: 3000, ...(article ? { responseMimeType: 'application/json' } : { tools: [{ googleSearch: {} }] }), thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } as any,
+  });
+  try { return JSON.parse(String(res?.text || '').match(/\{[\s\S]*\}/)?.[0] || 'null'); } catch { return null; }
+}
+
+/**
+ * --queue (living database step 2, nightly from run.ts, improvement fund): the facts a 👎 flagged
+ * (gameRecords/{key}/recheck/{id}, most votes first), each checked whole against its wiki article, else one search:
+ * confirmed, corrected (overlay, as above) or disputed (out of answers until settled). Counted in system/answerFacts.
+ */
+export async function recheckQueue(max: number): Promise<{ confirmed: number; corrected: number; disputed: number; not_covered: number; dollars: number }> {
+  const t = { confirmed: 0, corrected: 0, disputed: 0, not_covered: 0 };
+  const start = ledgerDollars();
+  const queued = (await db().collectionGroup('recheck').get()).docs.filter((d) => d.ref.parent.parent?.parent.id === 'gameRecords')
+    .sort((a, b) => (Number((b.data() as any).votes) || 0) - (Number((a.data() as any).votes) || 0));
+  for (const q of queued) {
+    if (ledgerDollars() - start + 0.04 >= max) { console.log(`Re-check queue stopped before $${max.toFixed(2)}.`); break; }
+    const key = q.ref.parent.parent!.id;
+    const live = (await RECORDS().doc(key).collection('records').doc(q.id).get()).data() as GameRecord | undefined;
+    if (!live || live.status !== 'checked') { await q.ref.delete(); continue; }
+    const was = (live as any).numCheck?.was as Record<string, string> | undefined;
+    const r: GameRecord = was ? { ...live, fields: { ...live.fields, ...was } } : live;
+    const game = String(((await db().collection('guides').doc(key).get()).data() as any)?.game || ((await RECORDS().doc(key).get()).data() as any)?.game || key);
+    const fields = Object.fromEntries(Object.entries(r.fields || {}).filter(([k, v]) => v && !['rank', 'kind', 'reason', 'tickable', 'group'].includes(k))) as Record<string, string>;
+    const w = await wikiFor(key, game).catch(() => null);
+    const article = await articleFor(w, r.name).catch(() => null);
+    let v = article ? await judgeAll(game, r, fields, article).catch(() => null) : null;
+    if (!v || v.verdict === 'not_covered') v = await judgeAll(game, r, fields, null).catch(() => null);
+    const verdict = v?.verdict || 'not_covered';
+    if (verdict === 'not_covered') { t.not_covered++; await q.ref.delete(); continue; }
+    const fixes = (verdict === 'corrected' ? Object.fromEntries(Object.entries(v!.fixes || {}).filter(([k, val]) => k in fields && typeof val === 'string' && val.trim() && val !== fields[k])) : {}) as Record<string, string>;
+    const status: NumberResult['status'] = verdict === 'disputed' ? 'disputed' : verdict === 'corrected' && Object.keys(fixes).length ? 'corrected' : 'confirmed';
+    t[status]++;
+    const res: NumberResult = { sig: contentSig(r), status, ...(status === 'corrected' ? { fixes, was: Object.fromEntries(Object.keys(fixes).map((k) => [k, fields[k]])) } : {}), source: article?.url || String(v?.site || 'web search'), ...(v?.quote ? { quote: String(v.quote).slice(0, 300) } : {}), at: Date.now() };
+    await RECORDS().doc(key).collection('numbers').doc(r.place || '_').set({ results: { [r.id]: res }, at: Date.now() }, { merge: true });
+    const { hash: _h, ...rest } = r as any;
+    const numCheck = { status, source: res.source, ...(res.quote ? { quote: res.quote } : {}), at: res.at, ...(res.was ? { was: res.was } : {}) };
+    await RECORDS().doc(key).collection('records').doc(r.id).set(finish(status === 'disputed' ? { ...rest, status: 'disputed', ...(res.quote ? { dispute: res.quote } : {}), numCheck } as any : { ...rest, fields: status === 'corrected' ? { ...r.fields, ...fixes } : r.fields, numCheck } as any));
+    await q.ref.delete();
+    console.log(`  ${status} ${key} / ${r.name}${status === 'corrected' ? `: ${JSON.stringify(res.was).slice(0, 120)} -> ${JSON.stringify(fixes).slice(0, 120)}` : ''}`);
+  }
+  const dollars = ledgerDollars() - start;
+  const day = new Date().toISOString().slice(0, 10);
+  const { FieldValue } = await import('firebase-admin/firestore');
+  if (t.confirmed + t.corrected + t.disputed) await db().collection('system').doc('answerFacts').set({ days: { [day]: { confirmed: FieldValue.increment(t.confirmed), corrected: FieldValue.increment(t.corrected), disputed: FieldValue.increment(t.disputed) } } }, { merge: true });
+  if (dollars > 0) {
+    const ref = db().collection('system').doc('improveFund');
+    const f: any = (await ref.get()).data() || {};
+    await ref.set({ spent: Number(f.spent || 0) + dollars, log: [...(f.log || []), { at: Date.now(), kind: 'recheck', dollars, line: `👎 re-checks: ${t.confirmed} confirmed, ${t.corrected} corrected, ${t.disputed} disputed, ${t.not_covered} not covered` }] }, { merge: true });
+  }
+  return { ...t, dollars };
+}
+
 async function main() {
+  if (process.argv.includes('--queue')) {
+    const r = await recheckQueue(Number(arg('max-dollars', '0.5')) || 0.5);
+    console.log(`Re-check queue: ${r.confirmed} confirmed, ${r.corrected} corrected, ${r.disputed} disputed, ${r.not_covered} not covered; $${r.dollars.toFixed(3)}.`);
+    return void setTimeout(() => process.exit(0), 300);
+  }
   const only = String(arg('only') || ''), max = Number(arg('max-dollars', '8')) || 8, searchGames = Number(arg('search-games', '4')) || 0;
   const dry = process.argv.includes('--dry-run');
   // --prior: spent by an earlier interrupted run of this re-check (never logged): counted toward the stop and logged now.

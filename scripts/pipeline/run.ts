@@ -951,6 +951,20 @@ async function main() {
   // the search room the pipeline leaves; paid from system/improveFund { budget, spent, nightly }, not the pipeline's cap.
   // The results go live with the next night's publish.
   if (!DRY) {
+    // First (living database step 2, owner Nov 16 2026): the facts a 👎 flagged, each checked whole against its wiki
+    // article, else one search (numericRecheck.ts --queue): $0.50 a night at most, from the same fund.
+    try {
+      const fund: any = (await db().collection('system').doc('improveFund').get()).data() || {};
+      const left = Number(fund.budget || 0) - Number(fund.spent || 0);
+      const queued = (await db().collectionGroup('recheck').limit(1).get()).size;
+      if (queued && fund.recheck !== false && left > 0.25) {
+        const r = spawnSync('npx', ['tsx', 'scripts/guides/numericRecheck.ts', '--queue', '--max-dollars', Math.min(0.5, left).toFixed(2)], { encoding: 'utf8', timeout: 30 * 60_000, maxBuffer: 16 * 1024 * 1024, shell: process.platform === 'win32', env: { ...process.env, PIPELINE_STEP_DOLLARS: Math.min(0.5, left).toFixed(2) } });
+        const line = (`${r.stdout || ''}`.match(/^Re-check queue: [^\n]*/m) || [''])[0];
+        report.push(line ? `🔁 Facts players marked 👎, re-checked: ${line.replace(/^Re-check queue: /, '')}` : `⚠️ The 👎 re-check didn't finish (exit ${r.status}); see the job log.`);
+      }
+    } catch (e: any) {
+      console.warn(`👎 re-check skipped: ${e?.message}`);
+    }
     try {
       const ifRef = db().collection('system').doc('improveFund');
       const fund: any = (await ifRef.get()).data() || {};

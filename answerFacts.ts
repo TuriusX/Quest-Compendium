@@ -38,10 +38,29 @@ export async function tallyFacts(searched: boolean): Promise<void> {
   await getFirestore().collection('system').doc('answerFacts').set({ days: { [day]: { answers: FieldValue.increment(1), searched: FieldValue.increment(searched ? 1 : 0) } } }, { merge: true });
 }
 
+/**
+ * Step 2 (owner, Nov 16 2026): a 👎 on a Pro answer sends the checked facts it used to the front of the nightly
+ * re-checks. Which facts: the same lookup again from the question (deterministic), so nothing links an answer or a
+ * player to facts. Queued in gameRecords/{key}/recheck/{id} { votes, reasons, at }; counted in system/answerFacts.
+ */
+export async function flagFactsFromVote(key: string, question: string, reason: string | null): Promise<number> {
+  if (!key || !String(question || '').trim()) return 0;
+  const f = await factsForQuestion(key, question);
+  if (!f.ids.length) return 0;
+  const { FieldValue } = await import('firebase-admin/firestore');
+  const batch = getFirestore().batch();
+  for (const id of f.ids) batch.set(getFirestore().collection('gameRecords').doc(key).collection('recheck').doc(id), { votes: FieldValue.increment(1), ...(reason ? { reasons: FieldValue.arrayUnion(reason) } : {}), at: Date.now() }, { merge: true });
+  const day = new Date().toISOString().slice(0, 10);
+  batch.set(getFirestore().collection('system').doc('answerFacts'), { days: { [day]: { flagged: FieldValue.increment(f.ids.length) } } }, { merge: true });
+  await batch.commit();
+  return f.ids.length;
+}
+
 /** The last `n` UTC days' counts, oldest first. */
-export async function factsDays(n = 7): Promise<{ day: string; answers: number; searched: number }[]> {
+export async function factsDays(n = 7): Promise<{ day: string; answers: number; searched: number; flagged: number; confirmed: number; corrected: number; disputed: number }[]> {
   const d: any = (await getFirestore().collection('system').doc('answerFacts').get()).data() || {};
-  return Object.keys(d.days || {}).sort().slice(-n).map((k) => ({ day: k, answers: Number(d.days[k].answers) || 0, searched: Number(d.days[k].searched) || 0 }));
+  const n0 = (x: any) => Number(x) || 0;
+  return Object.keys(d.days || {}).sort().slice(-n).map((k) => ({ day: k, answers: n0(d.days[k].answers), searched: n0(d.days[k].searched), flagged: n0(d.days[k].flagged), confirmed: n0(d.days[k].confirmed), corrected: n0(d.days[k].corrected), disputed: n0(d.days[k].disputed) }));
 }
 
 /** A game's checked records with a usable name (cached 30 minutes). */
@@ -68,9 +87,9 @@ const line = (r: Rec) => {
  * The checked facts a question names (whole words, longest names first, the player's area first), at most `max`.
  * `text` is the prompt block, empty when none.
  */
-export async function factsForQuestion(key: string, question: string, placeSlug = '', max = 8): Promise<{ text: string; count: number }> {
+export async function factsForQuestion(key: string, question: string, placeSlug = '', max = 8): Promise<{ text: string; count: number; ids: string[] }> {
   const q = norm(question);
-  if (!key || q.trim().length < 4) return { text: '', count: 0 };
+  if (!key || q.trim().length < 4) return { text: '', count: 0, ids: [] };
   const recs = await checkedRecords(key);
   const named = recs.filter((r) => q.includes(norm(r.name)))
     // A name inside a longer named one ("Mask" in "Mask Shard") is dropped when the longer one matched.
@@ -78,9 +97,10 @@ export async function factsForQuestion(key: string, question: string, placeSlug 
   const kept: Rec[] = [];
   for (const r of named) if (!kept.some((k) => norm(k.name).includes(norm(r.name)) && k.name !== r.name)) kept.push(r);
   const ordered = kept.sort((a, b) => Number(b.place === placeSlug) - Number(a.place === placeSlug)).slice(0, max);
-  if (!ordered.length) return { text: '', count: 0 };
+  if (!ordered.length) return { text: '', count: 0, ids: [] };
   return {
     count: ordered.length,
+    ids: ordered.map((r) => r.id),
     text: `[CHECKED FACTS FROM THE QUEST COMPENDIUM DATABASE]\nThese facts about what the player named were checked against sources. Use them as reference: they are reliable for what they say. If they cover what the player asked, answer from them without searching; if the player asks for something they don't cover, ask for a search as instructed.\n${ordered.map(line).join('\n')}`,
   };
 }

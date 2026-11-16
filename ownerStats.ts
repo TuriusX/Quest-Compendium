@@ -269,7 +269,9 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   // Checked facts in answers (answerFacts.ts, roadmap 31 step 1): answers that had them, and the searches they saved.
   const fd = (await factsDays(window === '30d' ? 30 : 7).catch(() => [])).filter((r) => r.day >= new Date(now - Math.max(siteMs, DAY)).toISOString().slice(0, 10));
   const fa = fd.reduce((n, r) => n + r.answers, 0), fs2 = fd.reduce((n, r) => n + r.searched, 0);
-  if (fa) parts.push(`**Checked facts in answers** (${winLabel}): ${fa} answer(s) had them, ${fs2} searched anyway · ${fa - fs2} search(es) saved (≈$${((fa - fs2) * 0.014).toFixed(2)})`);
+  const sumF = (k: 'flagged' | 'confirmed' | 'corrected' | 'disputed') => fd.reduce((n, r) => n + r[k], 0);
+  if (fa || sumF('flagged')) parts.push(`**Checked facts in answers** (${winLabel}): ${fa} answer(s) had them, ${fs2} searched anyway · ${fa - fs2} search(es) saved (≈$${((fa - fs2) * 0.014).toFixed(2)})` +
+    (sumF('flagged') ? `\n👎 sent ${sumF('flagged')} fact(s) back for re-checking: ${sumF('confirmed')} confirmed, ${sumF('corrected')} corrected, ${sumF('disputed')} disputed` : ''));
   // Visual answers (visualServer.ts, Nov 14 2026): once they're on (counted per UTC day; your own answers included).
   if (visualAnswersOn()) parts.push(visualStatsLine(await visualStatsFor(window === '30d' ? 30 : window === '7d' ? 7 : 1), window === '30d' ? 'last 30 days' : window === '7d' ? 'last 7 days' : 'today'));
   // "Worth getting here" on demand (worthOnDemand.ts, Nov 15 2026): areas filled for players and what they cost, by

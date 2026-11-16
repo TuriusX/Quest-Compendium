@@ -401,13 +401,15 @@ export const contentSig = (r: Pick<GameRecord, 'type' | 'name' | 'fields'>) =>
  * wiki article. Laid over records whose content is unchanged since (sig): a corrected one takes the corrected fields
  * (the old text kept in `numCheck.was` for undo), a confirmed one just records where it was confirmed.
  */
-export type NumberResult = { sig: string; status: 'confirmed' | 'corrected'; fixes?: Record<string, string>; was?: Record<string, string>; source: string; quote?: string; at: number };
+export type NumberResult = { sig: string; status: 'confirmed' | 'corrected' | 'disputed'; fixes?: Record<string, string>; was?: Record<string, string>; source: string; quote?: string; at: number };
 export function applyNumbers(recs: GameRecord[], v: { results?: Record<string, NumberResult> } | undefined): GameRecord[] {
   if (!v?.results) return recs;
   return recs.map((r) => {
     const x = v.results![r.id];
     if (!x || x.sig !== contentSig(r)) return r;
     const numCheck = { status: x.status, source: x.source, ...(x.quote ? { quote: x.quote } : {}), at: x.at, ...(x.was ? { was: x.was } : {}) };
+    // Contradicted by its source with no clear fix (a re-check after a 👎): out of answers until settled.
+    if (x.status === 'disputed') return finish({ ...r, status: 'disputed', ...(x.quote ? { dispute: x.quote } : {}), numCheck } as any);
     return finish({ ...r, fields: x.status === 'corrected' && x.fixes ? { ...r.fields, ...x.fixes } : r.fields, numCheck } as any);
   });
 }

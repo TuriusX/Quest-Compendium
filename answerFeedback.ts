@@ -18,6 +18,8 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { playerHash } from './corrections';
 import { QUESTION_TYPES } from './src/utils/questionType';
 import { apiLimits, searchesToday, quotaDay } from './apiLimits';
+import { answerFactsOn, flagFactsFromVote } from './answerFacts';
+import { guideKeyFor, baseGameKey } from './guidesApi';
 
 type Mw = (req: Request, res: Response, next: NextFunction) => any;
 
@@ -127,6 +129,17 @@ export function registerAnswerFeedback(app: Express, deps: { requireAuth: Mw; op
         voterKey: voter, at: Date.now(),
       });
       res.json({ ok: true });
+      // Living database step 2: a 👎 on a Pro answer sends the checked facts it used to the front of the nightly
+      // re-checks (answerFacts.ts flagFactsFromVote: the same lookup from the question; nothing about the player).
+      if (vote === 'down' && /pro/i.test(String(b.model || '')) && b.kind !== 'spot' && String(b.game || '').trim()) {
+        void (async () => {
+          if (!(await answerFactsOn())) return;
+          const game = cut(b.game, 160);
+          const key = (await guideKeyFor(game).catch(() => null)) || baseGameKey(game);
+          const n = await flagFactsFromVote(key, cut(b.question, 1000), reason);
+          if (n) console.log(`[facts] ${n} fact(s) of ${key} flagged for re-checking by a 👎`);
+        })().catch((e: any) => console.warn('[facts] flag failed:', e?.message));
+      }
     } catch (e: any) {
       console.error('[answer-feedback] save failed:', e?.message);
       res.status(500).json({ error: 'Could not save the vote.' });

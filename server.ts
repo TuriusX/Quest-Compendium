@@ -2821,6 +2821,7 @@ percentages:
       <li>Maintaining and improving app reliability and performance.</li>
       <li>Improving our game guides: when an answer corrects one of our guides (for example after you say a location is wrong), the correction may be saved anonymously and used to improve the guide. We keep only the text of the correction, the game and area it is about, and a one-way anonymised identifier (never your account, email or screenshots), and we check it against other sources or other players before changing a guide.</li>
       <li>Improving our game guides from the questions players ask, in the app and in the &ldquo;Ask about this&rdquo; box on our guide pages: questions are used anonymously (no account, email or other identifier is kept with them) to find what a guide is missing or explains poorly. Guide changes are always checked against published sources, and a question is never published as it was written; a question many players ask may appear on a guide page reworded in neutral words.</li>
+      <li>Keeping our game facts accurate: a 👎 on an answer can send the facts that answer was built on back to be re-checked against published sources, and playing, opening or reporting a picture or video counts toward whether it keeps being shown. We keep only what was learned (the facts, the pictures and videos, and counts), never your account, screenshots or question text with them.</li>
     </ul>
 
     <h2>3. Third-Party Services and Data Sharing</h2>

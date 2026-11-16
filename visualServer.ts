@@ -190,14 +190,23 @@ export function registerVisualAnswers(app: Express, deps: VisualDeps): void {
  */
 export async function visualEvent(type: 'played' | 'opened' | 'wrong', refId: string, dropAt: number): Promise<void> {
   void countVisual({ [type]: 1 }).catch(() => {});
-  if (type !== 'wrong' || !/^[0-9a-f]{40}$/.test(refId)) return;
+  if (!/^[0-9a-f]{40}$/.test(refId)) return;
+  // Living database step 2 (owner, Nov 16 2026): a play or an open raises the saved visual (plays on it: counts only,
+  // no player); every 5 of them is one more "Not right" needed to drop it, so one report doesn't remove a visual many
+  // players used.
+  if (type !== 'wrong') {
+    // update, not set: never creates a saved visual that doesn't exist.
+    await getFirestore().collection(C.cache).doc(refId).update({ plays: FieldValue.increment(1) }).catch(() => {});
+    return;
+  }
   try {
     const col = getFirestore().collection(C.cache);
     const ref = col.doc(refId);
     const d: any = (await ref.get()).data();
     if (!d?.visual || d.visual.kind === 'none') return;
     const votes = (Number(d.wrongVotes) || 0) + 1;
-    if (votes < dropAt) { await ref.set({ wrongVotes: votes }, { merge: true }); return; }
+    if (votes < dropAt + Math.floor((Number(d.plays) || 0) / 5)) { await ref.set({ wrongVotes: votes }, { merge: true }); return; }
+    void countVisual({ dropped: 1 }).catch(() => {});
     const id = visualId(d.visual);
     // Every saved key showing that same visual loses it; the next asker gets a fresh look without it.
     const field = d.visual.kind === 'video' ? 'visual.videoId' : 'visual.url';
@@ -223,7 +232,7 @@ export function visualStatsLine(s: { days: Record<string, any>[]; searchesToday:
   return [
     `**Visual answers** (${label}): ${answers} answer(s) looked at, ${shown} got one${pct(shown)}`,
     `Video ${sum('shown_video')} · our picture ${sum('shown_ours')} · wiki picture ${sum('shown_wiki')}${sum('shown_link') ? ` · wiki page only ${sum('shown_link')}` : ''} · nothing ${sum('shown_none')} · saved one reused ${sum('cached')}`,
-    `Cost: $${cost.toFixed(2)}${answers ? ` ($${(cost / answers).toFixed(4)} per answer)` : ''} · played ${sum('played')} · pictures opened ${sum('opened')} · "Not right" ${sum('wrong')}`,
+    `Cost: $${cost.toFixed(2)}${answers ? ` ($${(cost / answers).toFixed(4)} per answer)` : ''} · played ${sum('played')} · pictures opened ${sum('opened')} · "Not right" ${sum('wrong')}${sum('dropped') ? ` (${sum('dropped')} dropped and found again)` : ''}`,
     `YouTube searches today: ${s.searchesToday} of ${s.searchLimit}${sum('quotaOut') ? ` · ${sum('quotaOut')} answer(s) got no video because the day's searches were used up` : ''}`,
   ].join('\n');
 }
