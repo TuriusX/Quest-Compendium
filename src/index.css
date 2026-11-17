@@ -296,6 +296,16 @@ html.qc-pad [data-qc-keyhints] { display: none !important; }
 /* The Ask box's small mouse buttons (screenshot, microphone, send): the controller has its own buttons for these, and
    the prompt bar sits where they were. */
 html.qc-pad [data-qc-ask-tools] { visibility: hidden; }
+/* Step 4: the panels on the bumpers. Their badges sit at the ends of the Ask | Guide tabs (the text follows the
+   player's controller: ControllerLayer sets --qc-g-lb / --qc-g-rb). */
+html.qc-pad [data-qc-tabs]::before, html.qc-pad [data-qc-tabs]::after {
+  align-self: center; margin: 0 8px; padding: 2px 6px; border-radius: 5px; background: #3f3f46; color: #f4f4f5;
+  font: 800 10px/1.2 ui-monospace, monospace;
+}
+html.qc-pad [data-qc-tabs]::before { content: var(--qc-g-lb, "LB"); }
+html.qc-pad [data-qc-tabs]::after { content: var(--qc-g-rb, "RB"); }
+/* Bigger targets for a controller. */
+html.qc-pad [data-pad-stop="quick"] { font-size: 13px; padding: 5px 12px; }
 .qc-glyph {
   display: inline-flex;
   align-items: center;

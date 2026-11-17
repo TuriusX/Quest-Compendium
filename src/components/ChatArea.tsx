@@ -656,27 +656,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
-  /** Bumpers (controller): RB goes Ask -> Guide -> the next game; LB the other way. */
+  /**
+   * Bumpers (controller): along Quest log ◂ Ask ▸ Guide, stopping at the ends (controller mode step 4: games are
+   * switched in the quick menu, not by running off the end).
+   */
   const handlePadMode = (e: Event) => {
     const dir = Number((e as CustomEvent).detail?.dir) || 0;
     const fromLog = !!(e as CustomEvent).detail?.fromLog;
     // With the quest log attached: Ask -> the quest log -> Guide (RB), and back (LB).
     if (fromLog) {
-      if (dir > 0) setMode('guide');
+      if (dir > 0) setMode('ask');
       return;
     }
-    if (logAttached && ((dir > 0 && mode === 'ask') || (dir < 0 && mode === 'guide'))) {
-      if (dir < 0) setMode('ask');
-      window.dispatchEvent(new CustomEvent('qc-log-focus'));
+    // LB from Ask: into the quest log (when it's attached); from Guide: back to Ask. RB: Ask -> Guide.
+    if (dir < 0 && mode === 'ask') {
+      if (logAttached) window.dispatchEvent(new CustomEvent('qc-log-focus'));
       return;
     }
-    if (dir > 0) {
-      if (mode === 'ask') setMode('guide');
-      else { window.dispatchEvent(new CustomEvent('qc-switch-tab', { detail: { delta: 1 } })); setMode('ask'); }
-    } else if (dir < 0) {
-      if (mode === 'guide') setMode('ask');
-      else window.dispatchEvent(new CustomEvent('qc-switch-tab', { detail: { delta: -1 } }));
-    }
+    if (dir > 0 && mode === 'ask') setMode('guide');
+    else if (dir < 0 && mode === 'guide') setMode('ask');
   };
 
   // Controller: a question picked from the quick-questions list or typed on the on-screen keyboard.
@@ -1530,7 +1528,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {activeTab && (
         <div className="flex-shrink-0 h-10 flex items-stretch min-w-0 border-b border-white/[0.08] bg-black/15">
           {/* Ask | Guide, the full width (owner, Nov 5 2026) */}
-          <div role="tablist" aria-label={t('main.modeLabel')} className="flex-1 min-w-0 flex items-stretch" title={t('main.modeHint')}>
+          <div role="tablist" data-qc-tabs="" aria-label={t('main.modeLabel')} className="flex-1 min-w-0 flex items-stretch" title={t('main.modeHint')}>
             {(['ask', 'guide'] as const).map((m) => (
               <button
                 key={m}

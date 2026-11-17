@@ -27,6 +27,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useT } from '../i18n';
 import { QUICK_MAIN, QUICK_MORE, QUICK_HINTS, quickLabelKey } from '../utils/quickQuestions';
 import { nextStop, ringIndex, ringSpot, type Stop } from '../utils/padStops';
+import { glyph, styleFromId, type PadStyle } from '../utils/padGlyphs';
 import { Camera, EyeOff, Gamepad2, Keyboard, LocateFixed, Mic, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
@@ -270,7 +271,7 @@ type Special = (typeof SPECIALS)[number];
 
 // ---- The layer ----------------------------------------------------------------------------------------------
 
-export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, logAttached = false }: { enabled: boolean; talkButton?: string; hintMode?: boolean; logAttached?: boolean }) {
+export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', hintMode = false, logAttached = false }: { enabled: boolean; padStyle?: 'auto' | PadStyle; talkButton?: string; hintMode?: boolean; logAttached?: boolean }) {
   const [talking, setTalking] = useState(false);
   const t = useT();
   const locale = useLocale();
@@ -282,6 +283,32 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
   const [aIndex, setAIndex] = useState(0);
   // What the controller is on, for the prompt bar: 'ask' | 'quick' | 'answer' | 'card' | 'log' | 'other'.
   const [kind, setKind] = useState('ask');
+  // Button names (step 4): the setting, else what the controller says it is (only readable while the panel has focus;
+  // the system-level reader can't tell), else Xbox.
+  const [detected, setDetected] = useState<PadStyle | null>(null);
+  const style: PadStyle = padStyle !== 'auto' ? padStyle : detected || 'xbox';
+  useEffect(() => {
+    if (padStyle !== 'auto' || typeof navigator === 'undefined' || !navigator.getGamepads) return;
+    const look = () => {
+      for (const p of Array.from(navigator.getGamepads() || [])) {
+        const s = p && styleFromId(p.id);
+        if (s) return setDetected(s);
+      }
+    };
+    look();
+    window.addEventListener('gamepadconnected', look);
+    const timer = setInterval(look, 3000);
+    return () => {
+      window.removeEventListener('gamepadconnected', look);
+      clearInterval(timer);
+    };
+  }, [padStyle]);
+  // The panel tabs' bumper badges (index.css: [data-qc-tabs]) follow the style.
+  useEffect(() => {
+    const root = document.documentElement.style;
+    root.setProperty('--qc-g-lb', JSON.stringify(glyph('lb', style).text));
+    root.setProperty('--qc-g-rb', JSON.stringify(glyph('rb', style).text));
+  }, [style]);
   const [qIndex, setQIndex] = useState(0);
   const [text, setText] = useState('');
   const [kb, setKb] = useState({ row: 1, col: 0, shift: false, symbols: false });
@@ -438,9 +465,9 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
     api.setQuickMenu(
       [{ key: 'panel', label: t('pad.openPanel') }, ...quickMenuRef.current.filter((i) => i.key !== 'hide').map(({ key, label }) => ({ key, label }))],
-      { title: t('pad.quickMenu'), listening: t('pad.listening'), listeningTap: t('pad.listeningTap'), select: t('pad.select'), close: t('common.close'), ask: t('pad.ask'), cancel: t('common.cancel'), accent },
+      { title: t('pad.quickMenu'), listening: t('pad.listening'), listeningTap: t('pad.listeningTap'), select: t('pad.select'), close: t('common.close'), ask: t('pad.ask'), cancel: t('common.cancel'), accent, glyphs: { a: glyph('a', style), b: glyph('b', style) } },
     );
-  }, [locale, t]);
+  }, [locale, t, style]);
   useEffect(() => {
     electronAPI()?.onQuickAction?.((key: string) => {
       // Speak from the ring: listening while it's up; A asks, B cancels.
@@ -517,7 +544,7 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
       if (logFocus) {
         if (b === 'up' || b === 'down') logKey(b === 'down' ? 'next' : 'prev');
         else if (b === 'a') logKey('tick');
-        else if (b === 'b' || b === 'lb' || b === 'rb') {
+        else if (b === 'b' || b === 'rb') {
           setLogFocus(false);
           logKey('blur');
           if (b === 'rb') emit('qc-pad-mode', { dir: 1, fromLog: true });
@@ -614,7 +641,9 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
       }
       // In the docked quest log: B back to the question box; RB on to the Guide, LB back to Ask.
       const inLog = !!(document.activeElement as HTMLElement | null)?.closest?.('[data-qc-log]');
-      if (inLog && (b === 'b' || b === 'lb' || b === 'rb')) {
+      // In the quest log (the left end): LB stays, B or RB back to the Ask bar.
+      if (inLog && b === 'lb') return;
+      if (inLog && (b === 'b' || b === 'rb')) {
         setFocus(document.querySelector<HTMLElement>('[data-qc-ask-input]'));
         if (b === 'rb') emit('qc-pad-mode', { dir: 1, fromLog: true });
         return;
@@ -705,7 +734,14 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
         if (electronAPI()) emit('trigger-auto-screenshot-submit');
       } else if (b === 'lb' || b === 'rb') {
         // Ask -> Guide -> the next game (RB), and back (LB). Inside a dialog: nothing.
-        if (scope === document.body) emit('qc-pad-mode', { dir: b === 'rb' ? 1 : -1 });
+        if (scope === document.body) {
+          emit('qc-pad-mode', { dir: b === 'rb' ? 1 : -1 });
+          // The new panel's first stop once it's drawn (the quest log takes the focus itself).
+          setTimeout(() => {
+            const at = document.activeElement as HTMLElement | null;
+            if (!at || at === document.body || !isVisible(at)) setFocusRef.current(defaultStop());
+          }, 180);
+        }
       } else if (b === 'rs') {
         // R3: Pro / Fast for the next question (ChatArea's switch next to the send button). Inside a dialog: nothing.
         if (scope === document.body) emit('qc-toggle-answer-model');
@@ -753,7 +789,15 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
     send: t('pad.send'),
   };
 
-  const Glyph = ({ b }: { b: string }) => <span className={`qc-glyph qc-glyph-${b}`}>{b.toUpperCase()}</span>;
+  const Glyph = ({ b }: { b: string }) => {
+    if (!/^[a-z0-9]+$/.test(b)) return <span className="qc-glyph">{b}</span>; // not a button (↕)
+    const g = glyph(b, style);
+    return (
+      <span className="qc-glyph" style={{ background: g.bg, color: g.fg, borderRadius: g.round ? 999 : 5 }}>
+        {g.text}
+      </span>
+    );
+  };
   const Hint = ({ b, label }: { b: string; label: string }) => (
     <span className="flex items-center gap-1.5 whitespace-nowrap">
       <Glyph b={b} />

@@ -3971,7 +3971,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
 
       {/* Controller support: focus navigation, quick questions, on-screen keyboard, button hints */}
       {poppedLogOpen && <PopWindow name="qc-log" title={tr('tracker.logTitle')}>{questLogEl(true)}</PopWindow>}
-      <ControllerLayer enabled={settings.controllerEnabled !== false} talkButton={settings.controllerTalk || 'y'} hintMode={settings.hintMode === true} logAttached={questLogAttached && (questLogVisible || questLogTucked) && !isBrowserMode} />
+      <ControllerLayer enabled={settings.controllerEnabled !== false} padStyle={settings.controllerStyle || 'auto'} talkButton={settings.controllerTalk || 'y'} hintMode={settings.hintMode === true} logAttached={questLogAttached && (questLogVisible || questLogTucked) && !isBrowserMode} />
 
       {/* Quick Game Search & Switcher Modal */}
       <QuickGameSearchModal

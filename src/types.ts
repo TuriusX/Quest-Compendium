@@ -345,6 +345,8 @@ export interface AppSettings {
   controllerCustom?: { buttons: string[]; mode: 'hold' | 'double' };
   /** Hold to talk on the controller while the overlay is open (default 'y'; 'off' turns it off). */
   controllerTalk?: 'y' | 'x' | 'lb' | 'rb' | 'off';
+  /** Controller mode: which buttons the app names (Xbox, PlayStation, Nintendo, Steam Deck), or 'auto' (default). */
+  controllerStyle?: 'auto' | 'xbox' | 'playstation' | 'nintendo' | 'deck';
   /**
    * The quest log's tick and cycle buttons (off by default): hold the show / hide combo's first button and press this
    * one (electron/padCombo.cjs chordFor).

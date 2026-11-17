@@ -951,6 +951,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   {settings.controllerEnabled !== false && (
                     <>
+                      {/* Button names (controller mode step 4): automatic, or the player's controller. */}
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-white">{tr('set.pad.style')}</div>
+                        <div className="text-[11px] text-zinc-400">{tr('set.pad.styleDesc')}</div>
+                        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                          {(['auto', 'xbox', 'playstation', 'nintendo', 'deck'] as const).map((s) => {
+                            const selected = (settings.controllerStyle || 'auto') === s;
+                            return (
+                              <button
+                                key={s}
+                                aria-pressed={selected}
+                                onClick={() => { playBlipSound(soundEnabled); onUpdateSettings({ controllerStyle: s }); }}
+                                className={`p-2.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                                  selected ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white' : 'bg-black/30 border-white/[0.08] text-zinc-300 hover:border-white/20'
+                                }`}
+                              >
+                                {tr(`set.pad.style.${s}`)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                       <div className="space-y-2">
                         <div className="text-xs font-semibold text-white">{tr('set.pad.toggle')}</div>
                         <div className="text-[11px] text-zinc-400">{tr('set.pad.toggleDesc')}</div>

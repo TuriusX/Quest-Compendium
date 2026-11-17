@@ -80,7 +80,14 @@
     ring.querySelectorAll('.item').forEach((el, i) => el.classList.toggle('on', i === sel));
     document.getElementById('title').textContent = listening ? '' : strings.title || '';
     document.getElementById('label').textContent = listening ? (held ? strings.listening : strings.listeningTap) || '' : (items[sel] && items[sel].label) || '';
-    const k = (g, t) => `<span><span class="g ${g}">${g.toUpperCase()}</span>${t || ''}</span>`;
+    // The player's controller's names and colours for A and B (controller mode step 4), when the app sent them.
+    const k = (g, t) => {
+      const gl = strings.glyphs && strings.glyphs[g];
+      const look = gl ? ` style="background:${gl.bg};color:${gl.fg};border-radius:${gl.round ? '999px' : '4px'}"` : '';
+      const span = document.createElement('span');
+      span.textContent = gl ? gl.text : g.toUpperCase();
+      return `<span><span class="g ${g}"${look}>${span.innerHTML}</span>${t || ''}</span>`;
+    };
     document.getElementById('keys').innerHTML = listening ? (held ? '' : k('a', strings.ask) + k('b', strings.cancel)) : k('a', strings.select) + k('b', strings.close);
     document.body.classList.toggle('listening', listening);
   }
