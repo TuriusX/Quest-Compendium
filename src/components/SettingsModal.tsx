@@ -306,6 +306,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               return (
                 <button
                   key={tab.id}
+                  data-pad-tab=""
+                  aria-selected={isActive}
                   onClick={() => {
                     playBlipSound(soundEnabled);
                     setActiveTab(tab.id);

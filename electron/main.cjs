@@ -795,7 +795,11 @@ app.whenReady().then(() => {
   // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
   // overlay with the controller while it's visible. See controller.cjs.
   controllerService = createControllerService({
-    isVisible: () => (!!mainWindow && !mainWindow.isDestroyed() && isAppVisible && mainWindow.isVisible()) || quickWheel.isOpen(),
+    isVisible: () =>
+      (!!mainWindow && !mainWindow.isDestroyed() && isAppVisible && mainWindow.isVisible()) ||
+      quickWheel.isOpen() ||
+      // The Settings window, while it has focus (controller mode step 6: it's driven by the controller too).
+      (!!settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isFocused()),
     // The quest log's tick / cycle buttons (Settings), while a game is focused: no mouse needed.
     // Locate me's button goes to the app; the tick and cycle buttons to the quest log.
     onTrackerKey: (action) => {
@@ -818,6 +822,7 @@ app.whenReady().then(() => {
     },
     onInput: (evt) => {
       if (quickWheel.isOpen()) return quickWheel.input(evt);
+      if (settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isFocused()) return settingsWindow.webContents.send('controller-input', evt);
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-input', evt);
     },
   });
@@ -2148,9 +2153,12 @@ ipcMain.on('open-settings-window', () => {
 });
 
 ipcMain.on('close-settings-window', () => {
-  if (settingsWindow) {
-    settingsWindow.close();
-  }
+  if (!settingsWindow) return;
+  // Closed with the controller's B: only once it's let go, so the press never reaches the game underneath.
+  const w = settingsWindow;
+  const released = controllerService && controllerService.whenReleased ? controllerService.whenReleased() : Promise.resolve();
+  w.setOpacity(0);
+  released.then(() => { if (!w.isDestroyed()) w.close(); });
 });
 
 ipcMain.on('close-app', () => { app.quit(); });

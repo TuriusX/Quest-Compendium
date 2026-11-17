@@ -233,6 +233,8 @@ function SettingsStandalone() {
 
   return (
     <div className="w-screen h-screen bg-[#0c0d14] text-zinc-100 overflow-auto">
+      {/* Controller mode step 6: the controller works here too (the desktop app sends it input while this has focus). */}
+      <ControllerLayer enabled={settings.controllerEnabled !== false} padStyle={settings.controllerStyle || 'auto'} talkButton="off" intro={false} />
       <SettingsModal 
         isOpen={true} 
         onClose={closeWindow}

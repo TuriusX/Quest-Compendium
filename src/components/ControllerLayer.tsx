@@ -29,7 +29,7 @@ import { QUICK_MAIN, QUICK_MORE, QUICK_HINTS, quickLabelKey } from '../utils/qui
 import { nextStop, ringIndex, ringSpot, type Stop } from '../utils/padStops';
 import { glyph, styleFromId, type PadStyle } from '../utils/padGlyphs';
 import { applySuggestion, buildVocab, deleteWord, suggest, type Vocab } from '../utils/padWords';
-import { Camera, EyeOff, Gamepad2, Keyboard, LocateFixed, Mic, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
+import { Camera, EyeOff, Gamepad2, Keyboard, LocateFixed, Mic, Move, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
 type PadEvent =
@@ -87,10 +87,14 @@ function nextInDirection(from: HTMLElement | null, dir: 'up' | 'down' | 'left' |
     const dx = bc.x - ac.x;
     const dy = bc.y - ac.y;
     let primary: number, secondary: number;
-    if (dir === 'down') { if (b.top < a.bottom - 4 && dy <= 4) continue; primary = Math.max(0, b.top - a.bottom); secondary = Math.abs(dx); }
-    else if (dir === 'up') { if (b.bottom > a.top + 4 && dy >= -4) continue; primary = Math.max(0, a.top - b.bottom); secondary = Math.abs(dx); }
-    else if (dir === 'right') { if (b.left < a.right - 4 && dx <= 4) continue; primary = Math.max(0, b.left - a.right); secondary = Math.abs(dy); }
-    else { if (b.right > a.left + 4 && dx >= -4) continue; primary = Math.max(0, a.left - b.right); secondary = Math.abs(dy); }
+    // Sideways distance: none when the two overlap side by side (a wide slider row under a button counts as straight
+    // below it), else the gap between them.
+    const sideX = Math.max(0, b.left - a.right, a.left - b.right);
+    const sideY = Math.max(0, b.top - a.bottom, a.top - b.bottom);
+    if (dir === 'down') { if (b.top < a.bottom - 4 && dy <= 4) continue; primary = Math.max(0, b.top - a.bottom); secondary = sideX + Math.abs(dx) * 0.05; }
+    else if (dir === 'up') { if (b.bottom > a.top + 4 && dy >= -4) continue; primary = Math.max(0, a.top - b.bottom); secondary = sideX + Math.abs(dx) * 0.05; }
+    else if (dir === 'right') { if (b.left < a.right - 4 && dx <= 4) continue; primary = Math.max(0, b.left - a.right); secondary = sideY + Math.abs(dy) * 0.05; }
+    else { if (b.right > a.left + 4 && dx >= -4) continue; primary = Math.max(0, a.left - b.right); secondary = sideY + Math.abs(dy) * 0.05; }
     const score = primary + secondary * 2.2;
     if (score < bestScore) { bestScore = score; best = el; }
   }
@@ -272,7 +276,7 @@ type Special = (typeof SPECIALS)[number];
 
 // ---- The layer ----------------------------------------------------------------------------------------------
 
-export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', hintMode = false, logAttached = false }: { enabled: boolean; padStyle?: 'auto' | PadStyle; talkButton?: string; hintMode?: boolean; logAttached?: boolean }) {
+export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', hintMode = false, logAttached = false, intro = true }: { enabled: boolean; padStyle?: 'auto' | PadStyle; talkButton?: string; hintMode?: boolean; logAttached?: boolean; intro?: boolean }) {
   const [talking, setTalking] = useState(false);
   const t = useT();
   const locale = useLocale();
@@ -284,6 +288,24 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
   const [aIndex, setAIndex] = useState(0);
   // What the controller is on, for the prompt bar: 'ask' | 'quick' | 'answer' | 'card' | 'log' | 'other'.
   const [kind, setKind] = useState('ask');
+  // The first time a controller is used (step 6): one screen with the layout. A or B closes it for good.
+  const [showIntro, setShowIntro] = useState(false);
+  useEffect(() => {
+    if (!padMode || !intro) return;
+    try {
+      if (!localStorage.getItem('qc-pad-intro-seen')) setShowIntro(true);
+    } catch {
+      /* no storage: skip it */
+    }
+  }, [padMode, intro]);
+  const closeIntro = () => {
+    setShowIntro(false);
+    try {
+      localStorage.setItem('qc-pad-intro-seen', '1');
+    } catch {
+      /* shown again next time */
+    }
+  };
   // Button names (step 4): the setting, else what the controller says it is (only readable while the panel has focus;
   // the system-level reader can't tell), else Xbox.
   const [detected, setDetected] = useState<PadStyle | null>(null);
@@ -381,19 +403,21 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
   useEffect(() => () => document.documentElement.classList.remove('qc-pad'), []);
 
   const setFocus = useCallback((el: HTMLElement | null) => {
-    if (focusedRef.current) focusedRef.current.classList.remove('qc-pad-focus');
+    if (focusedRef.current) focusedRef.current.removeAttribute('data-qc-pad-focus');
     focusedRef.current = el;
     setKind(
       !el ? 'other'
+        : el.matches('input[type="range"]') ? 'slider'
         : el.matches('[data-qc-ask-input]') ? 'ask'
         : el.matches('[data-pad-stop="quick"]') ? 'quick'
         : el.matches('[data-pad-stop="answer"]') ? 'answer'
         : cardRef.current && cardRef.current.contains(el) ? 'card'
         : el.closest('[data-qc-log]') ? 'log'
+        : el.closest('[role="dialog"], .fixed.inset-0') ? 'dialog'
         : 'other',
     );
     if (!el) return;
-    el.classList.add('qc-pad-focus');
+    el.setAttribute('data-qc-pad-focus', ''); // an attribute: React redraws class lists (a tab that changes its look), not this
     el.focus({ preventScroll: true });
     el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, []);
@@ -464,6 +488,8 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
     setPanel('actions');
   }, [t]);
 
+  const showIntroRef = useRef(showIntro);
+  showIntroRef.current = showIntro;
   const openKeyboardRef = useRef(openKeyboard);
   openKeyboardRef.current = openKeyboard;
 
@@ -535,6 +561,18 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
         setPadMode(true);
         staleRef.current = false;
         cardRef.current = null;
+        // The very first time: the guide comes up first, and this press only opens it.
+        let seen = true;
+        try {
+          seen = !!localStorage.getItem('qc-pad-intro-seen');
+        } catch {
+          /* no storage */
+        }
+        if (intro && !seen) {
+          setShowIntro(true);
+          setFocus(defaultStop());
+          return;
+        }
         if (e.type === 'button' && !panel) {
           const offer = document.querySelector<HTMLElement>('[data-qc-offer-open]');
           if (offer && e.button === 'a') { offer.click(); return; }
@@ -549,6 +587,10 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
           const i = ringIndex(e.x, e.y, quickMenu.length);
           if (i !== null) setQmIndex(i);
         }
+        return;
+      }
+      if (showIntroRef.current) {
+        if (e.type === 'button' && (e.button === 'a' || e.button === 'b')) closeIntro();
         return;
       }
       if (e.type === 'scroll') {
@@ -687,6 +729,19 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
         if (b === 'rb') emit('qc-pad-mode', { dir: 1, fromLog: true });
         return;
       }
+      // A slider (text size, volume): left / right change it, a step at a time.
+      const onSlider = document.activeElement instanceof HTMLInputElement && document.activeElement.type === 'range' ? document.activeElement : null;
+      if (onSlider && (b === 'left' || b === 'right')) {
+        const step = Number(onSlider.step) || 1;
+        const min = onSlider.min === '' ? 0 : Number(onSlider.min);
+        const max = onSlider.max === '' ? 100 : Number(onSlider.max);
+        const next = Math.max(min, Math.min(max, Number(onSlider.value) + (b === 'right' ? step : -step)));
+        // React keeps its own copy of the value: set it the way a person dragging would.
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(onSlider, String(next));
+        onSlider.dispatchEvent(new Event('input', { bubbles: true }));
+        onSlider.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
+      }
       if (b === 'up' || b === 'down' || b === 'left' || b === 'right') {
         const current = document.activeElement instanceof HTMLElement ? document.activeElement : focusedRef.current;
         if (scope !== document.body) {
@@ -773,7 +828,16 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
         if (electronAPI()) emit('trigger-auto-screenshot-submit');
       } else if (b === 'lb' || b === 'rb') {
         // Ask -> Guide -> the next game (RB), and back (LB). Inside a dialog: nothing.
-        if (scope === document.body) {
+        if (scope !== document.body) {
+          // A dialog with tabs (Settings): the previous / next tab, and the focus on it.
+          const tabs = Array.from(scope.querySelectorAll<HTMLElement>('[data-pad-tab], [role="tab"]')).filter(isVisible);
+          const at = tabs.findIndex((tb) => tb.getAttribute('aria-selected') === 'true');
+          const to = tabs[at + (b === 'rb' ? 1 : -1)];
+          if (to) {
+            to.click();
+            setFocus(to);
+          }
+        } else {
           emit('qc-pad-mode', { dir: b === 'rb' ? 1 : -1 });
           // The new panel's first stop once it's drawn (the quest log takes the focus itself).
           setTimeout(() => {
@@ -786,7 +850,7 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
         if (scope === document.body) emit('qc-toggle-answer-model');
       }
     },
-    [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus, logFocus, actions, aIndex, openActions, quickMenu, qmIndex, text, caret, suggestions, typeText],
+    [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus, logFocus, actions, aIndex, openActions, quickMenu, qmIndex, text, caret, suggestions, typeText, showIntro, intro],
   );
 
   // Desktop: system-level controller service. Falls back to the Gamepad API if it isn't available.
@@ -828,8 +892,16 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
     send: t('pad.send'),
   };
 
+  const hasTabs = kind === 'dialog' && !!topScope().querySelector('[data-pad-tab], [role="tab"]');
   const Glyph = ({ b }: { b: string }) => {
-    if (!/^[a-z0-9]+$/.test(b)) return <span className="qc-glyph">{b}</span>; // not a button (↕)
+    // The d-pad (↕ / ↔): an icon (the pixel font has no arrows).
+    if (!/^[a-z0-9]+$/.test(b)) {
+      return (
+        <span className="qc-glyph" style={{ background: '#3f3f46', color: '#f4f4f5', borderRadius: 5 }}>
+          <Move className="w-3 h-3" />
+        </span>
+      );
+    }
     const g = glyph(b, style);
     return (
       <span className="qc-glyph" style={{ background: g.bg, color: g.fg, borderRadius: g.round ? 999 : 5 }}>
@@ -861,6 +933,30 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
               {label}
             </div>
           ))}
+        </div>
+      )}
+
+      {showIntro && (
+        <div className="fixed inset-0 z-[402] pointer-events-auto flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label={t('pad.introTitle')}>
+          <div className="w-full max-w-md rounded-2xl bg-[#0d0e15]/97 border border-[var(--accent-border)] shadow-2xl p-5 space-y-3">
+            <div className="text-base font-bold text-white">{t('pad.introTitle')}</div>
+            {([
+              [['↕'], 'pad.introMove'],
+              [['lb', 'rb'], 'pad.introPanels'],
+              [['menu'], 'pad.introMenu'],
+              [['y'], 'pad.introActions'],
+              [['b'], 'pad.introBack'],
+            ] as [string[], string][]).map(([keys, label]) => (
+              <div key={label} className="flex items-center gap-3 text-[13px] text-zinc-200">
+                <span className="flex items-center gap-1 w-20 flex-shrink-0">{keys.map((k) => <Glyph key={k} b={k} />)}</span>
+                <span>{t(label)}</span>
+              </div>
+            ))}
+            <p className="text-[12px] leading-snug text-zinc-400">{t('pad.introOpen')}</p>
+            <div className="flex justify-end">
+              <span className="flex items-center gap-1.5 text-[13px] font-semibold text-white"><Glyph b="a" />{t('pad.introOk')}</span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1029,6 +1125,23 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
             <Hint b="a" label={t('pad.type')} />
             <Hint b="x" label={t('pad.voice')} />
             <Hint b="y" label={t('pad.questions')} />
+          </>
+        ) : kind === 'slider' ? (
+          <>
+            <Hint b="↔" label={t('pad.adjust')} />
+            <Hint b="b" label={t('common.close')} />
+          </>
+        ) : kind === 'dialog' ? (
+          <>
+            <Hint b="a" label={t('pad.select')} />
+            {hasTabs && (
+              <span className="flex items-center gap-1.5 whitespace-nowrap">
+                <Glyph b="lb" />
+                <Glyph b="rb" />
+                {t('pad.tabs')}
+              </span>
+            )}
+            <Hint b="b" label={t('common.close')} />
           </>
         ) : kind === 'quick' ? (
           <Hint b="a" label={t('pad.ask')} />
