@@ -3464,6 +3464,8 @@ async function main() {
   }
   setLang('en');
   renderUpdates(sitemap);
+  // The Steam Deck install page (Marketing_Website_Files/steam-deck/, hand-written; owner, Nov 16 2026).
+  if (!PREVIEW && fs.existsSync(path.join(OUT, "steam-deck", "index.html"))) sitemap.push(`${SITE}/steam-deck/`);
   fs.writeFileSync(
     path.join(OUT, 'sitemap.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${[...new Set(sitemap)].map((u) => `  <url><loc>${u}</loc>${LASTMOD.get(u) ? `<lastmod>${new Date(LASTMOD.get(u)!).toISOString().slice(0, 10)}</lastmod>` : ''}</url>`).join('\n')}\n</urlset>\n`,

@@ -117,7 +117,7 @@
           <i data-lucide="external-link" class="w-5 h-5"></i>
           Launch Web App
         </a>
-        <a href="#steam-deck" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+        <a href="steam-deck/" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="gamepad-2" class="w-5 h-5"></i>
           Get it for Steam Deck
         </a>
@@ -166,11 +166,11 @@
           <p class="text-zinc-400 text-base mb-4">A Decky Loader plugin. Open the Quick Access menu, tap a preset like "I'm stuck", and get an answer that matches your game. Answers about your screen show the spots marked on your screenshot, and a guide can stay open while you play.</p>
           <ol class="text-zinc-400 text-sm space-y-2 mb-4 list-decimal list-inside">
             <li>Install <a href="https://decky.xyz" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Decky Loader</a></li>
-            <li>In Decky's settings, turn on <strong class="text-white">Developer Mode</strong></li>
-            <li>Open <strong class="text-white">Developer</strong>, choose <strong class="text-white">Install Plugin from URL</strong> and enter:</li>
+            <li>Install it from <a href="https://deckyhub.com" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">DeckyHub</a> (search for Quest Compendium), or by URL in Decky's <strong class="text-white">Developer</strong> settings:</li>
           </ol>
           <code class="block text-xs bg-black/40 border border-white/10 rounded-lg p-3 text-zinc-300 break-all select-all mb-3">https://github.com/TuriusX/Quest-Compendium-Decky/releases/latest/download/quest-compendium-decky.zip</code>
-          <p class="text-sm text-zinc-500 mt-auto">Not in the Decky store yet, so it installs manually. <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Source code on GitHub</a></p>
+          <a href="steam-deck/" class="inline-flex items-center gap-2 text-[#a87ffb] hover:text-white font-semibold mb-3">Step-by-step install guide <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
+          <p class="text-sm text-zinc-500 mt-auto">Not in the official Decky store. <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Source code on GitHub</a></p>
         </div>
       </div>
     </section>
@@ -465,7 +465,7 @@
     } else {
       discordLinks.forEach((a) => { a.style.display = "none"; });
       document.querySelectorAll(".qc-discord-mention").forEach((el) => { el.style.display = "none"; });
-    }
+    }
     lucide.createIcons();
   </script>
 <script>(function(){try{var f=new URLSearchParams(location.search).get('from');if(f!=='guide')return;document.querySelectorAll('a[href^="https://quest-compendium-890629309063.us-east1.run.app/?from="]').forEach(function(a){a.href=a.href.replace(/from=[a-z]+/,'from=guide');});}catch(e){}})();</script>
