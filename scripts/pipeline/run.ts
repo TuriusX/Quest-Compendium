@@ -82,7 +82,7 @@ import { siteAskWeekLine, siteFixWeekLine } from '../../siteAskStats';
 import { recordsWeekLine } from '../guides/recordsImport';
 import { autoWeekLines } from '../../autoChanges';
 import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
-import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY, searchBillLine } from '../../searchGuard';
+import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY, searchBillLine, billedSearchDollars, SEARCH_BILL_FACTOR } from '../../searchGuard';
 import { spendReport } from './spendAlert';
 import { FieldPath } from 'firebase-admin/firestore';
 import { postDiscord, summaryText } from './summary';
@@ -1410,7 +1410,7 @@ async function main() {
   } catch (e: any) {
     console.warn(`Unpriced-model line skipped: ${e?.message}`);
   }
-  const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAY_CAP.toFixed(2)}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches, ${state.searches || 0} pipeline searches).${sm ? ` 🔎 Searches this month: pipeline ${sm.pipeline + sm.flagship} of its ${pipelineShare(month)} (flagship ${sm.flagship}); players ${sm.players} of their ${PLAYER_MONTHLY()}; ${sm.count} in all, ${Math.max(0, sm.count - 5000)} past the free 5,000 (≈ $${(Math.max(0, sm.count - 5000) * 0.014).toFixed(2)}).` : ''}`;
+  const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAY_CAP.toFixed(2)}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches, ${state.searches || 0} pipeline searches).${sm ? ` 🔎 Searches this month: pipeline ${sm.pipeline + sm.flagship} of its ${pipelineShare(month)} (flagship ${sm.flagship}); players ${sm.players} of their ${PLAYER_MONTHLY()}; ${sm.count} counted in all, ≈$${billedSearchDollars(sm.count).toFixed(2)} billed (from the first query, ×${SEARCH_BILL_FACTOR()} for missed queries).` : ''}`;
   const closing = RUN.stoppedBy ? `🛑 Run stopped early: ${RUN.stoppedBy}. ${totals}` : `🏁 Run finished. ${totals}`;
   state.lastRun = Date.now();
   state.lastReport = report;

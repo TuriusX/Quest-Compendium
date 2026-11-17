@@ -63,9 +63,9 @@ server's image only holds the built app.
   - the pipeline and the flagship builds together: `PIPELINE_MONTHLY_SEARCHES` (4,800), or one month's own share in
     `PIPELINE_MONTHLY_SEARCHES_BY_MONTH` (default `2026-10:6500`). Every searching call of theirs stops there
     (scripts/guides/common.ts), and the run plans within it.
-  - players: `PLAYER_MONTHLY_SEARCHES` (2,000), their own reserve, which the pipeline can never use. Past the free
-    5,000 a month, searches cost $14 per 1,000.
-  The run's closing line on Discord shows both, and the searches past the free 5,000. `MONTHLY_SEARCH_CAP` is retired
+  - players: `PLAYER_MONTHLY_SEARCHES` (2,000), their own reserve, which the pipeline can never use. Searches cost
+    $14 per 1,000 from the first query (no free allowance), scaled ×1.4 for queries the counter misses.
+  The run's closing line on Discord shows both, and this month's searches as billed. `MONTHLY_SEARCH_CAP` is retired
   (it's still set to 8500 on the job and the server, and nothing reads it).
 - **Off switch:** set `enabled` to `false` on the `system/pipeline` document in Firestore. The month's totals and the
   last report are on that document too.
