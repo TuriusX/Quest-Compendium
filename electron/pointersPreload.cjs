@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld('qcBridge', {
   moved: (occupied) => ipcRenderer.send('pointers-moved', Array.isArray(occupied) ? occupied.slice(0, 20) : []),
   // The screen never matched the answer's screenshot: the app says so and offers the markers on the screenshot.
   unplaced: () => ipcRenderer.send('pointers-unplaced'),
+  // Markers v2: the view changed and the screen is still now: find the markers again.
+  refind: () => ipcRenderer.send('pointers-refind'),
 });

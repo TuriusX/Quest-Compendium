@@ -92,6 +92,8 @@ interface ChatAreaProps {
   immersiveReadAloud?: boolean;
   /** Desktop: show an answer's markers in the on-screen objectives tracker (hides the panel). */
   onTrackOnScreen?: (msgId: string) => void;
+  /** Desktop (markers v2): find an answer's markers again on the screen as it is now (Find again, and Show). */
+  onFindMarkers?: (msgId: string) => void;
   /** "Next turn" under a combat answer: a fresh screenshot and a short question for whoever acts now (desktop). */
   onNextTurn?: () => void;
   /** Desktop: how long markers stay on screen, in seconds (0 = always). */
@@ -247,6 +249,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   missablesHere,
   immersiveReadAloud = true,
   onTrackOnScreen,
+  onFindMarkers,
   onNextTurn,
   soundEnabled,
   onAppendToNotes,
@@ -1600,6 +1603,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             if (!isDesktopApp) return;
                             if (next.length >= points.length) api?.hideScreenPointers?.();
                             else if (markersActiveFor(msg.id)) api?.setPointersHidden?.(msg.id, next);
+                            // Shown again later: found on the screen as it is now (the screenshot is old by then).
+                            else if (onFindMarkers && shotUrl) setTimeout(() => onFindMarkers(msg.id), 50);
                             else startMarkers(next);
                           };
                           return (
@@ -1621,6 +1626,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               compact={compact}
                               referenced={compact ? markerMentions(msg.text, points) : undefined}
                               onTrack={compact && onTrackOnScreen ? () => onTrackOnScreen(msg.id) : undefined}
+                              onFindAgain={compact && onFindMarkers && shotUrl ? () => onFindMarkers(msg.id) : undefined}
                               onHighlight={(i) => {
                                 if (isDesktopApp && markersActiveFor(msg.id)) api?.highlightPointer?.(msg.id, i);
                               }}

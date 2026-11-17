@@ -327,6 +327,8 @@ export interface AppSettings {
   questLogShortcut?: string;
   /** Locate me from anywhere (default Ctrl+Shift+K). */
   locateShortcut?: string;
+  /** Find the markers again on the screen as it is now (default Ctrl+Shift+M; markers v2). */
+  findMarkersShortcut?: string;
   enableThematicBanners?: boolean;
   /** Interface style: 'lofi' (pixel art, default) or 'classic' (the original look). */
   uiStyle?: UiStyle;

@@ -722,6 +722,7 @@ export default function App() {
         trackerNextShortcut: settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down',
         questLogShortcut: settings.questLogShortcut || 'CmdOrCtrl+Shift+L',
         locateShortcut: settings.locateShortcut || 'CmdOrCtrl+Shift+K',
+        findMarkersShortcut: settings.findMarkersShortcut || 'CmdOrCtrl+Shift+M',
         // The owner's picture capture for the guides (admins only).
         ownerCaptureShortcut: userData?.isAdmin ? 'CmdOrCtrl+Shift+P' : '',
       });
@@ -734,6 +735,7 @@ export default function App() {
     settings.trackerNextShortcut,
     settings.questLogShortcut,
     settings.locateShortcut,
+    settings.findMarkersShortcut,
     userData?.isAdmin,
   ]);
 
@@ -2003,6 +2005,135 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
    * instead. Replaces the close-up check on desktop; if anything fails, the markers go up the old way (screenshot + check).
    */
   const markerRunRef = useRef('');
+  // When each answer's markers first went up (their display time counts from then), and how often they've been found again.
+  const markerShownAtRef = useRef(new Map<string, number>());
+  const findAgainRef = useRef(new Map<string, { auto: number; manual: number; empty: number }>());
+  /** Finding again: by itself at most 3 times per answer (stopping after 2 finds that saw none of them), 10 on request. */
+  const AUTO_FINDS = 3;
+  const MANUAL_FINDS = 10;
+
+  /**
+   * Markers v2, step 3: find an answer's markers again on the screen as it is now. `auto`: the marker page lost the view
+   * (the camera turned, the player walked) and the screen has held still since; otherwise the player asked (Find again,
+   * the shortcut, Show). Things listed as not on screen are looked for too, and go back in the list when found. Markers
+   * not found this time stay in the list but aren't drawn. The server caps finding again per day (markerFindCap.ts).
+   */
+  const findMarkersAgain = async (msgId: string | undefined, auto: boolean) => {
+    const api = (window as any).electronAPI;
+    const log = (m: string) => api?.markerLog?.(m);
+    const id = msgId || markerRunRef.current;
+    if (!api?.captureScreenNow || !id) return;
+    const stop = () => {
+      if (auto) api.hideScreenPointers?.();
+    };
+    const tab = tabsRef.current.find((t) => t.messages.some((m) => m.id === id));
+    const at = tab ? tab.messages.findIndex((m) => m.id === id) : -1;
+    const msg = tab && at >= 0 ? tab.messages[at] : undefined;
+    let shot: string | undefined;
+    for (let i = at - 1; tab && i >= 0; i--) {
+      if (tab.messages[i].role === 'user') {
+        shot = tab.messages[i].imageUrl;
+        break;
+      }
+    }
+    const listed = msg?.points ?? [];
+    const gone = msg?.removedPoints ?? [];
+    if (!msg || !shot || (!listed.length && !gone.length)) return stop();
+    const c = findAgainRef.current.get(id) || { auto: 0, manual: 0, empty: 0 };
+    if (auto ? c.auto >= AUTO_FINDS || c.empty >= 2 : c.manual >= MANUAL_FINDS) {
+      log(`not finding the markers again: ${auto ? (c.empty >= 2 ? 'two finds in a row saw none of them' : `${AUTO_FINDS} finds already`) : `${MANUAL_FINDS} finds on request already`}`);
+      return stop();
+    }
+    // The display time counts from when they first went up; asking again starts it over.
+    const lifetimeMs = Math.max(0, settingsRef.current.markerLifetime ?? 120) * 1000;
+    const shownAt = markerShownAtRef.current.get(id) ?? Date.now();
+    const leftMs = lifetimeMs > 0 ? lifetimeMs - (Date.now() - shownAt) : 0;
+    if (auto && lifetimeMs > 0 && leftMs < 3000) return stop();
+    if (auto) c.auto++;
+    else c.manual++;
+    findAgainRef.current.set(id, c);
+    // Area finds (fromArea) were placed on other pictures: not looked for here.
+    const items = [...listed, ...gone];
+    const lookFor = items.map((p, i) => ({ p, i })).filter(({ p }) => !p.fromArea);
+    try {
+      const t0 = performance.now();
+      const user = locateUserRef.current;
+      const token = user && typeof user.getIdToken === 'function' ? await user.getIdToken().catch(() => null) : user?.isGuest ? String(user.uid) : null;
+      const [screen, crops] = await Promise.all([api.captureScreenNow().catch(() => null), closeUps(shot, lookFor.map(({ p }) => p))]);
+      if (!screen || !crops) {
+        log('finding again: no fresh picture');
+        return stop();
+      }
+      const res = await fetch(`${getApiBaseUrl()}/api/refind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          image: screen,
+          items: lookFor.map(({ p }, k) => ({ crop: crops[k], label: p.label, where: p.where || '', category: p.category, ...(p.guideId ? { guide: true } : {}) })),
+          game: tab?.activeSteamGame?.name || tab?.name || '',
+          client: 'desktop',
+          appVersion: APP_VERSION,
+          again: true,
+        }),
+      });
+      if (!res.ok) {
+        log(`finding again failed: server ${res.status}${res.status === 429 ? ' (paused for now)' : ''}`);
+        return stop();
+      }
+      const data = await res.json();
+      if (markerRunRef.current && markerRunRef.current !== id && auto) return; // a newer answer's markers are up
+      const fresh = new Map<number, { x: number; y: number }>();
+      for (const f of Array.isArray(data.found) ? data.found : []) {
+        const it = lookFor[f?.index];
+        if (it && Number.isFinite(f.x) && Number.isFinite(f.y)) fresh.set(it.i, { x: f.x, y: f.y });
+      }
+      log(`found again: ${fresh.size} of ${lookFor.length} in ${Math.round(performance.now() - t0)} ms (${auto ? `auto ${c.auto} of ${AUTO_FINDS}` : `asked ${c.manual} of ${MANUAL_FINDS}`})`);
+      if (!fresh.size) {
+        c.empty++;
+        findAgainRef.current.set(id, c);
+        api.hideScreenPointers?.();
+        return;
+      }
+      c.empty = 0;
+      findAgainRef.current.set(id, c);
+      // Things that weren't on screen before and are now: back in the answer's list, numbered after the others.
+      const back = gone.map((p, j) => ({ p, j })).filter(({ j }) => fresh.has(listed.length + j));
+      const points = [...listed, ...back.map(({ p }) => p)];
+      if (back.length) {
+        const left = gone.filter((_, j) => !fresh.has(listed.length + j));
+        updateMessageById(id, (m) => ({
+          ...m,
+          points,
+          removedPoints: left.length ? left : undefined,
+          removedMarkers: left.length ? left.map((p) => (p.where ? `${p.label} (${p.where})` : p.label)) : undefined,
+        }));
+      }
+      const order = [...listed.map((_, i) => i), ...back.map(({ j }) => listed.length + j)];
+      const drawn = order.map((k, n) => ({ ...points[n], ...(fresh.get(k) || {}) }));
+      const missing = order.map((k, n) => (fresh.has(k) ? -1 : n)).filter((n) => n >= 0);
+      if (!auto) markerShownAtRef.current.set(id, Date.now());
+      markerRunRef.current = id;
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+      api.showScreenPointers?.(withGuideNote(drawn), accent, {
+        refImage: screen,
+        sessionId: id,
+        hidden: msg.donePoints ?? [],
+        missing,
+        combat: !!msg.combat,
+        refindable: true,
+        ...(auto && leftMs > 0 ? { lifetimeMs: leftMs } : {}),
+      });
+    } catch (e: any) {
+      log(`finding again failed: ${e?.message ?? e}`);
+      stop();
+    }
+  };
+  const findMarkersAgainRef = useRef(findMarkersAgain);
+  findMarkersAgainRef.current = findMarkersAgain;
+  useEffect(() => {
+    (window as any).electronAPI?.onRefindRequest?.((r: { id?: string; auto?: boolean }) => void findMarkersAgainRef.current(r.id, r.auto === true));
+  }, []);
+
   const placeMarkersNow = async (msgId: string, image: string, points: ScreenPoint[], accent: string, opts: { combat: boolean; watchNearby: boolean }, game: string, token: string | null) => {
     const api = (window as any).electronAPI;
     const log = (m: string) => api?.markerLog?.(m);
@@ -2010,7 +2141,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     const fallback = (why: string) => {
       if (markerRunRef.current !== msgId) return;
       log(`placing markers on the screen now failed (${why}): using the screenshot`);
-      api?.showScreenPointers?.(withGuideNote(points), accent, { refImage: image, sessionId: msgId, hidden: [], watchNearby: opts.watchNearby, combat: opts.combat, checking: true });
+      markerShownAtRef.current.set(msgId, Date.now());
+      api?.showScreenPointers?.(withGuideNote(points), accent, { refImage: image, sessionId: msgId, hidden: [], watchNearby: opts.watchNearby, combat: opts.combat, checking: true, refindable: true });
       void refineMarkers(msgId, image, points, game, token);
     };
     try {
@@ -2066,7 +2198,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         .filter(({ i }) => !s.removed.includes(i))
         .map(({ p, f }) => (f ? { ...p, x: f.x, y: f.y } : p));
       if (!onScreen.length) return;
-      api?.showScreenPointers?.(withGuideNote(onScreen), accent, { refImage: screen, sessionId: msgId, hidden: [], watchNearby: opts.watchNearby, combat: opts.combat });
+      markerShownAtRef.current.set(msgId, Date.now());
+      api?.showScreenPointers?.(withGuideNote(onScreen), accent, { refImage: screen, sessionId: msgId, hidden: [], watchNearby: opts.watchNearby, combat: opts.combat, refindable: true });
     } catch (e: any) {
       fallback(e?.name === 'AbortError' ? 'timed out' : String(e?.message ?? e));
     }
@@ -3670,6 +3803,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 locating={locating}
                 locateNote={locateNote}
                 onTrackOnScreen={isDesktop ? handleTrackOnScreen : undefined}
+                onFindMarkers={isDesktop ? (id: string) => void findMarkersAgain(id, false) : undefined}
                 onNextTurn={isDesktop ? runNextTurn : undefined}
                 onSetStory={(story) => {
                   const next = { name: activeTab.place?.name || '', confirmed: !!activeTab.place?.confirmed, ...(activeTab.place || {}), story, storyConfirmed: true };

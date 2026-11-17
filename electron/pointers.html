@@ -179,7 +179,7 @@
     canvas.height = h;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const tracker = QCTracker.createTracker({
-      ref: grayOf(ctx, ref, w, h), w, h, points: opts.points, exclude: opts.exclude || [],
+      ref: grayOf(ctx, ref, w, h), w, h, points: opts.points.map((p, i) => (removed.has(i) ? { ...p, skip: true } : p)), exclude: opts.exclude || [],
       selfVisible: !!opts.selfVisible, screenWidth: window.innerWidth,
     });
 
@@ -219,13 +219,15 @@
     const watchdog = setInterval(() => {
       if (finished) return clearInterval(watchdog);
       if (tracker.lost && performance.now() - lastTracked > 500) {
-        log('lost the scene and no new frames arrived: fading out');
         clearInterval(watchdog);
+        if (canFindAgain('lost')) return waitAndFindAgain(video, ctx, w, h, 'the view changed and the screen is still');
+        log('lost the scene and no new frames arrived: fading out');
         finish();
       }
     }, 200);
     let started = Date.now();
     live.restartTimer = () => { started = Date.now(); };
+    live.startedAt = () => started;
     live.opts = opts;
     let lastTrack = 0;
     let lastAsk = 0;
@@ -273,6 +275,8 @@
           els[i].classList.toggle('hidden', !r.visible || hidden.has(i) || removed.has(i));
         }
         if (tracker.gone) {
+          // Markers v2: the view changed (not a black or white screen): hide them and find them again once it settles.
+          if (canFindAgain(tracker.goneWhy)) return waitAndFindAgain(video, ctx, w, h, tracker.goneWhy === 'unplaced' ? 'the screen no longer matches' : 'the view changed');
           if (tracker.unplaced) {
             log('the screen no longer matches the answer\'s screenshot: markers not placed');
             if (window.qcBridge && window.qcBridge.unplaced) window.qcBridge.unplaced();
@@ -370,6 +374,68 @@
     };
     track();
     requestAnimationFrame(draw);
+  }
+
+  /**
+   * Markers v2: find the markers again instead of ending them, when the app allows it for this answer (`refindable`)
+   * and the view changed for a reason other than a black or white screen (a door, loading, a battle still ends them).
+   */
+  let waiting = false;
+  const canFindAgain = (why) => !!(live && live.opts && live.opts.refindable && window.qcBridge && window.qcBridge.refind && why !== 'screen');
+  /**
+   * The markers hide, and the page watches the screen until it holds still for a second (the player stopped turning
+   * or walking), then asks the app to find them again on a fresh picture. The app replaces this window with the new
+   * markers, or ends them. A black or white screen while waiting, or the display time running out, ends them.
+   */
+  function waitAndFindAgain(video, ctx, w, h, why) {
+    if (waiting || finished) return;
+    waiting = true;
+    log(`${why}: markers hidden until the screen holds still, then found again`);
+    document.querySelectorAll('.m').forEach((el) => el.classList.add('hidden'));
+    const STILL_MS = 1000; // how long the screen must hold still
+    const MOVING = 8; // average change per pixel (0-255) between frames that counts as movement
+    let prevG = null;
+    let lastChange = performance.now();
+    let asked = false;
+    const look = () => {
+      if (finished || asked) return;
+      if (video.readyState >= 2) {
+        const g = grayOf(ctx, video, w, h);
+        let sum = 0;
+        let diff = 0;
+        let n = 0;
+        for (let i = 0; i < g.length; i += 5, n++) {
+          sum += g[i];
+          if (prevG) diff += Math.abs(g[i] - prevG[i]);
+        }
+        const bright = sum / n;
+        if (bright < 10 || bright > 245) {
+          log('black or white screen while waiting: fading out');
+          return finish();
+        }
+        if (!prevG || diff / n > MOVING) lastChange = performance.now();
+        prevG = g;
+      }
+      // Screen capture sends no frames while nothing changes: the timer below sees that as still.
+      if (typeof video.requestVideoFrameCallback === 'function') video.requestVideoFrameCallback(look);
+      else setTimeout(look, 66);
+    };
+    look();
+    const timer = setInterval(() => {
+      if (finished) return clearInterval(timer);
+      const o = live && live.opts;
+      if (o && o.lifetimeMs > 0 && live.startedAt && Date.now() - live.startedAt() > o.lifetimeMs) {
+        clearInterval(timer);
+        log('display time is up while waiting: fading out');
+        return finish();
+      }
+      if (performance.now() - lastChange < STILL_MS) return;
+      clearInterval(timer);
+      asked = true;
+      log('the screen is still: asking the app to find the markers again');
+      window.qcBridge.refind();
+      setTimeout(() => finish(), 25000); // the app never answered
+    }, 200);
   }
 
   /** One item picked in the answer's list (its index there): its marker stands out. */
@@ -502,6 +568,12 @@
     }
     const els = buildMarkers(opts.points || []);
     els.forEach((el, i) => hidden.has(i) && el.classList.add('hidden'));
+    // Markers v2: in the answer's list but not found on the screen now: kept so the numbers match, never shown.
+    (Array.isArray(opts.missing) ? opts.missing : []).forEach((i) => {
+      if (!Number.isInteger(i) || !els[i]) return;
+      removed.add(i);
+      els[i].classList.add('gone', 'hidden');
+    });
     if (opts.sticky && opts.sourceId && opts.refImage && window.QCTracker) {
       try {
         await startSticky(opts, els);

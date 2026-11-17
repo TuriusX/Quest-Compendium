@@ -175,6 +175,7 @@ export function AnnotatedShot({
   referenced,
   onTrack,
   unplaced = false,
+  onFindAgain,
 }: {
   msgId: string;
   imageUrl?: string;
@@ -201,6 +202,8 @@ export function AnnotatedShot({
   onTrack?: () => void;
   /** Desktop: the game screen no longer matched the screenshot, so the markers couldn't be placed on it. */
   unplaced?: boolean;
+  /** Desktop (markers v2): find the markers again on the screen as it is now. */
+  onFindAgain?: () => void;
 }) {
   const t = useT();
   const [large, setLarge] = useState(false);
@@ -339,6 +342,16 @@ export function AnnotatedShot({
               className="px-2 py-1 border-l border-white/10 text-[var(--accent-color)] hover:bg-white/10 cursor-pointer"
             >
               {active ? t('chat.hide') : t('chat.show')}
+            </button>
+          )}
+          {left > 0 && onFindAgain && (
+            <button
+              type="button"
+              onClick={onFindAgain}
+              title={t('chat.findAgainHint')}
+              className="px-2 py-1 border-l border-white/10 text-[var(--accent-color)] hover:bg-white/10 cursor-pointer"
+            >
+              {t('chat.findAgain')}
             </button>
           )}
           {hasMore && (

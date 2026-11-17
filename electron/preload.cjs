@@ -74,6 +74,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   hideScreenPointers: () => ipcRenderer.send('hide-screen-pointers'),
   // Markers v2: a fresh picture of the game's screen when the answer arrives (null if it can't be taken).
   captureScreenNow: () => ipcRenderer.invoke('capture-screen-now'),
+  // Find the markers again: asked by the marker page (auto) or the shortcut key.
+  onRefindRequest: (callback) => { ipcRenderer.removeAllListeners('refind-request'); ipcRenderer.on('refind-request', (event, r) => callback(r || {})); },
   // The objectives tracker drawn over the game (electron/tracker.cjs).
   showObjectivesTracker: (data, gameKey) => ipcRenderer.invoke('tracker-show', { data, gameKey }),
   updateObjectivesTracker: (patch, gameKey) => ipcRenderer.send('tracker-update', { data: patch, gameKey }),

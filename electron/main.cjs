@@ -801,7 +801,7 @@ app.whenReady().then(() => {
       tick: shortcuts.trackerTickShortcut || 'CommandOrControl+Shift+Enter',
       next: shortcuts.trackerNextShortcut || 'CommandOrControl+Shift+Down',
     };
-    appKeys = [shortcuts.hideAppShortcut, shortcuts.voiceInputShortcut, shortcuts.autoScreenshotShortcut, shortcuts.questLogShortcut, shortcuts.locateShortcut || 'CommandOrControl+Shift+K'].filter(Boolean);
+    appKeys = [shortcuts.hideAppShortcut, shortcuts.voiceInputShortcut, shortcuts.autoScreenshotShortcut, shortcuts.questLogShortcut, shortcuts.locateShortcut || 'CommandOrControl+Shift+K', shortcuts.findMarkersShortcut || 'CommandOrControl+Shift+M'].filter(Boolean);
 
     // Always ensure a show/hide shortcut exists: the player's, else Ctrl+Space.
     const hideAppCmd = shortcuts.hideAppShortcut || 'CommandOrControl+Space';
@@ -843,6 +843,13 @@ app.whenReady().then(() => {
       if (!globalShortcut.register(locateCmd, () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('locate-key'); })) console.warn(`[locate] ${locateCmd} is taken; the Locate me shortcut isn't set`);
     } catch (err) {
       console.error('Failed to register locateShortcut', err);
+    }
+    // Find the markers again from anywhere (Settings: findMarkersShortcut, default Ctrl+Shift+M; markers v2).
+    const findCmd = shortcuts.findMarkersShortcut || 'CommandOrControl+Shift+M';
+    try {
+      if (!globalShortcut.register(findCmd, () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('refind-request', { auto: false }); })) console.warn(`[markers] ${findCmd} is taken; the Find again shortcut isn't set`);
+    } catch (err) {
+      console.error('Failed to register findMarkersShortcut', err);
     }
     // The owner's picture capture (Ctrl+Shift+P): sent only when the signed-in account is an admin.
     if (shortcuts.ownerCaptureShortcut) {
@@ -1568,7 +1575,9 @@ function showScreenPointers(points, accent, opts = {}) {
   const wantSticky = typeof opts.sticky === 'boolean' ? opts.sticky : stickyPointers;
   const sticky = wantSticky && !!lastCaptureSourceId && !!refImage;
   // A fight's markers never outlast one turn's worth of play: 3 minutes at most (the next question hides them sooner).
-  const lifetimeMs = combat ? combatLifetime(markerLifetimeMs) : markerLifetimeMs;
+  // Markers found again (markers v2) keep the time left from when they first appeared, not a fresh 2 minutes.
+  const fullMs = combat ? combatLifetime(markerLifetimeMs) : markerLifetimeMs;
+  const lifetimeMs = Number.isFinite(opts.lifetimeMs) && opts.lifetimeMs > 0 && fullMs > 0 ? Math.min(fullMs, opts.lifetimeMs) : fullMs;
   const sessionId = typeof opts.sessionId === 'string' ? opts.sessionId : null;
   // "Found nearby" area checks are off: they rarely found anything and cost an AI call each time.
   const watchNearby = NEARBY_CHECKS && sticky && opts.watchNearby === true;
@@ -1590,6 +1599,10 @@ function showScreenPointers(points, accent, opts = {}) {
     combat,
     // The precision pass is about to check these: drawn dimmed until it settles them (no jumps once they're solid).
     checking: opts.checking === true,
+    // Markers v2: find them again when the view changes (the app decides when to stop), and the answer's markers that
+    // weren't found on this screen (kept so the numbers match its list, never shown).
+    refindable: opts.refindable === true,
+    missing: Array.isArray(opts.missing) ? opts.missing.filter((n) => Number.isInteger(n) && n >= 0).slice(0, 16) : [],
     // Our own overlay panel doesn't move with the game: keep the camera tracker from using it as background.
     // The objectives tracker doesn't move with the game either.
     exclude: (() => {
@@ -1791,6 +1804,16 @@ ipcMain.on('pointers-move', (event, { id, moves } = {}) => {
   const js = `window.qcMovePoints(${JSON.stringify({ moves: valid })})`;
   if (!session.ready) session.queueJs = [...(session.queueJs || []), js];
   else pointerWindow.webContents.executeJavaScript(js).catch(() => {});
+});
+
+// Markers v2: the view changed and the screen has held still since: ask the app to find this answer's markers again
+// (it redraws them, or ends them when it shouldn't look again).
+ipcMain.on('pointers-refind', (event) => {
+  const session = pointerSession;
+  if (!session || !session.id || event.sender !== (session.win && !session.win.isDestroyed() && session.win.webContents)) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return closeScreenPointers();
+  console.log('[markers] the view changed: asking the app to find the markers again');
+  mainWindow.webContents.send('refind-request', { id: session.id, auto: true });
 });
 
 // The marker page couldn't match the screen to the answer's screenshot (the scene changed before the answer came).

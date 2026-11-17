@@ -38,6 +38,8 @@ export interface LocateDeps {
    * it removed or moved far, with why, for the Quality page (no screenshots or crops are kept).
    */
   onChecked?: (game: string, checked: number, kept: number, details?: MarkerCheckDetail[]) => void;
+  /** Markers v2: one more "find again" fits under today's cap (markerFindCap.ts). The first placement isn't capped. */
+  findAgainAllowed?: () => Promise<boolean>;
 }
 
 /** What the close-up check made of one marker ('off screen': finding it on the screen now didn't see it, /api/refind). */
@@ -357,9 +359,41 @@ export function refindPrompt(items: { label: string; where: string; category: st
     'Each close-up shows what that thing looked like a few seconds earlier (it is in the centre of its close-up): find that ' +
     'same object on the screen now, not a similar one. If a description is a group of objects (for example "Search these"), ' +
     'give the centre of the whole group. Big things (a large monster, a building) count when part of them is on screen.\n' +
-    'Reply with JSON only: an array of {"i": number, "y": 0-1000 from the top, "x": 0-1000 from the left} for the centre of ' +
-    'each one you can actually see now. Leave out any that are no longer on screen. If you are not sure, leave it out.'
+    'First decide whether the screen now shows the same place as the close-ups. A camera that turned, zoomed or moved ' +
+    'within the same area is the same place, even if the close-ups\' things are partly or fully out of view. samePlace is ' +
+    'false only when you are sure the screen shows somewhere else: a different area or game, a menu, a map, or a cutscene ' +
+    'elsewhere, with nothing around it matching the close-ups.\n' +
+    'Reply with JSON only: {"samePlace": true or false, "found": [{"i": number, "y": 0-1000 from the top, "x": 0-1000 from ' +
+    'the left}]} with the centre of each one you can actually see now. If samePlace is false, "found" is []. Leave out ' +
+    'any that are no longer on screen. If you are not sure, leave it out.'
   );
+}
+
+/**
+ * The reply to refindPrompt: the found list, or nothing when the model says the screen is a different place (markers
+ * v2 step 3: finding again on an unrelated scene marked look-alikes). A bare array (the older format) is accepted.
+ */
+export function parseRefindReply(text: string, count: number): { found: { index: number; x: number; y: number }[]; samePlace: boolean | null } {
+  const raw = String(text || '').replace(/^```[a-z]*\s*|\s*```$/gi, '').trim();
+  let obj: any = null;
+  try {
+    obj = JSON.parse(raw);
+  } catch {
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (m) {
+      try {
+        obj = JSON.parse(m[0]);
+      } catch {
+        /* below */
+      }
+    }
+  }
+  if (obj && !Array.isArray(obj) && typeof obj === 'object') {
+    const samePlace = obj.samePlace === false ? false : obj.samePlace === true ? true : null;
+    if (samePlace === false) return { found: [], samePlace };
+    return { found: parseLocateReply(JSON.stringify(Array.isArray(obj.found) ? obj.found : []), count), samePlace };
+  }
+  return { found: parseLocateReply(raw, count), samePlace: null };
 }
 
 /** Each item's outcome: found (kept), not found ('off screen'), or found where the blind look saw no one ('no person'). */
@@ -442,6 +476,10 @@ export function registerRefind(app: Express, deps: LocateDeps): void {
     const client = /^(desktop|web|deck)$/.test(String(req.body?.client ?? '')) ? String(req.body.client) : 'desktop';
     const appVersion = String(req.body?.appVersion ?? '').replace(/[^0-9A-Za-z.+-]/g, '').slice(0, 24);
     if (!allow(req)) return res.status(429).json({ error: 'Marker checks are paused for a bit.', found: [] });
+    // Finding again (the view changed, or the player asked): paused for the day once the daily cap is spent.
+    if (req.body?.again === true && deps.findAgainAllowed && !(await deps.findAgainAllowed())) {
+      return res.status(429).json({ error: 'Finding markers again is paused for today.', capped: true, found: [] });
+    }
 
     const game = String(req.body?.game ?? '').trim().slice(0, 120);
     const parts: any[] = [{ text: 'The screen now:' }, { inlineData: { mimeType: sm[1], data: sm[2] } }];
@@ -462,7 +500,9 @@ export function registerRefind(app: Express, deps: LocateDeps): void {
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
       ]);
       logUsage('refind', model, response);
-      let found = parseLocateReply(response?.text ?? '', items.length);
+      const reply = parseRefindReply(response?.text ?? '', items.length);
+      if (reply.samePlace === false) console.log(`[refind] a different place now: nothing marked (${items.length} looked for)`);
+      let found = reply.found;
       const firstLook = found;
       const noOne = new Set<number>();
 
@@ -518,7 +558,7 @@ export function registerRefind(app: Express, deps: LocateDeps): void {
           .map(({ outcome, c }) => ({ label: c.label, category: c.category, guide: c.guide, outcome, client, appVersion }));
         deps.onChecked(game, items.length, found.length, details);
       }
-      return res.json({ found, checked: items.length });
+      return res.json({ found, checked: items.length, ...(reply.samePlace === false ? { samePlace: false } : {}) });
     } catch (err: any) {
       console.warn('[refind] failed:', err?.message);
       return res.status(502).json({ error: 'Could not find the markers on screen.', found: [] });

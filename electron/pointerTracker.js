@@ -366,6 +366,8 @@
       tpl.offY = sy - y0;
       return {
         x, y, tpl, offX: sx - x0, offY: sy - y0, weak: tpl.std < MIN_STD, lost: 0, miss: 0, matched: false, visible: false, score: 0, label: p.label || '', note: p.note || '',
+        // `skip`: in the answer's list but not found on this screen (markers v2): never shown, kept so numbers line up.
+        ...(p.skip ? { dropped: true } : {}),
         // Enemies and characters move and animate (a dragon breathing, an NPC walking), so their picture stops matching even
         // though they're still there: they don't end on "item stopped matching", only on real scene changes.
         moving: p.category === 'enemy' || p.category === 'character',
@@ -393,6 +395,13 @@
     let cameraLost = 0;
     let started = false;
     let gone = false;
+    // Why it ended: 'screen' (a black or white screen: a door, loading, a battle), 'lost' (the view changed: the camera
+    // turned or the player walked on; the page can find the markers again), or 'unplaced'.
+    let goneWhy = '';
+    const end = (why) => {
+      if (!gone) goneWhy = why;
+      gone = true;
+    };
     // The answer arrives a few seconds after its screenshot: the first frames may still show the app's own panel, a
     // passing effect or a menu closing. Keep trying to match the screenshot for a moment before deciding the scene
     // changed. `unplaced`: gave up at the start (the app then offers the markers on the screenshot instead).
@@ -433,21 +442,21 @@
       let sum = 0;
       for (let i = 0; i < rawFrame.length; i += 7) sum += rawFrame[i];
       const brightness = (sum * 7) / rawFrame.length;
-      if (started && (brightness < DARK || brightness > BRIGHT)) gone = true;
+      if (started && (brightness < DARK || brightness > BRIGHT)) end('screen');
       const frame = soften(rawFrame, w, h);
       const ii = integral(frame, w, h);
       // After a gap in the frames, or every so often while tracking, the whole screen must still line up with the
       // last tracked view. Patches alone can be fooled by look-alike tiles in a new room; the whole screen can't.
       if (started && !gone && prevWhole && (gapMs > GAP_MS || ++sinceWhole >= WHOLE_CHECK_EVERY)) {
         sinceWhole = 0;
-        if (!registerFrames(prevWhole, frame, w, h, selfVisible ? exclude.concat(markerRects()) : exclude)) gone = true;
+        if (!registerFrames(prevWhole, frame, w, h, selfVisible ? exclude.concat(markerRects()) : exclude)) end('lost');
       }
       if (!started) {
         if (registerStart(frame)) started = true;
         else if (++startTries >= START_TRIES) {
           // The screen still can't be matched to the screenshot: a different scene. Show nothing here.
           started = true;
-          gone = true;
+          end('unplaced');
           unplaced = true;
         } else return markers.map((m) => ({ x: m.x / w, y: m.y / h, visible: false, score: 0 }));
       } else if (prev) {
@@ -521,8 +530,8 @@
           // Don't wait for more frames to decide: screen capture may not send any while the screen sits still
           // (a closed game, a paused desktop). If the whole screen no longer lines up with the last good view, it's
           // a different scene right now.
-          if (cameraLost === 1 && prevWhole && !registerFrames(prevWhole, frame, w, h, selfVisible ? exclude.concat(markerRects()) : exclude)) gone = true;
-          if (cameraLost >= CUT_FRAMES) gone = true;
+          if (cameraLost === 1 && prevWhole && !registerFrames(prevWhole, frame, w, h, selfVisible ? exclude.concat(markerRects()) : exclude)) end('lost');
+          if (cameraLost >= CUT_FRAMES) end('lost');
         }
 
       }
@@ -568,7 +577,7 @@
       // scrolled off screen don't count: in 2D games the player often walks away and comes back.)
       if (started && !gone) {
         const checkable = markers.filter((m) => m.matched && !m.pending && !m.moving);
-        if (checkable.length && checkable.every((m) => m.dropped)) gone = true;
+        if (checkable.length && checkable.every((m) => m.dropped)) end('lost');
       }
       markers.forEach((m) => {
         const onScreen = m.x >= 0 && m.x <= w && m.y >= 0 && m.y <= h;
@@ -650,6 +659,10 @@
       /** True when the screen never matched the screenshot (the scene changed before the answer arrived). */
       get unplaced() {
         return unplaced;
+      },
+      /** Why the markers ended: 'screen' (black or white screen), 'lost' (the view changed) or 'unplaced'. */
+      get goneWhy() {
+        return goneWhy;
       },
       /** True while the camera can't be followed (the page ends the markers if this lasts, even with no new frames). */
       get lost() {
