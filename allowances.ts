@@ -35,6 +35,22 @@ export function normalizeAllowances(d: any): Allowances {
   return { premium: plan(d?.premium, ALLOWANCE_DEFAULTS.premium), free: plan(d?.free, ALLOWANCE_DEFAULTS.free), guest: plan(d?.guest, ALLOWANCE_DEFAULTS.guest) };
 }
 
+/**
+ * Scheduled changes (owner, Nov 16 2026: the holiday allowance), in config/allowances.schedule:
+ *   [{ "from": "2026-11-26", "until": "2027-01-04", "free": { "pro": 3, "flash": 8 } }]
+ * From `from` through `until` (both included, Central time) the plan's numbers are replaced; afterwards they're back to
+ * the usual ones by themselves (free days never carry over, so nobody keeps the extra). Any plan can be scheduled.
+ */
+export const allowanceDay = (t = Date.now()) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+export function scheduledAllowances(d: any, day = allowanceDay()): any {
+  const out = { ...(d || {}) };
+  for (const s of Array.isArray(d?.schedule) ? d.schedule : []) {
+    if (!s?.from || !s?.until || day < String(s.from) || day > String(s.until)) continue;
+    for (const plan of ['premium', 'free', 'guest'] as const) if (s[plan]) out[plan] = { ...(out[plan] || {}), ...s[plan] };
+  }
+  return out;
+}
+
 let cache: { at: number; value: Allowances } | null = null;
 /** The allowances (cached for a minute). ALLOWANCES (JSON) overrides them for a local test server. */
 export async function allowances(): Promise<Allowances> {
@@ -42,7 +58,7 @@ export async function allowances(): Promise<Allowances> {
   let value = ALLOWANCE_DEFAULTS;
   try {
     const d: any = process.env.ALLOWANCES ? JSON.parse(process.env.ALLOWANCES) : (await getFirestore().collection('config').doc('allowances').get()).data() || {};
-    value = normalizeAllowances(d);
+    value = normalizeAllowances(scheduledAllowances(d));
   } catch {
     /* defaults */
   }

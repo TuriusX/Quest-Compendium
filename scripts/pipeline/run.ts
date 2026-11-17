@@ -83,6 +83,7 @@ import { recordsWeekLine } from '../guides/recordsImport';
 import { autoWeekLines } from '../../autoChanges';
 import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
 import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY, searchBillLine } from '../../searchGuard';
+import { spendReport } from './spendAlert';
 import { FieldPath } from 'firebase-admin/firestore';
 import { postDiscord, summaryText } from './summary';
 import { waitForGuideLock, isRefusal, lockedLine, SITE_LOCK } from '../guides/guideLock';
@@ -1367,6 +1368,15 @@ async function main() {
     const parts = [...byKind].sort((a, b) => b[1].dollars - a[1].dollars).map(([k, v]) => `${k}${v.n > 1 ? ` ×${v.n}` : ''} $${v.dollars.toFixed(2)}${v.searches ? ` (${v.searches} searches)` : ''}`);
     const top = costs.filter((c) => c.dollars >= 0.5).sort((a, b) => b.dollars - a.dollars).slice(0, 5).map((c) => `${c.label} $${c.dollars.toFixed(2)}`);
     report.push(`💰 Costs this run: $${runDollars.toFixed(2)}: ${parts.join(', ')}.${top.length ? ` Biggest: ${top.join('; ')}.` : ''} Today $${state.spend.dollars.toFixed(2)} of $${DAY_CAP.toFixed(2)}; ${new Date().toLocaleString('en-US', { month: 'long' })} $${(state.dollars || 0).toFixed(2)} of $${AI_CAP}.`);
+  }
+  // All of today's AI spend (pipeline, flagship builds, players, searches), and an alert past the owner's daily
+  // threshold, once a day (spendAlert.ts; config/alerts.dailyAiDollars).
+  try {
+    const sp = await spendReport(state.spend.dollars);
+    report.push(sp.line);
+    if (sp.alert && process.env.DISCORD_WEBHOOK_URL && !DRY) await postDiscord(process.env.DISCORD_WEBHOOK_URL, sp.alert);
+  } catch (e: any) {
+    console.warn('[spend] could not total today:', e?.message);
   }
   // The closing line: how the run ended (finished, or stopped by which cap) and what it spent.
   // The limits that apply: the daily and monthly dollar caps, and the app's monthly searches minus the player reserve.

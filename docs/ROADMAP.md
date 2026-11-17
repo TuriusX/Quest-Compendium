@@ -8,6 +8,7 @@ Owner: Noah. Source: the project mind map (Oct 13, 2026). Keep this file in the 
 - **Propose before building** anything marked *(propose first)*: a short plan with the design, the files it touches, the cost (AI and searches) and any risks. Wait for Noah's go-ahead.
 - **Show before/after screenshots** for every visible change, desktop and phone width where relevant, before committing.
 - **Desktop app changes ship together in a release.** Note which release each item lands in (0.5.6, 0.5.7, …). Stay on 0.x.
+- **Holiday code freeze, Dec 20 2026 – Jan 2 2027 (owner, Nov 16 2026): fixes only.** No new features, redesigns or new paid runs in those dates; bug fixes, security fixes and the scheduled holiday switches (allowances, offer end on Jan 4) go ahead. Releases in the freeze are fix releases.
 - **Standing rules that still apply:** ask before any new AI spending outside the existing budgets; keep guide page addresses stable; every source is allowed, Fandom and Fextralife included (owner, Nov 8 2026: nothing blocked; forums and videos still never count as the only source of a fact); never put secrets in code, logs or chat (Secret Manager only); don't add spoiler handling, warnings or blurring anywhere; check no core run is publishing before deploying the site or rebuilding the pipeline image; one Claude Code session per repo.
 
 ## Phase 1: reach players (next release, 0.5.6)

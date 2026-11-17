@@ -28,8 +28,15 @@ import { apiLimits, searchesToday, recordSearchDay, playerSearchOk } from './api
 const num = (v: string | undefined, d: number) => (v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
 const FREE_DAILY = () => num(process.env.FREE_DAILY_SEARCHES, 3);
 const PREMIUM_DAILY = () => num(process.env.PREMIUM_DAILY_SEARCHES, 10);
-/** The players' own searches a month (their reserve; the pipeline never uses it). */
-export const PLAYER_MONTHLY = () => num(process.env.PLAYER_MONTHLY_SEARCHES, 2000);
+/**
+ * The players' own searches a month (their reserve; the pipeline never uses it): that month's own reserve in
+ * PLAYER_MONTHLY_SEARCHES_BY_MONTH ("2026-12:6000,2027-01:6000"; owner, Nov 16 2026: the holidays), else
+ * PLAYER_MONTHLY_SEARCHES (2,000).
+ */
+export const PLAYER_MONTHLY = (month = new Date().toISOString().slice(0, 7)) => {
+  const m = (process.env.PLAYER_MONTHLY_SEARCHES_BY_MONTH ?? '').split(',').map((x) => x.trim().split(':')).find(([k]) => k === month);
+  return m && Number.isFinite(Number(m[1])) ? Number(m[1]) : num(process.env.PLAYER_MONTHLY_SEARCHES, 2000);
+};
 /** The pipeline's (and the flagship builds') searches for a month: that month's own share, else the default. */
 export function pipelineShare(month = new Date().toISOString().slice(0, 7)): number {
   const m = (process.env.PIPELINE_MONTHLY_SEARCHES_BY_MONTH ?? '2026-10:6500').split(',').map((x) => x.trim().split(':')).find(([k]) => k === month);
