@@ -6,8 +6,8 @@
  * Rates: Google's Gemini API price list (ai.google.dev/gemini-api/docs/pricing, Sept 2026), per million tokens.
  * Gemini 3.8 Flash and both voices are at introductory prices through Dec 31, 2026; they double on Jan 1, 2027
  * (RATE_CHANGES: the new rates apply from that day by themselves).
- * Output includes thinking. Search grounding: 5,000 free searches a month across the Gemini 3 family, then $14 per
- * 1,000 searches (one question can run several). A model with no price on file is counted at the most expensive rate
+ * Output includes thinking. Search grounding: $14 per 1,000 search queries from the first one (no free allowance for
+ * this project, per the Nov 2026 bill; one question can run several). A model with no price on file is counted at the most expensive rate
  * we know (UNKNOWN_RATE), so budgets and caps can never miss its spending, and each call is recorded (per day and
  * model, system/unpricedModels) for the pipeline's Discord summary to flag until its price is added here.
  */
@@ -41,11 +41,8 @@ export function rateOn(model: string, day = new Date().toISOString().slice(0, 10
   const change = (RATE_CHANGES[model] || []).filter((c) => c.from <= day).sort((a, b) => b.from.localeCompare(a.from))[0];
   return change ? { input: change.input, output: change.output } : RATES[model];
 }
-const SEARCH_COST = 14 / 1000; // after the monthly free allowance
-/**
- * What the pipeline counts a search as: billed in full (no free allowance assumed, since the project's credits ran out
- * and the free 5,000 are shared with players). PIPELINE_SEARCH_DOLLARS overrides it.
- */
+const SEARCH_COST = 14 / 1000; // every query: no free allowance for this project (the Nov 2026 bill)
+/** What a search query costs in the ledgers and caps: billed in full. PIPELINE_SEARCH_DOLLARS overrides it. */
 export const SEARCH_DOLLARS = Number.isFinite(Number(process.env.PIPELINE_SEARCH_DOLLARS)) && process.env.PIPELINE_SEARCH_DOLLARS ? Number(process.env.PIPELINE_SEARCH_DOLLARS) : SEARCH_COST;
 /** Prompts over 200k tokens are billed at a higher rate on Pro (input and output). */
 const LONG_PROMPT = 200_000;
@@ -170,7 +167,7 @@ export function logUsage(feature: string, model: string, response: any): void {
     `[usage] ${feature} ${model} in=${input}${image ? ` (image ${image})` : ''} out=${answer} thinking=${thinking}` +
       (searches ? ` searches=${searches}` : '') +
       ` ≈ $${cost.toFixed(4)}${hasPrice(model) ? '' : ' (no price on file: top rate)'}` +
-      (searches ? ` (+$${(searches * SEARCH_COST).toFixed(3)} search once past the free 5,000/month)` : ''),
+      (searches ? ` (+$${(searches * SEARCH_COST).toFixed(3)} search)` : ''),
   );
 }
 

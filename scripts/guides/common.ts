@@ -116,6 +116,24 @@ export function gemini(): GoogleGenAI {
     await recordLocal(u.tokenDollars + u.searchDollars, u.searches);
     return res;
   };
+  // Streamed calls (the model comparisons' replay) are counted too, once the stream ends (owner, Nov 16 2026: they
+  // weren't, and Google bills them all the same).
+  const stream = client.models.generateContentStream.bind(client.models);
+  (client.models as any).generateContentStream = async (request: any) => {
+    const forPlayers = searchForPlayers.getStore() === 'players';
+    const it = await stream(request);
+    return (async function* () {
+      let n = 0;
+      for await (const ch of it) {
+        n = Math.max(n, searchesIn(ch));
+        yield ch;
+      }
+      if (n) {
+        await Promise.all([recordSearchDay(n, forPlayers ? 'players' : 'pipeline'), recordMonthly(n, forPlayers ? 'players' : undefined)]);
+        ledger.searches += n;
+      }
+    })();
+  };
   return client;
 }
 

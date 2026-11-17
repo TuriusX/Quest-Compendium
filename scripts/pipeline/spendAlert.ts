@@ -5,14 +5,15 @@
  *   - pipeline: system/pipeline.spend (today's guide-pipeline dollars, Central day; searches included)
  *   - flagship builds: system/flagship.spentToday (its own budget)
  *   - players: stats/{day}.costs (their answers' AI cost, Central day; your own and test accounts left out)
- *   - searches: searchDays/{Pacific day} (Google's day), with what they're billed once the month is past the free 5,000
+ *   - searches: searchDays/{Pacific day} (Google's day), at $14 per 1,000 from the first, scaled for the queries the
+ *     counter misses (searchGuard.ts billedSearchDollars)
  *
  * The threshold is config/alerts.dailyAiDollars (default $10): change it in Firestore, no deploy needed. The alert is
  * posted once a day at most (system/spendAlert.day).
  */
 import { db } from '../guides/common';
 import { quotaDay } from '../../apiLimits';
-import { searchMonth, SEARCH_FREE_MONTHLY } from '../../searchGuard';
+import { searchMonth, billedSearchDollars } from '../../searchGuard';
 import crypto from 'crypto';
 
 export const DEFAULT_DAILY_ALERT = 10;
@@ -29,11 +30,9 @@ export function daySpendFrom(o: { day: string; pipeline: any; flagship: any; sta
   let players = 0;
   for (const [h, c] of Object.entries((o.stats?.costs || {}) as Record<string, any>)) if (!own.has(h)) players += Number(c?.dollars) || 0;
   const searches = Number(o.searchDay?.total) || 0;
-  // Today's queries that fall past the month's free 5,000 are billed at $14 per 1,000.
-  const paid = Math.max(0, Math.min(searches, o.monthCount - SEARCH_FREE_MONTHLY));
   return {
     day: o.day, pipeline, flagship, players, total: pipeline + flagship + players, searches,
-    pipelineSearches: Number(o.searchDay?.pipeline) || 0, playerSearches: Number(o.searchDay?.players) || 0, searchDollars: (paid * 14) / 1000,
+    pipelineSearches: Number(o.searchDay?.pipeline) || 0, playerSearches: Number(o.searchDay?.players) || 0, searchDollars: billedSearchDollars(searches),
   };
 }
 
@@ -62,8 +61,8 @@ export async function daySpend(pipelineToday?: number): Promise<{ spend: DaySpen
 }
 
 /** The summary's line, and the alert to post (once a day) when today's total is past the threshold. */
-/** Players' search queries this month at Google's $14 per 1,000 (the pipeline uses the free 5,000 first). */
-export const playerSearchDollars = (players: number) => (players * 14) / 1000;
+/** Players' search queries this month as billed ($14 per 1,000 from the first, scaled for missed queries). */
+export const playerSearchDollars = (players: number) => billedSearchDollars(players);
 export const DEFAULT_PLAYER_SEARCH_ALERT = 50;
 
 export async function spendReport(pipelineToday?: number): Promise<{ line: string; alert: string | null }> {

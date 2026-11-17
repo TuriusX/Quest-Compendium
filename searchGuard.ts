@@ -1,15 +1,16 @@
 /**
  * Keeps Google Search grounding costs in check, and remembers facts the AI already looked up.
  *
- * Search grounding on Gemini 3 is billed per search query the model runs (one question can run several): 5,000 free a
- * month across the project, then $14 per 1,000. Three guards, all tunable with environment variables:
+ * Search grounding on Gemini 3 is billed per search query the model runs (one question can run several): $14 per 1,000
+ * from the first query (no free allowance for this project: the Nov 2026 bill). Three guards, all tunable with
+ * environment variables:
  *   - per player per day: FREE_DAILY_SEARCHES (default 3), PREMIUM_DAILY_SEARCHES (default 10); counted on the player's
  *     user document (searchesToday / searchDay). Guests share the free allowance, counted in memory per guest id.
  *   - per month, two separate shares, counted in Firestore at searchMonths/{YYYY-MM} { count, pipeline, players,
  *     flagship } (count: all of them; atomic increments, so concurrent writers never lose a count; months before
  *     November 2026 were kept at system/searchBudget):
  *       players (chat, the Steam Deck's web search): PLAYER_MONTHLY_SEARCHES (2,000), their own reserve, which the
- *         pipeline can never use; past the free 5,000 a month they're paid ($14 per 1,000).
+ *         pipeline can never use; every one is paid ($14 per 1,000).
  *       the pipeline and the flagship builds together: pipelineShare(month), PIPELINE_MONTHLY_SEARCHES (4,800) or a
  *         month's own share in PIPELINE_MONTHLY_SEARCHES_BY_MONTH ("2026-10:6500"); every searching call of theirs
  *         stops there (scripts/guides/common.ts).
@@ -42,18 +43,24 @@ export function pipelineShare(month = new Date().toISOString().slice(0, 7)): num
   const m = (process.env.PIPELINE_MONTHLY_SEARCHES_BY_MONTH ?? '2026-10:6500').split(',').map((x) => x.trim().split(':')).find(([k]) => k === month);
   return m && Number.isFinite(Number(m[1])) ? Number(m[1]) : num(process.env.PIPELINE_MONTHLY_SEARCHES, 4800);
 }
-export type SearchWho = 'pipeline' | 'players' | 'flagship';
-export type SearchMonth = { month: string; count: number; pipeline: number; players: number; flagship: number };
+export type SearchWho = 'pipeline' | 'players' | 'flagship' | 'tests';
+export type SearchMonth = { month: string; count: number; pipeline: number; players: number; flagship: number; tests?: number };
 
 const today = () => new Date().toISOString().slice(0, 10);
 const thisMonth = () => new Date().toISOString().slice(0, 7);
 
-/** What Google bills for a month's search queries: the first 5,000 free, then $14 per 1,000 (Gemini 3 grounding). */
-export const SEARCH_FREE_MONTHLY = 5000;
-export const billedSearchDollars = (queries: number) => (Math.max(0, queries - SEARCH_FREE_MONTHLY) * 14) / 1000;
-/** "6,832 search queries this month (pipeline 5,528, flagship 1,042, players 262) · ≈$25.65 billed past the free 5,000" */
+/**
+ * What Google bills for search queries (owner, Nov 16 2026, from the Cloud Console: SKU "Generate content search query
+ * gemini 3 paid one", Nov 1-16: 9,524 queries, $133.34): $14 per 1,000 for EVERY query, no free allowance for this
+ * project. And it bills about 1.4 times what we count (9,524 billed vs 6,832 counted): SEARCH_BILL_FACTOR (1.4) scales
+ * the dollar estimates (never the counts, shares or caps) until the counter reconciles with the bill.
+ */
+export const SEARCH_FREE_MONTHLY = 0;
+export const SEARCH_BILL_FACTOR = () => num(process.env.SEARCH_BILL_FACTOR, 1.4);
+export const billedSearchDollars = (counted: number) => (counted * SEARCH_BILL_FACTOR() * 14) / 1000;
+/** "6,832 search queries counted this month (…) · ≈9,565 billed, ≈$133.91" */
 export const searchBillLine = (s: SearchMonth) =>
-  `${s.count.toLocaleString('en-US')} search queries this month (pipeline ${s.pipeline.toLocaleString('en-US')}, flagship ${s.flagship.toLocaleString('en-US')}, players ${s.players.toLocaleString('en-US')}) · ≈$${billedSearchDollars(s.count).toFixed(2)} billed past the free ${SEARCH_FREE_MONTHLY.toLocaleString('en-US')}`;
+  `${s.count.toLocaleString('en-US')} search queries counted this month (pipeline ${s.pipeline.toLocaleString('en-US')}, flagship ${s.flagship.toLocaleString('en-US')}, players ${s.players.toLocaleString('en-US')}${s.tests ? `, tests ${s.tests.toLocaleString('en-US')}` : ''}) · ≈${Math.round(s.count * SEARCH_BILL_FACTOR()).toLocaleString('en-US')} billed, ≈$${billedSearchDollars(s.count).toFixed(2)} ($14 per 1,000 from the first; ×${SEARCH_BILL_FACTOR()} for queries the counter misses)`;
 
 /**
  * Count a response's searches when the client that made it doesn't count them itself (the server's own client; the
@@ -83,8 +90,40 @@ const zero = (month: string): SearchMonth => ({ month, count: 0, pipeline: 0, pl
 export function splitOf(d: any): SearchMonth {
   const count = Number(d?.count) || 0;
   const players = Number(d?.players) || 0, flagship = Number(d?.flagship) || 0;
-  const pipeline = d?.pipeline === undefined ? Math.max(0, count - players - flagship) : Number(d.pipeline) || 0;
-  return { month: String(d?.month || ''), count, pipeline, players, flagship };
+  const tests = Number(d?.tests) || 0;
+  const pipeline = d?.pipeline === undefined ? Math.max(0, count - players - flagship - tests) : Number(d.pipeline) || 0;
+  return { month: String(d?.month || ''), count, pipeline, players, flagship, ...(tests ? { tests } : {}) };
+}
+
+/**
+ * A client for one-off tests and benchmarks (owner, Nov 16 2026: this month's local test scripts made their own client
+ * and about 1,300 of their searches never reached the counter, though Google billed them). It only counts each
+ * response's searches, under "tests" (never the pipeline's or the players' shares, and no caps), streaming included.
+ */
+export function countingClient<T extends { models: any }>(client: T): T {
+  if ((client as any).countsSearches) return client;
+  const gen = client.models.generateContent.bind(client.models);
+  client.models.generateContent = async (req: any) => {
+    const res = await gen(req);
+    countUncounted(client, res, 'tests');
+    return res;
+  };
+  if (typeof client.models.generateContentStream === 'function') {
+    const stream = client.models.generateContentStream.bind(client.models);
+    client.models.generateContentStream = async (req: any) => {
+      const it = await stream(req);
+      return (async function* () {
+        let n = 0;
+        for await (const ch of it) {
+          n = Math.max(n, countSearches(ch));
+          yield ch;
+        }
+        if (n) countUncounted(client, { candidates: [{ groundingMetadata: { webSearchQueries: Array(n).fill('') } }] }, 'tests');
+      })();
+    };
+  }
+  (client as any).countsSearches = true;
+  return client;
 }
 let monthly: SearchMonth & { readAt: number } = { ...zero(''), readAt: 0 };
 let warned80 = '';
@@ -142,7 +181,7 @@ export async function recordMonthly(n: number, who: SearchWho = process.env.SEAR
   const m = thisMonth();
   if (monthly.month !== m) monthly = { ...zero(m), readAt: 0 };
   monthly.count += n;
-  monthly[who] += n;
+  monthly[who] = (monthly[who] || 0) + n;
   if (who === 'players' && monthly.players >= PLAYER_MONTHLY() * 0.8 && warned80 !== m) {
     warned80 = m;
     console.warn(`[search] ${monthly.players} of the players' ${PLAYER_MONTHLY()} monthly searches used (80%).`);

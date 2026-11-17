@@ -317,7 +317,7 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   // Premium subscribers (not the owner's accounts) and this month's player AI cost.
   const cost = costs.docs.filter((d) => !owners.has(playerHash(d.id))).reduce((n, d) => n + (Number((d.data() as any).dollars) || 0), 0);
   parts.push(`**Premium subscribers:** ${subs}\n**Player AI cost this month:** ${money(cost)}\n**Accounts:** ${created.length}`);
-  // Google search grounding, all of it (pipeline, flagship builds, players): Google bills each query past 5,000 a month.
+  // Google search grounding, all of it (pipeline, flagship builds, players): Google bills every query, $14 per 1,000.
   const sm = await searchMonth(true).catch(() => null);
   if (sm) parts.push(`**Search:** ${searchBillLine(sm)}`);
   const approx = parts.some((p) => p.includes(' ≈'));

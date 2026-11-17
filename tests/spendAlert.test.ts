@@ -12,11 +12,11 @@ test("today's totals, owner left out, yesterday's numbers ignored", () => {
   const s = daySpendFrom({ ...base, pipeline: { spend: { day: "2026-11-16", dollars: 3 } }, flagship: { day: "2026-11-15", spentToday: 9 },
     stats: { costs: { a: { dollars: 0.5 }, me: { dollars: 4 }, t: { dollars: 1 } }, owners: ["t"] }, searchDay: { total: 400, pipeline: 380, players: 20 }, monthCount: 6832 });
   assert.equal(s.pipeline, 3); assert.equal(s.flagship, 0); assert.equal(s.players, 0.5); assert.equal(s.total, 3.5);
-  assert.equal(Math.round(s.searchDollars * 100), 560);
+  assert.equal(Math.round(s.searchDollars * 100), 784); // 400 counted ×1.4 at $14 per 1,000
 });
-test("searches within the month's free 5,000 cost nothing", () => {
+test("every query is billed, from the first", () => {
   const s = daySpendFrom({ ...base, pipeline: {}, flagship: {}, stats: {}, searchDay: { total: 300 }, monthCount: 5100 });
-  assert.equal(Math.round(s.searchDollars * 1000), 1400); // 100 of the 300 past the free 5,000
+  assert.equal(Math.round(s.searchDollars * 100), 588); // 300 ×1.4 at $14 per 1,000, early in the month too
 });
 test("the line", () => {
   const s = daySpendFrom({ ...base, pipeline: { spend: { day: "2026-11-16", dollars: 2 } }, flagship: {}, stats: {}, searchDay: { total: 10, pipeline: 10 }, monthCount: 100 });
