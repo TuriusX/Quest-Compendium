@@ -12,7 +12,7 @@ test("a live Stripe subscription: Premium, and the customer id and renewal are s
   const d = decidePremium({ isPremium: false }, { customerId: "cus_1", active: true, periodEnd: 1_800_000_000_000 });
   assert.equal(d.isPremium, true);
   assert.equal(d.source, "stripe");
-  assert.deepEqual(d.save, { stripeCustomerId: "cus_1", isPremium: true, subscriptionStatus: "active", premiumPeriodEnd: 1_800_000_000_000 });
+  assert.deepEqual(d.save, { stripeCustomerId: "cus_1", isPremium: true, subscriptionStatus: "active", premiumPeriodEnd: 1_800_000_000_000, premiumEver: true });
 });
 
 test("cancelled in the portal: still Premium until the period ends, marked as ending", () => {

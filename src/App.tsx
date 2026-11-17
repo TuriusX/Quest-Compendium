@@ -25,6 +25,7 @@ const GameScreenModal = React.lazy(() => import('./components/GameScreenModal').
 const AuthModal = React.lazy(() => import('./components/AuthModal').then(module => ({ default: module.AuthModal })));
 import { LogFacts } from './components/LogFacts';
 const PaywallModal = React.lazy(() => import('./components/PaywallModal').then(module => ({ default: module.PaywallModal })));
+import { TrialEndsNote } from './components/TrialEndsNote';
 const RenameModal = React.lazy(() => import('./components/RenameModal').then(module => ({ default: module.RenameModal })));
 const UpdateRequiredModal = React.lazy(() => import('./components/UpdateRequiredModal').then(module => ({ default: module.UpdateRequiredModal })));
 const BetaFeedbackModal = React.lazy(() => import('./components/BetaFeedbackModal').then(module => ({ default: module.BetaFeedbackModal })));
@@ -3086,6 +3087,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
   // A local dev server shows the update bar and "What's new" with sample notes at ?previewUpdate (for screenshots).
   const previewUpdate = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /[?&]previewUpdate/.test(location.search);
+  // ?previewOffers on a dev server: the Premium card with the free trial and holiday deal, and the trial's last-day note.
+  const previewOffers = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /[?&]previewOffers/.test(location.search);
+  useEffect(() => { if (previewOffers) setIsPaywallOpen(true); }, []);
   // Tuck the panel away without the shortcut: exactly what the shortcut does (focus back to the game, quest log as is).
   const tuckAway = () => (window as any).electronAPI?.hidePanel?.();
   // Hide just the chat (owner, Nov 15 2026): the panel folds down to the docked quest log; the seam tab brings it back.
@@ -3368,6 +3372,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
               : undefined}
           />
         )}
+        {/* A free trial's last day: it ends tomorrow, then $4.99/month (TrialEndsNote). */}
+        <TrialEndsNote trialEnd={previewOffers ? Date.now() + 20 * 3_600_000 : Number(userData?.premiumTrialEnd) || undefined} onManage={() => setIsPaywallOpen(true)} />
 
         {/* Main Body: Central Chat/Browser + Right Achievements Drawer */}
         {/* overflow-clip, not overflow-hidden: a clipped box isn't scrollable, so focusing a field can't shift the
@@ -3700,7 +3706,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       {!isInitializing && user && !isOutdated && isPaywallOpen && (
         <PaywallModal
           onClose={() => setIsPaywallOpen(false)}
-          isGuest={!!user.isGuest}
+          isGuest={!!user.isGuest && !previewOffers}
           onSignIn={() => { setIsPaywallOpen(false); openSignIn(); }}
           isPremium={userData?.isPremium === true}
           beta={userData?.beta === true}

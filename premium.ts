@@ -23,6 +23,8 @@ export type StripeView = {
   cancelAtPeriodEnd?: boolean;
   /** Billed monthly or yearly (the subscription's price), for "Premium, yearly". */
   interval?: 'month' | 'year';
+  /** In a free trial: when it ends (ms), for "Your trial ends tomorrow". */
+  trialEnd?: number;
 };
 
 export type PremiumDecision = {
@@ -52,6 +54,10 @@ export function decidePremium(doc: any, stripe: StripeView | null, opts: { owner
     if (stripe.periodEnd && d.premiumPeriodEnd !== stripe.periodEnd) save.premiumPeriodEnd = stripe.periodEnd;
     if (!!stripe.cancelAtPeriodEnd !== !!d.premiumCancelAtPeriodEnd) save.premiumCancelAtPeriodEnd = !!stripe.cancelAtPeriodEnd;
     if (stripe.interval && d.premiumInterval !== stripe.interval) save.premiumInterval = stripe.interval;
+    // A free trial: its end (shown the day before); cleared once it's a paid subscription.
+    const trialEnd = stripe.trialEnd ?? null;
+    if ((d.premiumTrialEnd ?? null) !== trialEnd) save.premiumTrialEnd = trialEnd;
+    if (d.premiumEver !== true) save.premiumEver = true;
     return { isPremium: true, source: 'stripe', save };
   }
   if (granted) return { isPremium: true, source: 'grant', save };
@@ -87,7 +93,8 @@ export async function stripeViewFor(stripe: Stripe, savedCustomerId: string | un
     const live = subs.data.find((s: any) => LIVE.has(s.status));
     if (live) {
       const iv = (live as any).items?.data?.[0]?.price?.recurring?.interval;
-      return { customerId: id, active: true, periodEnd: periodEndOf(live), cancelAtPeriodEnd: !!(live as any).cancel_at_period_end || !!(live as any).cancel_at, ...(iv === 'year' || iv === 'month' ? { interval: iv } : {}) };
+      const trialEnd = live.status === 'trialing' && Number((live as any).trial_end) > 0 ? Number((live as any).trial_end) * 1000 : undefined;
+      return { customerId: id, active: true, periodEnd: periodEndOf(live), cancelAtPeriodEnd: !!(live as any).cancel_at_period_end || !!(live as any).cancel_at, ...(iv === 'year' || iv === 'month' ? { interval: iv } : {}), ...(trialEnd ? { trialEnd } : {}) };
     }
   }
   return { customerId: firstCustomer, active: false };

@@ -35,7 +35,7 @@ import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
-import { currentOffer } from './offers';
+import { currentOffer, currentTrial, trialEligible, trialStep } from './offers';
 import { questionType } from './src/utils/questionType';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerGuideImages } from './guideImages';
@@ -310,7 +310,8 @@ async function startServer() {
         if (userId && !userId.startsWith('guest_')) {
           await db.collection('users').doc(userId).set({
             ...(session.customer ? { stripeCustomerId: String(session.customer) } : {}),
-            ...(session.mode === 'subscription' && session.payment_status === 'paid' ? { isPremium: true, subscriptionStatus: 'active' } : {}),
+            // Paid, or a free trial started (nothing to pay yet): Premium now. premiumEver: no free trial later.
+            ...(session.mode === 'subscription' && ['paid', 'no_payment_required'].includes(session.payment_status) ? { isPremium: true, subscriptionStatus: 'active', premiumEver: true } : {}),
             ...(session.metadata?.from === 'homepage' ? { premiumFrom: 'homepage', premiumFromAt: Date.now() } : {}),
           }, { merge: true });
           forgetStripeView(userId);
@@ -323,6 +324,14 @@ async function startServer() {
           const found = await db.collection('users').where('stripeCustomerId', '==', customer).limit(3).get();
           for (const u of found.docs) forgetStripeView(u.id);
           console.log(`[stripe] ${event.type} (${sub.status}) for ${found.size} account(s)`);
+          // Free trials (offers.ts): started, converted (first payment), or cancelled, for /stats; the player's one
+          // trial is marked used so there's never a second.
+          const step = trialStep(event.type, sub, (event.data as any).previous_attributes);
+          if (step) {
+            const uid = String(sub.metadata?.uid || found.docs[0]?.id || '');
+            await db.collection('trials').doc(String(sub.id)).set({ [step]: Date.now(), status: step, trialEnd: Number(sub.trial_end) * 1000 || null, updatedAt: Date.now() }, { merge: true });
+            if (uid && step === 'started') await db.collection('users').doc(uid).set({ trialUsed: true, premiumEver: true, premiumTrialEnd: Number(sub.trial_end) * 1000 || null }, { merge: true });
+          }
         }
       }
     } catch (dbErr: any) {
@@ -746,6 +755,8 @@ async function startServer() {
         premiumSource: premium.source,
         ...(premium.source === 'stripe' && userData.premiumPeriodEnd ? { premiumPeriodEnd: userData.premiumPeriodEnd, premiumCancelAtPeriodEnd: userData.premiumCancelAtPeriodEnd === true } : {}),
         ...(premium.source === 'stripe' && userData.premiumInterval ? { premiumInterval: userData.premiumInterval } : {}),
+        // In a free trial: when it ends (the apps say so the day before).
+        ...(premium.source === 'stripe' && Number(userData.premiumTrialEnd) > Date.now() ? { premiumTrialEnd: Number(userData.premiumTrialEnd) } : {}),
         // The owner's tools in the desktop app (the image capture hotkey) switch on only for admins.
         ...(isAdmin((req as any).user) ? { isAdmin: true } : {}),
       });
@@ -800,6 +811,23 @@ async function startServer() {
 .card{max-width:420px;text-align:center;background:#0e0e14;border:1px solid rgba(168,127,251,.4);border-radius:16px;padding:32px 28px;box-shadow:0 0 40px rgba(168,127,251,.15)}
 h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
 <body><div class="card"><h1>${title}</h1><p>${body}</p></div></body></html>`);
+  });
+
+  // --- API: today's Premium offers for this player (offers.ts): the free trial if they can still have one, and the
+  // holiday deal's line. The Premium cards show them; checkout decides again, with Stripe's history.
+  app.get('/api/offers', requireAuth, async (req, res) => {
+    try {
+      const uid = String((req as any).user?.uid || '');
+      const guest = (req as any).user?.isGuest || uid.startsWith('guest_');
+      const [offer, trial] = await Promise.all([currentOffer(), currentTrial()]);
+      const doc = guest ? null : await getFirestoreDocREST(req.headers.authorization!.split('Bearer ')[1], uid).catch(() => null);
+      res.json({
+        trial: trial && (guest || trialEligible(doc, false)) ? { days: trial.days } : null,
+        holiday: offer?.line ? { line: offer.line, until: offer.until } : null,
+      });
+    } catch {
+      res.json({ trial: null, holiday: null });
+    }
   });
 
   // --- API: Stripe Checkout ---
@@ -858,6 +886,23 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
       // A dated offer on the yearly plan (offers.ts, config/offers: the holiday offer, Nov 26 - Jan 4).
       const offer = yearly ? await currentOffer() : null;
       if (offer) sessionFields.discounts = [{ coupon: offer.coupon }];
+      // The free trial on monthly (offers.ts config/offers.trial), card up front, once per player: not for anyone who
+      // has had a trial or Premium, here or on any of their Stripe customers. Never with the yearly coupon.
+      const trial = !yearly ? await currentTrial() : null;
+      if (trial) {
+        let ever = false;
+        try {
+          const ids = new Set<string>(saved?.stripeCustomerId ? [String(saved.stripeCustomerId)] : []);
+          if (userEmail) for (const c of (await stripe.customers.list({ email: userEmail, limit: 5 })).data) ids.add(c.id);
+          for (const id of ids) if ((await stripe.subscriptions.list({ customer: id, status: 'all', limit: 1 })).data.length) { ever = true; break; }
+        } catch {
+          ever = true; // can't tell: no trial (never a second one by mistake)
+        }
+        if (trialEligible(saved, ever)) {
+          sessionFields.subscription_data = { ...sessionFields.subscription_data, trial_period_days: trial.days, metadata: { ...sessionFields.subscription_data.metadata, trial: String(trial.days) } };
+          sessionFields.payment_method_collection = 'always';
+        }
+      }
       const hosted = { ...sessionFields, success_url: fromHome ? `${site}/?upgrade=success` : done, cancel_url: fromHome ? `${site}/?upgrade=canceled` : back };
       if (fromHome && req.body?.embedded === true) {
         try {
@@ -1236,7 +1281,10 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
         const allow = await allowances();
         const p = isGuest || free.limited ? allow.guest : isPremium ? allow.premium : allow.free;
         // A dated Premium offer, one line (offers.ts): only for signed-in free players.
-        const offerLine = !isGuest && !isPremium ? (await currentOffer())?.line || '' : '';
+        const holidayLine = !isGuest && !isPremium ? (await currentOffer())?.line || '' : '';
+        // The free trial too (offers.ts): only for players who haven't had one or Premium.
+        const trialNow = !isGuest && !isPremium && trialEligible(userData, false) ? await currentTrial() : null;
+        const offerLine = [trialNow ? `Try Premium free for ${trialNow.days} days.` : '', holidayLine].filter(Boolean).join(' ');
         return res.status(429).json({
           text: isGuest
             // Guests are asked to sign in (more questions today, conversations saved), never sent to Premium.

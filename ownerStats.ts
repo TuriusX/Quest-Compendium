@@ -217,6 +217,18 @@ async function limitsIn(from: number, to: number, owners: Set<string>): Promise<
   return tallyLimits(hours, owners);
 }
 
+/** Free trials: started, converted and cancelled in [from, to), and how many are in their trial now. */
+async function trialsIn(from: number, to: number): Promise<{ started: number; converted: number; cancelled: number; live: number }> {
+  const docs = (await getFirestore().collection('trials').get()).docs.map((d) => d.data() as any);
+  const inWin = (t: any) => Number(t) >= from && Number(t) < to;
+  return {
+    started: docs.filter((t) => inWin(t.started)).length,
+    converted: docs.filter((t) => inWin(t.converted)).length,
+    cancelled: docs.filter((t) => inWin(t.cancelled)).length,
+    live: docs.filter((t) => t.status === 'started' && Number(t.trialEnd) > to).length,
+  };
+}
+
 const APP_NAMES: [string, string][] =[['desktop', 'desktop'], ['deck', 'Deck'], ['web', 'web']];
 const change = (now: number, before: number) => (before ? ` (${now >= before ? '+' : ''}${Math.round(((now - before) / before) * 100)}%)` : now ? ' (new)' : '');
 const money = (n: number) => `$${n.toFixed(2)}`;
@@ -317,6 +329,9 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   // Premium subscribers (not the owner's accounts) and this month's player AI cost.
   const cost = costs.docs.filter((d) => !owners.has(playerHash(d.id))).reduce((n, d) => n + (Number((d.data() as any).dollars) || 0), 0);
   parts.push(`**Premium subscribers:** ${subs}\n**Player AI cost this month:** ${money(cost)}\n**Accounts:** ${created.length}`);
+  // Free trials of monthly Premium (offers.ts, trials/{subscription}): started, converted and cancelled in the window.
+  const tr = await trialsIn(now - siteMs, now).catch(() => null);
+  if (tr && (tr.started || tr.converted || tr.cancelled)) parts.push(`**Free trials** (${winLabel}): ${tr.started} started · ${tr.converted} converted · ${tr.cancelled} cancelled${tr.live ? ` · ${tr.live} still in trial` : ''}`);
   // Google search grounding, all of it (pipeline, flagship builds, players): Google bills every query, $14 per 1,000.
   const sm = await searchMonth(true).catch(() => null);
   if (sm) parts.push(`**Search:** ${searchBillLine(sm)}`);

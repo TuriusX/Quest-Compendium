@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { scheduledAllowances, normalizeAllowances } from "../allowances";
 import { PLAYER_MONTHLY } from "../searchGuard";
-import { activeOffer } from "../offers";
+import { activeOffer, activeTrial, trialEligible, trialStep } from "../offers";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -36,5 +36,29 @@ test("the holiday offer: only between its dates, and only with a coupon", () => 
   assert.equal(activeOffer(o, "2027-01-04")?.line, "Holiday offer");
   assert.equal(activeOffer(o, "2027-01-05"), null);
   assert.equal(activeOffer({ holiday: { ...o.holiday, coupon: "" } }, "2026-12-01"), null);
+});
+test("the free trial: off unless on, from its start day, and after Jan 4 too", () => {
+  const c = { trial: { on: true, days: 7, from: "2026-11-26" } };
+  assert.equal(activeTrial({}, "2026-12-01"), null);
+  assert.equal(activeTrial({ trial: { ...c.trial, on: false } }, "2026-12-01"), null);
+  assert.equal(activeTrial(c, "2026-11-25"), null);
+  assert.equal(activeTrial(c, "2026-11-26")?.days, 7);
+  assert.equal(activeTrial(c, "2027-02-01")?.days, 7);
+});
+test("one trial per player: not after a trial, Premium, or any past subscription", () => {
+  assert.equal(trialEligible({}, false), true);
+  assert.equal(trialEligible({ trialUsed: true }, false), false);
+  assert.equal(trialEligible({ premiumEver: true }, false), false);
+  assert.equal(trialEligible({ isPremium: true }, false), false);
+  assert.equal(trialEligible({}, true), false);
+});
+test("trial steps from Stripe's events", () => {
+  const t = { id: "sub_1", trial_end: 1000 };
+  assert.equal(trialStep("customer.subscription.created", { ...t, status: "trialing" }, null), "started");
+  assert.equal(trialStep("customer.subscription.updated", { ...t, status: "active" }, { status: "trialing" }), "converted");
+  assert.equal(trialStep("customer.subscription.updated", { ...t, status: "trialing", cancel_at_period_end: true }, { cancel_at_period_end: false }), "cancelled");
+  assert.equal(trialStep("customer.subscription.deleted", { ...t, status: "canceled", ended_at: 1000 }, null), "cancelled");
+  assert.equal(trialStep("customer.subscription.deleted", { ...t, status: "canceled", ended_at: 999999 }, null), null);
+  assert.equal(trialStep("customer.subscription.created", { id: "sub_2", status: "active" }, null), null);
 });
 console.log(`\n${passed} tests passed`);

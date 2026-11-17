@@ -51,6 +51,23 @@ async function open(path: '/api/checkout' | '/api/billing-portal', extra: Record
   }
 }
 
+/**
+ * Today's offers for this player (the server's /api/offers): the monthly free trial if they can still have one, and the
+ * holiday deal's line for yearly. Nothing when signed out or the server can't say.
+ */
+export type Offers = { trial: { days: number } | null; holiday: { line: string; until: string } | null };
+export async function fetchOffers(): Promise<Offers> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return { trial: null, holiday: null };
+    const res = await fetch(`${getApiBaseUrl()}/api/offers`, { headers: { Authorization: `Bearer ${token}` } });
+    const d = await res.json();
+    return { trial: d?.trial?.days ? { days: Number(d.trial.days) } : null, holiday: d?.holiday?.line ? { line: String(d.holiday.line), until: String(d.holiday.until || '') } : null };
+  } catch {
+    return { trial: null, holiday: null };
+  }
+}
+
 /** Subscribe to Premium (signed-in players). Throws 'signin' for a guest. */
 export const startCheckout = (interval: Interval = 'month') => open('/api/checkout', { interval });
 /** Change the card, see invoices, cancel (Premium players managed by Stripe). */

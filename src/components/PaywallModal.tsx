@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, CreditCard, X } from './icons';
 import { useT } from '../i18n';
 import { GlainIcon } from './GlainIcon';
-import { startCheckout, openBillingPortal, PRICES, type Interval } from '../utils/billing';
+import { startCheckout, openBillingPortal, fetchOffers, PRICES, type Interval, type Offers } from '../utils/billing';
 
 interface PaywallModalProps {
   onClose?: () => void;
@@ -36,6 +36,18 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = f
   // Monthly is the default; yearly is one click away, with its saving shown.
   const [interval, setBillingInterval] = useState<Interval>(initialInterval);
   const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
+  // Today's offers (owner, Nov 2026): the monthly free trial for players who haven't had one, the holiday deal on yearly.
+  const [offers, setOffers] = useState<Offers>({ trial: null, holiday: null });
+  // A dev server shows both with sample wording at ?previewOffers (for screenshots), like ?previewUpdate.
+  const previewOffers = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /[?&]previewOffers/.test(location.search);
+  useEffect(() => {
+    if (previewOffers) { setOffers({ trial: { days: 7 }, holiday: { line: 'Holiday offer: first year $29.99 (until Jan 4).', until: '2027-01-04' } }); return; }
+    if (isPremium || isGuest) return;
+    let alive = true;
+    void fetchOffers().then((o) => alive && setOffers(o));
+    return () => { alive = false; };
+  }, [isPremium, isGuest]);
+  const trialHere = interval === 'month' ? offers.trial : null;
   // Escape closes it (wherever the focus is).
   useEffect(() => {
     if (!onClose) return;
@@ -116,11 +128,15 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = f
             <div className="rounded-xl border border-[var(--accent-border)] bg-[var(--accent-dim)] p-3.5">
               <div className="flex items-center justify-between mb-2"><span className="font-semibold text-white flex items-center gap-1.5"><GlainIcon size={14} /> {t('prem.premiumPlan')}</span></div>
               {interval === 'month' ? (
-                <div className="text-[var(--accent-color)] font-bold mb-2">{PRICES.month.label}<span className="text-zinc-400 font-normal">{t('pay.perMonth')}</span></div>
+                <div className="mb-2">
+                  <div className="text-[var(--accent-color)] font-bold">{PRICES.month.label}<span className="text-zinc-400 font-normal">{t('pay.perMonth')}</span></div>
+                  {offers.trial && <div className="text-[11.5px] font-semibold text-emerald-300">{t('prem.trialCard', { n: offers.trial.days })}</div>}
+                </div>
               ) : (
                 <div className="mb-2">
                   <div className="text-[var(--accent-color)] font-bold">{PRICES.year.label}<span className="text-zinc-400 font-normal">{t('prem.perYear')}</span> <span className="ml-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10.5px] font-bold text-emerald-300">{t('prem.save', { n: PRICES.savePercent })}</span></div>
                   <div className="text-[11px] text-zinc-400">{t('prem.yearlyEach', { price: PRICES.yearPerMonth })}</div>
+                  {offers.holiday && <div className="text-[11.5px] font-semibold text-emerald-300">{t('prem.holidayCard')}</div>}
                 </div>
               )}
               <ul className="space-y-1.5 text-zinc-200">
@@ -146,9 +162,9 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({ onClose, isGuest = f
           <>
             <button onClick={subscribe} disabled={loading} className="w-full flex items-center justify-center gap-2 bg-[var(--accent-color)] text-black font-bold py-3 px-6 rounded-xl hover:brightness-110 transition disabled:opacity-50 cursor-pointer">
               <CreditCard className="w-5 h-5" />
-              {loading ? t('pay.connecting') : isGuest ? t('prem.signInToSubscribe') : interval === 'year' ? t('prem.subscribeYearly') : t('prem.subscribe')}
+              {loading ? t('pay.connecting') : isGuest ? t('prem.signInToSubscribe') : interval === 'year' ? (offers.holiday ? t('prem.subscribeYearlyHoliday') : t('prem.subscribeYearly')) : trialHere ? t('prem.startTrial', { n: trialHere.days }) : t('prem.subscribe')}
             </button>
-            <p className="mt-3 text-[11.5px] text-zinc-500 text-center">{isGuest ? t('prem.guestNote') : t('prem.cancelNote')}</p>
+            <p className="mt-3 text-[11.5px] text-zinc-500 text-center">{isGuest ? t('prem.guestNote') : trialHere ? t('prem.trialNote', { n: trialHere.days, price: PRICES.month.label }) : t('prem.cancelNote')}</p>
           </>
         )}
       </div>
