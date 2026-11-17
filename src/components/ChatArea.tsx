@@ -956,6 +956,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setTimeout(() => setSavedNoteMessageId(null), 2000);
   };
 
+  // Controller mode's Actions menu (ControllerLayer): the answer's ⋯ menu items without opening the menu.
+  const answerActionRef = useRef<(id: string, action: string) => void>(() => {});
+  answerActionRef.current = (id, action) => {
+    const idx = activeTab.messages.findIndex((m) => m.id === id);
+    const msg = activeTab.messages[idx];
+    if (!msg) return;
+    if (action === 'copy') handleCopyMessage(id, msg.text);
+    else if (action === 'save') handleSaveToNotes(id, msg.text);
+    else if (action === 'report') {
+      let question = '';
+      for (let j = idx - 1; j >= 0; j--) if (activeTab.messages[j].role === 'user') { question = activeTab.messages[j].text; break; }
+      setReportTarget({
+        messageId: msg.id, answer: msg.text, question,
+        game: activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name,
+        place: msg.placeChosen || msg.place?.name || activeTab.place?.name,
+        model: msg.modelUsed,
+      });
+    }
+  };
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = ((e as CustomEvent).detail || {}) as { id?: string; action?: string };
+      answerActionRef.current(String(d.id || ''), String(d.action || ''));
+    };
+    window.addEventListener('qc-answer-action', on);
+    return () => window.removeEventListener('qc-answer-action', on);
+  }, []);
+
   const stopAllAudio = () => {
     // 1. Abort any in-flight TTS generation network request
     if (ttsAbortControllerRef.current) {
@@ -1371,8 +1399,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             className="flex-1 bg-transparent text-white outline-none resize-none max-h-48 min-h-[72px] py-4 pl-4 pr-4 sm:pr-4 pb-14"
           />
 
-          {/* Action Buttons inside Input Bar */}
-          <div className="absolute flex items-center gap-1.5 right-2.5 bottom-2.5">
+          {/* Action Buttons inside Input Bar (hidden in controller mode: X speaks, Y asks a quick question, A types) */}
+          <div data-qc-ask-tools="" className="absolute flex items-center gap-1.5 right-2.5 bottom-2.5">
 
             {/* Hidden file input for manual upload */}
             <input
@@ -1866,6 +1894,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         {/* Audio TTS button with animated wave indicator / stop control */}
                         <button
                           onClick={() => handlePlayTTS(msg.id, msg.text)}
+                          data-pad-action="read"
                           title={isAudioPlaying ? t('chat.stopNarration') : t('chat.readAloud')}
                           className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-xs font-medium ${
                             isAudioPlaying 
@@ -1905,6 +1934,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           return (
                             <button
                               key={v}
+                              data-pad-action={`vote-${v}`}
                               onClick={() => {
                                 playBlipSound(soundEnabled);
                                 const next = on ? undefined : v;
@@ -1927,6 +1957,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         {onPinAnswer && (
                           <button
                             type="button"
+                            data-pad-action="pin"
                             onClick={() => { playBlipSound(soundEnabled); onPinAnswer(msg.id); }}
                             title={questLog?.pins?.includes(msg.id) ? t('tracker.logUnpin') : t('tracker.logPin')}
                             aria-label={questLog?.pins?.includes(msg.id) ? t('tracker.logUnpin') : t('tracker.logPin')}

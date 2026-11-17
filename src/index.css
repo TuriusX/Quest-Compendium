@@ -291,6 +291,11 @@ html.qc-pad .qc-pad-focus {
   z-index: 5;
 }
 html.qc-pad * { cursor: none !important; }
+/* Keyboard hints mean nothing on a controller (the prompt bar says what the buttons do). */
+html.qc-pad [data-qc-keyhints] { display: none !important; }
+/* The Ask box's small mouse buttons (screenshot, microphone, send): the controller has its own buttons for these, and
+   the prompt bar sits where they were. */
+html.qc-pad [data-qc-ask-tools] { visibility: hidden; }
 .qc-glyph {
   display: inline-flex;
   align-items: center;

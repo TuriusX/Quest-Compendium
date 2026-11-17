@@ -7,7 +7,9 @@
  *   D-pad / left stick  move between stops (src/utils/padStops.ts): each answer, the quick questions, the Ask bar, the
  *                       quest log's rows; A on an answer goes into it, B comes back out
  *   A  select (on the Ask bar: the keyboard)          B  back (closes dialogs, steps out of an answer; never hides the app)
- *   X  voice question (press again to send)          Y  quick questions (hold: ask out loud, immersive mode)
+ *   X  voice question (press again to send); on an answer: read it aloud
+ *   Y  quick questions (hold: ask out loud, immersive mode); on an answer: its Actions menu
+ *   A small prompt bar in the corner shows only the buttons that do something for what's selected (step 2).
  *   Menu  on-screen keyboard                         View  screenshot & ask (desktop)
  *   LB / RB  Ask, Guide, then the previous / next game   LT / RT  page through long answers   Right stick  scroll
  *   R3 (press the right stick)  switch Pro / Fast for the next question
@@ -259,7 +261,12 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
   const t = useT();
   const locale = useLocale();
   const [padMode, setPadMode] = useState(false);
-  const [panel, setPanel] = useState<null | 'questions' | 'keyboard'>(null);
+  const [panel, setPanel] = useState<null | 'questions' | 'keyboard' | 'actions'>(null);
+  // The Actions menu (Y on an answer): everything the mouse version offers for it, as one list.
+  const [actions, setActions] = useState<{ label: string; run: () => void }[]>([]);
+  const [aIndex, setAIndex] = useState(0);
+  // What the controller is on, for the prompt bar: 'ask' | 'quick' | 'answer' | 'card' | 'log' | 'other'.
+  const [kind, setKind] = useState('ask');
   const [qIndex, setQIndex] = useState(0);
   const [text, setText] = useState('');
   const [kb, setKb] = useState({ row: 1, col: 0, shift: false, symbols: false });
@@ -333,6 +340,15 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
   const setFocus = useCallback((el: HTMLElement | null) => {
     if (focusedRef.current) focusedRef.current.classList.remove('qc-pad-focus');
     focusedRef.current = el;
+    setKind(
+      !el ? 'other'
+        : el.matches('[data-qc-ask-input]') ? 'ask'
+        : el.matches('[data-pad-stop="quick"]') ? 'quick'
+        : el.matches('[data-pad-stop="answer"]') ? 'answer'
+        : cardRef.current && cardRef.current.contains(el) ? 'card'
+        : el.closest('[data-qc-log]') ? 'log'
+        : 'other',
+    );
     if (!el) return;
     el.classList.add('qc-pad-focus');
     el.focus({ preventScroll: true });
@@ -347,6 +363,33 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
     setKb({ row: 1, col: 0, shift: false, symbols: false });
     setPanel('keyboard');
   }, []);
+
+  /** The answer the controller is on (the answer itself, or a control inside it). */
+  const currentAnswer = (): HTMLElement | null => {
+    const el = (document.activeElement as HTMLElement | null) || focusedRef.current;
+    return (el?.closest?.('[data-pad-stop="answer"]') as HTMLElement | null) || null;
+  };
+  /**
+   * The Actions menu for an answer: its own buttons in order (read aloud, 👍 / 👎, pin, the markers' Show / Hide and
+   * Find again), then what its ⋯ menu holds (save to notes, copy, report), run without opening that menu.
+   */
+  const openActions = useCallback((answer: HTMLElement) => {
+    const items: { label: string; run: () => void }[] = [];
+    const seen = new Set<string>();
+    for (const el of Array.from(answer.querySelectorAll<HTMLElement>('[data-pad-action]'))) {
+      const label = (el.getAttribute('data-pad-label') || el.getAttribute('aria-label') || el.title || el.innerText || '').trim();
+      if (!label || seen.has(label)) continue;
+      seen.add(label);
+      items.push({ label, run: () => el.click() });
+    }
+    const id = answer.getAttribute('data-msg-id') || '';
+    for (const [action, key] of [['save', 'chat.saveTitle'], ['copy', 'chat.copy'], ['report', 'report.tooltip']] as const) {
+      items.push({ label: t(key), run: () => emit('qc-answer-action', { id, action }) });
+    }
+    setActions(items);
+    setAIndex(0);
+    setPanel('actions');
+  }, [t]);
 
   const typeText = useCallback((next: string) => {
     setText(next);
@@ -427,6 +470,18 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
         else if (b === 'down') setQIndex((i) => (i + 1) % questionLabels.length);
         else if (b === 'a') { emit('qc-ask', { text: questionLabels[qIndex], quick: quickIds[qIndex] }); setPanel(null); }
         else if (b === 'b' || b === 'y') setPanel(null);
+        return;
+      }
+
+      // --- Actions menu
+      if (panel === 'actions') {
+        if (b === 'up') setAIndex((i) => (i + actions.length - 1) % Math.max(1, actions.length));
+        else if (b === 'down') setAIndex((i) => (i + 1) % Math.max(1, actions.length));
+        else if (b === 'a') {
+          const item = actions[aIndex];
+          setPanel(null);
+          item?.run();
+        } else if (b === 'b' || b === 'y') setPanel(null);
         return;
       }
 
@@ -546,10 +601,19 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
         // Back: the open dialog closes. B never hides the app (hiding is the show / hide combo).
         closeTopDialog();
       } else if (b === 'x') {
-        emit('trigger-voice-record');
+        // On an answer: read it aloud (again: stop). Elsewhere: ask out loud.
+        const answer = scope === document.body ? currentAnswer() : null;
+        const read = answer?.querySelector<HTMLElement>('[data-pad-action="read"]');
+        if (read) read.click();
+        else emit('trigger-voice-record');
       } else if (b === 'y') {
-        setQIndex(0);
-        setPanel('questions');
+        // On an answer: its Actions menu. Elsewhere: the quick questions.
+        const answer = scope === document.body ? currentAnswer() : null;
+        if (answer) openActions(answer);
+        else {
+          setQIndex(0);
+          setPanel('questions');
+        }
       } else if (b === 'start') {
         openKeyboard();
       } else if (b === 'back') {
@@ -565,7 +629,7 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
         if (scope === document.body) emit('qc-toggle-answer-model');
       }
     },
-    [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus, logFocus],
+    [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus, logFocus, actions, aIndex, openActions],
   );
 
   // Desktop: system-level controller service. Falls back to the Gamepad API if it isn't available.
@@ -635,6 +699,24 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
         </div>
       )}
 
+      {panel === 'actions' && (
+        <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-[#0d0e15]/97 border border-[var(--accent-border)] shadow-2xl p-3 space-y-1" role="menu" aria-label={t('pad.actions')}>
+          <div className="px-1 pb-1 text-[10px] font-mono uppercase text-zinc-400">{t('pad.actions')}</div>
+          {actions.map((item, i) => (
+            <div
+              key={i}
+              role="menuitem"
+              aria-current={i === aIndex}
+              className={`px-3 py-2 rounded-xl text-sm border transition-colors ${
+                i === aIndex ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white' : 'border-transparent text-zinc-300'
+              }`}
+            >
+              {item.label}
+            </div>
+          ))}
+        </div>
+      )}
+
       {panel === 'keyboard' && (
         <div className="pointer-events-auto w-full max-w-xl rounded-2xl bg-[#0d0e15]/97 border border-[var(--accent-border)] shadow-2xl p-3 space-y-2" aria-label={t('pad.keyboard')}>
           <div className="px-3 py-2 rounded-xl bg-black/50 border border-white/10 text-sm text-white min-h-[40px] break-words" lang={locale}>
@@ -680,8 +762,8 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
         </div>
       )}
 
-      {/* Button hints */}
-      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 px-4 py-2 rounded-2xl bg-black/80 border border-white/10 text-[11px] font-medium text-zinc-200 shadow-lg">
+      {/* The prompt bar: only the buttons that do something for what's selected (step 2), in the corner. */}
+      <div className="self-end flex flex-wrap items-center justify-end gap-x-3 gap-y-1 px-3 py-1.5 rounded-xl bg-black/85 border border-white/10 text-[11px] font-medium text-zinc-200 shadow-lg">
         {panel === 'keyboard' ? (
           <>
             <Hint b="a" label={t('pad.type')} />
@@ -702,18 +784,38 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
             <Hint b="a" label={t('pad.logTick')} />
             <Hint b="b" label={t('pad.back')} />
           </>
+        ) : panel === 'actions' ? (
+          <>
+            <Hint b="a" label={t('pad.select')} />
+            <Hint b="b" label={t('common.close')} />
+          </>
+        ) : talking ? (
+          <Hint b={talkButton !== 'off' ? talkButton : 'x'} label={t('pad.listening')} />
+        ) : kind === 'ask' ? (
+          <>
+            <Hint b="a" label={t('pad.type')} />
+            <Hint b="x" label={t('pad.voice')} />
+            <Hint b="y" label={t('pad.questions')} />
+          </>
+        ) : kind === 'quick' ? (
+          <Hint b="a" label={t('pad.ask')} />
+        ) : kind === 'answer' ? (
+          <>
+            <Hint b="a" label={t('pad.open')} />
+            <Hint b="x" label={t('chat.readAloud')} />
+            <Hint b="y" label={t('pad.actions')} />
+            <Hint b="rt" label={t('pad.page')} />
+          </>
+        ) : kind === 'card' ? (
+          <>
+            <Hint b="a" label={t('pad.select')} />
+            <Hint b="y" label={t('pad.actions')} />
+            <Hint b="b" label={t('pad.back')} />
+          </>
         ) : (
           <>
             <Hint b="a" label={t('pad.select')} />
             <Hint b="b" label={t('pad.back')} />
-            <Hint b="x" label={t('pad.voice')} />
-            <Hint b="y" label={t('pad.questions')} />
-            {talkButton !== 'off' && <Hint b={talkButton} label={talking ? t('pad.listening') : t('pad.talk')} />}
-            <Hint b="menu" label={t('pad.keyboard')} />
-            <Hint b="lb" label={t(logAttached ? 'pad.askLogGuide' : 'pad.askGuide')} />
-            <Hint b="rt" label={t('pad.page')} />
-            <Hint b="view" label={t('pad.questLog')} />
-            <Hint b="ls" label={t('pad.shotAsk')} />
           </>
         )}
       </div>

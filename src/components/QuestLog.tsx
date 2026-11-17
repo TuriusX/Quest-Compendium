@@ -479,7 +479,7 @@ export function QuestLog(p: QuestLogProps) {
       </div>
 
       {/* The keys, one line. */}
-      <div className="flex flex-wrap gap-x-2.5 gap-y-1 px-3.5 py-2 border-t border-white/[0.07] bg-black/20 font-mono text-[10.5px] text-zinc-500">
+      <div data-qc-keyhints="" className="flex flex-wrap gap-x-2.5 gap-y-1 px-3.5 py-2 border-t border-white/[0.07] bg-black/20 font-mono text-[10.5px] text-zinc-500">
         <span><kbd className="qc-log-kbd">Space</kbd> {t('tracker.logKeyTick')}</span>
         <span><kbd className="qc-log-kbd">↑↓</kbd> {t('tracker.logKeyMove')}</span>
         <span><kbd className="qc-log-kbd">{p.keysLabel}</kbd> {t('tracker.logClose')}</span>

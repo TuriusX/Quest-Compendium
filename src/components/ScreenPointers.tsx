@@ -339,6 +339,8 @@ export function AnnotatedShot({
             <button
               type="button"
               onClick={active ? onHideAll : onShowAll}
+              data-pad-action="markers"
+              data-pad-label={`${active ? t('chat.hide') : t('chat.show')} · ${t(left === 1 ? 'chat.markers1' : 'chat.markersN', { n: left })}`}
               className="px-2 py-1 border-l border-white/10 text-[var(--accent-color)] hover:bg-white/10 cursor-pointer"
             >
               {active ? t('chat.hide') : t('chat.show')}
@@ -348,6 +350,8 @@ export function AnnotatedShot({
             <button
               type="button"
               onClick={onFindAgain}
+              data-pad-action="find-again"
+              data-pad-label={t('chat.findAgain')}
               title={t('chat.findAgainHint')}
               className="px-2 py-1 border-l border-white/10 text-[var(--accent-color)] hover:bg-white/10 cursor-pointer"
             >
