@@ -131,6 +131,8 @@ export interface ChatMessage {
   storyChosen?: string;
   /** Markers the close-up check removed because it couldn't see them on screen (shown as a note under the list). */
   removedMarkers?: string[];
+  /** The same markers with their spots on the screenshot (markers v2), so each is listed with its close-up. */
+  removedPoints?: ScreenPoint[];
   /** Desktop: the game screen no longer matched this answer's screenshot, so its markers couldn't be placed on it. */
   markersUnplaced?: boolean;
   /** Visual answers (Nov 14 2026): the video (with 2-3 alternatives) or picture found for this answer, after it arrived. */

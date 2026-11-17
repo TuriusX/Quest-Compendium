@@ -37,7 +37,7 @@ import {
   ThumbsDown,
   Pin,
 } from './icons';
-import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions, unmarkedLine } from './ScreenPointers';
+import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions, NotOnScreen } from './ScreenPointers';
 import { VisualCard, type VisualEvent } from './VisualCard';
 import { areaFindsFor, markersActiveFor } from './pointerStore';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
@@ -1616,6 +1616,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               lifetime={markerLifetime ?? 120}
                               onChangeLifetime={onChangeMarkerLifetime}
                               removed={msg.removedMarkers}
+                              removedPoints={msg.removedPoints}
                               unplaced={!!msg.markersUnplaced}
                               compact={compact}
                               referenced={compact ? markerMentions(msg.text, points) : undefined}
@@ -2025,7 +2026,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                   {/* Every marker was dropped by the close-up check: what they were and where, in words */}
                   {!isUser && msg.removedMarkers && msg.removedMarkers.length > 0 && !(msg.points && msg.points.length) && (
-                    <p className="mt-2 text-[11px] leading-snug text-zinc-400">{unmarkedLine(t, msg.removedMarkers)}</p>
+                    <NotOnScreen
+                      className="mt-2"
+                      points={msg.removedPoints}
+                      labels={msg.removedMarkers}
+                      imageUrl={(() => {
+                        // The screenshot this answer is about: the nearest earlier question that had one.
+                        for (let i = msgIndex - 1; i >= 0; i--) if (activeTab.messages[i].role === 'user') return activeTab.messages[i].imageUrl;
+                        return undefined;
+                      })()}
+                    />
                   )}
 
                   {/* TTS Error / Connection diagnostic notification if speech failed */}

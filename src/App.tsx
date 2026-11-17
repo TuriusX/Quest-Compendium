@@ -1958,7 +1958,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       updateMessageById(msgId, (m) => ({
         ...m,
         points: s.kept.length ? s.kept : undefined,
-        ...(s.removed.length ? { donePoints: s.done, removedMarkers: [...(m.removedMarkers || []), ...s.removedLabels] } : {}),
+        ...(s.removed.length ? { donePoints: s.done, removedMarkers: [...(m.removedMarkers || []), ...s.removedLabels], removedPoints: [...(m.removedPoints || []), ...s.removed.map((i) => points[i])] } : {}),
       }));
     } catch (e: any) {
       log(`precision pass skipped: ${e?.message ?? e}`);
@@ -2057,6 +2057,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           points: s.kept.length ? s.kept : undefined,
           donePoints: s.done,
           removedMarkers: [...(m.removedMarkers || []), ...s.removedLabels],
+          removedPoints: [...(m.removedPoints || []), ...s.removed.map((i) => points[i])],
         }));
       }
       const at = new Map(found.map((f) => [f.index, f]));

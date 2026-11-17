@@ -51,7 +51,7 @@ import { registerSiteAccount } from './siteAccount';
 import { registerSiteFix } from './siteFix';
 import { pingNewSignup } from './signupPing';
 import { STEPS_RULES, extractSteps, cleanObjective, objectiveRules, extractTicked } from './steps';
-import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
+import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, fixVagueLabel, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
 import { disagreeingEntries } from './src/utils/guideAgree';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
 import { MISSING_RULES, extractMissing, saveMissingFacts, notOnPage } from './missingFacts';
@@ -1370,6 +1370,7 @@ The <...> parts are placeholders: always write your own values. Never copy the p
 - Exits and doors are low priority: only mark one if it's clearly visible AND either the player asked how to leave or it's genuinely easy to miss. Markers go to items, secrets, people and hazards first. A normal door isn't worth a marker.
 - Top-down games: exits are often just a gap or a doormat at the bottom edge of the room, and the player's own character may be standing on or in front of it. Stairs, ladders and wall openings are not the exit unless you can see they lead out. If you're not sure where the exit is, don't mark it and don't name a specific spot in your answer; just say to leave the room and which way to go.
 - Labels: 1 to 4 words, in the player's language.
+- Every label says what the thing is. Never a label like "Loot this", "Open this", "Use this", "Proceed here" or "Click here": name it instead ("Open: Iron Chest", "Take the Rusty Key", "Path to the camp"). Moves on an exact spot ("Jump up here", "Shove this") are fine.
 - "where": a few words that pick out exactly which object it is among similar ones nearby (for example its position: lower-right of the three, second from the left), in the player's language.
 - Label each point with what the player cares about, not with what the object is: the item inside a container (not "Barrel" or "Chest"), the action to take ("Pull lever", "Save here"), or who it is ("Talk to <name>", only when the name is on screen or they're unmistakable: see below). Only fall back to naming the object when you don't know anything more useful about it.
 ${IDENTITY_RULES}
@@ -2453,10 +2454,18 @@ percentages:
               if (!combat && isTrivialMarker({ label, note, detail, category, missable: p?.missable === true })) continue;
               // "Climb here" when the answer says to jump: the label names the game's own action.
               const sharp = sharpenAction(named.label, cleaned);
+              // "Loot this", "Open this", "Proceed here": named from the marker's own note or "which one" ("Open: Iron
+              // chest"), or dropped when nothing says what it is (quests, keys, dangers and enemies keep theirs).
+              const fixed = fixVagueLabel({ label: sharp.text, note, where, category });
+              if (!fixed) {
+                console.log(`[markers] dropped a marker with a vague label: "${sharp.text}"`);
+                continue;
+              }
+              if (fixed.changed) console.log(`[markers] vague label "${sharp.text}" named "${fixed.label}"`);
               points.push({
                 x: Math.round(x) / 1000,
                 y: Math.round(y) / 1000,
-                label: sharp.text.slice(0, 40),
+                label: fixed.label.slice(0, 40),
                 ...(where ? { where } : {}),
                 ...(MARKER_CATEGORIES.has(category) ? { category } : {}),
                 ...(note ? { note } : {}),

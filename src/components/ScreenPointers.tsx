@@ -3,7 +3,7 @@
  * checkbox (checked = collected, and its marker leaves the screen), Show all / Hide all, what the app is watching
  * for as you walk, and what's elsewhere nearby. Numbered checkboxes also appear inside the answer text.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BookOpen, ChevronDown, FlaskConical, Gem, Hand, KeyRound, MapPin, ScrollText, Shield, Skull, Sparkles, Sword, TriangleAlert, User } from 'lucide-react';
 import type { NearbyItem, ScreenPoint } from '../types';
 import { useT } from '../i18n';
@@ -63,6 +63,75 @@ export function unmarkedLine(t: (key: string, vars?: Record<string, string | num
   return t('chat.unmarked', { list: items.join('; ') });
 }
 
+/** Screenshot shapes (width / height), so each close-up doesn't load the picture again. */
+const aspects = new Map<string, number>();
+
+/**
+ * What a marked thing looks like (markers v2): a square close-up of the answer's screenshot around it, drawn from the
+ * screenshot already in the chat (nothing extra is fetched or stored). The square is 12% of the screenshot's width.
+ */
+export function CloseUp({ src, x, y, size = 52, label }: { src: string; x: number; y: number; size?: number; label: string }) {
+  const [aspect, setAspect] = useState<number | null>(aspects.get(src) ?? null);
+  useEffect(() => {
+    if (aspect) return;
+    let live = true;
+    const img = new Image();
+    img.onload = () => {
+      if (!img.naturalWidth || !img.naturalHeight) return;
+      const a = img.naturalWidth / img.naturalHeight;
+      aspects.set(src, a);
+      if (live) setAspect(a);
+    };
+    img.src = src;
+    return () => {
+      live = false;
+    };
+  }, [src, aspect]);
+  const box = { width: size, height: size };
+  if (!aspect) return <span className="block flex-shrink-0 rounded-md bg-white/[0.06] border border-white/10" style={box} aria-hidden="true" />;
+  const side = Math.min(0.12, 0.3 / aspect); // of the width
+  const bgW = size / side;
+  const bgH = bgW / aspect;
+  const left = Math.max(0, Math.min(bgW - size, x * bgW - size / 2));
+  const top = Math.max(0, Math.min(bgH - size, y * bgH - size / 2));
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      className="block flex-shrink-0 rounded-md border border-white/15 bg-black"
+      style={{ ...box, backgroundImage: `url("${src}")`, backgroundSize: `${bgW}px ${bgH}px`, backgroundPosition: `${-left}px ${-top}px`, backgroundRepeat: 'no-repeat' }}
+    />
+  );
+}
+
+/**
+ * Marked things that aren't on screen right now, each with its close-up from the screenshot and where to look, so the
+ * player knows what they're looking for (markers v2). Without the screenshot: the line in words, as before.
+ */
+export function NotOnScreen({ points, labels, imageUrl, className = '' }: { points?: ScreenPoint[]; labels?: string[]; imageUrl?: string; className?: string }) {
+  const t = useT();
+  if (points?.length && imageUrl) {
+    return (
+      <div className={className}>
+        <p className="text-[11px] leading-snug text-zinc-400">{t('chat.notOnScreen')}</p>
+        <ul className="mt-1.5 space-y-1.5">
+          {points.map((p, i) => (
+            <li key={i} className="flex items-center gap-2.5">
+              <CloseUp src={imageUrl} x={p.x} y={p.y} label={p.label} />
+              <span className="min-w-0">
+                <span className="block text-[12.5px] text-zinc-200 font-medium">{p.label}</span>
+                {(p.where || p.note) && <span className="block text-[11.5px] leading-snug text-zinc-500">{p.where || p.note}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  if (!labels?.length) return null;
+  return <p className={`text-[11px] leading-snug text-zinc-400 ${className}`}>{unmarkedLine(t, labels)}</p>;
+}
+
 export function markerMentions(text: string, points: ScreenPoint[]): Set<number> {
   const found = new Set<number>();
   for (const m of withMarkerBadges(text, points).matchAll(/\]\(#qc-marker-(\d+)\)/g)) found.add(Number(m[1]) - 1);
@@ -101,6 +170,7 @@ export function AnnotatedShot({
   onChangeLifetime,
   onHighlight,
   removed,
+  removedPoints,
   compact = false,
   referenced,
   onTrack,
@@ -121,6 +191,8 @@ export function AnnotatedShot({
   onHighlight?: (index: number | null) => void;
   /** Markers the close-up check removed because it couldn't see them. */
   removed?: string[];
+  /** The same markers with where they were on the screenshot (markers v2): listed with their close-ups. */
+  removedPoints?: ScreenPoint[];
   /** Desktop: a compact footer after the answer (markers are on screen and checkboxes are in the text). */
   compact?: boolean;
   /** With compact: markers the answer text already mentions; only the others get listed. */
@@ -201,6 +273,7 @@ export function AnnotatedShot({
                   aria-label={t('chat.markDone', { label: p.label })}
                 />
                 <span className="qc-pt-num flex-shrink-0 mt-0.5">{i + 1}</span>
+                {imageUrl && !p.fromArea && <CloseUp src={imageUrl} x={p.x} y={p.y} label={p.label} />}
                 <button
                   type="button"
                   onClick={p.detail ? toggleOpen : () => onToggle(i)}
@@ -229,8 +302,8 @@ export function AnnotatedShot({
   );
   const extra = (
     <>
-      {removed && removed.length > 0 && (
-        <p className="mt-2 text-[11px] leading-snug text-zinc-500">{unmarkedLine(t, removed)}</p>
+      {((removedPoints && removedPoints.length > 0) || (removed && removed.length > 0)) && (
+        <NotOnScreen className="mt-2" points={removedPoints} labels={removed} imageUrl={imageUrl} />
       )}
       {watching.length > 0 && (
         <p className="text-[11px] text-zinc-400 leading-relaxed">

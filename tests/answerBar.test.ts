@@ -1,6 +1,6 @@
 // Run: npm run test:sync   (or: npx tsx tests/answerBar.test.ts)
 import assert from "node:assert/strict";
-import { isTrivialMarker, isFillerStep, WORTH_POINTING_OUT } from "../answerBar";
+import { isTrivialMarker, isFillerStep, WORTH_POINTING_OUT, fixVagueLabel } from "../answerBar";
 import { extractSteps, STEPS_RULES } from "../steps";
 
 let passed = 0;
@@ -68,6 +68,20 @@ test("the prompt carries the bar for markers and steps (0 to 3 normal, 0 is fine
   assert.match(WORTH_POINTING_OUT, /0 to 3 is normal, and 0 is fine/);
   assert.match(WORTH_POINTING_OUT, /corpse right in front of the\s+player holding minor supplies and gold/);
   assert.ok(STEPS_RULES.includes(WORTH_POINTING_OUT));
+});
+
+// Vague marker labels (markers v2): named from the marker's own words, else dropped (quests, keys, dangers, enemies kept).
+test("vague labels get a name or go", () => {
+  assert.deepEqual(fixVagueLabel({ label: "Loot this", where: "the iron chest left of the door" }), { label: "Loot: Iron chest", changed: true });
+  assert.deepEqual(fixVagueLabel({ label: "Open this", note: "Ornate Chest: holds a rare ring" }), { label: "Open: Ornate Chest", changed: true });
+  assert.equal(fixVagueLabel({ label: "Proceed here", where: "the gap in the wooden fence at the bottom" })?.label, "Proceed: Gap in the wooden fence");
+  assert.equal(fixVagueLabel({ label: "This", where: "the lever on the wall" })?.label, "Lever");
+  assert.equal(fixVagueLabel({ label: "Talk to him", where: "the merchant in the red hat" })?.label, "Talk to: Merchant in the red hat");
+  assert.equal(fixVagueLabel({ label: "Click here", category: "consumable" }), null, "nothing says what it is");
+  assert.deepEqual(fixVagueLabel({ label: "Use this", category: "key" }), { label: "Use this", changed: false }, "a key keeps its marker");
+  for (const label of ["Jump up here", "Shove this", "Search these", "Iron Chest", "Pull lever", "Talk to Withers"]) {
+    assert.deepEqual(fixVagueLabel({ label, where: "somewhere" }), { label, changed: false }, label);
+  }
 });
 
 console.log(`\n${passed} tests passed`);

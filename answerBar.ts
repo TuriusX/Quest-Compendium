@@ -68,6 +68,47 @@ export function sharpenAction(text: string, answerText: string): { text: string;
 }
 
 /**
+ * Vague marker labels (markers v2, Nov 2026): "Loot this", "Open this", "Proceed here", "Click here" say nothing about
+ * what the thing is, and the precision check removed several of them because it couldn't tell what to look for either.
+ * A verb (or nothing) plus "this/here/it": the label needs a name. Moves the instructions ask for ("Jump up here",
+ * "Shove this", "Throw at this") aren't listed: the marker sits on the exact spot, which is the point.
+ */
+const VAGUE_LABEL = /^(?:(?:loot|open|use|search|check|take|grab|pick up|collect|get|interact(?: with)?|click(?: on)?|tap|press|activate|examine|inspect|look at|read|go|proceed|head|move|walk|run|enter|exit|leave|talk to|speak to|this|here|there)(?:\s+(?:this|that|it|him|her|them|here|there|these|those|one|spot|item|thing|object|area|now))?|(?:this|that) (?:one|thing|spot|item|object))\s*[.!]*$/i;
+const NAME_STOP = /\s+(?:on|at|by|near|next to|beside|behind|under|underneath|above|below|left of|right of|to the|of the \w+ (?:side|edge|corner)|along|against|inside|outside|from|with|that|which|where|,|;|\()\b.*$/i;
+const KEEP_UNNAMED = new Set(['quest', 'key', 'danger', 'enemy']);
+
+/** A short name for a marked thing from the marker's own words: the note's lead before a colon, else its "which one". */
+function nameFrom(note: string, where: string): string {
+  const clean = (s: string) =>
+    s.replace(/^(?:the|a|an|this|that|your)\s+/i, '').replace(NAME_STOP, '').replace(/[.:;,!]+$/, '').replace(/\s+/g, ' ').trim();
+  const ok = (s: string) => s.length >= 3 && s.split(' ').length <= 5 && !VAGUE_LABEL.test(s) && !/^(?:it|one|spot|thing|item|here|there)$/i.test(s);
+  const lead = String(note || '').match(/^([^:]{3,40}):/);
+  if (lead && ok(clean(lead[1]))) return clean(lead[1]);
+  const w = clean(String(where || ''));
+  return ok(w) ? w : '';
+}
+
+/**
+ * A vague label made specific: "Open this" with where "the iron chest left of the door" becomes "Open: Iron chest".
+ * Returns the label to use, the same label when it wasn't vague, or null when nothing says what it is (drop the
+ * marker), unless it's a quest, key, danger or enemy (those keep their label: better a vague marker than none).
+ */
+export function fixVagueLabel(p: { label: string; note?: string; where?: string; category?: string }): { label: string; changed: boolean } | null {
+  const label = String(p.label || '').trim();
+  // "Search these" is the instructions' own label for a group (the note names what's in one of them).
+  if (!VAGUE_LABEL.test(label) || /^search these$/i.test(label)) return { label, changed: false };
+  const name = nameFrom(p.note || '', p.where || '');
+  if (name) {
+    const verb = label.replace(/\s+(?:this|that|it|him|her|them|here|there|these|those|one|spot|item|thing|object|area|now)\s*[.!]*$/i, '').replace(/[.!]+$/, '').trim();
+    const bare = /^(?:this|here|there|that)$/i.test(verb) || /^(?:this|that) /i.test(verb);
+    const named = name.charAt(0).toUpperCase() + name.slice(1);
+    return { label: (bare ? named : `${verb.charAt(0).toUpperCase()}${verb.slice(1).toLowerCase()}: ${named}`).slice(0, 40), changed: true };
+  }
+  if (p.category && KEEP_UNNAMED.has(p.category)) return { label, changed: false };
+  return null;
+}
+
+/**
  * Who or what a marker names. A specific name only when it's on screen or unmistakable: a marker named "Talk to
  * Nettie" on a druid who was really Loic (no name on screen, just an assumption) sends the player to the wrong person.
  */
