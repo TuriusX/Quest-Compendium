@@ -1707,7 +1707,7 @@ async function captureForLocate(session) {
     if (win && !win.isDestroyed()) win.setContentProtection(true);
     if (trackerHidden) await new Promise((resolve) => setTimeout(resolve, 80));
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1280, height: 720 } });
-    const source = sources.find((s) => s.id === session.sourceId) || sources[0];
+    const source = sources.find((s) => s.id === session.sourceId) || (session.sameScreenOnly ? null : sources[0]);
     if (!source || !source.thumbnail || source.thumbnail.isEmpty()) return null;
     return 'data:image/jpeg;base64,' + source.thumbnail.toJPEG(75).toString('base64');
   } catch (err) {
@@ -1718,6 +1718,14 @@ async function captureForLocate(session) {
     showLogsAfterCapture();
   }
 }
+
+// Markers v2: a fresh picture of the screen the question's screenshot came from, taken when the answer arrives, so the
+// markers are found on the screen as it is now (the screenshot is ~20 s old by then). Markers already showing and the
+// objectives tracker are kept out of it. Null when that screen can't be captured (the app then uses the screenshot).
+ipcMain.handle('capture-screen-now', async () => {
+  if (!lastCaptureSourceId) return null;
+  return captureForLocate({ win: pointerWindow, sourceId: lastCaptureSourceId, sameScreenOnly: true });
+});
 
 // The marker page says the player walked far enough: look for the answer's nearby items (free, rate-limited).
 ipcMain.on('pointers-moved', async (event, occupied) => {

@@ -21,7 +21,7 @@ import { registerEmailSignIn, freePoolKeys, isDisposable, poolLeft } from './ema
 import { cleanTag, recordSignupSource, recordVisit } from './visitSources';
 import { recordGroundingMiss, registerBlueprints } from './blueprints';
 import { registerWebSearch } from './webSearch';
-import { registerLocate, registerRefine } from './locate';
+import { registerLocate, registerRefine, registerRefind } from './locate';
 import { registerVisualAnswers, answerVisual, visualAnswersOn, visualEvent } from './visualServer';
 import { registerLocateMe, readPlaceOnScreen, areaForSeenText } from './locateMe';
 import { registerWorthRoutes, areaRef as worthAreaRef, worthTicket, topUpFromAnswer, ASKS_WHATS_WORTH } from './worthOnDemand';
@@ -563,6 +563,8 @@ async function startServer() {
   registerLocateMe(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST, updateUserDoc: updateFirestoreDocREST, loadGuide: guideAreasWithPages });
   registerSpot(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST });
   registerRefine(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed, onChecked: (game, checked, kept, details) => void recordMarkerCheck(game, checked, kept, details) });
+  // Markers v2: find the marked things on the screen as it is when the answer arrives (desktop).
+  registerRefind(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed, onChecked: (game, checked, kept, details) => void recordMarkerCheck(game, checked, kept, details) });
   // Visual answers (owner, Nov 14 2026): one video or picture under an answer, after it arrives. Off unless VISUAL_ANSWERS=1.
   registerVisualAnswers(app, { requireAuth, getGeminiClient: getGeminiClient as any, log: (label, model, res) => logUsage(label, model, res), guideKeyFor: (game) => guideKeyFor(game) });
 

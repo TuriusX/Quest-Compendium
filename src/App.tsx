@@ -1967,6 +1967,110 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     }
   };
 
+  /** A close-up (384 px square) around each marked spot of the question's screenshot: what each thing looked like. */
+  const closeUps = async (image: string, points: { x: number; y: number }[]): Promise<string[] | null> => {
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = image;
+      });
+      const W = img.naturalWidth;
+      const H = img.naturalHeight;
+      const side = Math.round(Math.min(W * 0.3, H * 0.7));
+      const canvas = document.createElement('canvas');
+      canvas.width = 384;
+      canvas.height = 384;
+      const ctx = canvas.getContext('2d');
+      if (!ctx || side < 40) return null;
+      ctx.imageSmoothingEnabled = false; // keep pixel art crisp
+      return points.map((p) => {
+        const x0 = Math.max(0, Math.min(W - side, Math.round(p.x * W - side / 2)));
+        const y0 = Math.max(0, Math.min(H - side, Math.round(p.y * H - side / 2)));
+        ctx.drawImage(img, x0, y0, side, side, 0, 0, 384, 384);
+        return canvas.toDataURL('image/jpeg', 0.85);
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * Markers v2 (Nov 2026): the answer arrives ~20 s after its screenshot, and in a 3D game the camera has moved by then.
+   * So take a fresh picture of the screen and find each marked thing on it (/api/refind, with a close-up of each from the
+   * screenshot); the markers are tracked from that picture. Things not on screen now are listed under the answer
+   * instead. Replaces the close-up check on desktop; if anything fails, the markers go up the old way (screenshot + check).
+   */
+  const markerRunRef = useRef('');
+  const placeMarkersNow = async (msgId: string, image: string, points: ScreenPoint[], accent: string, opts: { combat: boolean; watchNearby: boolean }, game: string, token: string | null) => {
+    const api = (window as any).electronAPI;
+    const log = (m: string) => api?.markerLog?.(m);
+    markerRunRef.current = msgId;
+    const fallback = (why: string) => {
+      if (markerRunRef.current !== msgId) return;
+      log(`placing markers on the screen now failed (${why}): using the screenshot`);
+      api?.showScreenPointers?.(withGuideNote(points), accent, { refImage: image, sessionId: msgId, hidden: [], watchNearby: opts.watchNearby, combat: opts.combat, checking: true });
+      void refineMarkers(msgId, image, points, game, token);
+    };
+    try {
+      const t0 = performance.now();
+      const [screen, crops] = await Promise.all([api.captureScreenNow().catch(() => null), closeUps(image, points)]);
+      if (!screen || !crops) return fallback(!screen ? 'no fresh picture' : 'no close-ups');
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      let res: Response;
+      try {
+        res = await fetch(`${getApiBaseUrl()}/api/refind`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({
+            image: screen,
+            items: points.map((p, i) => ({ crop: crops[i], label: p.label, where: p.where || '', category: p.category, ...(p.guideId ? { guide: true } : {}) })),
+            game,
+            client: 'desktop',
+            appVersion: APP_VERSION,
+          }),
+          signal: ctrl.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      if (!res.ok) return fallback(`server ${res.status}`);
+      const data = await res.json();
+      if (markerRunRef.current !== msgId) return; // a newer answer's markers have taken over
+      const found = (Array.isArray(data.found) ? data.found : []).filter(
+        (f: any) => Number.isInteger(f?.index) && f.index >= 0 && f.index < points.length && Number.isFinite(f.x) && Number.isFinite(f.y),
+      ) as CheckFound[];
+      const checked = Number.isInteger(data.checked) ? Math.min(data.checked, points.length) : points.length;
+      // The answer's list keeps the screenshot's positions (they're drawn on it); only the overlay uses the fresh ones.
+      const s = settleCheck(
+        points,
+        found.map((f) => ({ index: f.index, x: points[f.index].x, y: points[f.index].y })),
+        checked,
+        tabsRef.current.flatMap((t) => t.messages).find((m) => m.id === msgId)?.donePoints ?? [],
+      );
+      log(`placed on the screen now: ${found.length} of ${points.length} found in ${Math.round(performance.now() - t0)} ms`);
+      if (s.removed.length) {
+        updateMessageById(msgId, (m) => ({
+          ...m,
+          points: s.kept.length ? s.kept : undefined,
+          donePoints: s.done,
+          removedMarkers: [...(m.removedMarkers || []), ...s.removedLabels],
+        }));
+      }
+      const at = new Map(found.map((f) => [f.index, f]));
+      const onScreen = points
+        .map((p, i) => ({ p, f: at.get(i), i }))
+        .filter(({ i }) => !s.removed.includes(i))
+        .map(({ p, f }) => (f ? { ...p, x: f.x, y: f.y } : p));
+      if (!onScreen.length) return;
+      api?.showScreenPointers?.(withGuideNote(onScreen), accent, { refImage: screen, sessionId: msgId, hidden: [], watchNearby: opts.watchNearby, combat: opts.combat });
+    } catch (e: any) {
+      fallback(e?.name === 'AbortError' ? 'timed out' : String(e?.message ?? e));
+    }
+  };
+
   // On-screen markers: know which answer's markers are showing, and run area checks for nearby items.
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
@@ -2794,8 +2898,13 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         timestamp: nowAi
       };
 
-      // Desktop: show the AI's pointers right on top of the game.
-      if (aiMessage.points && settings.showPointersOnScreen !== false) {
+      // Desktop: show the AI's pointers right on top of the game, found on the screen as it is now (markers v2).
+      const markerGame = activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '';
+      const placeNow = !!(aiMessage.points?.length && imageBase64 && settings.showPointersOnScreen !== false && (window as any).electronAPI?.captureScreenNow);
+      if (placeNow) {
+        const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+        void placeMarkersNow(aiMessage.id, imageBase64!, aiMessage.points!, accent, { combat: !!aiMessage.combat, watchNearby: !!aiMessage.nearby?.length }, markerGame, token);
+      } else if (aiMessage.points && settings.showPointersOnScreen !== false) {
         const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
         // The screenshot this answer is about is the reference the markers track against.
         (window as any).electronAPI?.showScreenPointers?.(withGuideNote(aiMessage.points), accent, {
@@ -2812,8 +2921,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         hideCombatMarkers();
       }
       // Precision pass: zoom in on each marked spot so markers land on the exact object (free, rate-limited).
-      if (aiMessage.points?.length && imageBase64 && settings.showPointersOnScreen !== false) {
-        refineMarkers(aiMessage.id, imageBase64, aiMessage.points, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token);
+      // (Desktop: placeMarkersNow above does this job on the screen now.)
+      if (!placeNow && aiMessage.points?.length && imageBase64 && settings.showPointersOnScreen !== false) {
+        refineMarkers(aiMessage.id, imageBase64, aiMessage.points, markerGame, token);
       }
       // A video or picture under the answer, if one helps (after the answer, never instead of it).
       // A screenshot or voice message with no typed question gets one too (owner, Nov 14 2026): its question is the app's

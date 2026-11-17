@@ -72,6 +72,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // On-screen pointers (markers drawn over the game)
   showScreenPointers: (points, accent, opts) => ipcRenderer.invoke('show-screen-pointers', { points, accent, opts }),
   hideScreenPointers: () => ipcRenderer.send('hide-screen-pointers'),
+  // Markers v2: a fresh picture of the game's screen when the answer arrives (null if it can't be taken).
+  captureScreenNow: () => ipcRenderer.invoke('capture-screen-now'),
   // The objectives tracker drawn over the game (electron/tracker.cjs).
   showObjectivesTracker: (data, gameKey) => ipcRenderer.invoke('tracker-show', { data, gameKey }),
   updateObjectivesTracker: (patch, gameKey) => ipcRenderer.send('tracker-update', { data: patch, gameKey }),

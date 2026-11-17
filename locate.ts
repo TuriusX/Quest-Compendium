@@ -11,11 +11,18 @@
  * spot, with the AI's own description of which object it is ("lower-right barrel of the three"), and gets back the
  * exact spot inside each crop. Tiny objects in a scaled-down screenshot are easy to miss by one; close-ups aren't.
  *
+ * And POST /api/refind (markers v2, Nov 2026): answers arrive about 20 s after their screenshot, so the screen has
+ * usually moved on (in a 3D game the camera has turned). The desktop app takes a fresh picture when the answer arrives
+ * and sends it with a close-up of each marked thing from the question's screenshot; this finds each thing on the
+ * screen as it is now. Tested on 51 objects after a big camera move: 50 right with close-ups (61% by lining up the old
+ * screenshot), and things that had left the screen were marked anyway 1 time in 8. Replaces /api/refine on desktop.
+ *
  * Free: these never use the player's Pro/Flash questions. Limited instead (each endpoint separately):
  *   LOCATE_PER_USER_HOURLY (60), LOCATE_PER_GUEST_HOURLY (60), LOCATE_GLOBAL_DAILY (10000), LOCATE_MODEL (gemini-3.8-flash)
  */
 import type { Express, NextFunction, Request, Response } from 'express';
 import { ThinkingLevel, type GoogleGenAI } from '@google/genai';
+import sharp from 'sharp';
 import { clientIp } from './guestGuard';
 import { logUsage } from './usage';
 
@@ -33,8 +40,8 @@ export interface LocateDeps {
   onChecked?: (game: string, checked: number, kept: number, details?: MarkerCheckDetail[]) => void;
 }
 
-/** What the close-up check made of one marker. */
-export type MarkerOutcome = 'kept' | 'moved' | 'not there' | 'no person';
+/** What the close-up check made of one marker ('off screen': finding it on the screen now didn't see it, /api/refind). */
+export type MarkerOutcome = 'kept' | 'moved' | 'not there' | 'no person' | 'off screen';
 export interface MarkerCheckDetail {
   label: string;
   category: string;
@@ -328,6 +335,193 @@ export function registerRefine(app: Express, deps: LocateDeps): void {
     } catch (err: any) {
       console.warn('[refine] failed:', err?.message);
       return res.status(502).json({ error: 'Could not refine the markers.', found: [] });
+    }
+  });
+}
+
+/** One marked thing to find again: a close-up of it from the question's screenshot plus the answer's words for it. */
+export interface RefindItem {
+  crop: string;
+  label: string;
+  where: string;
+  category: string;
+  guide: boolean;
+}
+
+/** The instructions for finding the marked things on the screen now (as tested in the Nov 17 2026 3D test). */
+export function refindPrompt(items: { label: string; where: string; category: string }[], game: string): string {
+  const list = items.map((c, i) => `${i}. ${c.label}${c.where ? ` (${c.where})` : ''}${c.category ? ` [kind: ${c.category}]` : ''}`).join('\n');
+  return (
+    `The first image is the screen of the video game${game ? ` ${game}` : ''} right now. The camera may have moved since these ` +
+    `things were pointed out. Find each of them on the screen now:\n${list}\n` +
+    'Each close-up shows what that thing looked like a few seconds earlier (it is in the centre of its close-up): find that ' +
+    'same object on the screen now, not a similar one. If a description is a group of objects (for example "Search these"), ' +
+    'give the centre of the whole group. Big things (a large monster, a building) count when part of them is on screen.\n' +
+    'Reply with JSON only: an array of {"i": number, "y": 0-1000 from the top, "x": 0-1000 from the left} for the centre of ' +
+    'each one you can actually see now. Leave out any that are no longer on screen. If you are not sure, leave it out.'
+  );
+}
+
+/** Each item's outcome: found (kept), not found ('off screen'), or found where the blind look saw no one ('no person'). */
+export function refindOutcomes(count: number, found: { index: number }[], noOne: Set<number>): MarkerOutcome[] {
+  return Array.from({ length: count }, (_, i) => (!found.some((f) => f.index === i) ? 'off screen' : noOne.has(i) ? 'no person' : 'kept'));
+}
+
+/** A rate limiter per player (or guest IP) per hour plus a global daily count, like the other marker endpoints. */
+function makeLimiter(env: Record<string, string | undefined>, now: () => number) {
+  const perUserHourly = envNum(env.LOCATE_PER_USER_HOURLY, 60);
+  const perGuestHourly = envNum(env.LOCATE_PER_GUEST_HOURLY, 60);
+  const globalDaily = envNum(env.LOCATE_GLOBAL_DAILY, 10000);
+  const proxyHops = envNum(env.GUEST_PROXY_HOPS, 1);
+  const hourly = new Map<string, { n: number; reset: number }>();
+  let global = { day: '', n: 0 };
+  setInterval(() => {
+    const t = now();
+    for (const [k, v] of hourly) if (t >= v.reset) hourly.delete(k);
+  }, 60_000).unref();
+  return (req: Request): boolean => {
+    const user = (req as any).user ?? {};
+    const uid = String(user.uid ?? '');
+    const isGuest = !!user.isGuest || uid.startsWith('guest_');
+    const key = isGuest ? `ip:${clientIp(req, proxyHops)}` : `uid:${uid}`;
+    const t = now();
+    const day = new Date(t).toISOString().slice(0, 10);
+    if (global.day !== day) global = { day, n: 0 };
+    let w = hourly.get(key);
+    if (!w || t >= w.reset) {
+      w = { n: 0, reset: t + 60 * 60 * 1000 };
+      hourly.set(key, w);
+    }
+    if (w.n >= (isGuest ? perGuestHourly : perUserHourly) || global.n >= globalDaily) return false;
+    w.n++;
+    global.n++;
+    return true;
+  };
+}
+
+/** The blind look's question: is a character really in the middle of each close-up? */
+const BLIND_PROMPT = (game: string) =>
+  `Each image is a close-up from a video game screenshot${game ? ` (${game})` : ''}. For each, look at what is in the ` +
+  'middle of the image and reply with JSON only: an array of {"i": image number, "what": "3 to 6 words", ' +
+  '"character": true or false}. "character" is true only if a person, creature or enemy sprite is clearly there, ' +
+  'with a visible head and body, or clearly part of a large creature (a close-up may only show part of a big monster). ' +
+  'Furniture (chairs, tables, beds), statues, plants, objects, empty floor and walls are false. Describe only what you see.';
+
+/**
+ * Find the marked things on the screen now: POST /api/refind
+ *   { image: fresh screen (data URL), items: [{ crop, label, where, category, guide }], game?, client?, appVersion? }
+ *   -> { found: [{ index, x, y }] (0-1 of the fresh screen), checked }
+ * Things it can't see now are left out (the app lists them as not on screen). People and enemies get the blind
+ * "is someone really there" look, on a close-up of the fresh screen around where they were found.
+ */
+export function registerRefind(app: Express, deps: LocateDeps): void {
+  const env = deps.env ?? process.env;
+  const model = env.LOCATE_MODEL || 'gemini-3.8-flash';
+  const allow = makeLimiter(env, deps.now ?? Date.now);
+
+  app.post('/api/refind', deps.requireAuth as any, async (req: Request, res: Response) => {
+    if (deps.allowed && !(await deps.allowed(req))) return res.status(403).json({ error: 'Part of Premium.', premiumRequired: true, found: [] });
+    const screen = String(req.body?.image ?? '');
+    const sm = screen.match(DATA_URL_RE);
+    if (!sm || screen.length > MAX_IMAGE_CHARS) return res.status(400).json({ error: 'A screenshot is required.', found: [] });
+    const items: RefindItem[] = (Array.isArray(req.body?.items) ? req.body.items : [])
+      .slice(0, REFINE_MAX_CROPS)
+      .map((c: any) => ({
+        crop: String(c?.crop ?? ''),
+        label: String(c?.label ?? '').trim().slice(0, 40),
+        where: String(c?.where ?? '').trim().slice(0, 100),
+        category: /^[a-z]{2,12}$/.test(String(c?.category ?? '')) ? String(c.category) : '',
+        guide: c?.guide === true,
+      }));
+    if (!items.length) return res.json({ found: [], checked: 0 });
+    // Indexes are the answer's marker numbers, so a bad item can't just be dropped (the rest would shift): refuse, and
+    // the app falls back to the screenshot.
+    if (!items.every((c) => c.label && DATA_URL_RE.test(c.crop) && c.crop.length <= MAX_IMAGE_CHARS)) {
+      return res.status(400).json({ error: 'Each marker needs a label and a close-up.', found: [] });
+    }
+    const client = /^(desktop|web|deck)$/.test(String(req.body?.client ?? '')) ? String(req.body.client) : 'desktop';
+    const appVersion = String(req.body?.appVersion ?? '').replace(/[^0-9A-Za-z.+-]/g, '').slice(0, 24);
+    if (!allow(req)) return res.status(429).json({ error: 'Marker checks are paused for a bit.', found: [] });
+
+    const game = String(req.body?.game ?? '').trim().slice(0, 120);
+    const parts: any[] = [{ text: 'The screen now:' }, { inlineData: { mimeType: sm[1], data: sm[2] } }];
+    items.forEach((c, i) => {
+      const m = c.crop.match(DATA_URL_RE)!;
+      parts.push({ text: `Close-up ${i}, from a screenshot taken a few seconds earlier (the thing is in its centre):` });
+      parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+    });
+    parts.push({ text: refindPrompt(items, game) });
+    try {
+      const ai = deps.getGeminiClient();
+      const response: any = await Promise.race([
+        ai.models.generateContent({
+          model,
+          contents: [{ role: 'user', parts }],
+          config: { responseMimeType: 'application/json', temperature: 0.1, thinkingConfig: LOCATE_THINKING },
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
+      ]);
+      logUsage('refind', model, response);
+      let found = parseLocateReply(response?.text ?? '', items.length);
+      const firstLook = found;
+      const noOne = new Set<number>();
+
+      // The blind look at people and enemies, on the screen now: a close-up around where each was found, asked cold
+      // whether a character is there (told what to expect, a model sees "an old man" in an empty chair).
+      const people = found.filter((f) => items[f.index].category === 'character' || items[f.index].category === 'enemy');
+      if (people.length) {
+        try {
+          const buf = Buffer.from(sm[2], 'base64');
+          const meta = await sharp(buf).metadata();
+          const W = meta.width || 0;
+          const H = meta.height || 0;
+          const side = Math.round(Math.min(W * 0.3, H * 0.7));
+          if (side >= 40) {
+            const blindParts: any[] = [];
+            for (const [k, f] of people.entries()) {
+              const left = Math.max(0, Math.min(W - side, Math.round(f.x * W - side / 2)));
+              const top = Math.max(0, Math.min(H - side, Math.round(f.y * H - side / 2)));
+              const crop = await sharp(buf).extract({ left, top, width: side, height: side }).resize(384, 384).jpeg({ quality: 85 }).toBuffer();
+              blindParts.push({ text: `Image ${k}:` });
+              blindParts.push({ inlineData: { mimeType: 'image/jpeg', data: crop.toString('base64') } });
+            }
+            blindParts.push({ text: BLIND_PROMPT(game) });
+            const blind: any = await Promise.race([
+              ai.models.generateContent({
+                model,
+                contents: [{ role: 'user', parts: blindParts }],
+                config: { responseMimeType: 'application/json', temperature: 0, thinkingConfig: LOCATE_THINKING },
+              }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+            ]);
+            logUsage('refind-people', model, blind);
+            const rows = JSON.parse(String(blind?.text ?? '[]').replace(/```json|```/g, '').trim());
+            if (Array.isArray(rows)) {
+              for (const r of rows) {
+                const k = Number(r?.i);
+                if (Number.isInteger(k) && people[k] && r?.character === false) {
+                  noOne.add(people[k].index);
+                  console.log(`[refind] no character at "${items[people[k].index].label}": ${String(r?.what ?? '').slice(0, 60)}`);
+                }
+              }
+              if (noOne.size) found = found.filter((f) => !noOne.has(f.index));
+            }
+          }
+        } catch (e: any) {
+          console.warn('[refind] people check skipped:', e?.message); // keep the first look's result
+        }
+      }
+      if (deps.onChecked) {
+        const details = refindOutcomes(items.length, firstLook, noOne)
+          .map((outcome, i) => ({ outcome, c: items[i] }))
+          .filter((d): d is { outcome: MarkerCheckDetail['outcome']; c: RefindItem } => d.outcome !== 'kept')
+          .map(({ outcome, c }) => ({ label: c.label, category: c.category, guide: c.guide, outcome, client, appVersion }));
+        deps.onChecked(game, items.length, found.length, details);
+      }
+      return res.json({ found, checked: items.length });
+    } catch (err: any) {
+      console.warn('[refind] failed:', err?.message);
+      return res.status(502).json({ error: 'Could not find the markers on screen.', found: [] });
     }
   });
 }
