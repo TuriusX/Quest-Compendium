@@ -28,6 +28,7 @@ import { useLocale, useT } from '../i18n';
 import { QUICK_MAIN, QUICK_MORE, QUICK_HINTS, quickLabelKey } from '../utils/quickQuestions';
 import { nextStop, ringIndex, ringSpot, type Stop } from '../utils/padStops';
 import { glyph, styleFromId, type PadStyle } from '../utils/padGlyphs';
+import { applySuggestion, buildVocab, deleteWord, suggest, type Vocab } from '../utils/padWords';
 import { Camera, EyeOff, Gamepad2, Keyboard, LocateFixed, Mic, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
@@ -399,10 +400,22 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
   const setFocusRef = useRef(setFocus);
   setFocusRef.current = setFocus;
 
+  // The keyboard's caret (where letters go; LT / RT move it) and its word suggestions (step 5), from what's on screen.
+  const [caret, setCaret] = useState(0);
+  const vocabRef = useRef<Vocab>(new Map());
   const openKeyboard = useCallback(() => {
     const box = document.querySelector<HTMLTextAreaElement>('[data-qc-ask-input]');
-    setText(box?.value ?? '');
+    const value = box?.value ?? '';
+    setText(value);
+    setCaret(value.length);
     setKb({ row: 1, col: 0, shift: false, symbols: false });
+    // Words and names to suggest: the game (header), the quest log, the latest answers.
+    const texts = [
+      document.querySelector<HTMLElement>('header')?.innerText || '',
+      document.querySelector<HTMLElement>('[data-qc-log]')?.innerText || '',
+      ...Array.from(document.querySelectorAll<HTMLElement>('[data-pad-stop="answer"]')).slice(-6).map((el) => el.innerText),
+    ];
+    vocabRef.current = buildVocab(texts);
     setPanel('keyboard');
   }, []);
 
@@ -476,28 +489,40 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
     });
   }, []);
 
-  const typeText = useCallback((next: string) => {
+  const typeText = useCallback((next: string, nextCaret: number) => {
     setText(next);
+    setCaret(Math.max(0, Math.min(next.length, nextCaret)));
     emit('qc-set-input', { text: next });
   }, []);
+  const suggestions = panel === 'keyboard' ? suggest(vocabRef.current, text, caret) : [];
 
   const pressKey = useCallback(
     (key: string | Special) => {
       if (key === 'shift') return setKb((k) => ({ ...k, shift: !k.shift }));
       if (key === 'symbols') return setKb((k) => ({ ...k, symbols: !k.symbols }));
-      if (key === 'space') return typeText(text + ' ');
-      if (key === 'backspace') return typeText(text.slice(0, -1));
+      const at = Math.min(caret, text.length);
+      if (key === 'space') return typeText(text.slice(0, at) + ' ' + text.slice(at), at + 1);
+      if (key === 'backspace') return at > 0 && typeText(text.slice(0, at - 1) + text.slice(at), at - 1);
       if (key === 'send') {
         if (text.trim()) emit('qc-ask', { text: text.trim() });
         setText('');
+        setCaret(0);
         setPanel(null);
         return;
       }
-      typeText(text + (kb.shift ? key.toUpperCase() : key));
+      const ch = kb.shift ? key.toUpperCase() : key;
+      typeText(text.slice(0, at) + ch + text.slice(at), at + ch.length);
       if (kb.shift) setKb((k) => ({ ...k, shift: false }));
     },
-    [text, kb.shift, typeText],
+    [text, caret, kb.shift, typeText],
   );
+  /** A word suggestion in place of the word being typed. */
+  const pickSuggestion = (word: string | undefined) => {
+    if (!word) return;
+    const r = applySuggestion(text, Math.min(caret, text.length), word);
+    typeText(r.text, r.caret);
+    setKb((k) => (k.row < 0 ? { ...k, row: 0, col: 0 } : k));
+  };
 
   const handle = useCallback(
     (e: PadEvent) => {
@@ -551,8 +576,8 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
         }
         return;
       }
-      // Triggers page through long answers (and lists), most of a screen at a time.
-      if (b === 'lt' || b === 'rt') {
+      // Triggers page through long answers (and lists), most of a screen at a time. (In the keyboard: the caret.)
+      if ((b === 'lt' || b === 'rt') && panel !== 'keyboard') {
         const el = scrollableIn(topScope());
         if (el) el.scrollBy({ top: (b === 'rt' ? 1 : -1) * Math.round(el.clientHeight * 0.8), behavior: 'smooth' });
         return;
@@ -596,6 +621,20 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
       if (panel === 'keyboard') {
         const rows = kb.symbols ? SYMBOLS : LETTERS;
         const lastRow = rows.length; // index of the specials row
+        // Row -1: the word suggestions above the keys (when there are any).
+        if (kb.row < 0) {
+          if (!suggestions.length || b === 'down') setKb((k) => ({ ...k, row: 0, col: 0 }));
+          else if (b === 'left' || b === 'right') setKb((k) => ({ ...k, col: (k.col + (b === 'right' ? 1 : suggestions.length - 1)) % suggestions.length }));
+          else if (b === 'a') pickSuggestion(suggestions[kb.col]);
+          if (b === 'down' || b === 'left' || b === 'right' || b === 'a') return;
+        }
+        if (b === 'lt' || b === 'rt') return setCaret((c) => Math.max(0, Math.min(text.length, c + (b === 'rt' ? 1 : -1))));
+        if (b === 'rb') return pickSuggestion(suggestions[0]);
+        if (b === 'lb') {
+          const r = deleteWord(text, Math.min(caret, text.length));
+          return typeText(r.text, r.caret);
+        }
+        if (b === 'up' && kb.row === 0 && suggestions.length) return setKb((k) => ({ ...k, row: -1, col: 0 }));
         if (b === 'up' || b === 'down') {
           setKb((k) => {
             const row = Math.max(0, Math.min(lastRow, k.row + (b === 'down' ? 1 : -1)));
@@ -747,7 +786,7 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
         if (scope === document.body) emit('qc-toggle-answer-model');
       }
     },
-    [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus, logFocus, actions, aIndex, openActions, quickMenu, qmIndex],
+    [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus, logFocus, actions, aIndex, openActions, quickMenu, qmIndex, text, caret, suggestions, typeText],
   );
 
   // Desktop: system-level controller service. Falls back to the Gamepad API if it isn't available.
@@ -873,17 +912,44 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
       )}
 
       {panel === 'keyboard' && (
-        <div className="pointer-events-auto w-full max-w-xl rounded-2xl bg-[#0d0e15]/97 border border-[var(--accent-border)] shadow-2xl p-3 space-y-2" aria-label={t('pad.keyboard')}>
-          <div className="px-3 py-2 rounded-xl bg-black/50 border border-white/10 text-sm text-white min-h-[40px] break-words" lang={locale}>
-            {text || <span className="text-zinc-500">{t('chat.ask')}</span>}
-            <span className="qc-caret" />
+        <div className="pointer-events-auto w-full max-w-2xl rounded-2xl bg-[#0d0e15]/97 border border-[var(--accent-border)] shadow-2xl p-3.5 space-y-2" aria-label={t('pad.keyboard')}>
+          <div className="px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-[15px] text-white min-h-[46px] break-words whitespace-pre-wrap" lang={locale}>
+            {text ? (
+              <>
+                {text.slice(0, caret)}
+                <span className="qc-caret" />
+                {text.slice(caret)}
+              </>
+            ) : (
+              <>
+                <span className="qc-caret" />
+                <span className="text-zinc-500">{t('chat.ask')}</span>
+              </>
+            )}
+          </div>
+          {/* Word suggestions: names and words from the game, the quest log and the answers (RB takes the first). */}
+          <div className="flex flex-wrap gap-1.5 min-h-[34px]" aria-label={t('pad.suggestions')}>
+            {suggestions.map((w, i) => (
+              <span
+                key={w}
+                className={`px-3 h-[34px] flex items-center rounded-lg border text-sm font-semibold ${
+                  kb.row < 0 && kb.col === i
+                    ? 'bg-[var(--accent-color)] text-[#16101f] border-transparent'
+                    : i === 0
+                      ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white'
+                      : 'bg-white/[0.05] border-white/10 text-zinc-200'
+                }`}
+              >
+                {w}
+              </span>
+            ))}
           </div>
           {rows.map((row, r) => (
             <div key={r} className="grid grid-cols-10 gap-1.5">
               {row.map((key, c) => (
                 <span
                   key={key}
-                  className={`h-9 flex items-center justify-center rounded-lg border text-sm font-semibold ${
+                  className={`h-11 flex items-center justify-center rounded-lg border text-base font-semibold ${
                     kb.row === r && kb.col === c ? 'bg-[var(--accent-color)] text-[#16101f] border-transparent scale-105' : 'bg-white/[0.05] border-white/10 text-zinc-200'
                   }`}
                 >
@@ -899,7 +965,7 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
               return (
                 <span
                   key={key}
-                  className={`h-9 flex items-center justify-center rounded-lg border text-xs font-bold ${
+                  className={`h-11 flex items-center justify-center rounded-lg border text-sm font-bold ${
                     selected
                       ? 'bg-[var(--accent-color)] text-[#16101f] border-transparent scale-105'
                       : on
@@ -922,9 +988,15 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
         {panel === 'keyboard' ? (
           <>
             <Hint b="a" label={t('pad.type')} />
+            {suggestions.length > 0 && <Hint b="rb" label={t('pad.useSuggestion')} />}
             <Hint b="x" label={t('pad.delete')} />
+            <Hint b="lb" label={t('pad.deleteWord')} />
             <Hint b="y" label={t('pad.space')} />
-            <Hint b="l3" label={t('pad.shift')} />
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <Glyph b="lt" />
+              <Glyph b="rt" />
+              {t('pad.cursor')}
+            </span>
             <Hint b="menu" label={t('pad.send')} />
             <Hint b="b" label={t('common.close')} />
           </>
