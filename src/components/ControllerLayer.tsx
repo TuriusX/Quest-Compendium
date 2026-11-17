@@ -4,7 +4,9 @@
  * Input comes from the desktop app's system-level controller service (electron/controller.cjs) when available,
  * otherwise from the browser Gamepad API (web app, or while the window is focused).
  *
- *   D-pad / left stick  move between controls       A  select           B  back (closes dialogs, then hides the overlay)
+ *   D-pad / left stick  move between stops (src/utils/padStops.ts): each answer, the quick questions, the Ask bar, the
+ *                       quest log's rows; A on an answer goes into it, B comes back out
+ *   A  select (on the Ask bar: the keyboard)          B  back (closes dialogs, steps out of an answer; never hides the app)
  *   X  voice question (press again to send)          Y  quick questions (hold: ask out loud, immersive mode)
  *   Menu  on-screen keyboard                         View  screenshot & ask (desktop)
  *   LB / RB  Ask, Guide, then the previous / next game   LT / RT  page through long answers   Right stick  scroll
@@ -19,6 +21,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useT } from '../i18n';
 import { QUICK_MAIN, QUICK_MORE, QUICK_HINTS, quickLabelKey } from '../utils/quickQuestions';
+import { nextStop, type Stop } from '../utils/padStops';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
 type PadEvent = { type: 'button'; button: Btn | 'lt' | 'rt' } | { type: 'scroll'; dy: number } | { type: 'talk'; state: 'start' | 'end' };
@@ -89,6 +92,63 @@ function scrollableIn(scope: HTMLElement): HTMLElement | null {
     return (cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 4 && isVisible(el);
   });
   return candidates.sort((a, b) => b.clientHeight - a.clientHeight)[0] ?? null;
+}
+
+// ---- Stops (controller mode step 1, owner Nov 17 2026) ---------------------------------------------------------
+
+/** Marked stops: each answer, the quick questions, the Ask bar (data-pad-stop, data-qc-ask-input). */
+const STOP_SEL = '[data-pad-stop], [data-qc-ask-input]';
+
+/**
+ * A control worth stopping on: it says something (not an icon-only button), it's big enough to see, and it's not in the
+ * header (the header's controls move to the quick menu). The Send button is never one: an empty Send asks about a
+ * screenshot, one stray press away.
+ */
+/** Shown at all (not hidden or collapsed), wherever it is scrolled to. */
+function shown(el: HTMLElement): boolean {
+  const r = el.getBoundingClientRect();
+  if (r.width < 2 || r.height < 2) return false;
+  const cs = getComputedStyle(el);
+  return cs.visibility !== 'hidden' && cs.display !== 'none';
+}
+
+function meaningful(el: HTMLElement): boolean {
+  if (el.closest('header') || el.closest('[data-qc-pad-ui]') || el.matches('[data-qc-send], [data-qc-log-popout], [aria-hidden="true"]')) return false;
+  const r = el.getBoundingClientRect();
+  if (r.height < 18) return false;
+  const text = (el.innerText || (el as HTMLInputElement).value || '').trim();
+  return text.length >= 2 || el.matches('textarea, input[type="text"], select');
+}
+
+/**
+ * The stops on screen now, in two zones: the quest log ('log', every row that says something) and the rest ('main':
+ * the marked stops of the conversation, or on other views such as the Guide, the controls that say something).
+ */
+function gatherStops(): { els: HTMLElement[]; stops: Stop[] } {
+  const els: HTMLElement[] = [];
+  const add = (el: HTMLElement) => {
+    if (!els.includes(el) && isVisible(el)) els.push(el);
+  };
+  const log = document.querySelector<HTMLElement>('[data-qc-log]');
+  if (log && isVisible(log)) focusables(log).filter(meaningful).forEach(add);
+  const marked = Array.from(document.querySelectorAll<HTMLElement>(STOP_SEL)).filter((el) => !el.closest('[data-qc-log]') && !el.closest('[data-qc-pad-ui]'));
+  const ask = marked.find((el) => el.matches('[data-qc-ask-input]'));
+  // Answers scrolled out of view still count (up from the oldest one on screen goes on to older ones; the conversation
+  // scrolls to it).
+  if (ask && isVisible(ask)) marked.forEach((el) => (el.matches('[data-pad-stop="answer"]') ? shown(el) && !els.includes(el) && els.push(el) : add(el)));
+  else focusables(document.body).filter((el) => !el.closest('[data-qc-log]') && meaningful(el)).forEach(add);
+  const stops = els.map((el, id) => {
+    const r = el.getBoundingClientRect();
+    return { id, zone: el.closest('[data-qc-log]') ? 'log' : 'main', box: { left: r.left, top: r.top, right: r.right, bottom: r.bottom } };
+  });
+  return { els, stops };
+}
+
+/** Where the controller starts: the Ask bar, else the first stop. */
+function defaultStop(): HTMLElement | null {
+  const box = document.querySelector<HTMLElement>('[data-qc-ask-input]');
+  if (box && isVisible(box)) return box;
+  return gatherStops().els[0] ?? null;
 }
 
 /** Close the top dialog: its close/cancel button if we can find one, else Escape. Returns false if none open. */
@@ -205,6 +265,11 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
   const [kb, setKb] = useState({ row: 1, col: 0, shift: false, symbols: false });
   const [desktopPad, setDesktopPad] = useState<boolean | null>(null);
   const focusedRef = useRef<HTMLElement | null>(null);
+  // Inside an answer (A on it): the d-pad moves among its own controls; B comes back out to the answer.
+  const cardRef = useRef<HTMLElement | null>(null);
+  // The focus is out of date (the panel was hidden, or controller mode ended): the next press starts from the Ask bar
+  // instead of acting on a control the player can't see is selected.
+  const staleRef = useRef(true);
   // The controller is in the attached quest log (RB from Ask, LB from Guide): up / down move its highlight, A ticks,
   // B or LB goes back to Ask, RB on to Guide. The log is another window: it's driven through the app.
   const [logFocus, setLogFocus] = useState(false);
@@ -247,6 +312,8 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
       if ((e as MouseEvent).isTrusted === false) return;
       setPadMode(false);
       setPanel(null);
+      staleRef.current = true;
+      cardRef.current = null;
     };
     const onMove = (e: MouseEvent) => {
       if (Math.abs(e.movementX) + Math.abs(e.movementY) > 8) exit(e);
@@ -307,16 +374,19 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
   const handle = useCallback(
     (e: PadEvent) => {
       if (!enabled) return;
-      if (!padMode) {
+      if (!padMode || staleRef.current) {
+        // Into controller mode, or back after the panel was away: the focus starts fresh, on the Ask bar ("Open a tab
+        // for X?" when it's showing), so a press never acts on a control the player can't see is selected. The press
+        // still counts (A types, X speaks, Y asks a quick question), except a direction or B, which just shows where
+        // the focus is.
         setPadMode(true);
+        staleRef.current = false;
+        cardRef.current = null;
         if (e.type === 'button' && !panel) {
-          // The first press just wakes controller mode and puts focus somewhere sensible: "Open a tab for X?" when
-          // it's showing (and A on it says yes right away), else the question box.
           const offer = document.querySelector<HTMLElement>('[data-qc-offer-open]');
           if (offer && e.button === 'a') { offer.click(); return; }
-          const box = document.querySelector<HTMLElement>('[data-qc-ask-input]');
-          setFocus(offer || (box && isVisible(box) ? box : focusables(topScope())[0] ?? null));
-          return;
+          setFocus(offer || defaultStop());
+          if (['up', 'down', 'left', 'right', 'b'].includes(e.button)) return;
         }
       }
 
@@ -390,6 +460,23 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
 
       // --- Normal navigation
       const scope = topScope();
+      // Inside an answer: its own controls; B back out to the answer.
+      const card = cardRef.current && document.contains(cardRef.current) && scope === document.body ? cardRef.current : null;
+      if (cardRef.current && !card) cardRef.current = null;
+      if (card) {
+        if (b === 'b') {
+          cardRef.current = null;
+          setFocus(card);
+          return;
+        }
+        if (b === 'up' || b === 'down' || b === 'left' || b === 'right') {
+          const items = focusables(card).filter((el) => !el.matches('[data-qc-send]'));
+          const current = document.activeElement instanceof HTMLElement ? document.activeElement : focusedRef.current;
+          const next = nextInDirection(current && card.contains(current) ? current : null, b, items);
+          if (next) setFocus(next);
+          return;
+        }
+      }
       // In the docked quest log: B back to the question box; RB on to the Guide, LB back to Ask.
       const inLog = !!(document.activeElement as HTMLElement | null)?.closest?.('[data-qc-log]');
       if (inLog && (b === 'b' || b === 'lb' || b === 'rb')) {
@@ -398,18 +485,66 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
         return;
       }
       if (b === 'up' || b === 'down' || b === 'left' || b === 'right') {
-        const items = focusables(scope);
         const current = document.activeElement instanceof HTMLElement ? document.activeElement : focusedRef.current;
-        setFocus(nextInDirection(current, b, items));
+        if (scope !== document.body) {
+          // A dialog: its controls, as before (dialogs get their own layout in a later step).
+          setFocus(nextInDirection(current, b, focusables(scope).filter((el) => !el.matches('[data-qc-send]'))));
+          return;
+        }
+        const { els, stops } = gatherStops();
+        const at = current ? els.findIndex((el) => el === current || el.contains(current)) : -1;
+        if (at < 0) {
+          setFocus(defaultStop());
+          return;
+        }
+        // Answers go in conversation order (scrolled out of view, they can sit below the quick questions on screen):
+        // up and down step answer to answer; down from the newest goes to the quick questions, and up from those to
+        // the newest answer.
+        const answers = els.filter((el) => el.matches('[data-pad-stop="answer"]'));
+        const cur = els[at];
+        if ((b === 'up' || b === 'down') && answers.includes(cur)) {
+          const i = answers.indexOf(cur) + (b === 'down' ? 1 : -1);
+          if (i >= 0 && i < answers.length) return setFocus(answers[i]);
+          if (b === 'up') return;
+          const below = els.filter((el) => !answers.includes(el) && !el.closest('[data-qc-log]'));
+          const bottomRow = below.sort((p, q) => p.getBoundingClientRect().top - q.getBoundingClientRect().top || p.getBoundingClientRect().left - q.getBoundingClientRect().left)[0];
+          if (bottomRow) setFocus(bottomRow);
+          return;
+        }
+        const to = nextStop(stops, at, b);
+        if (to === null) return;
+        if (b === 'up' && answers.includes(els[to]) && answers.length) return setFocus(answers[answers.length - 1]);
+        // Into the quest log from the conversation: its Now, the row that matters most.
+        if (b === 'left' && !cur.closest('[data-qc-log]') && els[to].closest('[data-qc-log]')) {
+          // (The marked Now control is its tick box; the stop is the row next to it.)
+          const mark = document.querySelector<HTMLElement>('[data-qc-log] [data-qc-log-now]');
+          if (mark && isVisible(mark)) {
+            const m = mark.getBoundingClientRect();
+            const near = els
+              .filter((el) => el.closest('[data-qc-log]'))
+              .map((el) => ({ el, d: Math.abs(el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2 - (m.top + m.height / 2)) }))
+              .sort((p, q) => p.d - q.d)[0];
+            if (near) return setFocus(near.el);
+          }
+        }
+        setFocus(els[to]);
       } else if (b === 'a') {
         const el = (document.activeElement as HTMLElement) || focusedRef.current;
         // "Open a tab for X?" (DetectionLine): A says yes unless the controller is on another button.
         const offer = document.querySelector<HTMLElement>('[data-qc-offer-open]');
         if (offer && (!el || el === document.body || el.matches('[data-qc-ask-input]'))) offer.click();
         else if (el?.matches('[data-qc-ask-input]')) openKeyboard();
-        else if (el && el !== document.body) el.click();
+        else if (el?.matches('[data-pad-stop="answer"]')) {
+          // Into the answer: its first control (the marker chip, a link, the votes).
+          const first = focusables(el).filter((c) => !c.matches('[data-qc-send]'))[0];
+          if (first) {
+            cardRef.current = el;
+            setFocus(first);
+          }
+        } else if (el && el !== document.body && !el.matches('[data-qc-send]')) el.click();
       } else if (b === 'b') {
-        if (!closeTopDialog()) electronAPI()?.toggleSlide?.();
+        // Back: the open dialog closes. B never hides the app (hiding is the show / hide combo).
+        closeTopDialog();
       } else if (b === 'x') {
         emit('trigger-voice-record');
       } else if (b === 'y') {
@@ -443,12 +578,16 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
       return;
     }
     api.onControllerInput((evt: PadEvent) => handleRef.current(evt));
+    // The panel slid away: whatever was selected is out of date when it comes back.
+    api.onPanelHidden?.(() => {
+      staleRef.current = true;
+      cardRef.current = null;
+    });
     api.onControllerActivated?.(() => {
       setPadMode(true);
-      setTimeout(() => {
-        const box = document.querySelector<HTMLElement>('[data-qc-ask-input]');
-        if (box && isVisible(box)) setFocus(box);
-      }, 200);
+      staleRef.current = false;
+      cardRef.current = null;
+      setTimeout(() => setFocus(defaultStop()), 200);
     });
     Promise.resolve(api.getControllerStatus?.())
       .then((s: any) => setDesktopPad(!!s?.available))

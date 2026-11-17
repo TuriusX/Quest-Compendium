@@ -461,16 +461,24 @@ function slideOut() {
     if (detected) handBack = detected;
     focusHelper.restore(mainWindow, handBack, { detected: !!detected });
   };
+  // The panel keeps focus (out of sight) until every controller button is let go, so the press that closed it never
+  // reaches the game (owner, Nov 17 2026: the controller must never fight the game).
+  const released = () => (controllerService && controllerService.whenReleased ? controllerService.whenReleased() : Promise.resolve());
   focusBeforeOverlay = null;
   openSnapshot = null; // the snapshot only lives for one visit
   if (currentDockPosition !== 'undocked') {
     const coords = getDockCoords(true);
-    animateWindow(coords.x, coords.y, 150).then(() => { giveBack(); parkPanel(); });
+    animateWindow(coords.x, coords.y, 150).then(released).then(() => { giveBack(); parkPanel(); });
   } else {
     // Undocked: the panel goes and the book spine stays where it was (a click brings the panel back there).
-    giveBack();
-    mainWindow.hide();
-    spine.show();
+    mainWindow.setOpacity(0);
+    released().then(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      giveBack();
+      if (!isAppVisible) mainWindow.hide();
+      mainWindow.setOpacity(1);
+      if (!isAppVisible) spine.show();
+    });
   }
   // The quest log stays as it is; one that stepped off the panel goes back to its own spot.
   tracker.panelHidden();

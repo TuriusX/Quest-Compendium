@@ -18,6 +18,8 @@ const BTN = {
   UP: 0x0001, DOWN: 0x0002, LEFT: 0x0004, RIGHT: 0x0008,
   START: 0x0010, BACK: 0x0020, LS: 0x0040, RS: 0x0080,
   LB: 0x0100, RB: 0x0200, A: 0x1000, B: 0x2000, X: 0x4000, Y: 0x8000,
+  // The Xbox / PS button: only XInputGetStateEx reports it. Games never see it, which makes it the cleanest open button.
+  GUIDE: 0x0400,
 };
 
 /** Buttons forwarded to the app as simple presses (directions are handled separately, with repeat). */
@@ -28,6 +30,8 @@ const SIMPLE = [
 ];
 
 const REPEAT_DELAY_MS = 380;
+/** Keep holding the open combo this long after the panel opens and it starts listening (asking in one motion). */
+const QUICK_ASK_MS = 500;
 const REPEAT_EVERY_MS = 110;
 const STICK_DEADZONE = 0.55;
 const SCROLL_DEADZONE = 0.25;
@@ -62,9 +66,28 @@ function loadXInput() {
       Gamepad: XINPUT_GAMEPAD,
     });
     const XInputGetState = lib.func('uint32 __stdcall XInputGetState(uint32 dwUserIndex, _Out_ XINPUT_STATE *pState)');
+    // XInputGetStateEx (exported only by number, 100) is the same call plus the Xbox / PS (Guide) button (controller
+    // mode, Nov 2026). Used when xinput1_4 / 1_3 has it; otherwise the plain call (no Guide button).
+    let getState = (index, state) => XInputGetState(index, state);
+    try {
+      const kernel32 = koffi.load('kernel32.dll');
+      const GetModuleHandleW = kernel32.func('uintptr_t __stdcall GetModuleHandleW(str16 name)');
+      const GetProcAddress = kernel32.func('void * __stdcall GetProcAddress(uintptr_t h, uintptr_t name)');
+      for (const dll of ['xinput1_4.dll', 'xinput1_3.dll']) {
+        const h = GetModuleHandleW(dll);
+        const ex = h ? GetProcAddress(h, 100) : null;
+        if (ex) {
+          const proto = koffi.proto('uint32 __stdcall QC_XInputGetStateEx(uint32 dwUserIndex, _Out_ XINPUT_STATE *pState)');
+          getState = (index, state) => koffi.call(ex, proto, index, state);
+          break;
+        }
+      }
+    } catch (_) {
+      /* the plain call */
+    }
     return (index) => {
       const state = {};
-      const result = XInputGetState(index, state);
+      const result = getState(index, state);
       return result === 0 ? state.Gamepad : null; // 0 = ERROR_SUCCESS, 1167 = not connected
     };
   } catch (err) {
@@ -108,6 +131,10 @@ function createControllerService(opts) {
   const suppressed = new Set(); // combo members that just fired the combo: ignored until they're let go
   const repeat = { up: null, down: null, left: null, right: null, lt: null, rt: null };
   let lastScroll = 0;
+  // Buttons (and triggers) down on the last read: the panel hands focus back to the game only once they're all let go.
+  let heldBits = 0;
+  // The open hold still going after the panel opened: { since, talking } (asking in one motion).
+  let quickAsk = null;
 
   function tick() {
     const t = now();
@@ -135,6 +162,7 @@ function createControllerService(opts) {
       lt = Math.max(lt, g.bLeftTrigger || 0);
       rt = Math.max(rt, g.bRightTrigger || 0);
     }
+    heldBits = buttons | (lt > 30 ? 0x10000 : 0) | (rt > 30 ? 0x20000 : 0);
 
     // Show / hide combo (a 1-second hold or a double-tap). Works whether or not the overlay is visible.
     if (combo.step(buttons, t).fire) {
@@ -142,7 +170,22 @@ function createControllerService(opts) {
       pendingMember.clear();
       for (const [name, bit] of SIMPLE) if (combo.mask & bit) suppressed.add(name);
       if (talk) talk.reset();
+      // Asking in one motion (owner, Nov 17 2026: playing and asking at once): a hold that opened the panel and keeps
+      // going starts listening; letting go asks. No moving through the panel, so the fewest presses reach the game.
+      const opening = !opts.isVisible();
       opts.onToggle();
+      quickAsk = opening && combo.mode === 'hold' ? { since: t, talking: false } : null;
+    }
+    if (quickAsk) {
+      if ((buttons & combo.mask) === combo.mask) {
+        if (!quickAsk.talking && t - quickAsk.since >= QUICK_ASK_MS) {
+          quickAsk.talking = true;
+          opts.onInput({ type: 'talk', state: 'start' });
+        }
+      } else {
+        if (quickAsk.talking) opts.onInput({ type: 'talk', state: 'end' });
+        quickAsk = null;
+      }
     }
     if ((buttons & combo.mask) === 0 && !combo.pendingUntil()) firedDuringPress = false;
 
@@ -270,7 +313,28 @@ function createControllerService(opts) {
   }
 
   setConfig(config);
-  return { available, setConfig, stop, _tick: tick };
+  /**
+   * Resolves once no button or trigger has been down for `quietMs` (or after `maxMs` anyway): the panel hands focus
+   * back to the game only then, so the B that closed it never reaches the game as a dodge or a cancel (owner, Nov 17
+   * 2026: the controller must never fight the game). Right away when no controller is read.
+   */
+  function whenReleased(quietMs = 120, maxMs = 3000) {
+    if (!available || !timer) return Promise.resolve();
+    const start = now();
+    let quietSince = heldBits ? 0 : start;
+    return new Promise((resolve) => {
+      const check = setInterval(() => {
+        const t = now();
+        if (heldBits) quietSince = 0;
+        else if (!quietSince) quietSince = t;
+        if ((quietSince && t - quietSince >= quietMs) || t - start >= maxMs) {
+          clearInterval(check);
+          resolve();
+        }
+      }, TICK_MS);
+    });
+  }
+  return { available, setConfig, stop, whenReleased, _tick: tick };
 }
 
 module.exports = { createControllerService, BTN };

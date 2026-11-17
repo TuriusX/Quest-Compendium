@@ -1292,6 +1292,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   <button
                     key={id}
                     type="button"
+                    data-pad-stop="quick"
                     disabled={isLoading}
                     onClick={() => ask(id)}
                     className="qc-px-frame shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11.5px] font-medium text-zinc-300 hover:text-white hover:border-[var(--accent-border)] hover:bg-[var(--accent-dim)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default"
@@ -1303,6 +1304,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <button
                 ref={moreQuickBtnRef}
                 type="button"
+                data-pad-stop="quick"
                 aria-haspopup="menu"
                 aria-expanded={showMoreQuick}
                 disabled={isLoading}
@@ -1445,6 +1447,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <HasTextGate ref={hasTextRef}>{(hasText) => (
             <button
               type="submit"
+              data-qc-send=""
               aria-label={t('chat.send')}
               disabled={
                 (!hasText && !attachedImage && !(typeof window !== 'undefined' && (window as any).electronAPI)) ||
@@ -1638,6 +1641,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <div
                 key={msg.id}
                 data-msg-id={msg.id}
+                // Controller mode: each answer is one stop (A goes into it).
+                {...(!isUser ? { 'data-pad-stop': 'answer', tabIndex: -1 } : {})}
                 className={`group/msg flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-full`}
               >
                 {/* User or AI Message Header Tag */}

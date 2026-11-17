@@ -169,7 +169,7 @@ const ShortcutInput: React.FC<{
 };
 
 /** Controller show / hide presets (electron/padCombo.cjs); older settings map onto them. */
-const PAD_PRESETS = ['hold-view-menu', 'double-view', 'hold-ls-rs', 'custom', 'off'] as const;
+const PAD_PRESETS = ['hold-guide', 'hold-view-menu', 'double-view', 'hold-ls-rs', 'custom', 'off'] as const;
 const padPreset = (v?: string) => (v === 'back+start' || !v ? 'hold-view-menu' : v === 'ls+rs' ? 'hold-ls-rs' : v === 'lb+rb+back' ? 'custom' : v);
 const PAD_BUTTONS = ['a', 'b', 'x', 'y', 'lb', 'rb', 'back', 'start', 'ls', 'rs'] as const;
 /** Same rule as the desktop app: two buttons or more, or View, Menu, L3 or R3 on its own. */
@@ -1030,7 +1030,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           first button (the player chose it as safe for their game) and press the other one. */}
                       {(() => {
                         const toggle = padPreset(settings.controllerToggle);
-                        const toggleButtons: string[] = toggle === 'custom' ? (settings.controllerCustom?.buttons || []) : toggle === 'hold-ls-rs' ? ['ls', 'rs'] : toggle === 'off' ? [] : ['back', 'start'];
+                        const toggleButtons: string[] = toggle === 'custom' ? (settings.controllerCustom?.buttons || []) : toggle === 'hold-ls-rs' ? ['ls', 'rs'] : toggle === 'hold-guide' ? ['guide'] : toggle === 'off' ? [] : ['back', 'start'];
                         const mod = toggleButtons[0] || 'back';
                         const keyLabelOf = (k: string) => (k === 'up' ? tr('set.pad.dpadUp') : k === 'right' ? tr('set.pad.dpadRight') : k === 'down' ? tr('set.pad.dpadDown') : tr(`set.pad.btn.${k}`));
                         // The same rules as the desktop app (padCombo chordFor): never the modifier itself or a button of

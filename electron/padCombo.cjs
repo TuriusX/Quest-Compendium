@@ -6,6 +6,7 @@
  *   'hold-view-menu'  hold View + Menu for 1 second (the default)
  *   'double-view'     double-tap View
  *   'hold-ls-rs'      hold L3 + R3 (click both sticks) for 1 second
+ *   'hold-guide'      hold the Xbox / PS button for 1 second (games never see it)
  *   'custom'          any buttons (controllerCustom.buttons), held for 1 second or double-tapped (controllerCustom.mode)
  *   'off'
  * A normal single press never triggers either: a hold needs the buttons down together for a full second, and a
@@ -20,6 +21,7 @@ const BITS = {
   up: 0x0001, down: 0x0002, left: 0x0004, right: 0x0008,
   start: 0x0010, back: 0x0020, ls: 0x0040, rs: 0x0080,
   lb: 0x0100, rb: 0x0200, a: 0x1000, b: 0x2000, x: 0x4000, y: 0x8000,
+  guide: 0x0400, // the Xbox / PS button (controller.cjs reads it with XInputGetStateEx)
 };
 
 const HOLD_MS = 1000;      // a show/hide hold
@@ -36,6 +38,9 @@ const PRESETS = {
   'hold-view-menu': { buttons: ['back', 'start'], mode: 'hold' },
   'double-view': { buttons: ['back'], mode: 'double' },
   'hold-ls-rs': { buttons: ['ls', 'rs'], mode: 'hold' },
+  // Games never see the Xbox / PS button, so opening the panel never reaches the game (owner, Nov 17 2026). Windows'
+  // Game Bar may also open on it unless that's turned off in Windows' settings.
+  'hold-guide': { buttons: ['guide'], mode: 'hold' },
 };
 
 /** The show/hide combo for these settings: { buttons, mode, mask } or null (off, or no usable buttons). */
@@ -51,7 +56,7 @@ function comboFor(preset, custom) {
   const mask = c.buttons.reduce((m, b) => m | (BITS[b] || 0), 0);
   // A single face button, bumper or direction clashes with every game: a custom combo is two buttons or more, or one of
   // View, Menu, L3 or R3 on its own. Anything else is refused (null), like 'off'.
-  if (!mask || (c.buttons.length === 1 && !['back', 'start', 'ls', 'rs'].includes(c.buttons[0]))) return null;
+  if (!mask || (c.buttons.length === 1 && !['back', 'start', 'ls', 'rs', 'guide'].includes(c.buttons[0]))) return null;
   return { buttons: c.buttons, mode: c.mode, mask };
 }
 

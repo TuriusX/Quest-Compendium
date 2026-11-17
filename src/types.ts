@@ -340,7 +340,7 @@ export interface AppSettings {
    * How the controller shows / hides the overlay (electron/padCombo.cjs): a 1-second hold of View + Menu (default), a
    * double-tap of View, a 1-second hold of L3 + R3, a custom combo (controllerCustom), or off. Older values still work.
    */
-  controllerToggle?: 'hold-view-menu' | 'double-view' | 'hold-ls-rs' | 'custom' | 'off' | 'back+start' | 'ls+rs' | 'lb+rb+back';
+  controllerToggle?: 'hold-guide' | 'hold-view-menu' | 'double-view' | 'hold-ls-rs' | 'custom' | 'off' | 'back+start' | 'ls+rs' | 'lb+rb+back';
   /** A custom show / hide combo: its buttons (XInput names: a, b, x, y, lb, rb, back, start, ls, rs) and its timing. */
   controllerCustom?: { buttons: string[]; mode: 'hold' | 'double' };
   /** Hold to talk on the controller while the overlay is open (default 'y'; 'off' turns it off). */
