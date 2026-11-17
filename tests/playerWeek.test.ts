@@ -1,6 +1,7 @@
 // Run: npm run test:sync   (or: npx tsx tests/playerWeek.test.ts)
 import assert from "node:assert/strict";
 import { playerWeek } from "../scripts/pipeline/playerWeek";
+import { tallyLimits, limitLine } from "../ownerStats";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -34,5 +35,18 @@ test("cost by tier without the owner, and free players who ran out", () => {
 test("an owner known from config is left out too", () => {
   const w = playerWeek(days.map((d) => ({ ...d, owners: [] })), [], today, ["me"]);
   assert.equal(w.now.players.has("me"), false);
+});
+test("daily limit by tier with refused questions, owner and test accounts left out", () => {
+  const d = [day("2026-10-14", { limitHit: { f1: "free", g1: "guest", p1: "premium", me: "premium", t1: "guest" }, limitRefused: { f1: 3, g1: 1, p1: 2, me: 9, t1: 4 } }), day("2026-10-16", { limitHit: { f1: "free" }, limitRefused: { f1: 2 } })];
+  const w = playerWeek(d, [], today, ["me", "t1"]);
+  assert.deepEqual([w.limits.free.players.size, w.limits.free.refused], [1, 5]);
+  assert.deepEqual([w.limits.guest.players.size, w.limits.guest.refused], [1, 1]);
+  assert.deepEqual([w.limits.premium.players.size, w.limits.premium.refused], [1, 2]);
+});
+test("/stats limit tally from the hourly counts", () => {
+  const hours = [{ lh: { a: { t: "free", n: 2 }, me: { t: "premium", n: 5 } } }, { lh: { a: { t: "free", n: 1 }, g: { t: "guest", n: 1 } } }];
+  const l = tallyLimits(hours, new Set(["me"]));
+  assert.deepEqual(l, { free: { players: 1, refused: 3 }, guest: { players: 1, refused: 1 }, premium: { players: 0, refused: 0 } });
+  assert.equal(limitLine("Last 24 hours", l), "Last 24 hours: free 1 (3 refused) · guests 1 (1 refused) · Premium 0 (0 refused)");
 });
 console.log(`\n${passed} tests passed`);

@@ -517,7 +517,11 @@ export function recordAnswerGame(game: string | undefined, userId: string, email
   }, { merge: true }).catch(() => {});
 }
 
-/** A player who asked with no questions left today ("You've used today's…"): stats/{day}.limitHit.{player} = tier. */
+/**
+ * A player who asked with no questions left today ("You've used today's…"): stats/{day}.limitHit.{player} = tier, and
+ * each refused question counted (stats/{day}.limitRefused.{player}, and by the hour in statsHours/{UTC hour}.lh.{player}
+ * { t: tier, n } for /stats' rolling windows; counted from Nov 17 2026). Shows when players regularly run out.
+ */
 export function recordLimitHit(userId: string, tier: PlayerTier, email?: string): void {
   const d = db();
   if (!d || !userId || isTestTraffic(userId)) return;
@@ -525,7 +529,13 @@ export function recordLimitHit(userId: string, tier: PlayerTier, email?: string)
   const owner = !!email && ownerEmails().includes(String(email).toLowerCase());
   d.collection('stats').doc(statsDay()).set({
     limitHit: { [who]: tier },
+    limitRefused: { [who]: FieldValue.increment(1) },
     ...(owner ? { owners: FieldValue.arrayUnion(who) } : {}),
+  }, { merge: true }).catch(() => {});
+  const hour = new Date().toISOString().slice(0, 13);
+  d.collection('statsHours').doc(hour).set({
+    at: Date.parse(`${hour}:00:00Z`),
+    lh: { [who]: { t: tier, n: FieldValue.increment(1) } },
   }, { merge: true }).catch(() => {});
 }
 

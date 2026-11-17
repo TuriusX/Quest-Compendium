@@ -20,7 +20,7 @@ const dayOf = (t: number) => new Date(t).toLocaleDateString('en-CA', { timeZone:
 const hashOf = (uid: string) => crypto.createHash('sha256').update(`qc:${uid}`).digest('hex').slice(0, 12);
 const money = (n: number) => `$${n.toFixed(n < 1 ? 3 : 2)}`;
 
-type Day = { id: string; players: string[]; guests: string[]; costs: Record<string, { dollars: number; questions: number; tier: string }>; limitHit: Record<string, string>; owners: string[] };
+type Day = { id: string; players: string[]; guests: string[]; costs: Record<string, { dollars: number; questions: number; tier: string }>; limitHit: Record<string, string>; limitRefused?: Record<string, number>; owners: string[] };
 
 /** The section's numbers for the week ending yesterday (pure: the days and month costs passed in). */
 export function playerWeek(days: Day[], monthCosts: { hash: string; dollars: number }[], today = Date.now(), ownerHashes: string[] = []) {
@@ -41,6 +41,8 @@ export function playerWeek(days: Day[], monthCosts: { hash: string; dollars: num
   // Cost by tier, and who was free this week (anyone with a free answer or a free limit hit).
   const cost: Record<string, { dollars: number; questions: number; players: Set<string> }> = {};
   const freePlayers = new Set<string>(), hitFree = new Set<string>();
+  // Everyone who hit the limit this week, by tier, and the questions refused after it (counted from Nov 17 2026).
+  const limits: Record<string, { players: Set<string>; refused: number }> = { free: { players: new Set(), refused: 0 }, guest: { players: new Set(), refused: 0 }, premium: { players: new Set(), refused: 0 } };
   let costDays = 0;
   for (const d of days) {
     if (!week.has(d.id)) continue;
@@ -53,13 +55,17 @@ export function playerWeek(days: Day[], monthCosts: { hash: string; dollars: num
       if (t === 'free') freePlayers.add(h);
     }
     for (const [h, t] of Object.entries(d.limitHit || {})) {
-      if (!keep(h) || t !== 'free') continue;
+      if (!keep(h)) continue;
+      const l = limits[t] || limits.free;
+      l.players.add(h);
+      l.refused += Number(d.limitRefused?.[h]) || 0;
+      if (t !== 'free') continue;
       freePlayers.add(h); hitFree.add(h);
     }
   }
   const monthDollars = monthCosts.filter((c) => !owners.has(c.hash)).reduce((n, c) => n + c.dollars, 0);
   const hitShare = freePlayers.size ? hitFree.size / freePlayers.size : 0;
-  return { now, before, fresh, returning: all.length - fresh, cost, freePlayers: freePlayers.size, hitFree: hitFree.size, hitShare, monthDollars, owners: owners.size, costDays };
+  return { now, before, fresh, returning: all.length - fresh, cost, freePlayers: freePlayers.size, hitFree: hitFree.size, hitShare, monthDollars, owners: owners.size, costDays, limits };
 }
 
 /** The Discord lines (Mondays). */
@@ -89,6 +95,8 @@ export async function playerWeekLines(today = Date.now()): Promise<string[]> {
     ? `💸 Player AI cost this week: ${money(total)}${qs ? `, ${money(total / qs)} a question` : ''} · ${part('free', 'free')} · ${part('premium', 'Premium')} · ${part('guest', 'guests')}${w.costDays < 7 ? ` (counted for ${w.costDays} of 7 days so far)` : ''}. This month: ${money(w.monthDollars)}.`
     : `💸 Player AI cost this week: counted from the next deploy on (this month so far: ${money(w.monthDollars)}).`);
   lines.push(`🚧 Free players who ran out of questions this week: ${w.hitFree} of ${w.freePlayers} (${Math.round(w.hitShare * 100)}%).`);
+  const lim = (name: string, l: { players: Set<string>; refused: number }) => `${name} ${l.players.size} (${l.refused} refused)`;
+  lines.push(`🛑 Hit the daily question limit this week: ${lim('free', w.limits.free)} · ${lim('guests', w.limits.guest)} · ${lim('Premium', w.limits.premium)} (players, and questions refused after it).`);
   const alerts = [
     w.monthDollars > ALERT_MONTH_DOLLARS ? `players' AI cost is ${money(w.monthDollars)} this month (over $${ALERT_MONTH_DOLLARS})` : '',
     w.freePlayers && w.hitShare > ALERT_LIMIT_SHARE ? `${Math.round(w.hitShare * 100)}% of free players ran out of questions (over ${Math.round(ALERT_LIMIT_SHARE * 100)}%)` : '',

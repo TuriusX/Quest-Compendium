@@ -193,6 +193,29 @@ async function locates(from: number, to: number, owners: Set<string>): Promise<{
   return out;
 }
 
+type LimitTally = Record<'free' | 'guest' | 'premium', { players: number; refused: number }>;
+/** Players who hit their daily question limit in [from, to), by tier, and how many questions were refused (statsHours.lh). */
+export function tallyLimits(hours: any[], owners: Set<string>): LimitTally {
+  const by: Record<string, { players: Set<string>; refused: number }> = {};
+  for (const h of hours) for (const [who, l] of Object.entries((h.lh || {}) as Record<string, any>)) {
+    if (owners.has(who)) continue;
+    const t = ['free', 'guest', 'premium'].includes(l?.t) ? l.t : 'free';
+    const g = (by[t] ||= { players: new Set(), refused: 0 });
+    g.players.add(who);
+    g.refused += Number(l?.n) || 0;
+  }
+  const one = (t: string) => ({ players: by[t]?.players.size || 0, refused: by[t]?.refused || 0 });
+  return { free: one('free'), guest: one('guest'), premium: one('premium') };
+}
+export function limitLine(label: string, l: LimitTally): string {
+  const part = (name: string, x: { players: number; refused: number }) => `${name} ${x.players} (${x.refused} refused)`;
+  return `${label}: ${part('free', l.free)} · ${part('guests', l.guest)} · ${part('Premium', l.premium)}`;
+}
+async function limitsIn(from: number, to: number, owners: Set<string>): Promise<LimitTally> {
+  const hours = (await getFirestore().collection('statsHours').where('at', '>=', from - HOUR + 1).get()).docs.map((d) => d.data() as any).filter((h) => h.at < to);
+  return tallyLimits(hours, owners);
+}
+
 const APP_NAMES: [string, string][] =[['desktop', 'desktop'], ['deck', 'Deck'], ['web', 'web']];
 const change = (now: number, before: number) => (before ? ` (${now >= before ? '+' : ''}${Math.round(((now - before) / before) * 100)}%)` : now ? ' (new)' : '');
 const money = (n: number) => `$${n.toFixed(2)}`;
@@ -253,6 +276,9 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   const talkMs = window === '24h' ? DAY : longMs, talkLabel = window === '24h' ? 'last 24 hours' : `last ${longMs / DAY} days`;
   const [games, fb] = await Promise.all([topGames(now - talkMs, now).catch(() => []), feedbackIn(now - talkMs, now, owners).catch(() => null)]);
   if (games.length) parts.push(`**Top games** (${talkLabel}, by questions, yours included): ${games.map((g) => `${g.name} ${g.q}`).join(' · ')}`);
+  // Players who hit their daily question limit (counted from Nov 17 2026): shows when they regularly run out.
+  const [lim24, lim7] = await Promise.all([limitsIn(now - DAY, now, owners), limitsIn(now - 7 * DAY, now, owners)]).catch(() => [null, null]);
+  if (lim24 && lim7) parts.push(`**Hit the daily question limit** (players, questions refused after it)\n${limitLine('Last 24 hours', lim24)}\n${limitLine('Last 7 days', lim7)}`);
   if (fb) parts.push(`**Answer feedback** (${talkLabel}): 👍 ${fb.up} · 👎 ${fb.down}${fb.up + fb.down ? ` (${Math.round((100 * fb.up) / (fb.up + fb.down))}% positive)` : ''} · ${fb.reports} report(s)${fb.open ? `, ${fb.open} still open` : ''}`);
   const site = await siteAskWindow(now - siteMs, now);
   // The homepage's app (scripts/guides/homeApp.ts): tries, sign-ups and Premium starts from it.
