@@ -867,7 +867,16 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
           console.warn('[checkout] embedded refused, using the hosted page:', e?.message);
         }
       }
-      const session = await stripe.checkout.sessions.create(hosted);
+      let session;
+      try {
+        session = await stripe.checkout.sessions.create(hosted);
+      } catch (e: any) {
+        // The offer's coupon refused (missing, expired, mistyped): the yearly price without it, never a failed checkout.
+        if (!hosted.discounts) throw e;
+        console.warn('[checkout] offer coupon refused, checking out without it:', e?.message);
+        delete hosted.discounts;
+        session = await stripe.checkout.sessions.create(hosted);
+      }
 
       res.json({ url: session.url });
     } catch (err: any) {
