@@ -582,6 +582,11 @@
       markers.forEach((m) => {
         const onScreen = m.x >= 0 && m.x <= w && m.y >= 0 && m.y <= h;
         m.visible = !gone && !m.pending && !m.dropped && onScreen;
+        // Markers v2 step 4: off screen, but the camera is being followed this very frame, so we know which way it is
+        // (the page draws an arrow at the screen edge). Never while the camera is lost: no guessing.
+        // Only markers whose item was matched on screen (not camera dead-reckoning alone), at most half a screen past the edge.
+        m.off = !gone && !m.pending && !m.dropped && !onScreen && started && cameraLost === 0 && m.matched &&
+          m.x > -0.5 * w && m.x < 1.5 * w && m.y > -0.5 * h && m.y < 1.5 * h;
       });
       if (cameraLost === 0) {
         // Pick a new reference frame once the view has moved on (a quarter screen), or when too few of the
@@ -597,7 +602,7 @@
         prev = frame;
         prevWhole = frame;
       }
-      return markers.map((m) => ({ x: m.x / w, y: m.y / h, visible: m.visible, score: m.score }));
+      return markers.map((m) => ({ x: m.x / w, y: m.y / h, visible: m.visible, score: m.score, off: !!m.off }));
     }
 
     /**

@@ -52,4 +52,22 @@ assert.equal(r[0].visible, true);
 assert.equal(r[1].visible, false, 'a skipped marker is never shown');
 assert.equal(t.gone, false, 'a skipped marker never ends the others');
 
+// Edge arrows (step 4): a marker the camera panned off screen is "off" (the page points at it from the edge); on a
+// view that's lost it never is (no guessing).
+t = T.createTracker({ ref: scene(1), w, h, points: [{ x: 0.9, y: 0.5, label: 'Chest' }, { x: 0.4, y: 0.5, label: 'Lever' }] });
+for (let i = 0; i < 5; i++) r = t.update(scene(1), 33);
+for (let dx = 2; dx <= 16; dx += 2) r = t.update(scene(1, dx, 0), 33);
+assert.equal(t.gone, false, 'a pan is followed');
+assert.equal(r[0].visible, false, 'the chest scrolled off the right edge');
+assert.equal(r[0].off, true, 'and is pointed at from the edge');
+assert.ok(r[0].x > 1, 'on the right: the scene moved right');
+assert.equal(r[1].off, false, 'the lever is still on screen');
+// A lost view: no arrows (a fresh tracker, as in the "lost" case above; these tiny test pictures can't stand in for
+// a real pan followed by a scene change, which the 2D bench covers on real footage).
+t = T.createTracker({ ref: scene(1), w, h, points: [{ x: 0.9, y: 0.5, label: 'Chest' }] });
+for (let i = 0; i < 5; i++) t.update(scene(1), 33);
+for (let i = 0; i < 8 && !t.gone; i++) r = t.update(elsewhere(), 33);
+assert.equal(t.goneWhy, 'lost');
+assert.ok(r.every((m) => !m.off), 'no arrows once the view is lost');
+
 console.log('trackerFindAgain: all passed');

@@ -54,6 +54,24 @@
   body.checking .m .tag { opacity: .85; border-style: dashed; background: rgba(16, 12, 28, .8); }
   body.checking .num { animation: blink 1s steps(2) infinite; }
   .m.gone { opacity: 0 !important; transition: opacity .3s steps(3); }
+  /* Markers v2 step 4: a marker that scrolled off screen (the camera still followed): its number in a small badge at
+     the screen edge, with a tip pointing the way. */
+  .edge { position: absolute; left: 0; top: 0; width: 34px; height: 34px; margin: -17px 0 0 -17px; will-change: transform;
+          display: flex; align-items: center; justify-content: center; background: var(--accent); border: 2px solid rgba(16, 12, 28, .9);
+          color: #16101f; font-weight: 800; font-size: 16px; box-shadow: 0 4px 14px rgba(0, 0, 0, .65); transition: opacity .2s steps(3); }
+  /* The marker's name on the inward side of the badge. */
+  .edge .lab { position: absolute; white-space: nowrap; padding: 2px 8px; background: rgba(16, 12, 28, .92); border: 1.5px solid var(--accent);
+               color: #fff; font-size: 13px; font-weight: 700; pointer-events: none; }
+  .edge.s-top .lab { top: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
+  .edge.s-bottom .lab { bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
+  .edge.s-left .lab { left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
+  .edge.s-right .lab { right: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
+  .edge.hidden { opacity: 0; }
+  .edge .rot { position: absolute; inset: 0; pointer-events: none; }
+  .edge .tip { position: absolute; right: -15px; top: 50%; margin-top: -9px; width: 0; height: 0;
+               border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-left: 12px solid var(--accent); }
+  .edge.guide { --accent: #f5b642; }
+  body.out .edge { opacity: 0; transition: opacity .3s steps(3); }
   @keyframes blink { 50% { opacity: .35; } }
   @keyframes pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
 </style>
@@ -205,7 +223,9 @@
     const GLIDE_MS = 110; // how quickly a marker settles onto a corrected spot
     let lastDraw = 0;
     const visible = opts.points.map(() => false);
-    live = { tracker, ctx, w, h, els, target, shown, visible, calm };
+    const off = opts.points.map(() => false); // off screen, and the camera is followed: an arrow at the edge
+    const edges = []; // the arrows, made when first needed
+    live = { tracker, ctx, w, h, els, target, shown, visible, calm, off };
     // Found items that arrived while tracking was starting up (or that were found earlier and shown again).
     const queued = pendingAdds;
     pendingAdds = [];
@@ -273,6 +293,8 @@
           if (r.visible !== visible[i]) log(`marker ${i + 1} ${r.visible ? 'shown' : 'hidden'}`);
           visible[i] = r.visible;
           els[i].classList.toggle('hidden', !r.visible || hidden.has(i) || removed.has(i));
+          // Not too far: past a screen and a half, the camera's path is too long to be sure of the way.
+          off[i] = !!r.off && !hidden.has(i) && !removed.has(i) && Math.abs(r.x - 0.5) < 2 && Math.abs(r.y - 0.5) < 2;
         }
         if (tracker.gone) {
           // Markers v2: the view changed (not a black or white screen): hide them and find them again once it settles.
@@ -328,6 +350,53 @@
 
     // Draw every screen refresh at the tracked spot, nudged ahead along the camera's motion to make up for the
     // capture delay (none when the camera is still).
+    const EDGE_INSET = 34; // px from the screen edge
+    function drawEdge(i, x, y) {
+      let el = edges[i];
+      if (!off[i] || waiting) {
+        if (el && !el.classList.contains('hidden')) el.classList.add('hidden');
+        return;
+      }
+      if (!el) {
+        el = edges[i] = document.createElement('div');
+        el.className = 'edge hidden' + (els[i].classList.contains('guide') ? ' guide' : '');
+        const num = els[i].querySelector('.num');
+        el.textContent = num && num.textContent ? num.textContent : '•';
+        const rot = document.createElement('div');
+        rot.className = 'rot';
+        const tip = document.createElement('div');
+        tip.className = 'tip';
+        rot.append(tip);
+        el.append(rot);
+        const name = String((opts.points[i] && opts.points[i].label) || '');
+        if (name) {
+          const lab = document.createElement('span');
+          lab.className = 'lab';
+          lab.textContent = name.length > 22 ? `${name.slice(0, 21)}…` : name;
+          el.append(lab);
+        }
+        document.body.append(el);
+      }
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      const dx = x * W - W / 2;
+      const dy = y * H - H / 2;
+      const s = Math.min(dx ? (W / 2 - EDGE_INSET) / Math.abs(dx) : Infinity, dy ? (H / 2 - EDGE_INSET) / Math.abs(dy) : Infinity);
+      const px = Math.round(W / 2 + dx * s);
+      const py = Math.round(H / 2 + dy * s);
+      el.style.transform = `translate(${px}px, ${py}px)`;
+      // Which edge it sits on decides where its name goes (always towards the middle of the screen).
+      const sx = dx ? (W / 2 - EDGE_INSET) / Math.abs(dx) : Infinity;
+      const sy = dy ? (H / 2 - EDGE_INSET) / Math.abs(dy) : Infinity;
+      const side = sx < sy ? (dx > 0 ? 's-right' : 's-left') : dy > 0 ? 's-bottom' : 's-top';
+      if (el._side !== side) {
+        if (el._side) el.classList.remove(el._side);
+        el.classList.add(side);
+        el._side = side;
+      }
+      el.firstElementChild && (el.querySelector('.rot').style.transform = `rotate(${Math.atan2(dy, dx)}rad)`);
+      el.classList.remove('hidden');
+    }
     const draw = (now) => {
       if (finished) return;
       const lead = (Math.min(80, now - lastCaptureT + 16) / 1000) * LEAD_SHARE;
@@ -362,6 +431,7 @@
         }
         shown[i].x = c.x + ox;
         shown[i].y = c.y + oy;
+        drawEdge(i, shown[i].x, shown[i].y);
         // Only touch the page when a marker actually moved a pixel: an unchanged page costs the game nothing.
         const px = Math.round(shown[i].x * window.innerWidth);
         const py = Math.round(shown[i].y * window.innerHeight);
