@@ -69,3 +69,19 @@ export function nextStop(stops: Stop[], from: number | null, dir: Dir, zoneOrder
   }
   return best ? best.id : null;
 }
+
+/**
+ * The quick menu (controller mode step 3): `n` items around a ring, the first at the top, going clockwise. The right
+ * stick points at one: x right, y up (-1..1). Returns the item's index, or null while the stick is near the centre.
+ */
+export function ringIndex(x: number, y: number, n: number, deadzone = 0.5): number | null {
+  if (n <= 0 || Math.hypot(x, y) < deadzone) return null;
+  const deg = ((Math.atan2(x, y) * 180) / Math.PI + 360) % 360; // 0 at the top, clockwise
+  return Math.round(deg / (360 / n)) % n;
+}
+
+/** Where item `i` of `n` sits on a ring of radius `r` (px from the centre; y down, for the page). */
+export function ringSpot(i: number, n: number, r: number): { x: number; y: number } {
+  const a = (i / n) * Math.PI * 2;
+  return { x: Math.round(Math.sin(a) * r) + 0, y: Math.round(-Math.cos(a) * r) + 0 };
+}

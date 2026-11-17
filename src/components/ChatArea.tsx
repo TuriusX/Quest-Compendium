@@ -551,10 +551,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const immersiveRef = useRef(false);
   const stopPendingRef = useRef(false);
   const readAloudPendingRef = useRef(false);
+  // Listening was cancelled (B in the controller's quick menu): the recording stops and nothing is sent.
+  const cancelRecordingRef = useRef(false);
 
   const startVoiceRecording = async () => {
     if (isRecording) return;
     stopPendingRef.current = false;
+    cancelRecordingRef.current = false;
 
     playBlipSound(soundEnabled);
     try {
@@ -570,6 +573,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       };
 
       mediaRecorder.onstop = async () => {
+        if (cancelRecordingRef.current) {
+          cancelRecordingRef.current = false;
+          immersiveRef.current = false;
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const reader = new FileReader();
         
@@ -639,6 +648,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     } else if (state === 'end') {
       if (isRecording && mediaRecorderRef.current) stopVoiceRecording();
       else stopPendingRef.current = true;
+    } else if (state === 'cancel') {
+      if (isRecording && mediaRecorderRef.current) {
+        cancelRecordingRef.current = true;
+        stopVoiceRecording();
+      }
     }
   };
 

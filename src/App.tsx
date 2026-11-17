@@ -2132,6 +2132,10 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   findMarkersAgainRef.current = findMarkersAgain;
   useEffect(() => {
     (window as any).electronAPI?.onRefindRequest?.((r: { id?: string; auto?: boolean }) => void findMarkersAgainRef.current(r.id, r.auto === true));
+    // The controller's quick menu: Find markers again (the latest answer's).
+    const onFind = () => void findMarkersAgainRef.current(undefined, false);
+    window.addEventListener('qc-find-markers', onFind);
+    return () => window.removeEventListener('qc-find-markers', onFind);
   }, []);
 
   const placeMarkersNow = async (msgId: string, image: string, points: ScreenPoint[], accent: string, opts: { combat: boolean; watchNearby: boolean }, game: string, token: string | null) => {
@@ -3032,6 +3036,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         timestamp: nowAi
       };
 
+      // Asked from the controller's quick menu over the game: the panel slides in with the answer (electron/main.cjs).
+      (window as any).electronAPI?.answerArrived?.();
       // Desktop: show the AI's pointers right on top of the game, found on the screen as it is now (markers v2).
       const markerGame = activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '';
       const placeNow = !!(aiMessage.points?.length && imageBase64 && settings.showPointersOnScreen !== false && (window as any).electronAPI?.captureScreenNow);

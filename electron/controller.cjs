@@ -131,6 +131,8 @@ function createControllerService(opts) {
   const suppressed = new Set(); // combo members that just fired the combo: ignored until they're let go
   const repeat = { up: null, down: null, left: null, right: null, lt: null, rt: null };
   let lastScroll = 0;
+  let lastStick = 0;
+  let stickOut = false;
   // Buttons (and triggers) down on the last read: the panel hands focus back to the game only once they're all let go.
   let heldBits = 0;
   // The open hold still going after the panel opened: { since, talking } (asking in one motion).
@@ -147,7 +149,7 @@ function createControllerService(opts) {
 
     // Merge every connected pad into one virtual controller.
     let buttons = 0;
-    let lx = 0, ly = 0, ry = 0, lt = 0, rt = 0;
+    let lx = 0, ly = 0, ry = 0, rx = 0, lt = 0, rt = 0;
     for (let i = 0; i < 4; i++) {
       if (!connected[i]) continue;
       const g = readPad(i);
@@ -159,6 +161,7 @@ function createControllerService(opts) {
       if (Math.abs(g.sThumbLX) > Math.abs(lx)) lx = g.sThumbLX;
       if (Math.abs(g.sThumbLY) > Math.abs(ly)) ly = g.sThumbLY;
       if (Math.abs(g.sThumbRY) > Math.abs(ry)) ry = g.sThumbRY;
+      if (Math.abs(g.sThumbRX || 0) > Math.abs(rx)) rx = g.sThumbRX || 0;
       lt = Math.max(lt, g.bLeftTrigger || 0);
       rt = Math.max(rt, g.bRightTrigger || 0);
     }
@@ -265,11 +268,22 @@ function createControllerService(opts) {
       }
     }
 
-    // Right stick scrolls.
+    // Right stick scrolls; it also points in the quick menu, so its direction is sent too while it's pushed
+    // ({ type: 'stick', x, y }, -1..1, y up), and once when it's let go (x = y = 0).
     const nry = ry / 32767;
+    const nrx = rx / 32767;
     if (visible && Math.abs(nry) > SCROLL_DEADZONE && t - lastScroll > 33) {
       lastScroll = t;
       opts.onInput({ type: 'scroll', dy: Math.round(-nry * 42) });
+    }
+    const pushed = Math.hypot(nrx, nry) > STICK_DEADZONE;
+    if (visible && pushed && t - lastStick > 50) {
+      lastStick = t;
+      stickOut = true;
+      opts.onInput({ type: 'stick', x: Math.round(nrx * 100) / 100, y: Math.round(nry * 100) / 100 });
+    } else if (stickOut && !pushed) {
+      stickOut = false;
+      opts.onInput({ type: 'stick', x: 0, y: 0 });
     }
 
     prevButtons = buttons;
@@ -334,7 +348,10 @@ function createControllerService(opts) {
       }, TICK_MS);
     });
   }
-  return { available, setConfig, stop, whenReleased, _tick: tick };
+  // Tests: the combo firing, and input as if from the controller.
+  const _toggle = () => opts.onToggle();
+  const _input = (evt) => opts.onInput(evt);
+  return { available, setConfig, stop, whenReleased, _tick: tick, _toggle, _input };
 }
 
 module.exports = { createControllerService, BTN };

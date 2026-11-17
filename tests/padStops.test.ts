@@ -38,3 +38,16 @@ assert.equal(sameRow(box(0, 0, 10, 20), box(20, 10, 10, 20)), true);
 assert.equal(sameRow(box(0, 0, 10, 20), box(20, 15, 10, 20)), false);
 
 console.log("padStops: all passed");
+
+// The quick menu's ring (step 3): the stick points at an item; the first is at the top, clockwise.
+import { ringIndex, ringSpot } from "../src/utils/padStops";
+assert.equal(ringIndex(0, 1, 8), 0, "up: the top item");
+assert.equal(ringIndex(1, 0, 8), 2, "right: a quarter of the way round");
+assert.equal(ringIndex(0, -1, 8), 4, "down");
+assert.equal(ringIndex(-1, 0, 8), 6, "left");
+assert.equal(ringIndex(-0.7, 0.7, 8), 7, "up-left: the last item");
+assert.equal(ringIndex(0.1, 0.1, 8), null, "near the centre: nothing");
+assert.equal(ringIndex(0, 1, 0), null);
+assert.deepEqual(ringSpot(0, 4, 100), { x: 0, y: -100 }, "the first item is at the top");
+assert.deepEqual(ringSpot(1, 4, 100), { x: 100, y: 0 });
+console.log("padStops ring: all passed");

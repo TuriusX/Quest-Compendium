@@ -74,6 +74,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   hideScreenPointers: () => ipcRenderer.send('hide-screen-pointers'),
   // Markers v2: a fresh picture of the game's screen when the answer arrives (null if it can't be taken).
   captureScreenNow: () => ipcRenderer.invoke('capture-screen-now'),
+  // The quick menu over the game (wheel.cjs): its labels, what was picked there, and "an answer arrived".
+  setQuickMenu: (items, strings) => ipcRenderer.send('quick-menu-items', { items, strings }),
+  onQuickAction: (callback) => { ipcRenderer.removeAllListeners('quick-action'); ipcRenderer.on('quick-action', (event, key) => callback(String(key || ''))); },
+  answerArrived: () => ipcRenderer.send('answer-arrived'),
   // Find the markers again: asked by the marker page (auto) or the shortcut key.
   onRefindRequest: (callback) => { ipcRenderer.removeAllListeners('refind-request'); ipcRenderer.on('refind-request', (event, r) => callback(r || {})); },
   // The objectives tracker drawn over the game (electron/tracker.cjs).

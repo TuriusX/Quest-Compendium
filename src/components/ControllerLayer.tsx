@@ -10,7 +10,10 @@
  *   X  voice question (press again to send); on an answer: read it aloud
  *   Y  quick questions (hold: ask out loud, immersive mode); on an answer: its Actions menu
  *   A small prompt bar in the corner shows only the buttons that do something for what's selected (step 2).
- *   Menu  on-screen keyboard                         View  screenshot & ask (desktop)
+ *   Menu  the quick menu (step 3): a ring of actions picked with the right stick or the d-pad, A to choose. It holds
+ *         what used to be hidden on L3, R3, View and Menu (they still work): Help me here, Screenshot and ask, Speak,
+ *         Find markers again, Quest log, Pro / Fast, Switch game, Type, Settings, Hide the app
+ *   View  quest log
  *   LB / RB  Ask, Guide, then the previous / next game   LT / RT  page through long answers   Right stick  scroll
  *   R3 (press the right stick)  switch Pro / Fast for the next question
  *
@@ -23,10 +26,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useT } from '../i18n';
 import { QUICK_MAIN, QUICK_MORE, QUICK_HINTS, quickLabelKey } from '../utils/quickQuestions';
-import { nextStop, type Stop } from '../utils/padStops';
+import { nextStop, ringIndex, ringSpot, type Stop } from '../utils/padStops';
+import { Camera, EyeOff, Gamepad2, Keyboard, LocateFixed, Mic, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
-type PadEvent = { type: 'button'; button: Btn | 'lt' | 'rt' } | { type: 'scroll'; dy: number } | { type: 'talk'; state: 'start' | 'end' };
+type PadEvent =
+  | { type: 'button'; button: Btn | 'lt' | 'rt' }
+  | { type: 'scroll'; dy: number }
+  | { type: 'talk'; state: 'start' | 'end' }
+  // The right stick's direction while pushed (x right, y up, -1..1), and x = y = 0 once let go: points in the quick menu.
+  | { type: 'stick'; x: number; y: number };
 
 const FOCUSABLE =
   'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, ' +
@@ -184,6 +193,8 @@ function useGamepadPolling(enabled: boolean, talkButton: string, onEvent: (e: Pa
     // Hold to talk on one button: held 350 ms starts listening, letting go sends; a tap is its normal press.
     let talkSince: number | null = null, talking = false;
     let lastScroll = 0;
+    let lastStick = 0;
+    let stickOut = false;
     let raf = 0;
     const loop = () => {
       raf = requestAnimationFrame(loop);
@@ -192,7 +203,7 @@ function useGamepadPolling(enabled: boolean, talkButton: string, onEvent: (e: Pa
       if (!pads.length) return;
       const t = performance.now();
       const down = new Set<Btn>();
-      let lx = 0, ly = 0, ry = 0;
+      let lx = 0, ly = 0, ry = 0, rx = 0;
       for (const p of pads) {
         for (const [i, name] of MAP) if (p.buttons[i]?.pressed) down.add(name);
         if (p.buttons[12]?.pressed) down.add('up');
@@ -202,6 +213,7 @@ function useGamepadPolling(enabled: boolean, talkButton: string, onEvent: (e: Pa
         if (Math.abs(p.axes[0] ?? 0) > Math.abs(lx)) lx = p.axes[0] ?? 0;
         if (Math.abs(p.axes[1] ?? 0) > Math.abs(ly)) ly = p.axes[1] ?? 0;
         if (Math.abs(p.axes[3] ?? 0) > Math.abs(ry)) ry = p.axes[3] ?? 0;
+        if (Math.abs(p.axes[2] ?? 0) > Math.abs(rx)) rx = p.axes[2] ?? 0;
         if ((p.buttons[6]?.value ?? 0) > 0.5) down.add('lt' as Btn);
         if ((p.buttons[7]?.value ?? 0) > 0.5) down.add('rt' as Btn);
       }
@@ -229,6 +241,8 @@ function useGamepadPolling(enabled: boolean, talkButton: string, onEvent: (e: Pa
         else if (t - r.since > 380 && t - r.last > every) { r.last = t; onEventRef.current({ type: 'button', button: d }); }
       }
       if (Math.abs(ry) > 0.25 && t - lastScroll > 33) { lastScroll = t; onEventRef.current({ type: 'scroll', dy: Math.round(ry * 42) }); }
+      if (Math.hypot(rx, ry) > 0.55 && t - lastStick > 50) { lastStick = t; stickOut = true; onEventRef.current({ type: 'stick', x: rx, y: -ry }); }
+      else if (stickOut && Math.hypot(rx, ry) <= 0.55) { stickOut = false; onEventRef.current({ type: 'stick', x: 0, y: 0 }); }
       prev.clear();
       for (const [, name] of MAP) if (down.has(name)) prev.add(name);
     };
@@ -261,7 +275,8 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
   const t = useT();
   const locale = useLocale();
   const [padMode, setPadMode] = useState(false);
-  const [panel, setPanel] = useState<null | 'questions' | 'keyboard' | 'actions'>(null);
+  const [panel, setPanel] = useState<null | 'questions' | 'keyboard' | 'actions' | 'quick'>(null);
+  const [qmIndex, setQmIndex] = useState(0);
   // The Actions menu (Y on an answer): everything the mouse version offers for it, as one list.
   const [actions, setActions] = useState<{ label: string; run: () => void }[]>([]);
   const [aIndex, setAIndex] = useState(0);
@@ -364,6 +379,24 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
     setPanel('keyboard');
   }, []);
 
+  /**
+   * The quick menu (step 3): what used to sit on hidden buttons, in one ring. Desktop-only actions (screenshot, find
+   * markers, settings, hide) only on the desktop.
+   */
+  const desktop = !!electronAPI();
+  const quickMenu: { key: string; label: string; Icon: React.ComponentType<{ className?: string }>; run: () => void }[] = [
+    { key: 'help', label: t('set.locateKey'), Icon: LocateFixed, run: () => emit('qc-help-here') },
+    ...(desktop ? [{ key: 'shot', label: t('pad.shotAsk'), Icon: Camera, run: () => emit('trigger-auto-screenshot-submit') }] : []),
+    { key: 'speak', label: t('pad.voice'), Icon: Mic, run: () => emit('trigger-voice-record') },
+    ...(desktop ? [{ key: 'find', label: t('set.sc.findMarkers'), Icon: ScanSearch, run: () => emit('qc-find-markers') }] : []),
+    { key: 'log', label: t('pad.questLog'), Icon: ScrollText, run: () => emit('qc-toggle-log') },
+    { key: 'model', label: t('pad.model'), Icon: Zap, run: () => emit('qc-toggle-answer-model') },
+    { key: 'games', label: t('pad.switchGame'), Icon: Gamepad2, run: () => emit('qc-open-games') },
+    { key: 'type', label: t('pad.keyboard'), Icon: Keyboard, run: () => openKeyboardRef.current() },
+    ...(desktop ? [{ key: 'settings', label: t('common.settings'), Icon: Settings, run: () => electronAPI()?.openSettingsWindow?.() }] : []),
+    ...(desktop ? [{ key: 'hide', label: t('pad.hideApp'), Icon: EyeOff, run: () => electronAPI()?.toggleSlide?.() }] : []),
+  ];
+
   /** The answer the controller is on (the answer itself, or a control inside it). */
   const currentAnswer = (): HTMLElement | null => {
     const el = (document.activeElement as HTMLElement | null) || focusedRef.current;
@@ -390,6 +423,31 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
     setAIndex(0);
     setPanel('actions');
   }, [t]);
+
+  const openKeyboardRef = useRef(openKeyboard);
+  openKeyboardRef.current = openKeyboard;
+
+  // The quick menu over the game (electron/wheel.cjs): the desktop app shows it, not the panel, when the controller's
+  // open combo is used with the panel away. It gets this menu's labels (plus "Open the panel" first; Hide the app means
+  // nothing there), and sends back what was picked.
+  const quickMenuRef = useRef(quickMenu);
+  quickMenuRef.current = quickMenu;
+  useEffect(() => {
+    const api = electronAPI();
+    if (!api?.setQuickMenu) return;
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
+    api.setQuickMenu(
+      [{ key: 'panel', label: t('pad.openPanel') }, ...quickMenuRef.current.filter((i) => i.key !== 'hide').map(({ key, label }) => ({ key, label }))],
+      { title: t('pad.quickMenu'), listening: t('pad.listening'), listeningTap: t('pad.listeningTap'), select: t('pad.select'), close: t('common.close'), ask: t('pad.ask'), cancel: t('common.cancel'), accent },
+    );
+  }, [locale, t]);
+  useEffect(() => {
+    electronAPI()?.onQuickAction?.((key: string) => {
+      // Speak from the ring: listening while it's up; A asks, B cancels.
+      if (key.startsWith('talk-')) return emit('qc-talk', { state: key.slice(5) });
+      quickMenuRef.current.find((i) => i.key === key)?.run();
+    });
+  }, []);
 
   const typeText = useCallback((next: string) => {
     setText(next);
@@ -433,7 +491,16 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
         }
       }
 
+      // The right stick points in the quick menu; elsewhere its direction means nothing (it scrolls).
+      if (e.type === 'stick') {
+        if (panel === 'quick') {
+          const i = ringIndex(e.x, e.y, quickMenu.length);
+          if (i !== null) setQmIndex(i);
+        }
+        return;
+      }
       if (e.type === 'scroll') {
+        if (panel === 'quick') return;
         const el = scrollableIn(topScope());
         if (el) el.scrollBy({ top: e.dy });
         return;
@@ -470,6 +537,19 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
         else if (b === 'down') setQIndex((i) => (i + 1) % questionLabels.length);
         else if (b === 'a') { emit('qc-ask', { text: questionLabels[qIndex], quick: quickIds[qIndex] }); setPanel(null); }
         else if (b === 'b' || b === 'y') setPanel(null);
+        return;
+      }
+
+      // --- Quick menu: the d-pad steps round the ring (the right stick points); A chooses; B or Menu closes.
+      if (panel === 'quick') {
+        const n = quickMenu.length;
+        if (b === 'right' || b === 'down') setQmIndex((i) => (i + 1) % n);
+        else if (b === 'left' || b === 'up') setQmIndex((i) => (i + n - 1) % n);
+        else if (b === 'a') {
+          const item = quickMenu[qmIndex];
+          setPanel(null);
+          item?.run();
+        } else if (b === 'b' || b === 'start') setPanel(null);
         return;
       }
 
@@ -615,7 +695,9 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
           setPanel('questions');
         }
       } else if (b === 'start') {
-        openKeyboard();
+        // The quick menu, wherever you are (the keyboard: A on the Ask bar, or Type in this menu).
+        setQmIndex(0);
+        setPanel('quick');
       } else if (b === 'back') {
         // View: the quest log opens or closes (owner, Oct 30 2026). Screenshot and ask moved to L3.
         emit('qc-toggle-log');
@@ -629,7 +711,7 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
         if (scope === document.body) emit('qc-toggle-answer-model');
       }
     },
-    [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus, logFocus, actions, aIndex, openActions],
+    [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus, logFocus, actions, aIndex, openActions, quickMenu, qmIndex],
   );
 
   // Desktop: system-level controller service. Falls back to the Gamepad API if it isn't available.
@@ -696,6 +778,35 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
               {label}
             </div>
           ))}
+        </div>
+      )}
+
+      {panel === 'quick' && (
+        <div className="fixed inset-0 z-[401] pointer-events-auto flex items-center justify-center bg-black/55" role="menu" aria-label={t('pad.quickMenu')}>
+          <div className="relative" style={{ width: 360, height: 360 }}>
+            <div className="absolute inset-[70px] rounded-full border border-[var(--accent-border)] bg-[#0d0e15]/95 shadow-2xl flex flex-col items-center justify-center text-center px-6">
+              <div className="text-[10px] font-mono uppercase text-zinc-400 mb-1">{t('pad.quickMenu')}</div>
+              <div className="text-base font-bold text-white leading-tight">{quickMenu[qmIndex]?.label}</div>
+            </div>
+            {quickMenu.map((item, i) => {
+              const at = ringSpot(i, quickMenu.length, 150);
+              const on = i === qmIndex;
+              return (
+                <div
+                  key={item.key}
+                  role="menuitem"
+                  aria-current={on}
+                  aria-label={item.label}
+                  className={`absolute w-14 h-14 -ml-7 -mt-7 rounded-full border flex items-center justify-center transition-transform ${
+                    on ? 'bg-[var(--accent-color)] border-transparent text-[#16101f] scale-110 shadow-[0_0_18px_var(--accent-glow)]' : 'bg-[#13141d] border-white/15 text-zinc-200'
+                  }`}
+                  style={{ left: 180 + at.x, top: 180 + at.y }}
+                >
+                  <item.Icon className="w-6 h-6" />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -783,6 +894,12 @@ export function ControllerLayer({ enabled, talkButton = 'y', hintMode = false, l
             <Hint b="↕" label={t('pad.logMove')} />
             <Hint b="a" label={t('pad.logTick')} />
             <Hint b="b" label={t('pad.back')} />
+          </>
+        ) : panel === 'quick' ? (
+          <>
+            <Hint b="rs" label={t('pad.logMove')} />
+            <Hint b="a" label={t('pad.select')} />
+            <Hint b="b" label={t('common.close')} />
           </>
         ) : panel === 'actions' ? (
           <>

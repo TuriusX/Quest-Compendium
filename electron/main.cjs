@@ -96,6 +96,7 @@ app.setName('Quest Compendium');
 const path = require('path');
 const { spawn } = require('child_process');
 const { createControllerService } = require('./controller.cjs');
+const { createWheel } = require('./wheel.cjs');
 const { createFocusHelper } = require('./focus.cjs');
 const { pickCaptureDisplay } = require('./gameScreen.cjs');
 const tracker = require('./tracker.cjs');
@@ -282,6 +283,8 @@ app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5
 
 let isAppVisible = true;
 let controllerService = null;
+let quickWheel = null; // the quick menu over the game (wheel.cjs)
+let wheelAskAt = 0; // when something was asked from it: its answer brings the panel in
 // The window (usually the game) that had focus before the overlay opened, so focus can be handed back.
 let focusBeforeOverlay = null;
 // Snapshot on open: some games pause as soon as they lose focus, so the overlay grabs a screenshot of the game
@@ -756,10 +759,43 @@ app.whenReady().then(() => {
     },
   });
 
+  // The quick menu over the game (wheel.cjs): the controller's open combo shows this ring, not the panel; its first
+  // item opens the panel, and an answer asked from it brings the panel in when it arrives ('answer-arrived').
+  const showPanelFromPad = () =>
+    Promise.resolve(slideIn()).then(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-activated');
+    });
+  quickWheel = createWheel({
+    focusHelper,
+    display: () => gameDisplay() || screen.getDisplayNearestPoint(screen.getCursorScreenPoint()),
+    whenReleased: () => (controllerService && controllerService.whenReleased ? controllerService.whenReleased() : Promise.resolve()),
+    onChoose: (key) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      if (key === 'panel') return void quickWheel.close(true).then(showPanelFromPad);
+      // These need the panel: it opens, then does them.
+      if (key === 'type' || key === 'games') {
+        return void quickWheel.close(true).then(showPanelFromPad).then(() => mainWindow.webContents.send('quick-action', key));
+      }
+      // The rest happen with the game in front; asking ones bring the panel in with their answer.
+      if (key === 'help' || key === 'shot') wheelAskAt = Date.now();
+      quickWheel.close().then(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('quick-action', key);
+      });
+    },
+    onTalk: (state) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      if (state === 'end') wheelAskAt = Date.now();
+      mainWindow.webContents.send('quick-action', `talk-${state}`);
+    },
+  });
+
+  // Dev builds only: tests drive the quick menu and the controller through this (scratchpad harness).
+  if (isDev) global.__qcDev = { wheel: () => quickWheel, toggle: () => controllerService && controllerService._toggle && controllerService._toggle(), input: (evt) => controllerService && controllerService._input && controllerService._input(evt) };
+
   // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
   // overlay with the controller while it's visible. See controller.cjs.
   controllerService = createControllerService({
-    isVisible: () => !!mainWindow && !mainWindow.isDestroyed() && isAppVisible && mainWindow.isVisible(),
+    isVisible: () => (!!mainWindow && !mainWindow.isDestroyed() && isAppVisible && mainWindow.isVisible()) || quickWheel.isOpen(),
     // The quest log's tick / cycle buttons (Settings), while a game is focused: no mouse needed.
     // Locate me's button goes to the app; the tick and cycle buttons to the quest log.
     onTrackerKey: (action) => {
@@ -768,16 +804,20 @@ app.whenReady().then(() => {
     },
     onToggle: () => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
-      if (isAppVisible) {
+      if (quickWheel.isOpen()) {
+        quickWheel.close();
+      } else if (isAppVisible) {
         slideOut();
+      } else if (quickWheel.hasItems()) {
+        // The quick menu over the game, not the panel (owner, Nov 17 2026).
+        quickWheel.show();
       } else {
-        // The panel at its dock; the quest log stays as it is.
-        Promise.resolve(slideIn()).then(() => {
-          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-activated');
-        });
+        // The app hasn't sent the menu yet: the panel, as before.
+        showPanelFromPad();
       }
     },
     onInput: (evt) => {
+      if (quickWheel.isOpen()) return quickWheel.input(evt);
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-input', evt);
     },
   });
@@ -1395,6 +1435,22 @@ ipcMain.on('set-controller-config', (event, cfg) => {
 });
 
 ipcMain.handle('get-controller-status', async () => ({ available: !!(controllerService && controllerService.available) }));
+
+// The app's labels for the quick menu over the game (localized), and its page strings.
+ipcMain.on('quick-menu-items', (event, { items, strings } = {}) => {
+  if (quickWheel) quickWheel.setItems(items, strings);
+});
+
+// An answer arrived. If it was asked from the quick menu over the game (within two minutes), the panel slides in with it.
+ipcMain.on('answer-arrived', () => {
+  if (!wheelAskAt || Date.now() - wheelAskAt > 120000) return;
+  wheelAskAt = 0;
+  if (!isAppVisible && mainWindow && !mainWindow.isDestroyed()) {
+    Promise.resolve(slideIn()).then(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-activated');
+    });
+  }
+});
 
 ipcMain.on('toggle-slide', () => {
   if (isAppVisible) {
