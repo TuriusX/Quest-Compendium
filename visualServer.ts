@@ -17,6 +17,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { visualFor, visualId, communityWikis, YouTubeQuotaOut, type Cost, type Visual, type VisualStore } from './visualAnswer';
 import { communityWikisFor, rememberPictureSite, type CommunityWiki } from './scripts/guides/suggestImages';
 import { GENERATED } from './src/locales.generated';
+import { guideList } from './guidesApi';
 
 /**
  * The app's stand-in question when the player sent only a screenshot or a voice message (ChatArea: chat.defaultShotQ,
@@ -148,6 +149,29 @@ export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'l
   return { visual: v.kind === 'none' ? null : v, ref: r.keys[0] ? keyDoc(r.keys[0]) : null, cost: r.cost };
 }
 
+/**
+ * The game a question names, from the games with guides (owner, Nov 16 2026: "how to get the Nagakiba in Elden Ring"
+ * asked from the Steam home screen still gets its video). The longest name found as whole words; a one-word name
+ * ("Control", "Inside") only when it's capitalized in the question, so ordinary words don't count.
+ */
+export function gameNamedIn(question: string, games: { game: string }[]): string {
+  const norm = (s: string) => ` ${s.toLowerCase().replace(/[™®©:'’.,!?()\-–—]/g, ' ').replace(/\s+/g, ' ').trim()} `;
+  const q = norm(question);
+  let best = '', bestLen = 0;
+  for (const { game } of games) {
+    const n = norm(game).trim();
+    if (n.length < 4 || n.length <= bestLen) continue;
+    if (!q.includes(` ${n} `)) continue;
+    if (!n.includes(' ')) {
+      const word = game.replace(/[™®©]/g, '').trim();
+      if (!new RegExp(`(^|[^A-Za-z])${word.charAt(0).toUpperCase()}${word.slice(1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Za-z]|$)`).test(question)) continue;
+    }
+    best = game;
+    bestLen = n.length;
+  }
+  return best;
+}
+
 export function registerVisualAnswers(app: Express, deps: VisualDeps): void {
   const env = deps.env ?? process.env;
   const on = () => visualAnswersOn(env);
@@ -157,9 +181,12 @@ export function registerVisualAnswers(app: Express, deps: VisualDeps): void {
 
   app.post('/api/visual', deps.requireAuth, async (req: Request, res: Response) => {
     if (!on()) return res.json({ visual: null, off: true });
-    const game = String(req.body?.game ?? '').trim().slice(0, 120);
     const question = String(req.body?.question ?? '').trim().slice(0, 500);
     const answer = String(req.body?.answer ?? '').trim().slice(0, 6000);
+    // The game the question names comes first, then the app's (the running game, the tab's, the last played): no
+    // running game is needed (guide-free first).
+    const named = question ? gameNamedIn(question, await guideList().catch(() => [])) : '';
+    const game = (named || String(req.body?.game ?? '').trim()).slice(0, 120);
     if (!game || !question || !answer) return res.json({ visual: null });
     const uid = String((req as any).user?.uid ?? '');
     const t = Date.now();
