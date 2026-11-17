@@ -23,6 +23,7 @@ import { getAuth, type UserRecord } from 'firebase-admin/auth';
 import { siteAskWindow } from './siteAskStats';
 import { improverMonth } from './autoChanges';
 import { visualAnswersOn, visualStatsFor, visualStatsLine } from './visualServer';
+import { searchBillLine, searchMonth } from './searchGuard';
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 const DAY_TZ = 'America/Chicago';
@@ -316,6 +317,9 @@ export async function statsText(window: '24h' | '7d' | '30d' | '' = '', now = Da
   // Premium subscribers (not the owner's accounts) and this month's player AI cost.
   const cost = costs.docs.filter((d) => !owners.has(playerHash(d.id))).reduce((n, d) => n + (Number((d.data() as any).dollars) || 0), 0);
   parts.push(`**Premium subscribers:** ${subs}\n**Player AI cost this month:** ${money(cost)}\n**Accounts:** ${created.length}`);
+  // Google search grounding, all of it (pipeline, flagship builds, players): Google bills each query past 5,000 a month.
+  const sm = await searchMonth(true).catch(() => null);
+  if (sm) parts.push(`**Search:** ${searchBillLine(sm)}`);
   const approx = parts.some((p) => p.includes(' ≈'));
   return parts.join('\n\n') + `\n\n-# Without your accounts, test accounts and test traffic.${approx ? ' ≈: part of the window is from the daily counts (before hourly counting began), so whole days and your own platform use may be in it.' : ''}`;
 }

@@ -27,6 +27,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { db, gemini, MODEL, arg, searchesIn, ledgerDollars, usageScope } from './common';
 import { addImage, targetsFor, pageImpressionList, type ImageTarget } from '../../guideImages';
 import { pictureBudget } from './pictureFocus';
+import { countUncounted } from '../../searchGuard';
 
 const LITE = process.env.GUIDE_LITE_MODEL || 'gemini-3.1-flash-lite';
 const UA = 'QuestCompendium-ImageSuggester/1.0 (+https://questcompendium.com)';
@@ -251,6 +252,7 @@ export async function communityWikisFor(key: string, game: string, src: any, ai?
         contents: [{ role: 'user', parts: [{ text: `Which community-run wikis cover the video game "${game}" (its items, places and characters)? Not Fextralife, not Fandom. Reply with their domain names only, one per line, best first, at most 3; "none" if there are none.` }] }],
         config: { tools: [{ googleSearch: {} }], temperature: 0, maxOutputTokens: 2000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
       });
+      countUncounted(ai, res);
       const hosts = String(res?.text || '').toLowerCase().match(/[a-z0-9.-]+\.[a-z]{2,}/g) || [];
       for (const h of [...new Set(hosts)].filter((h) => !/fandom\.com|fextralife|wikipedia|youtube|reddit/.test(h)).slice(0, 3)) {
         const w = await mediaWikiAt(h.replace(/^www\./, ''));

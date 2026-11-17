@@ -41,6 +41,26 @@ export type SearchMonth = { month: string; count: number; pipeline: number; play
 const today = () => new Date().toISOString().slice(0, 10);
 const thisMonth = () => new Date().toISOString().slice(0, 7);
 
+/** What Google bills for a month's search queries: the first 5,000 free, then $14 per 1,000 (Gemini 3 grounding). */
+export const SEARCH_FREE_MONTHLY = 5000;
+export const billedSearchDollars = (queries: number) => (Math.max(0, queries - SEARCH_FREE_MONTHLY) * 14) / 1000;
+/** "6,832 search queries this month (pipeline 5,528, flagship 1,042, players 262) · ≈$25.65 billed past the free 5,000" */
+export const searchBillLine = (s: SearchMonth) =>
+  `${s.count.toLocaleString('en-US')} search queries this month (pipeline ${s.pipeline.toLocaleString('en-US')}, flagship ${s.flagship.toLocaleString('en-US')}, players ${s.players.toLocaleString('en-US')}) · ≈$${billedSearchDollars(s.count).toFixed(2)} billed past the free ${SEARCH_FREE_MONTHLY.toLocaleString('en-US')}`;
+
+/**
+ * Count a response's searches when the client that made it doesn't count them itself (the server's own client; the
+ * scripts' gemini() client counts every search already). Owner, Nov 16 2026: picture finding and the community-wiki
+ * lookup searched on the server without being counted.
+ */
+export function countUncounted(client: any, response: any, who: SearchWho = 'players'): void {
+  if (client?.countsSearches) return;
+  const n = countSearches(response);
+  if (!n) return;
+  void recordMonthly(n, who).catch(() => {});
+  void recordSearchDay(n, who === 'players' ? 'players' : 'pipeline').catch(() => {});
+}
+
 /** Number of Google searches a Gemini response ran. */
 export function countSearches(response: any): number {
   const q = response?.candidates?.[0]?.groundingMetadata?.webSearchQueries;

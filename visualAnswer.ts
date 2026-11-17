@@ -20,6 +20,7 @@
 import { ThinkingLevel } from '@google/genai';
 import sharp from 'sharp';
 import { estimateCost, SEARCH_DOLLARS } from './usage';
+import { countUncounted } from './searchGuard';
 import { fextralifeImage, pagePicture } from './scripts/guides/suggestImages';
 
 export type VisualKind = 'video' | 'picture' | 'none';
@@ -409,6 +410,7 @@ async function webTries(ai: Gen, cost: Cost, game: string, subject: string, step
       config: { tools: [{ googleSearch: {} }], temperature: 0, maxOutputTokens: 2000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
     });
     const searches = (res?.candidates?.[0]?.groundingMetadata?.webSearchQueries || []).length;
+    countUncounted(ai, res);
     cost.d += (estimateCost(FAST, res) || 0) + searches * SEARCH_DOLLARS;
     cost.log?.('visual-web', FAST, res);
     const links = ((res?.candidates?.[0]?.groundingMetadata?.groundingChunks || []) as any[]).map((c) => String(c?.web?.uri || '')).filter(Boolean);

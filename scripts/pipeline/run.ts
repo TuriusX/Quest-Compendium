@@ -82,7 +82,7 @@ import { siteAskWeekLine, siteFixWeekLine } from '../../siteAskStats';
 import { recordsWeekLine } from '../guides/recordsImport';
 import { autoWeekLines } from '../../autoChanges';
 import { guideDemand, rankByDemand, demandScore, QUESTION_WEIGHT } from './demandReport';
-import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY } from '../../searchGuard';
+import { searchMonth, pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY, searchBillLine } from '../../searchGuard';
 import { FieldPath } from 'firebase-admin/firestore';
 import { postDiscord, summaryText } from './summary';
 import { waitForGuideLock, isRefusal, lockedLine, SITE_LOCK } from '../guides/guideLock';
@@ -1352,6 +1352,8 @@ async function main() {
   try {
     const sl = await apiLimits(), sd = await searchesToday(true);
     report.push(`🔎 Searches today (Pacific day): ${searchDayLine(sl, sd)}.${pipelineRoom(sl, sd) <= 0 ? ' The pipeline reached its share; searching work waits for tomorrow.' : ''}`);
+    // The month's queries and what Google bills for them (owner, Nov 16 2026: checked against the console's cost report).
+    report.push(`🧾 ${searchBillLine(await searchMonth(true))}.`);
   } catch { /* no count */ }
   if (LOCKED.size) report.push(`🔒 Skipped (another process was working on the guide): ${[...LOCKED].slice(0, 8).join('; ')}. Tried again next run.`);
   // ---- costs: what this run spent, by kind of work (the biggest steps named), and the day's and month's totals ----

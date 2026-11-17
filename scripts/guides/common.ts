@@ -72,6 +72,8 @@ export function gemini(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY is missing from .env');
   const client = new GoogleGenAI({ apiKey });
+  // This client counts its own searches (below): code handed a client checks this before counting (countUncounted).
+  (client as any).countsSearches = true;
   const generate = client.models.generateContent.bind(client.models);
   (client.models as any).generateContent = async (request: any) => {
     if (STEP_LIMIT && ledgerDollars() >= STEP_LIMIT) throw new Error(`spending cap: this step has spent its $${STEP_LIMIT.toFixed(2)}`);
