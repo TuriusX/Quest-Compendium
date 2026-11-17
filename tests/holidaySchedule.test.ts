@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { scheduledAllowances, normalizeAllowances } from "../allowances";
 import { PLAYER_MONTHLY } from "../searchGuard";
+import { activeOffer } from "../offers";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -27,5 +28,13 @@ test("players' search reserve by month", () => {
   assert.equal(PLAYER_MONTHLY("2026-12"), 6000);
   assert.equal(PLAYER_MONTHLY("2027-01"), 6000);
   assert.equal(PLAYER_MONTHLY("2027-02"), 2000);
+});
+test("the holiday offer: only between its dates, and only with a coupon", () => {
+  const o = { holiday: { from: "2026-11-26", until: "2027-01-04", coupon: "HOLIDAY2026", line: "Holiday offer" } };
+  assert.equal(activeOffer(o, "2026-11-25"), null);
+  assert.equal(activeOffer(o, "2026-11-26")?.coupon, "HOLIDAY2026");
+  assert.equal(activeOffer(o, "2027-01-04")?.line, "Holiday offer");
+  assert.equal(activeOffer(o, "2027-01-05"), null);
+  assert.equal(activeOffer({ holiday: { ...o.holiday, coupon: "" } }, "2026-12-01"), null);
 });
 console.log(`\n${passed} tests passed`);

@@ -35,6 +35,7 @@ import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
+import { currentOffer } from './offers';
 import { questionType } from './src/utils/questionType';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerGuideImages } from './guideImages';
@@ -854,6 +855,9 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
           },
         ],
       };
+      // A dated offer on the yearly plan (offers.ts, config/offers: the holiday offer, Nov 26 - Jan 4).
+      const offer = yearly ? await currentOffer() : null;
+      if (offer) sessionFields.discounts = [{ coupon: offer.coupon }];
       const hosted = { ...sessionFields, success_url: fromHome ? `${site}/?upgrade=success` : done, cancel_url: fromHome ? `${site}/?upgrade=canceled` : back };
       if (fromHome && req.body?.embedded === true) {
         try {
@@ -1222,13 +1226,15 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
         const resetAt = nextReset(tz);
         const allow = await allowances();
         const p = isGuest || free.limited ? allow.guest : isPremium ? allow.premium : allow.free;
+        // A dated Premium offer, one line (offers.ts): only for signed-in free players.
+        const offerLine = !isGuest && !isPremium ? (await currentOffer())?.line || '' : '';
         return res.status(429).json({
           text: isGuest
             // Guests are asked to sign in (more questions today, conversations saved), never sent to Premium.
             ? `You've used today's guest questions. Sign in to keep going: ${allow.free.pro} Pro and ${allow.free.flash} Fast questions a day, and your conversations saved on all your devices.`
             : isPremium
             ? `You've used today's Pro and Fast questions. They're topped up at midnight, and what you don't use carries over.`
-            : `You've used today's ${p.pro} Pro and ${p.flash} Fast questions. They reset at midnight. Premium gives you ${allow.premium.pro} Pro and ${allow.premium.flash} Fast questions a day, and what you don't use carries over.`,
+            : `You've used today's ${p.pro} Pro and ${p.flash} Fast questions. They reset at midnight. Premium gives you ${allow.premium.pro} Pro and ${allow.premium.flash} Fast questions a day, and what you don't use carries over.${offerLine ? ` ${offerLine}` : ''}`,
           modelUsed: 'Limit Reached',
           limit: {
             resetAt, isPremium, dailyPro: p.pro, dailyFlash: p.flash, premiumPro: allow.premium.pro, premiumFlash: allow.premium.flash,
