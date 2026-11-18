@@ -19,6 +19,74 @@ const ZOOMS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 
 const isWeb = (u) => /^https?:\/\//i.test(String(u || ''));
 
+// Controller support inside a page (step 2): a small helper run in its own isolated world (the page's scripts can't see
+// it). It picks the links and controls on screen in reading order, rings the picked one in the app's accent colour,
+// opens it, and fills a text box with what was typed on the app's on-screen keyboard.
+const PAD_WORLD = 7781;
+const PAD_JS = `(() => {
+  if (window.__qcPad) return true;
+  const P = (window.__qcPad = { el: null, prev: null });
+  const vis = (el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4 || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return false;
+    const cs = getComputedStyle(el);
+    return cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0' && !el.disabled;
+  };
+  P.list = () => Array.from(document.querySelectorAll('a[href], button, input:not([type=hidden]), select, textarea, summary, [role=button], [role=link], [role=tab], [contenteditable=true]'))
+    .filter(vis)
+    .sort((a, b) => { const p = a.getBoundingClientRect(), q = b.getBoundingClientRect(); return Math.abs(p.top - q.top) > 8 ? p.top - q.top : p.left - q.left; });
+  P.mark = (el) => {
+    if (P.el && P.prev) { P.el.style.outline = P.prev.o; P.el.style.outlineOffset = P.prev.off; }
+    P.el = el; P.prev = null;
+    if (!el) return;
+    P.prev = { o: el.style.outline, off: el.style.outlineOffset };
+    el.style.outline = '3px solid #a87ffb'; el.style.outlineOffset = '2px';
+    el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
+  P.step = (d) => {
+    const L = P.list();
+    if (!L.length) { P.mark(null); return { none: true }; }
+    let i = P.el ? L.indexOf(P.el) : -1;
+    if (i < 0) i = d > 0 ? 0 : L.length - 1; else i = (i + d + L.length) % L.length;
+    P.mark(L[i]);
+    return { label: (L[i].innerText || L[i].getAttribute('aria-label') || L[i].value || '').trim().slice(0, 80) };
+  };
+  P.activate = () => {
+    const el = P.el && document.contains(P.el) ? P.el : null;
+    if (!el) return { none: true };
+    const t = el.tagName;
+    const editable = t === 'TEXTAREA' || el.isContentEditable || (t === 'INPUT' && !/^(button|submit|reset|checkbox|radio|range|color|file|image)$/i.test(el.type || ''));
+    el.focus();
+    if (editable) return { editable: true, value: el.isContentEditable ? el.innerText : el.value || '' };
+    el.click();
+    return {};
+  };
+  // Scroll what's under the middle of the page (an inner panel that scrolls, else the page itself).
+  P.scroll = (dy, smooth) => {
+    let el = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+    while (el && el !== document.body && el !== document.documentElement) {
+      const cs = getComputedStyle(el);
+      if (/(auto|scroll)/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 4) break;
+      el = el.parentElement;
+    }
+    const target = el && el !== document.body && el !== document.documentElement ? el : (document.scrollingElement || document.documentElement);
+    const h = target === (document.scrollingElement || document.documentElement) ? innerHeight : target.clientHeight;
+    const by = dy === 'page' ? Math.round(h * 0.85) : dy === '-page' ? -Math.round(h * 0.85) : Number(dy) || 0;
+    target.scrollBy({ top: by, behavior: smooth ? 'smooth' : 'auto' });
+    return {};
+  };
+  P.fill = (text) => {
+    const el = document.activeElement;
+    if (!el || el === document.body) return { none: true };
+    if (el.isContentEditable) el.innerText = text;
+    else Object.getOwnPropertyDescriptor(el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value').set.call(el, text);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return {};
+  };
+  return true;
+})()`;
+
 /** @param {{ getWindow: () => Electron.BrowserWindow | null }} opts */
 function createGuideBrowser(opts) {
   /** @type {Map<string, { id: string, url: string, title: string, favicon: string, loading: boolean, zoom: number, view: Electron.WebContentsView | null, usedAt: number }>} */
@@ -298,6 +366,39 @@ function createGuideBrowser(opts) {
     const t = tabs.get(activeId);
     if (!t || !t.view || !shown) return null;
     try { return (await t.view.webContents.capturePage()).toDataURL(); } catch { return null; }
+  });
+  // The controller inside the page: scroll, step through links, open, back, fill a text box.
+  ipcMain.handle('gb:pad', async (event, { id, cmd } = {}) => {
+    if (!fromApp(event)) return null;
+    const t = tabs.get(String(id));
+    const wc = t && t.view && !t.view.webContents.isDestroyed() ? t.view.webContents : null;
+    if (!wc || !cmd) return null;
+    const run = async (call) => {
+      try {
+        return await wc.executeJavaScriptInIsolatedWorld(PAD_WORLD, [{ code: `${PAD_JS}; window.__qcPad.${call}` }]);
+      } catch {
+        return null;
+      }
+    };
+    // (cmd.scroll > 0 moves the page up, like a wheel turned up; cmd.page 1 = a page up, -1 = a page down.)
+    if (cmd.page) return run(`scroll(${cmd.page > 0 ? "'-page'" : "'page'"}, true)`);
+    if (cmd.scroll) return run(`scroll(${-(Number(cmd.scroll) || 0)}, false)`);
+    if (cmd.link) return run(`step(${cmd.link > 0 ? 1 : -1})`);
+    if (cmd.activate) return run('activate()');
+    if (cmd.back) {
+      if (wc.canGoBack()) { wc.goBack(); return {}; }
+      return { home: true };
+    }
+    if (typeof cmd.fill === 'string') {
+      const r = await run(`fill(${JSON.stringify(cmd.fill.slice(0, 2000))})`);
+      if (cmd.submit) {
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+        wc.sendInputEvent({ type: 'char', keyCode: '\r' });
+        wc.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+      }
+      return r;
+    }
+    return null;
   });
   ipcMain.on('gb:external', (event, url) => { if (fromApp(event) && isWeb(url)) shell.openExternal(String(url)).catch(() => {}); });
   ipcMain.handle('gb:state', (event) => (fromApp(event) ? state() : null));

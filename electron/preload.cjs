@@ -91,6 +91,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     snapshot: () => ipcRenderer.invoke('gb:snapshot'),
     external: (url) => ipcRenderer.send('gb:external', String(url || '')),
     state: () => ipcRenderer.invoke('gb:state'),
+    // The controller inside the page: { scroll } | { page } | { link } | { activate } | { back } | { fill, submit }.
+    pad: (id, cmd) => ipcRenderer.invoke('gb:pad', { id: String(id), cmd }),
     onState: (cb) => { ipcRenderer.removeAllListeners('gb:state'); ipcRenderer.on('gb:state', (e, s) => cb(s)); },
     onKey: (cb) => { ipcRenderer.removeAllListeners('gb:key'); ipcRenderer.on('gb:key', (e, k) => cb(k || {})); },
     onFound: (cb) => { ipcRenderer.removeAllListeners('gb:found'); ipcRenderer.on('gb:found', (e, f) => cb(f || {})); },

@@ -212,10 +212,14 @@ export function GuidesBrowser({ active, game, steamAppId, home }: { active: bool
   };
   const closeTab = (id: string) => gb?.close(id);
   const isFav = !!tab && favs.some((f) => samePage(f.url, tab.url));
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
   const toggleFav = () => {
     if (!tab?.url) return;
     setFavs((list) => (isFav ? list.filter((f) => !samePage(f.url, tab.url)) : [...list, { name: (tab.title || hostOf(tab.url)).slice(0, 60), url: tab.url }]));
   };
+  const toggleFavRef = useRef(toggleFav);
+  toggleFavRef.current = toggleFav;
   const cycle = (dir: number) => {
     const ids: (string | 'home')[] = ['home', ...st.tabs.map((x) => x.id)];
     const at = onHome ? 0 : Math.max(0, ids.indexOf(st.activeId || 'home'));
@@ -243,6 +247,19 @@ export function GuidesBrowser({ active, game, steamAppId, home }: { active: bool
   };
   useEffect(() => {
     gb?.onKey((k: { act: string }) => keyRef.current(k.act));
+  }, [gb]);
+  // The controller's browser actions (ControllerLayer: B back to the guide from a tab's first page, Y's Actions).
+  useEffect(() => {
+    const on = (e: Event) => {
+      const act = String((e as CustomEvent).detail?.act || '');
+      if (act === 'home') return setOnHome(true);
+      if (act === 'fav') return toggleFavRef.current();
+      if (act === 'external') { if (tabRef.current?.url) gb?.external(tabRef.current.url); return; }
+      if (act === 'forward' || act === 'reload') { if (tabRef.current) gb?.action(tabRef.current.id, act); return; }
+      keyRef.current(act);
+    };
+    window.addEventListener('qc-gb', on);
+    return () => window.removeEventListener('qc-gb', on);
   }, [gb]);
   useEffect(() => {
     if (!active || !gb) return;
@@ -376,6 +393,7 @@ export function GuidesBrowser({ active, game, steamAppId, home }: { active: bool
           >
             <input
               ref={addressRef}
+              data-gb-address
               value={address}
               onFocus={(e) => { setEditing(true); e.target.select(); }}
               onBlur={() => setEditing(false)}
@@ -458,7 +476,7 @@ export function GuidesBrowser({ active, game, steamAppId, home }: { active: bool
       ) : !tab || !tab.url ? (
         startPage
       ) : (
-        <div ref={pageRef} className="flex-1 min-h-0 relative bg-white">
+        <div ref={pageRef} data-gb-page={tab.id} className="flex-1 min-h-0 relative bg-white">
           {snap && <img src={snap} alt="" className="absolute inset-0 w-full h-full object-cover object-left-top" />}
         </div>
       )}

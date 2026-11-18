@@ -318,6 +318,8 @@ export function ControllerLayer({
   const [aIndex, setAIndex] = useState(0);
   // What the controller is on, for the prompt bar: 'ask' | 'quick' | 'answer' | 'card' | 'log' | 'other'.
   const [kind, setKind] = useState('ask');
+  // On a web page in the Guides tab (the controller drives the page; its own prompts).
+  const [onPage, setOnPage] = useState(false);
   // The first time a controller is used (step 6): one screen with the layout. A or B closes it for good.
   const [showIntro, setShowIntro] = useState(false);
   useEffect(() => {
@@ -466,9 +468,14 @@ export function ControllerLayer({
   // The keyboard's caret (where letters go; LT / RT move it) and its word suggestions (step 5), from what's on screen.
   const [caret, setCaret] = useState(0);
   const vocabRef = useRef<Vocab>(new Map());
-  const openKeyboard = useCallback(() => {
+  // Where the on-screen keyboard types: the Ask box, the Guides tab's address bar, or a text box in a web page there.
+  const kbTargetRef = useRef<{ kind: 'ask' } | { kind: 'address'; el: HTMLInputElement } | { kind: 'page'; id: string }>({ kind: 'ask' });
+  const openKeyboard = useCallback((target?: { kind: 'address'; el: HTMLInputElement } | { kind: 'page'; id: string; value: string }) => {
+    kbTargetRef.current = !target ? { kind: 'ask' } : target.kind === 'page' ? { kind: 'page', id: target.id } : target;
     const box = document.querySelector<HTMLTextAreaElement>('[data-qc-ask-input]');
-    const value = box?.value ?? '';
+    // (The address bar starts empty, like a browser's selected address: what's typed replaces it.)
+    const value = !target ? box?.value ?? '' : target.kind === 'page' ? target.value : '';
+    if (target?.kind === 'address') target.el.focus();
     setText(value);
     setCaret(value.length);
     setKb({ row: 1, col: 0, shift: false, symbols: false });
@@ -528,6 +535,46 @@ export function ControllerLayer({
     setPanel('actions');
   }, [t]);
 
+  /** The Guides tab's web page, when it's on screen and the controller can drive it (no dialog or panel over it). */
+  const guidePage = (): { id: string } | null => {
+    if (panel || topScope() !== document.body) return null;
+    const el = document.querySelector<HTMLElement>('[data-gb-page]');
+    if (!el || !isVisible(el)) return null;
+    const id = el.getAttribute('data-gb-page') || '';
+    return id ? { id } : null;
+  };
+  const lastLinkStep = useRef(0);
+  const guidePageRef = useRef(guidePage);
+  guidePageRef.current = guidePage;
+  useEffect(() => {
+    if (!padMode) return;
+    const iv = setInterval(() => {
+      const now = !!guidePageRef.current();
+      setOnPage((was) => {
+        // Onto the page: the ring leaves the app's own controls (the page shows its own on the picked link).
+        if (now && !was) setFocusRef.current(null);
+        return now;
+      });
+    }, 350);
+    return () => clearInterval(iv);
+  }, [padMode]);
+  /** Y on a web page: the browser's actions (the Guides tab does them; GuidesBrowser 'qc-gb'). */
+  const openBrowserActions = () => {
+    const a = (act: string) => () => emit('qc-gb', { act });
+    setActions([
+      { label: t('gb.home'), run: a('home') },
+      { label: t('gb.forward'), run: a('forward') },
+      { label: t('gb.reload'), run: a('reload') },
+      { label: t('gb.nextTab'), run: a('next-tab') },
+      { label: t('gb.prevTab'), run: a('prev-tab') },
+      { label: t('gb.newTab'), run: a('new-tab') },
+      { label: t('gb.closeTab'), run: a('close-tab') },
+      { label: t('gb.favToggle'), run: a('fav') },
+      { label: t('gb.openExternal'), run: a('external') },
+    ]);
+    setAIndex(0);
+    setPanel('actions');
+  };
   const showIntroRef = useRef(showIntro);
   showIntroRef.current = showIntro;
   const openKeyboardRef = useRef(openKeyboard);
@@ -583,7 +630,13 @@ export function ControllerLayer({
   const typeText = useCallback((next: string, nextCaret: number) => {
     setText(next);
     setCaret(Math.max(0, Math.min(next.length, nextCaret)));
-    emit('qc-set-input', { text: next });
+    const tgt = kbTargetRef.current;
+    if (tgt.kind === 'ask') emit('qc-set-input', { text: next });
+    else if (tgt.kind === 'address') {
+      // React keeps its own copy of the value: set it the way typing would.
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(tgt.el, next);
+      tgt.el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   }, []);
   const suggestions = panel === 'keyboard' ? suggest(vocabRef.current, text, caret) : [];
 
@@ -595,7 +648,11 @@ export function ControllerLayer({
       if (key === 'space') return typeText(text.slice(0, at) + ' ' + text.slice(at), at + 1);
       if (key === 'backspace') return at > 0 && typeText(text.slice(0, at - 1) + text.slice(at), at - 1);
       if (key === 'send') {
-        if (text.trim()) emit('qc-ask', { text: text.trim() });
+        const tgt = kbTargetRef.current;
+        kbTargetRef.current = { kind: 'ask' };
+        if (tgt.kind === 'address') tgt.el.form?.requestSubmit();
+        else if (tgt.kind === 'page') void electronAPI()?.guideBrowser?.pad(tgt.id, { fill: text, submit: true });
+        else if (text.trim()) emit('qc-ask', { text: text.trim() });
         setText('');
         setCaret(0);
         setPanel(null);
@@ -661,6 +718,8 @@ export function ControllerLayer({
       }
       if (e.type === 'scroll') {
         if (panel === 'quick') return;
+        const pg = !panel ? guidePage() : null;
+        if (pg) return void electronAPI()?.guideBrowser?.pad(pg.id, { scroll: -e.dy });
         const el = scrollableIn(topScope());
         if (el) el.scrollBy({ top: e.dy });
         return;
@@ -686,6 +745,8 @@ export function ControllerLayer({
       }
       // Triggers page through long answers (and lists), most of a screen at a time. (In the keyboard: the caret.)
       if ((b === 'lt' || b === 'rt') && panel !== 'keyboard') {
+        const pg = !panel ? guidePage() : null;
+        if (pg) return void electronAPI()?.guideBrowser?.pad(pg.id, { page: b === 'rt' ? -1 : 1 });
         const el = scrollableIn(topScope());
         if (el) el.scrollBy({ top: (b === 'rt' ? 1 : -1) * Math.round(el.clientHeight * 0.8), behavior: 'smooth' });
         return;
@@ -763,8 +824,43 @@ export function ControllerLayer({
         else if (b === 'ls') pressKey('shift');
         else if (b === 'rs') pressKey('symbols');
         else if (b === 'start') pressKey('send');
-        else if (b === 'b') setPanel(null);
+        else if (b === 'b') {
+          kbTargetRef.current = { kind: 'ask' };
+          setPanel(null);
+        }
         return;
+      }
+
+      // --- A web page in the Guides tab: scroll, step through its links, open, back, address, the browser's actions.
+      const pg = guidePage();
+      if (pg && !logFocus) {
+        const gb = electronAPI()?.guideBrowser;
+        if (b === 'up' || b === 'down') return void gb?.pad(pg.id, { scroll: b === 'up' ? 140 : -140 });
+        if (b === 'left' || b === 'right') {
+          // The left stick moves links at a gentler pace than its repeat.
+          if (e.src === 'stick' && e.repeat && performance.now() - lastLinkStep.current < 260) return;
+          lastLinkStep.current = performance.now();
+          return void gb?.pad(pg.id, { link: b === 'right' ? 1 : -1 });
+        }
+        if (b === 'a') {
+          void Promise.resolve(gb?.pad(pg.id, { activate: true })).then((r: any) => {
+            // A text box on the page (a site's search): the on-screen keyboard types into it.
+            if (r?.editable) openKeyboard({ kind: 'page', id: pg.id, value: String(r.value || '') });
+          });
+          return;
+        }
+        if (b === 'b') {
+          void Promise.resolve(gb?.pad(pg.id, { back: true })).then((r: any) => {
+            if (r?.home) emit('qc-gb', { act: 'home' });
+          });
+          return;
+        }
+        if (b === 'x') {
+          const addr = document.querySelector<HTMLInputElement>('[data-gb-address]');
+          if (addr) openKeyboard({ kind: 'address', el: addr });
+          return;
+        }
+        if (b === 'y') return openBrowserActions();
       }
 
       // --- Normal navigation
@@ -1191,6 +1287,15 @@ export function ControllerLayer({
           </>
         ) : talking ? (
           <Hint b={talkButton !== 'off' ? talkButton : 'x'} label={t('pad.listening')} />
+        ) : onPage ? (
+          <>
+            <Hint b="↕" label={t('pad.scroll')} />
+            <Hint b="↔" label={t('pad.links')} />
+            <Hint b="a" label={t('pad.open')} />
+            <Hint b="b" label={t('pad.back')} />
+            <Hint b="x" label={t('pad.address')} />
+            <Hint b="y" label={t('pad.actions')} />
+          </>
         ) : kind === 'ask' ? (
           <>
             <Hint b="a" label={t('pad.type')} />
