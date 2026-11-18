@@ -2198,7 +2198,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
       )}
 
-      {askForm}
+      {/* The ask box belongs to the Ask tab; the Guides tab gets the full height (owner, Nov 18 2026). */}
+      <div className={activeTab && mode === 'guide' ? 'hidden' : 'contents'}>{askForm}</div>
 
       {/* Embedded Browser Screen Capture Guidance Modal */}
       <ReportAnswerModal

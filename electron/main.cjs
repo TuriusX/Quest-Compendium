@@ -290,6 +290,10 @@ let answerCard = null; // the answer card over the game (answerCard.cjs)
 // When something was asked from the quick menu with the panel away: its answer goes on the answer card, and nothing
 // brings the panel in or takes focus from the game (owner, Nov 17 2026).
 let quietAskAt = 0;
+// The card's own: a quiet ask from a keyboard shortcut, and "open the answer on the card" (set once the card exists).
+let cardAsk = () => {};
+let cardOpen = () => false;
+const cardWord = (k) => (((quickWheel && quickWheel.strings()) || {}).card || {})[k] || '';
 const quietAsk = (ms = 120000) => !!quietAskAt && Date.now() - quietAskAt < ms;
 // The window (usually the game) that had focus before the overlay opened, so focus can be handed back.
 let focusBeforeOverlay = null;
@@ -772,18 +776,37 @@ app.whenReady().then(() => {
   // The quick menu over the game (wheel.cjs): the controller's open combo always shows this ring, over the game or the
   // panel (owner, Nov 17 2026: wheel first). Asking from it with the panel away keeps the game in front: the answer
   // goes on the answer card (answerCard.cjs, never focused). Only the panel's own items bring the panel in.
+  // The answer on the card, in the panel ("Open" on the card, Ctrl+Space with a card up, or the quick menu).
+  const openAnswerInPanel = (a) => {
+    answerCard.hide();
+    Promise.resolve(slideIn()).then(() => {
+      if (a && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('quick-action', `answer:${a.id}`);
+    });
+  };
   answerCard = createAnswerCard({
     display: () => gameDisplay() || screen.getDisplayNearestPoint(screen.getCursorScreenPoint()),
+    // The card's words come with the quick menu's (the app sends both, in the player's language).
     strings: () => {
       const s = (quickWheel && quickWheel.strings()) || {};
-      return { thinking: s.thinking, more: s.more, accent: s.accent };
+      const card = s.card || {};
+      // The keyboard hint names the player's own show / hide shortcut.
+      return { ...card, keysOpen: String(card.keysOpen || '').replace('{keys}', hideKeysNow ? formatAccelerator(hideKeysNow) : 'Ctrl+Space'), accent: s.accent };
     },
+    onAction: (what, a) => { if (what === 'open') openAnswerInPanel(a); },
   });
-  // Asked from the wheel: with the panel away, the card shows it, thinking, and the answer lands there.
-  const askedQuietly = (label) => {
+  // Asked over the game (the quick menu, or a keyboard shortcut with the panel away): the card shows the question,
+  // thinking, and the answer lands there; the panel never comes in by itself (owner, Nov 17-18 2026).
+  const askedQuietly = (label, mode = 'pad') => {
     if (isAppVisible) return;
     quietAskAt = Date.now();
-    answerCard.thinking(label);
+    answerCard.thinking({ question: label, mode });
+  };
+  cardAsk = askedQuietly;
+  cardOpen = () => {
+    const a = answerCard.recent();
+    if (!a || isAppVisible) return false;
+    openAnswerInPanel(a);
+    return true;
   };
   const showPanelFromPad = () =>
     Promise.resolve(slideIn()).then(() => {
@@ -797,11 +820,18 @@ app.whenReady().then(() => {
     });
   quickWheel = createWheel({
     focusHelper,
+    // The pop-up answer's time runs again once the menu closes.
+    onClose: () => answerCard && answerCard.resume(),
     display: () => gameDisplay() || screen.getDisplayNearestPoint(screen.getCursorScreenPoint()),
     whenReleased: () => (controllerService && controllerService.whenReleased ? controllerService.whenReleased() : Promise.resolve()),
     onChoose: (key) => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       if (key === 'panel') return void wheelToPanel();
+      // More of the answer on the card, right there (the game gets its focus back as the menu closes).
+      if (key === 'more') {
+        answerCard.more();
+        return void quickWheel.close();
+      }
       // Back to the game (the wheel opened over the panel): the panel slides away and the game gets focus back.
       if (key === 'back') return void quickWheel.close(true).then(() => slideOut());
       // The answer on the card, in the panel.
@@ -838,7 +868,14 @@ app.whenReady().then(() => {
   });
 
   // Dev builds only: tests drive the quick menu and the controller through this (scratchpad harness).
-  if (isDev) global.__qcDev = { wheel: () => quickWheel, card: () => answerCard, toggle: () => controllerService && controllerService._toggle && controllerService._toggle(), input: (evt) => controllerService && controllerService._input && controllerService._input(evt) };
+  if (isDev) global.__qcDev = {
+    // The keyboard's Screenshot and ask / Help me here / show-hide shortcuts, as if pressed (the same code paths).
+    keys: (k) => {
+      if (k === 'hide') return toggleFromShortcut('CommandOrControl+Space');
+      if (!isAppVisible) cardAsk(cardWord(k === 'shot' ? 'askShot' : 'askHelp'), 'keys');
+      mainWindow.webContents.send(k === 'shot' ? 'trigger-auto-screenshot' : 'locate-key');
+    },
+    wheel: () => quickWheel, card: () => answerCard, toggle: () => controllerService && controllerService._toggle && controllerService._toggle(), input: (evt) => controllerService && controllerService._input && controllerService._input(evt) };
 
   // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
   // overlay with the controller while it's visible. See controller.cjs.
@@ -851,7 +888,12 @@ app.whenReady().then(() => {
     // The quest log's tick / cycle buttons (Settings), while a game is focused: no mouse needed.
     // Locate me's button goes to the app; the tick and cycle buttons to the quest log.
     onTrackerKey: (action) => {
-      if (action === 'locate') { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('locate-key'); }
+      if (action === 'locate') {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          if (!isAppVisible) cardAsk(cardWord('askHelp'), 'pad');
+          mainWindow.webContents.send('locate-key');
+        }
+      }
       else tracker.key(action);
     },
     onToggle: () => {
@@ -864,8 +906,15 @@ app.whenReady().then(() => {
         const s = quickWheel.strings() || {};
         let items = quickWheel.items();
         if (isAppVisible) items = items.map((i) => (i.key === 'panel' ? { key: 'back', label: s.backToGame || i.label } : i));
-        else if (answerCard.recent() && s.openAnswer) items = [{ key: 'answer', label: s.openAnswer }, ...items];
-        answerCard.putAway();
+        else if (answerCard.recent()) {
+          // An answer on the card: More of it first (while there's more), then Open in the panel.
+          const extra = [];
+          if (answerCard.canMore() && s.moreAnswer) extra.push({ key: 'more', label: s.moreAnswer });
+          if (s.openAnswer) extra.push({ key: 'answer', label: s.openAnswer });
+          items = [...extra, ...items];
+        }
+        // The card stays where it is (it's in a corner); its time stops while the menu is open.
+        answerCard.pause();
         quickWheel.show(items);
       } else if (isAppVisible) {
         slideOut();
@@ -886,7 +935,9 @@ app.whenReady().then(() => {
   const toggleFromShortcut = (keys) => {
     console.log(`[panel] hide shortcut (${keys}): ${isAppVisible ? 'hiding' : 'showing'} the panel`);
     if (isAppVisible) slideOut();
-    else {
+    else if (cardOpen()) {
+      // A pop-up answer was up: the panel opens at it.
+    } else {
       slideIn();
       // The panel's "Mouse unlocked" toast (the app shows it the first 10 times).
       tellApp({ type: 'mouse-tip', what: 'shortcut-open', keys: formatAccelerator(keys) });
@@ -930,6 +981,8 @@ app.whenReady().then(() => {
     try {
       globalShortcut.register(autoScreenshotCmd, () => {
         if (mainWindow) {
+          // With the panel away, the answer pops up over the game instead (owner, Nov 18 2026).
+          if (!isAppVisible) cardAsk(cardWord('askShot'), 'keys');
           mainWindow.webContents.send('trigger-auto-screenshot');
         }
       });
@@ -947,7 +1000,11 @@ app.whenReady().then(() => {
     // Locate me from anywhere (Settings: locateShortcut, default Ctrl+Shift+K): the app finds where the player is.
     const locateCmd = shortcuts.locateShortcut || 'CommandOrControl+Shift+K';
     try {
-      if (!globalShortcut.register(locateCmd, () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('locate-key'); })) console.warn(`[locate] ${locateCmd} is taken; the Locate me shortcut isn't set`);
+      if (!globalShortcut.register(locateCmd, () => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        if (!isAppVisible) cardAsk(cardWord('askHelp'), 'keys');
+        mainWindow.webContents.send('locate-key');
+      })) console.warn(`[locate] ${locateCmd} is taken; the Locate me shortcut isn't set`);
     } catch (err) {
       console.error('Failed to register locateShortcut', err);
     }
@@ -1001,10 +1058,13 @@ function onVoiceKey() {
   const finish = () => {
     clearTimeout(voiceKey.releaseTimer);
     voiceKey.active = false; voiceKey.held = false;
+    if (voiceKey.quiet) cardAsk(cardWord('askSpoken'), 'keys');
+    voiceKey.quiet = false;
     send('stop');
   };
   if (!voiceKey.active) {
-    Object.assign(voiceKey, { active: true, held: false, last: t });
+    // With the panel away, the answer pops up over the game (owner, Nov 18 2026).
+    Object.assign(voiceKey, { active: true, held: false, last: t, quiet: !isAppVisible });
     send('start');
     return;
   }
@@ -1504,9 +1564,27 @@ ipcMain.on('quick-menu-items', (event, { items, strings } = {}) => {
 // two minutes, or while the card is up): it goes on the answer card, and the game keeps focus.
 ipcMain.on('answer-arrived', (event, a) => {
   if (isAppVisible || !answerCard) return;
+  if (answerCard.update(a)) return; // the same answer, its picture arrived
   if (!quietAsk() && !answerCard.isShowing()) return;
   answerCard.answer(a);
 });
+// A question asked from the panel while a game runs (owner, Nov 18 2026): the panel slides away and the answer pops up
+// over the game (the full answer stays in the panel). From a shortcut with the panel away, the card already shows it.
+ipcMain.on('ask-over-game', (event, a = {}) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents || !answerCard) return;
+  const fromPanel = isAppVisible;
+  if (fromPanel) slideOut();
+  quietAskAt = Date.now();
+  if (fromPanel || !answerCard.isThinking()) answerCard.thinking({ question: String(a.question || '').slice(0, 200), mode: a.mode === 'pad' ? 'pad' : 'keys' });
+  if (typeof a.screen === 'string' && a.screen.startsWith('data:image')) answerCard.stage({ screen: a.screen });
+});
+// What's happening while a question asked over the game is answered (the card's "Asking Pro…").
+ipcMain.on('card-stage', (event, s) => {
+  if (!answerCard || isAppVisible || !quietAsk()) return;
+  answerCard.stage(s);
+});
+// Settings: the pop-up's size and corner.
+ipcMain.on('set-card-prefs', (event, p) => { if (answerCard) answerCard.setPrefs(p || {}); });
 
 ipcMain.on('toggle-slide', () => {
   if (isAppVisible) {
@@ -2117,6 +2195,8 @@ ipcMain.handle('capture-fresh', async () => {
     const image = await captureScreenImage();
     // The game as it is now replaces this visit's snapshot from opening (an automatic Locate me never goes back to it).
     if (image && wasVisible) openSnapshot = { image, session: overlaySession, at: Date.now() };
+    // A question asked over the game (Help me here, hold to talk): the card shows the picture it's looking at.
+    else if (image && quietAsk(20000) && answerCard) answerCard.stage({ screen: image });
     return image;
   } catch (err) {
     console.warn('[next-turn] capture failed:', err && err.message);
@@ -2150,6 +2230,7 @@ ipcMain.handle('take-screenshot', async () => {
       // If the overlay was closed, this capture doubles as its "snapshot on open". Not for a question asked from the
       // controller's quick menu over the game: the game stays in front and its answer goes on the card.
       if (wasVisible || !quietAsk(20000)) slideIn({ snapshot: wasVisible ? undefined : base64Image });
+      else if (base64Image && answerCard) answerCard.stage({ screen: base64Image });
     } catch (err) {
       console.error('Failed to slideIn window:', err);
     }

@@ -589,7 +589,8 @@ export function ControllerLayer({
   quickIdsRef.current = quickIds;
   useEffect(() => {
     const api = electronAPI();
-    if (!api?.setQuickMenu) return;
+    // Only the panel sends these (the Settings window has a controller layer too, without the game's context).
+    if (!api?.setQuickMenu || /settings/.test(window.location.hash)) return;
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
     api.setQuickMenu(
       [{ key: 'panel', label: t('pad.openPanel') }, ...quickMenuRef.current.filter((i) => i.key !== 'hide').map(({ key, label }) => ({ key, label }))],
@@ -600,9 +601,17 @@ export function ControllerLayer({
         // adds or swaps in (electron/main.cjs).
         questionsTitle: t('pad.questions'), questions: quickIds.map((key, i) => ({ key, label: questionLabels[i] })),
         thinking: t('pad.cardThinking'), more: t('pad.cardMore'), spoken: t('pad.cardSpoken'), openAnswer: t('pad.openAnswer'), backToGame: t('pad.backToGame'),
+        moreAnswer: t('card.moreAnswer'),
+        // The pop-up answer's own words (electron/answerCard.html).
+        card: {
+          thinking: t('pad.cardThinking'), gotScreen: t('card.gotScreen'), sending: t('card.sending'), asking: t('card.asking'), proChecking: t('card.proChecking'),
+          yourScreen: t('card.yourScreen'), more: t('card.more'), open: t('card.open'), moreBelow: t('card.moreBelow'), part: t('card.part'),
+          padMore: t('card.padMore'), padOpen: t('card.padOpen'), keysOpen: t('card.keysOpen'), combo: comboLabel,
+          askShot: t('pad.shotAsk'), askHelp: t('set.locateKey'), askSpoken: t('pad.cardSpoken'),
+        },
       },
     );
-  }, [locale, t, style, questionLabels.join('\n'), quickIds.join(',')]);
+  }, [locale, t, style, questionLabels.join('\n'), quickIds.join(','), comboLabel]);
   useEffect(() => {
     electronAPI()?.onQuickAction?.((key: string) => {
       // Speak from the ring: listening while it's up; A asks, B cancels.

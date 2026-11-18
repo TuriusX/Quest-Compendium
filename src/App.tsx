@@ -740,6 +740,11 @@ export default function App() {
     userData?.isAdmin,
   ]);
 
+  // Pop-up answers over the game: their size and corner (Settings).
+  useEffect(() => {
+    (window as any).electronAPI?.setCardPrefs?.({ size: settings.popupSize || 'm', corner: settings.popupCorner || 'tr' });
+  }, [settings.popupSize, settings.popupCorner]);
+
   // Controller: tell the desktop app which chord shows / hides the overlay.
   useEffect(() => {
     (window as any).electronAPI?.setControllerConfig?.({
@@ -1068,23 +1073,44 @@ export default function App() {
   const runHelpRef = useRef(runHelpHere);
   runHelpRef.current = runHelpHere;
 
-  // Every new answer (or note) goes to the desktop app, which puts it on the answer card over the game when it was
-  // asked from the controller's quick menu with the panel away (electron/answerCard.cjs; owner, Nov 17 2026).
+  // Every new answer (or note) goes to the desktop app, which pops it up over the game when it was asked there (the
+  // controller's quick menu, or a keyboard shortcut with the panel away; electron/answerCard.cjs; owner, Nov 17-18 2026).
+  // Its one picture, in Noah's order: the answer's own visual, else a close-up from the question's screenshot that the
+  // marker check confirmed is there, else none. The card never mentions markers.
   const cardSeenRef = useRef<string | null>(null);
+  const cardCloseUpRef = useRef(new Map<string, string>());
+  const [cardCloseUpTick, setCardCloseUpTick] = useState(0);
   useEffect(() => {
     const api = (window as any).electronAPI;
     if (!api?.answerArrived || !activeTab) return;
     const msgs = activeTab.messages;
     const last = msgs[msgs.length - 1];
-    const sig = last && last.role === 'assistant' ? `${last.id}:${(last.text || '').length}` : '';
+    const v = last && last.role === 'assistant' && !last.visualHidden ? last.visual : undefined;
+    const closeUp = last ? cardCloseUpRef.current.get(last.id) : undefined;
+    const picture =
+      v?.kind === 'picture' && v.source !== 'ours' ? { url: v.url, credit: v.credit || v.page?.site || '' }
+        : v?.kind === 'video' ? { url: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`, credit: v.channel || 'YouTube', video: true }
+        : closeUp ? { url: closeUp, credit: tr('card.yourScreen') }
+        : null;
+    const sig = last && last.role === 'assistant' ? `${last.id}:${(last.text || '').length}:${picture?.url.slice(-40) || ''}` : '';
     const first = cardSeenRef.current === null;
     if (sig === cardSeenRef.current) return;
     cardSeenRef.current = sig;
     if (first || !sig) return; // what was there on start isn't new
     let question = '';
     for (let i = msgs.length - 2; i >= 0; i--) if (msgs[i].role === 'user') { question = String(msgs[i].text || ''); break; }
-    api.answerArrived({ id: last.id, question: question.slice(0, 200), title: last.title || '', text: String(last.text || '').slice(0, 4000) });
-  }, [activeTab?.messages]);
+    api.answerArrived({
+      id: last.id,
+      question: question.slice(0, 200),
+      title: last.title || '',
+      text: String(last.text || '').slice(0, 6000),
+      steps: (last.steps || []).map((s) => ({ kind: s.kind, label: s.label || s.text, where: s.where || '' })),
+      model: /pro/i.test(last.modelUsed || '') ? 'Pro' : last.modelUsed ? 'Fast' : '',
+      place: activeTab.place?.name || '',
+      combat: !!last.combat,
+      picture,
+    });
+  }, [activeTab?.messages, cardCloseUpTick]);
   useEffect(() => {
     const on = () => void runHelpRef.current();
     window.addEventListener('qc-help-here', on);
@@ -2229,6 +2255,13 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         tabsRef.current.flatMap((t) => t.messages).find((m) => m.id === msgId)?.donePoints ?? [],
       );
       log(`placed on the screen now: ${found.length} of ${points.length} found in ${Math.round(performance.now() - t0)} ms`);
+      // The pop-up card's picture when the answer has none of its own: a thing the check confirmed is on screen.
+      const sure = found.find((f) => crops[f.index]);
+      if (sure) {
+        cardCloseUpRef.current.set(msgId, crops[sure.index]);
+        if (cardCloseUpRef.current.size > 20) cardCloseUpRef.current.delete(cardCloseUpRef.current.keys().next().value as string);
+        setCardCloseUpTick((n) => n + 1);
+      }
       if (s.removed.length) {
         updateMessageById(msgId, (m) => ({
           ...m,
@@ -2867,6 +2900,22 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     const backendUrl = getApiBaseUrl();
     const chatEndpoint = backendUrl ? `${backendUrl}/api/chat` : '/api/chat';
 
+    // Asked from the panel while a game is running (owner, Nov 18 2026): the panel slides away as it does after hold to
+    // talk, and the answer pops up over the game (electron/answerCard.cjs); the full answer stays here for later.
+    // Settings → Pop-up answers can keep the panel open instead.
+    {
+      const api = (window as any).electronAPI;
+      if (api?.askOverGame && globalActiveGame && settings.popupHidePanel !== false) {
+        const standIn = [tr('chat.defaultShotQ'), tr('chat.defaultQ'), tr('chat.referencePicture')].includes(text);
+        api.askOverGame({
+          question: audioBase64 ? tr('pad.cardSpoken') : standIn ? tr('pad.shotAsk') : String(text || '').slice(0, 200),
+          mode: document.documentElement.classList.contains('qc-pad') ? 'pad' : 'keys',
+          screen: typeof imageBase64 === 'string' && imageBase64.startsWith('data:image') ? imageBase64 : undefined,
+        });
+      }
+      // The pop-up card says it's on its way, and to which model.
+      api?.cardStage?.({ sent: true, model: preferredModel === 'flash' ? 'Fast' : 'Pro', place: activeTab?.place?.name || '' });
+    }
     try {
       const res = await fetch(chatEndpoint, {
         method: 'POST',

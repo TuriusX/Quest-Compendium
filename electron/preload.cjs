@@ -77,7 +77,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The quick menu over the game (wheel.cjs): its labels, what was picked there, and "an answer arrived".
   setQuickMenu: (items, strings) => ipcRenderer.send('quick-menu-items', { items, strings }),
   onQuickAction: (callback) => { ipcRenderer.removeAllListeners('quick-action'); ipcRenderer.on('quick-action', (event, key) => callback(String(key || ''))); },
-  answerArrived: (a) => ipcRenderer.send('answer-arrived', a && typeof a === 'object' ? { id: String(a.id || ''), question: String(a.question || ''), title: String(a.title || ''), text: String(a.text || '') } : null),
+  // Every new answer, for the pop-up over the game (answerCard.cjs): its words, steps, model, place and one picture.
+  answerArrived: (a) => ipcRenderer.send('answer-arrived', a && typeof a === 'object' ? {
+    id: String(a.id || ''), question: String(a.question || ''), title: String(a.title || ''), text: String(a.text || ''),
+    steps: Array.isArray(a.steps) ? a.steps.slice(0, 8).map((s) => ({ kind: String((s && s.kind) || 'step'), label: String((s && s.label) || ''), where: String((s && s.where) || '') })) : [],
+    model: String(a.model || ''), place: String(a.place || ''), combat: !!a.combat,
+    picture: a.picture && typeof a.picture.url === 'string' ? { url: a.picture.url, credit: String(a.picture.credit || ''), video: !!a.picture.video } : null,
+  } : null),
+  // Asked from the panel while a game runs: the panel slides away and the answer pops up over the game.
+  askOverGame: (a) => ipcRenderer.send('ask-over-game', a && typeof a === 'object' ? { question: String(a.question || ''), mode: String(a.mode || 'keys'), screen: typeof a.screen === 'string' ? a.screen : undefined } : {}),
+  // The pop-up while it thinks: the question was sent (and to which model).
+  cardStage: (s) => ipcRenderer.send('card-stage', s && typeof s === 'object' ? { sent: !!s.sent, model: String(s.model || ''), place: String(s.place || '') } : {}),
+  // Settings: the pop-up's size (s / m / l) and corner (tr / tl / br / bl).
+  setCardPrefs: (p) => ipcRenderer.send('set-card-prefs', p && typeof p === 'object' ? { size: String(p.size || 'm'), corner: String(p.corner || 'tr') } : {}),
   // The Guides tab's browser (guideBrowser.cjs): web tabs laid over the panel's page area.
   guideBrowser: {
     open: (url, background) => ipcRenderer.invoke('gb:open', { url: String(url || ''), background: !!background }),

@@ -3,60 +3,262 @@
 <head>
 <meta charset="utf-8">
 <title>Quest Compendium answer</title>
+<!-- The app's own faces (as the panel loads them); without the network, the system face stands in. -->
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Silkscreen&display=swap" rel="stylesheet">
 <style>
-  /* The answer card over the game (answerCard.cjs): never focused, clicks go through. */
+  /* Pop-up answers over the game (answerCard.cjs; owner, Nov 17-18 2026, docs "Pop-up answers"). Never focused; the
+     mouse only reaches it over the card. Sizes are for a 1080p screen at Medium (--s scales Small / Large). */
+  :root { --accent: #a87ffb; --s: 1; --ink: #ece9f4; --muted: #a49db8; --amber: #f3b64c; --good: #6fd39a; }
   html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none;
-               font-family: 'Segoe UI', system-ui, sans-serif; color: #fff; }
-  :root { --accent: #a87ffb; }
-  .card { position: absolute; top: 0; right: 0; width: 100%; max-height: 100%; box-sizing: border-box; padding: 14px 16px 12px;
-          border-radius: 14px; background: rgba(13, 14, 21, .93); border: 1.5px solid var(--accent); box-shadow: 0 8px 28px rgba(0, 0, 0, .55);
-          display: flex; flex-direction: column; gap: 6px; opacity: 0; transform: translateY(-8px); transition: opacity .22s, transform .22s; }
+               font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; color: var(--ink); }
+  .card { position: absolute; top: 0; width: 100%; box-sizing: border-box; border-radius: calc(16px * var(--s));
+          background: rgba(13, 12, 20, .94); border: calc(2px * var(--s)) solid var(--accent); box-shadow: 0 10px 34px rgba(0, 0, 0, .6);
+          overflow: hidden; opacity: 0; transform: translateY(-8px); transition: opacity .22s, transform .22s; }
+  body.bottom .card { top: auto; bottom: 0; transform: translateY(8px); }
   body.on .card { opacity: 1; transform: none; }
-  .q { font-size: 12px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .title { font-size: 15px; font-weight: 700; line-height: 1.25; }
-  .text { font-size: 13.5px; line-height: 1.42; color: #e4e4e7; overflow: hidden; max-height: 228px; white-space: pre-line; }
-  .more { font-size: 11.5px; color: var(--accent); display: none; }
-  body.long .more { display: block; }
-  .wait { display: none; align-items: center; gap: 8px; font-size: 14px; color: #e4e4e7; }
-  body.thinking .wait { display: flex; }
-  body.thinking .title, body.thinking .text { display: none; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite; }
-  @keyframes pulse { 50% { transform: scale(1.6); opacity: .4; } }
+  .in { padding: calc(18px * var(--s)) calc(20px * var(--s)) calc(14px * var(--s)); display: flex; flex-direction: column; gap: calc(10px * var(--s)); }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: calc(26px * var(--s)); }
+  .place { font: calc(12px * var(--s)) 'Silkscreen', ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip { font-weight: 700; font-size: calc(12px * var(--s)); color: var(--accent); border: 1px solid rgba(168, 127, 251, .5); border-radius: 999px; padding: 1px calc(9px * var(--s)); flex: none; }
+  .btns { display: none; gap: calc(6px * var(--s)); flex: none; }
+  body.hover .btns { display: flex; }
+  body.hover .chip { display: none; }
+  .btn { font: 700 calc(13px * var(--s)) inherit; font-family: inherit; padding: calc(4px * var(--s)) calc(10px * var(--s)); border-radius: calc(8px * var(--s));
+         background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .16); color: var(--ink); cursor: pointer; }
+  .btn:hover { background: rgba(255, 255, 255, .16); }
+  .btn.primary { background: var(--accent); color: #16101f; border-color: var(--accent); }
+  .head { display: grid; grid-template-columns: 1fr auto; gap: calc(14px * var(--s)); align-items: start; }
+  .head.nopic { grid-template-columns: 1fr; }
+  .q { font-size: calc(15px * var(--s)); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t { font-weight: 800; font-size: calc(26px * var(--s)); line-height: 1.15; letter-spacing: -.01em; margin-top: calc(6px * var(--s)); }
+  .slot { width: calc(132px * var(--s)); display: flex; flex-direction: column; gap: 4px; }
+  .slot .img { position: relative; aspect-ratio: 4 / 3; border-radius: calc(10px * var(--s)); background: #000 center / cover no-repeat; border: 1px solid rgba(255, 255, 255, .2); }
+  .slot .img.video::after { content: ""; position: absolute; left: 50%; top: 50%; width: calc(34px * var(--s)); height: calc(34px * var(--s)); margin: calc(-17px * var(--s)) 0 0 calc(-17px * var(--s));
+                            border-radius: 50%; background: rgba(168, 127, 251, .92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 7l8 5-8 5z' fill='%2316101f'/%3E%3C/svg%3E") center / 60% no-repeat; }
+  .slot .cap { font-size: calc(11.5px * var(--s)); color: var(--muted); line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .warn { display: flex; gap: calc(8px * var(--s)); align-items: flex-start; background: rgba(243, 182, 76, .12); border: 1px solid rgba(243, 182, 76, .45);
+          color: #ffe2a8; border-radius: calc(10px * var(--s)); padding: calc(8px * var(--s)) calc(10px * var(--s)); font-weight: 600; font-size: calc(16px * var(--s)); line-height: 1.35; }
+  .steps { display: flex; flex-direction: column; gap: calc(9px * var(--s)); margin: 0; padding: 0; list-style: none; }
+  .steps li { display: grid; grid-template-columns: calc(28px * var(--s)) 1fr; gap: calc(10px * var(--s)); align-items: start; font-weight: 500; font-size: calc(19px * var(--s)); line-height: 1.3; }
+  .steps .n { width: calc(26px * var(--s)); height: calc(26px * var(--s)); border-radius: 50%; background: var(--accent); color: #16101f; font-weight: 800; font-size: calc(14px * var(--s));
+              display: grid; place-items: center; margin-top: calc(1px * var(--s)); }
+  .steps small { display: block; font-size: calc(14.5px * var(--s)); color: var(--muted); font-weight: 400; margin-top: 1px; }
+  .intro { font-size: calc(17px * var(--s)); line-height: 1.45; color: #ddd8ea; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+  .body { font-size: calc(17px * var(--s)); line-height: 1.45; white-space: pre-line; overflow: hidden; }
+  body.expanded .body { overflow-y: auto; scrollbar-width: thin; }
+  .body::-webkit-scrollbar { width: 6px; } .body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .2); border-radius: 3px; }
+  .stages { display: flex; flex-direction: column; gap: calc(7px * var(--s)); font-weight: 500; font-size: calc(17px * var(--s)); }
+  .stages span { display: flex; align-items: center; gap: calc(9px * var(--s)); }
+  .stages b { width: calc(12px * var(--s)); height: calc(12px * var(--s)); border-radius: 50%; border: 2px solid var(--muted); flex: none; box-sizing: border-box; }
+  .stages .done b { background: var(--good); border-color: var(--good); }
+  .stages .now b { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 50% { transform: scale(1.35); opacity: .6; } }
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: calc(13px * var(--s)); color: var(--muted);
+          border-top: 1px solid rgba(255, 255, 255, .08); padding-top: calc(10px * var(--s)); }
+  .foot:empty { display: none; }
+  .timer { height: calc(4px * var(--s)); background: rgba(255, 255, 255, .08); }
+  .timer i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; }
+  .fight .t { color: #ffd0d0; }
+  body.fight .card { border-color: #ff7a7a; }
+  @media (prefers-reduced-motion: reduce) { .card { transition: none; } .stages .now b { animation: none; } }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="q" id="q"></div>
-  <div class="wait"><div class="dot"></div><span id="thinking"></span></div>
-  <div class="title" id="title"></div>
-  <div class="text" id="text"></div>
-  <div class="more" id="more"></div>
+<div class="card" id="card">
+  <div class="in">
+    <div class="top"><span class="place" id="place"></span><span class="chip" id="chip"></span>
+      <span class="btns"><button class="btn primary" id="bMore"></button><button class="btn" id="bOpen"></button><button class="btn" id="bClose">✕</button></span></div>
+    <div class="head" id="head">
+      <div><div class="q" id="q"></div><div class="t" id="title"></div></div>
+      <div class="slot" id="slot" hidden><div class="img" id="img"></div><div class="cap" id="cap"></div></div>
+    </div>
+    <div class="stages" id="stages" hidden></div>
+    <div class="intro" id="intro" hidden></div>
+    <div class="warn" id="warn" hidden><span>⚠</span><span id="warnText"></span></div>
+    <ol class="steps" id="steps"></ol>
+    <div class="body" id="body" hidden></div>
+    <div class="foot" id="foot"><span id="hint"></span><span id="more"></span></div>
+  </div>
+  <div class="timer" id="timerBar"><i id="timer"></i></div>
 </div>
 <script>
   'use strict';
+  const $ = (id) => document.getElementById(id);
+  let S = {}; // strings from the app
+  let cur = null; // what's on the card
+  let expanded = false;
+  let proTimer = null;
+
   // Plain text from the answer's markdown: no emphasis marks or headings, bullets as •.
   const plain = (s) => String(s || '')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/[*_`]{1,3}([^*_`]+)[*_`]{1,3}/g, '$1')
+    .replace(/[*_`]{1,3}([^*_`\n]+)[*_`]{1,3}/g, '$1')
     .replace(/^#{1,6}\s*/gm, '')
     .replace(/^\s*[-*]\s+/gm, '• ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+  const fmt = (s, v) => String(s || '').replace(/\{(\w+)\}/g, (m, k) => (v && v[k] != null ? v[k] : m));
+
+  function setPicture(p) {
+    const slot = $('slot');
+    if (!p || !p.url) { slot.hidden = true; $('head').classList.add('nopic'); return; }
+    slot.hidden = false;
+    $('head').classList.remove('nopic');
+    const img = $('img');
+    img.style.backgroundImage = `url("${String(p.url).replace(/"/g, '%22')}")`;
+    img.classList.toggle('video', !!p.video);
+    $('cap').textContent = p.credit || '';
+  }
+
+  // How tall the card is: the window follows it (never taller than the app allows).
+  function report() {
+    requestAnimationFrame(() => window.qcCard.size(Math.ceil($('card').getBoundingClientRect().height)));
+  }
+  // Parts of a long answer: More shows the next part of the text, in place.
+  function partInfo() {
+    const b = $('body');
+    if (!expanded || b.hidden) return { more: !!(cur && cur.state === 'answer' && cur.hasMore), part: 0, parts: 0 };
+    const parts = Math.max(1, Math.ceil((b.scrollHeight - 2) / Math.max(1, b.clientHeight)));
+    const part = Math.min(parts, Math.floor((b.scrollTop + 2) / Math.max(1, b.clientHeight)) + 1);
+    return { more: part < parts, part, parts };
+  }
+  function paintFoot() {
+    if (!cur) return;
+    const pi = partInfo();
+    $('hint').textContent = cur.state === 'thinking' ? '' : cur.mode === 'pad' ? fmt(pi.more ? S.padMore : S.padOpen, { combo: S.combo || '' }) : (S.keysOpen || '');
+    $('more').textContent = expanded && pi.parts > 1 ? fmt(S.part, { n: pi.part, total: pi.parts }) : (!expanded && pi.more ? S.moreBelow || '' : '');
+    $('bMore').textContent = pi.more ? S.more || 'More' : S.open || 'Open';
+    $('bMore').dataset.act = pi.more ? 'more' : 'open';
+    $('bOpen').hidden = !pi.more;
+    $('bOpen').textContent = S.open || 'Open';
+    window.qcCard.state({ more: pi.more, part: pi.part, parts: pi.parts });
+  }
+
+  function showThinking(d) {
+    cur = d; expanded = false;
+    document.body.classList.remove('expanded', 'fight');
+    $('place').textContent = d.place || '';
+    $('chip').textContent = d.model || '';
+    $('chip').hidden = !d.model;
+    $('q').textContent = d.question || '';
+    $('title').textContent = '';
+    $('title').hidden = true;
+    setPicture(d.screen ? { url: d.screen, credit: S.yourScreen } : null);
+    $('warn').hidden = true;
+    $('intro').hidden = true;
+    $('steps').innerHTML = '';
+    $('body').hidden = true;
+    const st = $('stages');
+    st.hidden = false;
+    st.innerHTML = '';
+    const row = (cls, text) => { const s = document.createElement('span'); s.className = cls; const b = document.createElement('b'); s.append(b, document.createTextNode(text)); st.append(s); };
+    if (d.screen) row('done', S.gotScreen || '');
+    if (d.sent) {
+      const asking = fmt(S.asking, { model: d.model || '' });
+      if (d.model === 'Pro' && d.proLong) { row('done', asking); row('now', S.proChecking || ''); }
+      else row('now', asking);
+    } else row('now', d.screen ? S.sending || '' : S.thinking || '');
+    clearTimeout(proTimer);
+    if (d.sent && d.model === 'Pro' && !d.proLong) proTimer = setTimeout(() => { if (cur === d) { d.proLong = true; showThinking(d); } }, 8000);
+    $('timerBar').hidden = true;
+    paintFoot();
+    report();
+  }
+
+  function showAnswer(d) {
+    cur = d; expanded = false;
+    clearTimeout(proTimer);
+    document.body.classList.remove('expanded');
+    document.body.classList.toggle('fight', !!d.combat);
+    $('place').textContent = d.place || '';
+    $('chip').textContent = d.model || '';
+    $('chip').hidden = !d.model;
+    $('q').textContent = d.question || '';
+    $('stages').hidden = true;
+    const text = plain(d.text);
+    const steps = Array.isArray(d.steps) ? d.steps : [];
+    const warns = steps.filter((s) => s.kind === 'warning');
+    const todo = steps.filter((s) => s.kind !== 'warning');
+    $('title').hidden = !d.title;
+    $('title').textContent = d.title || '';
+    setPicture(d.picture);
+    // The answer's opening lines above its steps (owner, Nov 18 2026: show more of the answer), up to 4 lines.
+    const intro = todo.length ? (text.split(/\n\s*\n/).find((p) => p.trim() && !/^\s*(\d+[.)]|•)/.test(p)) || '') : '';
+    $('intro').hidden = !intro;
+    $('intro').textContent = intro.replace(/\s*\n\s*/g, ' ');
+    $('warn').hidden = !warns.length;
+    $('warnText').textContent = warns.map((w) => w.label || w.text).join(' · ');
+    const ol = $('steps');
+    ol.innerHTML = '';
+    todo.slice(0, 5).forEach((s, i) => {
+      const li = document.createElement('li');
+      const n = document.createElement('span'); n.className = 'n'; n.textContent = String(i + 1);
+      const t = document.createElement('span'); t.textContent = s.label || s.text;
+      if (s.where) { const sm = document.createElement('small'); sm.textContent = s.where; t.append(sm); }
+      li.append(n, t);
+      ol.append(li);
+    });
+    // No steps: the answer's first lines; with steps, the full text waits behind More.
+    const body = $('body');
+    body.textContent = text;
+    body.hidden = todo.length > 0;
+    body.style.maxHeight = todo.length ? '' : `calc(${Math.round(12 * 1.45 * 17)}px * var(--s))`;
+    d.hasMore = todo.length ? true : false;
+    $('timerBar').hidden = false;
+    report();
+    requestAnimationFrame(() => { if (!todo.length) d.hasMore = body.scrollHeight > body.clientHeight + 2; paintFoot(); report(); });
+  }
+
+  // More: the full answer in place, then the next part of it; after the last part, the panel.
+  function more() {
+    if (!cur || cur.state !== 'answer') return;
+    const b = $('body');
+    if (!expanded) {
+      expanded = true;
+      document.body.classList.add('expanded');
+      $('steps').innerHTML = '';
+      $('warn').hidden = true;
+      $('intro').hidden = true;
+      b.hidden = false;
+      b.style.maxHeight = `${Math.max(120, (cur.maxHeight || 600) - 190)}px`;
+      b.scrollTop = 0;
+    } else if (partInfo().more) {
+      b.scrollTop += b.clientHeight - 4;
+    } else {
+      window.qcCard.action('open');
+      return;
+    }
+    paintFoot();
+    report();
+  }
+
   window.qcCard.onShow((d) => {
-    const s = d.strings || {};
-    if (s.accent) document.documentElement.style.setProperty('--accent', s.accent);
-    document.getElementById('q').textContent = d.question || '';
-    document.getElementById('thinking').textContent = s.thinking || '';
-    document.getElementById('title').textContent = d.title || '';
-    document.getElementById('title').style.display = d.title ? '' : 'none';
-    const text = document.getElementById('text');
-    text.textContent = plain(d.text);
-    document.getElementById('more').textContent = s.more || '';
-    document.body.classList.toggle('thinking', d.state === 'thinking');
-    document.body.classList.toggle('long', d.state === 'answer' && text.scrollHeight > text.clientHeight + 2);
+    S = d.strings || S;
+    if (S.accent) document.documentElement.style.setProperty('--accent', S.accent);
+    document.documentElement.style.setProperty('--s', String(d.scale || 1));
+    document.body.classList.toggle('bottom', !!d.bottom);
+    if (d.state === 'thinking') showThinking(d);
+    else showAnswer(d);
     document.body.classList.add('on');
   });
+  window.qcCard.onMore(() => more());
+  window.qcCard.onTimer((t) => {
+    // The bar runs down over the time left; paused, it holds.
+    const bar = $('timer');
+    bar.style.transition = 'none';
+    bar.style.transform = `scaleX(${Math.max(0, Math.min(1, t.left / Math.max(1, t.total)))})`;
+    if (!t.paused) requestAnimationFrame(() => { bar.style.transition = `transform ${t.left}ms linear`; bar.style.transform = 'scaleX(0)'; });
+  });
   window.qcCard.onHide(() => document.body.classList.remove('on'));
+  $('body').addEventListener('scroll', () => paintFoot());
+  // The mouse: the buttons show while the pointer is over the card (clicking never takes focus from the game).
+  $('card').addEventListener('mouseenter', () => { document.body.classList.add('hover'); window.qcCard.mouse(true); });
+  $('card').addEventListener('mouseleave', () => { document.body.classList.remove('hover'); window.qcCard.mouse(false); });
+  $('bMore').addEventListener('click', () => ($('bMore').dataset.act === 'more' ? more() : window.qcCard.action('open')));
+  $('bOpen').addEventListener('click', () => window.qcCard.action('open'));
+  $('bClose').addEventListener('click', () => window.qcCard.action('close'));
 </script>
 </body>
 </html>

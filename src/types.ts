@@ -344,6 +344,11 @@ export interface AppSettings {
   controllerToggle?: 'hold-guide' | 'hold-view-menu' | 'double-view' | 'hold-ls-rs' | 'custom' | 'off' | 'back+start' | 'ls+rs' | 'lb+rb+back';
   /** A custom show / hide combo: its buttons (XInput names: a, b, x, y, lb, rb, back, start, ls, rs) and its timing. */
   controllerCustom?: { buttons: string[]; mode: 'hold' | 'double' };
+  /** Pop-up answers over the game (desktop): their size (Small / Medium / Large) and corner. */
+  popupSize?: 's' | 'm' | 'l';
+  popupCorner?: 'tr' | 'tl' | 'br' | 'bl';
+  /** Asking from the panel while a game runs: the panel slides away and the answer pops up (default on). */
+  popupHidePanel?: boolean;
   /** The open combo was moved off View + Menu to L3 + R3 (once, Nov 17 2026; App.tsx). */
   padComboMoved?: boolean;
   /** Hold to talk on the controller while the overlay is open (default 'y'; 'off' turns it off). */

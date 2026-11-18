@@ -1,5 +1,24 @@
 # Notifications: answers over the game (plan, Nov 17 2026)
 
+> **Superseded, Nov 17 2026.** Noah: this took "notifications" too literally. What he liked is answers popping up over
+> the game instead of the panel sliding out. The plan is now **Pop-up answers**, a design look with mockups:
+> https://claude.ai/artifact/THGgKSJBDyQYTkreEUKyg4
+>
+> Nothing is built until he OKs it.
+>
+> **His decisions on that plan:**
+> 1. **Cards are not tied to markers** (markers are still a work in progress).
+>    - No marker messages on cards: no "Couldn't find the markers again", and no card for markers found again.
+>    - No numbered close-ups matching markers.
+>    - Markers keep working on screen, separately, and the card never refers to them.
+> 2. **One picture slot per card**, filled in this order:
+>    - (a) the best picture from the answer's own visuals (the same pipeline as visual answers in the app, credited);
+>    - (b) else a close-up from the question's screenshot, only when the check confirmed that thing is there (none if
+>      unconfirmed or unsure);
+>    - (c) else no picture. An empty slot beats a weak one.
+>
+> The note kinds, rate rules and Deck pop-ups below are set aside. The rest is kept for reference.
+
 A plan only; nothing here is built yet except the controller's answer card (commit 5909b82b7), which becomes step 1.
 
 **The idea.** When something the player asked for arrives while they're playing, it shows over the game as a small

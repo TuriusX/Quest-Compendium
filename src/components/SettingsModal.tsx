@@ -30,7 +30,8 @@ import {
   Download,
   Package,
   Cloud,
-  Copy
+  Copy,
+  MessageSquareText
 } from './icons';
 import { AppSettings, AiMode, ColorTheme, DockPosition, CloudSyncDiagnostics } from '../types';
 import { playBlipSound } from '../utils/audio';
@@ -371,6 +372,66 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                   <p className="text-[11px] text-zinc-500">{tr('set.languageHint')}</p>
                 </div>
+
+                {/* Pop-up answers over the game (desktop): their size and corner (owner, Nov 18 2026). */}
+                {typeof window !== 'undefined' && (window as any).electronAPI && (
+                  <div className="space-y-2.5">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+                      <MessageSquareText className="w-4 h-4 text-[var(--accent-color)]" />
+                      <span>{tr('set.popup')}</span>
+                    </label>
+                    <p className="text-[11px] text-zinc-500">{tr('set.popupHint')}</p>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={settings.popupHidePanel !== false}
+                      onClick={() => { playBlipSound(soundEnabled); onUpdateSettings({ popupHidePanel: settings.popupHidePanel === false }); }}
+                      className="w-full flex items-center justify-between gap-3 p-3 rounded-xl border border-white/[0.08] bg-black/30 hover:border-white/20 text-left cursor-pointer"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold text-zinc-200">{tr('set.popupHidePanel')}</span>
+                        <span className="block text-[11px] text-zinc-500">{tr('set.popupHidePanelHint')}</span>
+                      </span>
+                      <span className={`w-9 h-5 rounded-full p-0.5 flex flex-shrink-0 transition-colors ${settings.popupHidePanel !== false ? 'bg-[var(--accent-color)] justify-end' : 'bg-white/15 justify-start'}`}>
+                        <span className="w-4 h-4 rounded-full bg-white" />
+                      </span>
+                    </button>
+                    <div className="text-[11px] text-zinc-400">{tr('set.popupSize')}</div>
+                    <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={tr('set.popupSize')}>
+                      {(['s', 'm', 'l'] as const).map((sz) => {
+                        const on = (settings.popupSize || 'm') === sz;
+                        return (
+                          <button
+                            key={sz}
+                            role="radio"
+                            aria-checked={on}
+                            onClick={() => { playBlipSound(soundEnabled); onUpdateSettings({ popupSize: sz }); }}
+                            className={`p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${on ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white' : 'bg-black/30 border-white/[0.08] text-zinc-300 hover:border-white/20'}`}
+                          >
+                            {tr(`set.popupSize.${sz}`)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="text-[11px] text-zinc-400">{tr('set.popupCorner')}</div>
+                    <div className="grid grid-cols-2 gap-2 max-w-[260px]" role="radiogroup" aria-label={tr('set.popupCorner')}>
+                      {(['tl', 'tr', 'bl', 'br'] as const).map((c) => {
+                        const on = (settings.popupCorner || 'tr') === c;
+                        return (
+                          <button
+                            key={c}
+                            role="radio"
+                            aria-checked={on}
+                            onClick={() => { playBlipSound(soundEnabled); onUpdateSettings({ popupCorner: c }); }}
+                            className={`p-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${on ? 'bg-[var(--accent-dim)] border-[var(--accent-border)] text-white' : 'bg-black/30 border-white/[0.08] text-zinc-300 hover:border-white/20'}`}
+                          >
+                            {tr(`set.popupCorner.${c}`)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Answer text: its typeface and size (was the "Aa" button by the question box) */}
                 <div className="space-y-2.5">

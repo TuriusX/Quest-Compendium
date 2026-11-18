@@ -86,6 +86,7 @@ function createWheel(opts) {
   function close(toPanel = false) {
     if (!open) return Promise.resolve();
     open = false;
+    if (opts.onClose) opts.onClose();
     const w = win;
     send('wheel-close', {});
     if (toPanel || !w || w.isDestroyed()) {
