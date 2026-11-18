@@ -98,6 +98,7 @@ const { spawn } = require('child_process');
 const { createControllerService } = require('./controller.cjs');
 const { createWheel } = require('./wheel.cjs');
 const { createAnswerCard } = require('./answerCard.cjs');
+const { createDrawLayer } = require('./drawLayer.cjs');
 const { createGuideBrowser, PARTITION: GUIDE_PARTITION } = require('./guideBrowser.cjs');
 const { createFocusHelper } = require('./focus.cjs');
 const { pickCaptureDisplay } = require('./gameScreen.cjs');
@@ -1937,6 +1938,34 @@ ipcMain.handle('capture-screen-now', async () => {
   if (!lastCaptureSourceId) return null;
   return captureForLocate({ win: pointerWindow, sourceId: lastCaptureSourceId, sameScreenOnly: true });
 });
+
+// Drawn answers, step 2 (owner, Nov 18 2026): the answer's drawing laid over the live game while the screen the
+// question was about (a map, a menu) stays the same (drawLayer.cjs).
+let drawLayer = null;
+ipcMain.handle('show-drawn-layer', async (event, a = {}) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return false;
+  if (!drawLayer) {
+    drawLayer = createDrawLayer({
+      getDisplay: () => lastCaptureDisplay,
+      getSourceId: () => lastCaptureSourceId,
+      // Our own windows on that screen now, which the question's screenshot didn't have: the panel and the trackers.
+      getCovered: () => {
+        const out = [];
+        try { if (mainWindow && !mainWindow.isDestroyed() && isAppVisible) out.push(mainWindow.getBounds()); } catch (_) { /* closing */ }
+        try { const tb = tracker.getBounds(); if (tb) out.push(tb); const lb = logWindow.getBounds(); if (lb) out.push(lb); } catch (_) { /* closing */ }
+        return out;
+      },
+      log: (m) => console.log(m),
+    });
+  }
+  try {
+    return await drawLayer.show({ id: a.id, layer: a.layer, ref: typeof a.ref === 'string' && a.ref.startsWith('data:image/') ? a.ref : lastCaptureImage });
+  } catch (err) {
+    console.warn('[drawn] layer failed:', err && err.message);
+    return false;
+  }
+});
+ipcMain.on('hide-drawn-layer', () => { if (drawLayer) drawLayer.hide('asked'); });
 
 // The marker page says the player walked far enough: look for the answer's nearby items (free, rate-limited).
 ipcMain.on('pointers-moved', async (event, occupied) => {

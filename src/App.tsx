@@ -2003,7 +2003,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
    * or an illustration, when seeing it helps (the server decides; most answers get none). After the answer, alongside
    * the visual; the answer never waits for it.
    */
-  const fetchDrawn = async (msgId: string, question: string, answer: string, game: string, token: string | null, shotOnly: boolean, image?: string) => {
+  const fetchDrawn = async (msgId: string, question: string, answer: string, game: string, token: string | null, shotOnly: boolean, image?: string, live = false) => {
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/drawn`, {
         method: 'POST',
@@ -2015,6 +2015,12 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       if (d && d.kind === 'drawn' && typeof d.url === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(d.url) && ['screen', 'wiki', 'illustration'].includes(d.on)) {
         const page = d.page && /^https:\/\//.test(String(d.page.url || '')) ? { url: String(d.page.url), title: String(d.page.title || '').slice(0, 120), site: String(d.page.site || '').slice(0, 60) } : undefined;
         updateMessageById(msgId, (m) => ({ ...m, drawn: { kind: 'drawn', url: d.url, on: d.on, alt: String(d.alt || '').slice(0, 200), ...(page ? { page } : {}) } }));
+        // Step 2 (desktop): drawn on a screen that holds still (a map, a menu): the strokes over the live game while that
+        // screen stays the same. Not kept in the conversation.
+        const api = (window as any).electronAPI;
+        if (live && image && d.on === 'screen' && typeof d.layer === 'string' && d.layer.startsWith('data:image/png;base64,') && api?.showDrawnLayer) {
+          void api.showDrawnLayer({ id: msgId, layer: d.layer, ref: image });
+        }
       }
     } catch {
       /* no drawing: the answer is complete without one */
@@ -2846,6 +2852,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const handleSendMessage = async (text: string, imageBase64?: string, audioBase64?: string, preferredModel?: 'pro' | 'flash', quick?: string) => {
     if (!activeTab) return;
     markAsked(); // a new web app version no longer reloads this page
+    // The last answer's drawing over the game is about the last question: it goes when a new one is asked.
+    (window as any).electronAPI?.hideDrawnLayer?.();
 
     if (!user) {
       syncDiagnostics.addEvent?.('CHAT_NO_USER', 'Attempted to send chat message with no authenticated or guest user', true);
@@ -3187,7 +3195,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       if (text && aiMessage.text && !limitText) {
         const shotOnly = !!audioBase64 || (!!imageBase64 && (text === tr('chat.defaultShotQ') || text === tr('chat.defaultQ')));
         void fetchVisual(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly);
-        void fetchDrawn(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly, imageBase64 || undefined);
+        void fetchDrawn(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly, imageBase64 || undefined, settings.showPointersOnScreen !== false);
       }
 
       const readArea: string = data.placeRead && typeof data.placeRead.area === 'string' ? data.placeRead.area.trim().slice(0, 80) : '';

@@ -45,6 +45,12 @@ export type Drawn = {
   alt: string;
   /** A wiki drawing: the picture's page, credited and linked. */
   page?: WikiPage;
+  /**
+   * Drawn on the player's screen, and that screen holds still (the game's map, a menu, a skill tree, an inventory):
+   * the strokes alone as a see-through PNG (data URL) the size of the screenshot, laid over the live game by the desktop
+   * app while the screen stays the same (drawn answers step 2, Nov 18 2026). Never saved; the app doesn't keep it.
+   */
+  layer?: string;
 };
 export type DrawnResult = { drawn: Drawn | null; cost: number; ms: number; steps: string[]; cached?: boolean; decided: DrawnOn | 'none'; failed?: string };
 
@@ -86,7 +92,7 @@ export function mightDraw(question: string): boolean {
   return /\b(where|how (do|can|to|should) i (get|reach|go|find|solve|open|beat|dodge|reach|climb|cross|enter|unlock)|get to|way to|route|path|find|puzzle|solve|solution|order|sequence|combination|code|look(s)? like|dodge|lever|switch|symbol|pillar|statue|dial|map)\b/.test(q);
 }
 
-export type Decision = { on: DrawnOn | 'none'; draw: string; place: string; isMap: boolean; why: string; confidence: string };
+export type Decision = { on: DrawnOn | 'none'; draw: string; place: string; isMap: boolean; still: boolean; why: string; confidence: string };
 
 export async function decide(ai: Gen, cost: Cost, o: { game: string; question: string; answer: string; shot: Buffer | null; shotOnly?: boolean }): Promise<Decision> {
   const prompt =
@@ -111,6 +117,8 @@ export async function decide(ai: Gen, cost: Cost, o: { game: string; question: s
     'Be strict: if it is not clearly one of the first ones, it is "none".\n' +
     'Reply with JSON only: {"on": ' + (o.shot ? '"screen" | ' : '') + '"wiki" | "illustration" | "none", "confidence": "high" | "medium" | "low", ' +
     '"isMap": true if the screenshot is the game\'s map screen, ' +
+    '"still": true if the screenshot is a screen that holds still while the player reads it (the game\'s map, a menu, an ' +
+    'inventory, a skill tree, a puzzle screen shown flat), false for a view of the game world that moves with the camera, ' +
     '"place": "for wiki: the in-game name of the area to show, as the answer names it; else empty", ' +
     '"draw": "what to draw, for an artist, in at most 3 marks: e.g. \\"a route from the player icon along the road north to Blackwater, a circle on Blackwater labelled Blackwater\\" or \\"number the levers 1 left, 2 right, 3 middle\\"; labels of 1-3 words", ' +
     '"why": "one short sentence"}';
@@ -118,7 +126,7 @@ export async function decide(ai: Gen, cost: Cost, o: { game: string; question: s
   const on = ['screen', 'wiki', 'illustration'].includes(j?.on) && j?.confidence === 'high' && String(j?.draw || '').trim() ? (j.on as DrawnOn) : 'none';
   return {
     on: on === 'screen' && !o.shot ? 'none' : on === 'wiki' && !String(j?.place || '').trim() ? 'none' : on,
-    draw: String(j?.draw || '').slice(0, 400), place: String(j?.place || '').slice(0, 80), isMap: j?.isMap === true,
+    draw: String(j?.draw || '').slice(0, 400), place: String(j?.place || '').slice(0, 80), isMap: j?.isMap === true, still: j?.isMap === true || j?.still === true,
     why: String(j?.why || '').slice(0, 200), confidence: String(j?.confidence || ''),
   };
 }
@@ -187,6 +195,55 @@ export async function compare(orig: Buffer, drawn: Buffer): Promise<{ strokes: n
   for (let i = 0; i < n; i++) { if (near[i] && (stroke[i] || mid[i])) s++; else if (mid[i]) alt++; }
   return { strokes: s / n, altered: alt / n };
 }
+/**
+ * The strokes alone, lifted off the drawing: a see-through PNG at the original's size (at most 1280 wide), the drawn
+ * pixels kept (with their soft edges), everything else clear. Laid over the live game, it lines up with the screen the
+ * screenshot was taken of.
+ */
+export async function strokeLayer(orig: Buffer, drawn: Buffer): Promise<Buffer> {
+  const m = await sharp(orig).metadata();
+  const w = Math.min(m.width || 1280, 1280), h = Math.round(((m.height || 720) * w) / (m.width || 1280));
+  const a = await sharp(orig).resize(w, h, { fit: 'fill' }).removeAlpha().raw().toBuffer();
+  const b = await sharp(drawn).resize(w, h, { fit: 'fill' }).removeAlpha().raw().toBuffer();
+  const n = w * h;
+  const stroke = new Uint8Array(n), diff = new Uint16Array(n);
+  for (let i = 0; i < n; i++) {
+    const d = Math.abs(a[i * 3] - b[i * 3]) + Math.abs(a[i * 3 + 1] - b[i * 3 + 1]) + Math.abs(a[i * 3 + 2] - b[i * 3 + 2]);
+    diff[i] = d;
+    const mx = Math.max(b[i * 3], b[i * 3 + 1], b[i * 3 + 2]), mn = Math.min(b[i * 3], b[i * 3 + 1], b[i * 3 + 2]);
+    if (d > 150 && (mx - mn > 70 || mx > 235)) stroke[i] = 1;
+  }
+  // Lone specks (a white button icon that came back slightly brighter) aren't strokes: a stroke pixel needs at least 6
+  // others within 2 pixels.
+  const keep = new Uint8Array(n);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!stroke[y * w + x]) continue;
+    let c = 0;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const yy = y + dy, xx = x + dx;
+      if (yy >= 0 && yy < h && xx >= 0 && xx < w && stroke[yy * w + xx]) c++;
+    }
+    if (c >= 7) keep[y * w + x] = 1;
+  }
+  stroke.set(keep);
+  const out = Buffer.alloc(n * 4);
+  const R = 3;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    if (diff[i] < 40) continue;
+    let near = stroke[i] === 1;
+    for (let dy = -R; dy <= R && !near; dy++) for (let dx = -R; dx <= R && !near; dx++) {
+      const yy = y + dy, xx = x + dx;
+      if (yy >= 0 && yy < h && xx >= 0 && xx < w && stroke[yy * w + xx]) near = true;
+    }
+    if (!near) continue;
+    out[i * 4] = b[i * 3]; out[i * 4 + 1] = b[i * 3 + 1]; out[i * 4 + 2] = b[i * 3 + 2];
+    // Soft edges fade in with how much they changed.
+    out[i * 4 + 3] = stroke[i] ? 255 : Math.min(255, Math.round((diff[i] - 40) * 2.2));
+  }
+  return sharp(out, { raw: { width: w, height: h, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer();
+}
+
 /** Too much drawn (a swapped background) or too much of the scene changed. */
 export const STROKES_MAX = 0.3;
 export const ALTERED_MAX = 0.15;
@@ -292,6 +349,11 @@ export async function drawnFor(ai: Gen, o: {
       .jpeg({ quality: 80 }).toBuffer();
     const drawn: Drawn = { kind: 'drawn', url: `data:image/jpeg;base64,${jpg.toString('base64')}`, on: d.on, alt: chk.what || d.draw.slice(0, 160), ...(page ? { page } : {}) };
     if (keys.length && o.store) await o.store.set(keys, drawn).catch(() => {});
+    // A screen that holds still: the strokes alone too, for the desktop app to lay over the live game.
+    if (d.on === 'screen' && d.still && base) {
+      const layer = await strokeLayer(base, out).catch(() => null);
+      if (layer) { drawn.layer = `data:image/png;base64,${layer.toString('base64')}`; steps.push(`layer: ${Math.round(layer.length / 1024)} KB`); }
+    }
     return done(drawn);
   } catch (e: any) {
     steps.push(`error: ${String(e?.message || e).slice(0, 160)}`);

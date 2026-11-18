@@ -74,6 +74,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   hideScreenPointers: () => ipcRenderer.send('hide-screen-pointers'),
   // Markers v2: a fresh picture of the game's screen when the answer arrives (null if it can't be taken).
   captureScreenNow: () => ipcRenderer.invoke('capture-screen-now'),
+  // Drawn answers step 2: the answer's drawing over the live game while the screen stays the same (drawLayer.cjs).
+  showDrawnLayer: (a) => ipcRenderer.invoke('show-drawn-layer', a),
+  hideDrawnLayer: () => ipcRenderer.send('hide-drawn-layer'),
   // The quick menu over the game (wheel.cjs): its labels, what was picked there, and "an answer arrived".
   setQuickMenu: (items, strings) => ipcRenderer.send('quick-menu-items', { items, strings }),
   onQuickAction: (callback) => { ipcRenderer.removeAllListeners('quick-action'); ipcRenderer.on('quick-action', (event, key) => callback(String(key || ''))); },

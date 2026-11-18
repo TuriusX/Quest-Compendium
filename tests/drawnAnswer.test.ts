@@ -153,3 +153,18 @@ console.log("drawnAnswer: ok");
   assert.equal(r.cost, 0);
 }
 console.log("drawnAnswer: skip check ok");
+
+// 9. Step 2: the strokes alone, see-through elsewhere, the original's size.
+{
+  const { strokeLayer } = await import("../drawnAnswer");
+  const png = await strokeLayer(orig, drawn);
+  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  assert.equal(info.width, W); assert.equal(info.height, H);
+  let solid = 0;
+  for (let i = 3; i < data.length; i += 4) if (data[i] > 128) solid++;
+  const share = solid / (W * H);
+  assert.ok(share > 0.01 && share < 0.2, `layer share ${share}`);
+  // A corner far from the line is clear.
+  assert.equal(data[(5 * W + 300) * 4 + 3], 0);
+  console.log("drawnAnswer: layer ok");
+}

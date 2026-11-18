@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Quest Compendium drawing</title>
+<style>
+  /* The answer's drawing over the live game (drawLayer.cjs): the strokes alone, stretched over the whole screen the
+     question's screenshot was taken of, so they sit on the map underneath. A soft dark edge keeps them readable on
+     bright maps. */
+  html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  img { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity .3s;
+        filter: drop-shadow(0 0 2px rgba(0, 0, 0, .85)); }
+  body.on img { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { img { transition: none; } }
+</style>
+</head>
+<body>
+<img id="layer" alt="">
+<script>
+  'use strict';
+  window.qcShow = (url) => {
+    const img = document.getElementById('layer');
+    img.onload = () => requestAnimationFrame(() => document.body.classList.add('on'));
+    img.src = url;
+  };
+  window.qcFade = () => document.body.classList.remove('on');
+</script>
+</body>
+</html>
