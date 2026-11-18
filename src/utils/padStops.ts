@@ -80,6 +80,52 @@ export function ringIndex(x: number, y: number, n: number, deadzone = 0.5): numb
   return Math.round(deg / (360 / n)) % n;
 }
 
+export type PadDir = 'up' | 'down' | 'left' | 'right';
+
+/**
+ * Pointing at the quick menu with either stick or the d-pad, all the same way (owner, Nov 17 2026: the right stick
+ * worked, the left didn't). Kept in step with electron/ringPoint.js (the wheel over the game); tests/ringPoint.test.ts
+ * runs both on the same cases.
+ * - stick(which, x, y, n): whichever stick is pushed further points (x right, y up); null near the centre.
+ * - dpad(dir, t, n, current): the item in that direction; two arrows pressed together (within `comboMs`) point at the
+ *   diagonal. With more than 8 items, pressing the same direction again moves to its other nearest item and back.
+ */
+export function createRingPointer(comboMs = 150) {
+  const sticks = { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } };
+  const at: Record<PadDir, number> = { up: -Infinity, down: -Infinity, left: -Infinity, right: -Infinity };
+  let last = '';
+  return {
+    reset() {
+      last = '';
+      sticks.left = { x: 0, y: 0 };
+      sticks.right = { x: 0, y: 0 };
+    },
+    stick(which: 'left' | 'right', x: number, y: number, n: number): number | null {
+      sticks[which] = { x, y };
+      const l = sticks.left, r = sticks.right;
+      const s = Math.hypot(l.x, l.y) >= Math.hypot(r.x, r.y) ? l : r;
+      last = '';
+      return ringIndex(s.x, s.y, n);
+    },
+    dpad(dir: PadDir, t: number, n: number, current: number): number {
+      if (n <= 0) return current;
+      at[dir] = t;
+      const on = (d: PadDir) => t - at[d] < comboMs;
+      const x = dir === 'right' ? 1 : dir === 'left' ? -1 : on('right') && !on('left') ? 1 : on('left') && !on('right') ? -1 : 0;
+      const y = dir === 'up' ? 1 : dir === 'down' ? -1 : on('up') && !on('down') ? 1 : on('down') && !on('up') ? -1 : 0;
+      const key = `${x},${y}`;
+      const p = ((((Math.atan2(x, y) * 180) / Math.PI + 360) % 360) / (360 / n));
+      const idx = Math.round(p) % n;
+      const other = (p >= Math.round(p) ? idx + 1 : idx + n - 1) % n;
+      const again = key === last;
+      last = key;
+      if (n > 8 && again && current === idx) return other;
+      if (n > 8 && again && current === other) return idx;
+      return idx;
+    },
+  };
+}
+
 /** Where item `i` of `n` sits on a ring of radius `r` (px from the centre; y down, for the page). */
 export function ringSpot(i: number, n: number, r: number): { x: number; y: number } {
   const a = (i / n) * Math.PI * 2;

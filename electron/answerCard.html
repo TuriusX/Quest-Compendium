@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Quest Compendium answer</title>
+<style>
+  /* The answer card over the game (answerCard.cjs): never focused, clicks go through. */
+  html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none;
+               font-family: 'Segoe UI', system-ui, sans-serif; color: #fff; }
+  :root { --accent: #a87ffb; }
+  .card { position: absolute; top: 0; right: 0; width: 100%; max-height: 100%; box-sizing: border-box; padding: 14px 16px 12px;
+          border-radius: 14px; background: rgba(13, 14, 21, .93); border: 1.5px solid var(--accent); box-shadow: 0 8px 28px rgba(0, 0, 0, .55);
+          display: flex; flex-direction: column; gap: 6px; opacity: 0; transform: translateY(-8px); transition: opacity .22s, transform .22s; }
+  body.on .card { opacity: 1; transform: none; }
+  .q { font-size: 12px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .title { font-size: 15px; font-weight: 700; line-height: 1.25; }
+  .text { font-size: 13.5px; line-height: 1.42; color: #e4e4e7; overflow: hidden; max-height: 228px; white-space: pre-line; }
+  .more { font-size: 11.5px; color: var(--accent); display: none; }
+  body.long .more { display: block; }
+  .wait { display: none; align-items: center; gap: 8px; font-size: 14px; color: #e4e4e7; }
+  body.thinking .wait { display: flex; }
+  body.thinking .title, body.thinking .text { display: none; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { transform: scale(1.6); opacity: .4; } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="q" id="q"></div>
+  <div class="wait"><div class="dot"></div><span id="thinking"></span></div>
+  <div class="title" id="title"></div>
+  <div class="text" id="text"></div>
+  <div class="more" id="more"></div>
+</div>
+<script>
+  'use strict';
+  // Plain text from the answer's markdown: no emphasis marks or headings, bullets as •.
+  const plain = (s) => String(s || '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[*_`]{1,3}([^*_`]+)[*_`]{1,3}/g, '$1')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^\s*[-*]\s+/gm, '• ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  window.qcCard.onShow((d) => {
+    const s = d.strings || {};
+    if (s.accent) document.documentElement.style.setProperty('--accent', s.accent);
+    document.getElementById('q').textContent = d.question || '';
+    document.getElementById('thinking').textContent = s.thinking || '';
+    document.getElementById('title').textContent = d.title || '';
+    document.getElementById('title').style.display = d.title ? '' : 'none';
+    const text = document.getElementById('text');
+    text.textContent = plain(d.text);
+    document.getElementById('more').textContent = s.more || '';
+    document.body.classList.toggle('thinking', d.state === 'thinking');
+    document.body.classList.toggle('long', d.state === 'answer' && text.scrollHeight > text.clientHeight + 2);
+    document.body.classList.add('on');
+  });
+  window.qcCard.onHide(() => document.body.classList.remove('on'));
+</script>
+</body>
+</html>

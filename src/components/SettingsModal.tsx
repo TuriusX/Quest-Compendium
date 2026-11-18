@@ -38,6 +38,7 @@ import { logOut } from '../lib/firebase';
 import { getApiBaseUrl, setApiBaseUrl, testBackendHealth, DEFAULT_CLOUD_URL } from '../utils/api';
 import { LOCALES, normalizeLocale, useT } from '../i18n';
 import { UpdateCheck } from './AppUpdates';
+import { padPreset } from '../utils/padGlyphs';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -169,8 +170,8 @@ const ShortcutInput: React.FC<{
 };
 
 /** Controller show / hide presets (electron/padCombo.cjs); older settings map onto them. */
-const PAD_PRESETS = ['hold-guide', 'hold-view-menu', 'double-view', 'hold-ls-rs', 'custom', 'off'] as const;
-const padPreset = (v?: string) => (v === 'back+start' || !v ? 'hold-view-menu' : v === 'ls+rs' ? 'hold-ls-rs' : v === 'lb+rb+back' ? 'custom' : v);
+// Holding L3 + R3 first: the default since Nov 17 2026 (View + Menu also opens Windows' multitasking view and Game Bar).
+const PAD_PRESETS = ['hold-ls-rs', 'hold-guide', 'hold-view-menu', 'double-view', 'custom', 'off'] as const;
 const PAD_BUTTONS = ['a', 'b', 'x', 'y', 'lb', 'rb', 'back', 'start', 'ls', 'rs'] as const;
 /** Same rule as the desktop app: two buttons or more, or View, Menu, L3 or R3 on its own. */
 const customComboOk = (b: string[]) => b.length >= 2 || (b.length === 1 && ['back', 'start', 'ls', 'rs'].includes(b[0]));

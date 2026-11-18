@@ -97,6 +97,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { createControllerService } = require('./controller.cjs');
 const { createWheel } = require('./wheel.cjs');
+const { createAnswerCard } = require('./answerCard.cjs');
 const { createFocusHelper } = require('./focus.cjs');
 const { pickCaptureDisplay } = require('./gameScreen.cjs');
 const tracker = require('./tracker.cjs');
@@ -284,7 +285,11 @@ app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5
 let isAppVisible = true;
 let controllerService = null;
 let quickWheel = null; // the quick menu over the game (wheel.cjs)
-let wheelAskAt = 0; // when something was asked from it: its answer brings the panel in
+let answerCard = null; // the answer card over the game (answerCard.cjs)
+// When something was asked from the quick menu with the panel away: its answer goes on the answer card, and nothing
+// brings the panel in or takes focus from the game (owner, Nov 17 2026).
+let quietAskAt = 0;
+const quietAsk = (ms = 120000) => !!quietAskAt && Date.now() - quietAskAt < ms;
 // The window (usually the game) that had focus before the overlay opened, so focus can be handed back.
 let focusBeforeOverlay = null;
 // Snapshot on open: some games pause as soon as they lose focus, so the overlay grabs a screenshot of the game
@@ -759,11 +764,31 @@ app.whenReady().then(() => {
     },
   });
 
-  // The quick menu over the game (wheel.cjs): the controller's open combo shows this ring, not the panel; its first
-  // item opens the panel, and an answer asked from it brings the panel in when it arrives ('answer-arrived').
+  // The quick menu over the game (wheel.cjs): the controller's open combo always shows this ring, over the game or the
+  // panel (owner, Nov 17 2026: wheel first). Asking from it with the panel away keeps the game in front: the answer
+  // goes on the answer card (answerCard.cjs, never focused). Only the panel's own items bring the panel in.
+  answerCard = createAnswerCard({
+    display: () => gameDisplay() || screen.getDisplayNearestPoint(screen.getCursorScreenPoint()),
+    strings: () => {
+      const s = (quickWheel && quickWheel.strings()) || {};
+      return { thinking: s.thinking, more: s.more, accent: s.accent };
+    },
+  });
+  // Asked from the wheel: with the panel away, the card shows it, thinking, and the answer lands there.
+  const askedQuietly = (label) => {
+    if (isAppVisible) return;
+    quietAskAt = Date.now();
+    answerCard.thinking(label);
+  };
   const showPanelFromPad = () =>
     Promise.resolve(slideIn()).then(() => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-activated');
+    });
+  // From the wheel to the panel: the panel learns the game's window (the wheel had focus last, so slideIn can't tell).
+  const wheelToPanel = () =>
+    quickWheel.close(true).then((game) => {
+      if (game) focusBeforeOverlay = game;
+      return showPanelFromPad();
     });
   quickWheel = createWheel({
     focusHelper,
@@ -771,26 +796,44 @@ app.whenReady().then(() => {
     whenReleased: () => (controllerService && controllerService.whenReleased ? controllerService.whenReleased() : Promise.resolve()),
     onChoose: (key) => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
-      if (key === 'panel') return void quickWheel.close(true).then(showPanelFromPad);
+      if (key === 'panel') return void wheelToPanel();
+      // Back to the game (the wheel opened over the panel): the panel slides away and the game gets focus back.
+      if (key === 'back') return void quickWheel.close(true).then(() => slideOut());
+      // The answer on the card, in the panel.
+      if (key === 'answer') {
+        const a = answerCard.recent();
+        answerCard.hide();
+        return void wheelToPanel().then(() => {
+          if (a && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('quick-action', `answer:${a.id}`);
+        });
+      }
       // These need the panel: it opens, then does them.
       if (key === 'type' || key === 'games') {
-        return void quickWheel.close(true).then(showPanelFromPad).then(() => mainWindow.webContents.send('quick-action', key));
+        return void wheelToPanel().then(() => mainWindow.webContents.send('quick-action', key));
       }
-      // The rest happen with the game in front; asking ones bring the panel in with their answer.
-      if (key === 'help' || key === 'shot') wheelAskAt = Date.now();
+      // The rest happen where they are; asking ones (with the panel away) put their answer on the card.
+      const label = (k) => ((quickWheel.items().find((i) => i.key === k) || {}).label || '');
+      let action = key;
+      if (key.startsWith('q:')) {
+        const id = key.slice(2);
+        const qs = quickWheel.strings().questions;
+        const q = (Array.isArray(qs) ? qs : []).find((x) => x && x.key === id);
+        askedQuietly(q ? q.label : '');
+        action = `ask:${id}`;
+      } else if (key === 'help' || key === 'shot') askedQuietly(label(key));
       quickWheel.close().then(() => {
-        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('quick-action', key);
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('quick-action', action);
       });
     },
     onTalk: (state) => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
-      if (state === 'end') wheelAskAt = Date.now();
+      if (state === 'end') askedQuietly((quickWheel.strings() || {}).spoken || '');
       mainWindow.webContents.send('quick-action', `talk-${state}`);
     },
   });
 
   // Dev builds only: tests drive the quick menu and the controller through this (scratchpad harness).
-  if (isDev) global.__qcDev = { wheel: () => quickWheel, toggle: () => controllerService && controllerService._toggle && controllerService._toggle(), input: (evt) => controllerService && controllerService._input && controllerService._input(evt) };
+  if (isDev) global.__qcDev = { wheel: () => quickWheel, card: () => answerCard, toggle: () => controllerService && controllerService._toggle && controllerService._toggle(), input: (evt) => controllerService && controllerService._input && controllerService._input(evt) };
 
   // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
   // overlay with the controller while it's visible. See controller.cjs.
@@ -810,11 +853,17 @@ app.whenReady().then(() => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       if (quickWheel.isOpen()) {
         quickWheel.close();
+      } else if (quickWheel.hasItems()) {
+        // Always the quick menu, over the game or the panel (owner, Nov 17 2026: wheel first). With the panel up,
+        // "Open the panel" becomes "Back to the game"; with an answer on the card, "Open this answer" comes first.
+        const s = quickWheel.strings() || {};
+        let items = quickWheel.items();
+        if (isAppVisible) items = items.map((i) => (i.key === 'panel' ? { key: 'back', label: s.backToGame || i.label } : i));
+        else if (answerCard.recent() && s.openAnswer) items = [{ key: 'answer', label: s.openAnswer }, ...items];
+        answerCard.putAway();
+        quickWheel.show(items);
       } else if (isAppVisible) {
         slideOut();
-      } else if (quickWheel.hasItems()) {
-        // The quick menu over the game, not the panel (owner, Nov 17 2026).
-        quickWheel.show();
       } else {
         // The app hasn't sent the menu yet: the panel, as before.
         showPanelFromPad();
@@ -1446,15 +1495,12 @@ ipcMain.on('quick-menu-items', (event, { items, strings } = {}) => {
   if (quickWheel) quickWheel.setItems(items, strings);
 });
 
-// An answer arrived. If it was asked from the quick menu over the game (within two minutes), the panel slides in with it.
-ipcMain.on('answer-arrived', () => {
-  if (!wheelAskAt || Date.now() - wheelAskAt > 120000) return;
-  wheelAskAt = 0;
-  if (!isAppVisible && mainWindow && !mainWindow.isDestroyed()) {
-    Promise.resolve(slideIn()).then(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-activated');
-    });
-  }
+// An answer arrived (the app sends every new one). Asked from the quick menu over the game with the panel away (within
+// two minutes, or while the card is up): it goes on the answer card, and the game keeps focus.
+ipcMain.on('answer-arrived', (event, a) => {
+  if (isAppVisible || !answerCard) return;
+  if (!quietAsk() && !answerCard.isShowing()) return;
+  answerCard.answer(a);
 });
 
 ipcMain.on('toggle-slide', () => {
@@ -2096,8 +2142,9 @@ ipcMain.handle('take-screenshot', async () => {
     console.error('Screenshot failed:', error);
   } finally {
     try {
-      // If the overlay was closed, this capture doubles as its "snapshot on open".
-      slideIn({ snapshot: wasVisible ? undefined : base64Image });
+      // If the overlay was closed, this capture doubles as its "snapshot on open". Not for a question asked from the
+      // controller's quick menu over the game: the game stays in front and its answer goes on the card.
+      if (wasVisible || !quietAsk(20000)) slideIn({ snapshot: wasVisible ? undefined : base64Image });
     } catch (err) {
       console.error('Failed to slideIn window:', err);
     }

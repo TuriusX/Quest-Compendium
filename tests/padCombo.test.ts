@@ -92,6 +92,21 @@ test("service: View pressed alone still works (after release); the 1-second hold
   assert.equal(h.events.filter((e) => e.type === "button").length, 0, "the combo's buttons don't act");
 });
 
+test("default (nothing saved): hold L3 + R3; L3 or R3 alone is just a press, a short L3 + R3 too", () => {
+  assert.deepEqual(comboFor(undefined).buttons, ["ls", "rs"], "View + Menu also opens Windows' multitasking view and Game Bar");
+  const r = rig({});
+  r.at(0, BITS.ls); r.at(150, 0); r.at(400, BITS.rs); r.at(550, 0);
+  assert.equal(r.toggles(), 0, "one stick clicked never opens anything");
+  assert.deepEqual(r.events.filter((e) => e.type === "button").map((e) => e.button), ["ls", "rs"]);
+  const s = rig({});
+  s.at(0, BITS.ls | BITS.rs); s.at(400, BITS.ls | BITS.rs); s.at(500, 0);
+  assert.equal(s.toggles(), 0, "a short press of both (a game's own L3 + R3) doesn't open it");
+  const h = rig({});
+  h.at(0, BITS.ls | BITS.rs); h.at(1100, BITS.ls | BITS.rs); h.at(1200, 0);
+  assert.equal(h.toggles(), 1, "held for a second, it does");
+  assert.equal(h.events.filter((e) => e.type === "button").length, 0, "and neither stick click acts in the app");
+});
+
 test("service: double-tap View toggles; a single View press reports once the double-tap can't happen", () => {
   const r = rig({ toggle: "double-view" });
   r.at(0, BITS.back); r.at(100, 0); r.at(250, BITS.back); r.at(300, 0); r.at(1000, 0);

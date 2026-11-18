@@ -25,19 +25,21 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useT } from '../i18n';
-import { QUICK_MAIN, QUICK_MORE, QUICK_HINTS, quickLabelKey } from '../utils/quickQuestions';
-import { nextStop, ringIndex, ringSpot, type Stop } from '../utils/padStops';
+import { padQuestionList, quickLabelKey } from '../utils/quickQuestions';
+import { createRingPointer, nextStop, ringSpot, type Stop } from '../utils/padStops';
 import { glyph, styleFromId, type PadStyle } from '../utils/padGlyphs';
 import { applySuggestion, buildVocab, deleteWord, suggest, type Vocab } from '../utils/padWords';
-import { Camera, EyeOff, Gamepad2, Keyboard, LocateFixed, Mic, Move, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
+import { Camera, CircleHelp, EyeOff, Gamepad2, Keyboard, LocateFixed, Mic, Move, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
 type PadEvent =
-  | { type: 'button'; button: Btn | 'lt' | 'rt' }
+  // A direction says where it came from (the d-pad or the left stick) and whether it's a key-repeat (the quick menu
+  // points with the sticks' own direction and takes only fresh d-pad presses).
+  | { type: 'button'; button: Btn | 'lt' | 'rt'; src?: 'dpad' | 'stick'; repeat?: boolean }
   | { type: 'scroll'; dy: number }
   | { type: 'talk'; state: 'start' | 'end' }
-  // The right stick's direction while pushed (x right, y up, -1..1), and x = y = 0 once let go: points in the quick menu.
-  | { type: 'stick'; x: number; y: number };
+  // Either stick's direction while pushed (x right, y up, -1..1), and x = y = 0 once let go: points in the quick menu.
+  | { type: 'stick'; x: number; y: number; which?: 'left' | 'right' };
 
 const FOCUSABLE =
   'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, ' +
@@ -201,6 +203,8 @@ function useGamepadPolling(enabled: boolean, talkButton: string, onEvent: (e: Pa
     let lastScroll = 0;
     let lastStick = 0;
     let stickOut = false;
+    let lastStickL = 0;
+    let stickOutL = false;
     let raf = 0;
     const loop = () => {
       raf = requestAnimationFrame(loop);
@@ -209,6 +213,7 @@ function useGamepadPolling(enabled: boolean, talkButton: string, onEvent: (e: Pa
       if (!pads.length) return;
       const t = performance.now();
       const down = new Set<Btn>();
+      const dpad = new Set<string>();
       let lx = 0, ly = 0, ry = 0, rx = 0;
       for (const p of pads) {
         for (const [i, name] of MAP) if (p.buttons[i]?.pressed) down.add(name);
@@ -216,6 +221,7 @@ function useGamepadPolling(enabled: boolean, talkButton: string, onEvent: (e: Pa
         if (p.buttons[13]?.pressed) down.add('down');
         if (p.buttons[14]?.pressed) down.add('left');
         if (p.buttons[15]?.pressed) down.add('right');
+        for (const [i, d] of [[12, 'up'], [13, 'down'], [14, 'left'], [15, 'right']] as const) if (p.buttons[i]?.pressed) dpad.add(d);
         if (Math.abs(p.axes[0] ?? 0) > Math.abs(lx)) lx = p.axes[0] ?? 0;
         if (Math.abs(p.axes[1] ?? 0) > Math.abs(ly)) ly = p.axes[1] ?? 0;
         if (Math.abs(p.axes[3] ?? 0) > Math.abs(ry)) ry = p.axes[3] ?? 0;
@@ -243,12 +249,15 @@ function useGamepadPolling(enabled: boolean, talkButton: string, onEvent: (e: Pa
         if (!down.has(d as Btn)) { rep[d] = null; continue; }
         const r = rep[d];
         const every = d === 'lt' || d === 'rt' ? 330 : 110;
-        if (!r) { rep[d] = { since: t, last: t }; onEventRef.current({ type: 'button', button: d }); }
-        else if (t - r.since > 380 && t - r.last > every) { r.last = t; onEventRef.current({ type: 'button', button: d }); }
+        const src = d === 'lt' || d === 'rt' ? undefined : dpad.has(d) ? ('dpad' as const) : ('stick' as const);
+        if (!r) { rep[d] = { since: t, last: t }; onEventRef.current({ type: 'button', button: d, src }); }
+        else if (t - r.since > 380 && t - r.last > every) { r.last = t; onEventRef.current({ type: 'button', button: d, src, repeat: true }); }
       }
       if (Math.abs(ry) > 0.25 && t - lastScroll > 33) { lastScroll = t; onEventRef.current({ type: 'scroll', dy: Math.round(ry * 42) }); }
-      if (Math.hypot(rx, ry) > 0.55 && t - lastStick > 50) { lastStick = t; stickOut = true; onEventRef.current({ type: 'stick', x: rx, y: -ry }); }
-      else if (stickOut && Math.hypot(rx, ry) <= 0.55) { stickOut = false; onEventRef.current({ type: 'stick', x: 0, y: 0 }); }
+      if (Math.hypot(rx, ry) > 0.55 && t - lastStick > 50) { lastStick = t; stickOut = true; onEventRef.current({ type: 'stick', which: 'right', x: rx, y: -ry }); }
+      else if (stickOut && Math.hypot(rx, ry) <= 0.55) { stickOut = false; onEventRef.current({ type: 'stick', which: 'right', x: 0, y: 0 }); }
+      if (Math.hypot(lx, ly) > 0.55 && t - lastStickL > 50) { lastStickL = t; stickOutL = true; onEventRef.current({ type: 'stick', which: 'left', x: lx, y: -ly }); }
+      else if (stickOutL && Math.hypot(lx, ly) <= 0.55) { stickOutL = false; onEventRef.current({ type: 'stick', which: 'left', x: 0, y: 0 }); }
       prev.clear();
       for (const [, name] of MAP) if (down.has(name)) prev.add(name);
     };
@@ -276,13 +285,34 @@ type Special = (typeof SPECIALS)[number];
 
 // ---- The layer ----------------------------------------------------------------------------------------------
 
-export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', hintMode = false, logAttached = false, intro = true }: { enabled: boolean; padStyle?: 'auto' | PadStyle; talkButton?: string; hintMode?: boolean; logAttached?: boolean; intro?: boolean }) {
+export function ControllerLayer({
+  enabled,
+  padStyle = 'auto',
+  talkButton = 'y',
+  hintMode = false,
+  logAttached = false,
+  intro = true,
+  comboLabel = '',
+  context,
+}: {
+  enabled: boolean;
+  padStyle?: 'auto' | PadStyle;
+  talkButton?: string;
+  hintMode?: boolean;
+  logAttached?: boolean;
+  intro?: boolean;
+  /** The open combo as the player's controller names it ("Hold L3 + R3"), for the first-time guide. */
+  comboLabel?: string;
+  /** What the quick menu's question list fits to (App): the quest log's Now goal, a fight, anything asked yet. */
+  context?: { goal: string; combat: boolean; asked: boolean };
+}) {
   const [talking, setTalking] = useState(false);
   const t = useT();
   const locale = useLocale();
   const [padMode, setPadMode] = useState(false);
   const [panel, setPanel] = useState<null | 'questions' | 'keyboard' | 'actions' | 'quick'>(null);
   const [qmIndex, setQmIndex] = useState(0);
+  const ringPointer = useRef(createRingPointer());
   // The Actions menu (Y on an answer): everything the mouse version offers for it, as one list.
   const [actions, setActions] = useState<{ label: string; run: () => void }[]>([]);
   const [aIndex, setAIndex] = useState(0);
@@ -372,8 +402,17 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
 
   // The quick questions (src/utils/quickQuestions.ts): the starters, then the ones behind "More" (and "Just a hint"
   // with hint mode on).
-  const quickIds = [...QUICK_MAIN, ...QUICK_MORE, ...(hintMode ? [QUICK_HINTS[0]] : [])];
-  const questionLabels = quickIds.map((id) => t(quickLabelKey(id)));
+  // The quick questions list, fitted to the moment (the quest log's Now goal, a fight, after an answer): the same list
+  // in the panel and in the quick menu over the game.
+  const quickIds = padQuestionList({ goal: context?.goal, combat: context?.combat, asked: context?.asked, hintMode });
+  const questionLabels = quickIds.map((id) => (id === 'goal' ? t('pad.askGoal', { goal: context?.goal || '' }) : t(quickLabelKey(id))));
+  const askListed = (i: number) => {
+    const id = quickIds[i];
+    if (!id) return;
+    emit('qc-ask', id === 'goal' ? { text: questionLabels[i] } : { text: questionLabels[i], quick: id });
+  };
+  const askListedRef = useRef(askListed);
+  askListedRef.current = askListed;
 
   // Controller mode shows the focus ring and button hints; any mouse or keyboard use hides them again.
   useEffect(() => {
@@ -452,6 +491,7 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
     { key: 'help', label: t('set.locateKey'), Icon: LocateFixed, run: () => emit('qc-help-here') },
     ...(desktop ? [{ key: 'shot', label: t('pad.shotAsk'), Icon: Camera, run: () => emit('trigger-auto-screenshot-submit') }] : []),
     { key: 'speak', label: t('pad.voice'), Icon: Mic, run: () => emit('trigger-voice-record') },
+    { key: 'questions', label: t('pad.questions'), Icon: CircleHelp, run: () => { setQIndex(0); setPanel('questions'); } },
     ...(desktop ? [{ key: 'find', label: t('set.sc.findMarkers'), Icon: ScanSearch, run: () => emit('qc-find-markers') }] : []),
     { key: 'log', label: t('pad.questLog'), Icon: ScrollText, run: () => emit('qc-toggle-log') },
     { key: 'model', label: t('pad.model'), Icon: Zap, run: () => emit('qc-toggle-answer-model') },
@@ -498,19 +538,44 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
   // nothing there), and sends back what was picked.
   const quickMenuRef = useRef(quickMenu);
   quickMenuRef.current = quickMenu;
+  const quickIdsRef = useRef(quickIds);
+  quickIdsRef.current = quickIds;
   useEffect(() => {
     const api = electronAPI();
     if (!api?.setQuickMenu) return;
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
     api.setQuickMenu(
       [{ key: 'panel', label: t('pad.openPanel') }, ...quickMenuRef.current.filter((i) => i.key !== 'hide').map(({ key, label }) => ({ key, label }))],
-      { title: t('pad.quickMenu'), listening: t('pad.listening'), listeningTap: t('pad.listeningTap'), select: t('pad.select'), close: t('common.close'), ask: t('pad.ask'), cancel: t('common.cancel'), accent, glyphs: { a: glyph('a', style), b: glyph('b', style) } },
+      {
+        title: t('pad.quickMenu'), listening: t('pad.listening'), listeningTap: t('pad.listeningTap'), select: t('pad.select'), close: t('common.close'),
+        ask: t('pad.ask'), cancel: t('common.cancel'), back: t('pad.back'), accent, glyphs: { a: glyph('a', style), b: glyph('b', style) },
+        // The quick questions list (its own view in the ring), the answer card's words, and the items the desktop app
+        // adds or swaps in (electron/main.cjs).
+        questionsTitle: t('pad.questions'), questions: quickIds.map((key, i) => ({ key, label: questionLabels[i] })),
+        thinking: t('pad.cardThinking'), more: t('pad.cardMore'), spoken: t('pad.cardSpoken'), openAnswer: t('pad.openAnswer'), backToGame: t('pad.backToGame'),
+      },
     );
-  }, [locale, t, style]);
+  }, [locale, t, style, questionLabels.join('\n'), quickIds.join(',')]);
   useEffect(() => {
     electronAPI()?.onQuickAction?.((key: string) => {
       // Speak from the ring: listening while it's up; A asks, B cancels.
       if (key.startsWith('talk-')) return emit('qc-talk', { state: key.slice(5) });
+      // A quick question picked from the list over the game.
+      if (key.startsWith('ask:')) {
+        const i = quickIdsRef.current.indexOf(key.slice(4) as never);
+        if (i >= 0) askListedRef.current(i);
+        return;
+      }
+      // "Open this answer": the panel came in; the focus goes to that answer once it has settled.
+      if (key.startsWith('answer:')) {
+        const id = key.slice(7);
+        emit('qc-scroll-to-msg', { id });
+        setTimeout(() => {
+          const el = document.querySelector<HTMLElement>(`[data-pad-stop="answer"][data-msg-id="${CSS.escape(id)}"]`);
+          if (el) setFocusRef.current(el);
+        }, 350);
+        return;
+      }
       quickMenuRef.current.find((i) => i.key === key)?.run();
     });
   }, []);
@@ -581,10 +646,11 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
         }
       }
 
-      // The right stick points in the quick menu; elsewhere its direction means nothing (it scrolls).
+      // Either stick points in the quick menu; elsewhere its direction means nothing (the right one scrolls, the left
+      // one moves as directions).
       if (e.type === 'stick') {
         if (panel === 'quick') {
-          const i = ringIndex(e.x, e.y, quickMenu.length);
+          const i = ringPointer.current.stick(e.which === 'left' ? 'left' : 'right', e.x, e.y, quickMenu.length);
           if (i !== null) setQmIndex(i);
         }
         return;
@@ -629,17 +695,17 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
       if (panel === 'questions') {
         if (b === 'up') setQIndex((i) => (i + questionLabels.length - 1) % questionLabels.length);
         else if (b === 'down') setQIndex((i) => (i + 1) % questionLabels.length);
-        else if (b === 'a') { emit('qc-ask', { text: questionLabels[qIndex], quick: quickIds[qIndex] }); setPanel(null); }
+        else if (b === 'a') { askListed(qIndex); setPanel(null); }
         else if (b === 'b' || b === 'y') setPanel(null);
         return;
       }
 
-      // --- Quick menu: the d-pad steps round the ring (the right stick points); A chooses; B or Menu closes.
+      // --- Quick menu: the d-pad and either stick point at an item, all the same way; A chooses; B or Menu closes.
       if (panel === 'quick') {
-        const n = quickMenu.length;
-        if (b === 'right' || b === 'down') setQmIndex((i) => (i + 1) % n);
-        else if (b === 'left' || b === 'up') setQmIndex((i) => (i + n - 1) % n);
-        else if (b === 'a') {
+        if (b === 'up' || b === 'down' || b === 'left' || b === 'right') {
+          // The left stick points through its own direction ('stick' above); a held d-pad doesn't repeat.
+          if (e.src !== 'stick' && !e.repeat) setQmIndex((i) => ringPointer.current.dpad(b, performance.now(), quickMenu.length, i));
+        } else if (b === 'a') {
           const item = quickMenu[qmIndex];
           setPanel(null);
           item?.run();
@@ -820,6 +886,7 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
       } else if (b === 'start') {
         // The quick menu, wherever you are (the keyboard: A on the Ask bar, or Type in this menu).
         setQmIndex(0);
+        ringPointer.current.reset();
         setPanel('quick');
       } else if (b === 'back') {
         // View: the quest log opens or closes (owner, Oct 30 2026). Screenshot and ask moved to L3.
@@ -952,7 +1019,11 @@ export function ControllerLayer({ enabled, padStyle = 'auto', talkButton = 'y', 
                 <span>{t(label)}</span>
               </div>
             ))}
-            <p className="text-[12px] leading-snug text-zinc-400">{t('pad.introOpen')}</p>
+            {comboLabel && (
+              <p className="text-[12px] leading-snug text-zinc-400">
+                <span className="font-semibold text-white">{comboLabel}</span>: {t('pad.introOpenCombo')}
+              </p>
+            )}
             <div className="flex justify-end">
               <span className="flex items-center gap-1.5 text-[13px] font-semibold text-white"><Glyph b="a" />{t('pad.introOk')}</span>
             </div>

@@ -90,3 +90,15 @@ export const QUICK_PROMPTS: Record<QuickId, string> = {
 };
 
 export const isQuickId = (v: unknown): v is QuickId => typeof v === 'string' && Object.prototype.hasOwnProperty.call(QUICK_PROMPTS, v);
+
+/**
+ * The controller's quick questions list (the quick menu's "Quick questions", over the game and in the panel), fitted
+ * to the moment (owner, Nov 17 2026): help with the quest log's Now goal first when there is one, then the chips in the
+ * order they'd show (in a fight, beating it first; after an answer, what comes next), then the rest. "Show me where on
+ * screen" needs the last screenshot, so it isn't in the list.
+ */
+export function padQuestionList(o: { goal?: string; combat?: boolean; asked?: boolean; hintMode?: boolean }): ('goal' | QuickId)[] {
+  const { shown, extra } = quickChips({ asked: !!o.asked, combat: !!o.combat, canShowWhere: false, hintMode: !!o.hintMode });
+  const ids = [...shown, ...extra].filter((id) => id !== 'where');
+  return [...(o.goal && o.goal.trim() ? (['goal'] as const) : []), ...ids];
+}

@@ -3,9 +3,10 @@
  * and hold-to-talk.
  *
  * Show / hide (Settings, controllerToggle), chosen to rarely clash with games:
- *   'hold-view-menu'  hold View + Menu for 1 second (the default)
+ *   'hold-ls-rs'      hold L3 + R3 (click both sticks) for 1 second (the default since Nov 17 2026: View + Menu also
+ *                     opens Windows' multitasking view and Game Bar)
+ *   'hold-view-menu'  hold View + Menu for 1 second
  *   'double-view'     double-tap View
- *   'hold-ls-rs'      hold L3 + R3 (click both sticks) for 1 second
  *   'hold-guide'      hold the Xbox / PS button for 1 second (games never see it)
  *   'custom'          any buttons (controllerCustom.buttons), held for 1 second or double-tapped (controllerCustom.mode)
  *   'off'
@@ -45,14 +46,14 @@ const PRESETS = {
 
 /** The show/hide combo for these settings: { buttons, mode, mask } or null (off, or no usable buttons). */
 function comboFor(preset, custom) {
-  const p = preset || 'hold-view-menu';
+  const p = preset || 'hold-ls-rs';
   if (p === 'off') return null;
   let c = PRESETS[p] || LEGACY[p];
   if (p === 'custom') {
     const buttons = (custom && Array.isArray(custom.buttons) ? custom.buttons : []).filter((b) => BITS[b] !== undefined).slice(0, 4);
     c = { buttons: [...new Set(buttons)], mode: custom && custom.mode === 'double' ? 'double' : 'hold' };
   }
-  if (!c) c = PRESETS['hold-view-menu'];
+  if (!c) c = PRESETS['hold-ls-rs'];
   const mask = c.buttons.reduce((m, b) => m | (BITS[b] || 0), 0);
   // A single face button, bumper or direction clashes with every game: a custom combo is two buttons or more, or one of
   // View, Menu, L3 or R3 on its own. Anything else is refused (null), like 'off'.

@@ -20,6 +20,25 @@ export function styleFromId(id: string): PadStyle | null {
   return null;
 }
 
+/**
+ * The open combo's preset (electron/padCombo.cjs) from what's saved: the default (nothing saved) is holding L3 + R3
+ * (owner, Nov 17 2026: View + Menu also opens Windows' multitasking view and Game Bar); older values map onto presets.
+ */
+export function padPreset(v?: string): string {
+  if (!v || v === 'ls+rs') return 'hold-ls-rs';
+  if (v === 'back+start') return 'hold-view-menu';
+  if (v === 'lb+rb+back') return 'custom';
+  return v;
+}
+
+/** The open combo as the app names it ("Hold L3 + R3"), from the Settings label without its "(1 second)"; '' when off. */
+export function padComboLabel(toggle: string | undefined, custom: { buttons?: string[] } | undefined, t: (key: string) => string): string {
+  const p = padPreset(toggle);
+  if (p === 'off') return '';
+  if (p === 'custom') return (custom?.buttons || []).map((b) => t(`set.pad.btn.${b}`)).join(' + ');
+  return t(`set.pad.preset.${p}`).replace(/\s*[(（][^()（）]*[)）]\s*$/, '');
+}
+
 type G = { text: string; bg: string; fg: string; round: boolean };
 const FACE = (text: string, bg: string, fg = '#0b0a10'): G => ({ text, bg, fg, round: true });
 const BAR = (text: string): G => ({ text, bg: '#3f3f46', fg: '#f4f4f5', round: false });

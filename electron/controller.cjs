@@ -114,7 +114,7 @@ function createControllerService(opts) {
   const available = typeof readPad === 'function';
 
   let config = { enabled: true };
-  let combo = createComboDetector(comboFor('hold-view-menu'));
+  let combo = createComboDetector(comboFor('hold-ls-rs'));
   // The quest log's tick and cycle chords (the show / hide modifier + a button; off until turned on in Settings),
   // whether or not the overlay is visible.
   let tickChord = createChord(null);
@@ -133,6 +133,8 @@ function createControllerService(opts) {
   let lastScroll = 0;
   let lastStick = 0;
   let stickOut = false;
+  let lastStickL = 0;
+  let stickOutL = false;
   // Buttons (and triggers) down on the last read: the panel hands focus back to the game only once they're all let go.
   let heldBits = 0;
   // The open hold still going after the panel opened: { since, talking } (asking in one motion).
@@ -259,17 +261,30 @@ function createControllerService(opts) {
         repeat[d] = null;
         continue;
       }
+      // Where a direction came from (the d-pad, or the left stick) and whether it's a key-repeat: the quick menu
+      // points with the sticks' own direction ('stick' below) and takes only fresh d-pad presses.
+      const bit = d === 'up' ? BTN.UP : d === 'down' ? BTN.DOWN : d === 'left' ? BTN.LEFT : d === 'right' ? BTN.RIGHT : 0;
+      const src = bit ? ((buttons & bit) !== 0 ? 'dpad' : 'stick') : undefined;
       if (!repeat[d]) {
         repeat[d] = { since: t, last: t };
-        opts.onInput({ type: 'button', button: d });
+        opts.onInput({ type: 'button', button: d, ...(src ? { src } : {}) });
       } else if (t - repeat[d].since > REPEAT_DELAY_MS && t - repeat[d].last > REPEAT_EVERY_MS * (d === 'lt' || d === 'rt' ? 3 : 1)) {
         repeat[d].last = t;
-        opts.onInput({ type: 'button', button: d });
+        opts.onInput({ type: 'button', button: d, repeat: true, ...(src ? { src } : {}) });
       }
     }
 
-    // Right stick scrolls; it also points in the quick menu, so its direction is sent too while it's pushed
-    // ({ type: 'stick', x, y }, -1..1, y up), and once when it's let go (x = y = 0).
+    // Right stick scrolls; both sticks also point in the quick menu, so their direction is sent too while pushed
+    // ({ type: 'stick', which, x, y }, -1..1, y up), and once when let go (x = y = 0).
+    const pushedL = Math.hypot(nx, ny) > STICK_DEADZONE;
+    if (visible && pushedL && t - lastStickL > 50) {
+      lastStickL = t;
+      stickOutL = true;
+      opts.onInput({ type: 'stick', which: 'left', x: Math.round(nx * 100) / 100, y: Math.round(ny * 100) / 100 });
+    } else if (stickOutL && !pushedL) {
+      stickOutL = false;
+      opts.onInput({ type: 'stick', which: 'left', x: 0, y: 0 });
+    }
     const nry = ry / 32767;
     const nrx = rx / 32767;
     if (visible && Math.abs(nry) > SCROLL_DEADZONE && t - lastScroll > 33) {
@@ -280,10 +295,10 @@ function createControllerService(opts) {
     if (visible && pushed && t - lastStick > 50) {
       lastStick = t;
       stickOut = true;
-      opts.onInput({ type: 'stick', x: Math.round(nrx * 100) / 100, y: Math.round(nry * 100) / 100 });
+      opts.onInput({ type: 'stick', which: 'right', x: Math.round(nrx * 100) / 100, y: Math.round(nry * 100) / 100 });
     } else if (stickOut && !pushed) {
       stickOut = false;
-      opts.onInput({ type: 'stick', x: 0, y: 0 });
+      opts.onInput({ type: 'stick', which: 'right', x: 0, y: 0 });
     }
 
     prevButtons = buttons;
@@ -312,7 +327,7 @@ function createControllerService(opts) {
   function setConfig(next) {
     const n = next || {};
     config = { enabled: n.enabled !== false };
-    const toggleCombo = comboFor(n.toggle || n.chord || 'hold-view-menu', n.custom);
+    const toggleCombo = comboFor(n.toggle || n.chord || 'hold-ls-rs', n.custom);
     combo = createComboDetector(toggleCombo);
     tickChord = createChord(chordFor(n.trackerTick || 'off', toggleCombo));
     nextChord = createChord(chordFor(n.trackerNext || 'off', toggleCombo));

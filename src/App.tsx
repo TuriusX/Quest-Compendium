@@ -83,6 +83,7 @@ import { PopWindow } from './components/PopWindow';
 import { useWorthHere } from './hooks/useWorthHere';
 import { QuestLog } from './components/QuestLog';
 import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, doSteps, isNowQuestion, isCuriosityQuestion, heldIds, HELD_DAYS, type LogView, type Foe } from './utils/questLogView';
+import { padComboLabel, padPreset } from './utils/padGlyphs';
 import { missablesThin } from './utils/missablesCheck';
 
 /**
@@ -745,7 +746,7 @@ export default function App() {
   useEffect(() => {
     (window as any).electronAPI?.setControllerConfig?.({
       enabled: settings.controllerEnabled !== false,
-      toggle: settings.controllerToggle || 'hold-view-menu',
+      toggle: padPreset(settings.controllerToggle),
       custom: settings.controllerCustom,
       talk: settings.controllerTalk || 'y',
       trackerTick: settings.controllerTick || 'off',
@@ -1068,6 +1069,24 @@ export default function App() {
   };
   const runHelpRef = useRef(runHelpHere);
   runHelpRef.current = runHelpHere;
+
+  // Every new answer (or note) goes to the desktop app, which puts it on the answer card over the game when it was
+  // asked from the controller's quick menu with the panel away (electron/answerCard.cjs; owner, Nov 17 2026).
+  const cardSeenRef = useRef<string | null>(null);
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.answerArrived || !activeTab) return;
+    const msgs = activeTab.messages;
+    const last = msgs[msgs.length - 1];
+    const sig = last && last.role === 'assistant' ? `${last.id}:${(last.text || '').length}` : '';
+    const first = cardSeenRef.current === null;
+    if (sig === cardSeenRef.current) return;
+    cardSeenRef.current = sig;
+    if (first || !sig) return; // what was there on start isn't new
+    let question = '';
+    for (let i = msgs.length - 2; i >= 0; i--) if (msgs[i].role === 'user') { question = String(msgs[i].text || ''); break; }
+    api.answerArrived({ id: last.id, question: question.slice(0, 200), title: last.title || '', text: String(last.text || '').slice(0, 4000) });
+  }, [activeTab?.messages]);
   useEffect(() => {
     const on = () => void runHelpRef.current();
     window.addEventListener('qc-help-here', on);
@@ -1469,6 +1488,29 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     }
     if (userData && !userData.isGuest) wasPremiumRef.current = now;
   }, [userData?.isPremium]);
+
+  // The controller's open combo moves from holding View + Menu (it also opens Windows' multitasking view and Game Bar)
+  // to holding L3 + R3, once (owner, Nov 17 2026). A short note says so, and the first-time controller guide shows
+  // again with the new combo. Anyone can pick View + Menu again in Settings; this never runs twice.
+  useEffect(() => {
+    if (settings.padComboMoved) return;
+    const was = settings.controllerToggle;
+    const moving = !was || was === 'hold-view-menu' || was === 'back+start';
+    setSettings((s) => ({ ...s, padComboMoved: true, ...(moving ? { controllerToggle: 'hold-ls-rs' as const } : {}) }));
+    if (!moving) return;
+    // Nothing saved means the old default: a note only for players who have used a controller here already.
+    let usedPad = !!was;
+    try {
+      usedPad = usedPad || !!localStorage.getItem('qc-pad-intro-seen');
+      localStorage.removeItem('qc-pad-intro-seen');
+    } catch {
+      /* the guide just won't show again */
+    }
+    if (!usedPad) return;
+    setMouseToast(tr('pad.comboMoved'));
+    if (mouseToastTimer.current) clearTimeout(mouseToastTimer.current);
+    mouseToastTimer.current = setTimeout(() => setMouseToast(null), 9000);
+  }, [settings.padComboMoved, settings.controllerToggle]);
   // The plan the Premium screen starts on: monthly, or yearly when a link asks for it (?plan=year).
   const [paywallInterval, setPaywallInterval] = useState<'month' | 'year'>('month');
   // Subscribe for everyone not on Premium (owner, Nov 15 2026), at the right end of the game-detected row under the top
@@ -3038,8 +3080,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         timestamp: nowAi
       };
 
-      // Asked from the controller's quick menu over the game: the panel slides in with the answer (electron/main.cjs).
-      (window as any).electronAPI?.answerArrived?.();
       // Desktop: show the AI's pointers right on top of the game, found on the screen as it is now (markers v2).
       const markerGame = activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '';
       const placeNow = !!(aiMessage.points?.length && imageBase64 && settings.showPointersOnScreen !== false && (window as any).electronAPI?.captureScreenNow);
@@ -3973,7 +4013,22 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
 
       {/* Controller support: focus navigation, quick questions, on-screen keyboard, button hints */}
       {poppedLogOpen && <PopWindow name="qc-log" title={tr('tracker.logTitle')}>{questLogEl(true)}</PopWindow>}
-      <ControllerLayer enabled={settings.controllerEnabled !== false} padStyle={settings.controllerStyle || 'auto'} talkButton={settings.controllerTalk || 'y'} hintMode={settings.hintMode === true} logAttached={questLogAttached && (questLogVisible || questLogTucked) && !isBrowserMode} />
+      <ControllerLayer
+        enabled={settings.controllerEnabled !== false}
+        padStyle={settings.controllerStyle || 'auto'}
+        talkButton={settings.controllerTalk || 'y'}
+        hintMode={settings.hintMode === true}
+        logAttached={questLogAttached && (questLogVisible || questLogTucked) && !isBrowserMode}
+        comboLabel={padComboLabel(settings.controllerToggle, settings.controllerCustom, tr)}
+        context={(() => {
+          // What the quick menu's question list fits to: the quest log's Now goal, a fight, whether anything was asked.
+          const msgs = activeTab?.messages ?? [];
+          const nowMsg = activeTab?.questLog?.now ? msgs.find((x) => x.id === activeTab.questLog!.now) : undefined;
+          let lastAnswer: ChatMessage | undefined;
+          for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].role === 'assistant') { lastAnswer = msgs[i]; break; }
+          return { goal: nowMsg ? answerTitle(nowMsg) : '', combat: !!lastAnswer?.combat, asked: msgs.some((m) => m.role === 'user') };
+        })()}
+      />
 
       {/* Quick Game Search & Switcher Modal */}
       <QuickGameSearchModal

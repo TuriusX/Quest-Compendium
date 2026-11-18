@@ -337,12 +337,15 @@ export interface AppSettings {
   /** Controller support (on by default) and the held chord that shows / hides the desktop overlay. */
   controllerEnabled?: boolean;
   /**
-   * How the controller shows / hides the overlay (electron/padCombo.cjs): a 1-second hold of View + Menu (default), a
-   * double-tap of View, a 1-second hold of L3 + R3, a custom combo (controllerCustom), or off. Older values still work.
+   * How the controller opens the quick menu (electron/padCombo.cjs): a 1-second hold of L3 + R3 (default since Nov 17
+   * 2026), of View + Menu, or of the Xbox / PS button, a double-tap of View, a custom combo (controllerCustom), or off.
+   * Older values still work.
    */
   controllerToggle?: 'hold-guide' | 'hold-view-menu' | 'double-view' | 'hold-ls-rs' | 'custom' | 'off' | 'back+start' | 'ls+rs' | 'lb+rb+back';
   /** A custom show / hide combo: its buttons (XInput names: a, b, x, y, lb, rb, back, start, ls, rs) and its timing. */
   controllerCustom?: { buttons: string[]; mode: 'hold' | 'double' };
+  /** The open combo was moved off View + Menu to L3 + R3 (once, Nov 17 2026; App.tsx). */
+  padComboMoved?: boolean;
   /** Hold to talk on the controller while the overlay is open (default 'y'; 'off' turns it off). */
   controllerTalk?: 'y' | 'x' | 'lb' | 'rb' | 'off';
   /** Controller mode: which buttons the app names (Xbox, PlayStation, Nintendo, Steam Deck), or 'auto' (default). */

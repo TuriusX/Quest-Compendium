@@ -1,14 +1,14 @@
 /**
- * The quick menu over the game (controller mode, owner Nov 17 2026: "the radial wheel pops up along with the side
- * window, which probably isn't necessary, at least until there's an answer").
+ * The quick menu over the game (controller mode; owner, Nov 17 2026: wheel first).
  *
- * The show / hide combo, with the panel away, opens only this ring, in the middle of the game's screen. Its first item
- * opens the panel; Speak, Screenshot and ask and Help me here run from here, and the panel slides in by itself when
- * the answer arrives (main.cjs, 'answer-arrived'). While the ring is up it holds focus, like the panel, so the game
- * doesn't react to the stick or A; focus goes back to the game once every button is let go.
+ * The open combo (hold L3 + R3 by default) always opens this ring, over the game or the panel; it never shows or
+ * hides the panel itself. Asking items (Help me here, Screenshot and ask, Speak, a quick question from its list) run
+ * with the game in front, and their answer goes on the answer card (answerCard.cjs), never taking focus. Only the
+ * panel's own items (Open the panel, Open this answer, Type, Switch game) bring the panel in. While the ring is up it
+ * holds focus, so the game doesn't react to the sticks or A; focus goes back once every button is let go.
  *
- * The page (wheel.html) draws the ring and picks with the right stick or the d-pad; this module owns the window, the
- * focus and the controller input while it's open.
+ * The page (wheel.html) draws the ring and the quick questions list; either stick or the d-pad points
+ * (ringPoint.js). This module owns the window, the focus and the controller input while it's open.
  */
 const { BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
@@ -64,14 +64,16 @@ function createWheel(opts) {
   }
 
   let open = false;
-  function show() {
+  /** Open; `override`: the items for this opening (main.cjs adds "Open this answer" and swaps in "Back to the game"). */
+  function show(override) {
     const w = ensure();
     const d = opts.display();
     const { x, y, width, height } = d.workArea || d.bounds;
     w.setBounds({ x: Math.round(x + (width - 560) / 2), y: Math.round(y + (height - 560) / 2), width: 560, height: 560 });
     previous = opts.focusHelper.other ? opts.focusHelper.other() : null;
     open = true;
-    send('wheel-open', { items, strings });
+    const questions = Array.isArray(strings.questions) ? strings.questions : [];
+    send('wheel-open', { items: Array.isArray(override) ? override : items, strings, questions });
     w.show();
     w.focus();
     const took = opts.focusHelper.take ? opts.focusHelper.take(w) : null;
@@ -79,7 +81,8 @@ function createWheel(opts) {
     console.log('[wheel] open');
   }
 
-  /** Close; `toPanel`: the panel opens next and takes focus itself (no hand-back to the game). */
+  /** Close; `toPanel`: the panel opens next and takes focus itself (no hand-back to the game; resolves with the game's
+   * window, for the panel to give focus back to). */
   function close(toPanel = false) {
     if (!open) return Promise.resolve();
     open = false;
@@ -87,8 +90,10 @@ function createWheel(opts) {
     send('wheel-close', {});
     if (toPanel || !w || w.isDestroyed()) {
       if (w && !w.isDestroyed()) w.hide();
+      // The panel takes focus next: it gets the game's window, to give focus back to when it goes away.
+      const game = previous;
       previous = null;
-      return Promise.resolve();
+      return Promise.resolve(game);
     }
     // Out of sight at once; focus back to the game once every button is let go.
     w.setOpacity(0);
@@ -102,7 +107,7 @@ function createWheel(opts) {
     });
   }
 
-  // The page picked something, or closed.
+  // The page picked something, or closed. ('q:<id>': a quick question from its list.)
   ipcMain.on('wheel-choose', (event, key) => {
     if (!win || event.sender !== win.webContents || !open) return;
     if (key === 'speak') {
@@ -127,11 +132,13 @@ function createWheel(opts) {
   return {
     isOpen: () => open,
     hasItems: () => items.length > 0,
+    items: () => items.slice(),
+    strings: () => strings,
     show,
     close,
     /** The app's labels for the ring (localized): [{ key, label }] and the page's strings. */
     setItems(next, nextStrings) {
-      items = Array.isArray(next) ? next.filter((i) => i && i.key && i.label).slice(0, 12) : [];
+      items = Array.isArray(next) ? next.filter((i) => i && i.key && i.label).slice(0, 14) : [];
       strings = nextStrings && typeof nextStrings === 'object' ? nextStrings : {};
     },
     /** Controller input while the ring is open: buttons, the stick's direction, and hold-to-talk. */

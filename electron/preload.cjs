@@ -77,7 +77,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The quick menu over the game (wheel.cjs): its labels, what was picked there, and "an answer arrived".
   setQuickMenu: (items, strings) => ipcRenderer.send('quick-menu-items', { items, strings }),
   onQuickAction: (callback) => { ipcRenderer.removeAllListeners('quick-action'); ipcRenderer.on('quick-action', (event, key) => callback(String(key || ''))); },
-  answerArrived: () => ipcRenderer.send('answer-arrived'),
+  answerArrived: (a) => ipcRenderer.send('answer-arrived', a && typeof a === 'object' ? { id: String(a.id || ''), question: String(a.question || ''), title: String(a.title || ''), text: String(a.text || '') } : null),
   // Find the markers again: asked by the marker page (auto) or the shortcut key.
   onRefindRequest: (callback) => { ipcRenderer.removeAllListeners('refind-request'); ipcRenderer.on('refind-request', (event, r) => callback(r || {})); },
   // The objectives tracker drawn over the game (electron/tracker.cjs).
