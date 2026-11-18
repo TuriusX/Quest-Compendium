@@ -49,6 +49,7 @@ import { QuestLogo } from './QuestLogo';
 import { ReportAnswerModal, type ReportTarget } from './ReportAnswerModal';
 import { PlaceBar } from './PlaceBar';
 import { QcGuidesView } from './QcGuidesView';
+import { GuidesBrowser } from './GuidesBrowser';
 import { SourceLinks } from './SourceLinks';
 import { GlainIcon } from './GlainIcon';
 import { Walkthrough, walkthroughDone, OPEN_TOUR_EVENT } from './Walkthrough';
@@ -370,7 +371,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       setGuideOpenReq({ slug: d.slug, entry: typeof d.entry === 'string' ? d.entry : undefined, entity: !!d.entity, n: Date.now() });
     };
     window.addEventListener('qc-open-guide', onOpen);
-    return () => window.removeEventListener('qc-open-guide', onOpen);
+    // "Browse all guides" in the game menu: the Guides tab.
+    const onGuides = () => setMode('guide');
+    window.addEventListener('qc-open-guides-tab', onGuides);
+    return () => {
+      window.removeEventListener('qc-open-guide', onOpen);
+      window.removeEventListener('qc-open-guides-tab', onGuides);
+    };
   }, []);
   /** "That's right" on an answer that corrected the guide: tell the server the player confirmed that area (best effort). */
   const confirmCorrectionsPlace = async (ids: string[]) => {
@@ -1553,6 +1560,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       {activeTab && guideLoaded && (
         <div className={mode === 'guide' ? 'flex-1 flex flex-col min-h-0' : 'hidden'}>
+          {/* The Guides tab: our guide (📖) first, then web tabs (owner, Nov 17 2026). */}
+          <GuidesBrowser
+            active={mode === 'guide'}
+            game={activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || ''}
+            steamAppId={Number(activeTab.activeSteamGame?.appId || activeGame?.appId) || 0}
+            home={
           <QcGuidesView
             gameName={activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name}
             gameAppId={Number(activeTab.activeSteamGame?.appId || activeGame?.appId) || 0}
@@ -1565,6 +1578,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               setMode('ask');
               handleSubmit(undefined, q);
             }}
+          />
+            }
           />
         </div>
       )}

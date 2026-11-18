@@ -98,6 +98,7 @@ const { spawn } = require('child_process');
 const { createControllerService } = require('./controller.cjs');
 const { createWheel } = require('./wheel.cjs');
 const { createAnswerCard } = require('./answerCard.cjs');
+const { createGuideBrowser, PARTITION: GUIDE_PARTITION } = require('./guideBrowser.cjs');
 const { createFocusHelper } = require('./focus.cjs');
 const { pickCaptureDisplay } = require('./gameScreen.cjs');
 const tracker = require('./tracker.cjs');
@@ -518,7 +519,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
-      webviewTag: true,
+      // The Guides tab's web pages are their own locked-down views (guideBrowser.cjs), not <webview> tags.
+      webviewTag: false,
       webSecurity: false,
       // Hidden while the panel is away (the spine shows instead): its timers (game detection, the tracker's updates)
       // must keep their pace.
@@ -638,7 +640,10 @@ app.whenReady().then(() => {
     return true;
   });
 
-  // Initialize AdBlocker for the webview partition
+  // The Guides tab's browser (guideBrowser.cjs): web tabs laid over the panel.
+  createGuideBrowser({ getWindow: () => mainWindow });
+
+  // Ads and trackers blocked in the Guides tab's browser (owner, Nov 17 2026: "with adblocker implemented").
   try {
     const { ElectronBlocker } = require('@ghostery/adblocker-electron');
   const fetch = require('cross-fetch');
@@ -650,8 +655,8 @@ app.whenReady().then(() => {
     write: fsp.writeFile,
   }).then((blocker) => {
     // blocker.enableBlockingInSession(session.defaultSession); // Removed to prevent double IPC registration crash
-    blocker.enableBlockingInSession(session.fromPartition('persist:browser_session'));
-    console.log("Adblocker enabled for browser sessions");
+    blocker.enableBlockingInSession(session.fromPartition(GUIDE_PARTITION));
+    console.log("Adblocker enabled for the Guides browser");
   }).catch((err) => console.error("Adblocker failed:", err));
   } catch(e) { console.error("Adblocker module missing, skipping adblocker initialization."); }
 

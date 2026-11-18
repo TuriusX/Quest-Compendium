@@ -17,7 +17,6 @@ import { ChatArea } from './components/ChatArea';
 import { AchievementsDrawer } from './components/AchievementsDrawer';
 const PlaythroughNotepad = React.lazy(() => import('./components/PlaythroughNotepad').then(module => ({ default: module.PlaythroughNotepad })));
 const PersonalQuestsModal = React.lazy(() => import('./components/PersonalQuestsModal').then(module => ({ default: module.PersonalQuestsModal })));
-const GameGuidesBrowser = React.lazy(() => import('./components/GameGuidesBrowser').then(module => ({ default: module.GameGuidesBrowser })));
 const EmailSignInPage = React.lazy(() => import('./components/EmailSignInPage').then(module => ({ default: module.EmailSignInPage })));
 const SettingsModal = React.lazy(() => import('./components/SettingsModal').then(module => ({ default: module.SettingsModal })));
 const QuickGameSearchModal = React.lazy(() => import('./components/QuickGameSearchModal').then(module => ({ default: module.QuickGameSearchModal })));
@@ -357,7 +356,6 @@ export default function App() {
   const [isAchDrawerOpen, setIsAchDrawerOpen] = useState(false);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isQuestsOpen, setIsQuestsOpen] = useState(false);
-  const [isBrowserMode, setIsBrowserMode] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGameSearchOpen, setIsGameSearchOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
@@ -2397,7 +2395,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     if ((window as any).electronAPI?.onTriggerVoiceInputStart) {
       // Hold to talk with the keyboard (the voice shortcut held down): immersive, like the controller's.
       (window as any).electronAPI.onTriggerVoiceInputStart(() => {
-        setIsBrowserMode(false);
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('qc-talk', { detail: { state: 'start' } }));
         }, 100);
@@ -2410,7 +2407,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     }
     if ((window as any).electronAPI?.onTriggerVoiceInput) {
       (window as any).electronAPI.onTriggerVoiceInput(() => {
-        setIsBrowserMode(false);
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('trigger-voice-record'));
         }, 100);
@@ -2418,7 +2414,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     }
     if ((window as any).electronAPI?.onTriggerAutoScreenshot) {
       (window as any).electronAPI.onTriggerAutoScreenshot(() => {
-        setIsBrowserMode(false);
         // On another game's compendium: open the running game's first, and ask once it's on screen.
         const switched = toRunningForShot.current();
         setTimeout(() => {
@@ -3254,7 +3249,6 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   // Tab Handlers
   const handleSelectTab = (tabId: string) => {
     setActiveTabId(tabId);
-    if (isBrowserMode) setIsBrowserMode(false);
   };
 
 
@@ -3573,7 +3567,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           onStartCreateTab={spacesOn && spaces ? () => setIsGameSearchOpen(true) : handleStartCreateTab}
           onStartRenameTab={spacesOn && spaces ? undefined : handleStartRenameTab}
           onDeleteTab={handleDeleteTab}
-          onOpenGuides={() => setIsBrowserMode(true)}
+          onOpenGuides={() => window.dispatchEvent(new CustomEvent('qc-open-guides-tab'))}
           onOpenNotes={() => setIsNotesOpen(true)}
           onOpenQuests={() => setIsQuestsOpen(true)}
           onToggleAchDrawer={() => setIsAchDrawerOpen(!isAchDrawerOpen)}
@@ -3610,7 +3604,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         {/* The tucked-in quest log's bookmark is its own window just outside the panel's edge, which keyboard focus
             can't reach: this invisible stop sits under it on the panel's inner edge. Focused (Tab, or the controller's
             d-pad toward the edge), it rings the bookmark; Enter, Space or A slides the log out. */}
-        {isDesktop && questLogTucked && !isBrowserMode && (
+        {isDesktop && questLogTucked && (
           <button
             type="button"
             onClick={toggleQuestLog}
@@ -3675,13 +3669,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         <div className="flex-1 min-h-0 min-w-0 flex overflow-clip relative">
           {/* Central Workspace: Chat OR Browser */}
           <main className="qc-scanlines flex-1 min-h-0 min-w-0 flex flex-col overflow-clip relative">
-            {isBrowserMode ? (
-              <GameGuidesBrowser
-                activeGame={activeGame}
-                soundEnabled={settings.soundEnabled}
-                place={activeTab?.place?.name}
-              />
-            ) : tabs.length === 0 ? (
+            {tabs.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center bg-[#07070b] crt-grid p-4 sm:p-6 overflow-y-auto">
                  <div className="w-full max-w-lg flex flex-col items-center gap-5 text-center animate-in fade-in zoom-in-95 duration-200">
                    {/* Language: changes the interface and the language the AI answers in */}
@@ -4018,7 +4006,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         padStyle={settings.controllerStyle || 'auto'}
         talkButton={settings.controllerTalk || 'y'}
         hintMode={settings.hintMode === true}
-        logAttached={questLogAttached && (questLogVisible || questLogTucked) && !isBrowserMode}
+        logAttached={questLogAttached && (questLogVisible || questLogTucked)}
         comboLabel={padComboLabel(settings.controllerToggle, settings.controllerCustom, tr)}
         context={(() => {
           // What the quick menu's question list fits to: the quest log's Now goal, a fight, whether anything was asked.

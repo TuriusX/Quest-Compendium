@@ -1151,7 +1151,7 @@ export function ControllerLayer({
       )}
 
       {/* The prompt bar: only the buttons that do something for what's selected (step 2), in the corner. */}
-      <div className="self-end flex flex-wrap items-center justify-end gap-x-3 gap-y-1 px-3 py-1.5 rounded-xl bg-black/85 border border-white/10 text-[11px] font-medium text-zinc-200 shadow-lg">
+      <div data-qc-prompt-bar className="self-end flex flex-wrap items-center justify-end gap-x-3 gap-y-1 px-3 py-1.5 rounded-xl bg-black/85 border border-white/10 text-[11px] font-medium text-zinc-200 shadow-lg">
         {panel === 'keyboard' ? (
           <>
             <Hint b="a" label={t('pad.type')} />

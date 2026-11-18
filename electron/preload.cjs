@@ -78,6 +78,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setQuickMenu: (items, strings) => ipcRenderer.send('quick-menu-items', { items, strings }),
   onQuickAction: (callback) => { ipcRenderer.removeAllListeners('quick-action'); ipcRenderer.on('quick-action', (event, key) => callback(String(key || ''))); },
   answerArrived: (a) => ipcRenderer.send('answer-arrived', a && typeof a === 'object' ? { id: String(a.id || ''), question: String(a.question || ''), title: String(a.title || ''), text: String(a.text || '') } : null),
+  // The Guides tab's browser (guideBrowser.cjs): web tabs laid over the panel's page area.
+  guideBrowser: {
+    open: (url, background) => ipcRenderer.invoke('gb:open', { url: String(url || ''), background: !!background }),
+    close: (id) => ipcRenderer.send('gb:close', String(id)),
+    select: (id) => ipcRenderer.send('gb:select', String(id)),
+    navigate: (id, url) => ipcRenderer.send('gb:navigate', { id: String(id), url: String(url || '') }),
+    action: (id, action, arg) => ipcRenderer.send('gb:action', { id: String(id), action: String(action), arg }),
+    move: (id, to) => ipcRenderer.send('gb:move', { id: String(id), to: Number(to) || 0 }),
+    layout: (visible, rect) => ipcRenderer.send('gb:layout', { visible: !!visible, rect: rect || null }),
+    restore: (tabs, active) => ipcRenderer.send('gb:restore', { tabs, active }),
+    snapshot: () => ipcRenderer.invoke('gb:snapshot'),
+    external: (url) => ipcRenderer.send('gb:external', String(url || '')),
+    state: () => ipcRenderer.invoke('gb:state'),
+    onState: (cb) => { ipcRenderer.removeAllListeners('gb:state'); ipcRenderer.on('gb:state', (e, s) => cb(s)); },
+    onKey: (cb) => { ipcRenderer.removeAllListeners('gb:key'); ipcRenderer.on('gb:key', (e, k) => cb(k || {})); },
+    onFound: (cb) => { ipcRenderer.removeAllListeners('gb:found'); ipcRenderer.on('gb:found', (e, f) => cb(f || {})); },
+    onDownload: (cb) => { ipcRenderer.removeAllListeners('gb:download'); ipcRenderer.on('gb:download', (e, d) => cb(d || {})); },
+  },
   // Find the markers again: asked by the marker page (auto) or the shortcut key.
   onRefindRequest: (callback) => { ipcRenderer.removeAllListeners('refind-request'); ipcRenderer.on('refind-request', (event, r) => callback(r || {})); },
   // The objectives tracker drawn over the game (electron/tracker.cjs).
