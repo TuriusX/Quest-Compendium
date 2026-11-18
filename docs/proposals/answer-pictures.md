@@ -1,5 +1,11 @@
 # More pictures in answers, without clutter (proposal, Nov 17 2026)
 
+> **Scrapped, Nov 18 2026.** It was built and tried on the 20 benchmark answers ($0.06).
+> - The pictures were the right things, but mostly portraits of characters or places the player already knew, so they
+>   didn't change what the player does next.
+> - Noah: "It doesn't appear to improve answers for players."
+> - The work was reverted before any commit.
+
 A proposal only. Nothing is built until Noah OKs it.
 
 **Noah's rules for this:**

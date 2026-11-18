@@ -18,6 +18,7 @@ import { visualFor, visualId, communityWikis, YouTubeQuotaOut, type Cost, type V
 import { communityWikisFor, rememberPictureSite, type CommunityWiki } from './scripts/guides/suggestImages';
 import { GENERATED } from './src/locales.generated';
 import { guideList } from './guidesApi';
+import { drawnFor, type Drawn, type DrawnBudget, type DrawnStore } from './drawnAnswer';
 
 /**
  * The app's stand-in question when the player sent only a screenshot or a voice message (ChatArea: chat.defaultShotQ,
@@ -48,7 +49,7 @@ const utcDay = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
 export const keyDoc = (k: string) => crypto.createHash('sha1').update(k).digest('hex');
 /** A local test run writes to test_ collections (VISUAL_TEST_PREFIX=test_, never on Cloud Run), removed afterwards. */
 const P = !process.env.K_SERVICE ? String(process.env.VISUAL_TEST_PREFIX || '').replace(/[^a-z_]/g, '') : '';
-const C = { cache: `${P}visualCache`, stats: `${P}visualStats`, sys: `${P}visualAnswers` };
+const C = { cache: `${P}visualCache`, stats: `${P}visualStats`, sys: `${P}visualAnswers`, drawn: `${P}drawnCache`, drawnSys: `${P}drawnAnswers` };
 
 export function firestoreStore(): VisualStore {
   const col = () => getFirestore().collection(C.cache);
@@ -64,6 +65,52 @@ export function firestoreStore(): VisualStore {
       const batch = getFirestore().batch();
       for (const k of keys) batch.set(col().doc(keyDoc(k)), { key: k, visual, at: Date.now(), excluded: excluded || [] });
       await batch.commit();
+    },
+  };
+}
+
+/** Saved drawings (wiki drawings and illustrations only; a player's screen is never saved): drawnCache/{sha1(key)}. */
+export function firestoreDrawnStore(): DrawnStore {
+  const col = () => getFirestore().collection(C.drawn);
+  return {
+    async get(keys) {
+      for (const k of keys) {
+        const d: any = (await col().doc(keyDoc(k)).get()).data();
+        if (d?.drawn?.url && !d.wrong) return d.drawn as Drawn;
+      }
+      return null;
+    },
+    async set(keys, drawn) {
+      // A Firestore document holds at most 1 MB: a bigger picture simply isn't saved.
+      if (drawn.url.length > 900_000) return;
+      const batch = getFirestore().batch();
+      for (const k of keys) batch.set(col().doc(keyDoc(k)), { key: k, drawn, at: Date.now() });
+      await batch.commit();
+    },
+  };
+}
+
+/** The drawings' daily cap (owner, Nov 18 2026: $3 a day to start; DRAWN_DAILY_DOLLARS), in system/drawnAnswers. */
+export function drawnBudget(limit: number): DrawnBudget {
+  const ref = () => getFirestore().collection('system').doc(C.drawnSys);
+  return {
+    async reserve(d) {
+      const day = utcDay();
+      return getFirestore().runTransaction(async (tx) => {
+        const s: any = (await tx.get(ref())).data() || {};
+        const used = s.day === day ? Number(s.dollars) || 0 : 0;
+        if (used + d > limit) return false;
+        tx.set(ref(), { day, dollars: used + d }, { merge: true });
+        return true;
+      });
+    },
+    async settle(reserved, spent) {
+      const day = utcDay();
+      await getFirestore().runTransaction(async (tx) => {
+        const s: any = (await tx.get(ref())).data() || {};
+        if (s.day !== day) return; // a new day began meanwhile: today's count starts fresh
+        tx.set(ref(), { dollars: Math.max(0, (Number(s.dollars) || 0) - reserved + spent) }, { merge: true });
+      });
     },
   };
 }
@@ -109,19 +156,22 @@ export const visualAnswersOn = (env: NodeJS.ProcessEnv = process.env) => env.VIS
  * The visual for one answer, counted for /stats: used by the app's /api/visual and the website's ask box
  * (siteAsk.ts /api/site/visual). `visual` is null when nothing helps or nothing confident was found.
  */
+/** A game's wikis for pictures: its known wikis (guideImageSources) and its community wikis. */
+async function wikiSources(deps: Pick<VisualDeps, 'getGeminiClient'>, gameKey: string, game: string) {
+  const src: any = (await getFirestore().collection('guideImageSources').doc(gameKey).get()).data() || {};
+  // Community wikis: the override, else found once from the name (a first lookup waits at most 6 s and finishes in
+  // the background, remembered for the next answer).
+  const found = communityWikis(gameKey).length ? Promise.resolve(communityWikis(gameKey))
+    : communityWikisFor(gameKey, game, src, deps.getGeminiClient()).catch(() => [] as CommunityWiki[]);
+  const more = await Promise.race([found, new Promise<CommunityWiki[]>((r) => setTimeout(() => r([]), 6000))]);
+  return { fextralife: src.fextralife?.domain || '', fandom: src.wiki?.domain || '', more, prefer: (src.pictureSites || []) as string[] };
+}
+
 export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'log' | 'guideKeyFor' | 'env'>, o: { game: string; guideKey?: string; question: string; answer: string; client: string; appVersion?: string; shotOnly?: boolean }): Promise<{ visual: Visual | null; ref: string | null; cost: number }> {
   const env = deps.env ?? process.env;
   const shotOnly = o.shotOnly === true || isStandInQuestion(o.question);
   const keyOf = async (game: string) => (await deps.guideKeyFor(game)) || game.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  const wikiOf = async (gameKey: string, game = o.game) => {
-    const src: any = (await getFirestore().collection('guideImageSources').doc(gameKey).get()).data() || {};
-    // Community wikis: the override, else found once from the name (a first lookup waits at most 6 s and finishes in
-    // the background, remembered for the next answer).
-    const found = communityWikis(gameKey).length ? Promise.resolve(communityWikis(gameKey))
-      : communityWikisFor(gameKey, game, src, deps.getGeminiClient()).catch(() => [] as CommunityWiki[]);
-    const more = await Promise.race([found, new Promise<CommunityWiki[]>((r) => setTimeout(() => r([]), 6000))]);
-    return { fextralife: src.fextralife?.domain || '', fandom: src.wiki?.domain || '', more, prefer: (src.pictureSites || []) as string[] };
-  };
+  const wikiOf = (gameKey: string, game = o.game) => wikiSources(deps, gameKey, game);
   const gameKey = String(o.guideKey || '').replace(/[^a-z0-9-]/g, '').slice(0, 120) || (await keyOf(o.game));
   const key = String(env.YOUTUBE_API_KEY || '');
   const r = await visualFor(deps.getGeminiClient(), {
@@ -147,6 +197,31 @@ export async function answerVisual(deps: Pick<VisualDeps, 'getGeminiClient' | 'l
     youtubeSearches: r.youtubeSearches, cost: Math.round(r.cost * 1e6) / 1e6, [`client_${client}`]: 1,
   }).catch(() => {});
   return { visual: v.kind === 'none' ? null : v, ref: r.keys[0] ? keyDoc(r.keys[0]) : null, cost: r.cost };
+}
+
+/** Drawn answers are on (DRAWN_ANSWERS=1 on the server; owner, Nov 18 2026). */
+export const drawnAnswersOn = (env: NodeJS.ProcessEnv = process.env) => env.DRAWN_ANSWERS === '1';
+
+/**
+ * The drawn picture for one answer (drawnAnswer.ts), counted for /stats: null when a drawing wouldn't help, the day's
+ * money is used up, or the drawing failed its checks.
+ */
+export async function answerDrawn(deps: Pick<VisualDeps, 'getGeminiClient' | 'log' | 'guideKeyFor' | 'env'>, o: { game: string; guideKey?: string; question: string; answer: string; image?: string; client: string; shotOnly?: boolean }): Promise<Drawn | null> {
+  const env = deps.env ?? process.env;
+  const shotOnly = o.shotOnly === true || isStandInQuestion(o.question);
+  const gameKey = String(o.guideKey || '').replace(/[^a-z0-9-]/g, '').slice(0, 120) || (await deps.guideKeyFor(o.game)) || o.game.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const r = await drawnFor(deps.getGeminiClient(), {
+    game: o.game, gameKey, question: o.question, answer: o.answer, image: o.image, shotOnly,
+    wiki: await wikiSources(deps, gameKey, o.game),
+    budget: drawnBudget(Number(env.DRAWN_DAILY_DOLLARS) || 3), store: firestoreDrawnStore(), log: deps.log,
+  });
+  const client = String(o.client || 'web').replace(/[^a-z]/g, '').slice(0, 8) || 'web';
+  console.log(`[drawn] ${client} | ${o.game} | "${o.question.replace(/\s+/g, ' ').slice(0, 80)}" | ${r.decided}${r.drawn ? ' -> shown' : r.failed ? ` -> failed (${r.failed})` : ''}${r.cached ? ' (saved)' : ''} | $${r.cost.toFixed(4)} ${(r.ms / 1000).toFixed(1)}s | ${r.steps.join(' / ').replace(/\s+/g, ' ').slice(0, 900)}`);
+  void countVisual({
+    drawnLooked: 1, ...(r.decided !== 'none' ? { [`drawnWanted_${r.decided}`]: 1 } : {}), ...(r.drawn ? { [`drawn_${r.drawn.on}`]: 1 } : {}),
+    ...(r.failed ? { [`drawnFailed_${r.failed.replace(/[^a-z]/g, '')}`]: 1 } : {}), drawnCached: r.cached ? 1 : 0, drawnCost: Math.round(r.cost * 1e6) / 1e6,
+  }).catch(() => {});
+  return r.drawn;
 }
 
 /**
@@ -202,8 +277,36 @@ export function registerVisualAnswers(app: Express, deps: VisualDeps): void {
     }
   });
 
+  // Drawn answers (owner, Nov 18 2026): POST /api/drawn { game, guideKey?, question, answer, image?, shotOnly?, client }
+  // -> { drawn | null }. Called by the app after the answer arrived, alongside /api/visual; the answer never waits for it.
+  const drawnHourly = new Map<string, { n: number; reset: number }>();
+  setInterval(() => { const t = Date.now(); for (const [k, v] of drawnHourly) if (t >= v.reset) drawnHourly.delete(k); }, 60_000).unref();
+  app.post('/api/drawn', deps.requireAuth, async (req: Request, res: Response) => {
+    if (!drawnAnswersOn(env)) return res.json({ drawn: null, off: true });
+    const question = String(req.body?.question ?? '').trim().slice(0, 500);
+    const answer = String(req.body?.answer ?? '').trim().slice(0, 6000);
+    const named = question ? gameNamedIn(question, await guideList().catch(() => [])) : '';
+    const game = (named || String(req.body?.game ?? '').trim()).slice(0, 120);
+    if (!game || !question || !answer) return res.json({ drawn: null });
+    const image = typeof req.body?.image === 'string' && req.body.image.length < 15_000_000 ? req.body.image : undefined;
+    const uid = String((req as any).user?.uid ?? '');
+    const t = Date.now();
+    let w = drawnHourly.get(uid);
+    if (!w || t >= w.reset) drawnHourly.set(uid, (w = { n: 0, reset: t + 3600_000 }));
+    if (w.n++ >= (Number(env.DRAWN_PER_USER_HOURLY) || 20)) return res.json({ drawn: null, limited: true });
+    try {
+      const drawn = await answerDrawn(deps, { game, guideKey: String(req.body?.guideKey || ''), question, answer, image, client: String(req.body?.client || 'web'), shotOnly: req.body?.shotOnly === true });
+      res.json({ drawn });
+    } catch (e: any) {
+      console.warn('[drawn] failed:', e?.message || e);
+      res.json({ drawn: null });
+    }
+  });
+
   app.post('/api/visual/event', deps.requireAuth, async (req: Request, res: Response) => {
     const type = String(req.body?.type ?? '');
+    // A drawn picture's "Not right" (owner, Nov 18 2026): counted for /stats (a player's own screen isn't saved).
+    if (type === 'drawnWrong') { void countVisual({ drawnWrong: 1 }).catch(() => {}); return res.json({ ok: true }); }
     if (!['played', 'opened', 'wrong'].includes(type)) return res.status(400).json({ ok: false });
     await visualEvent(type as any, String(req.body?.ref ?? ''), 1);
     res.json({ ok: true });
@@ -278,6 +381,10 @@ export function visualStatsLine(s: { days: Record<string, any>[]; searchesToday:
     `Video ${sum('shown_video')} · our picture ${sum('shown_ours')} · wiki picture ${sum('shown_wiki')}${sum('shown_link') ? ` · wiki page only ${sum('shown_link')}` : ''} · nothing ${sum('shown_none')} · saved one reused ${sum('cached')}`,
     `Cost: $${cost.toFixed(2)}${answers ? ` ($${(cost / answers).toFixed(4)} per answer)` : ''} · played ${sum('played')} · pictures opened ${sum('opened')} · "Not right" ${sum('wrong')}${sum('dropped') ? ` (${sum('dropped')} dropped and found again)` : ''}`,
     `YouTube searches today: ${s.searchesToday} of ${s.searchLimit}${sum('quotaOut') ? ` · ${sum('quotaOut')} answer(s) got no video because the day's searches were used up` : ''}`,
+    ...(sum('drawnLooked') ? [
+      `Drawn pictures: ${sum('drawn_screen') + sum('drawn_wiki') + sum('drawn_illustration')} shown of ${sum('drawnLooked')} answers looked at (on their screen ${sum('drawn_screen')} · on a wiki picture ${sum('drawn_wiki')} · illustration ${sum('drawn_illustration')} · saved one reused ${sum('drawnCached')})` +
+        ` · failed checks ${sum('drawnFailed_scenechanged') + sum('drawnFailed_check') + sum('drawnFailed_nothingdrawn')} · day's cap reached ${sum('drawnFailed_cap')} · cost $${sum('drawnCost').toFixed(2)}${sum('drawnWrong') ? ` · "Not right" ${sum('drawnWrong')}` : ''}`,
+    ] : []),
   ].join('\n');
 }
 

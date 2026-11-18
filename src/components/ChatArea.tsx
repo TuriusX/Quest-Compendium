@@ -39,6 +39,7 @@ import {
 } from './icons';
 import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions, NotOnScreen } from './ScreenPointers';
 import { VisualCard, type VisualEvent } from './VisualCard';
+import { DrawnCard } from './DrawnCard';
 import { areaFindsFor, markersActiveFor } from './pointerStore';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
 import { getApiBaseUrl, DEFAULT_PREVIEW_URL } from '../utils/api';
@@ -923,7 +924,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   /** A 👍 / 👎 (or 'none': taken back) on an answer, with what it was about, for the Quality numbers. */
   /** Visual answers: played, opened (counted for /stats) or "Not right" (that visual isn't picked for this question again). */
-  const sendVisualEvent = async (type: VisualEvent, ref?: string) => {
+  const sendVisualEvent = async (type: VisualEvent | 'drawnWrong', ref?: string) => {
     try {
       const token = auth.currentUser ? await auth.currentUser.getIdToken().catch(() => null) : null;
       await fetch(`${getApiBaseUrl()}/api/visual/event`, {
@@ -1857,6 +1858,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       text={!isUser && markersOn && msg.points?.length ? withMarkerBadges(msg.text, msg.points) : msg.text}
                     />
                   </div>
+                  {/* Drawn answers (Nov 18 2026): the answer drawn on a picture, or an illustration, first. */}
+                  {!isUser && msg.drawn && !msg.drawnHidden && (
+                    <DrawnCard drawn={msg.drawn} compact={isDesktopApp} onWrong={() => {
+                      void sendVisualEvent('drawnWrong');
+                      setTimeout(() => onUpdateMessage?.(msg.id, { drawnHidden: true }), 5000);
+                    }} />
+                  )}
                   {/* Visual answers (Nov 14 2026): the video or picture found for this answer, under its text. */}
                   {!isUser && msg.visual && !msg.visualHidden && (
                     <VisualCard visual={msg.visual} compact={isDesktopApp} onEvent={(type) => {

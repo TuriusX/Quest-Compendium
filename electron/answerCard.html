@@ -37,6 +37,15 @@
   .slot .img.video::after { content: ""; position: absolute; left: 50%; top: 50%; width: calc(34px * var(--s)); height: calc(34px * var(--s)); margin: calc(-17px * var(--s)) 0 0 calc(-17px * var(--s));
                             border-radius: 50%; background: rgba(168, 127, 251, .92) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 7l8 5-8 5z' fill='%2316101f'/%3E%3C/svg%3E") center / 60% no-repeat; }
   .slot .cap { font-size: calc(11.5px * var(--s)); color: var(--muted); line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* A drawn answer (drawnAnswer.ts) is the picture itself: across the card, whole (never cropped); a click makes it
+     bigger, another back. Illustrations carry their label on the picture. */
+  .wide { display: flex; flex-direction: column; gap: 4px; }
+  .wide img { display: block; width: 100%; max-height: calc(250px * var(--s)); object-fit: contain; border-radius: calc(10px * var(--s));
+              background: #000; border: 1px solid rgba(255, 255, 255, .2); cursor: zoom-in; }
+  body.bigpic .wide img { max-height: calc(560px * var(--s)); cursor: zoom-out; }
+  .wide .cap { font-size: calc(12.5px * var(--s)); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wide .tag { position: absolute; left: calc(8px * var(--s)); top: calc(8px * var(--s)); font-weight: 800; font-size: calc(11px * var(--s)); letter-spacing: .06em;
+               text-transform: uppercase; background: rgba(0, 0, 0, .75); color: #fff; border-radius: 4px; padding: 2px 6px; }
   .warn { display: flex; gap: calc(8px * var(--s)); align-items: flex-start; background: rgba(243, 182, 76, .12); border: 1px solid rgba(243, 182, 76, .45);
           color: #ffe2a8; border-radius: calc(10px * var(--s)); padding: calc(8px * var(--s)) calc(10px * var(--s)); font-weight: 600; font-size: calc(16px * var(--s)); line-height: 1.35; }
   .steps { display: flex; flex-direction: column; gap: calc(9px * var(--s)); margin: 0; padding: 0; list-style: none; }
@@ -74,6 +83,7 @@
       <div><div class="q" id="q"></div><div class="t" id="title"></div></div>
       <div class="slot" id="slot" hidden><div class="img" id="img"></div><div class="cap" id="cap"></div></div>
     </div>
+    <div class="wide" id="wide" hidden><div style="position:relative"><img id="wideImg" alt=""><span class="tag" id="wideTag" hidden></span></div><div class="cap" id="wideCap"></div></div>
     <div class="stages" id="stages" hidden></div>
     <div class="intro" id="intro" hidden></div>
     <div class="warn" id="warn" hidden><span>⚠</span><span id="warnText"></span></div>
@@ -103,6 +113,19 @@
 
   function setPicture(p) {
     const slot = $('slot');
+    // A drawn answer: across the card, whole.
+    const wide = !!(p && p.url && p.wide);
+    $('wide').hidden = !wide;
+    if (!wide) document.body.classList.remove('bigpic');
+    if (wide) {
+      slot.hidden = true;
+      $('head').classList.add('nopic');
+      if ($('wideImg').getAttribute('src') !== p.url) $('wideImg').src = p.url;
+      $('wideTag').hidden = !p.tag;
+      $('wideTag').textContent = p.tag || '';
+      $('wideCap').textContent = p.credit || '';
+      return;
+    }
     if (!p || !p.url) { slot.hidden = true; $('head').classList.add('nopic'); return; }
     slot.hidden = false;
     $('head').classList.remove('nopic');
@@ -259,6 +282,8 @@
   $('bMore').addEventListener('click', () => ($('bMore').dataset.act === 'more' ? more() : window.qcCard.action('open')));
   $('bOpen').addEventListener('click', () => window.qcCard.action('open'));
   $('bClose').addEventListener('click', () => window.qcCard.action('close'));
+  $('wideImg').addEventListener('click', () => { document.body.classList.toggle('bigpic'); report(); });
+  $('wideImg').addEventListener('load', () => report());
 </script>
 </body>
 </html>

@@ -141,6 +141,10 @@ export interface ChatMessage {
   visualRef?: string;
   /** The player marked the visual "Not right": it isn't shown again. */
   visualHidden?: boolean;
+  /** Drawn answers (Nov 18 2026): the answer drawn on the player's screenshot or a wiki picture, or an illustration. */
+  drawn?: import('./components/DrawnCard').DrawnData;
+  /** The player marked the drawing "Not right". */
+  drawnHidden?: boolean;
   /** How many facts this answer taught (or re-confirmed for) the game knowledge base. */
   factsSaved?: number;
   /** Corrections to the guide this answer made (candidates to verify): "That's right" on it confirms their area. */

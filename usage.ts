@@ -30,6 +30,13 @@ const RATES: Record<string, { input: number; output: number }> = {
   // $1.00 / $12.00 from Jan 1, 2027 (like Flash and Flash TTS, whose prices also double then).
   'gemini-3.8-flash-lite-tts': { input: 0.5, output: 6.0 },
 };
+/**
+ * Image models billed by the token (Nano Banana 2: drawn answers, picture upscales; $60 a million image tokens out, per
+ * Google's price list). Kept apart from RATES so the rate for an unknown text model isn't raised to an image's.
+ */
+const IMAGE_RATES: Record<string, { input: number; output: number }> = {
+  'gemini-3.1-flash-image': { input: 0.5, output: 60.0 },
+};
 /** Price changes Google has announced: from that day (UTC) on, the model's rate. */
 const RATE_CHANGES: Record<string, { from: string; input: number; output: number }[]> = {
   'gemini-3.8-flash': [{ from: '2027-01-01', input: 1.5, output: 7.5 }],
@@ -54,8 +61,8 @@ export const BANNER_IMAGE_COST = 0.0336; // one 1K image from the Flash-Lite ima
 /** The rate for a model with no price on file: the most expensive input and output rates we know (long prompts included). */
 export const UNKNOWN_RATE = [...Object.values(RATES), ...Object.values(LONG_RATES), ...Object.values(RATE_CHANGES).flat()].reduce((m, r) => ({ input: Math.max(m.input, r.input), output: Math.max(m.output, r.output) }), { input: 0, output: 0 });
 /** Whether a model has a price on file (text and audio models; banner images are priced per image). */
-export const hasPrice = (model: string) => !!RATES[model];
-const rateOf = (model: string) => rateOn(model) || UNKNOWN_RATE;
+export const hasPrice = (model: string) => !!RATES[model] || !!IMAGE_RATES[model];
+const rateOf = (model: string) => rateOn(model) || IMAGE_RATES[model] || UNKNOWN_RATE;
 
 /**
  * A call to a model with no price on file: recorded per day and model in system/unpricedModels (calls, dollars at

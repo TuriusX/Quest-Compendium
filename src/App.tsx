@@ -1086,9 +1086,16 @@ export default function App() {
     const msgs = activeTab.messages;
     const last = msgs[msgs.length - 1];
     const v = last && last.role === 'assistant' && !last.visualHidden ? last.visual : undefined;
+    const dr = last && last.role === 'assistant' && !last.drawnHidden ? last.drawn : undefined;
     const closeUp = last ? cardCloseUpRef.current.get(last.id) : undefined;
+    // A drawn answer comes first (owner, Nov 18 2026), shown across the card.
     const picture =
-      v?.kind === 'picture' && v.source !== 'ours' ? { url: v.url, credit: v.credit || v.page?.site || '' }
+      dr ? {
+        url: dr.url, wide: true,
+        credit: dr.on === 'illustration' ? tr('drawn.illustrationNote') : dr.on === 'wiki' ? tr('drawn.onWiki', { site: dr.page?.site || 'wiki' }) : tr('drawn.onScreen'),
+        ...(dr.on === 'illustration' ? { tag: tr('drawn.illustration') } : {}),
+      }
+        : v?.kind === 'picture' && v.source !== 'ours' ? { url: v.url, credit: v.credit || v.page?.site || '' }
         : v?.kind === 'video' ? { url: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`, credit: v.channel || 'YouTube', video: true }
         : closeUp ? { url: closeUp, credit: tr('card.yourScreen') }
         : null;
@@ -1988,6 +1995,29 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       }
     } catch {
       /* no visual: the answer is complete without one */
+    }
+  };
+
+  /**
+   * Drawn answers (owner, Nov 18 2026; drawnAnswer.ts): the answer drawn on the question's screenshot or a wiki picture,
+   * or an illustration, when seeing it helps (the server decides; most answers get none). After the answer, alongside
+   * the visual; the answer never waits for it.
+   */
+  const fetchDrawn = async (msgId: string, question: string, answer: string, game: string, token: string | null, shotOnly: boolean, image?: string) => {
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/drawn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ game, guideKey: trackerGameRef.current?.guideKey || undefined, question, answer, client: (window as any).electronAPI ? 'desktop' : 'web', ...(image ? { image } : {}), ...(shotOnly ? { shotOnly: true } : {}) }),
+      });
+      if (!res.ok) return;
+      const d = (await res.json())?.drawn;
+      if (d && d.kind === 'drawn' && typeof d.url === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(d.url) && ['screen', 'wiki', 'illustration'].includes(d.on)) {
+        const page = d.page && /^https:\/\//.test(String(d.page.url || '')) ? { url: String(d.page.url), title: String(d.page.title || '').slice(0, 120), site: String(d.page.site || '').slice(0, 60) } : undefined;
+        updateMessageById(msgId, (m) => ({ ...m, drawn: { kind: 'drawn', url: d.url, on: d.on, alt: String(d.alt || '').slice(0, 200), ...(page ? { page } : {}) } }));
+      }
+    } catch {
+      /* no drawing: the answer is complete without one */
     }
   };
 
@@ -3157,6 +3187,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       if (text && aiMessage.text && !limitText) {
         const shotOnly = !!audioBase64 || (!!imageBase64 && (text === tr('chat.defaultShotQ') || text === tr('chat.defaultQ')));
         void fetchVisual(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly);
+        void fetchDrawn(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly, imageBase64 || undefined);
       }
 
       const readArea: string = data.placeRead && typeof data.placeRead.area === 'string' ? data.placeRead.area.trim().slice(0, 80) : '';

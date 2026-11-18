@@ -28,7 +28,10 @@ function readingMs(text, hasWarning) {
   return hasWarning ? Math.max(30000, ms) : ms;
 }
 
-const pictureOf = (p) => (p && typeof p.url === 'string' && p.url ? { url: p.url, credit: String(p.credit || '').slice(0, 80), video: !!p.video } : null);
+// A drawn answer (wide: shown across the card, whole) may be a data URL of a few hundred KB; tag: "Illustration".
+const pictureOf = (p) => (p && typeof p.url === 'string' && p.url
+  ? { url: p.url, credit: String(p.credit || '').slice(0, 120), video: !!p.video, ...(p.wide ? { wide: true, tag: String(p.tag || '').slice(0, 40) } : {}) }
+  : null);
 
 /** @param {{ display: () => Electron.Display, strings: () => object, onAction: (what: string, current: object|null) => void }} opts */
 function createAnswerCard(opts) {
@@ -230,8 +233,11 @@ function createAnswerCard(opts) {
       if (!current || !a || String(a.id || '') !== current.id || !shownAt) return false;
       const picture = pictureOf(a.picture);
       if (JSON.stringify(picture) !== JSON.stringify(current.picture)) {
+        const newDrawing = !!(picture && picture.wide && !(current.picture && current.picture.wide));
         current.picture = picture;
         send('card-show', { ...current, ...look() });
+        // A drawing arrived (a few seconds after the answer): at least 25 s more to look at it, unless paused.
+        if (newDrawing && !pausedLeft && endsAt - Date.now() < 25000) startTimer(25000);
       }
       return true;
     },
