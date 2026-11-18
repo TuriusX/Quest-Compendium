@@ -52,7 +52,7 @@ export type Drawn = {
    */
   layer?: string;
 };
-export type DrawnResult = { drawn: Drawn | null; cost: number; ms: number; steps: string[]; cached?: boolean; decided: DrawnOn | 'none'; failed?: string };
+export type DrawnResult = { drawn: Drawn | null; cost: number; ms: number; steps: string[]; cached?: boolean; decided: DrawnOn | 'none'; failed?: string; pins?: Pins | null };
 
 const parse = (t: string): any => { const s = String(t || '').replace(/```json|```/g, ''); const a = s.indexOf('{'), z = s.lastIndexOf('}'); try { return a >= 0 && z > a ? JSON.parse(s.slice(a, z + 1)) : null; } catch { return null; } };
 const jpegPart = (b: Buffer) => ({ inlineData: { mimeType: 'image/jpeg', data: b.toString('base64') } });
@@ -92,9 +92,38 @@ export function mightDraw(question: string): boolean {
   return /\b(where|how (do|can|to|should) i (get|reach|go|find|solve|open|beat|dodge|reach|climb|cross|enter|unlock)|get to|way to|route|path|find|puzzle|solve|solution|order|sequence|combination|code|look(s)? like|dodge|lever|switch|symbol|pillar|statue|dial|map)\b/.test(q);
 }
 
-export type Decision = { on: DrawnOn | 'none'; draw: string; place: string; isMap: boolean; still: boolean; why: string; confidence: string };
+/**
+ * Step 3 (owner, Nov 18 2026): shapes that hang off the answer's markers over the live game, so they follow the camera
+ * with them: `order`, the markers to join with a line in the order to visit or use them (indexes into the answer's
+ * markers, at least 2); `labels`, a 1-3 word note on the link from order[k] to order[k+1] ("jump", "climb"), by k;
+ * `areas`, markers that stand for a rough area ("somewhere around here"): a ring instead of a pin.
+ */
+export type Pins = { order: number[]; labels: Record<number, string>; areas: number[] };
+export const noPins = (p: Pins | null | undefined) => !p || (p.order.length < 2 && !p.areas.length);
 
-export async function decide(ai: Gen, cost: Cost, o: { game: string; question: string; answer: string; shot: Buffer | null; shotOnly?: boolean }): Promise<Decision> {
+/** The model's pins (1-based marker numbers) checked against the markers: 0-based, no repeats, nothing out of range. */
+export function cleanPins(j: any, count: number): Pins | null {
+  if (!j || !count) return null;
+  const nums = (a: any) => (Array.isArray(a) ? a : []).map((n: any) => Number(n) - 1).filter((n: number) => Number.isInteger(n) && n >= 0 && n < count);
+  const order = [...new Set(nums(j.join))].slice(0, 8);
+  const areas = [...new Set(nums(j.areas))].slice(0, 4);
+  const labels: Record<number, string> = {};
+  if (order.length >= 2 && j.joinLabels && typeof j.joinLabels === 'object') {
+    for (const [k, v] of Object.entries(j.joinLabels)) {
+      const from = Number(k) - 1;
+      const at = order.indexOf(from);
+      const text = String(v || '').trim().split(/\s+/).slice(0, 3).join(' ').slice(0, 24);
+      if (at >= 0 && at < order.length - 1 && text) labels[at] = text;
+    }
+  }
+  const p = { order: order.length >= 2 ? order : [], labels: order.length >= 2 ? labels : {}, areas };
+  return noPins(p) ? null : p;
+}
+
+export type Decision = { on: DrawnOn | 'none'; draw: string; place: string; isMap: boolean; still: boolean; why: string; confidence: string; pins: Pins | null };
+
+export async function decide(ai: Gen, cost: Cost, o: { game: string; question: string; answer: string; shot: Buffer | null; shotOnly?: boolean; markers?: string[] }): Promise<Decision> {
+  const markers = (o.markers || []).slice(0, 8);
   const prompt =
     `A player of "${o.game}" ${o.shotOnly ? 'sent a screenshot with no typed question' : `asked: "${o.question}"`}${o.shot ? ' (their screenshot is attached)' : ' (no screenshot)'}.\n` +
     `The answer they got:\n"""${o.answer.slice(0, 2500)}"""\n\n` +
@@ -121,13 +150,27 @@ export async function decide(ai: Gen, cost: Cost, o: { game: string; question: s
     'inventory, a skill tree, a puzzle screen shown flat), false for a view of the game world that moves with the camera, ' +
     '"place": "for wiki: the in-game name of the area to show, as the answer names it; else empty", ' +
     '"draw": "what to draw, for an artist, in at most 3 marks: e.g. \\"a route from the player icon along the road north to Blackwater, a circle on Blackwater labelled Blackwater\\" or \\"number the levers 1 left, 2 right, 3 middle\\"; labels of 1-3 words", ' +
-    '"why": "one short sentence"}';
+    '"why": "one short sentence"' +
+    (markers.length
+      ? ', "join": [...], "joinLabels": {...}, "areas": [...]}\n\n' +
+        'SEPARATELY, whatever you chose for "on": the app has already placed these markers on the things the answer names, ' +
+        `on the player's screen: ${markers.map((m, i) => `${i + 1}. ${m}`).join('; ')}. You don't need to see them yourself; ` +
+        'go by the answer\'s words.\n' +
+        '- "join": the marker numbers in the order the answer says to go to or use them, when the answer gives such an ' +
+        'order or a path through 2 or more of them ("cross the bridge, then the path, then the gate"; levers in order). ' +
+        'Else [].\n' +
+        '- "joinLabels": {"marker number": "1-3 words for how to get from that marker to the next one in join, only when ' +
+        'the answer says how (climb, jump, swim across)"}; else {}.\n' +
+        '- "areas": the marker numbers that stand for a rough area rather than an exact spot (the answer says "search ' +
+        'around", "somewhere near", "in this area"). Else [].'
+      : '}');
   const j = await look(ai, cost, [...(o.shot ? [jpegPart(o.shot)] : []), { text: prompt }], 'drawn-decide');
   const on = ['screen', 'wiki', 'illustration'].includes(j?.on) && j?.confidence === 'high' && String(j?.draw || '').trim() ? (j.on as DrawnOn) : 'none';
   return {
     on: on === 'screen' && !o.shot ? 'none' : on === 'wiki' && !String(j?.place || '').trim() ? 'none' : on,
     draw: String(j?.draw || '').slice(0, 400), place: String(j?.place || '').slice(0, 80), isMap: j?.isMap === true, still: j?.isMap === true || j?.still === true,
     why: String(j?.why || '').slice(0, 200), confidence: String(j?.confidence || ''),
+    pins: cleanPins(j, markers.length),
   };
 }
 
@@ -293,6 +336,8 @@ export async function drawnFor(ai: Gen, o: {
   game: string; gameKey: string; question: string; answer: string;
   /** The question's screenshot (data URL or base64), if any. */
   image?: string; shotOnly?: boolean;
+  /** The answer's markers on the player's screen, by name (step 3: shapes that hang off them). */
+  markers?: string[];
   wiki: { fextralife?: string; fandom?: string; more?: MoreWiki[]; prefer?: string[] };
   budget: DrawnBudget; store?: DrawnStore; log?: Cost['log'];
 }): Promise<DrawnResult> {
@@ -305,9 +350,12 @@ export async function drawnFor(ai: Gen, o: {
     steps.push('decide: none (the question has nothing to draw)');
     return { drawn: null, cost: 0, ms: Date.now() - t0, steps, decided: 'none' };
   }
-  const d = await decide(ai, cost, { game: o.game, question: o.question, answer: o.answer, shot, shotOnly: o.shotOnly });
+  const d = await decide(ai, cost, { game: o.game, question: o.question, answer: o.answer, shot, shotOnly: o.shotOnly, markers: shot ? o.markers : [] });
   steps.push(`decide: ${d.on} (${d.confidence})${d.place ? ` place "${d.place}"` : ''}: ${d.draw.slice(0, 120)}${d.why ? ` / ${d.why}` : ''}`);
-  const done = (drawn: Drawn | null, extra: Partial<DrawnResult> = {}): DrawnResult => ({ drawn, cost: cost.d, ms: Date.now() - t0, steps, decided: d.on, ...extra });
+  // The route already joins the answer's markers on the player's live screen: a wiki picture of it adds little.
+  if (d.on === 'wiki' && d.pins && d.pins.order.length >= 2) { steps.push('wiki drawing skipped: the markers are joined on screen'); d.on = 'none'; }
+  if (d.pins) steps.push(`pins: join ${d.pins.order.map((i) => i + 1).join('>') || '-'}${Object.keys(d.pins.labels).length ? ` (${Object.values(d.pins.labels).join(', ')})` : ''}, areas ${d.pins.areas.map((i) => i + 1).join(',') || '-'}`);
+  const done = (drawn: Drawn | null, extra: Partial<DrawnResult> = {}): DrawnResult => ({ drawn, cost: cost.d, ms: Date.now() - t0, steps, decided: d.on, pins: d.pins, ...extra });
   if (d.on === 'none') return done(null);
 
   // Saved: wiki drawings and illustrations (never a player's screen), by the question and by the topic.

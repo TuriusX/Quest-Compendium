@@ -74,6 +74,18 @@
   body.out .edge { opacity: 0; transition: opacity .3s steps(3); }
   @keyframes blink { 50% { opacity: .35; } }
   @keyframes pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
+  /* Drawn answers step 3: lines joining markers in order, rings for rough areas (qcSetPins). Under the markers. */
+  svg.pins { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .pin-line { stroke: var(--accent); stroke-width: 7; stroke-linecap: round; stroke-dasharray: 1 14; fill: none;
+              filter: drop-shadow(0 0 2px rgba(0, 0, 0, .9)); transition: opacity .25s; }
+  .pin-head { stroke: var(--accent); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; fill: none;
+              filter: drop-shadow(0 0 2px rgba(0, 0, 0, .9)); transition: opacity .25s; }
+  .pin-lab { fill: #fff; font: 800 18px 'Segoe UI', system-ui, sans-serif; text-anchor: middle; paint-order: stroke;
+             stroke: rgba(16, 12, 28, .95); stroke-width: 5px; stroke-linejoin: round; transition: opacity .25s; }
+  .pin-ring { fill: rgba(168, 127, 251, .12); stroke: var(--accent); stroke-width: 3; stroke-dasharray: 10 8;
+              filter: drop-shadow(0 0 2px rgba(0, 0, 0, .8)); transition: opacity .25s; }
+  svg.pins .off { opacity: 0; }
+  body.out svg.pins { opacity: 0; transition: opacity .3s; }
 </style>
 </head>
 <body>
@@ -103,6 +115,8 @@
   }
 
   function place(el, x, y) {
+    el._fx = x; // where it points (screen fractions), for the lines and rings that hang off it (qcSetPins)
+    el._fy = y;
     el.style.transform = `translate(${Math.round(x * window.innerWidth)}px, ${Math.round(y * window.innerHeight)}px)`;
     el.classList.toggle('below', y < 0.12); // near the top edge the label goes under the item
   }
@@ -614,6 +628,79 @@
     el.textContent = text;
     document.body.append(el);
     setTimeout(() => el.remove(), 5000);
+  }
+
+  /**
+   * Drawn answers step 3 (owner, Nov 18 2026): shapes that hang off the markers, so they follow the camera with them.
+   * `order`: markers joined by a dotted line in the order to go to or use them (a chevron shows the way, and a short
+   * note like "jump" can sit on a link); `areas`: markers that stand for a rough area get a ring. Indexes are the
+   * answer's list. A line shows only while both its markers do; everything goes with the markers.
+   */
+  let pins = null;
+  let pinSvg = null;
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  window.qcSetPins = (p) => {
+    if (finished || !p) return;
+    const order = (Array.isArray(p.order) ? p.order : []).map(elIndex).filter((i) => i >= 0);
+    const areas = (Array.isArray(p.areas) ? p.areas : []).map(elIndex).filter((i) => i >= 0);
+    if (order.length < 2 && !areas.length) return;
+    if (!pinSvg) {
+      pinSvg = document.createElementNS(SVGNS, 'svg');
+      pinSvg.setAttribute('class', 'pins');
+      document.body.prepend(pinSvg); // under the markers
+    }
+    pinSvg.textContent = '';
+    const make = (tag, cls) => { const e = document.createElementNS(SVGNS, tag); e.setAttribute('class', cls); pinSvg.append(e); return e; };
+    pins = {
+      links: order.slice(0, -1).map((a, k) => ({
+        a, b: order[k + 1], line: make('line', 'pin-line'), head: make('path', 'pin-head'),
+        label: p.labels && p.labels[k] ? (() => { const t = make('text', 'pin-lab'); t.textContent = String(p.labels[k]).slice(0, 24); return t; })() : null, key: '',
+      })),
+      rings: areas.map((i) => ({ i, ring: make('circle', 'pin-ring'), key: '' })),
+    };
+    log(`pins: ${order.length >= 2 ? `joined ${order.map((i) => i + 1).join(' > ')}` : 'no line'}${areas.length ? `, rings on ${areas.map((i) => i + 1).join(', ')}` : ''}`);
+    requestAnimationFrame(drawPins);
+  };
+  function drawPins() {
+    if (finished || !pins) return;
+    const els = document.querySelectorAll('.m');
+    const W = window.innerWidth, H = window.innerHeight;
+    const at = (i) => {
+      const el = els[i];
+      if (!el || el.classList.contains('hidden') || el.classList.contains('gone') || typeof el._fx !== 'number') return null;
+      return { x: el._fx * W, y: el._fy * H };
+    };
+    const show = (e, on) => { if (e) e.classList.toggle('off', !on); };
+    for (const l of pins.links) {
+      const a = at(l.a), b = at(l.b);
+      const len = a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0;
+      // Too short to read as a line (the two markers overlap): none.
+      if (!a || !b || len < 60) { show(l.line, false); show(l.head, false); show(l.label, false); l.key = ''; continue; }
+      const key = `${Math.round(a.x)},${Math.round(a.y)},${Math.round(b.x)},${Math.round(b.y)}`;
+      show(l.line, true); show(l.head, true); show(l.label, true);
+      if (key === l.key) continue; // nothing moved: the page isn't touched
+      l.key = key;
+      // Kept clear of the things themselves (18 px at each end).
+      const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+      l.line.setAttribute('x1', (a.x + ux * 18).toFixed(1)); l.line.setAttribute('y1', (a.y + uy * 18).toFixed(1));
+      l.line.setAttribute('x2', (b.x - ux * 18).toFixed(1)); l.line.setAttribute('y2', (b.y - uy * 18).toFixed(1));
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const ang = Math.atan2(uy, ux) * 180 / Math.PI;
+      l.head.setAttribute('d', 'M -9 -11 L 7 0 L -9 11');
+      l.head.setAttribute('transform', `translate(${mx.toFixed(1)} ${my.toFixed(1)}) rotate(${ang.toFixed(1)})`);
+      if (l.label) { l.label.setAttribute('x', mx.toFixed(1)); l.label.setAttribute('y', (my - 24).toFixed(1)); }
+    }
+    for (const r of pins.rings) {
+      const c = at(r.i);
+      if (!c) { show(r.ring, false); r.key = ''; continue; }
+      show(r.ring, true);
+      const rad = Math.max(56, Math.round(W * 0.045));
+      const key = `${Math.round(c.x)},${Math.round(c.y)},${rad}`;
+      if (key === r.key) continue;
+      r.key = key;
+      r.ring.setAttribute('cx', c.x.toFixed(1)); r.ring.setAttribute('cy', c.y.toFixed(1)); r.ring.setAttribute('r', String(rad));
+    }
+    requestAnimationFrame(drawPins);
   }
 
   /** How long markers stay (0 = until hidden or the scene changes). Restarts the clock. */

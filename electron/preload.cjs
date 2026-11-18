@@ -77,6 +77,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Drawn answers step 2: the answer's drawing over the live game while the screen stays the same (drawLayer.cjs).
   showDrawnLayer: (a) => ipcRenderer.invoke('show-drawn-layer', a),
   hideDrawnLayer: () => ipcRenderer.send('hide-drawn-layer'),
+  // Step 3: lines joining the answer's markers in order, rings for rough areas (pointers.html qcSetPins).
+  setPointerPins: (a) => ipcRenderer.send('pointers-pins', a),
   // The quick menu over the game (wheel.cjs): its labels, what was picked there, and "an answer arrived".
   setQuickMenu: (items, strings) => ipcRenderer.send('quick-menu-items', { items, strings }),
   onQuickAction: (callback) => { ipcRenderer.removeAllListeners('quick-action'); ipcRenderer.on('quick-action', (event, key) => callback(String(key || ''))); },

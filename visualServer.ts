@@ -18,7 +18,7 @@ import { visualFor, visualId, communityWikis, YouTubeQuotaOut, type Cost, type V
 import { communityWikisFor, rememberPictureSite, type CommunityWiki } from './scripts/guides/suggestImages';
 import { GENERATED } from './src/locales.generated';
 import { guideList } from './guidesApi';
-import { drawnFor, type Drawn, type DrawnBudget, type DrawnStore } from './drawnAnswer';
+import { drawnFor, type Drawn, type DrawnBudget, type DrawnStore, type Pins } from './drawnAnswer';
 
 /**
  * The app's stand-in question when the player sent only a screenshot or a voice message (ChatArea: chat.defaultShotQ,
@@ -206,12 +206,12 @@ export const drawnAnswersOn = (env: NodeJS.ProcessEnv = process.env) => env.DRAW
  * The drawn picture for one answer (drawnAnswer.ts), counted for /stats: null when a drawing wouldn't help, the day's
  * money is used up, or the drawing failed its checks.
  */
-export async function answerDrawn(deps: Pick<VisualDeps, 'getGeminiClient' | 'log' | 'guideKeyFor' | 'env'>, o: { game: string; guideKey?: string; question: string; answer: string; image?: string; client: string; shotOnly?: boolean }): Promise<Drawn | null> {
+export async function answerDrawn(deps: Pick<VisualDeps, 'getGeminiClient' | 'log' | 'guideKeyFor' | 'env'>, o: { game: string; guideKey?: string; question: string; answer: string; image?: string; client: string; shotOnly?: boolean; markers?: string[] }): Promise<{ drawn: Drawn | null; pins: Pins | null }> {
   const env = deps.env ?? process.env;
   const shotOnly = o.shotOnly === true || isStandInQuestion(o.question);
   const gameKey = String(o.guideKey || '').replace(/[^a-z0-9-]/g, '').slice(0, 120) || (await deps.guideKeyFor(o.game)) || o.game.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const r = await drawnFor(deps.getGeminiClient(), {
-    game: o.game, gameKey, question: o.question, answer: o.answer, image: o.image, shotOnly,
+    game: o.game, gameKey, question: o.question, answer: o.answer, image: o.image, shotOnly, markers: o.markers,
     wiki: await wikiSources(deps, gameKey, o.game),
     budget: drawnBudget(Number(env.DRAWN_DAILY_DOLLARS) || 3), store: firestoreDrawnStore(), log: deps.log,
   });
@@ -220,8 +220,9 @@ export async function answerDrawn(deps: Pick<VisualDeps, 'getGeminiClient' | 'lo
   void countVisual({
     drawnLooked: 1, ...(r.decided !== 'none' ? { [`drawnWanted_${r.decided}`]: 1 } : {}), ...(r.drawn ? { [`drawn_${r.drawn.on}`]: 1 } : {}),
     ...(r.failed ? { [`drawnFailed_${r.failed.replace(/[^a-z]/g, '')}`]: 1 } : {}), drawnCached: r.cached ? 1 : 0, drawnCost: Math.round(r.cost * 1e6) / 1e6,
+    ...(r.pins ? { drawnPins: 1 } : {}),
   }).catch(() => {});
-  return r.drawn;
+  return { drawn: r.drawn, pins: r.pins || null };
 }
 
 /**
@@ -294,9 +295,11 @@ export function registerVisualAnswers(app: Express, deps: VisualDeps): void {
     let w = drawnHourly.get(uid);
     if (!w || t >= w.reset) drawnHourly.set(uid, (w = { n: 0, reset: t + 3600_000 }));
     if (w.n++ >= (Number(env.DRAWN_PER_USER_HOURLY) || 20)) return res.json({ drawn: null, limited: true });
+    // The answer's markers by name (step 3): at most 8 short names.
+    const markers = (Array.isArray(req.body?.markers) ? req.body.markers : []).map((m: unknown) => String(m || '').replace(/\s+/g, ' ').trim().slice(0, 60)).filter(Boolean).slice(0, 8);
     try {
-      const drawn = await answerDrawn(deps, { game, guideKey: String(req.body?.guideKey || ''), question, answer, image, client: String(req.body?.client || 'web'), shotOnly: req.body?.shotOnly === true });
-      res.json({ drawn });
+      const r = await answerDrawn(deps, { game, guideKey: String(req.body?.guideKey || ''), question, answer, image, client: String(req.body?.client || 'web'), shotOnly: req.body?.shotOnly === true, markers });
+      res.json({ drawn: r.drawn, ...(r.pins ? { pins: r.pins } : {}) });
     } catch (e: any) {
       console.warn('[drawn] failed:', e?.message || e);
       res.json({ drawn: null });
@@ -383,7 +386,7 @@ export function visualStatsLine(s: { days: Record<string, any>[]; searchesToday:
     `YouTube searches today: ${s.searchesToday} of ${s.searchLimit}${sum('quotaOut') ? ` · ${sum('quotaOut')} answer(s) got no video because the day's searches were used up` : ''}`,
     ...(sum('drawnLooked') ? [
       `Drawn pictures: ${sum('drawn_screen') + sum('drawn_wiki') + sum('drawn_illustration')} shown of ${sum('drawnLooked')} answers looked at (on their screen ${sum('drawn_screen')} · on a wiki picture ${sum('drawn_wiki')} · illustration ${sum('drawn_illustration')} · saved one reused ${sum('drawnCached')})` +
-        ` · failed checks ${sum('drawnFailed_scenechanged') + sum('drawnFailed_check') + sum('drawnFailed_nothingdrawn')} · day's cap reached ${sum('drawnFailed_cap')} · cost $${sum('drawnCost').toFixed(2)}${sum('drawnWrong') ? ` · "Not right" ${sum('drawnWrong')}` : ''}`,
+        ` · failed checks ${sum('drawnFailed_scenechanged') + sum('drawnFailed_check') + sum('drawnFailed_nothingdrawn')} · day's cap reached ${sum('drawnFailed_cap')} · cost $${sum('drawnCost').toFixed(2)}${sum('drawnWrong') ? ` · "Not right" ${sum('drawnWrong')}` : ''}${sum('drawnPins') ? ` · markers joined or ringed ${sum('drawnPins')}` : ''}`,
     ] : []),
   ].join('\n');
 }

@@ -1844,6 +1844,8 @@ function showScreenPointers(points, accent, opts = {}) {
   pointerWindow = win;
   pointerSession = { id: sessionId, combat, win, watch: watchNearby, checks: 0, lastCheck: 0, inFlight: false, sourceId: lastCaptureSourceId, ready: false, queue: [] };
   const session = pointerSession;
+  // Step 3: the answer's lines and rings, again on markers found again (the same answer).
+  if (sessionId && lastPins && lastPins.id === sessionId) session.queueJs = [`window.qcSetPins && window.qcSetPins(${JSON.stringify(lastPins.pins)})`];
   win.setIgnoreMouseEvents(true);
   win.setAlwaysOnTop(true, 'screen-saver');
   // Either hidden from all screen capture, or visible in recordings (then the tracker ignores its own markers).
@@ -1895,6 +1897,27 @@ ipcMain.handle('show-screen-pointers', async (event, payload) => {
 });
 
 ipcMain.on('hide-screen-pointers', () => closeScreenPointers());
+
+// Drawn answers step 3 (owner, Nov 18 2026): lines joining the answer's markers in order and rings for rough areas
+// (pointers.html qcSetPins), kept for the answer so markers found again get them too. Indexes into the answer's list.
+let lastPins = null;
+function cleanPinsIpc(p, max = 16) {
+  const nums = (a) => (Array.isArray(a) ? a : []).filter((n) => Number.isInteger(n) && n >= 0 && n < max).slice(0, 8);
+  const order = nums(p && p.order);
+  const labels = {};
+  if (p && p.labels && typeof p.labels === 'object') for (const [k, v] of Object.entries(p.labels)) if (/^\d$/.test(k) && typeof v === 'string') labels[k] = v.slice(0, 24);
+  return { order: order.length >= 2 ? order : [], labels, areas: nums(p && p.areas).slice(0, 4) };
+}
+ipcMain.on('pointers-pins', (event, { id, pins } = {}) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents || typeof id !== 'string') return;
+  const clean = cleanPinsIpc(pins);
+  if (clean.order.length < 2 && !clean.areas.length) return;
+  lastPins = { id, pins: clean };
+  if (!pointerSession || pointerSession.id !== id) return; // shown when its markers are
+  const js = `window.qcSetPins && window.qcSetPins(${JSON.stringify(clean)})`;
+  if (pointerSession.ready && pointerWindow && !pointerWindow.isDestroyed()) pointerWindow.webContents.executeJavaScript(js).catch(() => {});
+  else (pointerSession.queueJs = pointerSession.queueJs || []).push(js);
+});
 
 // The player switched individual markers on or off in the answer's list.
 ipcMain.on('pointers-hidden', (event, { id, hidden } = {}) => {

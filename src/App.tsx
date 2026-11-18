@@ -2003,15 +2003,19 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
    * or an illustration, when seeing it helps (the server decides; most answers get none). After the answer, alongside
    * the visual; the answer never waits for it.
    */
-  const fetchDrawn = async (msgId: string, question: string, answer: string, game: string, token: string | null, shotOnly: boolean, image?: string, live = false) => {
+  const fetchDrawn = async (msgId: string, question: string, answer: string, game: string, token: string | null, shotOnly: boolean, image?: string, live = false, markers: string[] = []) => {
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/drawn`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ game, guideKey: trackerGameRef.current?.guideKey || undefined, question, answer, client: (window as any).electronAPI ? 'desktop' : 'web', ...(image ? { image } : {}), ...(shotOnly ? { shotOnly: true } : {}) }),
+        body: JSON.stringify({ game, guideKey: trackerGameRef.current?.guideKey || undefined, question, answer, client: (window as any).electronAPI ? 'desktop' : 'web', ...(image ? { image } : {}), ...(shotOnly ? { shotOnly: true } : {}), ...(live && markers.length ? { markers } : {}) }),
       });
       if (!res.ok) return;
-      const d = (await res.json())?.drawn;
+      const body = await res.json();
+      // Step 3 (desktop): lines joining the answer's markers in order, rings for rough areas, over the game with them.
+      const pins = body?.pins;
+      if (live && pins && Array.isArray(pins.order) && Array.isArray(pins.areas)) (window as any).electronAPI?.setPointerPins?.({ id: msgId, pins });
+      const d = body?.drawn;
       if (d && d.kind === 'drawn' && typeof d.url === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(d.url) && ['screen', 'wiki', 'illustration'].includes(d.on)) {
         const page = d.page && /^https:\/\//.test(String(d.page.url || '')) ? { url: String(d.page.url), title: String(d.page.title || '').slice(0, 120), site: String(d.page.site || '').slice(0, 60) } : undefined;
         updateMessageById(msgId, (m) => ({ ...m, drawn: { kind: 'drawn', url: d.url, on: d.on, alt: String(d.alt || '').slice(0, 200), ...(page ? { page } : {}) } }));
@@ -3195,7 +3199,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       if (text && aiMessage.text && !limitText) {
         const shotOnly = !!audioBase64 || (!!imageBase64 && (text === tr('chat.defaultShotQ') || text === tr('chat.defaultQ')));
         void fetchVisual(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly);
-        void fetchDrawn(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly, imageBase64 || undefined, settings.showPointersOnScreen !== false);
+        void fetchDrawn(aiMessage.id, text, aiMessage.text, activeTab.activeSteamGame?.name || activeGame?.name || activeTab.name || '', token, shotOnly, imageBase64 || undefined, settings.showPointersOnScreen !== false, (aiMessage.points || []).map((p) => p.label || ''));
       }
 
       const readArea: string = data.placeRead && typeof data.placeRead.area === 'string' ? data.placeRead.area.trim().slice(0, 80) : '';

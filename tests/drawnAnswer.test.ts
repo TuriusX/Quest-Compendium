@@ -168,3 +168,14 @@ console.log("drawnAnswer: skip check ok");
   assert.equal(data[(5 * W + 300) * 4 + 3], 0);
   console.log("drawnAnswer: layer ok");
 }
+
+// 10. Step 3: the model's pins, checked against the markers.
+{
+  const { cleanPins } = await import("../drawnAnswer");
+  assert.deepEqual(cleanPins({ join: [1, 2, 3], joinLabels: { "1": "climb up there now", "3": "x" }, areas: [3] }, 3), { order: [0, 1, 2], labels: { 0: "climb up there" }, areas: [2] });
+  assert.equal(cleanPins({ join: [2], areas: [] }, 3), null, "one marker is no line");
+  assert.equal(cleanPins({ join: [1, 9], areas: [0] }, 3), null, "out of range");
+  assert.deepEqual(cleanPins({ join: [2, 2, 1], areas: [] }, 3), { order: [1, 0], labels: {}, areas: [] });
+  assert.equal(cleanPins({ join: [1, 2] }, 0), null, "no markers");
+  console.log("drawnAnswer: pins ok");
+}
