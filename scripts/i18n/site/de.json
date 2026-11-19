@@ -214,5 +214,16 @@
   "Version 0.6.3 beta. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "Version 0.6.3 Beta. Kostenlos testen: 2 Pro- und 5 Fast-Fragen pro Tag, keine Kreditkarte nötig.",
   "Standard & Immersive Modes": "Standard- & Immersiv-Modus",
   "Choose how you want to be helped: Standard for a straight expert guide, or Immersive for the same facts told by a character from the game's world.": "Du entscheidest, wie dir geholfen wird: Standard ist ein direkter Expertenguide, Immersiv liefert dieselben Fakten, erzählt von einer Figur aus der Spielwelt.",
-  "Get a thorough answer in Standard or Immersive mode, with a checklist of what to find and, on Windows, markers on the spots it's talking about.": "Erhalte detaillierte Antworten im Standard- oder Immersiv-Modus – inklusive Checkliste für Items und Markierungen direkt im Bild (unter Windows)."
+  "Get a thorough answer in Standard or Immersive mode, with a checklist of what to find and, on Windows, markers on the spots it's talking about.": "Erhalte detaillierte Antworten im Standard- oder Immersiv-Modus – inklusive Checkliste für Items und Markierungen direkt im Bild (unter Windows).",
+  "Install it from": "Installiere es über",
+  "DeckyHub": "DeckyHub",
+  "(search for Quest Compendium), or by URL in Decky's": "(suche nach Quest Compendium) oder per URL in Deckys",
+  "settings:": "Einstellungen:",
+  "Step-by-step install guide": "Schritt-für-Schritt-Installationsanleitung",
+  "Not in the official Decky store.": "Nicht im offiziellen Decky Store.",
+  "Powered by OpenAI's latest models, it recognizes the game you're playing, reads your screenshots, and takes longer to think when a question needs it. Answers stay thorough.": "Angetrieben von den neuesten OpenAI-Modellen: Erkennt das Spiel, das du gerade spielst, liest deine Screenshots und nimmt sich bei kniffligen Fragen extra Bedenkzeit. So bleiben die Antworten immer gründlich.",
+  "(the best answers) or": "(die besten Antworten) oder",
+  "(quicker answers) next to the send button. When one runs out, the other answers.": "(schnellere Antworten) direkt neben dem Senden-Button. Geht einem das Kontingent aus, springt das andere ein.",
+  "When you ask a question, the app sends your question, the game name and, if you include one, a screenshot to the Quest Compendium server, which passes them to OpenAI's AI to write the answer (Google's Gemini answers if OpenAI is unavailable). If you sign in, your notes and progress sync to the cloud. Details are in the": "Wenn du eine Frage stellst, sendet die App deine Frage, den Namen des Spiels und – falls angehängt – einen Screenshot an den Quest Compendium-Server. Dieser leitet alles an die KI von OpenAI weiter, um die Antwort zu verfassen (ist OpenAI nicht verfügbar, springt Googles Gemini ein). Wenn du dich anmeldest, werden deine Notizen und dein Fortschritt mit der Cloud synchronisiert. Details findest du in der",
+  "Powered by OpenAI and Google Gemini. Quest Compendium is an independent project and is not affiliated with or endorsed by Valve, Steam, Microsoft, OpenAI or Google.": "Unterstützt von OpenAI und Google Gemini. Quest Compendium ist ein unabhängiges Projekt und steht in keiner Verbindung zu Valve, Steam, Microsoft, OpenAI oder Google und wird von diesen weder unterstützt noch empfohlen."
 }

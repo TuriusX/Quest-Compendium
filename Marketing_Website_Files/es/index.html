@@ -117,7 +117,7 @@
           <i data-lucide="external-link" class="w-5 h-5"></i>
           Abrir app web
         </a>
-        <a href="#steam-deck" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+        <a href="../steam-deck/" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="gamepad-2" class="w-5 h-5"></i>
           Consíguelo para Steam Deck
         </a>
@@ -166,11 +166,11 @@
           <p class="text-zinc-400 text-base mb-4">Un plugin de Decky Loader. Abre el menú de acceso rápido, toca un ajuste predeterminado como &quot;Estoy atascado&quot; y obtén una respuesta que se adapte a tu juego. Las respuestas sobre tu pantalla destacan las zonas clave en tu captura, y la guía puede quedarse abierta mientras juegas.</p>
           <ol class="text-zinc-400 text-sm space-y-2 mb-4 list-decimal list-inside">
             <li>Instalar <a href="https://decky.xyz" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Decky Loader</a></li>
-            <li>En los ajustes de Decky, activa el <strong class="text-white">Modo de desarrollador</strong></li>
-            <li>Abre <strong class="text-white">Desarrollador</strong>, selecciona <strong class="text-white">Instalar plugin desde URL</strong> e ingresa:</li>
+            <li>Instálalo desde <a href="https://deckyhub.com" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">DeckyHub</a> (busca Quest Compendium) o mediante URL en los <strong class="text-white">Desarrollador</strong> ajustes de Decky:</li>
           </ol>
           <code class="block text-xs bg-black/40 border border-white/10 rounded-lg p-3 text-zinc-300 break-all select-all mb-3">https://github.com/TuriusX/Quest-Compendium-Decky/releases/latest/download/quest-compendium-decky.zip</code>
-          <p class="text-sm text-zinc-500 mt-auto">Aún no está en la tienda de Decky, por lo que se instala manualmente. <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Código fuente en GitHub</a></p>
+          <a href="../steam-deck/" class="inline-flex items-center gap-2 text-[#a87ffb] hover:text-white font-semibold mb-3">Guía de instalación paso a paso <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
+          <p class="text-sm text-zinc-500 mt-auto">No disponible en la tienda oficial de Decky. <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Código fuente en GitHub</a></p>
         </div>
       </div>
     </section>
@@ -264,7 +264,7 @@
         <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
           <i data-lucide="brain" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
           <h3 class="text-xl font-bold text-white mb-2">IA con contexto del juego</h3>
-          <p class="text-zinc-400 text-base">Impulsada por Gemini, reconoce el juego que estás jugando, lee tus capturas de pantalla y se toma más tiempo para pensar cuando la pregunta lo requiere. Respuestas siempre completas.</p>
+          <p class="text-zinc-400 text-base">Impulsado por los modelos más recientes de OpenAI, reconoce el juego que estás jugando, lee tus capturas de pantalla y se toma más tiempo para pensar cuando la pregunta lo requiere. Las respuestas siempre son completas.</p>
         </div>
         <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
           <i data-lucide="drama" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
@@ -356,7 +356,7 @@
           <p class="text-xs text-zinc-500 mt-2 text-center">Inicia sesión y paga de forma segura con Stripe. Cancela cuando quieras.</p>
         </div>
       </div>
-      <p class="text-center text-zinc-400 mt-4">Elige <strong class="text-white">Pro</strong> (Gemini Pro, las mejores respuestas) o <strong class="text-white">Fast</strong> (Gemini Flash, respuestas más rápidas) junto al botón de enviar. Si se te acaba uno, el otro responde.</p>
+      <p class="text-center text-zinc-400 mt-4">Elige <strong class="text-white">Pro</strong> (las mejores respuestas) o <strong class="text-white">Fast</strong> (respuestas más rápidas) junto al botón de enviar. Cuando una se agota, la otra responde.</p>
       <p class="text-center text-zinc-400 mt-3"><strong class="text-white">Durante la beta, todos los jugadores también tienen marcadores en pantalla y las voces de Gemini.</strong> <a href="https://quest-compendium-890629309063.us-east1.run.app/?premium=1&amp;from=site" class="text-[#a87ffb] hover:text-white underline">Mejora tu plan cuando quieras</a>, también desde la app.</p>
     </section>
 
@@ -403,7 +403,7 @@
         </details>
         <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">¿Qué datos envía y a dónde?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
-          <p class="text-zinc-400 mt-3">Cuando haces una pregunta, la app envía tu duda, el nombre del juego y, si incluyes una, la captura de pantalla al servidor de Quest Compendium, que se los pasa a la IA Gemini de Google para redactar la respuesta. Si inicias sesión, tus notas y progreso se sincronizan en la nube. Tienes todos los detalles en la <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">política de privacidad</a>.</p>
+          <p class="text-zinc-400 mt-3">Cuando haces una pregunta, la app envía tu consulta, el nombre del juego y, si incluyes una, una captura de pantalla al servidor de Quest Compendium, que se los pasa a la IA de OpenAI para generar la respuesta (Gemini de Google responde si OpenAI no está disponible). Si inicias sesión, tus notas y progreso se sincronizan en la nube. Más detalles en la <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">política de privacidad</a>.</p>
         </details>
         <details id="faq-smartscreen" class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Windows dice &quot;Windows protegió su PC&quot;. ¿Es seguro?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
@@ -450,7 +450,7 @@
       <a id="discord-footer" href="#" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">Discord</a>
       <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">Política de privacidad</a>
     </div>
-    <p class="mb-2">Desarrollado con Google Gemini. Quest Compendium es un proyecto independiente y no está afiliado ni respaldado por Valve, Steam, Microsoft o Google.</p>
+    <p class="mb-2">Desarrollado con OpenAI y Google Gemini. Quest Compendium es un proyecto independiente y no está afiliado, asociado ni respaldado por Valve, Steam, Microsoft, OpenAI ni Google.</p>
     <p>&amp;copy; 2026 Quest Compendium</p>
   </footer>
 
@@ -465,7 +465,7 @@
     } else {
       discordLinks.forEach((a) => { a.style.display = "none"; });
       document.querySelectorAll(".qc-discord-mention").forEach((el) => { el.style.display = "none"; });
-    }
+    }
     lucide.createIcons();
   </script>
 <script>(function(){try{var f=new URLSearchParams(location.search).get('from');if(f!=='guide')return;document.querySelectorAll('a[href^="https://quest-compendium-890629309063.us-east1.run.app/?from="]').forEach(function(a){a.href=a.href.replace(/from=[a-z]+/,'from=guide');});}catch(e){}})();</script>

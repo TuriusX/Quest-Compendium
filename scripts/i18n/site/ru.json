@@ -214,5 +214,16 @@
   "Version 0.6.3 beta. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "Версия 0.6.3 beta. Попробуйте бесплатно: 2 Pro- и 5 Fast-вопросов в день, без привязки карты.",
   "Standard & Immersive Modes": "Режимы: Стандарт и Погружение",
   "Choose how you want to be helped: Standard for a straight expert guide, or Immersive for the same facts told by a character from the game's world.": "Выбирайте формат подсказок: «Стандарт» — прямой экспертный гайд, «Погружение» — те же факты от лица персонажа из мира игры.",
-  "Get a thorough answer in Standard or Immersive mode, with a checklist of what to find and, on Windows, markers on the spots it's talking about.": "Получите подробный ответ в режиме «Стандарт» или «Погружение» со списком нужных предметов, а на Windows — еще и с метками на экране прямо в нужных точках."
+  "Get a thorough answer in Standard or Immersive mode, with a checklist of what to find and, on Windows, markers on the spots it's talking about.": "Получите подробный ответ в режиме «Стандарт» или «Погружение» со списком нужных предметов, а на Windows — еще и с метками на экране прямо в нужных точках.",
+  "Install it from": "Установите через",
+  "DeckyHub": "DeckyHub",
+  "(search for Quest Compendium), or by URL in Decky's": "(найдите Quest Compendium) или по URL в настройках",
+  "settings:": "Decky:",
+  "Step-by-step install guide": "Пошаговая инструкция по установке",
+  "Not in the official Decky store.": "Нет в официальном магазине Decky.",
+  "Powered by OpenAI's latest models, it recognizes the game you're playing, reads your screenshots, and takes longer to think when a question needs it. Answers stay thorough.": "Благодаря новейшим моделям OpenAI приложение распознает вашу игру, анализирует скриншоты и берет больше времени на размышления, когда вопрос этого требует. Ответы остаются подробными.",
+  "(the best answers) or": "(лучшие ответы) или",
+  "(quicker answers) next to the send button. When one runs out, the other answers.": "(более быстрые ответы) рядом с кнопкой отправки. Если один лимит исчерпан, ответит другая модель.",
+  "When you ask a question, the app sends your question, the game name and, if you include one, a screenshot to the Quest Compendium server, which passes them to OpenAI's AI to write the answer (Google's Gemini answers if OpenAI is unavailable). If you sign in, your notes and progress sync to the cloud. Details are in the": "Когда вы задаете вопрос, приложение отправляет его, название игры и скриншот (если вы его прикрепили) на сервер Quest Compendium, который передает их ИИ от OpenAI для составления ответа (если OpenAI недоступен, ответит Gemini от Google). При входе в аккаунт ваши заметки и прогресс синхронизируются с облаком. Подробности — в",
+  "Powered by OpenAI and Google Gemini. Quest Compendium is an independent project and is not affiliated with or endorsed by Valve, Steam, Microsoft, OpenAI or Google.": "Работает на базе OpenAI и Google Gemini. Quest Compendium — независимый проект, который не связан с Valve, Steam, Microsoft, OpenAI или Google и не одобрен ими."
 }

@@ -214,5 +214,16 @@
   "Version 0.6.3 beta. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "バージョン 0.6.3 ベータ。無料でお試し：Proの質問が1日2回、Fastの質問が1日5回まで利用可能。クレジットカードは不要です。",
   "Standard & Immersive Modes": "スタンダード＆没入モード",
   "Choose how you want to be helped: Standard for a straight expert guide, or Immersive for the same facts told by a character from the game's world.": "攻略スタイルを選べます。「スタンダード」は率直な専門ガイド、「没入」は同じ情報をゲーム世界の登場人物が語ります。",
-  "Get a thorough answer in Standard or Immersive mode, with a checklist of what to find and, on Windows, markers on the spots it's talking about.": "「スタンダード」または「没入」モードで詳しい回答が得られます。収集アイテムのチェックリストのほか、Windowsでは画面上の該当箇所にマーカーも表示されます。"
+  "Get a thorough answer in Standard or Immersive mode, with a checklist of what to find and, on Windows, markers on the spots it's talking about.": "「スタンダード」または「没入」モードで詳しい回答が得られます。収集アイテムのチェックリストのほか、Windowsでは画面上の該当箇所にマーカーも表示されます。",
+  "Install it from": "インストールは",
+  "DeckyHub": "DeckyHub",
+  "(search for Quest Compendium), or by URL in Decky's": "（Quest Compendium を検索）から、またはDeckyの設定でURLを入力して行えます。",
+  "settings:": "設定方法：",
+  "Step-by-step install guide": "インストール手順ガイド",
+  "Not in the official Decky store.": "公式Deckyストアには未掲載です。",
+  "Powered by OpenAI's latest models, it recognizes the game you're playing, reads your screenshots, and takes longer to think when a question needs it. Answers stay thorough.": "OpenAIの最新モデルを搭載。プレイ中のゲームを認識し、スクリーンショットを読み取り、難しい質問にはじっくり考えて答えます。いつでも丁寧で詳しい回答をお届け。",
+  "(the best answers) or": "（最高精度の回答）または",
+  "(quicker answers) next to the send button. When one runs out, the other answers.": "（スピーディーな回答）を送信ボタンの横で切り替え可能。片方の利用上限に達しても、もう一方が回答します。",
+  "When you ask a question, the app sends your question, the game name and, if you include one, a screenshot to the Quest Compendium server, which passes them to OpenAI's AI to write the answer (Google's Gemini answers if OpenAI is unavailable). If you sign in, your notes and progress sync to the cloud. Details are in the": "質問を送信すると、アプリから質問内容、ゲーム名、そして添付したスクリーンショットがQuest Compendiumのサーバーに送られ、OpenAIのAIが回答を作成します（OpenAIが利用できない場合はGoogleのGeminiが回答）。サインインすると、ノートや進捗状況がクラウドに同期されます。詳細は",
+  "Powered by OpenAI and Google Gemini. Quest Compendium is an independent project and is not affiliated with or endorsed by Valve, Steam, Microsoft, OpenAI or Google.": "Powered by OpenAI and Google Gemini. Quest Compendiumは独立したプロジェクトであり、Valve、Steam、Microsoft、OpenAI、Googleとの提携や推奨関係はありません。"
 }

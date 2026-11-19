@@ -90,6 +90,77 @@ if (process.argv[2] === 'submit') {
   process.exit(0);
 }
 
+// OpenAI as the reviewer (Nov 19 2026, the move to OpenAI): the same requests to Gemini 3.1 Pro (thinking LOW, as
+// claimCheck) and to an OpenAI model (OPENAI_REVIEWER, default gpt-6.2-sol, reasoning low), sent directly (not batched,
+// so full prices), scored the same way.  MAX_DOLLARS stops before sending.  npx tsx review.ts direct
+if (process.argv[2] === 'direct') {
+  const OpenAI = (await import('openai')).default;
+  const oa = new OpenAI();
+  const OAM = process.env.OPENAI_REVIEWER || 'gpt-6.2-sol';
+  const PRICE = { pro: { in: 2, out: 12 }, oa: { in: 2, out: 10 } };
+  const info: any = (await db().collection('guides').doc(KEY).get()).data() || {};
+  const game = String(info.game || KEY);
+  const meta: any[] = [];
+  const reqs: any[] = [];
+  for (const p of await pages()) {
+    const pack = (await db().collection('evidencePacks').doc(`${KEY}__quest__${p.e.slug}`).get()).data() as EvidencePack | undefined;
+    if (!pack?.evidence?.length) { console.log('no evidence:', p.e.name); continue; }
+    const ev = trusted(pack);
+    const slots = claimSlots(claimsOf(p.e.name, p.e.overview || '', p.q || {}));
+    const before = reqs.length;
+    for (let i = 0; i < slots.length; i += 60) reqs.push({ text: __claimPrompt(game, p.e.name, slots.slice(i, i + 60), evidenceText(ev)) });
+    meta.push({ slug: p.e.slug, name: p.e.name, known: p.known, planted: p.notes, requests: [before, reqs.length], slots, evIds: ev.evidence.map((x) => x.id) });
+  }
+  const inTok = reqs.reduce((n, r) => n + r.text.length / 4, 0);
+  const est = (inTok * (PRICE.pro.in + PRICE.oa.in) + reqs.length * 6000 * (PRICE.pro.out + PRICE.oa.out)) / 1e6;
+  console.log(`${meta.length} pages, ${reqs.length} requests, about ${Math.round(inTok)} input tokens each model: about $${est.toFixed(2)} at most`);
+  if (process.env.MAX_DOLLARS && est > Number(process.env.MAX_DOLLARS)) { console.log(`over MAX_DOLLARS ($${process.env.MAX_DOLLARS}): nothing sent`); process.exit(0); }
+  const real = gemini() as any;
+  const texts: Record<'pro' | 'oa', string[]> = { pro: [], oa: [] };
+  const ms: Record<'pro' | 'oa', number> = { pro: 0, oa: 0 };
+  let cost = 0;
+  for (const r of reqs) {
+    let t0 = Date.now();
+    const g = await real.models.generateContent({ model: MODELS.pro, contents: [{ role: 'user', parts: [{ text: r.text }] }], config: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 12000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } });
+    ms.pro += Date.now() - t0;
+    const gu = g.usageMetadata || {};
+    cost += (Number(gu.promptTokenCount || 0) * PRICE.pro.in + (Number(gu.candidatesTokenCount || 0) + Number(gu.thoughtsTokenCount || 0)) * PRICE.pro.out) / 1e6;
+    texts.pro.push(String(g.text || ''));
+    t0 = Date.now();
+    const o: any = await oa.responses.create({ model: OAM, input: r.text, reasoning: { effort: 'low' }, max_output_tokens: 12000, store: false, text: { format: { type: 'json_object' } } } as any);
+    ms.oa += Date.now() - t0;
+    const ou = o.usage || {};
+    cost += (Number(ou.input_tokens || 0) * PRICE.oa.in + Number(ou.output_tokens || 0) * PRICE.oa.out) / 1e6;
+    texts.oa.push(String(o.output_text || ''));
+    console.log(`request ${texts.pro.length}/${reqs.length}: $${cost.toFixed(3)} so far`);
+  }
+  const rows: any[] = [];
+  for (const p of meta) {
+    const row: any = { name: p.name, known: p.known, planted: p.planted };
+    const ev = { evidence: p.evIds.map((id: string) => ({ id })) } as any;
+    const verdicts: any = {};
+    for (const m of ['pro', 'oa'] as const) {
+      let all: any[] = [];
+      let off = 0;
+      for (const t of texts[m].slice(p.requests[0], p.requests[1])) {
+        const chunk = p.slots.slice(off, off + 60); off += 60;
+        all = all.concat(parseClaims(t, chunk, ev));
+      }
+      const s = scoreClaims(all);
+      row[m] = `${s.status} ${s.score} (${s.supported}/${s.total})`;
+      row[`${m}Status`] = s.status;
+      verdicts[m] = all;
+    }
+    row.diff = p.slots.map((sl: any, i: number) => ({ text: sl.text, pro: verdicts.pro[i]?.verdict, oa: verdicts.oa[i]?.verdict, oaWhy: verdicts.oa[i]?.why || '', proWhy: verdicts.pro[i]?.why || '' })).filter((d: any) => d.pro !== d.oa);
+    rows.push(row);
+    console.log(`${p.name} | should ${p.known === 'passed' ? 'pass' : 'fail'} | Gemini Pro ${row.pro} | ${OAM} ${row.oa} | ${row.diff.length} claim(s) judged differently`);
+  }
+  fs.mkdirSync('scratchpad/model-compare', { recursive: true });
+  fs.writeFileSync('scratchpad/model-compare/review-openai.json', JSON.stringify(rows, null, 1));
+  console.log(`time: Gemini Pro ${(ms.pro / 1000).toFixed(0)} s, ${OAM} ${(ms.oa / 1000).toFixed(0)} s; spent $${cost.toFixed(3)} (full prices; the pipeline's batches are half)`);
+  process.exit(0);
+}
+
 if (process.argv[2] === 'collect') {
   const st = JSON.parse(fs.readFileSync(FILE, 'utf8'));
   const real = gemini() as any;

@@ -117,7 +117,7 @@
           <i data-lucide="external-link" class="w-5 h-5"></i>
           Webアプリを起動
         </a>
-        <a href="#steam-deck" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+        <a href="../steam-deck/" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="gamepad-2" class="w-5 h-5"></i>
           Steam Deck版を入手
         </a>
@@ -166,11 +166,11 @@
           <p class="text-zinc-400 text-base mb-4">Decky Loader用プラグイン。クイックアクセスmenuを開き、「詰まった」などのプリセットをタップするだけで、プレイ状況に合った回答が得られます。画面に関する回答ではスクリーンショット上に注目ポイントがマークされ、ガイドを開いたままプレイを続けられます。</p>
           <ol class="text-zinc-400 text-sm space-y-2 mb-4 list-decimal list-inside">
             <li>インストール <a href="https://decky.xyz" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Decky Loader</a></li>
-            <li>Deckyの設定で次をオンにします： <strong class="text-white">Developer Mode</strong></li>
-            <li>次を開きます： <strong class="text-white">Developer</strong>、そして選択： <strong class="text-white">URLからプラグインをインストール</strong> 以下を入力：</li>
+            <li>インストールは <a href="https://deckyhub.com" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">DeckyHub</a> （Quest Compendium を検索）から、またはDeckyの設定でURLを入力して行えます。 <strong class="text-white">Developer</strong> 設定方法：</li>
           </ol>
           <code class="block text-xs bg-black/40 border border-white/10 rounded-lg p-3 text-zinc-300 break-all select-all mb-3">https://github.com/TuriusX/Quest-Compendium-Decky/releases/latest/download/quest-compendium-decky.zip</code>
-          <p class="text-sm text-zinc-500 mt-auto">Deckyストアにはまだないため、手動でインストールします。 <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHubでソースコードを見る</a></p>
+          <a href="../steam-deck/" class="inline-flex items-center gap-2 text-[#a87ffb] hover:text-white font-semibold mb-3">インストール手順ガイド <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
+          <p class="text-sm text-zinc-500 mt-auto">公式Deckyストアには未掲載です。 <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHubでソースコードを見る</a></p>
         </div>
       </div>
     </section>
@@ -264,7 +264,7 @@
         <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
           <i data-lucide="brain" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
           <h3 class="text-xl font-bold text-white mb-2">状況を読み取るスマートなAI</h3>
-          <p class="text-zinc-400 text-base">Geminiを搭載。プレイ中のゲームを認識し、スクリーンショットを読み取り、難しい質問にはじっくり思考。いつでも納得のいく詳しい回答を届けます。</p>
+          <p class="text-zinc-400 text-base">OpenAIの最新モデルを搭載。プレイ中のゲームを認識し、スクリーンショットを読み取り、難しい質問にはじっくり考えて答えます。いつでも丁寧で詳しい回答をお届け。</p>
         </div>
         <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
           <i data-lucide="drama" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
@@ -356,7 +356,7 @@
           <p class="text-xs text-zinc-500 mt-2 text-center">サインイン後、Stripe で安全にお支払い。いつでも解約可能です。</p>
         </div>
       </div>
-      <p class="text-center text-zinc-400 mt-4">送信ボタンの横で、 <strong class="text-white">Pro</strong> （最高精度の回答ができる Gemini Pro）または <strong class="text-white">Fast</strong> （素早く回答する Gemini Flash）を選択できます。片方を使い切ると、もう片方が回答します。</p>
+      <p class="text-center text-zinc-400 mt-4">送信ボタンの横で、 <strong class="text-white">Pro</strong> （最高精度の回答）または <strong class="text-white">Fast</strong> （スピーディーな回答）を送信ボタンの横で切り替え可能。片方の利用上限に達しても、もう一方が回答します。</p>
       <p class="text-center text-zinc-400 mt-3"><strong class="text-white">ベータ期間中は、すべてのプレイヤーが画面上のマーカーや Gemini 音声も利用できます。</strong> <a href="https://quest-compendium-890629309063.us-east1.run.app/?premium=1&amp;from=site" class="text-[#a87ffb] hover:text-white underline">いつでもアップグレード可能</a>（アプリ内からも可能）</p>
     </section>
 
@@ -403,7 +403,7 @@
         </details>
         <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">どんなデータが、どこへ送信されますか？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
-          <p class="text-zinc-400 mt-3">質問を送信すると、アプリは質問内容、ゲーム名、そして（添付されている場合は）スクリーンショットをQuest Compendiumのサーバーに送信し、そこからGoogleのGemini AIに渡して回答を生成します。サインインしている場合、メモや進行状況はクラウドに同期されます。詳細は <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">プライバシーポリシー</a>.</p>
+          <p class="text-zinc-400 mt-3">質問を送信すると、アプリから質問内容、ゲーム名、そして添付したスクリーンショットがQuest Compendiumのサーバーに送られ、OpenAIのAIが回答を作成します（OpenAIが利用できない場合はGoogleのGeminiが回答）。サインインすると、ノートや進捗状況がクラウドに同期されます。詳細は <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">プライバシーポリシー</a>.</p>
         </details>
         <details id="faq-smartscreen" class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Windowsで「WindowsによってPCが保護されました」と出ますが、安全ですか？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
@@ -450,7 +450,7 @@
       <a id="discord-footer" href="#" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">Discord</a>
       <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">プライバシーポリシー</a>
     </div>
-    <p class="mb-2">Powered by Google Gemini. Quest Compendiumは独立したプロジェクトであり、Valve、Steam、Microsoft、Googleとの提携や推奨関係はありません。</p>
+    <p class="mb-2">Powered by OpenAI and Google Gemini. Quest Compendiumは独立したプロジェクトであり、Valve、Steam、Microsoft、OpenAI、Googleとの提携や推奨関係はありません。</p>
     <p>&amp;copy; 2026 Quest Compendium</p>
   </footer>
 
@@ -465,7 +465,7 @@
     } else {
       discordLinks.forEach((a) => { a.style.display = "none"; });
       document.querySelectorAll(".qc-discord-mention").forEach((el) => { el.style.display = "none"; });
-    }
+    }
     lucide.createIcons();
   </script>
 <script>(function(){try{var f=new URLSearchParams(location.search).get('from');if(f!=='guide')return;document.querySelectorAll('a[href^="https://quest-compendium-890629309063.us-east1.run.app/?from="]').forEach(function(a){a.href=a.href.replace(/from=[a-z]+/,'from=guide');});}catch(e){}})();</script>

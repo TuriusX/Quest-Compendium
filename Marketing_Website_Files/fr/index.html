@@ -117,7 +117,7 @@
           <i data-lucide="external-link" class="w-5 h-5"></i>
           Lancer la Web App
         </a>
-        <a href="#steam-deck" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+        <a href="../steam-deck/" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="gamepad-2" class="w-5 h-5"></i>
           Obtenir sur Steam Deck
         </a>
@@ -166,11 +166,11 @@
           <p class="text-zinc-400 text-base mb-4">Un plugin Decky Loader. Ouvrez le menu d'accès rapide, touchez un preset comme « Je suis bloqué » et obtenez une réponse adaptée à votre jeu. Les réponses basées sur votre écran indiquent les zones clés sur votre capture, et le guide peut rester ouvert pendant que vous jouez.</p>
           <ol class="text-zinc-400 text-sm space-y-2 mb-4 list-decimal list-inside">
             <li>Installer <a href="https://decky.xyz" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Decky Loader</a></li>
-            <li>Dans les paramètres de Decky, activez le <strong class="text-white">Mode Développeur</strong></li>
-            <li>Ouvrez <strong class="text-white">Développeur</strong>, choisissez <strong class="text-white">Installer le plugin depuis une URL</strong> et entrez :</li>
+            <li>Installez-le depuis <a href="https://deckyhub.com" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">DeckyHub</a> (recherchez Quest Compendium), ou par URL dans les <strong class="text-white">Développeur</strong> paramètres de Decky :</li>
           </ol>
           <code class="block text-xs bg-black/40 border border-white/10 rounded-lg p-3 text-zinc-300 break-all select-all mb-3">https://github.com/TuriusX/Quest-Compendium-Decky/releases/latest/download/quest-compendium-decky.zip</code>
-          <p class="text-sm text-zinc-500 mt-auto">Pas encore sur le Decky store, s'installe donc manuellement. <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Code source sur GitHub</a></p>
+          <a href="../steam-deck/" class="inline-flex items-center gap-2 text-[#a87ffb] hover:text-white font-semibold mb-3">Guide d'installation pas à pas <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
+          <p class="text-sm text-zinc-500 mt-auto">Pas dans le store officiel Decky. <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Code source sur GitHub</a></p>
         </div>
       </div>
     </section>
@@ -264,7 +264,7 @@
         <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
           <i data-lucide="brain" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
           <h3 class="text-xl font-bold text-white mb-2">IA contextuelle</h3>
-          <p class="text-zinc-400 text-base">Propulsée par Gemini, elle reconnaît le jeu en cours, analyse vos captures d'écran et prend le temps de réfléchir pour les questions complexes. Les réponses restent toujours ultra-complètes.</p>
+          <p class="text-zinc-400 text-base">Propulsé par les derniers modèles d'OpenAI, il reconnaît le jeu auquel vous jouez, analyse vos captures d'écran et prend le temps de réfléchir quand une question l'exige. Les réponses restent toujours ultra complètes.</p>
         </div>
         <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
           <i data-lucide="drama" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
@@ -356,7 +356,7 @@
           <p class="text-xs text-zinc-500 mt-2 text-center">Connectez-vous, puis payez en toute sécurité avec Stripe. Résiliable à tout moment.</p>
         </div>
       </div>
-      <p class="text-center text-zinc-400 mt-4">Choisissez <strong class="text-white">Pro</strong> (Gemini Pro, les meilleures réponses) ou <strong class="text-white">Fast</strong> (Gemini Flash, des réponses plus rapides) à côté du bouton d'envoi. Quand l'un est épuisé, l'autre prend le relais.</p>
+      <p class="text-center text-zinc-400 mt-4">Choisissez <strong class="text-white">Pro</strong> (les meilleures réponses) ou <strong class="text-white">Fast</strong> (des réponses plus rapides) à côté du bouton d'envoi. Quand l'un s'épuise, l'autre prend le relais.</p>
       <p class="text-center text-zinc-400 mt-3"><strong class="text-white">Pendant la bêta, tous les joueurs profitent aussi des marqueurs à l'écran et des voix Gemini.</strong> <a href="https://quest-compendium-890629309063.us-east1.run.app/?premium=1&amp;from=site" class="text-[#a87ffb] hover:text-white underline">Passez à la vitesse supérieure quand vous voulez</a>, directement depuis l'application.</p>
     </section>
 
@@ -403,7 +403,7 @@
         </details>
         <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Quelles données sont envoyées, et où ?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
-          <p class="text-zinc-400 mt-3">Quand vous posez une question, l'application envoie votre demande, le nom du jeu et une éventuelle capture d'écran au serveur de Quest Compendium, qui les transmet à l'IA Gemini de Google pour générer la réponse. Si vous vous connectez, vos notes et votre progression sont synchronisées dans le cloud. Tous les détails sont dans notre <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">politique de confidentialité</a>.</p>
+          <p class="text-zinc-400 mt-3">Lorsque vous posez une question, l'application envoie votre demande, le nom du jeu et, si vous en ajoutez une, une capture d'écran au serveur de Quest Compendium, qui les transmet à l'IA d'OpenAI pour rédiger la réponse (Gemini de Google prend le relais si OpenAI est indisponible). Si vous vous connectez, vos notes et votre progression sont synchronisées sur le cloud. Retrouvez tous les détails dans notre <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">politique de confidentialité</a>.</p>
         </details>
         <details id="faq-smartscreen" class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Windows affiche « Windows a protégé votre ordinateur ». Est-ce sûr ?<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
@@ -450,7 +450,7 @@
       <a id="discord-footer" href="#" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">Discord</a>
       <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">Politique de confidentialité</a>
     </div>
-    <p class="mb-2">Propulsé par Google Gemini. Quest Compendium est un projet indépendant et n'est ni affilié à, ni approuvé par Valve, Steam, Microsoft ou Google.</p>
+    <p class="mb-2">Propulsé par OpenAI et Google Gemini. Quest Compendium est un projet indépendant et n'est ni affilié à, ni approuvé par Valve, Steam, Microsoft, OpenAI ou Google.</p>
     <p>&amp;copy; 2026 Quest Compendium</p>
   </footer>
 
@@ -465,7 +465,7 @@
     } else {
       discordLinks.forEach((a) => { a.style.display = "none"; });
       document.querySelectorAll(".qc-discord-mention").forEach((el) => { el.style.display = "none"; });
-    }
+    }
     lucide.createIcons();
   </script>
 <script>(function(){try{var f=new URLSearchParams(location.search).get('from');if(f!=='guide')return;document.querySelectorAll('a[href^="https://quest-compendium-890629309063.us-east1.run.app/?from="]').forEach(function(a){a.href=a.href.replace(/from=[a-z]+/,'from=guide');});}catch(e){}})();</script>

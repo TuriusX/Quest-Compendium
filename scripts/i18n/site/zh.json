@@ -214,5 +214,16 @@
   "Version 0.6.3 beta. Free to try: 2 Pro and 5 Fast questions a day, no credit card.": "版本 0.6.3 测试版。免费试用：每天可提问 2 次 Pro 和 5 次 Fast 问题，无需信用卡。",
   "Standard & Immersive Modes": "标准与沉浸模式",
   "Choose how you want to be helped: Standard for a straight expert guide, or Immersive for the same facts told by a character from the game's world.": "攻略风格由你决定：“标准”是直截了当的专家指南，“沉浸”则由游戏世界中的角色讲述同样的内容。",
-  "Get a thorough answer in Standard or Immersive mode, with a checklist of what to find and, on Windows, markers on the spots it's talking about.": "以标准或沉浸模式获得详尽解答；附带探索清单，Windows 端还支持在目标点位标记屏幕位置。"
+  "Get a thorough answer in Standard or Immersive mode, with a checklist of what to find and, on Windows, markers on the spots it's talking about.": "以标准或沉浸模式获得详尽解答；附带探索清单，Windows 端还支持在目标点位标记屏幕位置。",
+  "Install it from": "通过",
+  "DeckyHub": "DeckyHub",
+  "(search for Quest Compendium), or by URL in Decky's": "安装（搜索 Quest Compendium），或在 Decky 的",
+  "settings:": "设置中通过 URL 安装：",
+  "Step-by-step install guide": "分步安装指南",
+  "Not in the official Decky store.": "未上架 Decky 官方商店。",
+  "Powered by OpenAI's latest models, it recognizes the game you're playing, reads your screenshots, and takes longer to think when a question needs it. Answers stay thorough.": "由 OpenAI 最新模型驱动，它能自动识别你正在玩的游戏、读取你的游戏截图，并在遇到复杂问题时进行深度思考。回答始终详尽透彻。",
+  "(the best answers) or": "（最佳回答）或",
+  "(quicker answers) next to the send button. When one runs out, the other answers.": "（极速回答）模式。当其中一个额度用尽时，另一个会自动接替回答。",
+  "When you ask a question, the app sends your question, the game name and, if you include one, a screenshot to the Quest Compendium server, which passes them to OpenAI's AI to write the answer (Google's Gemini answers if OpenAI is unavailable). If you sign in, your notes and progress sync to the cloud. Details are in the": "当你提问时，应用会将你的问题、游戏名称以及截图（如果有）发送至 Quest Compendium 服务器，再转交给 OpenAI 的 AI 生成回答（若 OpenAI 服务不可用，则由 Google 的 Gemini 接替回答）。登录后，你的笔记和进度将同步到云端。详情请参阅",
+  "Powered by OpenAI and Google Gemini. Quest Compendium is an independent project and is not affiliated with or endorsed by Valve, Steam, Microsoft, OpenAI or Google.": "由 OpenAI 与 Google Gemini 提供技术支持。Quest Compendium 为独立项目，与 Valve、Steam、Microsoft、OpenAI 或 Google 无任何关联，亦未获得其官方认可。"
 }

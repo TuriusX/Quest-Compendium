@@ -117,7 +117,7 @@
           <i data-lucide="external-link" class="w-5 h-5"></i>
           启动网页端
         </a>
-        <a href="#steam-deck" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
+        <a href="../steam-deck/" class="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 font-bold px-8 py-3 rounded-full hover:bg-white/20 transition-colors shadow-lg text-lg w-full sm:w-auto">
           <i data-lucide="gamepad-2" class="w-5 h-5"></i>
           获取 Steam Deck 版
         </a>
@@ -166,11 +166,11 @@
           <p class="text-zinc-400 text-base mb-4">基于 Decky Loader 的快捷插件。呼出快捷访问菜单，点击诸如“我卡关了”等预设，即可获得完美契合当前战况的解答。针对画面的解答会直接在截屏中标注重点，攻略还能在游戏时保持悬浮显示。</p>
           <ol class="text-zinc-400 text-sm space-y-2 mb-4 list-decimal list-inside">
             <li>安装 <a href="https://decky.xyz" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">Decky Loader</a></li>
-            <li>在 Decky 的设置中，开启 <strong class="text-white">开发者模式</strong></li>
-            <li>打开 <strong class="text-white">开发者</strong>，选择 <strong class="text-white">通过 URL 安装插件</strong> 并输入：</li>
+            <li>通过 <a href="https://deckyhub.com" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">DeckyHub</a> 安装（搜索 Quest Compendium），或在 Decky 的 <strong class="text-white">开发者</strong> 设置中通过 URL 安装：</li>
           </ol>
           <code class="block text-xs bg-black/40 border border-white/10 rounded-lg p-3 text-zinc-300 break-all select-all mb-3">https://github.com/TuriusX/Quest-Compendium-Decky/releases/latest/download/quest-compendium-decky.zip</code>
-          <p class="text-sm text-zinc-500 mt-auto">尚未上架 Decky 商店，需手动安装。 <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub 源代码</a></p>
+          <a href="../steam-deck/" class="inline-flex items-center gap-2 text-[#a87ffb] hover:text-white font-semibold mb-3">分步安装指南 <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
+          <p class="text-sm text-zinc-500 mt-auto">未上架 Decky 官方商店。 <a href="https://github.com/TuriusX/Quest-Compendium-Decky" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">GitHub 源代码</a></p>
         </div>
       </div>
     </section>
@@ -264,7 +264,7 @@
         <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
           <i data-lucide="brain" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
           <h3 class="text-xl font-bold text-white mb-2">情境感知 AI</h3>
-          <p class="text-zinc-400 text-base">由 Gemini 强力驱动，可精准识别正在运行的游戏、分析屏幕截图，并针对复杂问题深入推演，始终奉上详尽解答。</p>
+          <p class="text-zinc-400 text-base">由 OpenAI 最新模型驱动，它能自动识别你正在玩的游戏、读取你的游戏截图，并在遇到复杂问题时进行深度思考。回答始终详尽透彻。</p>
         </div>
         <div class="bg-white/5 border border-white/10 rounded-2xl p-6">
           <i data-lucide="drama" class="w-8 h-8 text-[#a87ffb] mb-4"></i>
@@ -356,7 +356,7 @@
           <p class="text-xs text-zinc-500 mt-2 text-center">登录后通过 Stripe 安全支付。随时可取消。</p>
         </div>
       </div>
-      <p class="text-center text-zinc-400 mt-4">在发送按钮旁选择 <strong class="text-white">Pro</strong> （Gemini Pro，提供最佳回答）或 <strong class="text-white">Fast</strong> （Gemini Flash，响应更迅速）。一种用完时，会自动切换至另一种作答。</p>
+      <p class="text-center text-zinc-400 mt-4">在发送按钮旁选择 <strong class="text-white">Pro</strong> （最佳回答）或 <strong class="text-white">Fast</strong> （极速回答）模式。当其中一个额度用尽时，另一个会自动接替回答。</p>
       <p class="text-center text-zinc-400 mt-3"><strong class="text-white">测试期间，所有玩家均可体验屏幕标记功能和 Gemini 语音。</strong> <a href="https://quest-compendium-890629309063.us-east1.run.app/?premium=1&amp;from=site" class="text-[#a87ffb] hover:text-white underline">随时升级</a>，也可以直接在应用内完成。</p>
     </section>
 
@@ -403,7 +403,7 @@
         </details>
         <details class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">它会发送哪些数据？发送到哪里？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
-          <p class="text-zinc-400 mt-3">提问时，应用会将你的问题、游戏名称以及截图（如果有）发送到 Quest Compendium 服务器，随后转交给 Google 的 Gemini AI 生成回答。如果你登录了账号，笔记和进度还会同步到云端。详情请参阅 <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">隐私政策</a>.</p>
+          <p class="text-zinc-400 mt-3">当你提问时，应用会将你的问题、游戏名称以及截图（如果有）发送至 Quest Compendium 服务器，再转交给 OpenAI 的 AI 生成回答（若 OpenAI 服务不可用，则由 Google 的 Gemini 接替回答）。登录后，你的笔记和进度将同步到云端。详情请参阅 <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="text-[#a87ffb] hover:text-white">隐私政策</a>.</p>
         </details>
         <details id="faq-smartscreen" class="bg-white/5 border border-white/10 rounded-2xl p-5">
           <summary class="flex items-center justify-between gap-4 font-bold text-white">Windows 提示“Windows 已保护你的电脑”，安全吗？<i data-lucide="chevron-down" class="qc-chevron w-5 h-5 text-zinc-500 transition-transform shrink-0"></i></summary>
@@ -450,7 +450,7 @@
       <a id="discord-footer" href="#" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">Discord</a>
       <a href="https://quest-compendium-890629309063.us-east1.run.app/privacy" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">隐私政策</a>
     </div>
-    <p class="mb-2">由 Google Gemini 提供技术支持。Quest Compendium 是一个独立项目，与 Valve、Steam、Microsoft 或 Google 无任何从属或认可关系。</p>
+    <p class="mb-2">由 OpenAI 与 Google Gemini 提供技术支持。Quest Compendium 为独立项目，与 Valve、Steam、Microsoft、OpenAI 或 Google 无任何关联，亦未获得其官方认可。</p>
     <p>&amp;copy; 2026 Quest Compendium</p>
   </footer>
 
@@ -465,7 +465,7 @@
     } else {
       discordLinks.forEach((a) => { a.style.display = "none"; });
       document.querySelectorAll(".qc-discord-mention").forEach((el) => { el.style.display = "none"; });
-    }
+    }
     lucide.createIcons();
   </script>
 <script>(function(){try{var f=new URLSearchParams(location.search).get('from');if(f!=='guide')return;document.querySelectorAll('a[href^="https://quest-compendium-890629309063.us-east1.run.app/?from="]').forEach(function(a){a.href=a.href.replace(/from=[a-z]+/,'from=guide');});}catch(e){}})();</script>
