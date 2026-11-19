@@ -20,6 +20,10 @@ r = normalizeRouting({ openaiPro: "gpt-6.2-sol", openaiFast: "gpt-6-luna", opena
 assert.equal(openaiModelFor(r, { pro: false, uid: "owner" }), "gpt-6-luna");
 assert.equal(openaiModelFor(r, { pro: false, uid: "someone" }), "");
 assert.equal(openaiModelFor(r, { pro: true, uid: "" }), "");
+// The owner's accounts, when openaiOwner is on.
+r = normalizeRouting({ openaiPro: "gpt-6.2-sol", openaiOwner: true });
+assert.equal(openaiModelFor(r, { pro: true, uid: "x", owner: true }), "gpt-6.2-sol");
+assert.equal(openaiModelFor(r, { pro: true, uid: "x" }), "");
 
 // A share: the same player always gets the same answer; roughly the share of players.
 r = normalizeRouting({ openaiPro: "gpt-6.2-sol", openaiFast: "gpt-6-luna", openaiShare: 25 });

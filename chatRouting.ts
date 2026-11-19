@@ -23,14 +23,16 @@ export type Routing = {
    * (the owner's test first). Gemini answers when OpenAI is down, slow, or not set up (no OPENAI_API_KEY).
    */
   openaiPro: string; openaiFast: string; openaiShare: number; openaiUids: string[];
+  /** The owner's accounts (ADMIN_EMAILS) get OpenAI whatever the share: the owner tries it first. */
+  openaiOwner: boolean;
 };
-export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [] };
+export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [], openaiOwner: false };
 
 /** The OpenAI model for this question, or '' for Gemini. A stable share of players: by a hash of the account id. */
-export function openaiModelFor(r: Routing, o: { pro: boolean; uid: string }): string {
+export function openaiModelFor(r: Routing, o: { pro: boolean; uid: string; owner?: boolean }): string {
   const model = o.pro ? r.openaiPro : r.openaiFast;
   if (!model || !o.uid) return '';
-  if (r.openaiUids.includes(o.uid)) return model;
+  if (r.openaiUids.includes(o.uid) || (r.openaiOwner && o.owner)) return model;
   if (r.openaiShare <= 0) return '';
   if (r.openaiShare >= 100) return model;
   let h = 0;
@@ -66,6 +68,7 @@ export function normalizeRouting(d: any): Routing {
     openaiFast: /^gpt-[a-z0-9.-]+$/i.test(String(d?.openaiFast || '')) ? String(d.openaiFast) : '',
     openaiShare: Number.isFinite(Number(d?.openaiShare)) ? Math.max(0, Math.min(100, Number(d.openaiShare))) : 0,
     openaiUids: Array.isArray(d?.openaiUids) ? d.openaiUids.map(String).filter(Boolean).slice(0, 50) : [],
+    openaiOwner: d?.openaiOwner === true,
   };
 }
 

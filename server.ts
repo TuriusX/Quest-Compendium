@@ -1909,7 +1909,7 @@ percentages:
           if (usePro) modelUsed = 'Gemini 3.1 Pro';
           // OpenAI answers (openaiAnswer.ts; config/chatRouting openaiPro / openaiFast, for a share of players): the app's
           // Pro and Fast, not the website (yet). Gemini answers instead when OpenAI is down or overloaded.
-          const oaModel = !site && (usePro || fastApp) && openaiReady() && !evalCapture ? openaiModelFor(routingCfg, { pro: usePro, uid: String(userId || '') }) : '';
+          const oaModel = !site && (usePro || fastApp) && openaiReady() && !evalCapture ? openaiModelFor(routingCfg, { pro: usePro, uid: String(userId || ''), owner: isOwnerEmail(typeof (req as any).user?.email === 'string' ? String((req as any).user.email).trim().toLowerCase() : null) }) : '';
           const heard: { text?: string; seconds?: number } = {};
           const modelOf = (r: any) => (typeof r?.model === 'string' && /^gpt-/i.test(r.model) ? r.model : answerModel);
           const geminiCall = (sys: string, withSearch: boolean): Promise<any> => ai.models.generateContent(answerParams(sys, withSearch));
