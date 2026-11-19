@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Quest Compendium PlayStation controllers</title></head>
+<body>
+<script>
+  'use strict';
+  // Reads PlayStation controllers' input reports (sonyPads.cjs). This window's session may open only Sony game
+  // controllers; the reports go to the main process as they come.
+  const PRODUCTS = { 0x0ce6: 'dualsense', 0x0df2: 'dualsense', 0x05c4: 'ds4', 0x09cc: 'ds4', 0x0ba0: 'ds4' };
+  const open = new Set();
+  let n = 0;
+  async function attach(dev) {
+    const kind = PRODUCTS[dev.productId];
+    if (dev.vendorId !== 0x054c || !kind || open.has(dev)) return;
+    open.add(dev);
+    try {
+      if (!dev.opened) await dev.open();
+    } catch (e) {
+      open.delete(dev);
+      window.qcSonyPads.log(`couldn't open ${dev.productName}: ${e && e.message}`);
+      return;
+    }
+    const key = `${kind}-${++n}`;
+    window.qcSonyPads.log(`reading ${dev.productName} (${kind})`);
+    dev.addEventListener('inputreport', (e) => {
+      window.qcSonyPads.report({ key, kind, reportId: e.reportId, data: new Uint8Array(e.data.buffer, e.data.byteOffset, e.data.byteLength) });
+    });
+  }
+  let first = true;
+  async function scan() {
+    if (!navigator.hid) return window.qcSonyPads.log('no WebHID');
+    const list = await navigator.hid.getDevices();
+    if (first) { first = false; window.qcSonyPads.log(`started: ${list.length} PlayStation controller(s) found`); }
+    for (const d of list) await attach(d);
+  }
+  if (navigator.hid) {
+    navigator.hid.addEventListener('connect', (e) => attach(e.device));
+    navigator.hid.addEventListener('disconnect', (e) => open.delete(e.device));
+  }
+  scan();
+  // A controller turned on later: the connect event usually tells; this catches the rest.
+  setInterval(scan, 3000);
+</script>
+</body>
+</html>

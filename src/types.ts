@@ -337,6 +337,8 @@ export interface AppSettings {
   locateShortcut?: string;
   /** The quick menu (the wheel) from the keyboard: hold and point with the mouse, or tap (default Alt+Q). */
   quickMenuShortcut?: string;
+  /** The microphone for voice questions (a device id; empty: Windows' default). Nov 18 2026: a DualSense's mic. */
+  micDeviceId?: string;
   /** Find the markers again on the screen as it is now (default Ctrl+Shift+M; markers v2). */
   findMarkersShortcut?: string;
   enableThematicBanners?: boolean;

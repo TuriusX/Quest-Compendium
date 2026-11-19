@@ -170,6 +170,16 @@ function createControllerService(opts) {
       lt = Math.max(lt, g.bLeftTrigger || 0);
       rt = Math.max(rt, g.bRightTrigger || 0);
     }
+    // PlayStation controllers read directly (sonyPads.cjs; owner, Nov 18 2026): merged the same way.
+    for (const g of (opts.extraPads ? opts.extraPads() : [])) {
+      buttons |= g.wButtons;
+      if (Math.abs(g.sThumbLX) > Math.abs(lx)) lx = g.sThumbLX;
+      if (Math.abs(g.sThumbLY) > Math.abs(ly)) ly = g.sThumbLY;
+      if (Math.abs(g.sThumbRY) > Math.abs(ry)) ry = g.sThumbRY;
+      if (Math.abs(g.sThumbRX || 0) > Math.abs(rx)) rx = g.sThumbRX || 0;
+      lt = Math.max(lt, g.bLeftTrigger || 0);
+      rt = Math.max(rt, g.bRightTrigger || 0);
+    }
     heldBits = buttons | (lt > 30 ? 0x10000 : 0) | (rt > 30 ? 0x20000 : 0);
 
     // Show / hide combo (a 1-second hold or a double-tap). Works whether or not the overlay is visible.

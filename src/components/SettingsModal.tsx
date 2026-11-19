@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { formatShortcut } from '../utils/shortcut';
 import { keyLabel, shortcutKeys, sameShortcut } from '../utils/shortcut';
 import { 
@@ -6,6 +6,7 @@ import {
   Sparkles, 
   Palette, 
   Volume2, 
+  Mic, 
   Gamepad2, 
   Check,
   Maximize2,
@@ -177,6 +178,46 @@ const PAD_PRESETS = ['hold-ls-rs', 'hold-guide', 'hold-view-menu', 'double-view'
 const PAD_BUTTONS = ['a', 'b', 'x', 'y', 'lb', 'rb', 'back', 'start', 'ls', 'rs'] as const;
 /** Same rule as the desktop app: two buttons or more, or View, Menu, L3 or R3 on its own. */
 const customComboOk = (b: string[]) => b.length >= 2 || (b.length === 1 && ['back', 'start', 'ls', 'rs'].includes(b[0]));
+
+/**
+ * The microphone voice questions use (owner, Nov 18 2026: a DualSense's mic): Windows' default, or one picked here.
+ * The list follows devices plugged in or out. A PlayStation controller's mic only exists over a USB cable (Windows
+ * gets no controller audio over Bluetooth), which the note says.
+ */
+function MicPicker({ value, onChange, tr }: { value: string; onChange: (id: string) => void; tr: (k: string, v?: Record<string, string | number>) => string }) {
+  const [mics, setMics] = useState<{ id: string; label: string }[]>([]);
+  useEffect(() => {
+    const md = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
+    if (!md?.enumerateDevices) return;
+    const load = () => md.enumerateDevices()
+      .then((all) => setMics(all.filter((d) => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
+        .map((d, i) => ({ id: d.deviceId, label: d.label || tr('set.micUnnamed', { n: i + 1 }) }))))
+      .catch(() => {});
+    load();
+    md.addEventListener?.('devicechange', load);
+    return () => md.removeEventListener?.('devicechange', load);
+  }, []);
+  const missing = value && !mics.some((m) => m.id === value);
+  return (
+    <div className="space-y-2.5">
+      <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+        <Mic className="w-4 h-4 text-[var(--accent-color)]" />
+        <span>{tr('set.mic')}</span>
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={tr('set.mic')}
+        className="w-full bg-black/60 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-[var(--accent-border)] cursor-pointer"
+      >
+        <option value="" className="bg-zinc-900 text-white">{tr('set.micDefault')}</option>
+        {mics.map((m) => <option key={m.id} value={m.id} className="bg-zinc-900 text-white">{m.label}</option>)}
+        {missing && <option value={value} className="bg-zinc-900 text-white">{tr('set.micGone')}</option>}
+      </select>
+      <p className="text-[11px] text-zinc-500">{tr('set.micNote')}</p>
+    </div>
+  );
+}
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -811,6 +852,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     ))}
                   </select>
                 </div>
+
+                {/* Microphone (Nov 18 2026): which one voice questions use. */}
+                <MicPicker value={settings.micDeviceId || ''} onChange={(id) => { playBlipSound(soundEnabled); onUpdateSettings({ micDeviceId: id }); }} tr={tr} />
               </div>
             )}
 

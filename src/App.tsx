@@ -3994,6 +3994,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
                 onAppendToNotes={handleAppendToNotes}
                 markerLifetime={settings.markerLifetime ?? 120}
                 hintMode={settings.hintMode === true}
+                micDeviceId={settings.micDeviceId || ''}
                 onOpenPremium={() => setIsPaywallOpen(true)}
                 onChangeMarkerLifetime={(seconds) => setSettings((s) => ({ ...s, markerLifetime: seconds }))}
                 onSetPlace={handleSetPlace}

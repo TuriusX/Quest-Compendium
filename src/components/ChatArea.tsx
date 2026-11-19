@@ -104,6 +104,8 @@ interface ChatAreaProps {
   onChangeMarkerLifetime?: (seconds: number) => void;
   /** Hint mode (Settings): "Just a hint" among the quick questions. */
   hintMode?: boolean;
+  /** The microphone for voice questions (Settings; empty: Windows' default). */
+  micDeviceId?: string;
   /** A free player out of questions: See Premium on the card under the limit message. */
   onOpenPremium?: () => void;
   /** The quest log is attached and showing: the controller's LB / RB reach it between Ask and Guide. */
@@ -266,6 +268,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   markerLifetime,
   onChangeMarkerLifetime,
   hintMode = false,
+  micDeviceId = '',
   onOpenPremium,
   logAttached = false,
   questLog,
@@ -572,7 +575,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     playBlipSound(soundEnabled);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // The microphone picked in Settings, else Windows' default (also when the picked one is unplugged).
+      const stream = await (micDeviceId
+        ? navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: micDeviceId } } }).catch(() => navigator.mediaDevices.getUserMedia({ audio: true }))
+        : navigator.mediaDevices.getUserMedia({ audio: true }));
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];

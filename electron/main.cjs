@@ -98,6 +98,7 @@ const { spawn } = require('child_process');
 const { createControllerService } = require('./controller.cjs');
 const { createWheel } = require('./wheel.cjs');
 const { createAnswerCard } = require('./answerCard.cjs');
+const { createSonyPads } = require('./sonyPads.cjs');
 const { createDrawLayer } = require('./drawLayer.cjs');
 const { createGuideBrowser, PARTITION: GUIDE_PARTITION } = require('./guideBrowser.cjs');
 const { createFocusHelper } = require('./focus.cjs');
@@ -286,6 +287,7 @@ app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5
 
 let isAppVisible = true;
 let controllerService = null;
+let sonyPads = null; // PlayStation controllers read directly (sonyPads.cjs)
 let quickWheel = null; // the quick menu over the game (wheel.cjs)
 let answerCard = null; // the answer card over the game (answerCard.cjs)
 // When something was asked from the quick menu with the panel away: its answer goes on the answer card, and nothing
@@ -890,7 +892,12 @@ app.whenReady().then(() => {
 
   // Controller support: show/hide with a held button chord (even while a game is focused), and drive the
   // overlay with the controller while it's visible. See controller.cjs.
+  // PlayStation controllers, wired or Bluetooth, read directly (XInput sees only Xbox-style pads): merged with them.
+  sonyPads = createSonyPads();
+  sonyPads.onKind((kind) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-kind', kind); });
+  sonyPads.start();
   controllerService = createControllerService({
+    extraPads: () => sonyPads.states(),
     isVisible: () =>
       (!!mainWindow && !mainWindow.isDestroyed() && isAppVisible && mainWindow.isVisible()) ||
       quickWheel.isOpen() ||
@@ -1590,7 +1597,7 @@ ipcMain.on('set-controller-config', (event, cfg) => {
   if (controllerService) controllerService.setConfig(cfg || {});
 });
 
-ipcMain.handle('get-controller-status', async () => ({ available: !!(controllerService && controllerService.available) }));
+ipcMain.handle('get-controller-status', async () => ({ available: !!(controllerService && controllerService.available), kind: sonyPads && sonyPads.connected() ? 'playstation' : null }));
 
 // The app's labels for the quick menu over the game (localized), and its page strings.
 ipcMain.on('quick-menu-items', (event, { items, strings } = {}) => {

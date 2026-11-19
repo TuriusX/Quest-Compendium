@@ -1046,8 +1046,13 @@ export function ControllerLayer({
       cardRef.current = null;
       setTimeout(() => setFocus(defaultStop()), 200);
     });
+    // A PlayStation controller read by the desktop app: its button names (when the style is Auto).
+    api.onControllerKind?.((kind: string) => { if (kind === 'playstation') setDetected('playstation'); });
     Promise.resolve(api.getControllerStatus?.())
-      .then((s: any) => setDesktopPad(!!s?.available))
+      .then((s: any) => {
+        setDesktopPad(!!s?.available);
+        if (s?.kind === 'playstation') setDetected('playstation');
+      })
       .catch(() => setDesktopPad(false));
   }, [setFocus]);
 

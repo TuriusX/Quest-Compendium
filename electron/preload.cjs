@@ -147,5 +147,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setControllerConfig: (cfg) => ipcRenderer.send('set-controller-config', cfg),
   getControllerStatus: () => ipcRenderer.invoke('get-controller-status'),
   onControllerInput: (callback) => { ipcRenderer.removeAllListeners('controller-input'); ipcRenderer.on('controller-input', (event, evt) => callback(evt)); },
+  // A PlayStation controller started sending (sonyPads.cjs): the app shows its button names.
+  onControllerKind: (callback) => { ipcRenderer.removeAllListeners('controller-kind'); ipcRenderer.on('controller-kind', (event, kind) => callback(String(kind || ''))); },
   onControllerActivated: (callback) => { ipcRenderer.removeAllListeners('controller-activated'); ipcRenderer.on('controller-activated', () => callback()); }
 });
