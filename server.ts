@@ -60,6 +60,7 @@ import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
 import { HINT_LEVELS_RULES, extractHints } from './src/utils/hintLevels';
+import { CARD_SUMMARY_PROMPT, summaryInput, cleanSummary } from './src/utils/cardSummary';
 import { decidePremium, stripeViewFor, cachedStripeView, forgetStripeView } from './premium';
 import { recordDailyCost, recordLimitHit, recordAnswerGame } from './searchGuard';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, playerSearchesToday, recordPlayerSearches, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
@@ -2317,6 +2318,44 @@ percentages:
     }
   };
   app.post('/api/chat', requireAuth, chatHandler);
+
+  /**
+   * The pop-up's summary (owner, Nov 19 2026): what to do now, from the finished answer, shown and read aloud on the
+   * card over the game (src/utils/cardSummary.ts). Its own small call, so the answer itself is never changed by it.
+   * Flash, no searches, a few hundred tokens: about $0.0005. Nothing comes back when it fails (the card shows the
+   * answer instead).
+   */
+  const cardSummaryCalls = new Map<string, number[]>();
+  app.post('/api/card-summary', requireAuth, async (req, res) => {
+    try {
+      const answer = String(req.body?.answer || '');
+      const question = String(req.body?.question || '');
+      if (answer.trim().length < 40) return res.json({ summary: '' });
+      // At most 30 a minute for one player (one per answer is plenty).
+      const who = String((req as any).user?.uid || req.ip || 'anon');
+      const now = Date.now();
+      const recent = (cardSummaryCalls.get(who) || []).filter((t) => now - t < 60_000);
+      if (recent.length >= 30) return res.json({ summary: '' });
+      recent.push(now);
+      cardSummaryCalls.set(who, recent);
+      if (cardSummaryCalls.size > 5000) cardSummaryCalls.clear();
+      const ai = getGeminiClient();
+      const r: any = await withTimeout(
+        ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: [{ role: 'user', parts: [{ text: summaryInput(question, answer, req.body?.hint === true) }] }],
+          config: { systemInstruction: CARD_SUMMARY_PROMPT, temperature: 0.2, maxOutputTokens: 400, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+        }),
+        12000,
+        'card summary',
+      );
+      logUsage('card-summary', 'gemini-3.8-flash', r);
+      return res.json({ summary: cleanSummary(r?.text || '') });
+    } catch (err: any) {
+      console.log('card summary failed:', err?.message);
+      return res.json({ summary: '' });
+    }
+  });
 
   /**
    * One website question through the app's answer code (chatHandler). Limits, App Check and the cap are checked in siteAsk.ts

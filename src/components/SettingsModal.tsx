@@ -441,6 +441,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       role="switch"
+                      aria-checked={settings.popupReadAloud !== false}
+                      onClick={() => { playBlipSound(soundEnabled); onUpdateSettings({ popupReadAloud: settings.popupReadAloud === false }); }}
+                      className="w-full flex items-center justify-between gap-3 p-3 rounded-xl border border-white/[0.08] bg-black/30 hover:border-white/20 text-left cursor-pointer"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold text-zinc-200">{tr('set.popupReadAloud')}</span>
+                        <span className="block text-[11px] text-zinc-500">{tr('set.popupReadAloudHint')}</span>
+                      </span>
+                      <span className={`w-9 h-5 rounded-full p-0.5 flex flex-shrink-0 transition-colors ${settings.popupReadAloud !== false ? 'bg-[var(--accent-color)] justify-end' : 'bg-white/15 justify-start'}`}>
+                        <span className="w-4 h-4 rounded-full bg-white" />
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      role="switch"
                       aria-checked={settings.recapCard !== false}
                       onClick={() => { playBlipSound(soundEnabled); onUpdateSettings({ recapCard: settings.recapCard === false }); }}
                       className="w-full flex items-center justify-between gap-3 p-3 rounded-xl border border-white/[0.08] bg-black/30 hover:border-white/20 text-left cursor-pointer"

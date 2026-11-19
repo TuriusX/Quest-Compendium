@@ -800,6 +800,9 @@ app.whenReady().then(() => {
       // The hint's next level (session companion step 2): the app opens it, and the card shows it.
       if (what === 'hint' && a && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('quick-action', `hint:${a.id}`);
     },
+    // The summary read aloud by the app (its voice setting), or stopped (null); the speaker button's choice is kept.
+    onSpeak: (s) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('card-speak', s); },
+    onSpeakPref: (on) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('card-speak-pref', !!on); },
   });
   // Asked over the game (the quick menu, or a keyboard shortcut with the panel away): the card shows the question,
   // thinking, and the answer lands there; the panel never comes in by itself (owner, Nov 17-18 2026).
@@ -1642,6 +1645,7 @@ ipcMain.on('card-stage', (event, s) => {
 });
 // Settings: the pop-up's size and corner.
 ipcMain.on('set-card-prefs', (event, p) => { if (answerCard) answerCard.setPrefs(p || {}); });
+ipcMain.on('card-speaking', (event, on) => { if (answerCard) answerCard.speaking(!!on); });
 
 ipcMain.on('toggle-slide', () => {
   if (isAppVisible) {

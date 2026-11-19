@@ -88,7 +88,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   answerArrived: (a) => ipcRenderer.send('answer-arrived', a && typeof a === 'object' ? {
     id: String(a.id || ''), question: String(a.question || ''), title: String(a.title || ''), text: String(a.text || ''),
     steps: Array.isArray(a.steps) ? a.steps.slice(0, 8).map((s) => ({ kind: String((s && s.kind) || 'step'), label: String((s && s.label) || ''), where: String((s && s.where) || '') })) : [],
-    model: String(a.model || ''), place: String(a.place || ''), combat: !!a.combat, hintNext: String(a.hintNext || ''),
+    model: String(a.model || ''), place: String(a.place || ''), combat: !!a.combat, hintNext: String(a.hintNext || ''), summary: String(a.summary || ''),
     picture: a.picture && typeof a.picture.url === 'string' ? { url: a.picture.url, credit: String(a.picture.credit || ''), video: !!a.picture.video, wide: !!a.picture.wide, tag: String(a.picture.tag || '') } : null,
   } : null),
   // Asked from the panel while a game runs: the panel slides away and the answer pops up over the game.
@@ -96,7 +96,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The pop-up while it thinks: the question was sent (and to which model).
   cardStage: (s) => ipcRenderer.send('card-stage', s && typeof s === 'object' ? { sent: !!s.sent, model: String(s.model || ''), place: String(s.place || '') } : {}),
   // Settings: the pop-up's size (s / m / l) and corner (tr / tl / br / bl).
-  setCardPrefs: (p) => ipcRenderer.send('set-card-prefs', p && typeof p === 'object' ? { size: String(p.size || 'm'), corner: String(p.corner || 'tr') } : {}),
+  setCardPrefs: (p) => ipcRenderer.send('set-card-prefs', p && typeof p === 'object' ? { size: String(p.size || 'm'), corner: String(p.corner || 'tr'), speak: p.speak !== false } : {}),
+  // The pop-up's summary to read aloud ({ id, text }), or stop reading (null); the speaker button's choice; and back,
+  // whether it's being read (the card waits for it).
+  onCardSpeak: (callback) => { ipcRenderer.removeAllListeners('card-speak'); ipcRenderer.on('card-speak', (event, s) => callback(s && typeof s === 'object' ? { id: String(s.id || ''), text: String(s.text || '') } : null)); },
+  onCardSpeakPref: (callback) => { ipcRenderer.removeAllListeners('card-speak-pref'); ipcRenderer.on('card-speak-pref', (event, on) => callback(!!on)); },
+  cardSpeaking: (on) => ipcRenderer.send('card-speaking', !!on),
   // The Guides tab's browser (guideBrowser.cjs): web tabs laid over the panel's page area.
   guideBrowser: {
     open: (url, background) => ipcRenderer.invoke('gb:open', { url: String(url || ''), background: !!background }),

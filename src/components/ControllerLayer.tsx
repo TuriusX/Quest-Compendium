@@ -621,6 +621,7 @@ export function ControllerLayer({
           thinking: t('pad.cardThinking'), gotScreen: t('card.gotScreen'), sending: t('card.sending'), asking: t('card.asking'), proChecking: t('card.proChecking'),
           yourScreen: t('card.yourScreen'), more: t('card.more'), open: t('card.open'), moreBelow: t('card.moreBelow'), part: t('card.part'),
           padMore: t('card.padMore'), padOpen: t('card.padOpen'), keysOpen: t('card.keysOpen'), combo: comboLabel,
+          mute: t('card.mute'), unmute: t('card.unmute'),
           askShot: t('pad.shotAsk'), askHelp: t('set.locateKey'), askSpoken: t('pad.cardSpoken'),
         },
       },

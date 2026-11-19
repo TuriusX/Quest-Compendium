@@ -149,6 +149,10 @@ export interface ChatMessage {
   hints?: import('./utils/hintLevels').HintLevels;
   /** How many hint levels are open (1 = only the hint; 2 = the rule too; 3 = the answer too). */
   hintShown?: number;
+  /** Pop-up summary (Nov 19 2026): what to do now, shown and read aloud on the card over the game (utils/cardSummary). */
+  summary?: string;
+  /** The pop-up summary is being made (its own call, after the answer): the card waits for it. */
+  summaryPending?: boolean;
   /** How many facts this answer taught (or re-confirmed for) the game knowledge base. */
   factsSaved?: number;
   /** Corrections to the guide this answer made (candidates to verify): "That's right" on it confirms their area. */
@@ -361,6 +365,8 @@ export interface AppSettings {
   popupCorner?: 'tr' | 'tl' | 'br' | 'bl';
   /** Asking from the panel while a game runs: the panel slides away and the answer pops up (default on). */
   popupHidePanel?: boolean;
+  /** Read the pop-up's summary aloud (default on; the card's speaker button turns it off too). */
+  popupReadAloud?: boolean;
   /** "Where was I?" (session companion step 1): a recap card when a game starts after a day or more (default on). */
   recapCard?: boolean;
   /** The open combo was moved off View + Menu to L3 + R3 (once, Nov 17 2026; App.tsx). */

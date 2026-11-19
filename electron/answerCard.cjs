@@ -11,7 +11,12 @@
  *   update(payload)   the same answer with its picture, arrived later
  *   more()   the rest of the answer in place, then its next part (the quick menu's "More of this answer")
  *   pause() / resume()   while the quick menu is open, or the mouse is over the card
- *   setPrefs({ size, corner })   Settings: Small / Medium / Large, and the corner
+ *   setPrefs({ size, corner, speak })   Settings: Small / Medium / Large, the corner, and reading the summary aloud
+ *   speaking(on)   the summary is being read aloud: the card stays until it's done
+ *
+ * Summaries (owner, Nov 19 2026: quick information to get on with what led to the question): an answer with a summary
+ * (src/utils/cardSummary.ts; its own call after the answer, so the answer never changes) shows the summary, its warnings and its picture; More shows the whole answer. The summary
+ * is read aloud (opts.onSpeak) unless the card's speaker button or Settings turned that off (opts.onSpeakPref).
  */
 const { BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
@@ -33,7 +38,11 @@ const pictureOf = (p) => (p && typeof p.url === 'string' && p.url
   ? { url: p.url, credit: String(p.credit || '').slice(0, 120), video: !!p.video, ...(p.wide ? { wide: true, tag: String(p.tag || '').slice(0, 40) } : {}) }
   : null);
 
-/** @param {{ display: () => Electron.Display, strings: () => object, onAction: (what: string, current: object|null) => void }} opts */
+/**
+ * @param {{ display: () => Electron.Display, strings: () => object, onAction: (what: string, current: object|null) => void,
+ *   onSpeak?: (s: { id: string, text: string } | null) => void, onSpeakPref?: (on: boolean) => void }} opts
+ * onSpeak(null) stops the reading.
+ */
 function createAnswerCard(opts) {
   let win = null;
   let ready = false;
@@ -42,7 +51,8 @@ function createAnswerCard(opts) {
   let current = null; // the answer on the card (or put away), for "Open this answer"
   let thinkingNow = null;
   let shownAt = 0;
-  let prefs = { size: 'm', corner: 'tr' };
+  let prefs = { size: 'm', corner: 'tr', speak: true };
+  let speakingNow = false; // the summary is being read aloud (the timer waits)
   let height = 200;
   let moreState = { more: false, part: 0, parts: 0 };
   let total = 0; // the current timer's full length
@@ -130,6 +140,7 @@ function createAnswerCard(opts) {
   }
 
   function hide() {
+    if (speakingNow || (current && current.summary)) stopSpeaking();
     clearTimeout(timer);
     timer = null;
     shownAt = 0;
@@ -146,7 +157,13 @@ function createAnswerCard(opts) {
     }, 260);
   }
 
-  const look = () => ({ strings: opts.strings(), scale: scale(), bottom: prefs.corner === 'bl' || prefs.corner === 'br', maxHeight: maxHeight() });
+  const look = () => ({ strings: opts.strings(), scale: scale(), bottom: prefs.corner === 'bl' || prefs.corner === 'br', maxHeight: maxHeight(), speak: prefs.speak });
+
+  const speak = () => { if (current && current.summary && prefs.speak && opts.onSpeak) opts.onSpeak({ id: current.id, text: current.summary }); };
+  function stopSpeaking() {
+    if (opts.onSpeak) opts.onSpeak(null);
+    if (speakingNow) { speakingNow = false; resume(); }
+  }
 
   function pause() {
     if (!shownAt || pausedLeft || thinkingNow) return;
@@ -155,7 +172,7 @@ function createAnswerCard(opts) {
     send('card-timer', { left: pausedLeft, total, paused: true });
   }
   function resume() {
-    if (!shownAt || !pausedLeft || mouseOver) return;
+    if (!shownAt || !pausedLeft || mouseOver || speakingNow) return;
     const left = pausedLeft;
     pausedLeft = 0;
     endsAt = Date.now() + left;
@@ -187,6 +204,14 @@ function createAnswerCard(opts) {
     if (what === 'close') return void api.hide();
     if (what === 'open') opts.onAction('open', current);
     if (what === 'hint' && current && current.hintNext) opts.onAction('hint', current);
+    // The speaker button: reading the summary aloud off (it stops now) or on again (it reads this one).
+    if (what === 'speak') {
+      prefs.speak = !prefs.speak;
+      if (opts.onSpeakPref) opts.onSpeakPref(prefs.speak);
+      if (prefs.speak) speak();
+      else stopSpeaking();
+      if (current && shownAt) send('card-show', { ...current, ...look() });
+    }
   });
 
   const api = {
@@ -224,9 +249,19 @@ function createAnswerCard(opts) {
         picture: pictureOf(a.picture),
         // Hint levels: the next level's button ("More of a hint", "Show the answer"), or none.
         hintNext: String(a.hintNext || '').slice(0, 60),
+        // What to do now, shown instead of the answer's start and read aloud (Nov 19 2026).
+        summary: String(a.summary || '').slice(0, 320),
         at: Date.now(),
       };
       moreState = { more: false, part: 0, parts: 0 };
+      if (speakingNow) stopSpeaking();
+      if (current.summary) {
+        const warns = steps.filter((s) => s.kind === 'warning');
+        showFor(readingMs(`${current.title} ${current.summary} ${warns.map((s) => s.label).join(' ')}`, warns.length > 0));
+        send('card-show', { ...current, ...look() });
+        speak();
+        return;
+      }
       const shown = steps.length ? `${current.text.split(/\s+/).slice(0, 60).join(' ')} ${steps.map((s) => `${s.label} ${s.where}`).join(' ')}` : current.text.split(/\s+/).slice(0, 180).join(' ');
       showFor(readingMs(`${current.title} ${shown}`, steps.some((s) => s.kind === 'warning')));
       send('card-show', { ...current, ...look() });
@@ -238,6 +273,7 @@ function createAnswerCard(opts) {
       const text = String(a.text || '').slice(0, 6000);
       if (text && text !== current.text) {
         current.text = text;
+        current.summary = String(a.summary || '').slice(0, 320);
         current.hintNext = String(a.hintNext || '').slice(0, 60);
         current.steps = (Array.isArray(a.steps) ? a.steps : []).slice(0, 8).map((s) => ({ kind: s.kind === 'warning' ? 'warning' : 'step', label: String(s.label || '').slice(0, 160), where: String(s.where || '').slice(0, 160) }));
         moreState = { more: false, part: 0, parts: 0 };
@@ -271,6 +307,22 @@ function createAnswerCard(opts) {
     canMore: () => !!current && !!shownAt && moreState.more,
     pause,
     resume,
+    /** The summary is being read aloud (true) or the reading ended (false): the card stays a little after it ends. */
+    speaking(on) {
+      if (!shownAt || thinkingNow) return;
+      if (on && !speakingNow) {
+        speakingNow = true;
+        if (!pausedLeft) {
+          clearTimeout(timer);
+          pausedLeft = Math.max(1000, endsAt - Date.now());
+          send('card-timer', { left: pausedLeft, total, paused: true });
+        }
+      } else if (!on && speakingNow) {
+        speakingNow = false;
+        if (pausedLeft) pausedLeft = Math.max(pausedLeft, 8000);
+        resume();
+      }
+    },
     hide() {
       current = null;
       hide();
@@ -287,7 +339,7 @@ function createAnswerCard(opts) {
       return current && Date.now() - current.at < 120000 ? current : null;
     },
     setPrefs(p) {
-      prefs = { size: SCALE[p && p.size] ? p.size : 'm', corner: ['tr', 'tl', 'br', 'bl'].includes(p && p.corner) ? p.corner : 'tr' };
+      prefs = { size: SCALE[p && p.size] ? p.size : 'm', corner: ['tr', 'tl', 'br', 'bl'].includes(p && p.corner) ? p.corner : 'tr', speak: !(p && p.speak === false) };
       if (win && !win.isDestroyed()) place();
     },
   };

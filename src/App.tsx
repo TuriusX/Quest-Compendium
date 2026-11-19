@@ -797,8 +797,12 @@ export default function App() {
 
   // Pop-up answers over the game: their size and corner (Settings).
   useEffect(() => {
-    (window as any).electronAPI?.setCardPrefs?.({ size: settings.popupSize || 'm', corner: settings.popupCorner || 'tr' });
-  }, [settings.popupSize, settings.popupCorner]);
+    (window as any).electronAPI?.setCardPrefs?.({ size: settings.popupSize || 'm', corner: settings.popupCorner || 'tr', speak: settings.popupReadAloud !== false });
+  }, [settings.popupSize, settings.popupCorner, settings.popupReadAloud]);
+  // The pop-up's speaker button: its choice is the Settings switch's too.
+  useEffect(() => {
+    (window as any).electronAPI?.onCardSpeakPref?.((on: boolean) => setSettings((s) => ({ ...s, popupReadAloud: on })));
+  }, []);
 
   // Controller: tell the desktop app which chord shows / hides the overlay.
   useEffect(() => {
@@ -1140,6 +1144,9 @@ export default function App() {
     if (!api?.answerArrived || !activeTab) return;
     const msgs = activeTab.messages;
     const last = msgs[msgs.length - 1];
+    // Its pop-up summary is on the way (at most 8 s): the card keeps thinking until it's here.
+    // (One left over from a closed app is ignored.)
+    if (last && last.role === 'assistant' && last.summaryPending && Date.now() - (last.timestamp || 0) < 15000) return;
     const v = last && last.role === 'assistant' && !last.visualHidden ? last.visual : undefined;
     const dr = last && last.role === 'assistant' && !last.drawnHidden ? last.drawn : undefined;
     const closeUp = last ? cardCloseUpRef.current.get(last.id) : undefined;
@@ -1169,6 +1176,8 @@ export default function App() {
       text: textWithHints(String(last.text || ''), last.hints, last.hintShown || 1, { rule: tr('hint.rule'), answer: tr('hint.answer') }).slice(0, 6000),
       steps: (last.hintShown || 1) > 1 ? [] : (last.steps || []).map((s) => ({ kind: s.kind, label: s.label || s.text, where: s.where || '' })),
       hintNext: (() => { const n = nextHintLevel(last.hints, last.hintShown || 1); return n === 2 ? tr('hint.more') : n === 3 ? tr('hint.show') : ''; })(),
+      // What to do now (Nov 19 2026), until a bigger hint level is opened.
+      summary: (last.hintShown || 1) > 1 ? '' : last.summary || '',
       model: /pro/i.test(last.modelUsed || '') ? 'Pro' : last.modelUsed ? 'Fast' : '',
       place: activeTab.place?.name || '',
       combat: !!last.combat,
@@ -2038,6 +2047,36 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
    * Visual answers (owner, Nov 14 2026): after the answer has arrived, one video or picture for it, if one helps
    * (visualServer.ts). The answer itself never waits for this or changes; nothing found (or the feature off) adds nothing.
    */
+  /**
+   * The pop-up's summary (owner, Nov 19 2026): what to do now, made from the finished answer by its own small call
+   * (server: /api/card-summary), so the answer itself is never changed by it. The card waits for it (summaryPending),
+   * at most 8 s; without one it shows the answer as before.
+   */
+  const fetchCardSummary = async (msgId: string, question: string, answer: string, token: string | null, hint: boolean) => {
+    let summary = '';
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 8000);
+      const res = await fetch(`${getApiBaseUrl()}/api/card-summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ question, answer: answer.slice(0, 12000), ...(hint ? { hint: true } : {}) }),
+        signal: ctl.signal,
+      });
+      clearTimeout(timer);
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data?.summary === 'string') summary = data.summary.trim().slice(0, 320);
+      }
+    } catch {
+      /* no summary: the card shows the answer */
+    }
+    updateMessageById(msgId, (m) => {
+      const { summaryPending: _p, ...rest } = m;
+      return summary ? { ...rest, summary } : rest;
+    });
+  };
+
   const fetchVisual = async (msgId: string, question: string, answer: string, game: string, token: string | null, shotOnly = false) => {
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/visual`, {
@@ -3163,6 +3202,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       }
 
       const nowAi = Date.now();
+      // A game is running in the desktop app: the answer may pop up over it, with a summary to show and read aloud.
+      const wantCardSummary = !!((window as any).electronAPI?.answerArrived && globalActiveGame);
       const aiMessage: ChatMessage = {
         id: `msg-${nowAi + 1}`,
         role: 'assistant',
@@ -3185,6 +3226,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
               ...(typeof data.hints.answer === 'string' && data.hints.answer.trim() ? { answer: data.hints.answer.slice(0, 900) } : {}),
             }, hintShown: 1 }
           : {}),
+        // The pop-up's summary (Nov 19 2026) is asked for next, on its own (fetchCardSummary): the card waits for it.
+        ...(wantCardSummary && data.text && String(data.text).trim().length >= 40 ? { summaryPending: true } : {}),
         ...(typeof data.fight === 'string' && data.fight.trim() ? { fight: data.fight.trim().slice(0, 120) } : {}),
         // The quest log's steps: the 1-4 things to keep in front of the player (the tracker's "From your last answer").
         ...(Array.isArray(data.steps) && data.steps.length
@@ -3263,6 +3306,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       if (!placeNow && aiMessage.points?.length && imageBase64 && settings.showPointersOnScreen !== false) {
         refineMarkers(aiMessage.id, imageBase64, aiMessage.points, markerGame, token);
       }
+      if (aiMessage.summaryPending) void fetchCardSummary(aiMessage.id, text, aiMessage.text, token, quick === 'hint' || quick === 'hintInstead');
       // A video or picture under the answer, if one helps (after the answer, never instead of it).
       // A screenshot or voice message with no typed question gets one too (owner, Nov 14 2026): its question is the app's
       // stand-in text, so the server takes the topic from what the answer is about.

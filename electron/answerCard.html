@@ -53,6 +53,14 @@
   .steps .n { width: calc(26px * var(--s)); height: calc(26px * var(--s)); border-radius: 50%; background: var(--accent); color: #16101f; font-weight: 800; font-size: calc(14px * var(--s));
               display: grid; place-items: center; margin-top: calc(1px * var(--s)); }
   .steps small { display: block; font-size: calc(14.5px * var(--s)); color: var(--muted); font-weight: 400; margin-top: 1px; }
+  /* The summary (Nov 19 2026): what to do now, big enough to take in at a glance. */
+  .sum { font-weight: 600; font-size: calc(21px * var(--s)); line-height: 1.38; color: var(--ink); }
+  .spk { flex: none; width: calc(28px * var(--s)); height: calc(28px * var(--s)); border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+         background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .16); color: var(--ink); padding: 0; }
+  .spk:hover { background: rgba(255, 255, 255, .16); }
+  .spk svg { width: 60%; height: 60%; }
+  .spk.off { color: var(--muted); }
+  .topR { display: flex; align-items: center; gap: calc(6px * var(--s)); flex: none; }
   .intro { font-size: calc(17px * var(--s)); line-height: 1.45; color: #ddd8ea; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
   .body { font-size: calc(17px * var(--s)); line-height: 1.45; white-space: pre-line; overflow: hidden; }
   body.expanded .body { overflow-y: auto; scrollbar-width: thin; }
@@ -77,14 +85,16 @@
 <body>
 <div class="card" id="card">
   <div class="in">
-    <div class="top"><span class="place" id="place"></span><span class="chip" id="chip"></span>
-      <span class="btns"><button class="btn primary" id="bMore"></button><button class="btn" id="bOpen"></button><button class="btn" id="bClose">✕</button></span></div>
+    <div class="top"><span class="place" id="place"></span><span class="topR"><span class="chip" id="chip"></span>
+      <span class="btns"><button class="btn primary" id="bMore"></button><button class="btn" id="bOpen"></button><button class="btn" id="bClose">✕</button></span>
+      <button class="spk" id="bSpeak" hidden></button></span></div>
     <div class="head" id="head">
       <div><div class="q" id="q"></div><div class="t" id="title"></div></div>
       <div class="slot" id="slot" hidden><div class="img" id="img"></div><div class="cap" id="cap"></div></div>
     </div>
     <div class="wide" id="wide" hidden><div style="position:relative"><img id="wideImg" alt=""><span class="tag" id="wideTag" hidden></span></div><div class="cap" id="wideCap"></div></div>
     <div class="stages" id="stages" hidden></div>
+    <div class="sum" id="sum" hidden></div>
     <div class="intro" id="intro" hidden></div>
     <div class="warn" id="warn" hidden><span>⚠</span><span id="warnText"></span></div>
     <ol class="steps" id="steps"></ol>
@@ -109,6 +119,17 @@
     .replace(/^\s*[-*]\s+/gm, '• ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+  const ICON_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+  const ICON_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="m16 9 6 6"/><path d="m22 9-6 6"/></svg>';
+  function paintSpeaker(d) {
+    const b = $('bSpeak');
+    b.hidden = !(d && d.state === 'answer' && d.summary);
+    const on = d && d.speak !== false;
+    b.innerHTML = on ? ICON_ON : ICON_OFF;
+    b.classList.toggle('off', !on);
+    b.title = on ? (S.mute || 'Stop reading aloud') : (S.unmute || 'Read aloud');
+    b.setAttribute('aria-label', b.title);
+  }
   const fmt = (s, v) => String(s || '').replace(/\{(\w+)\}/g, (m, k) => (v && v[k] != null ? v[k] : m));
 
   function setPicture(p) {
@@ -173,6 +194,8 @@
     setPicture(d.screen ? { url: d.screen, credit: S.yourScreen } : null);
     $('warn').hidden = true;
     $('intro').hidden = true;
+    $('sum').hidden = true;
+    paintSpeaker(null);
     $('steps').innerHTML = '';
     $('body').hidden = true;
     const st = $('stages');
@@ -209,6 +232,25 @@
     $('title').hidden = !d.title;
     $('title').textContent = d.title || '';
     setPicture(d.picture);
+    paintSpeaker(d);
+    // A summary (Nov 19 2026): what to do now, its warnings and its picture; the whole answer is behind More.
+    $('sum').hidden = !d.summary;
+    $('sum').textContent = d.summary || '';
+    if (d.summary) {
+      $('intro').hidden = true;
+      $('warn').hidden = !warns.length;
+      $('warnText').textContent = warns.map((w) => w.label || w.text).join(' · ');
+      $('steps').innerHTML = '';
+      const b = $('body');
+      b.textContent = text;
+      b.hidden = true;
+      b.style.maxHeight = '';
+      d.hasMore = true;
+      $('timerBar').hidden = false;
+      report();
+      requestAnimationFrame(() => { paintFoot(); report(); });
+      return;
+    }
     // The answer's opening lines above its steps (owner, Nov 18 2026: show more of the answer), up to 4 lines.
     const intro = todo.length ? (text.split(/\n\s*\n/).find((p) => p.trim() && !/^\s*(\d+[.)]|•)/.test(p)) || '') : '';
     $('intro').hidden = !intro;
@@ -246,6 +288,7 @@
       $('steps').innerHTML = '';
       $('warn').hidden = true;
       $('intro').hidden = true;
+      $('sum').hidden = true;
       b.hidden = false;
       b.style.maxHeight = `${Math.max(120, (cur.maxHeight || 600) - 190)}px`;
       b.scrollTop = 0;
@@ -288,6 +331,7 @@
   });
   $('bOpen').addEventListener('click', () => window.qcCard.action('open'));
   $('bClose').addEventListener('click', () => window.qcCard.action('close'));
+  $('bSpeak').addEventListener('click', () => window.qcCard.action('speak'));
   $('wideImg').addEventListener('click', () => { document.body.classList.toggle('bigpic'); report(); });
   $('wideImg').addEventListener('load', () => report());
 </script>

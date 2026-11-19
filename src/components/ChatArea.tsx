@@ -1304,10 +1304,42 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const msgs = activeTab?.messages ?? [];
     const last = msgs[msgs.length - 1];
     if (!last || last.role !== 'assistant') return;
+    // Its pop-up summary is still being made (a second or two): wait for it.
+    if (last.summaryPending) return;
     readAloudPendingRef.current = false;
+    // An answer with a pop-up summary: the card reads the summary instead (or nothing, when it's muted).
+    if (last.summary) return;
     void handlePlayTTS(last.id, last.text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, activeTab?.messages?.length]);
+  }, [isLoading, activeTab?.messages?.length, activeTab?.messages?.[activeTab.messages.length - 1]?.summaryPending]);
+
+  // The pop-up's summary read aloud (Nov 19 2026; electron/answerCard.cjs asks, unless it's muted), in the player's
+  // voice; the card waits while it's read. null: stop reading it (the card closed or was muted).
+  const cardAudioId = useRef<string | null>(null);
+  const playTtsRef = useRef(handlePlayTTS);
+  playTtsRef.current = handlePlayTTS;
+  const stopAudioRef = useRef(stopAllAudio);
+  stopAudioRef.current = stopAllAudio;
+  useEffect(() => {
+    (window as any).electronAPI?.onCardSpeak?.((s: { id: string; text: string } | null) => {
+      if (!s) {
+        if (cardAudioId.current) stopAudioRef.current();
+        return;
+      }
+      if (!s.text.trim()) return;
+      cardAudioId.current = `card:${s.id}`;
+      stopAudioRef.current();
+      void playTtsRef.current(cardAudioId.current, s.text);
+    });
+  }, []);
+  const cardSpeakingRef = useRef(false);
+  useEffect(() => {
+    const on = !!cardAudioId.current && playingAudioId === cardAudioId.current;
+    if (on === cardSpeakingRef.current) return;
+    cardSpeakingRef.current = on;
+    (window as any).electronAPI?.cardSpeaking?.(on);
+    if (!on) cardAudioId.current = null;
+  }, [playingAudioId]);
   const lastAssistantId = (() => {
     const msgs = activeTab?.messages ?? [];
     for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].role === 'assistant') return msgs[i].id;
