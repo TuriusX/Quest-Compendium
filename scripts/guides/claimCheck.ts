@@ -351,11 +351,16 @@ export async function claimCheck(game: string, area: string, slots: ClaimSlot[],
  */
 export function parseClaims(text: string, slots: ClaimSlot[], ev: EvidencePack): ClaimVerdict[] {
   let rows: any[] = [];
+  const raw = text.replace(/```json|```/g, '').trim();
   try {
-    rows = JSON.parse(text.replace(/```json|```/g, '').trim());
+    rows = JSON.parse(raw);
   } catch {
-    rows = [];
+    // A sentence around the list (gpt-6-luna, Nov 19 2026): the list itself.
+    const a = raw.indexOf('['), b = raw.lastIndexOf(']');
+    try { rows = a >= 0 && b > a ? JSON.parse(raw.slice(a, b + 1)) : []; } catch { rows = []; }
   }
+  // The list wrapped in an object ({"claims": [...]}, {"verdicts": [...]}): the first list in it.
+  if (rows && !Array.isArray(rows) && typeof rows === 'object') rows = (Object.values(rows).find((v) => Array.isArray(v)) as any[]) || [];
   const byId = new Map((Array.isArray(rows) ? rows : []).filter((r) => r && r.id).map((r) => [String(r.id).toUpperCase(), r]));
   const ids = new Set(ev.evidence.map((e) => e.id));
   return slots.map((s) => {

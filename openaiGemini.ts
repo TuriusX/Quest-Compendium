@@ -81,7 +81,7 @@ export async function openaiGenerate(request: any, model = openaiFor(request)): 
   const wantsJson = cfg.responseMimeType === 'application/json';
   const search = (cfg.tools || []).some((t: any) => t && (t.googleSearch || t.googleSearchRetrieval));
   const sys = systemOf(cfg.systemInstruction);
-  const instructions = [sys, wantsJson ? 'Reply with JSON only, exactly in the format asked for: no other text, no code fences.' : '', search ? 'Check several different sites (the game\'s wikis and the major guide sites), and cite the page each fact comes from right after that fact. Do not add links or citations beyond the ones the search tool adds.' : ''].filter(Boolean).join('\n\n');
+  const instructions = [sys, wantsJson ? 'Reply with JSON only, exactly in the format asked for: no other text, no code fences. When a list ([...]) is asked for, reply with the list itself, never an object around it.' : '', search ? 'Check several different sites (the game\'s wikis and the major guide sites), and cite the page each fact comes from right after that fact. Do not add links or citations beyond the ones the search tool adds.' : ''].filter(Boolean).join('\n\n');
   const timeout = Number(cfg.httpOptions?.timeout || request?.httpOptions?.timeout || 0) || undefined;
   const r: any = await oa().responses.create({
     model,

@@ -22,9 +22,12 @@ export async function pictureBudget(): Promise<{ nightLeft: number; monthLeft: n
   const month = new Date().toISOString().slice(0, 7), night = nightId();
   let monthUsed = st.month?.id === month ? Number(st.month.dollars) || 0 : 0;
   let nightUsed = st.night?.id === night ? Number(st.night.dollars) || 0 : 0;
+  // The owner's limits (system/imageSuggest.nightlyDollars / monthlyDollars; defaults $0.50 and $5).
+  const perNight = Number(st.nightlyDollars) > 0 ? Number(st.nightlyDollars) : 0.5;
+  const perMonth = Number(st.monthlyDollars) > 0 ? Number(st.monthlyDollars) : 5;
   return {
-    get nightLeft() { return Math.max(0, 0.5 - nightUsed); },
-    get monthLeft() { return Math.max(0, 5 - monthUsed); },
+    get nightLeft() { return Math.max(0, perNight - nightUsed); },
+    get monthLeft() { return Math.max(0, perMonth - monthUsed); },
     add: async (d: number) => {
       monthUsed += d; nightUsed += d;
       await STATE().set({ month: { id: month, dollars: monthUsed }, night: { id: night, dollars: nightUsed } }, { merge: true });

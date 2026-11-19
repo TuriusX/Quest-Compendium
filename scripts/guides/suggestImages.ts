@@ -66,9 +66,21 @@ async function descOf(key: string, t: ImageTarget): Promise<string> {
   return tidy(firstSentence(typeof e.description === 'string' ? e.description : e.summary || ''));
 }
 
-/** The game's top-100 pages (in impressions order) and, for official pictures, its characters, each with a guide line. */
+/**
+ * How many of the most-searched pages the suggester works on (owner, Nov 19 2026: the top 100 were all tried, so it found
+ * nothing new; system/imageSuggest.topCount, default 400).
+ */
+export async function topCount(): Promise<number> {
+  const n = Number(((await STATE().get()).data() as any)?.topCount);
+  return Number.isFinite(n) && n > 0 ? Math.min(2000, n) : 400;
+}
+
+/**
+ * The game's most-searched pages (in impressions order), then its compendium pages (people, places, quests: what
+ * players look up by name; owner, Nov 19 2026), and, for official pictures, its characters, each with a guide line.
+ */
 async function targetsOf(key: string): Promise<{ top: Target[]; all: Target[] }> {
-  const pages = (await pageImpressionList()).slice(0, 100).filter((p) => p.key === key);
+  const pages = (await pageImpressionList()).slice(0, await topCount()).filter((p) => p.key === key);
   const list = await targetsFor(key);
   const desc = (t: ImageTarget) => descOf(key, t);
   const top: Target[] = [];
@@ -76,6 +88,7 @@ async function targetsOf(key: string): Promise<{ top: Target[]; all: Target[] }>
     const t = list.find((x) => (x.kind === 'area' || x.kind === 'entity') && x.slug === p.slug);
     if (t) top.push({ ...t, desc: await desc(t), top: true });
   }
+  for (const t of list.filter((x) => x.kind === 'entity' && !top.some((y) => y.slug === x.slug)).slice(0, 80)) top.push({ ...t, desc: await desc(t), top: true });
   const people = list.filter((t) => t.kind === 'entity' && /character|person|npc|boss|companion/i.test(t.label) && !top.some((x) => x.slug === t.slug)).slice(0, 50);
   const all = [...top];
   for (const t of people) all.push({ ...t, desc: await desc(t), top: false });
@@ -632,18 +645,29 @@ export async function suggestNightly(): Promise<string | null> {
   const st: any = (await STATE().get()).data() || {};
   if (!st.nightly) return null;
   const b = await budget();
+  // The owner's limits (system/imageSuggest.nightlyMax / waitingMax; defaults 15 a night, paused at 30 waiting).
+  const nightlyMax = Number(st.nightlyMax) > 0 ? Number(st.nightlyMax) : 15;
+  const waitingMax = Number(st.waitingMax) > 0 ? Number(st.waitingMax) : 30;
   const waiting = (await db().collection('guideImages').where('status', '==', 'suggested').count().get()).data().count;
-  if (waiting >= 30) return `🖼️ Suggested pictures: paused, ${waiting} wait for review.`;
+  if (waiting >= waitingMax) return `🖼️ Suggested pictures: paused, ${waiting} wait for review.`;
   const cap = Math.min(b.nightLeft, b.monthLeft);
   if (cap <= 0.01) return `🖼️ Suggested pictures: ${b.monthLeft <= 0.01 ? "this month's $5 is used" : "tonight's $0.50 is used (Find another)"}.`;
-  const pages = (await pageImpressionList()).slice(0, 100);
+  const pages = (await pageImpressionList()).slice(0, await topCount());
   const done = st.pages || {};
   const order: string[] = [];
   for (const p of pages) if (!done[`${p.key}/${p.slug}`]?.all && !order.includes(p.key)) order.push(p.key);
+  // Games with compendium pages the suggester hasn't tried yet (they have no impressions of their own yet).
+  const comp = await db().collection('guideCompendium').select().get();
+  for (const c of comp.docs) {
+    if (order.includes(c.id)) continue;
+    const ents = await db().collection('guideCompendium').doc(c.id).collection('entities').where('status', '==', 'published').select().get();
+    if (ents.docs.some((e) => !done[`${c.id}/${e.id}`]?.all)) order.push(c.id);
+  }
   // Its own budget (not the pipeline's): shown every night, so a quiet night still says it ran.
-  const own = () => `$${(5 - b.monthLeft).toFixed(2)} of its own $5 this month`;
-  if (!order.length) return `🖼️ Suggested pictures: every top-100 page has been tried; nothing new tonight (${own()}).`;
-  const r = await suggestGames(order, cap, Math.min(15, 30 - waiting));
+  const monthly = Number(st.monthlyDollars) > 0 ? Number(st.monthlyDollars) : 5;
+  const own = () => `$${(monthly - b.monthLeft).toFixed(2)} of its own $${monthly} this month`;
+  if (!order.length) return `🖼️ Suggested pictures: every page in scope has been tried; nothing new tonight (${own()}).`;
+  const r = await suggestGames(order, cap, Math.min(nightlyMax, waitingMax - waiting));
   await b.add(spent(r));
   await STATE().set({ last: { at: Date.now(), suggested: r.suggested, checked: r.checked, dollars: spent(r) } }, { merge: true });
   return `🖼️ Suggested pictures: ${r.suggested} from ${r.checked} checked ($${spent(r).toFixed(2)}${r.stopped ? `, stopped at ${r.stopped}` : ''}; ${own()}, ${waiting + r.suggested} waiting for you).`;
@@ -665,3 +689,6 @@ async function main() {
   await STATE().set({ last: { at: Date.now(), suggested: r.suggested, checked: r.checked, dollars: spent(r), games } }, { merge: true });
 }
 if (/suggestImages\.ts$/.test(process.argv[1] || '')) main().then(() => setTimeout(() => process.exit(0), 300), (e) => { console.error('suggestImages failed:', String(e?.message || e).replace(/client_secret=[^&\s]+/g, 'client_secret=…')); process.exit(1); });
+
+/** For the picture-judging tests (scripts/evals/pictureJudge.ts): the suggester's own steps. */
+export const forTests = { check: (...a: Parameters<typeof check>) => check(...a), wikiImage: (...a: Parameters<typeof wikiImage>) => wikiImage(...a), download: (u: string) => download(u), forLook: (b: Buffer) => forLook(b), targetsOf: (k: string) => targetsOf(k), fextralifeDomain: (...a: Parameters<typeof fextralifeDomain>) => fextralifeDomain(...a), fextralifeImage: (...a: Parameters<typeof fextralifeImage>) => fextralifeImage(...a) };
