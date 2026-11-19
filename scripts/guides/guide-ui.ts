@@ -63,6 +63,8 @@ export const GUIDE_UI_EN: Record<string, string> = {
   fightWeak: 'Weaknesses and resistances',
   fightTactics: 'Tactics',
   fightRewards: 'Rewards',
+  watchFight: 'Watch the fight',
+  interactiveMap: 'Interactive map',
   walkthrough: 'Walkthrough',
   walkthroughIntro: 'The area in the order you play it. Tick things off as you go: they tick off in the checklists below too.',
   choicesHere: 'Choices here',

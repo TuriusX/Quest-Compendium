@@ -835,6 +835,16 @@ const ICON = {
  */
 let UNCONFIRMED = new Set<string>();
 const unconfirmedTag = () => ` <span class="ml-1 rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-200" title="${esc(ui('unconfirmed'))}">${esc(ui('unconfirmed'))}</span>`;
+/**
+ * A fight's video (scripts/guides/pageVideos.ts, owner Nov 19 2026: media where it helps, without clutter): one small
+ * link with the thumbnail, opening YouTube at the moment that shows the fight. No embedded player on the page.
+ */
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const videoLink = (v: any) => {
+  if (!v || !/^[A-Za-z0-9_-]{6,20}$/.test(String(v.videoId || ''))) return '';
+  const start = Math.max(0, Math.floor(Number(v.start) || 0));
+  return `<a href="https://www.youtube.com/watch?v=${esc(v.videoId)}${start ? `&amp;t=${start}s` : ''}" target="_blank" rel="noopener noreferrer" class="mt-2 flex items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.03] p-1.5 pr-3 text-xs text-zinc-300 hover:border-[#a87ffb]/40 hover:bg-white/[0.06] max-w-md"><img src="https://i.ytimg.com/vi/${esc(v.videoId)}/mqdefault.jpg" alt="" loading="lazy" width="96" height="54" class="h-[54px] w-24 shrink-0 rounded object-cover"><span class="min-w-0"><span class="block font-semibold text-white">▶ ${esc(ui('watchFight'))}${start ? ` · ${mmss(start)}` : ''}</span><span class="block truncate text-zinc-400">${esc(String(v.title || ''))}${v.channel ? ` · ${esc(String(v.channel))}` : ''}</span></span></a>`;
+};
 const checkRow = (id: string, html: string, anchor = false, icon = '') => {
   const ids = id.split('+');
   if (ids.some((x) => UNCONFIRMED.has(x))) html += unconfirmedTag();
@@ -1027,7 +1037,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     ...(a.tips.length ? [['tips', ui('tips')] as [string, string]] : []),
   ];
   const jump = sectionLinks.length > 2
-    ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex xl:hidden flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">${esc(ui('onThisPage'))}:</span>${sectionLinks.map(([id, label]) => `<a href="#${id}" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(label)}</a>`).join('')}</nav>`
+    ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex xl:hidden flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">${esc(ui('onThisPage'))}:</span>${sectionLinks.map(([id, label]) => `<a href="#${id}" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(label)}</a>`).join('')}${mapLinkHtml(gameKey, 'rounded-md border border-white/10 bg-white/[0.03] px-2 py-1')}</nav>`
     : '';
   // Prefer the page's own quest list (its summary box) over names found in the entries.
   const quests = a.info?.quests?.length ? [] : relatedQuests(a);
@@ -1075,7 +1085,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
   const fightRow = (label: string, v?: string) => (v ? `<p class="mt-1 text-sm text-zinc-300"><span class="text-zinc-500">${esc(label)}:</span> ${esc(v)}</p>` : '');
   const fights = (a.fights || []).length
     ? `<div class="space-y-2">${(a.fights || [])
-        .map((f) => `<div id="${esc(f.id)}" class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="flex items-center gap-2 font-semibold text-white">${entryIconSvg('boss')}${esc(f.name)}${(f as any).unconfirmed ? unconfirmedTag() : ''}</div>${fightRow(ui('fightEnemies'), f.enemies)}${fightRow(ui('fightThreats'), f.threats)}${fightRow(ui('fightWeak'), f.weaknesses)}${fightRow(ui('fightTactics'), f.tactics)}${fightRow(ui('fightRewards'), f.rewards)}</div>`)
+        .map((f) => `<div id="${esc(f.id)}" class="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5"><div class="flex items-center gap-2 font-semibold text-white">${entryIconSvg('boss')}${esc(f.name)}${(f as any).unconfirmed ? unconfirmedTag() : ''}</div>${fightRow(ui('fightEnemies'), f.enemies)}${fightRow(ui('fightThreats'), f.threats)}${fightRow(ui('fightWeak'), f.weaknesses)}${fightRow(ui('fightTactics'), f.tactics)}${fightRow(ui('fightRewards'), f.rewards)}${videoLink((f as any).video)}</div>`)
         .join('')}</div>`
     : '';
   const shops = a.shops.length ? `<ul class="space-y-1.5 px-3">${a.shops.map(cleanEntry).map((e) => `<li id="e-${esc(e.id)}" class="text-sm scroll-mt-20"><strong class="text-white">${esc(e.name)}</strong>${e.sells ? `<span class="text-zinc-400">: ${esc(e.sells)}</span>` : ''}${(e as any).unconfirmed ? unconfirmedTag() : ''}</li>`).join('')}</ul>` : '';
@@ -1149,7 +1159,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       </section>`
     : '';
   const box = (id: string) => `<input type="search" data-filter="#${id}" placeholder="${esc(ui('searchAreas'))}" class="w-full mb-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#a87ffb]/60">`;
-  const sidebar = (id: string) => `<nav aria-label="${esc(game)}" class="qc-scroll">${`<a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>`}${guideSearchBox(gameKey, `#${id}`, 'mb-2')}<ul id="${id}" class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
+  const sidebar = (id: string) => `<nav aria-label="${esc(game)}" class="qc-scroll">${`<a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>`}${mapLinkHtml(gameKey)}${guideSearchBox(gameKey, `#${id}`, 'mb-2')}<ul id="${id}" class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
 
   return `
   <div class="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_15rem] lg:gap-8">
@@ -1220,6 +1230,21 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
  */
 let FACT_KEYS = new Set<string>();
 const FACT_RECS = new Map<string, Map<string, any[]>>();
+/**
+ * Each guide's interactive map elsewhere (guides/{key}.mapLink { url, site }, found and checked by
+ * scripts/guides/mapLinks.ts; owner, Nov 19 2026): one small link under the game's name, never an embedded map.
+ */
+const MAP_LINKS = new Map<string, { url: string; site: string }>();
+async function loadMapLinks(): Promise<void> {
+  for (const d of (await db().collection('guides').select('mapLink').get()).docs) {
+    const m: any = (d.data() as any).mapLink;
+    if (m?.url && /^https:\/\//.test(String(m.url))) MAP_LINKS.set(d.id, { url: String(m.url), site: String(m.site || new URL(m.url).hostname) });
+  }
+}
+const mapLinkHtml = (gameKey: string, cls = 'block px-2.5 pb-2') => {
+  const m = MAP_LINKS.get(gameKey);
+  return m ? `<a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer" class="${cls} text-xs text-[#a87ffb] hover:text-white">🗺 ${esc(ui('interactiveMap'))} <span class="text-zinc-500">(${esc(m.site)}) ↗</span></a>` : '';
+};
 async function loadFactPages(only = ''): Promise<void> {
   const cfg: any = (await db().collection('config').doc('factPages').get().catch(() => null))?.data() || {};
   const keys = [...(Array.isArray(cfg.guides) ? cfg.guides : []), ...String(process.env.QC_FACT_PAGES || '').split(',')].map((s: string) => String(s).trim()).filter(Boolean);
@@ -1357,7 +1382,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
 
   const fights = (a.fights || []).length
     ? card('fights', ui('fights'), `<span class="text-xs text-zinc-500">${(a.fights || []).length}</span>`, table(['Fight', 'Watch for', ui('fightWeak'), ui('fightRewards')], (a.fights || []).map((f) =>
-        `<tr id="${esc(f.id)}">${td(`<strong class="text-white">${esc(f.name)}</strong>${(f as any).unconfirmed ? unconfirmedTag() : ''}${f.enemies ? `<span class="block text-xs text-zinc-500 mt-0.5">${esc(f.enemies)}</span>` : ''}`, 'min-w-[9rem]')}${td(`${esc(f.threats || '')}${f.tactics ? `<span class="block text-xs text-zinc-400 mt-1"><span class="text-zinc-500">${esc(ui('fightTactics'))}:</span> ${esc(f.tactics)}</span>` : ''}`, 'min-w-[14rem]')}${td(esc(f.weaknesses || ''), 'min-w-[10rem]')}${td(esc(f.rewards || ''), 'min-w-[9rem]')}</tr>`)))
+        `<tr id="${esc(f.id)}">${td(`<strong class="text-white">${esc(f.name)}</strong>${(f as any).unconfirmed ? unconfirmedTag() : ''}${f.enemies ? `<span class="block text-xs text-zinc-500 mt-0.5">${esc(f.enemies)}</span>` : ''}`, 'min-w-[9rem]')}${td(`${esc(f.threats || '')}${f.tactics ? `<span class="block text-xs text-zinc-400 mt-1"><span class="text-zinc-500">${esc(ui('fightTactics'))}:</span> ${esc(f.tactics)}</span>` : ''}${videoLink((f as any).video)}`, 'min-w-[14rem]')}${td(esc(f.weaknesses || ''), 'min-w-[10rem]')}${td(esc(f.rewards || ''), 'min-w-[9rem]')}</tr>`)))
     : '';
 
   const shops = a.shops.length
@@ -1413,13 +1438,13 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
     ...(enemies ? [['enemies', ui('enemies')] as [string, string]] : []),
   ];
   const jump = sectionLinks.length > 2
-    ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex xl:hidden flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">${esc(ui('onThisPage'))}:</span>${sectionLinks.map(([id, label]) => `<a href="#${id}" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(label)}</a>`).join('')}</nav>`
+    ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex xl:hidden flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">${esc(ui('onThisPage'))}:</span>${sectionLinks.map(([id, label]) => `<a href="#${id}" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(label)}</a>`).join('')}${mapLinkHtml(gameKey, 'rounded-md border border-white/10 bg-white/[0.03] px-2 py-1')}</nav>`
     : '';
   const navCard = (x: AreaLink | undefined, dir: 'prev' | 'next') =>
     x
       ? `<a href="../${esc(x.slug)}/index.html" class="flex-1 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/40 hover:bg-white/[0.06] px-4 py-3 ${dir === 'next' ? 'text-right' : ''}"><div class="text-[11px] uppercase tracking-wide text-zinc-500">${dir === 'prev' ? `&larr; ${esc(ui('previous'))}` : `${esc(ui('next'))} &rarr;`}</div><div class="text-sm font-semibold text-white truncate">${esc(x.name)}</div></a>`
       : '<span class="flex-1"></span>';
-  const sidebar = (id: string) => `<nav aria-label="${esc(game)}" class="qc-scroll"><a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>${guideSearchBox(gameKey, `#${id}`, 'mb-2')}<ul id="${id}" class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
+  const sidebar = (id: string) => `<nav aria-label="${esc(game)}" class="qc-scroll"><a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>${mapLinkHtml(gameKey)}${guideSearchBox(gameKey, `#${id}`, 'mb-2')}<ul id="${id}" class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
 
   return `
   <div class="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_15rem] lg:gap-8">
@@ -2031,6 +2056,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           <p class="qc-site-only text-sm text-zinc-500 mb-2"><a class="hover:text-white" href="../index.html">${esc(ui('navGuides'))}</a></p>
           ${artBox(gameName, appId, 'rounded-2xl border border-white/10 mb-5', key, true)}
           <h1 class="text-3xl font-bold text-white">${esc(ui('gameH1', { game: gameName }))}</h1>
+          ${mapLinkHtml(key, 'mt-2 inline-block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5')}
           ${igdbFacts(key, gameName)}
           ${ttbFront(key)}
           <p class="text-zinc-400 mt-2">${esc(ui('gameIntro'))}</p>
@@ -3315,6 +3341,7 @@ async function main() {
   const ownerEdits = await loadOwnerEdits(ONLY);
   // Fact pages (roadmap 29): the guides switched to pages drawn from the fact database.
   await loadFactPages(ONLY || '');
+  await loadMapLinks().catch((e) => console.warn('map links:', e?.message));
   // The compendium (scripts/guides/compendium.ts): each guide's published entity pages (a preview shows all of them).
   for (const cd of (await db().collection('guideCompendium').get()).docs) {
     if (ONLY && cd.id !== ONLY) continue;
