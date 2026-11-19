@@ -59,6 +59,7 @@ import { MISSING_RULES, extractMissing, saveMissingFacts, notOnPage } from './mi
 import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
+import { HINT_LEVELS_RULES, extractHints } from './src/utils/hintLevels';
 import { decidePremium, stripeViewFor, cachedStripeView, forgetStripeView } from './premium';
 import { recordDailyCost, recordLimitHit, recordAnswerGame } from './searchGuard';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, playerSearchesToday, recordPlayerSearches, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
@@ -1632,6 +1633,10 @@ percentages:
       // (src/utils/quickQuestions.ts). "Show me where" only makes sense with markers on.
       const quick = isQuickId(req.body.quick) && !(req.body.quick === 'where' && !wantMarkers) ? req.body.quick : null;
       if (quick) systemInstruction += `\n\n[QUICK QUESTION: the player tapped "${String(question || '').slice(0, 80)}"]\n${QUICK_PROMPTS[quick]}`;
+      // Hint levels (session companion step 2): an app that can show them gets the rule and the full answer as two
+      // hidden levels with the hint, from this same call (src/utils/hintLevels.ts).
+      const hintLevels = (quick === 'hint' || quick === 'hintInstead') && req.body.hintLevels === true;
+      if (hintLevels) systemInstruction += HINT_LEVELS_RULES;
       // The kind of question (for the Quality numbers), and the model: Pro when the player's Pro question is answered by
       // Pro (players' share of today's Pro requests isn't used up, chatRouting.ts); otherwise Flash.
       let qtype = questionType(String(question || ''), quick || (isQuickId(req.body.quick) ? req.body.quick : null));
@@ -2106,6 +2111,9 @@ percentages:
       // The quest log's steps (1-4 takeaways), always removed from the text.
       const stepsParsed = extractSteps(responseText, { combat: combatParsed.combat });
       responseText = stepsParsed.text;
+      // A hint's two bigger levels (always removed from the text; only kept when this app asked for them).
+      const hintsParsed = extractHints(responseText);
+      responseText = hintsParsed.text;
       // Steps of the player's objective the question says are done (always removed from the text).
       const tickedParsed = extractTicked(responseText, objective);
       responseText = tickedParsed.text;
@@ -2263,6 +2271,7 @@ percentages:
         // The question is about what the player is doing right now (or isn't): the app sets the answer as Now, with Undo.
         ...(titleParsed.now !== undefined ? { nowGoal: titleParsed.now } : {}),
         ...(stepsParsed.steps.length ? { steps: stepsParsed.steps } : {}),
+        ...(hintLevels && hintsParsed.hints ? { hints: hintsParsed.hints } : {}),
         ...(tickedParsed.done.length ? { objectiveDone: tickedParsed.done } : {}),
         ...(combatParsed.combat ? { combat: true } : {}),
         // A screenshot with no fight on it: a fight the player was in is over (the app clears its combat markers and plan).

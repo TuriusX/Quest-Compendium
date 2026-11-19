@@ -60,6 +60,7 @@ const isMacPlatform = typeof navigator !== 'undefined' && /Mac/i.test(navigator.
 
 const DEFAULT_SHORTCUTS = {
   hideAppShortcut: 'CmdOrCtrl+Space',
+  quickMenuShortcut: 'Alt+Q',
   voiceInputShortcut: 'CmdOrCtrl+Shift+V',
   autoScreenshotShortcut: 'CmdOrCtrl+Shift+S',
   trackerTickShortcut: 'CmdOrCtrl+Shift+Enter',
@@ -825,6 +826,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       // Each shortcut, and the others it must not clash with (a clash is refused, naming the other one).
                       const all = [
                         { key: 'hideAppShortcut', label: tr('set.sc.hide'), keys: settings.hideAppShortcut || DEFAULT_SHORTCUTS.hideAppShortcut },
+                        { key: 'quickMenuShortcut', label: tr('set.sc.quickMenu'), keys: settings.quickMenuShortcut || DEFAULT_SHORTCUTS.quickMenuShortcut, hint: tr('set.sc.quickMenuHint') },
                         { key: 'voiceInputShortcut', label: tr('set.sc.voice'), keys: settings.voiceInputShortcut || DEFAULT_SHORTCUTS.voiceInputShortcut },
                         { key: 'autoScreenshotShortcut', label: tr('set.sc.shot'), keys: settings.autoScreenshotShortcut || DEFAULT_SHORTCUTS.autoScreenshotShortcut },
                         { key: 'trackerTickShortcut', label: tr('set.sc.trackerTick'), keys: settings.trackerTickShortcut || DEFAULT_SHORTCUTS.trackerTickShortcut, hint: tr('set.sc.trackerHint') },
@@ -1139,13 +1141,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         const clashOf = (k: string) => {
                           if (k === 'off') return '';
                           if (k === mod || toggleButtons.includes(k)) return tr('set.pad.clashToggle');
-                          if (k === (settings.controllerTalk || 'y')) return tr('set.pad.clashTalk');
+                          if (k === (settings.controllerTalk || 'off')) return tr('set.pad.clashTalk');
                           return '';
                         };
                         const rows = [
                           { key: 'controllerTick', label: tr('set.pad.trackerTick'), value: String(settings.controllerTick || 'off').replace(/^view-/, ''), options: ['off', 'up', 'a'] },
                           { key: 'controllerNext', label: tr('set.pad.trackerNext'), value: String(settings.controllerNext || 'off').replace(/^view-/, ''), options: ['off', 'right', 'rb'] },
-                          { key: 'controllerLocate', label: tr('set.controllerLocate'), value: String(settings.controllerLocate || 'down'), options: ['off', 'down', 'x'] },
+                          { key: 'controllerLocate', label: tr('set.controllerLocate'), value: String(settings.controllerLocate || 'off'), options: ['off', 'down', 'x'] },
                         ] as const;
                         return (
                           <div className="space-y-2">
@@ -1185,7 +1187,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="text-[11px] text-zinc-400">{tr('set.pad.talkDesc', { keys: formatShortcut(settings.voiceInputShortcut || 'CmdOrCtrl+Shift+V') })}</div>
                         <div className="flex flex-wrap gap-1.5">
                           {(['y', 'x', 'lb', 'rb', 'off'] as const).map((b) => {
-                            const selected = (settings.controllerTalk || 'y') === b;
+                            const selected = (settings.controllerTalk || 'off') === b;
                             return (
                               <button
                                 key={b}
@@ -1226,7 +1228,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="p-3 rounded-xl bg-black/30 border border-white/[0.08] space-y-1.5">
                         <div className="text-[10px] font-mono uppercase text-zinc-400">{tr('set.pad.controls')}</div>
                         <ul className="grid sm:grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-zinc-300">
-                          {['move', 'a', 'b', 'x', 'y', 'menu', 'view', 'l3', 'lbrb', 'lt', 'rs', 'r3'].map((k) => (
+                          {['move', 'a', 'b', 'wheel', 'menuWheel', 'lbrb', 'lt', 'rs'].map((k) => (
                             <li key={k}>{tr(`set.pad.c.${k}`)}</li>
                           ))}
                         </ul>

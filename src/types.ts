@@ -145,6 +145,10 @@ export interface ChatMessage {
   drawn?: import('./components/DrawnCard').DrawnData;
   /** The player marked the drawing "Not right". */
   drawnHidden?: boolean;
+  /** Hint levels (session companion step 2): a hint's bigger hint (the rule) and the full answer, hidden until asked. */
+  hints?: import('./utils/hintLevels').HintLevels;
+  /** How many hint levels are open (1 = only the hint; 2 = the rule too; 3 = the answer too). */
+  hintShown?: number;
   /** How many facts this answer taught (or re-confirmed for) the game knowledge base. */
   factsSaved?: number;
   /** Corrections to the guide this answer made (candidates to verify): "That's right" on it confirms their area. */
@@ -331,6 +335,8 @@ export interface AppSettings {
   questLogShortcut?: string;
   /** Locate me from anywhere (default Ctrl+Shift+K). */
   locateShortcut?: string;
+  /** The quick menu (the wheel) from the keyboard: hold and point with the mouse, or tap (default Alt+Q). */
+  quickMenuShortcut?: string;
   /** Find the markers again on the screen as it is now (default Ctrl+Shift+M; markers v2). */
   findMarkersShortcut?: string;
   enableThematicBanners?: boolean;

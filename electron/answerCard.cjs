@@ -186,6 +186,7 @@ function createAnswerCard(opts) {
     if (!fromCard(event)) return;
     if (what === 'close') return void api.hide();
     if (what === 'open') opts.onAction('open', current);
+    if (what === 'hint' && current && current.hintNext) opts.onAction('hint', current);
   });
 
   const api = {
@@ -221,6 +222,8 @@ function createAnswerCard(opts) {
         id: String(a.id || ''), question: asked || String(a.question || ''), title: String(a.title || ''), text: String(a.text || '').slice(0, 6000),
         steps, model: a.model === 'Pro' || a.model === 'Fast' ? a.model : '', place: String(a.place || ''), combat: !!a.combat,
         picture: pictureOf(a.picture),
+        // Hint levels: the next level's button ("More of a hint", "Show the answer"), or none.
+        hintNext: String(a.hintNext || '').slice(0, 60),
         at: Date.now(),
       };
       moreState = { more: false, part: 0, parts: 0 };
@@ -231,6 +234,17 @@ function createAnswerCard(opts) {
     /** The same answer, updated (its picture arrived later): the card redraws without restarting its time. */
     update(a) {
       if (!current || !a || String(a.id || '') !== current.id || !shownAt) return false;
+      // A hint level opened (session companion step 2): the card shows it (newest first), with time to read it.
+      const text = String(a.text || '').slice(0, 6000);
+      if (text && text !== current.text) {
+        current.text = text;
+        current.hintNext = String(a.hintNext || '').slice(0, 60);
+        current.steps = (Array.isArray(a.steps) ? a.steps : []).slice(0, 8).map((s) => ({ kind: s.kind === 'warning' ? 'warning' : 'step', label: String(s.label || '').slice(0, 160), where: String(s.where || '').slice(0, 160) }));
+        moreState = { more: false, part: 0, parts: 0 };
+        send('card-show', { ...current, ...look() });
+        startTimer(readingMs(text.split(/\s+/).slice(0, 180).join(' '), false));
+        return true;
+      }
       const picture = pictureOf(a.picture);
       if (JSON.stringify(picture) !== JSON.stringify(current.picture)) {
         const newDrawing = !!(picture && picture.wide && !(current.picture && current.picture.wide));
@@ -251,6 +265,8 @@ function createAnswerCard(opts) {
       send('card-more');
       startTimer(Math.min(90000, Math.max(25000, readingMs(current.text.split(/\s+/).slice(0, 140).join(' '), false))));
     },
+    /** The hint's next level, when there is one (the quick menu offers it first): its button's words. */
+    hintNext: () => (current && shownAt && current.hintNext) || '',
     /** Whether More has more to show (the quick menu then offers it first). */
     canMore: () => !!current && !!shownAt && moreState.more,
     pause,

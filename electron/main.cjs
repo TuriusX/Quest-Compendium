@@ -793,7 +793,11 @@ app.whenReady().then(() => {
       // The keyboard hint names the player's own show / hide shortcut.
       return { ...card, keysOpen: String(card.keysOpen || '').replace('{keys}', hideKeysNow ? formatAccelerator(hideKeysNow) : 'Ctrl+Space'), accent: s.accent };
     },
-    onAction: (what, a) => { if (what === 'open') openAnswerInPanel(a); },
+    onAction: (what, a) => {
+      if (what === 'open') openAnswerInPanel(a);
+      // The hint's next level (session companion step 2): the app opens it, and the card shows it.
+      if (what === 'hint' && a && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('quick-action', `hint:${a.id}`);
+    },
   });
   // Asked over the game (the quick menu, or a keyboard shortcut with the panel away): the card shows the question,
   // thinking, and the answer lands there; the panel never comes in by itself (owner, Nov 17-18 2026).
@@ -831,6 +835,12 @@ app.whenReady().then(() => {
       // More of the answer on the card, right there (the game gets its focus back as the menu closes).
       if (key === 'more') {
         answerCard.more();
+        return void quickWheel.close();
+      }
+      // A hint's next level ("More of a hint", "Show the answer"), on the card.
+      if (key === 'hint') {
+        const a = answerCard.recent();
+        if (a) mainWindow.webContents.send('quick-action', `hint:${a.id}`);
         return void quickWheel.close();
       }
       // Back to the game (the wheel opened over the panel): the panel slides away and the game gets focus back.
@@ -897,7 +907,21 @@ app.whenReady().then(() => {
       }
       else tracker.key(action);
     },
-    onToggle: () => {
+    onToggle: () => toggleQuickMenu('pad'),
+    onInput: (evt) => {
+      if (quickWheel.isOpen()) return quickWheel.input(evt);
+      if (settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isFocused()) return settingsWindow.webContents.send('controller-input', evt);
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-input', evt);
+    },
+  });
+
+  /**
+   * The quick menu, from the controller's combo ('pad') or the keyboard's quick menu shortcut ('keys', Settings:
+   * quickMenuShortcut, default Alt+Q; owner Nov 18 2026: the wheel helps immersion with or without a controller).
+   * Open: it closes. With the keyboard, `keys` names the shortcut's keys: holding them, the mouse points (from where
+   * the cursor was) and letting go picks; a tap leaves it open to pick with the arrows and Enter, or a click.
+   */
+  function toggleQuickMenu(mode, keys) {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       if (quickWheel.isOpen()) {
         quickWheel.close();
@@ -910,26 +934,35 @@ app.whenReady().then(() => {
         else if (answerCard.recent()) {
           // An answer on the card: More of it first (while there's more), then Open in the panel.
           const extra = [];
+          // A hint on the card: its next level first (it's what the player asked hints for).
+          if (answerCard.hintNext()) extra.push({ key: 'hint', label: answerCard.hintNext() });
           if (answerCard.canMore() && s.moreAnswer) extra.push({ key: 'more', label: s.moreAnswer });
           if (s.openAnswer) extra.push({ key: 'answer', label: s.openAnswer });
           items = [...extra, ...items];
         }
         // The card stays where it is (it's in a corner); its time stops while the menu is open.
         answerCard.pause();
-        quickWheel.show(items);
+        quickWheel.show(items, mode === 'keys' ? { mode: 'keys', keys: acceleratorKeys(keys) } : { mode: 'pad' });
       } else if (isAppVisible) {
         slideOut();
       } else {
         // The app hasn't sent the menu yet: the panel, as before.
         showPanelFromPad();
       }
-    },
-    onInput: (evt) => {
-      if (quickWheel.isOpen()) return quickWheel.input(evt);
-      if (settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isFocused()) return settingsWindow.webContents.send('controller-input', evt);
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('controller-input', evt);
-    },
-  });
+  }
+  /** A shortcut's keys as the page's KeyboardEvent.key names, lower case ('Alt+Q' -> ['alt', 'q']): letting any go picks. */
+  function acceleratorKeys(acc) {
+    const names = { commandorcontrol: 'control', cmdorctrl: 'control', ctrl: 'control', control: 'control', alt: 'alt', option: 'alt', shift: 'shift', super: 'meta', meta: 'meta', cmd: 'meta', command: 'meta', space: ' ', plus: '+' };
+    return String(acc || '').split('+').map((k) => k.trim().toLowerCase()).filter(Boolean).map((k) => names[k] || k);
+  }
+  // The keyboard's quick menu shortcut (registered with the others in update-shortcuts).
+  const registerQuickMenuShortcut = (keys) => {
+    let ok = false;
+    try { ok = globalShortcut.register(keys, () => toggleQuickMenu('keys', keys)); } catch (err) { console.error(`[wheel] couldn't register ${keys}:`, err && err.message); }
+    if (!ok) console.warn(`[wheel] ${keys} is taken (by another app or shortcut); the quick menu shortcut isn't set`);
+    return ok;
+  };
+  registerQuickMenuShortcut('Alt+Q');
 
   // The show/hide shortcut (Settings: hideAppShortcut, default Ctrl+Space), the same toggle whether the game or the
   // panel has focus. Registered here until the app sends its settings (update-shortcuts), then re-registered there.
@@ -971,6 +1004,9 @@ app.whenReady().then(() => {
     tracker.setKeys(hideKeys);
     console.log(`[panel] show/hide shortcut: ${hideKeys || `none (${hideAppCmd} and Ctrl+Space are taken)`}`);
     
+    // The quick menu from the keyboard (Settings: quickMenuShortcut, default Alt+Q; "off" for none).
+    if (shortcuts.quickMenuShortcut !== 'off') registerQuickMenuShortcut(shortcuts.quickMenuShortcut || 'Alt+Q');
+
     const voiceCmd = shortcuts.voiceInputShortcut || 'CommandOrControl+Shift+V';
     try {
       globalShortcut.register(voiceCmd, () => onVoiceKey());

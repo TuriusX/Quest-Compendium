@@ -150,11 +150,13 @@
   function paintFoot() {
     if (!cur) return;
     const pi = partInfo();
-    $('hint').textContent = cur.state === 'thinking' ? '' : cur.mode === 'pad' ? fmt(pi.more ? S.padMore : S.padOpen, { combo: S.combo || '' }) : (S.keysOpen || '');
+    // A hint with a bigger level to open (session companion step 2): once its text is all showing, the button opens it.
+    const hintNext = !pi.more && cur.state === 'answer' && cur.hintNext ? cur.hintNext : '';
+    $('hint').textContent = cur.state === 'thinking' ? '' : cur.mode === 'pad' ? (hintNext && S.combo ? `${S.combo}: ${hintNext}` : fmt(pi.more ? S.padMore : S.padOpen, { combo: S.combo || '' })) : (S.keysOpen || '');
     $('more').textContent = expanded && pi.parts > 1 ? fmt(S.part, { n: pi.part, total: pi.parts }) : (!expanded && pi.more ? S.moreBelow || '' : '');
-    $('bMore').textContent = pi.more ? S.more || 'More' : S.open || 'Open';
-    $('bMore').dataset.act = pi.more ? 'more' : 'open';
-    $('bOpen').hidden = !pi.more;
+    $('bMore').textContent = hintNext || (pi.more ? S.more || 'More' : S.open || 'Open');
+    $('bMore').dataset.act = hintNext ? 'hint' : pi.more ? 'more' : 'open';
+    $('bOpen').hidden = !pi.more && !hintNext;
     $('bOpen').textContent = S.open || 'Open';
     window.qcCard.state({ more: pi.more, part: pi.part, parts: pi.parts });
   }
@@ -279,7 +281,11 @@
   // The mouse: the buttons show while the pointer is over the card (clicking never takes focus from the game).
   $('card').addEventListener('mouseenter', () => { document.body.classList.add('hover'); window.qcCard.mouse(true); });
   $('card').addEventListener('mouseleave', () => { document.body.classList.remove('hover'); window.qcCard.mouse(false); });
-  $('bMore').addEventListener('click', () => ($('bMore').dataset.act === 'more' ? more() : window.qcCard.action('open')));
+  $('bMore').addEventListener('click', () => {
+    const act = $('bMore').dataset.act;
+    if (act === 'more') more();
+    else window.qcCard.action(act === 'hint' ? 'hint' : 'open');
+  });
   $('bOpen').addEventListener('click', () => window.qcCard.action('open'));
   $('bClose').addEventListener('click', () => window.qcCard.action('close'));
   $('wideImg').addEventListener('click', () => { document.body.classList.toggle('bigpic'); report(); });

@@ -10,7 +10,7 @@
  * The page (wheel.html) draws the ring and the quick questions list; either stick or the d-pad points
  * (ringPoint.js). This module owns the window, the focus and the controller input while it's open.
  */
-const { BrowserWindow, ipcMain } = require('electron');
+const { BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
 
 /**
@@ -64,8 +64,31 @@ function createWheel(opts) {
   }
 
   let open = false;
-  /** Open; `override`: the items for this opening (main.cjs adds "Open this answer" and swaps in "Back to the game"). */
-  function show(override) {
+  // Keyboard and mouse (owner, Nov 18 2026): the mouse points from where the cursor was when the menu opened, as an
+  // offset, so a game that hides the cursor or holds it in the middle of the screen doesn't matter. Read here (not
+  // from the page's mouse events) so it works wherever the cursor is, even off the menu's window.
+  let aimTimer = null;
+  function startAim() {
+    stopAim();
+    const from = screen.getCursorScreenPoint();
+    let last = '';
+    aimTimer = setInterval(() => {
+      if (!open) return stopAim();
+      const p = screen.getCursorScreenPoint();
+      const v = `${p.x - from.x},${p.y - from.y}`;
+      if (v === last) return;
+      last = v;
+      send('wheel-input', { type: 'aim', dx: p.x - from.x, dy: p.y - from.y });
+    }, 16);
+  }
+  function stopAim() {
+    if (aimTimer) clearInterval(aimTimer);
+    aimTimer = null;
+  }
+
+  /** Open; `override`: the items for this opening (main.cjs adds "Open this answer" and swaps in "Back to the game").
+   * `how`: { mode: 'pad' } (the controller) or { mode: 'keys', keys } (the keyboard shortcut and its keys). */
+  function show(override, how = { mode: 'pad' }) {
     const w = ensure();
     const d = opts.display();
     const { x, y, width, height } = d.workArea || d.bounds;
@@ -73,7 +96,9 @@ function createWheel(opts) {
     previous = opts.focusHelper.other ? opts.focusHelper.other() : null;
     open = true;
     const questions = Array.isArray(strings.questions) ? strings.questions : [];
-    send('wheel-open', { items: Array.isArray(override) ? override : items, strings, questions });
+    const keys = how && how.mode === 'keys';
+    send('wheel-open', { items: Array.isArray(override) ? override : items, strings, questions, mode: keys ? 'keys' : 'pad', keys: keys && Array.isArray(how.keys) ? how.keys : [] });
+    if (keys) startAim();
     w.show();
     w.focus();
     const took = opts.focusHelper.take ? opts.focusHelper.take(w) : null;
@@ -86,6 +111,7 @@ function createWheel(opts) {
   function close(toPanel = false) {
     if (!open) return Promise.resolve();
     open = false;
+    stopAim();
     if (opts.onClose) opts.onClose();
     const w = win;
     send('wheel-close', {});

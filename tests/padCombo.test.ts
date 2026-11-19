@@ -83,7 +83,7 @@ function rig(config: any, visible = true) {
 
 test("service: View pressed alone still works (after release); the 1-second hold toggles without it", () => {
   const r = rig({ toggle: "hold-view-menu" });
-  r.at(0, BITS.back); r.at(100, 0);
+  r.at(0, BITS.back); r.at(100, 0); r.at(300, 0);
   assert.deepEqual(r.events.filter((e) => e.type === "button").map((e) => e.button), ["back"]);
   assert.equal(r.toggles(), 0);
   const h = rig({ toggle: "hold-view-menu" });
@@ -95,12 +95,13 @@ test("service: View pressed alone still works (after release); the 1-second hold
 test("default (nothing saved): hold L3 + R3; L3 or R3 alone is just a press, a short L3 + R3 too", () => {
   assert.deepEqual(comboFor(undefined).buttons, ["ls", "rs"], "View + Menu also opens Windows' multitasking view and Game Bar");
   const r = rig({});
-  r.at(0, BITS.ls); r.at(150, 0); r.at(400, BITS.rs); r.at(550, 0);
+  r.at(0, BITS.ls); r.at(150, 0); r.at(400, BITS.rs); r.at(550, 0); r.at(800, 0);
   assert.equal(r.toggles(), 0, "one stick clicked never opens anything");
   assert.deepEqual(r.events.filter((e) => e.type === "button").map((e) => e.button), ["ls", "rs"]);
   const s = rig({});
-  s.at(0, BITS.ls | BITS.rs); s.at(400, BITS.ls | BITS.rs); s.at(500, 0);
+  s.at(0, BITS.ls | BITS.rs); s.at(400, BITS.ls | BITS.rs); s.at(500, 0); s.at(900, 0);
   assert.equal(s.toggles(), 0, "a short press of both (a game's own L3 + R3) doesn't open it");
+  assert.equal(s.events.filter((e) => e.type === "button").length, 0, "and doesn't screenshot or switch Pro / Fast either");
   const h = rig({});
   h.at(0, BITS.ls | BITS.rs); h.at(1100, BITS.ls | BITS.rs); h.at(1200, 0);
   assert.equal(h.toggles(), 1, "held for a second, it does");
@@ -210,3 +211,23 @@ test("asking in one motion: the hold that opened the panel, kept going, listens;
     console.log(`\n${passed} passed`);
   });
 }
+
+test("L3 + R3 attempts never act as L3 or R3 (owner, Nov 18 2026: screenshots and Pro / Fast switches while opening the wheel)", () => {
+  // One stick first, the other joins, both let go before the second: nothing.
+  const a = rig({});
+  a.at(0, BITS.ls); a.at(120, BITS.ls | BITS.rs); a.at(600, BITS.rs); a.at(700, 0); a.at(1200, 0);
+  assert.equal(a.events.filter((e) => e.type === "button").length, 0);
+  // A stick slipping off for a moment during the hold: still one hold, it opens, and no stick click acts.
+  const b = rig({});
+  b.at(0, BITS.ls | BITS.rs); b.at(500, BITS.ls | BITS.rs); b.at(560, BITS.rs); b.at(620, BITS.ls | BITS.rs); b.at(1050, BITS.ls | BITS.rs); b.at(1200, 0); b.at(1600, 0);
+  assert.equal(b.toggles(), 1, "a slip under 150 ms doesn't restart the second");
+  assert.equal(b.events.filter((e) => e.type === "button").length, 0);
+  // L3 slipping before R3 joins: the slip isn't a click of its own.
+  const c = rig({});
+  c.at(0, BITS.ls); c.at(60, 0); c.at(100, BITS.ls); c.at(200, BITS.ls | BITS.rs); c.at(1300, BITS.ls | BITS.rs); c.at(1400, 0); c.at(1800, 0);
+  assert.equal(c.toggles(), 1);
+  assert.equal(c.events.filter((e) => e.type === "button").length, 0);
+  // Afterwards a lone L3 click works as before (the attempt is forgotten).
+  c.at(2000, BITS.ls); c.at(2100, 0); c.at(2400, 0);
+  assert.deepEqual(c.events.filter((e) => e.type === "button").map((e) => e.button), ["ls"]);
+});

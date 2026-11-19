@@ -244,7 +244,8 @@ function useGamepadPolling(enabled: boolean, talkButton: string, onEvent: (e: Pa
           talkSince = null; talking = false;
         }
       }
-      for (const [, name] of MAP) if (name !== tb && down.has(name) && !prev.has(name)) onEventRef.current({ type: 'button', button: name });
+      // L3 and R3 have no action of their own (owner, Nov 18 2026: only the quick menu's L3 + R3 hold uses them).
+      for (const [, name] of MAP) if (name !== tb && name !== 'ls' && name !== 'rs' && down.has(name) && !prev.has(name)) onEventRef.current({ type: 'button', button: name });
       for (const d of ['up', 'down', 'left', 'right', 'lt', 'rt'] as const) {
         if (!down.has(d as Btn)) { rep[d] = null; continue; }
         const r = rep[d];
@@ -307,6 +308,15 @@ export function ControllerLayer({
   context?: { goal: string; combat: boolean; asked: boolean };
 }) {
   const [talking, setTalking] = useState(false);
+  // The chat is recording a voice question (ChatArea's 'qc-recording'): A sends it, and the hint bar says so.
+  const [recording, setRecording] = useState(false);
+  const recordingRef = useRef(false);
+  recordingRef.current = recording;
+  useEffect(() => {
+    const on = (e: Event) => setRecording(!!(e as CustomEvent).detail?.on);
+    window.addEventListener('qc-recording', on);
+    return () => window.removeEventListener('qc-recording', on);
+  }, []);
   const t = useT();
   const locale = useLocale();
   const [padMode, setPadMode] = useState(false);
@@ -599,6 +609,8 @@ export function ControllerLayer({
       {
         title: t('pad.quickMenu'), listening: t('pad.listening'), listeningTap: t('pad.listeningTap'), select: t('pad.select'), close: t('common.close'),
         ask: t('pad.ask'), cancel: t('common.cancel'), back: t('pad.back'), accent, glyphs: { a: glyph('a', style), b: glyph('b', style) },
+        // Opened from the keyboard (the quick menu shortcut): how to point, and listening with Enter.
+        aim: t('pad.wheelAim'), listeningKeys: t('pad.listeningKeys'),
         // The quick questions list (its own view in the ring), the answer card's words, and the items the desktop app
         // adds or swaps in (electron/main.cjs).
         questionsTitle: t('pad.questions'), questions: quickIds.map((key, i) => ({ key, label: questionLabels[i] })),
@@ -624,6 +636,8 @@ export function ControllerLayer({
         if (i >= 0) askListedRef.current(i);
         return;
       }
+      // "More of a hint" / "Show the answer" for the hint on the card (session companion step 2).
+      if (key.startsWith('hint:')) return emit('qc-hint-more', { id: key.slice(5) });
       // "Open this answer": the panel came in; the focus goes to that answer once it has settled.
       if (key.startsWith('answer:')) {
         const id = key.slice(7);
@@ -743,6 +757,11 @@ export function ControllerLayer({
         return;
       }
       const b = e.button;
+      // A voice question recording (Speak on the quick menu): A sends it (owner, Nov 18 2026: no X shortcut any more).
+      if (recordingRef.current && b === 'a') {
+        emit('trigger-voice-record');
+        return;
+      }
       // In the attached quest log.
       if (logFocus) {
         if (b === 'up' || b === 'down') logKey(b === 'down' ? 'next' : 'prev');
@@ -832,8 +851,6 @@ export function ControllerLayer({
           pressKey(kb.row === lastRow ? SPECIALS[kb.col] : rows[kb.row][kb.col]);
         } else if (b === 'x') pressKey('backspace');
         else if (b === 'y') pressKey('space');
-        else if (b === 'ls') pressKey('shift');
-        else if (b === 'rs') pressKey('symbols');
         else if (b === 'start') pressKey('send');
         else if (b === 'b') {
           kbTargetRef.current = { kind: 'ask' };
@@ -976,30 +993,11 @@ export function ControllerLayer({
       } else if (b === 'b') {
         // Back: the open dialog closes. B never hides the app (hiding is the show / hide combo).
         closeTopDialog();
-      } else if (b === 'x') {
-        // On an answer: read it aloud (again: stop). Elsewhere: ask out loud.
-        const answer = scope === document.body ? currentAnswer() : null;
-        const read = answer?.querySelector<HTMLElement>('[data-pad-action="read"]');
-        if (read) read.click();
-        else emit('trigger-voice-record');
-      } else if (b === 'y') {
-        // On an answer: its Actions menu. Elsewhere: the quick questions.
-        const answer = scope === document.body ? currentAnswer() : null;
-        if (answer) openActions(answer);
-        else {
-          setQIndex(0);
-          setPanel('questions');
-        }
       } else if (b === 'start') {
         // The quick menu, wherever you are (the keyboard: A on the Ask bar, or Type in this menu).
         setQmIndex(0);
         ringPointer.current.reset();
         setPanel('quick');
-      } else if (b === 'back') {
-        // View: the quest log opens or closes (owner, Oct 30 2026). Screenshot and ask moved to L3.
-        emit('qc-toggle-log');
-      } else if (b === 'ls') {
-        if (electronAPI()) emit('trigger-auto-screenshot-submit');
       } else if (b === 'lb' || b === 'rb') {
         // Ask -> Guide -> the next game (RB), and back (LB). Inside a dialog: nothing.
         if (scope !== document.body) {
@@ -1019,10 +1017,10 @@ export function ControllerLayer({
             if (!at || at === document.body || !isVisible(at)) setFocusRef.current(defaultStop());
           }, 180);
         }
-      } else if (b === 'rs') {
-        // R3: Pro / Fast for the next question (ChatArea's switch next to the send button). Inside a dialog: nothing.
-        if (scope === document.body) emit('qc-toggle-answer-model');
       }
+      // No button shortcuts in the panel (owner, Nov 18 2026: "that's what the radial wheel is for"): X (ask out loud,
+      // read aloud), Y (quick questions, an answer's actions), View (quest log), L3 (screenshot and ask) and R3 (Pro /
+      // Fast) do nothing here; all of it is on the quick menu (Menu, or the open combo), and A goes into an answer.
     },
     [enabled, padMode, panel, questionLabels, qIndex, kb, pressKey, openKeyboard, setFocus, logFocus, actions, aIndex, openActions, quickMenu, qmIndex, text, caret, suggestions, typeText, showIntro, intro],
   );
@@ -1118,7 +1116,6 @@ export function ControllerLayer({
               [['↕'], 'pad.introMove'],
               [['lb', 'rb'], 'pad.introPanels'],
               [['menu'], 'pad.introMenu'],
-              [['y'], 'pad.introActions'],
               [['b'], 'pad.introBack'],
             ] as [string[], string][]).map(([keys, label]) => (
               <div key={label} className="flex items-center gap-3 text-[13px] text-zinc-200">
@@ -1297,7 +1294,9 @@ export function ControllerLayer({
             <Hint b="b" label={t('common.close')} />
           </>
         ) : talking ? (
-          <Hint b={talkButton !== 'off' ? talkButton : 'x'} label={t('pad.listening')} />
+          <Hint b={talkButton !== 'off' ? talkButton : 'a'} label={t('pad.listening')} />
+        ) : recording ? (
+          <Hint b="a" label={t('pad.ask')} />
         ) : onPage ? (
           <>
             <Hint b="↕" label={t('pad.scroll')} />
@@ -1310,8 +1309,6 @@ export function ControllerLayer({
         ) : kind === 'ask' ? (
           <>
             <Hint b="a" label={t('pad.type')} />
-            <Hint b="x" label={t('pad.voice')} />
-            <Hint b="y" label={t('pad.questions')} />
           </>
         ) : kind === 'slider' ? (
           <>
@@ -1335,14 +1332,11 @@ export function ControllerLayer({
         ) : kind === 'answer' ? (
           <>
             <Hint b="a" label={t('pad.open')} />
-            <Hint b="x" label={t('chat.readAloud')} />
-            <Hint b="y" label={t('pad.actions')} />
             <Hint b="rt" label={t('pad.page')} />
           </>
         ) : kind === 'card' ? (
           <>
             <Hint b="a" label={t('pad.select')} />
-            <Hint b="y" label={t('pad.actions')} />
             <Hint b="b" label={t('pad.back')} />
           </>
         ) : (

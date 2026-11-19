@@ -40,6 +40,7 @@ import {
 import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions, NotOnScreen } from './ScreenPointers';
 import { VisualCard, type VisualEvent } from './VisualCard';
 import { DrawnCard } from './DrawnCard';
+import { HintReveal } from './HintReveal';
 import { areaFindsFor, markersActiveFor } from './pointerStore';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
 import { getApiBaseUrl, DEFAULT_PREVIEW_URL } from '../utils/api';
@@ -482,6 +483,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     attachedImageRef.current = attachedImage;
   }, [attachedImage]);
   const [isRecording, setIsRecording] = useState(false);
+  // The controller layer listens: while recording, A sends the voice question.
+  useEffect(() => { window.dispatchEvent(new CustomEvent('qc-recording', { detail: { on: isRecording } })); }, [isRecording]);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   // "Report this answer" (Store policy 11.16): the answer the dialog is open for.
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
@@ -1858,6 +1861,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       text={!isUser && markersOn && msg.points?.length ? withMarkerBadges(msg.text, msg.points) : msg.text}
                     />
                   </div>
+                  {/* Hint levels (session companion step 2): the bigger hint, then the answer, one press at a time. */}
+                  {!isUser && msg.hints && (
+                    <HintReveal
+                      hints={msg.hints}
+                      shown={msg.hintShown ?? 1}
+                      onShow={(level) => onUpdateMessage?.(msg.id, { hintShown: level })}
+                      t={(k) => t(k)}
+                      renderText={(s) => <MessageMarkdown text={s} markerKey="" link={({ href, children, node, ...rest }: any) => <a href={href} {...rest}>{children}</a>} />}
+                    />
+                  )}
                   {/* Drawn answers (Nov 18 2026): the answer drawn on a picture, or an illustration, first. */}
                   {!isUser && msg.drawn && !msg.drawnHidden && (
                     <DrawnCard drawn={msg.drawn} compact={isDesktopApp} onWrong={() => {

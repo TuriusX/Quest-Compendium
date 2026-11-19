@@ -96,7 +96,7 @@ function loadXInput() {
   }
 }
 
-const { comboFor, chordFor, createComboDetector, createChord, createHoldToTalk, BITS } = require('./padCombo.cjs');
+const { comboFor, chordFor, createComboDetector, createChord, createHoldToTalk, BITS, SLIP_MS } = require('./padCombo.cjs');
 
 /** Triggers past this (0-255) count as pressed: they page through long answers. */
 const TRIGGER_DOWN = 128;
@@ -129,6 +129,9 @@ function createControllerService(opts) {
   let firedDuringPress = false;
   const pendingMember = new Map(); // combo member -> released at (its press waits: it may be the start of the combo)
   const suppressed = new Set(); // combo members that just fired the combo: ignored until they're let go
+  // Combo members pressed while another member was down too (an attempt at the combo, even one let go too soon):
+  // their own action never runs (owner, Nov 18 2026: L3 + R3 kept taking screenshots and switching Pro / Fast).
+  const touched = new Set();
   const repeat = { up: null, down: null, left: null, right: null, lt: null, rt: null };
   let lastScroll = 0;
   let lastStick = 0;
@@ -173,6 +176,7 @@ function createControllerService(opts) {
     if (combo.step(buttons, t).fire) {
       firedDuringPress = true;
       pendingMember.clear();
+      touched.clear();
       for (const [name, bit] of SIMPLE) if (combo.mask & bit) suppressed.add(name);
       if (talk) talk.reset();
       // Asking in one motion (owner, Nov 17 2026: playing and asking at once): a hold that opened the panel and keeps
@@ -218,12 +222,17 @@ function createControllerService(opts) {
     // Simple buttons. Combo members report on release (and only if the combo didn't fire; for a double-tap, only once
     // it can no longer complete), so starting the combo never triggers their normal action. The talk button reports
     // its taps from the hold-to-talk check above.
+    // Two or more of the combo's buttons down at once: each of them is part of a combo attempt.
+    const membersDown = buttons & combo.mask;
+    if (membersDown && (membersDown & (membersDown - 1))) {
+      for (const [name, bit] of SIMPLE) if (membersDown & bit) touched.add(name);
+    }
     for (const [name, bit] of SIMPLE) {
       const down = (buttons & bit) !== 0;
       const wasDown = (prevButtons & bit) !== 0;
       const member = (combo.mask & bit) !== 0;
       if (member && suppressed.has(name)) {
-        if (!down) suppressed.delete(name);
+        if (!down) { suppressed.delete(name); touched.delete(name); }
         continue;
       }
       if (bit === talkBit && talk && !member) {
@@ -231,6 +240,7 @@ function createControllerService(opts) {
         continue;
       }
       if (down && !wasDown) {
+        // A member pressed again moments after letting go (a slip): the same press, still waiting.
         if (member) pendingMember.set(name, 0);
         else if (visible) opts.onInput({ type: 'button', button: name });
       } else if (!down && wasDown && member && pendingMember.has(name)) {
@@ -239,10 +249,13 @@ function createControllerService(opts) {
     }
     for (const [name, releasedAt] of pendingMember) {
       if (!releasedAt) continue;
-      if (firedDuringPress) { pendingMember.delete(name); continue; }
+      if (firedDuringPress) { pendingMember.delete(name); touched.delete(name); continue; }
       if (combo.pendingUntil() > t) continue;
+      // Let go for good (not a slip), and only then: a member that was part of a combo attempt does nothing.
+      if (t - releasedAt < SLIP_MS) continue;
       pendingMember.delete(name);
-      if (visible) opts.onInput({ type: 'button', button: name });
+      const attempt = touched.delete(name);
+      if (visible && !attempt) opts.onInput({ type: 'button', button: name });
     }
 
     // Directions (D-pad or left stick) and the triggers, with key-repeat while held.
@@ -336,6 +349,7 @@ function createControllerService(opts) {
     talkBit = tb && tb !== 'off' && BITS[tb] ? BITS[tb] : 0;
     talk = talkBit ? createHoldToTalk(talkBit) : null;
     pendingMember.clear();
+    touched.clear();
     suppressed.clear();
     if (config.enabled) start();
     else stop();

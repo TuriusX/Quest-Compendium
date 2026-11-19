@@ -29,6 +29,9 @@ const HOLD_MS = 1000;      // a show/hide hold
 const TAP_MAX_MS = 300;    // a tap is shorter than this
 const TAP_GAP_MS = 350;    // the second tap of a double-tap comes within this of the first's release
 const TALK_HOLD_MS = 350;  // hold-to-talk starts after this
+// Stick clicks (L3 / R3) are easy to slip off for a moment while holding both: a gap this short doesn't restart the
+// hold, and a member let go this briefly and pressed again is still the same press (owner, Nov 18 2026).
+const SLIP_MS = 150;
 
 const LEGACY = {
   'back+start': { buttons: ['back', 'start'], mode: 'hold' },
@@ -69,7 +72,7 @@ function comboFor(preset, custom) {
  */
 function createComboDetector(combo, timing = {}) {
   const holdMs = timing.holdMs || HOLD_MS, tapMax = timing.tapMaxMs || TAP_MAX_MS, gap = timing.tapGapMs || TAP_GAP_MS;
-  let since = null, fired = false; // hold
+  let since = null, fired = false, brokeAt = null; // hold (brokeAt: when the buttons stopped being all down)
   // double-tap: 'idle' -> 'down1' (first press) -> 'gap' (released, waiting for the second) -> fire on the second press
   let phase = 'idle', at = 0;
   function step(buttons, t) {
@@ -78,9 +81,16 @@ function createComboDetector(combo, timing = {}) {
     const others = (buttons & ~combo.mask) !== 0;
     if (combo.mode === 'hold') {
       if (all) {
+        // Back after a gap longer than a slip: a new hold.
+        if (brokeAt !== null && t - brokeAt > (timing.slipMs || SLIP_MS)) { since = null; fired = false; }
+        brokeAt = null;
         if (since === null) since = t;
         if (!fired && t - since >= holdMs) { fired = true; return { fire: true }; }
-      } else { since = null; fired = false; }
+      } else if (since !== null || fired) {
+        // A slip shorter than SLIP_MS keeps the hold going; longer, it starts over.
+        if (brokeAt === null) brokeAt = t;
+        if (t - brokeAt > (timing.slipMs || SLIP_MS)) { since = null; fired = false; brokeAt = null; }
+      }
       return { fire: false };
     }
     // double-tap
@@ -165,4 +175,4 @@ function createChord(chord) {
   return { step, mask: chord ? chord.mask : 0, modBit: chord ? chord.mod : 0 };
 }
 
-module.exports = { BITS, PRESETS, CHORD_KEYS, comboFor, chordFor, chordModifier, createComboDetector, createChord, createHoldToTalk, HOLD_MS, TAP_MAX_MS, TAP_GAP_MS, TALK_HOLD_MS };
+module.exports = { BITS, PRESETS, CHORD_KEYS, comboFor, chordFor, chordModifier, createComboDetector, createChord, createHoldToTalk, HOLD_MS, TAP_MAX_MS, TAP_GAP_MS, TALK_HOLD_MS, SLIP_MS };

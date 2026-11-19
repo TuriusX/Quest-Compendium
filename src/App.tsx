@@ -59,6 +59,7 @@ import {
   emptyPlaythrough, OPEN_PLAYTHROUGH_EVENT, type Playthrough, type PlayKind,
 } from './utils/playthrough';
 import { buildRecap, recapCard, RECAP_GAP_MS } from './utils/recap';
+import { nextHintLevel, textWithHints } from './utils/hintLevels';
 import { readCloud, writeCloud } from './utils/playthroughCloud';
 import { PlaythroughPanel } from './components/PlaythroughPanel';
 import { appSource, isPhone } from './utils/source';
@@ -710,6 +711,19 @@ export default function App() {
     window.addEventListener('qc-recap', on);
     return () => window.removeEventListener('qc-recap', on);
   }, []);
+  // Hint levels (session companion step 2): "More of a hint" / "Show the answer" from the quick menu or the pop-up
+  // card opens the next level of that answer (the card then shows it, newest first).
+  useEffect(() => {
+    const on = (e: Event) => {
+      const id = String((e as CustomEvent).detail?.id || '');
+      if (id) updateMessageById(id, (m) => {
+        const next = nextHintLevel(m.hints, m.hintShown || 1);
+        return next ? { ...m, hintShown: next } : m;
+      });
+    };
+    window.addEventListener('qc-hint-more', on);
+    return () => window.removeEventListener('qc-hint-more', on);
+  }, []);
 
   // Following the game that starts (utils/runningGame.ts followRunning): its compendium opens by itself ("Switched to
   // X" for a few seconds, beside the book too when the panel is hidden), or "Open a tab for X?" when it has none. Once
@@ -762,6 +776,7 @@ export default function App() {
         trackerNextShortcut: settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down',
         questLogShortcut: settings.questLogShortcut || 'CmdOrCtrl+Shift+L',
         locateShortcut: settings.locateShortcut || 'CmdOrCtrl+Shift+K',
+        quickMenuShortcut: settings.quickMenuShortcut || 'Alt+Q',
         findMarkersShortcut: settings.findMarkersShortcut || 'CmdOrCtrl+Shift+M',
         // The owner's picture capture for the guides (admins only).
         ownerCaptureShortcut: userData?.isAdmin ? 'CmdOrCtrl+Shift+P' : '',
@@ -775,6 +790,7 @@ export default function App() {
     settings.trackerNextShortcut,
     settings.questLogShortcut,
     settings.locateShortcut,
+    settings.quickMenuShortcut,
     settings.findMarkersShortcut,
     userData?.isAdmin,
   ]);
@@ -790,10 +806,10 @@ export default function App() {
       enabled: settings.controllerEnabled !== false,
       toggle: padPreset(settings.controllerToggle),
       custom: settings.controllerCustom,
-      talk: settings.controllerTalk || 'y',
+      talk: settings.controllerTalk || 'off',
       trackerTick: settings.controllerTick || 'off',
       trackerNext: settings.controllerNext || 'off',
-      trackerLocate: settings.controllerLocate || 'down',
+      trackerLocate: settings.controllerLocate || 'off',
     });
   }, [settings.controllerEnabled, settings.controllerToggle, settings.controllerCustom, settings.controllerTalk, settings.controllerTick, settings.controllerNext, settings.controllerLocate]);
 
@@ -1138,7 +1154,7 @@ export default function App() {
         : v?.kind === 'video' ? { url: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`, credit: v.channel || 'YouTube', video: true }
         : closeUp ? { url: closeUp, credit: tr('card.yourScreen') }
         : null;
-    const sig = last && last.role === 'assistant' ? `${last.id}:${(last.text || '').length}:${picture?.url.slice(-40) || ''}` : '';
+    const sig = last && last.role === 'assistant' ? `${last.id}:${(last.text || '').length}:${picture?.url.slice(-40) || ''}:${last.hintShown || 0}` : '';
     const first = cardSeenRef.current === null;
     if (sig === cardSeenRef.current) return;
     cardSeenRef.current = sig;
@@ -1149,8 +1165,10 @@ export default function App() {
       id: last.id,
       question: question.slice(0, 200),
       title: last.title || '',
-      text: String(last.text || '').slice(0, 6000),
-      steps: (last.steps || []).map((s) => ({ kind: s.kind, label: s.label || s.text, where: s.where || '' })),
+      // Hint levels: the ones opened so far (newest first), and the next one's label for the card and the quick menu.
+      text: textWithHints(String(last.text || ''), last.hints, last.hintShown || 1, { rule: tr('hint.rule'), answer: tr('hint.answer') }).slice(0, 6000),
+      steps: (last.hintShown || 1) > 1 ? [] : (last.steps || []).map((s) => ({ kind: s.kind, label: s.label || s.text, where: s.where || '' })),
+      hintNext: (() => { const n = nextHintLevel(last.hints, last.hintShown || 1); return n === 2 ? tr('hint.more') : n === 3 ? tr('hint.show') : ''; })(),
       model: /pro/i.test(last.modelUsed || '') ? 'Pro' : last.modelUsed ? 'Fast' : '',
       place: activeTab.place?.name || '',
       combat: !!last.combat,
@@ -3026,6 +3044,8 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           timeZone: deviceTimeZone(),
           // A quick question's id (src/utils/quickQuestions.ts): the server adds what it asks for.
           ...(quick ? { quick } : {}),
+          // This app shows hint levels (session companion step 2): a hint comes with its rule and answer, hidden.
+          ...(quick === 'hint' || quick === 'hintInstead' ? { hintLevels: true } : {}),
           isGameRunningLocally: runningOpen,
           // The guide the app found for this game (the server checks it), and the compendium's name, so answers use the
           // same guide as the quest log whatever Steam calls the game.
@@ -3158,6 +3178,13 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         ...(data.combat === true ? { combat: true } : {}),
         // No fight on the screenshot: a fight is over (its markers go, the quest log shows normal steps).
         ...(data.noFight === true ? { noFight: true } : {}),
+        // A hint's bigger levels (session companion step 2): hidden until the player asks for them.
+        ...(data.hints && typeof data.hints === 'object' && (typeof data.hints.rule === 'string' || typeof data.hints.answer === 'string')
+          ? { hints: {
+              ...(typeof data.hints.rule === 'string' && data.hints.rule.trim() ? { rule: data.hints.rule.slice(0, 400) } : {}),
+              ...(typeof data.hints.answer === 'string' && data.hints.answer.trim() ? { answer: data.hints.answer.slice(0, 900) } : {}),
+            }, hintShown: 1 }
+          : {}),
         ...(typeof data.fight === 'string' && data.fight.trim() ? { fight: data.fight.trim().slice(0, 120) } : {}),
         // The quest log's steps: the 1-4 things to keep in front of the player (the tracker's "From your last answer").
         ...(Array.isArray(data.steps) && data.steps.length
@@ -4139,7 +4166,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       <ControllerLayer
         enabled={settings.controllerEnabled !== false}
         padStyle={settings.controllerStyle || 'auto'}
-        talkButton={settings.controllerTalk || 'y'}
+        talkButton={settings.controllerTalk || 'off'}
         hintMode={settings.hintMode === true}
         logAttached={questLogAttached && (questLogVisible || questLogTucked)}
         comboLabel={padComboLabel(settings.controllerToggle, settings.controllerCustom, tr)}
