@@ -159,6 +159,8 @@ export function billedUsage(model: string, response: any) {
 }
 
 export function logUsage(feature: string, model: string, response: any): void {
+  // A Gemini request answered by OpenAI (openaiGemini.ts): priced as the model that answered.
+  if (typeof response?.model === 'string' && /^gpt-/i.test(response.model)) model = response.model;
   const u = response?.usageMetadata;
   if (!u) return;
   const input = Number(u.promptTokenCount ?? 0);

@@ -11,6 +11,11 @@ import { pipelineSearchRoom, pipelineShare, PLAYER_MONTHLY, recordMonthly, month
 import { GoogleGenAI } from '@google/genai';
 import { AsyncLocalStorage } from 'async_hooks';
 import { billedUsage, withOutputCap, maybeBilledFailure, worstCaseDollars } from '../../usage';
+import { openaiFor, openaiGenerate } from '../../openaiGemini';
+import { openaiUnavailable } from '../../openaiAnswer';
+
+/** The pipeline's AI on OpenAI (owner, Nov 19 2026): PIPELINE_OPENAI=1; Gemini answers what OpenAI can't (openaiGemini.ts). */
+export const pipelineOnOpenAI = () => process.env.PIPELINE_OPENAI === '1';
 
 dotenv.config();
 if (!getApps().length) initializeApp({ projectId: 'quest-compendium-1bccf' });
@@ -91,7 +96,15 @@ export function gemini(): GoogleGenAI {
     request = withOutputCap(request);
     let res: any;
     try {
-      res = await generate(request);
+      const oaModel = pipelineOnOpenAI() ? openaiFor(request) : '';
+      res = oaModel
+        ? await openaiGenerate(request, oaModel).catch((e: any) => {
+            // OpenAI overloaded or down: this one call goes to Gemini instead.
+            if (!openaiUnavailable(e)) throw e;
+            console.warn(`[openai] ${oaModel} unavailable (${e?.status || ''}): Gemini answers this call`);
+            return generate(request);
+          })
+        : await generate(request);
     } catch (e) {
       // A call that may have run before failing is counted at its worst case (it's billed; we never see how much).
       if (maybeBilledFailure(e)) {
@@ -104,7 +117,8 @@ export function gemini(): GoogleGenAI {
       }
       throw e;
     }
-    const u = billedUsage(String(request?.model || ''), res);
+    // Priced as the model that answered (an OpenAI model's tokens and $0.01 searches).
+    const u = billedUsage(typeof res?.model === 'string' && /^gpt-/i.test(res.model) ? res.model : String(request?.model || ''), res);
     // Every search counts toward today's total and the month's (searchGuard.ts), here, once, and before the call returns.
     if (u.searches) await Promise.all([recordSearchDay(u.searches, forPlayers ? 'players' : 'pipeline'), recordMonthly(u.searches, forPlayers ? 'players' : undefined)]);
     ledger.calls++; ledger.input += u.input; ledger.output += u.output; ledger.thinking += u.thinking; ledger.searches += u.searches;

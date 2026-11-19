@@ -7,6 +7,7 @@ const logDebug = (...args: any[]) => {};
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold, ThinkingLevel } from '@google/genai';
 import { logBanner, logUsage, logTranscribe, withOutputCap, maybeBilledFailure, worstCaseDollars, requestCost } from './usage';
 import { openaiAnswer, openaiReady, openaiUnavailable, OPENAI_TRANSCRIBE_MODEL } from './openaiAnswer';
+import { openaiFor, openaiGenerate } from './openaiGemini';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
 import { initializeApp, getApp } from 'firebase-admin/app';
@@ -279,6 +280,37 @@ function getGeminiClient(): GoogleGenAI {
   throw new Error('A Gemini API key is required. Please add it in the settings menu.');
 }
 
+/**
+ * The client for the server's helper calls (pop-up summaries, visual answers, Locate me, Spot it, place reading, drawn
+ * answers): with config/chatRouting.openaiHelpers on, each Gemini request OpenAI can answer goes to OpenAI
+ * (openaiGemini.ts, a Gemini-shaped reply); video by link, images out and the rest stay on Gemini, and an overloaded
+ * OpenAI hands the call back to Gemini.
+ */
+let helpersOnOpenAI = false;
+function getHelperClient(): GoogleGenAI {
+  void routing().then((r) => { helpersOnOpenAI = r.openaiHelpers; }).catch(() => {});
+  const g = getGeminiClient();
+  if (!helpersOnOpenAI || !openaiReady()) return g;
+  const generate = g.models.generateContent.bind(g.models);
+  const models = Object.create(g.models);
+  models.generateContent = async (request: any) => {
+    // Flash-Lite's quick looks stay on Gemini: a player waits on them, and gpt-6-luna takes 2-4 s where Flash-Lite
+    // takes under 1 (and without thinking luna misreads places; Nov 19 2026 test on the Elden Ring screenshot).
+    const m = /flash-lite/i.test(String(request?.model || '')) ? '' : openaiFor(request);
+    if (!m) return generate(request);
+    try {
+      return await openaiGenerate(request, m);
+    } catch (e: any) {
+      if (!openaiUnavailable(e)) throw e;
+      console.log(`[helper-openai] ${m} unavailable (${e?.status || ''}): Gemini answers`);
+      return generate(request);
+    }
+  };
+  const client = Object.create(g);
+  client.models = models;
+  return client;
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -490,7 +522,7 @@ async function startServer() {
     // Visual answers under the box's answers (Nov 14 2026; visualServer.ts), when VISUAL_ANSWERS=1.
     visual: {
       on: () => visualAnswersOn(),
-      find: (o) => answerVisual({ getGeminiClient: getGeminiClient as any, log: (label, model, res) => logUsage(label, model, res), guideKeyFor: (game) => guideKeyFor(game) }, o),
+      find: (o) => answerVisual({ getGeminiClient: getHelperClient as any, log: (label, model, res) => logUsage(label, model, res), guideKeyFor: (game) => guideKeyFor(game) }, o),
       event: (type, ref) => visualEvent(type, ref, 2),
     },
     // A signed-in player on the website: who they are and whether they're Premium (the guide's own allowance, siteAsk.ts;
@@ -564,13 +596,13 @@ async function startServer() {
   };
   registerLocate(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed });
   // "Locate me" (the tracker and the PlaceBar): its own daily limit, never the player's questions.
-  registerLocateMe(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST, updateUserDoc: updateFirestoreDocREST, loadGuide: guideAreasWithPages });
-  registerSpot(app, { requireAuth, getGeminiClient, getUserDoc: getFirestoreDocREST });
+  registerLocateMe(app, { requireAuth, getGeminiClient: getHelperClient, getUserDoc: getFirestoreDocREST, updateUserDoc: updateFirestoreDocREST, loadGuide: guideAreasWithPages });
+  registerSpot(app, { requireAuth, getGeminiClient: getHelperClient, getUserDoc: getFirestoreDocREST });
   registerRefine(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed, onChecked: (game, checked, kept, details) => void recordMarkerCheck(game, checked, kept, details) });
   // Markers v2: find the marked things on the screen as it is when the answer arrives (desktop).
   registerRefind(app, { requireAuth, getGeminiClient, allowed: markerAiAllowed, onChecked: (game, checked, kept, details) => void recordMarkerCheck(game, checked, kept, details), findAgainAllowed: () => takeFindAgain() });
   // Visual answers (owner, Nov 14 2026): one video or picture under an answer, after it arrives. Off unless VISUAL_ANSWERS=1.
-  registerVisualAnswers(app, { requireAuth, getGeminiClient: getGeminiClient as any, log: (label, model, res) => logUsage(label, model, res), guideKeyFor: (game) => guideKeyFor(game) });
+  registerVisualAnswers(app, { requireAuth, getGeminiClient: getHelperClient as any, log: (label, model, res) => logUsage(label, model, res), guideKeyFor: (game) => guideKeyFor(game) });
 
   // --- API Health Check ---
   app.get('/api/health', (req, res) => {
@@ -2388,7 +2420,7 @@ percentages:
       recent.push(now);
       cardSummaryCalls.set(who, recent);
       if (cardSummaryCalls.size > 5000) cardSummaryCalls.clear();
-      const ai = getGeminiClient();
+      const ai = getHelperClient();
       const r: any = await withTimeout(
         ai.models.generateContent({
           model: 'gemini-3.8-flash',

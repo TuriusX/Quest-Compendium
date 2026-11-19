@@ -27,8 +27,13 @@ export type Routing = {
   openaiOwner: boolean;
   /** The website's questions ("Ask about this", siteAsk.ts) too, with the same models. */
   openaiSite: boolean;
+  /**
+   * The server's helper calls on OpenAI (openaiGemini.ts): pop-up summaries, visual answers' choices, Locate me, Spot it,
+   * place reading, drawn answers' decisions. What OpenAI can't do (video by link, images out) stays on Gemini.
+   */
+  openaiHelpers: boolean;
 };
-export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [], openaiOwner: false, openaiSite: false };
+export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [], openaiOwner: false, openaiSite: false, openaiHelpers: false };
 
 /** The OpenAI model for a website question, or '' for Gemini. */
 export function openaiSiteModel(r: Routing, pro: boolean): string {
@@ -77,6 +82,7 @@ export function normalizeRouting(d: any): Routing {
     openaiUids: Array.isArray(d?.openaiUids) ? d.openaiUids.map(String).filter(Boolean).slice(0, 50) : [],
     openaiOwner: d?.openaiOwner === true,
     openaiSite: d?.openaiSite === true,
+    openaiHelpers: d?.openaiHelpers === true,
   };
 }
 

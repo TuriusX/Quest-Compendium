@@ -90,7 +90,7 @@ async function questEvidence(key: string, game: string, name: string, kind: Ques
  */
 const STEP_RULE = 'Write each step as an action the player takes, in order, addressed to the player in the imperative and at most 120 characters: "Store small fish in your satchel and large ones on your horse", "Mail each fish to Jeremy Gill from a post office", "Read Gill\'s invitation at a post office". Never describe what happens or what the game does ("Gill sends an invitation", "Small fish are stored in the satchel"); turn it into what the player does about it, or leave it out.';
 
-const WRITER = (game: string, name: string, kind: QuestKind, ev: EvidencePack, chapters: string[]) => [
+export const WRITER = (game: string, name: string, kind: QuestKind, ev: EvidencePack, chapters: string[]) => [
   `Write a compendium page for the ${kind === 'story' ? 'story mission' : 'Stranger mission strand'} "${name}" in the video game "${game}", from the EVIDENCE only.`,
   'Every fact must come from an evidence line; leave a field empty rather than guess. Use the game\'s exact names. Never write generic advice.',
   '"chapter": as the evidence words it (e.g. "Chapter 2", "Epilogue Part 1"), only when it says.',
@@ -110,7 +110,7 @@ const WRITER = (game: string, name: string, kind: QuestKind, ev: EvidencePack, c
 ].join('\n');
 
 /** The page as claims: the overview as sentences, each fact (and each step) as its own claim. */
-function claimsOf(name: string, overview: string, q: Quest): { page: ClaimPage; map: ((ok: boolean) => void)[] } {
+export function claimsOf(name: string, overview: string, q: Quest): { page: ClaimPage; map: ((ok: boolean) => void)[] } {
   const services: string[] = [];
   const map: ((ok: boolean) => void)[] = [];
   const keep = <T,>(list: T[], i: number) => (ok: boolean) => { if (!ok) (list as any)[i] = null; };
@@ -138,7 +138,7 @@ function claimsOf(name: string, overview: string, q: Quest): { page: ClaimPage; 
   return { page: { steps, entries: [], choices: [], advice: [], services, fights: [] }, map };
 }
 
-function applyQuestVerdicts(overview: string, q: Quest, map: ((ok: boolean) => void)[], verdicts: ClaimVerdict[]) {
+export function applyQuestVerdicts(overview: string, q: Quest, map: ((ok: boolean) => void)[], verdicts: ClaimVerdict[]) {
   const bad = verdicts.filter((v) => v.verdict === 'unsupported' || v.verdict === 'contradicted');
   const removed = bad.map((v) => `${v.label} ${v.verdict}: ${cut(v.text, 120)}`);
   const dropSent = new Map<number, Set<number>>();
