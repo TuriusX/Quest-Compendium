@@ -25,8 +25,15 @@ export type Routing = {
   openaiPro: string; openaiFast: string; openaiShare: number; openaiUids: string[];
   /** The owner's accounts (ADMIN_EMAILS) get OpenAI whatever the share: the owner tries it first. */
   openaiOwner: boolean;
+  /** The website's questions ("Ask about this", siteAsk.ts) too, with the same models. */
+  openaiSite: boolean;
 };
-export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [], openaiOwner: false };
+export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [], openaiOwner: false, openaiSite: false };
+
+/** The OpenAI model for a website question, or '' for Gemini. */
+export function openaiSiteModel(r: Routing, pro: boolean): string {
+  return r.openaiSite ? (pro ? r.openaiPro : r.openaiFast) : '';
+}
 
 /** The OpenAI model for this question, or '' for Gemini. A stable share of players: by a hash of the account id. */
 export function openaiModelFor(r: Routing, o: { pro: boolean; uid: string; owner?: boolean }): string {
@@ -69,6 +76,7 @@ export function normalizeRouting(d: any): Routing {
     openaiShare: Number.isFinite(Number(d?.openaiShare)) ? Math.max(0, Math.min(100, Number(d.openaiShare))) : 0,
     openaiUids: Array.isArray(d?.openaiUids) ? d.openaiUids.map(String).filter(Boolean).slice(0, 50) : [],
     openaiOwner: d?.openaiOwner === true,
+    openaiSite: d?.openaiSite === true,
   };
 }
 

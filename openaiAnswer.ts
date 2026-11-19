@@ -97,6 +97,8 @@ export type OpenAIAnswerOpts = {
   signal?: AbortSignal;
   /** The request's voice transcript, kept between its calls (a retry doesn't transcribe again). */
   heard?: { text?: string; seconds?: number };
+  /** Shown as it's written (the website): called with the whole reply so far after each piece. */
+  onText?: (all: string) => void;
 };
 
 /** One answer from OpenAI, shaped like a Gemini response (see the top of this file). Throws on an API error. */
@@ -112,11 +114,34 @@ export async function openaiAnswer(o: OpenAIAnswerOpts): Promise<any> {
     reasoning: { effort: o.effort || 'low' },
     ...(o.withSearch ? { tools: [{ type: 'web_search' }] } : {}),
   };
-  const r: any = await oa().responses.create(req, { signal: o.signal });
+  let r: any;
+  if (o.onText) {
+    // Streamed: the pieces as they come, then the finished response (the same object a plain call returns).
+    let all = '';
+    const stream: any = await oa().responses.create({ ...req, stream: true }, { signal: o.signal });
+    for await (const ev of stream) {
+      if (ev?.type === 'response.output_text.delta' && ev.delta) {
+        all += String(ev.delta);
+        o.onText(stripInlineCitations(all));
+      } else if (ev?.type === 'response.completed' || ev?.type === 'response.incomplete') {
+        r = ev.response;
+      } else if (ev?.type === 'response.failed' || ev?.type === 'error') {
+        const err: any = new Error(String(ev?.response?.error?.message || ev?.message || 'OpenAI stream failed'));
+        err.status = 500;
+        throw err;
+      }
+    }
+    if (!r) { const err: any = new Error('OpenAI stream ended early'); err.status = 502; throw err; }
+  } else {
+    r = await oa().responses.create(req, { signal: o.signal });
+  }
   const out: any[] = Array.isArray(r?.output) ? r.output : [];
   const queries: string[] = [];
   for (const it of out) if (it?.type === 'web_search_call') queries.push(String(it?.action?.query || it?.action?.queries?.[0] || 'search'));
-  const raw = String(r?.output_text || '');
+  // output_text is the SDK's shortcut on a plain reply; a streamed reply's final response only has the parts.
+  const raw = typeof r?.output_text === 'string' && r.output_text
+    ? r.output_text
+    : out.filter((x) => x?.type === 'message').flatMap((x) => (x.content || []).filter((c: any) => c?.type === 'output_text').map((c: any) => String(c.text || ''))).join('');
   // A local test can keep the raw replies (never on Cloud Run).
   if (process.env.QC_OPENAI_RAW && !process.env.K_SERVICE) {
     try { (await import('node:fs')).appendFileSync(process.env.QC_OPENAI_RAW, JSON.stringify({ at: Date.now(), model: o.model, status: r?.status, raw, types: out.map((x) => x?.type) }) + '\n'); } catch {}

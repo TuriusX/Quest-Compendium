@@ -33,7 +33,7 @@ import { registerSpot } from './spot';
 import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor, baseGameKey } from './guidesApi';
-import { routing, takePlayerPro, PRO_CHAT_MODEL, openaiModelFor } from './chatRouting';
+import { routing, takePlayerPro, PRO_CHAT_MODEL, openaiModelFor, openaiSiteModel } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
@@ -1909,7 +1909,7 @@ percentages:
           if (usePro) modelUsed = 'Gemini 3.1 Pro';
           // OpenAI answers (openaiAnswer.ts; config/chatRouting openaiPro / openaiFast, for a share of players): the app's
           // Pro and Fast, not the website (yet). Gemini answers instead when OpenAI is down or overloaded.
-          const oaModel = !site && (usePro || fastApp) && openaiReady() && !evalCapture ? openaiModelFor(routingCfg, { pro: usePro, uid: String(userId || ''), owner: isOwnerEmail(typeof (req as any).user?.email === 'string' ? String((req as any).user.email).trim().toLowerCase() : null) }) : '';
+          const oaModel = site ? (openaiReady() && !evalCapture ? openaiSiteModel(routingCfg, usePro) : '') : (usePro || fastApp) && openaiReady() && !evalCapture ? openaiModelFor(routingCfg, { pro: usePro, uid: String(userId || ''), owner: isOwnerEmail(typeof (req as any).user?.email === 'string' ? String((req as any).user.email).trim().toLowerCase() : null) }) : '';
           const heard: { text?: string; seconds?: number } = {};
           const modelOf = (r: any) => (typeof r?.model === 'string' && /^gpt-/i.test(r.model) ? r.model : answerModel);
           const geminiCall = (sys: string, withSearch: boolean): Promise<any> => ai.models.generateContent(answerParams(sys, withSearch));
@@ -1933,11 +1933,20 @@ percentages:
           });
           const answerCall = (sys: string, withSearch: boolean): Promise<any> => {
             if (oaModel) {
-              return openaiAnswer({ model: oaModel, system: sys, contents: contentsPayload, withSearch, effort: 'low', maxOutputTokens: 16000, heard })
+              // The website shows it as it's written: only the attempt running now may reach the page.
+              const mine = site?.stream ? ++attempt : 0;
+              if (mine > 1) site!.stream!({ reset: true });
+              const onText = site?.stream ? (all: string) => { if (mine === attempt) site.stream!({ raw: all }); } : undefined;
+              return openaiAnswer({ model: oaModel, system: sys, contents: contentsPayload, withSearch, effort: 'low', maxOutputTokens: 16000, heard, onText })
                 .then((r) => { logTranscribe('chat-voice', OPENAI_TRANSCRIBE_MODEL, r.audioSeconds); return r; })
                 .catch((e: any) => {
                   if (!openaiUnavailable(e)) throw e;
                   console.log(`[chat-openai] ${oaModel} unavailable (${e?.status || ''} ${String(e?.message || '').slice(0, 80)}): Gemini answers`);
+                  if (site?.stream) {
+                    const again = ++attempt;
+                    site.stream({ reset: true });
+                    return ai.models.generateContentStream(answerParams(sys, withSearch)).then((st) => collectStream(st, (all) => { if (again === attempt) site.stream!({ raw: all }); }));
+                  }
                   return geminiCall(sys, withSearch);
                 });
             }
