@@ -34,6 +34,28 @@ export const QUESTIONS: { id: string; real: boolean; game: string; appId?: numbe
   { id: 's1', real: false, game: 'Red Dead Redemption 2', appId: 1174180, q: 'Where am I and is there anything worth doing nearby?', image: 'rdr2.jpg' },
   { id: 's2', real: false, game: "Baldur's Gate 3", appId: 1086940, q: 'Who is this and is there anything I should do here?', image: 'bg3.jpg' },
   { id: 's3', real: false, game: 'ELDEN RING', appId: 1245620, q: 'What is this castle and should I go in now?', image: 'er.jpg' },
+  // Second set (Nov 19 2026, the cross-provider test): 20 more in the same style, two in other languages, three
+  // more on the same screenshots.
+  { id: 'd1', real: false, game: 'Hollow Knight', appId: 367520, q: 'Where do I find the Mantis Claw?' },
+  { id: 'd2', real: false, game: 'ELDEN RING', appId: 1245620, q: 'How do I get into the Academy of Raya Lucaria? The gate is sealed.' },
+  { id: 'd3', real: false, game: "Baldur's Gate 3", appId: 1086940, q: 'How do I get the Blood of Lathander?' },
+  { id: 'd4', real: false, game: 'The Witcher 3: Wild Hunt', appId: 292030, q: 'Where do I find the Griffin School gear diagrams?' },
+  { id: 'd5', real: false, game: 'Red Dead Redemption 2', appId: 1174180, q: 'Where can I get the White Arabian horse?' },
+  { id: 'd6', real: false, game: 'Cyberpunk 2077', appId: 1091500, q: 'How do I romance Judy?' },
+  { id: 'd7', real: false, game: 'Hades II', appId: 1145350, q: 'How do I get to the surface?' },
+  { id: 'd8', real: false, game: 'Clair Obscur: Expedition 33', appId: 1903340, q: 'How do I beat the Lampmaster?' },
+  { id: 'd9', real: false, game: 'FINAL FANTASY VI', appId: 1173820, q: 'How do I get Shadow back in the World of Ruin?' },
+  { id: 'd10', real: false, game: 'Hollow Knight', appId: 367520, q: 'Any tips for the Mantis Lords fight?' },
+  { id: 'd11', real: false, game: 'ELDEN RING', appId: 1245620, q: '¿Dónde consigo la Campanilla de invocación de espíritus?', lang: 'Spanish' },
+  { id: 'd12', real: false, game: "Baldur's Gate 3", appId: 1086940, q: 'Como eu chego no Subterrâneo (Underdark)?', lang: 'Portuguese' },
+  { id: 'd13', real: false, game: 'The Witcher 3: Wild Hunt', appId: 292030, q: 'What do I need to do to get the ending where Ciri becomes a witcher?' },
+  { id: 'd14', real: false, game: 'Red Dead Redemption 2', appId: 1174180, q: 'How do I get the Legend of the East satchel?' },
+  { id: 'd15', real: false, game: 'Metroid Prime Remastered', q: 'Where are the Space Jump Boots?' },
+  { id: 'd16', real: false, game: 'Stardew Valley', appId: 413150, q: 'How do I fix the bridge to the quarry?' },
+  { id: 'd17', real: false, game: 'Cyberpunk 2077', appId: 1091500, q: 'Is there anything I can miss for good before The Heist?' },
+  { id: 'd18', real: false, game: 'ELDEN RING', appId: 1245620, q: 'Is there a Site of Grace near here?', image: 'er.jpg' },
+  { id: 'd19', real: false, game: "Baldur's Gate 3", appId: 1086940, q: 'How do I solve this?', image: 'bg3.jpg' },
+  { id: 'd20', real: false, game: 'Red Dead Redemption 2', appId: 1174180, q: "Where's the nearest fence from here?", image: 'rdr2.jpg' },
 ];
 
 if (/capture\.ts$/.test(process.argv[1] || '')) {
@@ -42,7 +64,7 @@ if (/capture\.ts$/.test(process.argv[1] || '')) {
     await new Promise((r) => setTimeout(r, 9500));
     const body: any = {
       question: x.q, history: [], aiMode: 'standard', isGameRunningLocally: true,
-      activeGame: { name: x.game, ...(x.appId ? { appId: x.appId } : {}) }, language: 'English', markers: false,
+      activeGame: { name: x.game, ...(x.appId ? { appId: x.appId } : {}) }, language: x.lang || 'English', markers: false,
       model: 'pro', preferredModel: 'pro', evalId: x.id, ...(x.image ? { imageBase64: await img(x.image) } : {}),
     };
     const r = await fetch('http://localhost:3000/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer guest_dev_local' }, body: JSON.stringify(body) });

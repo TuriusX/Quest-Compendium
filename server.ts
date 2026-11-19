@@ -5,7 +5,8 @@ import express from 'express';
 
 const logDebug = (...args: any[]) => {};
 import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold, ThinkingLevel } from '@google/genai';
-import { logBanner, logUsage, withOutputCap, maybeBilledFailure, worstCaseDollars, requestCost } from './usage';
+import { logBanner, logUsage, logTranscribe, withOutputCap, maybeBilledFailure, worstCaseDollars, requestCost } from './usage';
+import { openaiAnswer, openaiReady, openaiUnavailable, OPENAI_TRANSCRIBE_MODEL } from './openaiAnswer';
 import dotenv from 'dotenv';
 import xml2js from 'xml2js';
 import { initializeApp, getApp } from 'firebase-admin/app';
@@ -32,7 +33,7 @@ import { registerSpot } from './spot';
 import { deckUpdateNote } from './deckNotice';
 import { DONE_RULES, PLAYTHROUGH_RULES, extractDone } from './src/utils/progressMemory';
 import { registerGuidesApi, guidePageFor, guideEntriesForMarkers, guideMarkersPrompt, GUIDE_MARKER_LIMIT, guideNotesForPrompt, guideGroundingForPrompt, extractGuideRefs, guideFightNotes, guideLinesForPanel, guideAreasWithPages, passedAreaNames, type GuideRef , guideKeyFor, baseGameKey } from './guidesApi';
-import { routing, takePlayerPro, PRO_CHAT_MODEL } from './chatRouting';
+import { routing, takePlayerPro, PRO_CHAT_MODEL, openaiModelFor } from './chatRouting';
 import { releaseOf, isNewRelease, cutoffs, searchMode as searchModeFor, asksForSearch, stripSearchAsk, isBlankAnswer, wantsSpecifics, NOT_BLANK, EXISTENCE_RULES, ASK_RULES, FORCE_RULES, FORCE_AGAIN, type SearchMode, withProRules, ROLEPLAY_PERSONA } from './searchPolicy';
 import { recordPlayerCost, registerPlayerCosts } from './playerCosts';
 import { allowances, applyDay, pickBucket, wantedBucket, dayIn, nextReset, safeTimeZone, type Bucket } from './allowances';
@@ -1859,6 +1860,8 @@ percentages:
       // Query Gemini API
       let responseText = '';
       let modelUsed = targetModel === MAIN_MODEL ? 'Gemini 3.8 Flash' : 'Gemini Flash-Lite';
+      // The OpenAI model that answered ('' for Gemini): its own marker step below.
+      let oaAnswered = '';
       // First attempts given up on: billed, but never reported back (the website's dollars a day count them).
       let abandoned = 0;
       const modelStartedAt = Date.now();
@@ -1904,6 +1907,12 @@ percentages:
         } else {
           const answerModel = usePro ? PRO_CHAT_MODEL : targetModel;
           if (usePro) modelUsed = 'Gemini 3.1 Pro';
+          // OpenAI answers (openaiAnswer.ts; config/chatRouting openaiPro / openaiFast, for a share of players): the app's
+          // Pro and Fast, not the website (yet). Gemini answers instead when OpenAI is down or overloaded.
+          const oaModel = !site && (usePro || fastApp) && openaiReady() && !evalCapture ? openaiModelFor(routingCfg, { pro: usePro, uid: String(userId || '') }) : '';
+          const heard: { text?: string; seconds?: number } = {};
+          const modelOf = (r: any) => (typeof r?.model === 'string' && /^gpt-/i.test(r.model) ? r.model : answerModel);
+          const geminiCall = (sys: string, withSearch: boolean): Promise<any> => ai.models.generateContent(answerParams(sys, withSearch));
           const answerParams = (sys: string, withSearch: boolean) => ({
             model: answerModel,
             contents: contentsPayload,
@@ -1923,7 +1932,16 @@ percentages:
             }
           });
           const answerCall = (sys: string, withSearch: boolean): Promise<any> => {
-            if (!site?.stream) return ai.models.generateContent(answerParams(sys, withSearch));
+            if (oaModel) {
+              return openaiAnswer({ model: oaModel, system: sys, contents: contentsPayload, withSearch, effort: 'low', maxOutputTokens: 16000, heard })
+                .then((r) => { logTranscribe('chat-voice', OPENAI_TRANSCRIBE_MODEL, r.audioSeconds); return r; })
+                .catch((e: any) => {
+                  if (!openaiUnavailable(e)) throw e;
+                  console.log(`[chat-openai] ${oaModel} unavailable (${e?.status || ''} ${String(e?.message || '').slice(0, 80)}): Gemini answers`);
+                  return geminiCall(sys, withSearch);
+                });
+            }
+            if (!site?.stream) return geminiCall(sys, withSearch);
             const mine = ++attempt;
             if (mine > 1) site.stream({ reset: true });
             return ai.models.generateContentStream(answerParams(sys, withSearch)).then((st) => collectStream(st, (all) => { if (mine === attempt) site.stream!({ raw: all }); }));
@@ -1935,21 +1953,22 @@ percentages:
           // there pays for the attempt and gets a thinner answer from the fallback, so they get longer.
           // Shown as it's written, a long answer isn't given up on while the player is reading it.
           // The app's Fast: 20 s at most in the test, 30 s before the fallback.
-          const flashWait = site?.stream ? 75000 : site ? 45000 : 30000;
+          // OpenAI's Fast (gpt-6-luna): 16 s median, 36 of 40 within 30 s in the test: 40 s before the Gemini fallback.
+          const flashWait = site?.stream ? 75000 : site ? 45000 : oaModel ? 40000 : 30000;
           if (evalCapture) {
             const fs = await import('node:fs');
             fs.appendFileSync(String(process.env.QC_EVAL_CAPTURE), JSON.stringify({ id: req.body.evalId, model: answerModel, contents: contentsPayload, systemInstruction: firstSystem, retrySystem: systemInstruction, withSearch: !!searchTools, searchMode, factsUsed, temperature: 0.7, qtype }) + String.fromCharCode(10));
             return res.json({ text: 'captured', modelUsed: 'eval' });
           }
           let response = await withTimeout(answerCall(firstSystem, searchTools), usePro ? proWait : flashWait, usePro ? 'Pro query' : 'Flash query') as any;
-          logUsage(usePro ? `chat-pro:${qtype}` : 'chat', answerModel, response);
+          logUsage(usePro ? `chat-pro:${qtype}` : 'chat', modelOf(response), response);
           // A new release must be answered from a search: if the model skipped it, once more, told to search first.
           // (Flash only: Pro follows the instruction, and a second Pro call would run past the app's wait.)
           if (searchMode === 'force' && searchTools && !usePro && countSearches(response) === 0) {
             const first = response;
             try {
               response = await withTimeout(answerCall(`${systemInstruction}\n\n${FORCE_AGAIN}`, true), flashWait, 'New release, searching') as any;
-              logUsage(usePro ? 'chat-pro-searched' : 'chat-searched', answerModel, response);
+              logUsage(usePro ? 'chat-pro-searched' : 'chat-searched', modelOf(response), response);
               if (!String(response?.text || '').trim()) response = first;
             } catch {
               response = first;
@@ -1960,7 +1979,7 @@ percentages:
             searchAsked = true;
             site?.stream?.({ searching: true });
             response = await withTimeout(answerCall(systemInstruction, searchOk), usePro ? (searchOk ? Math.max(routingCfg.proTimeoutMs, 45000) : routingCfg.proTimeoutMs) : flashWait, 'Answer after asking to search') as any;
-            logUsage(usePro ? 'chat-pro-searched' : 'chat-searched', answerModel, response);
+            logUsage(usePro ? 'chat-pro-searched' : 'chat-searched', modelOf(response), response);
           }
           // A player never gets a blank answer: nothing readable (the model tried a search it wasn't given, or only
           // asked for one) is asked once more, with search when it's allowed.
@@ -1969,7 +1988,7 @@ percentages:
             console.log(`[chat-blank] ${response?.candidates?.[0]?.finishReason || 'empty'}: retrying${searchOk ? ' with search' : ''}`);
             try {
               response = await withTimeout(answerCall(`${systemInstruction}\n\n${NOT_BLANK}`, searchOk), usePro ? Math.max(routingCfg.proTimeoutMs, 45000) : flashWait, 'Answer after a blank one') as any;
-              logUsage(usePro ? 'chat-pro-blank' : 'chat-blank', answerModel, response);
+              logUsage(usePro ? 'chat-pro-blank' : 'chat-blank', modelOf(response), response);
               if (isBlankAnswer(response?.text || '')) response = blank;
             } catch {
               response = blank;
@@ -1980,6 +1999,11 @@ percentages:
           searchSourcesSeen = searchSources(response); groundingLinksSeen = groundingLinks(response);
           groundedSeen = groundedText(response);
           responseText = response.text || '';
+          // Which model answered, on the answer's line and in the feedback ("Pro"/"Fast" for players: modelKind).
+          if (/^gpt-/i.test(modelOf(response))) {
+            oaAnswered = modelOf(response);
+            modelUsed = usePro ? `OpenAI Pro (${oaAnswered})` : `OpenAI Fast (${oaAnswered})`;
+          }
 
           if (!isBlankAnswer(responseText)) {
             charge(usePro);
@@ -2091,6 +2115,22 @@ percentages:
           }
         } catch (e: any) {
           console.log('[chat] Pro marker step skipped:', e?.message);
+        }
+      }
+      // OpenAI's Fast (gpt-6-luna) leaves the markers out of its answers (the Nov 19 2026 check: none in 7 screenshot
+      // questions, where gpt-6.2-sol marked what it referred to): a short second call asks it for the block alone.
+      if (oaAnswered && !usePro && imageBase64 && wantMarkers && !/<qc-points>/i.test(responseText)) {
+        try {
+          const shown = responseText.replace(/<qc-[a-z-]+[^>]*>[\s\S]*?<\/qc-[a-z-]+>/gi, '').slice(0, 6000);
+          const mr: any = await withTimeout(openaiAnswer({
+            model: oaAnswered, system: systemInstruction, withSearch: false, effort: 'low', maxOutputTokens: 3000,
+            contents: [{ role: 'user', parts: [...currentParts.filter((p: any) => p.inlineData && /^image\//.test(p.inlineData.mimeType)), { text: `${promptText}\n\n[THE ANSWER ALREADY GIVEN]\n${shown}\n\n[TASK] Reply with only the <qc-points> block for this answer and this screenshot, following the marker rules exactly: point at the things the answer refers to that you can actually see, with their centers on the 0-1000 scale. If nothing it refers to is visible, reply <qc-points>[]</qc-points>.` }] }],
+          }), 15000, 'OpenAI marker step');
+          logUsage('chat-markers', oaAnswered, mr);
+          const block = String(mr?.text || '').match(/<qc-points>[\s\S]*?<\/qc-points>/i);
+          if (block) responseText = `${responseText}\n${block[0]}`;
+        } catch (e: any) {
+          console.log('[chat] OpenAI marker step skipped:', e?.message);
         }
       }
       // The guide entries the answer used (a checked or flagship page's tags).

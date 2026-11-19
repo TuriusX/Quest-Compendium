@@ -30,7 +30,15 @@ const RATES: Record<string, { input: number; output: number }> = {
   // The read-aloud voice: text in, audio out, per Google's price list (Oct 14, 2026): $0.50 / $6.00 through Dec 31, 2026,
   // $1.00 / $12.00 from Jan 1, 2027 (like Flash and Flash TTS, whose prices also double then).
   'gemini-3.8-flash-lite-tts': { input: 0.5, output: 6.0 },
+  // OpenAI answers (openaiAnswer.ts), per OpenAI's price page (Nov 19, 2026). Searches: OPENAI_SEARCH_DOLLARS.
+  'gpt-6.2-sol': { input: 2.0, output: 10.0 },
+  'gpt-6-luna': { input: 0.1, output: 0.5 },
 };
+/** OpenAI's web search: $10 per 1,000 calls (the pages it reads are billed as input tokens, counted above). */
+export const OPENAI_SEARCH_DOLLARS = 10 / 1000;
+/** Speech to text for voice questions (gpt-transcribe): $0.0045 a minute. */
+export const TRANSCRIBE_DOLLARS_PER_MINUTE = 0.0045;
+const searchDollarsFor = (model: string) => (/^gpt-/i.test(model) ? OPENAI_SEARCH_DOLLARS : SEARCH_DOLLARS);
 /**
  * Image models billed by the token (Nano Banana 2: drawn answers, picture upscales; $60 a million image tokens out, per
  * Google's price list). Kept apart from RATES so the rate for an unknown text model isn't raised to an image's.
@@ -146,7 +154,7 @@ export function billedUsage(model: string, response: any) {
   if (tokens !== null && !hasPrice(model)) noteUnpriced(model, tokens);
   return {
     input: Number(u.promptTokenCount ?? 0), output: Number(u.candidatesTokenCount ?? 0), thinking: Number(u.thoughtsTokenCount ?? 0),
-    searches, tokenDollars: tokens ?? 0, searchDollars: searches * SEARCH_DOLLARS, priced: hasPrice(model),
+    searches, tokenDollars: tokens ?? 0, searchDollars: searches * searchDollarsFor(model), priced: hasPrice(model),
   };
 }
 
@@ -168,7 +176,7 @@ export function logUsage(feature: string, model: string, response: any): void {
   if (!hasPrice(model)) noteUnpriced(model, cost);
   const scope = requestCost.getStore();
   if (scope) {
-    scope.dollars += (cost ?? 0) + searches * SEARCH_DOLLARS;
+    scope.dollars += (cost ?? 0) + searches * searchDollarsFor(model);
     scope.searches += searches;
   }
   // Gemini's own prompt caching (implicit: the same start of a request, like the rules text, re-used within minutes):
@@ -179,8 +187,17 @@ export function logUsage(feature: string, model: string, response: any): void {
     `[usage] ${feature} ${model} in=${input}${image ? ` (image ${image})` : ''}${cached ? ` cached=${cached}` : ''} out=${answer} thinking=${thinking}` +
       (searches ? ` searches=${searches}` : '') +
       ` ≈ $${cost.toFixed(4)}${hasPrice(model) ? '' : ' (no price on file: top rate)'}` +
-      (searches ? ` (+$${(searches * SEARCH_COST).toFixed(3)} search)` : ''),
+      (searches ? ` (+$${(searches * (/^gpt-/i.test(model) ? OPENAI_SEARCH_DOLLARS : SEARCH_COST)).toFixed(3)} search)` : ''),
   );
+}
+
+/** A voice question turned into text for an OpenAI answer (billed by the minute). */
+export function logTranscribe(feature: string, model: string, seconds: number): void {
+  if (!seconds) return;
+  const cost = (seconds / 60) * TRANSCRIBE_DOLLARS_PER_MINUTE;
+  const scope = requestCost.getStore();
+  if (scope) scope.dollars += cost;
+  console.log(`[usage] ${feature} ${model} audio=${seconds}s ≈ $${cost.toFixed(4)}`);
 }
 
 /** Banner art is billed per image rather than per token. */

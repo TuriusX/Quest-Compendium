@@ -15,8 +15,28 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { apiLimits, quotaDay } from './apiLimits';
 
-export type Routing = { freeProMarkers: boolean; playerProDaily: number; proTimeoutMs: number; testAsFree?: boolean };
-export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000 };
+export type Routing = {
+  freeProMarkers: boolean; playerProDaily: number; proTimeoutMs: number; testAsFree?: boolean;
+  /**
+   * OpenAI answers (openaiAnswer.ts, owner Nov 19 2026): the model for Pro and for the app's Fast ('' = Gemini as
+   * before), for openaiShare percent of players (0-100, the same players each day: by account) plus anyone in openaiUids
+   * (the owner's test first). Gemini answers when OpenAI is down, slow, or not set up (no OPENAI_API_KEY).
+   */
+  openaiPro: string; openaiFast: string; openaiShare: number; openaiUids: string[];
+};
+export const ROUTING_DEFAULTS: Routing = { freeProMarkers: false, playerProDaily: 40000, proTimeoutMs: 25000, openaiPro: '', openaiFast: '', openaiShare: 0, openaiUids: [] };
+
+/** The OpenAI model for this question, or '' for Gemini. A stable share of players: by a hash of the account id. */
+export function openaiModelFor(r: Routing, o: { pro: boolean; uid: string }): string {
+  const model = o.pro ? r.openaiPro : r.openaiFast;
+  if (!model || !o.uid) return '';
+  if (r.openaiUids.includes(o.uid)) return model;
+  if (r.openaiShare <= 0) return '';
+  if (r.openaiShare >= 100) return model;
+  let h = 0;
+  for (const ch of o.uid) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h % 100 < r.openaiShare ? model : '';
+}
 export const PRO_CHAT_MODEL = process.env.PRO_CHAT_MODEL || 'gemini-3.1-pro-preview';
 
 let cache: { at: number; value: Routing } | null = null;
@@ -42,6 +62,10 @@ export function normalizeRouting(d: any): Routing {
     freeProMarkers: d?.freeProMarkers === true,
     playerProDaily: Number.isFinite(Number(d?.playerProDaily)) ? Math.max(0, Math.floor(Number(d.playerProDaily))) : ROUTING_DEFAULTS.playerProDaily,
     proTimeoutMs: Number.isFinite(Number(d?.proTimeoutMs)) ? Math.max(5000, Math.min(60000, Number(d.proTimeoutMs))) : ROUTING_DEFAULTS.proTimeoutMs,
+    openaiPro: /^gpt-[a-z0-9.-]+$/i.test(String(d?.openaiPro || '')) ? String(d.openaiPro) : '',
+    openaiFast: /^gpt-[a-z0-9.-]+$/i.test(String(d?.openaiFast || '')) ? String(d.openaiFast) : '',
+    openaiShare: Number.isFinite(Number(d?.openaiShare)) ? Math.max(0, Math.min(100, Number(d.openaiShare))) : 0,
+    openaiUids: Array.isArray(d?.openaiUids) ? d.openaiUids.map(String).filter(Boolean).slice(0, 50) : [],
   };
 }
 
