@@ -2960,7 +2960,7 @@ percentages:
   <div class="container">
     <div class="badge">Official Legal Document</div>
     <h1>Privacy Policy for Quest Compendium</h1>
-    <div class="updated">Last updated: October 29, 2026</div>
+    <div class="updated">Last updated: November 19, 2026</div>
 
     <p>Welcome to <strong>Quest Compendium</strong> (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;the application&rdquo;). This Privacy Policy explains how personal information and application data are collected, used, and protected when you use our desktop application and web services.</p>
 
@@ -2992,7 +2992,8 @@ percentages:
     <p>We do not sell, rent, or trade your personal information. We share data only with the following trusted infrastructure providers to deliver the service:</p>
     <ul>
       <li><strong>Google Cloud & Firebase:</strong> Provides user authentication and encrypted cloud database synchronization (Firestore), and sends sign-in link emails.</li>
-      <li><strong>Google Gemini API:</strong> Processes your submitted gameplay inquiries, images, and voice queries to generate answers, guides, and text-to-speech narration. Google may keep prompts for up to 55 days to check for abuse. We don't keep screenshots sent from our homepage: they go to the Gemini API to answer that one question.</li>
+      <li><strong>OpenAI API:</strong> Answers questions asked in the app: your question, the recent conversation, and any screenshot or voice recording you attach are sent to OpenAI to write the answer (voice is turned into text first). When Google's voice is unavailable, OpenAI also reads answers aloud (the answer's text is sent to it). OpenAI does not use this data to train its models, and may keep it for up to 30 days to check for abuse; we ask it not to store answers beyond that.</li>
+      <li><strong>Google Gemini API:</strong> Answers questions when OpenAI is unavailable and on our website, and powers other features: pictures, videos and drawings with answers, on-screen markers, place detection, guides, and text-to-speech narration. It processes the inquiries, images, and voice queries those features need. Google may keep prompts for up to 55 days to check for abuse. We don't keep screenshots sent from our homepage: they go to the Gemini API to answer that one question.</li>
       <li><strong>Valve Steam Web API:</strong> Provides public game details, achievement lists, and news.</li>
       <li><strong>Stripe:</strong> Secure payment gateway for managing subscriptions and checkout.</li>
     </ul>

@@ -107,6 +107,8 @@ export async function openaiAnswer(o: OpenAIAnswerOpts): Promise<any> {
     instructions: `${o.system}${OPENAI_RULES}`,
     input,
     max_output_tokens: o.maxOutputTokens || 16000,
+    // Nothing kept at OpenAI past its abuse checks (no 30-day stored response): each answer stands alone.
+    store: false,
     reasoning: { effort: o.effort || 'low' },
     ...(o.withSearch ? { tools: [{ type: 'web_search' }] } : {}),
   };
