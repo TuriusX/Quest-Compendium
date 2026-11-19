@@ -172,7 +172,7 @@ function createWheel(opts) {
     input(evt) {
       if (!evt) return;
       if (evt.type === 'talk') {
-        // A hold that asks in one motion (or the talk button): listen while held; letting go asks.
+        // The talk button: listen while held; letting go asks.
         opts.onTalk(evt.state);
         send('wheel-input', { type: 'listening', on: evt.state === 'start' });
         if (evt.state === 'end') close();

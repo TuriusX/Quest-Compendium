@@ -167,22 +167,13 @@ test("quest log chords: the modifier press that starts one isn't a press on the 
   assert.equal(r.events.filter((e) => e.button === "back").length, 0);
 });
 
-test("asking in one motion: the hold that opened the panel, kept going, listens; letting go asks", () => {
+test("the combo only opens the quick menu: holding on after it opens never listens or asks (Nov 19 2026)", () => {
   const r = rig({ toggle: "hold-view-menu", talk: "off" }, false);
   r.at(0, VM); r.at(1050, VM);
-  assert.equal(r.toggles(), 1, "the hold opened the panel");
-  r.at(1300, VM);
-  assert.equal(r.events.filter((e) => e.type === "talk").length, 0, "not yet: a normal open lets go about now");
-  r.at(1600, VM);
-  assert.deepEqual(r.events.filter((e) => e.type === "talk").map((e) => e.state), ["start"]);
-  r.at(2500, 0);
-  assert.deepEqual(r.events.filter((e) => e.type === "talk").map((e) => e.state), ["start", "end"]);
-  const quick = rig({ toggle: "hold-view-menu", talk: "off" }, false);
-  quick.at(0, VM); quick.at(1050, VM); quick.at(1200, 0); quick.at(2500, 0);
-  assert.equal(quick.events.filter((e) => e.type === "talk").length, 0, "let go after opening: no listening");
-  const closing = rig({ toggle: "hold-view-menu", talk: "off" }, true);
-  closing.at(0, VM); closing.at(1050, VM); closing.at(2500, VM); closing.at(2600, 0);
-  assert.equal(closing.events.filter((e) => e.type === "talk").length, 0, "the hold that closes the panel never listens");
+  assert.equal(r.toggles(), 1, "the hold opened the quick menu");
+  r.at(1600, VM); r.at(3000, VM); r.at(3500, 0); r.at(5000, 0);
+  assert.equal(r.events.filter((e) => e.type === "talk").length, 0);
+  assert.equal(r.toggles(), 1);
 });
 
 // Controller mode step 1: closing the panel hands focus back to the game only once every button is let go (the B that

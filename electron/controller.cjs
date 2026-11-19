@@ -30,8 +30,6 @@ const SIMPLE = [
 ];
 
 const REPEAT_DELAY_MS = 380;
-/** Keep holding the open combo this long after the panel opens and it starts listening (asking in one motion). */
-const QUICK_ASK_MS = 500;
 const REPEAT_EVERY_MS = 110;
 const STICK_DEADZONE = 0.55;
 const SCROLL_DEADZONE = 0.25;
@@ -140,8 +138,6 @@ function createControllerService(opts) {
   let stickOutL = false;
   // Buttons (and triggers) down on the last read: the panel hands focus back to the game only once they're all let go.
   let heldBits = 0;
-  // The open hold still going after the panel opened: { since, talking } (asking in one motion).
-  let quickAsk = null;
 
   function tick() {
     const t = now();
@@ -189,22 +185,9 @@ function createControllerService(opts) {
       touched.clear();
       for (const [name, bit] of SIMPLE) if (combo.mask & bit) suppressed.add(name);
       if (talk) talk.reset();
-      // Asking in one motion (owner, Nov 17 2026: playing and asking at once): a hold that opened the panel and keeps
-      // going starts listening; letting go asks. No moving through the panel, so the fewest presses reach the game.
-      const opening = !opts.isVisible();
+      // The combo only opens / closes the quick menu. (Nov 17's "keep holding to ask out loud" is gone: owner, Nov 19
+      // 2026, holding L3 + R3 a moment too long sent a question. Asking is on the wheel.)
       opts.onToggle();
-      quickAsk = opening && combo.mode === 'hold' ? { since: t, talking: false } : null;
-    }
-    if (quickAsk) {
-      if ((buttons & combo.mask) === combo.mask) {
-        if (!quickAsk.talking && t - quickAsk.since >= QUICK_ASK_MS) {
-          quickAsk.talking = true;
-          opts.onInput({ type: 'talk', state: 'start' });
-        }
-      } else {
-        if (quickAsk.talking) opts.onInput({ type: 'talk', state: 'end' });
-        quickAsk = null;
-      }
     }
     if ((buttons & combo.mask) === 0 && !combo.pendingUntil()) firedDuringPress = false;
 
