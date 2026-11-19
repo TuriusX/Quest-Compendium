@@ -2532,7 +2532,8 @@ percentages:
   // the full experience (Premium, or everyone during the beta). Model: Google's recommended read-aloud model, with the
   // older one as a fallback if it's unavailable.
   let ttsModel = process.env.TTS_MODEL || 'gemini-3.8-flash-lite-tts';
-  const TTS_FALLBACK_MODEL = 'gemini-3.1-flash-tts-preview';
+  // gemini-3.1-flash-tts-preview shuts down Dec 18, 2026: the fallback is the full Flash TTS (the same voices).
+  const TTS_FALLBACK_MODEL = 'gemini-3.8-flash-tts';
 
   app.post('/api/tts', optionalAuth, async (req, res) => {
     try {
@@ -2752,7 +2753,7 @@ percentages:
             audioBase64: wavBuffer.toString('base64'),
             mimeType: 'audio/wav',
             voice: targetVoice,
-            engine: 'gemini-3.1-flash-tts-preview'
+            engine: ttsModel
           };
           if (ttsServerCache.size > 100) ttsServerCache.clear();
           ttsServerCache.set(cacheKey, resultPayload);
