@@ -272,7 +272,8 @@ const approve = arg('approve');
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-type AreaLink = { slug: string; name: string; story?: string; group?: string; total: number; search?: string };
+/** first: the page's first walkthrough step's title (the "Up next" card on the page before it). */
+type AreaLink = { slug: string; name: string; story?: string; group?: string; total: number; search?: string; first?: string };
 
 /** Words to find a page by: its item and secret names (so searching "Viper" finds the area with that gear). */
 const searchWords = (a: GuideArea) => [...a.items.map((e) => e.name), ...a.secrets.map((e) => e.text), ...a.enemies.map((e) => e.name)].filter(Boolean).join(' ').slice(0, 600);
@@ -296,26 +297,57 @@ const SCRIPT = `
   function save(k,v){try{localStorage.setItem(k,JSON.stringify(Array.from(v)))}catch(e){}try{window.dispatchEvent(new CustomEvent('qc-tick-saved',{detail:{k:k}}))}catch(e){}}
   var b=document.body, K=b.getAttribute('data-guide'), S=b.getAttribute('data-area');
   if(K&&S){
+    // "Continue where you left off" on an area page: the page the last visit ended on, when this visit (this tab's
+    // session) started somewhere else; gone once that page is opened.
+    var prevLast=null;try{prevLast=localStorage.getItem('qcw-last:'+K)}catch(e){}
+    var resume=null;try{var rk='qcw-resume:'+K;if(!sessionStorage.getItem('qcw-sess:'+K)){sessionStorage.setItem('qcw-sess:'+K,'1');if(prevLast&&prevLast!==S)sessionStorage.setItem(rk,prevLast);else sessionStorage.removeItem(rk);}
+      resume=sessionStorage.getItem(rk);if(resume===S){sessionStorage.removeItem(rk);resume=null;}}catch(e){}
+    var rl=document.querySelector('[data-resume]'), ra=resume&&document.querySelector('[data-area-link="'+resume+'"]');
+    if(rl&&ra){rl.setAttribute('href',ra.getAttribute('href'));rl.querySelector('[data-resume-name]').textContent=ra.getAttribute('data-name');rl.hidden=false;}
     try{localStorage.setItem('qcw-last:'+K,S)}catch(e){}
     var key='qcw:'+K+':'+S, done=load(key);
+    // "Up next": how many things here are still unticked, and a link to the first (in page order).
+    var ut=document.querySelector('[data-unticked]');
+    var untick=function(){if(!ut)return;var T=JSON.parse(ut.getAttribute('data-t')),seen={},all=[],first=null;
+      document.querySelectorAll('[data-check]').forEach(function(el){el.getAttribute('data-check').split('+').forEach(function(i){if(seen[i])return;seen[i]=1;all.push(i);if(!first&&!done.has(i))first={id:i,el:el};});});
+      if(!all.length){ut.hidden=true;return;}
+      var left=all.filter(function(i){return !done.has(i)}).length;ut.textContent='';var s=document.createElement('span');
+      if(!left){s.className='text-emerald-300';s.textContent='✓ '+T.done;ut.appendChild(s);}
+      else{s.textContent=left===1?T.one:T.many.replace('{n}',left);ut.appendChild(s);var a=document.createElement('a'),f=first;a.href='#e-'+f.id;a.className='font-semibold text-[#a87ffb] hover:text-white';a.textContent=T.jump+' →';
+        a.addEventListener('click',function(ev){ev.preventDefault();land(document.getElementById('e-'+f.id)||f.el);});ut.appendChild(a);}
+      ut.hidden=false;};
     var counts=function(){document.querySelectorAll('[data-count]').forEach(function(c){var ids=c.getAttribute('data-count').split(',');c.textContent=ids.filter(function(i){return done.has(i)}).length+'/'+ids.length;});};
     // The same entry can appear twice (a flagship page's walkthrough and its checklist): every copy follows a tick.
     var refresh=function(){document.querySelectorAll('[data-check]').forEach(function(el){var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');box.checked=ids.every(function(i){return done.has(i)}); el.classList.toggle('is-done',box.checked);});};
     document.querySelectorAll('[data-check]').forEach(function(el){
       var ids=el.getAttribute('data-check').split('+'), box=el.querySelector('input');
-      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); refresh(); counts(); progress(); });
+      box.addEventListener('change',function(){ ids.forEach(function(i){ if(box.checked) done.add(i); else done.delete(i); }); save(key,done); refresh(); counts(); progress(); untick(); });
     });
     refresh();
     counts();
+    untick();
     // Ticks from the account (assets/account.js, after signing in) repaint the page.
-    window.addEventListener('qc-ticks-changed',function(){done=load(key);refresh();counts();progress();});
+    window.addEventListener('qc-ticks-changed',function(){done=load(key);refresh();counts();progress();untick();});
   }
-  var progress=function(){document.querySelectorAll('[data-progress]').forEach(function(el){
+  var progress=function(){var tot={},got={};document.querySelectorAll('[data-progress]').forEach(function(el){
     var p=el.getAttribute('data-progress').split('|'), n=load('qcw:'+p[0]+':'+p[1]).size, t=+p[2];
+    if(t){tot[p[1]]=t;got[p[1]]=Math.min(n,t);}
     if(!t){el.textContent='';return}
     el.textContent=n>=t?'\u2713':(n?n+'/'+t:''); el.classList.toggle('is-complete',n>=t);
-  });};
+  });
+    // The guide front page: a bar per page (once something there is ticked) and the whole guide's progress.
+    document.querySelectorAll('[data-pbar]').forEach(function(el){var p=el.getAttribute('data-pbar').split('|'),t=+p[2],n=t?Math.min(load('qcw:'+p[0]+':'+p[1]).size,t):0;el.style.width=(t?Math.round(100*n/t):0)+'%';el.parentElement.hidden=!n;});
+    var ov=document.querySelector('[data-overall]');
+    if(ov){var T=0,G=0;Object.keys(tot).forEach(function(s){T+=tot[s];G+=got[s];});var tx=ov.querySelector('[data-overall-text]');
+      tx.textContent=tx.getAttribute('data-t').replace('{n}',G).replace('{total}',T);ov.querySelector('[data-overall-bar]').style.width=(T?Math.round(100*G/T):0)+'%';ov.hidden=!G;}
+  };
   progress();
+  window.addEventListener('qc-ticks-changed',progress);
+  // The guide front page's invitation to sign in (assets/account.js, deferred, sets window.QC_AUTH before DOMContentLoaded).
+  var sy=document.querySelector('[data-sync]');
+  if(sy){var hook=function(){var A=window.QC_AUTH;if(!A)return;var paint=function(s){var u=!!(s&&s.user);sy.querySelector('[data-sync-out]').hidden=u;sy.querySelector('[data-sync-in]').hidden=!u;};
+    var bt=sy.querySelector('[data-sync-signin]');bt.hidden=false;bt.addEventListener('click',function(){A.signIn();});paint(A.state);A.onChange(paint);};
+    if(window.QC_AUTH)hook();else document.addEventListener('DOMContentLoaded',hook);}
   // Achievement labels filter (one at a time; "To do" = not ticked yet).
   var ff=document.querySelector('[data-flag-filter]');
   if(ff){ff.addEventListener('click',function(e){var b=e.target.closest('button[data-flag]');if(!b)return;var f=b.getAttribute('data-flag');
@@ -984,6 +1016,53 @@ function peopleCards(slug: string, own?: { groups?: any[] }): string {
   return `<section id="people" class="mt-6 scroll-mt-20"><h2 class="text-base font-bold text-white">${esc(ui('infoServices'))}</h2><div class="mt-3 grid gap-3 sm:grid-cols-2">${pp.groups.map(card).join('')}</div></section>`;
 }
 
+/**
+ * "At a glance" under an area page's heading (owner, Nov 19 2026: pages players come back to), from what the page
+ * already has: region and levels, the key fights (linked to their cards), the recommended choice, notable rewards and
+ * the size of the route. Nothing about missables here (they keep their own place). Left out when there's nothing.
+ */
+function glanceBox(a: GuideArea, extraRewards: { name: string; text: string }[] = []): string {
+  const info = a.info || {};
+  const fights = a.fights || [];
+  const steps = (a.walkthrough || []).length;
+  const things = totalOf(a);
+  const pick = (a.choices || []).find((c) => c.recommended);
+  const rewards = [...fights.filter((f) => f.rewards).map((f) => ({ name: f.name, text: String(f.rewards) })), ...extraRewards].slice(0, 2);
+  const link = 'text-[#c4b0ff] hover:text-white underline decoration-[#a87ffb]/40 underline-offset-2';
+  const cell = (label: string, html: string, wide = false) => `<div class="min-w-0${wide ? ' sm:col-span-2' : ''}"><dt class="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">${esc(label)}</dt><dd class="mt-0.5 text-zinc-200">${html}</dd></div>`;
+  const cells = [
+    info.region ? cell(ui('infoRegion'), esc(info.region)) : '',
+    info.levels ? cell(ui('infoLevels'), esc(info.levels)) : '',
+    fights.length ? cell(ui(fights.length === 1 ? 'glanceFights' : 'glanceFightsMany'), fights.slice(0, 3).map((f) => `<a class="${link}" href="#${esc(f.id)}">${esc(f.name)}</a>`).join(', ') + (fights.length > 3 ? ` <a class="text-xs text-zinc-400 hover:text-white" href="#fights">+${fights.length - 3}</a>` : '')) : '',
+    steps || things ? cell(ui('glanceRoute'), [steps ? esc(ui('glanceSteps', { n: steps })) : '', things ? esc(ui('glanceThings', { n: things })) : ''].filter(Boolean).join(' · ')) : '',
+    pick ? cell(ui('glancePick'), `<a class="${link}" href="#${esc(pick.id)}">${esc(pick.title)}</a>: ${esc(snippet(String(pick.recommended), 140))}`, true) : '',
+    rewards.length ? cell(ui('glanceRewards'), rewards.map((r) => `<span class="block"><span class="text-zinc-400">${esc(r.name)}:</span> ${esc(snippet(r.text, 110))}</span>`).join(''), true) : '',
+  ].filter(Boolean);
+  // Only the route's size isn't worth a box of its own.
+  if (!cells.length || (cells.length === 1 && (steps || things) && !info.region && !info.levels && !fights.length)) return '';
+  return `<section aria-label="${esc(ui('glanceTitle'))}" class="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+    <h2 class="text-[11px] font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('glanceTitle'))}</h2>
+    <dl class="mt-2 grid gap-x-6 gap-y-2.5 text-sm sm:grid-cols-2">${cells.join('')}</dl>
+  </section>`;
+}
+
+/** "Continue where you left off" on an area page: shown by the page script when the last visit ended somewhere else. */
+const resumeLink = () => `<a hidden data-resume href="#" class="qc-site-only mt-3 flex items-center gap-2 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 px-3.5 py-2 text-sm hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]" aria-hidden="true">&#9654;</span><span class="shrink-0 text-zinc-400">${esc(ui('continue'))}:</span><span data-resume-name class="min-w-0 truncate font-semibold text-white"></span></a>`;
+
+/**
+ * The end of an area page: "Up next" (the next page and its first step), how much is still unticked here with a link to
+ * the first one (the page script fills that in from the ticks; without it, the card is a plain link), and the previous page.
+ */
+function upNextCard(prev?: AreaLink, next?: AreaLink): string {
+  const T = { many: ui('untickedLeft'), one: ui('untickedLeftOne'), jump: ui('untickedJump'), done: ui('allTicked') };
+  const left = `<div data-unticked hidden data-t="${esc(JSON.stringify(T))}" class="qc-site-only mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-300"></div>`;
+  const nextHtml = next
+    ? `<a href="../${esc(next.slug)}/index.html" rel="next" class="group block rounded-2xl border border-[#a87ffb]/40 bg-gradient-to-br from-[#a87ffb]/15 to-transparent px-5 py-4 hover:border-[#a87ffb]"><div class="text-[11px] font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('upNext'))} &rarr;</div><div class="mt-1 text-lg font-bold leading-snug text-white">${esc(next.name)}</div>${next.first ? `<div class="mt-0.5 text-sm text-zinc-400">${esc(ui('upNextStarts', { step: next.first }))}</div>` : ''}</a>`
+    : `<div class="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 text-sm text-zinc-300">${esc(ui('upNextLast'))} <a class="font-semibold text-[#a87ffb] hover:text-white" href="../index.html">${esc(ui('upNextBack'))} &rarr;</a></div>`;
+  const prevHtml = prev ? `<a href="../${esc(prev.slug)}/index.html" rel="prev" class="mt-2 inline-flex max-w-full items-center gap-1.5 text-sm text-zinc-400 hover:text-white"><span aria-hidden="true">&larr;</span><span class="shrink-0">${esc(ui('previous'))}:</span><span class="truncate">${esc(prev.name)}</span></a>` : '';
+  return `<section id="up-next" class="mt-10 scroll-mt-20">${left}${nextHtml}${prevHtml}</section>`;
+}
+
 function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[], prev?: AreaLink, next?: AreaLink, up = '../../../', achs: any[] = []) {
   UNCONFIRMED = new Set([...(a.items || []), ...(a.secrets || []), ...((a.sections || []) as any[]).flatMap((x: any) => x.entries || [])].filter((e: any) => e?.unconfirmed).map((e: any) => String(e.id)));
   const items = a.items.map(cleanEntry);
@@ -1048,10 +1127,9 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     return l ? `<a class="text-[#a87ffb] hover:text-white" href="../${esc(l.slug)}/index.html">${esc(name)}</a>` : esc(name);
   };
   const infoRow = (label: string, html: string) => `<div class="flex gap-2 py-1"><dt class="w-32 shrink-0 text-zinc-500">${esc(label)}</dt><dd class="min-w-0 text-zinc-200">${html}</dd></div>`;
-  const infoBox = info && (info.region || info.levels || info.quests?.length || info.services?.length || info.enemyTypes?.length || info.directions || info.connected?.length || info.coords)
+  // Region and levels are in "At a glance" under the heading.
+  const infoBox = info && (info.quests?.length || info.services?.length || info.enemyTypes?.length || info.directions || info.connected?.length || info.coords)
     ? `<dl class="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm">${[
-        info.region && infoRow(ui('infoRegion'), esc(info.region)),
-        info.levels && infoRow(ui('infoLevels'), esc(info.levels)),
         info.directions && infoRow(ui('infoWay'), `${esc(info.directions)}${info.coords ? ` <span class="text-zinc-500">(${esc(info.coords)})</span>` : ''}`),
         !info.directions && info.coords && infoRow(ui('infoCoords'), esc(info.coords)),
         info.connected?.length && infoRow(ui('infoConnected'), info.connected.map(areaLink).join(', ')),
@@ -1090,10 +1168,6 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
     : '';
   const shops = a.shops.length ? `<ul class="space-y-1.5 px-3">${a.shops.map(cleanEntry).map((e) => `<li id="e-${esc(e.id)}" class="text-sm scroll-mt-20"><strong class="text-white">${esc(e.name)}</strong>${e.sells ? `<span class="text-zinc-400">: ${esc(e.sells)}</span>` : ''}${(e as any).unconfirmed ? unconfirmedTag() : ''}</li>`).join('')}</ul>` : '';
   const tips = a.tips.length ? `<ul class="list-disc pl-8 space-y-1 text-sm text-zinc-300">${a.tips.map((t, i) => `<li id="tip-${i + 1}" class="scroll-mt-20">${esc(t)}</li>`).join('')}</ul>` : '';
-  const navCard = (x: AreaLink | undefined, dir: 'prev' | 'next') =>
-    x
-      ? `<a href="../${esc(x.slug)}/index.html" class="flex-1 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/40 hover:bg-white/[0.06] px-4 py-3 ${dir === 'next' ? 'text-right' : ''}"><div class="text-[11px] uppercase tracking-wide text-zinc-500">${dir === 'prev' ? `&larr; ${esc(ui('previous'))}` : `${esc(ui('next'))} &rarr;`}</div><div class="text-sm font-semibold text-white truncate">${esc(x.name)}</div></a>`
-      : '<span class="flex-1"></span>';
   // Flagship pages: the short version, the walkthrough (entries ticked where you meet them) and the choices.
   const fightById = new Map((a.fights || []).map((f) => [f.id, f]));
   const entryRow = (id: string) => {
@@ -1171,6 +1245,8 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
         <span>${esc(ui('guideOf', { game }))}${a.story ? ` · ${esc(a.story)}` : ''}</span>
         ${a.verified === true ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))}</span>` : ''}
       </div>
+      ${glanceBox(a)}
+      ${resumeLink()}
       <a href="../index.html" class="qc-site-only lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
       ${(() => {
         // The page's picture (owner-approved, "Guide page" on) beside the opening text; what follows starts below it.
@@ -1208,7 +1284,7 @@ function areaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLink[]
       ${fold(ui('shops'), ICON.shops, shops, { id: 'shops' })}
       ${fold(ui('tips'), ICON.tips, tips, { open: true, id: 'tips' })}
       ${notListed}
-      ${prev || next ? `<div class="mt-8 flex gap-3">${navCard(prev, 'prev')}${navCard(next, 'next')}</div>` : ''}
+      ${upNextCard(prev, next)}
       ${cta(up, game)}
       ${a.sourceLinks?.pages?.length
         ? // A flagship page written from a source pack: the wiki's articles, linked, and its licence.
@@ -1365,13 +1441,15 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
       </section>`
     : '';
 
-  // The route: one line per step, what you pick up there (linked to its checklist row), and its warning.
+  // The walkthrough: each step's full text (owner, Nov 19 2026: the one-line steps read like a database), what you pick
+  // up there (linked to its checklist row), and its tip and warning in place.
   const nameOf = new Map<string, string>([...a.items.map((e) => [e.id, String(e.name || '')] as [string, string]), ...a.secrets.map((e) => [e.id, String(e.name || '') || `${ui('secrets')}: ${String(e.text || '').split(/\s+/).slice(0, 5).join(' ')}…`] as [string, string]), ...(a.fights || []).map((f) => [f.id, f.name] as [string, string])]);
   const route = steps.length
-    ? card('walkthrough', ui('route'), `<span class="text-xs text-zinc-500">${steps.length} steps</span>`, `<ol class="space-y-0.5 py-2">${steps.map((st, i) => {
+    ? card('walkthrough', ui('walkthrough'), `<span class="text-xs text-zinc-500">${esc(ui('glanceSteps', { n: steps.length }))}</span>`, `<ol class="divide-y divide-white/5">${steps.map((st, i) => {
         const r = rec.get(String(st.id));
         const got = [...(st.entries || []), ...(st.fights || [])].filter((id) => nameOf.get(id));
-        return `<li id="${esc(st.id)}" class="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 px-4 py-2 scroll-mt-20"><span class="flex h-6 w-6 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-xs font-bold text-[#c4b0ff]">${i + 1}</span><div class="min-w-0"><p class="text-sm"><strong class="text-white">${esc(st.title)}.</strong> <span class="text-zinc-400">${esc(r?.short || String(st.text || '').split(/(?<=[.!?])\s/)[0])}</span></p>${(() => { const pic = stepPicture(gameKey, a.slug, st.id, 'step'); return pic ? stepHtml(pic) : ''; })()}${got.length ? `<div class="mt-1.5 flex flex-wrap gap-1.5">${got.map((id) => `<a href="#${(a.fights || []).some((f) => f.id === id) ? '' : 'e-'}${esc(id)}" class="rounded-md border border-white/10 px-1.5 py-0.5 text-[11px] text-zinc-400 hover:border-[#a87ffb]/40 hover:text-white">${esc(nameOf.get(id)!)}</a>`).join('')}</div>` : ''}${st.warn ? `<p class="mt-1 text-xs text-amber-200/90">&#9888; ${esc(st.warn)}</p>` : ''}</div></li>`;
+        const text = String(st.text || '') || String(r?.short || '');
+        return `<li id="${esc(st.id)}" class="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 px-4 py-3.5 scroll-mt-20"><span class="flex h-7 w-7 items-center justify-center rounded-full border border-[#a87ffb]/40 bg-[#a87ffb]/10 text-sm font-bold text-[#c4b0ff]">${i + 1}</span><div class="min-w-0"><h3 class="font-semibold leading-7 text-white">${esc(st.title)}</h3>${text ? `<p class="mt-1 text-[15px] leading-relaxed text-zinc-300">${rich(text)}</p>` : ''}${(() => { const pic = stepPicture(gameKey, a.slug, st.id, 'step'); return pic ? stepHtml(pic) : ''; })()}${got.length ? `<div class="mt-2 flex flex-wrap gap-1.5">${got.map((id) => `<a href="#${(a.fights || []).some((f) => f.id === id) ? '' : 'e-'}${esc(id)}" class="rounded-md border border-white/10 px-1.5 py-0.5 text-[11px] text-zinc-400 hover:border-[#a87ffb]/40 hover:text-white">${esc(nameOf.get(id)!)}</a>`).join('')}</div>` : ''}${st.tip ? `<p class="mt-2 text-sm text-emerald-200/90"><span class="font-semibold text-emerald-300">${esc(ui('stepTip'))}:</span> ${rich(st.tip)}</p>` : ''}${st.warn ? `<p class="mt-1.5 text-sm text-amber-200/90"><span class="font-semibold text-amber-300">${esc(ui('stepWarn'))}:</span> ${rich(st.warn)}</p>` : ''}</div></li>`;
       }).join('')}</ol>`)
     : '';
 
@@ -1402,24 +1480,25 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
     : '';
   const tips = a.tips.length ? card('tips', ui('tips'), '', `<ul class="space-y-1.5 px-4 py-3 text-sm text-zinc-300">${a.tips.map((t, i) => `<li id="tip-${i + 1}" class="flex gap-2 scroll-mt-20"><span class="text-[#a87ffb]">&bull;</span><span>${esc(t)}</span></li>`).join('')}</ul>`) : '';
 
-  // The old text, kept below the reference tools during the pilot (owner, Nov 8 2026), closed.
+  // The short version near the top, as on the classic pages (it used to be in a closed fold at the bottom with the
+  // walkthrough text, which the steps above now show in full).
   const adv = a.advice;
-  const oldText = (a.overview || steps.length || adv)
-    ? `<details class="qc-fold mt-6" id="full-text"><summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10">${ICON.caret}${ICON.list}<h2 class="flex-1 text-sm sm:text-base font-bold text-white">The full walkthrough text</h2></summary>
-        <div class="mt-3 space-y-4 px-1 text-[15px] leading-relaxed text-zinc-300">
-          ${a.overview ? `<p>${rich(a.overview)}</p>` : ''}
-          ${steps.map((st, i) => `<div><h3 class="font-semibold text-white">${i + 1}. ${esc(st.title)}</h3><p class="mt-1">${rich(st.text)}</p>${st.tip ? `<p class="mt-1 text-sm text-emerald-200/90"><span class="font-semibold text-emerald-300">${esc(ui('stepTip'))}:</span> ${rich(st.tip)}</p>` : ''}</div>`).join('')}
-          ${adv && (adv.matters.length || adv.mistakes.length || adv.skip.length) ? `<div><h3 class="font-semibold text-white">${esc(ui('shortVersion'))}</h3>${[[ui('adviceMatters'), adv.matters], [ui('adviceMistakes'), adv.mistakes], [ui('adviceSkip'), adv.skip]].filter(([, l]) => (l as string[]).length).map(([t, l]) => `<p class="mt-2 text-xs font-bold uppercase tracking-wide text-zinc-500">${esc(t as string)}</p><ul class="mt-1 list-disc pl-5 text-sm">${(l as string[]).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`).join('')}</div>` : ''}
-        </div>
-      </details>`
+  const adviceList = (title: string, list: string[], tone: string) => (list.length ? `<div><h3 class="text-xs font-bold uppercase tracking-wide ${tone}">${esc(title)}</h3><ul class="mt-1.5 space-y-1.5 text-sm text-zinc-300">${list.map((x) => `<li class="flex gap-2"><span class="${tone}">&bull;</span><span>${esc(x)}</span></li>`).join('')}</ul></div>` : '');
+  const shortVersion = adv && (adv.matters.length || adv.mistakes.length || adv.skip.length)
+    ? `<section id="short-version" class="mt-6 scroll-mt-20 rounded-2xl border border-[#a87ffb]/25 bg-gradient-to-br from-[#a87ffb]/[0.08] to-transparent p-4">
+        <h2 class="text-base font-bold text-white">${esc(ui('shortVersion'))}</h2>
+        <div class="mt-3 grid gap-4 sm:grid-cols-2">${adviceList(ui('adviceMatters'), adv.matters, 'text-[#c4b0ff]')}${adviceList(ui('adviceMistakes'), adv.mistakes, 'text-amber-300')}${adviceList(ui('adviceSkip'), adv.skip, 'text-zinc-400')}</div>
+      </section>`
     : '';
 
   // The summary as chips: region, levels, where it leads; the way here as one line.
   const info = a.info || {};
   const areaLink = (name: string) => { const l = areas.find((x) => x.name.toLowerCase() === name.toLowerCase()); return l ? `<a class="text-[#a87ffb] hover:text-white" href="../${esc(l.slug)}/index.html">${esc(name)}</a>` : esc(name); };
   const chip = (label: string, html: string) => `<span class="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-0.5 text-xs text-zinc-400">${esc(label)} <span class="text-zinc-200">${html}</span></span>`;
-  const chips = [info.region && chip(ui('infoRegion'), esc(info.region)), info.levels && chip(ui('infoLevels'), esc(info.levels)), info.connected?.length && chip(ui('infoConnected'), info.connected.map(areaLink).join(' · ')), info.quests?.length && chip(ui('relatedQuests'), String(info.quests.length))].filter(Boolean);
-  const lead = place?.short || String(a.overview || '').split(/(?<=[.!?])\s/)[0] || '';
+  // Region and levels are in "At a glance" under the heading.
+  const chips = [info.connected?.length && chip(ui('infoConnected'), info.connected.map(areaLink).join(' · ')), info.quests?.length && chip(ui('relatedQuests'), String(info.quests.length))].filter(Boolean);
+  // The page's whole opening text (it used to be one line here and the rest in the closed fold at the bottom).
+  const lead = String(a.overview || '') || place?.short || '';
   const factCount = recs.filter((r) => r.type !== 'place').length;
   const checkedCount = recs.filter((r) => r.type !== 'place' && r.status === 'checked').length;
   const lastChecked = Math.max(0, ...recs.map((r) => Number(r.checkedAt || 0)));
@@ -1429,7 +1508,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
     ...(worth ? [['worth-it', 'Worth it here'] as [string, string]] : []),
     ...(before ? [['before-you-leave', 'Before you leave'] as [string, string]] : []),
     ...(checklist ? [['checklist', ui('items')] as [string, string]] : []),
-    ...(route ? [['walkthrough', ui('route')] as [string, string]] : []),
+    ...(route ? [['walkthrough', ui('walkthrough')] as [string, string]] : []),
     ...(choices ? [['choices', ui('choicesHere')] as [string, string]] : []),
     ...(fights ? [['fights', ui('fights')] as [string, string]] : []),
     ...(achHtml ? [['achievements', ui('achHere')] as [string, string]] : []),
@@ -1440,10 +1519,6 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
   const jump = sectionLinks.length > 2
     ? `<nav aria-label="${esc(ui('onThisPage'))}" class="mt-4 flex xl:hidden flex-wrap items-center gap-1.5 text-xs"><span class="text-zinc-500 mr-1">${esc(ui('onThisPage'))}:</span>${sectionLinks.map(([id, label]) => `<a href="#${id}" class="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-zinc-300 hover:text-white hover:border-[#a87ffb]/40">${esc(label)}</a>`).join('')}${mapLinkHtml(gameKey, 'rounded-md border border-white/10 bg-white/[0.03] px-2 py-1')}</nav>`
     : '';
-  const navCard = (x: AreaLink | undefined, dir: 'prev' | 'next') =>
-    x
-      ? `<a href="../${esc(x.slug)}/index.html" class="flex-1 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] hover:border-[#a87ffb]/40 hover:bg-white/[0.06] px-4 py-3 ${dir === 'next' ? 'text-right' : ''}"><div class="text-[11px] uppercase tracking-wide text-zinc-500">${dir === 'prev' ? `&larr; ${esc(ui('previous'))}` : `${esc(ui('next'))} &rarr;`}</div><div class="text-sm font-semibold text-white truncate">${esc(x.name)}</div></a>`
-      : '<span class="flex-1"></span>';
   const sidebar = (id: string) => `<nav aria-label="${esc(game)}" class="qc-scroll"><a href="../index.html" class="block px-2.5 pb-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:text-white">${esc(game)}</a>${mapLinkHtml(gameKey)}${guideSearchBox(gameKey, `#${id}`, 'mb-2')}<ul id="${id}" class="space-y-0.5">${areaList(gameKey, areas, a.slug, '../')}</ul></nav>`;
 
   return `
@@ -1456,6 +1531,8 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
         <span>${esc(ui('guideOf', { game }))}${a.story ? ` · ${esc(a.story)}` : ''}</span>
         ${a.verified === true ? `<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">&#10003; ${esc(ui('checkedBadge'))}</span>` : ''}
       </div>
+      ${glanceBox(a, recs.filter((r) => r.type === 'quest' && r.fields?.rewards && r.status !== 'disputed').map((r) => ({ name: String(r.name), text: String(r.fields.rewards) })))}
+      ${resumeLink()}
       <a href="../index.html" class="qc-site-only lg:hidden mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm font-semibold text-white hover:bg-white/[0.06]"><span class="text-zinc-400">&larr;</span> ${esc(ui('allAreas'))}</a>
       ${(() => {
         const pic = pagePicture(gameKey, a.slug);
@@ -1465,6 +1542,7 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
       ${chips.length ? `<div class="mt-3 flex flex-wrap gap-1.5">${chips.join('')}</div>` : ''}
       ${info.directions ? `<p class="mt-2 text-xs text-zinc-500"><span class="text-zinc-400">${esc(ui('infoWay'))}:</span> ${esc(info.directions)}${info.coords ? ` (${esc(info.coords)})` : ''}</p>` : ''}
       ${a.verified === false && factCount ? `<p class="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-400">This page isn't fully checked yet: <strong class="text-zinc-200">${checkedCount} of ${factCount} facts</strong> confirmed against sources so far. The rest are being checked, most-searched pages first.</p>` : ''}
+      ${shortVersion}
       ${jump}
       ${worth}
       ${before}
@@ -1482,9 +1560,8 @@ function factAreaBody(game: string, gameKey: string, a: GuideArea, areas: AreaLi
       ${tips}
       ${playersAsked(gameKey, a.slug)}
       ${askBox(gameKey, game, a.slug, 'area', a.name)}
-      ${oldText}
       ${trust}
-      ${prev || next ? `<div class="mt-8 flex gap-3">${navCard(prev, 'prev')}${navCard(next, 'next')}</div>` : ''}
+      ${upNextCard(prev, next)}
       ${cta(up, game)}
     </article>
     ${rail(sectionLinks)}
@@ -1960,7 +2037,7 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
   const groupOf = (o: any) => String(o.group || byslug.get(o.slug)?.group || '');
   const links: AreaLink[] = visible.map((o: any) => {
     const a = pageOf(o.slug);
-    return { slug: o.slug, name: a.name, story: a.story, group: groupName(groupOf(o)) || undefined, total: totalOf(a), search: searchWords(a) };
+    return { slug: o.slug, name: a.name, story: a.story, group: groupName(groupOf(o)) || undefined, total: totalOf(a), search: searchWords(a), first: String(a.walkthrough?.[0]?.title || '') || undefined };
   });
   // The game's database lists (fact pages only): worked out first, since the area pages link to them.
   buildFactLists(key, visible, byslug);
@@ -2059,11 +2136,13 @@ function renderGame(key: string, gameName: string, visible: { slug: string; name
           ${mapLinkHtml(key, 'mt-2 inline-block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5')}
           ${igdbFacts(key, gameName)}
           ${ttbFront(key)}
-          <p class="text-zinc-400 mt-2">${esc(ui('gameIntro'))}</p>
+          <p class="text-zinc-400 mt-2">${esc(ui('gameIntroShort'))}</p>
+          <p data-sync class="qc-site-only mt-1 text-sm text-zinc-400"><span data-sync-out>${esc(ui('syncInvite'))} <button type="button" data-sync-signin hidden class="ml-1 font-semibold text-[#a87ffb] hover:text-white">${esc(ui('accSignIn'))} &rarr;</button></span><span data-sync-in hidden class="text-emerald-300/90">&#10003; ${esc(ui('syncSignedIn'))}</span></p>
           ${askBox(key, gameName, '', 'front', shortGame(gameName))}
           <div class="mt-5 grid grid-cols-2 ${checked ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2">${stat(links.length, one(links.length, 'statAreas'))}${stat(totalChecks, one(totalChecks, 'statThings'))}${stat(missables, one(missables, 'statMissables'))}${checked ? stat(checked === checkedTotal ? ui('statAll') : ui('statOf', { n: checked, total: checkedTotal }), one(checkedTotal, 'statChecked')) : ''}</div>
           ${achHere ? `<a href="achievements/index.html" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] hover:bg-amber-500/[0.12]"><span class="text-amber-300">&#9733;</span><span class="flex-1 min-w-0"><span class="block font-semibold text-white">${esc(ui('achLink'))}</span><span class="block text-xs text-zinc-400">${esc(ui('achCount', { n: (achHere.list || []).length }))} · ${(achHere.list || []).filter((x: any) => x.missable).length} ${esc(ui('achMissable').toLowerCase())}</span></span></a>` : ''}
           ${LANG === 'en' && SPINES.has(key) ? `<div class="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-4 py-3"><span class="block font-semibold text-white">&#9670; The story in order, with every missable</span><span class="block text-xs text-zinc-400">Each point of no return, and what to get before it.</span><span class="mt-2 flex flex-wrap gap-1.5">${SPINES.get(key)!.spine.acts.map((x, i) => `<a href="story-order/${esc(slugOf(x.name) || `part-${i + 1}`)}/" class="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-xs font-semibold text-[#a87ffb] hover:text-white">${esc(x.name)}</a>`).join('')}</span></div>` : ''}
+          <div data-overall hidden class="qc-site-only mt-5 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><div class="flex items-baseline justify-between gap-3 text-sm"><span class="font-semibold text-white">${esc(ui('yourProgress'))}</span><span data-overall-text data-t="${esc(ui('progressOf'))}" class="text-xs tabular-nums text-zinc-400"></span></div><div class="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><span data-overall-bar class="block h-full w-0 rounded-full bg-[#a87ffb]"></span></div></div>
           <a hidden data-continue="${esc(key)}" href="#" class="mt-5 flex items-center gap-3 px-4 py-3 rounded-xl border border-[#a87ffb]/40 bg-[#a87ffb]/10 hover:bg-[#a87ffb]/15"><span class="text-[#a87ffb]">&#9654;</span><span class="flex-1 min-w-0"><span class="block text-xs uppercase tracking-wide text-zinc-400">${esc(ui('continue'))}</span><span class="block font-semibold text-white truncate" data-continue-name></span></span></a>
           ${compIndexHtml(key, links, visible, byslug, !!achHere)}
           ${playersAsked(key, '')}
@@ -2763,10 +2842,10 @@ function compIndexHtml(key: string, links: AreaLink[], visible: { slug: string; 
       <span class="col-start-3 flex flex-wrap items-center gap-1.5 sm:col-start-auto sm:justify-end">${giver ? `<span class="text-xs text-zinc-500">${esc(giver)}</span>` : ''}${q.missables?.length ? tagMiss : ''}${q.choices?.length ? tagChoice : ''}</span></li>`;
   };
   const pageRow = (l: AreaLink, num?: number) => `<li data-f="${esc(`${l.name} ${l.story || ''}`)}" class="grid ${num ? 'grid-cols-[1.5rem_minmax(0,1fr)_auto] sm:grid-cols-[2rem_minmax(0,1fr)_auto]' : 'grid-cols-[minmax(0,1fr)_auto]'} items-center gap-x-2.5 rounded-lg px-2 py-1.5 hover:bg-white/[0.04]">
-      ${num ? `<span class="text-right text-xs tabular-nums text-zinc-500">${num}</span>` : ''}<a class="min-w-0" href="${esc(pageHref(l.slug))}" data-area-link="${esc(l.slug)}" data-name="${esc(l.name)}"><span class="qc-nm block text-white hover:text-[#c4b0ff]">${esc(l.name)}</span>${l.story ? `<span class="block truncate text-xs text-zinc-500">${esc(l.story)}</span>` : ''}</a>
+      ${num ? `<span class="text-right text-xs tabular-nums text-zinc-500">${num}</span>` : ''}<a class="min-w-0" href="${esc(pageHref(l.slug))}" data-area-link="${esc(l.slug)}" data-name="${esc(l.name)}"><span class="qc-nm block text-white hover:text-[#c4b0ff]">${esc(l.name)}</span>${l.story ? `<span class="block truncate text-xs text-zinc-500">${esc(l.story)}</span>` : ''}${l.total ? `<span hidden class="mt-1 block h-1 w-full max-w-[14rem] overflow-hidden rounded-full bg-white/[0.07]"><span data-pbar="${esc(key)}|${esc(l.slug)}|${l.total}" class="block h-full w-0 rounded-full bg-[#a87ffb]/70"></span></span>` : ''}</a>
       <span data-progress="${esc(key)}|${esc(l.slug)}|${l.total}"></span></li>`;
   const chapter = (name: string, rows: string, foot = '', note = '') => `<details data-ch data-fgroup class="mb-2 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
-    <summary class="grid cursor-pointer grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2.5 px-3.5 py-2.5 hover:bg-white/[0.03]"><span class="qc-caret text-zinc-500 transition-transform" aria-hidden="true">&#9656;</span><span class="min-w-0 font-semibold text-white">${esc(name)}${note ? ` <span class="text-xs font-normal text-zinc-500">${esc(note)}</span>` : ''}</span><span class="flex items-center gap-2 text-xs tabular-nums text-zinc-400"><span class="hidden h-1.5 w-16 overflow-hidden rounded-full bg-white/10 sm:block"><span data-chbar class="block h-full w-0 bg-[#a87ffb]"></span></span><span data-chcount></span></span></summary>
+    <summary class="grid cursor-pointer grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2.5 px-3.5 py-2.5 hover:bg-white/[0.03]"><span class="qc-caret text-zinc-500 transition-transform" aria-hidden="true">&#9656;</span><span class="min-w-0 font-semibold text-white">${esc(name)}${note ? ` <span class="text-xs font-normal text-zinc-500">${esc(note)}</span>` : ''}</span><span class="flex items-center gap-2 text-xs tabular-nums text-zinc-400"><span class="block h-1.5 w-10 overflow-hidden rounded-full bg-white/10 sm:w-16"><span data-chbar class="block h-full w-0 bg-[#a87ffb]"></span></span><span data-chcount></span></span></summary>
     <ol class="border-t border-white/10 p-1.5">${rows}</ol>${foot}</details>`;
   const story = of('story')[0];
   let storyHtml = '', storyCount = '', storyN = 0;
@@ -2901,7 +2980,7 @@ function compIndexHtml(key: string, links: AreaLink[], visible: { slug: string; 
   ];
   const total = parts.reduce((k, p) => k + p.n, 0);
   const menu = `<div class="qc-ix-menu sticky z-30 mt-6 flex flex-col gap-2 border-y border-white/10 bg-[#07070a]/95 py-2.5 backdrop-blur sm:flex-row sm:items-center">
-    <nav aria-label="${esc(ui('onThisPage'))}" class="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">${parts.map((p) => `<a href="#${p.id}" class="whitespace-nowrap rounded-full border ${p.n ? 'border-white/15 text-zinc-400' : 'border-dashed border-white/10 text-zinc-500'} px-3 py-1 text-[13px] hover:border-[#a87ffb]/50 hover:text-white"><b class="mr-1 font-semibold ${p.n ? 'text-white' : ''}">${esc(p.label)}</b><span class="tabular-nums">${p.n || esc(ui('ixSoon'))}</span></a>`).join('')}${ach ? `<a href="achievements/index.html" class="whitespace-nowrap rounded-full border border-amber-500/30 px-3 py-1 text-[13px] text-amber-300 hover:text-white">&#9733; ${esc(ui('achShort'))}</a>` : ''}</nav>
+    <nav aria-label="${esc(ui('onThisPage'))}" class="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">${parts.filter((p) => p.n).map((p) => `<a href="#${p.id}" class="whitespace-nowrap rounded-full border ${p.n ? 'border-white/15 text-zinc-400' : 'border-dashed border-white/10 text-zinc-500'} px-3 py-1 text-[13px] hover:border-[#a87ffb]/50 hover:text-white"><b class="mr-1 font-semibold ${p.n ? 'text-white' : ''}">${esc(p.label)}</b><span class="tabular-nums">${p.n || esc(ui('ixSoon'))}</span></a>`).join('')}${ach ? `<a href="achievements/index.html" class="whitespace-nowrap rounded-full border border-amber-500/30 px-3 py-1 text-[13px] text-amber-300 hover:text-white">&#9733; ${esc(ui('achShort'))}</a>` : ''}</nav>
     <input type="search" data-qc-filter id="qc-cfilter" autocomplete="off" placeholder="${esc(secs.length && total >= 40 ? ui('ixFilter') : ui('ixFilterSmall'))}" class="w-full shrink-0 rounded-xl border border-[#a87ffb]/40 bg-white/[0.04] px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:border-[#a87ffb] focus:outline-none sm:w-64"></div>`;
   const part = (p: Part, i: number) => `${i === 1 ? '<span id="compendium"></span>' : ''}<section id="${p.id}" data-fsec class="scroll-mt-36 pt-7"><div class="mb-2.5 flex items-baseline justify-between gap-3"><h2 class="text-xs font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(p.title)}</h2>${p.count ? `<span class="text-xs tabular-nums text-zinc-500">${esc(p.count)}</span>` : ''}</div>${p.html}</section>`;
   // Wider than the page's text from laptop width up, so cards sit four or five to a row.
@@ -3005,7 +3084,8 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
     fs.mkdirSync(dir, { recursive: true });
     // Fact pages (roadmap 29): the facts first; the story and background text in a closed fold below them.
     const factMode = FACT_KEYS.has(key);
-    const storyHtml = (e.story || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entStory'))}</h2>${e.story!.map((x: any, i: number) => `<h3 id="story-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.heading)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : '';
+    // On a fact page the story sits in a fold already titled "Story and background": no second heading inside it.
+    const storyHtml = (e.story || []).length ? `<section class="mt-6">${factMode ? '' : `<h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entStory'))}</h2>`}${e.story!.map((x: any, i: number) => `<h3 id="story-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(x.heading)}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : '';
     const playHtml = (e.gameplay || []).length ? `<section class="mt-6"><h2 class="text-sm font-bold uppercase tracking-wide text-[#c4b0ff]">${esc(ui('entGameplay'))}</h2>${e.gameplay!.map((x: any, i: number) => `<h3 id="play-${i + 1}" class="mt-4 scroll-mt-20 text-base font-semibold text-white">${esc(gameplayHeading(x, person))}</h3><p class="mt-1 text-zinc-300 leading-relaxed">${rich(x.text, '../', e.slug)}</p>`).join('')}</section>` : '';
     const askedHtml = (() => {
         // Answers to players' questions are worked into the sections above (qaArrange.ts); only those that fit none
@@ -3071,7 +3151,7 @@ function renderEntities(key: string, gameName: string, visible: { slug: string; 
       ${e.ref ? refBlocks(e.ref, e.slug) : ''}
       ${(sm.notes || []).length ? `<ul class="mt-4 space-y-1.5 text-sm text-zinc-300">${sm.notes.map((x: string) => `<li class="flex gap-2"><span class="text-[#c4b0ff]">&bull;</span><span>${rich(x, '../', e.slug)}</span></li>`).join('')}</ul>` : ''}
       ${factMode ? askedHtml : ''}
-      ${factMode && (storyHtml || playHtml) ? `<details class="qc-fold mt-6" id="story"><summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10">${ICON.caret}${ICON.list}<h2 class="flex-1 text-sm sm:text-base font-bold text-white">Story and background</h2></summary><div class="px-1">${storyHtml}${playHtml}</div></details>` : ''}
+      ${factMode && (storyHtml || playHtml) ? `<details class="qc-fold mt-6" id="story"><summary class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10">${ICON.caret}${ICON.list}<h2 class="flex-1 text-sm sm:text-base font-bold text-white">${esc(ui('entStory'))}</h2></summary><div class="px-1">${storyHtml.replace('<section class="mt-6">', '<section class="mt-2">')}${playHtml}</div></details>` : ''}
       ${factMode && e.review?.total ? `<p class="mt-6 border-t border-white/10 pt-3 text-xs text-zinc-500">${e.review.total} facts on this page checked against sources · ${e.review.supported} supported${(e as any).builtAt ? ` · last checked ${new Date(Number((e as any).promotedFromDraft || (e as any).builtAt)).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}</p>` : ''}
       ${publicSources(e.sources || []).length ? `<p class="mt-6 text-xs text-zinc-500">Sources: ${publicSources(e.sources).map(esc).join(', ')}</p>` : ''}
     </article>
