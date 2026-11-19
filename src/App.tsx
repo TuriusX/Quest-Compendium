@@ -2973,7 +2973,10 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         },
         body: JSON.stringify({
           question: text,
-          history: activeTab.messages,
+          // Only what the server reads (server.ts: the last 6 messages' role and text; whether there are any): never
+          // the earlier screenshots, drawn pictures or markers, which made every question upload the whole
+          // conversation (session companion step 0, Nov 18 2026).
+          history: activeTab.messages.slice(-6).map((m) => ({ role: m.role, text: typeof m.text === 'string' ? m.text : '' })),
           imageBase64,
           audioBase64,
           aiMode: settings.aiMode,

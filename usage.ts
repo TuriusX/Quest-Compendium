@@ -170,8 +170,12 @@ export function logUsage(feature: string, model: string, response: any): void {
     scope.dollars += (cost ?? 0) + searches * SEARCH_DOLLARS;
     scope.searches += searches;
   }
+  // Gemini's own prompt caching (implicit: the same start of a request, like the rules text, re-used within minutes):
+  // how much of the input it served from cache (session companion step 0, Nov 18 2026). Logged only; the cost above is
+  // the full rate, so a cache hit makes it an overestimate.
+  const cached = Number(u.cachedContentTokenCount ?? 0);
   console.log(
-    `[usage] ${feature} ${model} in=${input}${image ? ` (image ${image})` : ''} out=${answer} thinking=${thinking}` +
+    `[usage] ${feature} ${model} in=${input}${image ? ` (image ${image})` : ''}${cached ? ` cached=${cached}` : ''} out=${answer} thinking=${thinking}` +
       (searches ? ` searches=${searches}` : '') +
       ` ≈ $${cost.toFixed(4)}${hasPrice(model) ? '' : ' (no price on file: top rate)'}` +
       (searches ? ` (+$${(searches * SEARCH_COST).toFixed(3)} search)` : ''),
