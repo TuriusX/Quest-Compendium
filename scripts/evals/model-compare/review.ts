@@ -11,8 +11,10 @@ import { claimSlots, parseClaims, scoreClaims, trusted, evidenceText, type Claim
 
 const KEY = 'red-dead-redemption-2';
 const FILE = 'scratchpad/model-compare/review-state.json';
-const MODELS = { pro: 'gemini-3.1-pro-preview', argon: 'gemini-4-argon' };
-const BATCH = { pro: { in: 1, out: 6 }, argon: [{ in: 1, out: 5 }, { in: 2, out: 10 }] };
+// The candidate ("argon" below, the first one compared): CANDIDATE=gemini-4-hydrogen (Nov 18, 2026).
+const CAND = process.env.CANDIDATE || 'gemini-4-argon';
+const MODELS = { pro: 'gemini-3.1-pro-preview', argon: CAND };
+const BATCH = { pro: { in: 1, out: 6 }, argon: CAND === 'gemini-4-hydrogen' ? [{ in: 0.75, out: 3.75 }, { in: 0.75, out: 3.75 }] : [{ in: 1, out: 5 }, { in: 2, out: 10 }] };
 
 /** quests.ts claimsOf, as the page is reviewed (copied: it isn't exported). */
 function claimsOf(name: string, overview: string, q: any): ClaimPage {
@@ -70,6 +72,12 @@ if (process.argv[2] === 'submit') {
     meta.push({ slug: p.e.slug, name: p.e.name, known: p.known, planted: p.notes, requests: [before, reqs.length], slots, evIds: ev.evidence.map((x) => x.id) });
     console.log(`${p.e.name}: should ${p.known === 'passed' ? 'pass' : 'fail'}${p.notes.length ? ` (planted: ${p.notes.join('; ')})` : ''}, ${slots.length} claims`);
   }
+  // A cost check before anything is sent (MAX_DOLLARS): input at about 4 characters a token, output at 8k tokens a
+  // request for each model, both at batch prices.
+  const inTok = reqs.reduce((n, r) => n + r.text.length / 4, 0);
+  const est = (inTok * (BATCH.pro.in + BATCH.argon[0].in) + reqs.length * 8000 * (BATCH.pro.out + BATCH.argon[0].out)) / 1e6;
+  console.log(`${reqs.length} requests, about ${Math.round(inTok)} input tokens each model: about $${est.toFixed(2)} at most`);
+  if (process.env.MAX_DOLLARS && est > Number(process.env.MAX_DOLLARS)) { console.log(`over MAX_DOLLARS ($${process.env.MAX_DOLLARS}): nothing sent`); process.exit(0); }
   const real = gemini() as any;
   const config = (m: 'pro' | 'argon') => ({ responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 12000, ...(m === 'pro' ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {}) });
   const jobs: any = {};

@@ -9,7 +9,10 @@ const g: any = gemini();
 const PRICE: Record<string, { in: number; out: number }[]> = {
   'gemini-3.1-pro-preview': [{ in: 2, out: 12 }],
   'gemini-4-argon': [{ in: 2, out: 10 }, { in: 4, out: 20 }], // intro (to Nov 30), Dec 1
+  'gemini-4-hydrogen': [{ in: 1.5, out: 7.5 }], // Nov 18, 2026 (Google's launch price)
 };
+// A hard stop (owner-approved amounts): no new answer starts once this run has spent this much. STOP_DOLLARS=1.5
+const STOP = Number(process.env.STOP_DOLLARS || 0) || Infinity;
 const SEARCH = 0.014;
 const safety = [HarmCategory.HARM_CATEGORY_HATE_SPEECH, HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, HarmCategory.HARM_CATEGORY_HARASSMENT].map((category) => ({ category, threshold: HarmBlockThreshold.BLOCK_NONE }));
 const caps = fs.readFileSync(process.env.CAPTURED || 'scratchpad/model-compare/captured.jsonl', 'utf8').trim().split('\n').map((l) => JSON.parse(l));
@@ -50,6 +53,7 @@ async function answer(model: string, c: any) {
 let total = 0;
 for (const c of caps.filter((x) => !only.length || only.includes(x.id))) {
   for (const model of (process.env.MODELS || 'gemini-3.1-pro-preview,gemini-4-argon').split(',')) {
+    if (total >= STOP) { console.log(`hard stop: $${total.toFixed(3)} spent (limit $${STOP})`); process.exit(0); }
     try {
       const r = await answer(model, c);
       total += r.tokenCost[0] + r.searchCost;

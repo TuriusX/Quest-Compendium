@@ -22,6 +22,7 @@ export const requestCost = new AsyncLocalStorage<{ dollars: number; searches: nu
 const RATES: Record<string, { input: number; output: number }> = {
   'gemini-3.8-flash': { input: 0.75, output: 3.75 },
   'gemini-3.1-pro-preview': { input: 2.0, output: 12.0 },
+  'gemini-4-hydrogen': { input: 1.5, output: 7.5 }, // Nov 18, 2026 launch price (under test, not used live)
   // Place reading, Locate me, the free / backstop answers and the pipeline's light steps; per Google's price list (Oct 14, 2026).
   'gemini-3.1-flash-lite': { input: 0.25, output: 1.5 },
   'gemini-3.1-flash-tts-preview': { input: 0.5, output: 20.0 }, // audio output (rate from the project's billing report)
