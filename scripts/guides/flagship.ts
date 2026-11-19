@@ -83,7 +83,8 @@ async function plain(prompt: string, label: string): Promise<string> {
   const res: any = await gemini().models.generateContent({
     model: MODEL,
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    config: { temperature: 0.3, maxOutputTokens: 8000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    // 16k: on OpenAI the reasoning counts against the limit, and long pages lost their short version (written last).
+    config: { temperature: 0.3, maxOutputTokens: 16000, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
   });
   console.log(`  [${label}] no searches`);
   return String(res?.text || '');
@@ -140,6 +141,7 @@ function walkPrompt(game: string, p: any, entries: { line: string }[], fights: G
     MISSABLE_STANDARD,
     '',
     'Then the short version, one line each: 2-4 lines "MATTERS: ..." (what is worth your time here), 0-3 lines "SKIP: ..." (what you can safely ignore), 2-4 lines "MISTAKE: ..." (what players commonly get wrong here, and how to avoid it).',
+    'Use the advice the sources give (what is worth doing, the recommended level or gear, how to handle a fight, the best choice, common mistakes) for the short version and for the steps\' tips: practical, specific advice a player can act on, not a list of facts. Never write about the evidence or the sources themselves, or about advice they do not give. An entry on the page that the evidence does not support or puts elsewhere is simply left out: never mention it or correct it in the text.',
     '',
     'The page\'s entries:',
     ...entries.map((e) => `- ${e.line}`),
@@ -235,6 +237,8 @@ function applyFixes(text: string, d: Draft): { fixed: number; dropped: number } 
     if (dr) { drop.add(label); dropped++; continue; }
     const rest = fx!.slice(1);
     const body = rest.join(' | ');
+    // A "fix" that talks about the sources instead of the game removes the line instead.
+    if (isMetaLine(body)) { drop.add(label); dropped++; continue; }
     if (m[1] === 'S' && d.steps[n]) {
       const parts = rest.length >= 2 ? rest : [d.steps[n].title, body];
       d.steps[n] = { ...d.steps[n], title: cut(parts[0], 80) || d.steps[n].title, text: cut(parts[1], 900) || d.steps[n].text }; fixed++;
@@ -278,11 +282,20 @@ function parseSteps(text: string, ids: Set<string>, fightIds: Set<string>): Guid
   for (const line of text.split('\n')) {
     const f = fields(line, 'STEP');
     if (!f || f.length < 2 || none(f[1])) continue;
-    const list = (v: string | undefined, ok: Set<string>) => (none(v) ? [] : String(v).split(/[,;\s]+/).map((x) => x.trim()).filter((x) => ok.has(x)));
+    // The fields after the text by what they hold, not their position: a writer that leaves out the fights column
+    // shifted the entry ids into the tip ("e22" shown as a tip, Nov 19 2026). Id lists give entries and fights; the
+    // prose fields that remain are the tip, then the warning.
+    const tokens = (v: string) => v.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
+    const isIdList = (v: string) => none(v) || tokens(v).every((x) => ids.has(x) || fightIds.has(x) || /^[a-z]{1,2}\d+$/i.test(x));
+    const rest = f.slice(2);
+    const idTokens = rest.filter((v) => !none(v) && isIdList(v)).flatMap(tokens);
+    // A "-" holds a place: positions 2-3 are id slots, 4-5 prose; past the id slots a "-" is an empty tip or warning.
+    const prose = rest.map((v, i) => (none(v) ? (i >= 2 ? '' : null) : isIdList(v) ? null : isMetaLine(v) ? '' : v)).filter((v): v is string => v !== null);
+    const entries = [...new Set(idTokens.filter((x) => ids.has(x)))], fights = [...new Set(idTokens.filter((x) => fightIds.has(x)))];
     out.push({
       id: `w${out.length + 1}`, title: cut(f[0], 80), text: cut(f[1], 900),
-      ...(list(f[2], ids).length ? { entries: list(f[2], ids) } : {}), ...(list(f[3], fightIds).length ? { fights: list(f[3], fightIds) } : {}),
-      ...(!none(f[4]) ? { tip: cut(f[4], 300) } : {}), ...(!none(f[5]) ? { warn: cut(f[5], 300) } : {}),
+      ...(entries.length ? { entries } : {}), ...(fights.length ? { fights } : {}),
+      ...(prose[0] ? { tip: cut(prose[0], 300) } : {}), ...(prose[1] ? { warn: cut(prose[1], 300) } : {}),
     });
   }
   return out.slice(0, 12);
@@ -302,8 +315,15 @@ function parseNew(text: string, sources: string[]): { entry: GuideEntry; kind: '
   return out.slice(0, 8);
 }
 
+/**
+ * A line about the sources or the check rather than the game ("The supplied evidence does not support...", "There is
+ * no recommended level given for...", "the cited location is..."): never shown to players (Nov 19 2026 advice test).
+ */
+export const isMetaLine = (t: string) =>
+  /\b(supplied|provided|cited) (evidence|sources?|location)\b|\bthe evidence\b|\b(not|no) (supported|sourced|confirmed) by\b|\bno (recommended|specific|minimum) (level|gear|strategy|advice)[^.]{0,40}\b(given|listed|stated|mentioned|provided)\b|\b(sources?|guides?) (do not|don't|does not|doesn't) (say|give|mention|list|state)\b|\bunsupported\b|\b(not|isn't) the supported\b|\bthe listed\b/i.test(t);
+
 function parseAdvice(text: string): GuideAdvice {
-  const take = (tag: string, n: number) => text.split('\n').map((l) => fields(l, tag)).filter(Boolean).map((f) => cut(f!.join(' | '), 300)).filter((x) => !none(x)).slice(0, n);
+  const take = (tag: string, n: number) => text.split('\n').map((l) => fields(l, tag)).filter(Boolean).map((f) => cut(f!.join(' | '), 300)).filter((x) => !none(x) && !isMetaLine(x)).slice(0, n);
   return { matters: take('MATTERS', 4), skip: take('SKIP', 3), mistakes: take('MISTAKE', 4) };
 }
 
@@ -654,6 +674,15 @@ async function buildPageEvidence(key: string, game: string, slug: string, order:
     choices: parseChoices(sup ? sup.choices : await plain(choicePrompt(game, p, evText).replace(/Search guides and wikis to confirm each choice and its outcomes, and write only what the sources say\./, EVIDENCE_RULE), 'choices')),
     old: [...(p.items || []).map((e: GuideEntry) => ({ entry: { ...e }, kind: 'item' as const })), ...(p.secrets || []).map((e: GuideEntry) => ({ entry: { ...e }, kind: 'secret' as const }))],
   };
+  // No short version (a long page's reply ran out before it, Nov 19 2026 test): one small call writes only that.
+  if (!sup && !draft.advice.matters.length && !draft.advice.mistakes.length) {
+    draft.advice = parseAdvice(await plain([
+      `The short version of the area "${p.name}" in the video game "${game}", written ONLY from the EVIDENCE below, one line each:`,
+      '2-4 lines "MATTERS: ..." (what is worth your time here), 0-3 lines "SKIP: ..." (what you can safely ignore), 2-4 lines "MISTAKE: ..." (what players commonly get wrong here, and how to avoid it).',
+      'Practical, specific advice a player can act on (what is worth doing, the recommended level or gear, how to handle a fight, the best choice), in your own words. Never write about the evidence or the sources themselves.',
+      '', 'EVIDENCE:', evText,
+    ].join('\n'), 'short version'));
+  }
   for (const n of draft.news) {
     const s = draft.steps[Math.min(draft.steps.length, n.step) - 1];
     if (s) s.entries = [...(s.entries || []), n.entry.id];

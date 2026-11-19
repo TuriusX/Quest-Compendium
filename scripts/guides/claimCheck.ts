@@ -192,11 +192,16 @@ export async function buildEvidencePack(key: string, slug: string, game: string,
   const ref = db().collection('evidencePacks').doc(`${key}__${slug}`);
   // The page's own entries, asked about by name (so a true entry the general research didn't mention keeps its support).
   const names = (opts.entries || []).filter(Boolean).slice(0, 30);
+  // Advice from guides (owner, Nov 19 2026: pages read like dry lists because the research only gathered facts, so the
+  // claim check removed every tip it couldn't source): what's worth doing, the recommended level, the best choice,
+  // how to handle the hard fights, common mistakes, sourced like any fact.
+  const adviceTopic = { topic: 'advice', ask: (g: string, a: string) => `In the video game "${g}", the area "${a}": the practical advice guide sites give for it: the recommended level or gear for it, what is most worth doing there and what can be skipped, which choice guides recommend and why, how to handle its hard fights, and the mistakes players commonly make there. One piece of advice per line, only advice a guide or wiki gives. Use at most three searches.` };
+  const hasAdvice = (p?: EvidencePack) => !!p?.evidence?.some((e) => e.topic === 'advice');
   const entryTopic = names.length ? [{ topic: 'entries', ask: (g: string, a: string) => `In the video game "${g}", the area "${a}": for each of these, say exactly where it is found (and whether it is really in ${a} at all), how to get it, and only if a source says so whether it can be permanently missed and why: ${names.join('; ')}.` }] : [];
   let have: EvidencePack | undefined;
   if (!opts.rebuild) {
     have = (await ref.get()).data() as EvidencePack | undefined;
-    if (have?.evidence?.length && (opts.gameEvidence ? have.evidence.some((e) => e.topic === 'order') : !entryTopic.length || have.evidence.some((e) => e.topic === 'entries'))) return trusted(withGame(have, opts.gameEvidence, area, names));
+    if (have?.evidence?.length && hasAdvice(have) && (opts.gameEvidence ? have.evidence.some((e) => e.topic === 'order') : !entryTopic.length || have.evidence.some((e) => e.topic === 'entries'))) return trusted(withGame(have, opts.gameEvidence, area, names));
   }
   const evidence: Evidence[] = have?.evidence?.length ? [...have.evidence] : [];
   const sites = new Set<string>(have?.sites || []);
@@ -205,7 +210,8 @@ export async function buildEvidencePack(key: string, slug: string, game: string,
   // NPCs, bosses, key items and missables come from the game's evidence). A cached pack only needs the entries topic added.
   // One call for both, held to a few searches (searches are most of the cost).
   const pageTopic = { topic: 'order', ask: (g: string, a: string, n: string) => `${TOPICS[0].ask(g, a, n)}${names.length ? ` Then, for each of these, where exactly it is found (and whether it is really in ${a} at all), how to get it, and only if a source says so whether it can be permanently missed and why: ${names.join('; ')}.` : ''} Use at most ${lean() ? 'three' : 'five'} searches.` };
-  const topics = opts.gameEvidence ? (have?.evidence?.length && have.evidence.some((e) => e.topic === 'order') ? [] : [pageTopic]) : have?.evidence?.length ? entryTopic : [...TOPICS, ...entryTopic];
+  const baseTopics = opts.gameEvidence ? (have?.evidence?.length && have.evidence.some((e) => e.topic === 'order') ? [] : [pageTopic]) : have?.evidence?.length ? entryTopic : [...TOPICS, ...entryTopic];
+  const topics = [...baseTopics, ...(hasAdvice(have) ? [] : [adviceTopic])];
   for (const t of topics) {
     const res: any = await gemini().models.generateContent({
       model: MODEL,
@@ -298,6 +304,7 @@ export const CLAIM_RULES = [
   '"contradicted": an evidence line says otherwise (cite it, and give the corrected wording from the evidence in "fix").',
   '"unsupported": no evidence line says it, even if it sounds right.',
   '"general": the claim states no specific fact at all (pure advice like "explore carefully", or a transition like "Then head on.").',
+  'Advice (what is worth doing or skipping, a recommended level or gear, a strategy for a fight, a recommended choice, a common mistake) is "supported" when an evidence line gives the same advice or advice that clearly implies it, in any wording; the specific facts inside it (a place, an item, a consequence) still need support.',
   'Something being missable, permanently lost, or locking the player out needs an evidence line that explicitly says so; otherwise it is "unsupported".',
   'A placement claim is supported only if the evidence puts that thing in the part of the area the step covers (a thing the evidence puts in another part, or another area, is "unsupported" or "contradicted").',
   'A shop claim ("Shop: X sells or offers ...") is about what is sold or offered, not where: it is supported when the evidence says X sells or offers those things (a person can be their own shop).',
@@ -358,9 +365,12 @@ export function parseClaims(text: string, slots: ClaimSlot[], ev: EvidencePack):
     // A sentence around the list (gpt-6-luna, Nov 19 2026): the list itself.
     const a = raw.indexOf('['), b = raw.lastIndexOf(']');
     try { rows = a >= 0 && b > a ? JSON.parse(raw.slice(a, b + 1)) : []; } catch { rows = []; }
+    // A reply cut off before its end (the output ran out): every complete verdict object in it still counts.
+    if (!rows.length) rows = (raw.match(/\{[^{}]*"id"\s*:[^{}]*\}/g) || []).map((s) => { try { return JSON.parse(s); } catch { return null; } }).filter(Boolean);
   }
   // The list wrapped in an object ({"claims": [...]}, {"verdicts": [...]}): the first list in it.
   if (rows && !Array.isArray(rows) && typeof rows === 'object') rows = (Object.values(rows).find((v) => Array.isArray(v)) as any[]) || [];
+  if (process.env.CLAIM_DEBUG && !(Array.isArray(rows) && rows.length)) console.log(`[claim-debug] unreadable reply (${raw.length} chars): ${raw.slice(0, 300)} ... ${raw.slice(-400)}`);
   const byId = new Map((Array.isArray(rows) ? rows : []).filter((r) => r && r.id).map((r) => [String(r.id).toUpperCase(), r]));
   const ids = new Set(ev.evidence.map((e) => e.id));
   return slots.map((s) => {
