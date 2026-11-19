@@ -5,8 +5,11 @@
  * before the change against 28 days after it. A change stays only if clicks didn't drop. English pages only: translated
  * pages keep their own titles, so their numbers are left out.
  */
-export const TRIAL_PAGES = 20;
-export const NEW_A_NIGHT = 5;
+// How many pages may be on trial at once, and how many start a night. SEARCH_TITLE_TRIALS / SEARCH_TITLE_NEW change them
+// for a run (owner, Nov 19 2026: the click pass on the most-seen pages in one go).
+const envNum = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
+export const TRIAL_PAGES = envNum(typeof process !== 'undefined' ? process.env.SEARCH_TITLE_TRIALS : undefined, 20);
+export const NEW_A_NIGHT = envNum(typeof process !== 'undefined' ? process.env.SEARCH_TITLE_NEW : undefined, 5);
 export const MIN_IMPRESSIONS = 100;
 export const MAX_CTR = 0.01;
 export const MAX_POSITION = 20;
