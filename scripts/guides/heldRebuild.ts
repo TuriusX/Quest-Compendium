@@ -15,17 +15,66 @@ import { acquireGuideLock, isRefusal, releaseGuideLocks } from './guideLock';
 const PAGE_WORST = 0.75;
 
 async function main() {
-  const keys = String(arg('keys') || '').split(',').map((s) => s.trim()).filter(Boolean);
+  let keys = String(arg('keys') || '').split(',').map((s) => s.trim()).filter(Boolean);
   const max = Number(arg('max-dollars', '5')) || 5;
   const maxPages = Number(arg('max-pages', '40')) || 40;
   const reason = new RegExp(String(arg('reason', 'too few')), 'i');
   const dry = arg('dry') === 'true';
-  if (!keys.length) throw new Error('--keys is required');
+  // --traffic N (owner, Nov 19 2026: rebuild the pages players open with the sourced-advice writer): the N most-seen
+  // published area pages across all guides instead of held ones; a page that fails its review keeps its live version.
+  const traffic = Number(arg('traffic', '0')) || 0;
   const { loadPageStats } = await import('./pageStats');
   const stats = await loadPageStats();
+  const topIds = traffic ? Object.entries(stats).sort((a, b) => (Number((b[1] as any)[0]) || 0) - (Number((a[1] as any)[0]) || 0)).map(([id]) => id).filter((id) => id.split('/').length === 2 && !id.includes('--')) : [];
+  if (traffic && !keys.length) keys = [...new Set(topIds.map((id) => id.split('/')[0]))];
+  if (!keys.length) throw new Error('--keys or --traffic is required');
   const { buildPageEvidenceForCore, writePageForCore } = await import('./flagship');
   let done = 0, live = 0;
   const lines: string[] = [];
+  if (traffic) {
+    let n = 0;
+    for (const id of topIds) {
+      if (done >= traffic || n >= traffic * 3) break;
+      const [key, slug] = id.split('/');
+      if (!keys.includes(key)) continue;
+      const info: any = (await db().collection('guides').doc(key).get()).data();
+      const order: { slug: string; name: string }[] = info?.areas || [];
+      const a: any = order.some((o) => o.slug === slug) ? (await db().collection('guides').doc(key).collection('areas').doc(slug).get()).data() : null;
+      if (!a || a.status === 'held' || a.status === 'draft') continue;
+      n++;
+      if (dry) { console.log(`  would rebuild ${id}`); continue; }
+      if (ledgerDollars() + PAGE_WORST > max) { lines.push(`stopped at $${ledgerDollars().toFixed(2)} (the next page could pass $${max})`); break; }
+      const lk = await acquireGuideLock(key, 'traffic page rebuild');
+      if (isRefusal(lk)) { lines.push(`${id}: guide in use, skipped`); continue; }
+      const scope = { dollars: 0, searches: 0 };
+      let status = '';
+      try {
+        await usageScope.run(scope, async () => {
+          const r: any = await buildPageEvidenceForCore(key, String(info.game || key), slug, order, key);
+          if (r?.review?.status === 'passed') {
+            await writePageForCore(key, slug, r.proto);
+            await db().collection('guides').doc(key).set({ translationsDue: { at: Date.now(), pages: FieldValue.arrayUnion(slug) } }, { merge: true });
+            status = `rebuilt (review ${r.review.score})`;
+            live++;
+          } else status = `kept the live page (${r?.review?.status || 'not built'} ${r?.review?.score ?? ''})`;
+        });
+      } catch (e: any) {
+        status = `error: ${String(e?.message || e).slice(0, 120)}`;
+      } finally {
+        await lk.release().catch(() => {});
+      }
+      done++;
+      const line = `${id}: ${status}, $${scope.dollars.toFixed(3)} (${scope.searches} searches)`;
+      lines.push(line);
+      console.log(line);
+      if (/search day limit/i.test(status)) break;
+    }
+    console.log(`\nTraffic pages: ${done} built, ${live} rebuilt; $${ledgerDollars().toFixed(3)} spent.`);
+    for (const l of lines.filter((l) => !/: (rebuilt|kept|error)/.test(l))) console.log(l);
+    await releaseGuideLocks().catch(() => {});
+    setTimeout(() => process.exit(0), 300);
+    return;
+  }
   for (const key of keys) {
     const info: any = (await db().collection('guides').doc(key).get()).data();
     if (!info) { lines.push(`${key}: no such guide`); continue; }
