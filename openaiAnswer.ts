@@ -186,5 +186,5 @@ export async function openaiAnswer(o: OpenAIAnswerOpts): Promise<any> {
 /** Errors worth handing straight to the Gemini backup (overloaded, rate limit, server or network trouble). */
 export function openaiUnavailable(e: any): boolean {
   const s = Number(e?.status || 0);
-  return s === 429 || s >= 500 || /ECONN|ETIMEDOUT|fetch failed|socket|network/i.test(String(e?.message || ''));
+  return s === 429 || s >= 500 || /ECONN|ETIMEDOUT|fetch failed|socket|network|timed out|timeout/i.test(String(e?.message || '')) || e?.name === 'APIConnectionTimeoutError';
 }

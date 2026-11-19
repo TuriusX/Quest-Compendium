@@ -82,7 +82,9 @@ export async function openaiGenerate(request: any, model = openaiFor(request)): 
   const search = (cfg.tools || []).some((t: any) => t && (t.googleSearch || t.googleSearchRetrieval));
   const sys = systemOf(cfg.systemInstruction);
   const instructions = [sys, wantsJson ? 'Reply with JSON only, exactly in the format asked for: no other text, no code fences. When a list ([...]) is asked for, reply with the list itself, never an object around it.' : '', search ? 'Check several different sites (the game\'s wikis and the major guide sites), and cite the page each fact comes from right after that fact. Do not add links or citations beyond the ones the search tool adds.' : ''].filter(Boolean).join('\n\n');
-  const timeout = Number(cfg.httpOptions?.timeout || request?.httpOptions?.timeout || 0) || undefined;
+  // At most 3 minutes a call unless the request sets its own (a searched call hung for 25 minutes on Nov 19 2026); a
+  // timed-out call goes to Gemini (openaiUnavailable).
+  const timeout = Number(cfg.httpOptions?.timeout || request?.httpOptions?.timeout || 0) || 180_000;
   const r: any = await oa().responses.create({
     model,
     ...(instructions ? { instructions } : {}),
@@ -92,7 +94,7 @@ export async function openaiGenerate(request: any, model = openaiFor(request)): 
     reasoning: { effort: EFFORT[String(cfg.thinkingConfig?.thinkingLevel || '').toUpperCase()] || 'low' },
     store: false,
     ...(search ? { tools: [{ type: 'web_search' }] } : {}),
-  } as any, timeout ? { timeout } : undefined);
+  } as any, { timeout, maxRetries: 0 });
   const out: any[] = Array.isArray(r?.output) ? r.output : [];
   const queries: string[] = out.filter((x) => x?.type === 'web_search_call').map((x) => String(x?.action?.query || x?.action?.queries?.[0] || 'search'));
   const chunks: { web: { uri: string; title: string; domain: string } }[] = [];
