@@ -1569,6 +1569,19 @@ ipcMain.on('answer-arrived', (event, a) => {
   if (!quietAsk() && !answerCard.isShowing()) return;
   answerCard.answer(a);
 });
+// "Where was I?" (session companion step 1, owner Nov 18 2026): the app's recap of a game (src/utils/recap.ts) on the
+// pop-up card, when a game starts after a day or more away, or from the quick menu. Only with the panel away (like
+// answers); nothing from the AI, so it's checked here like an answer's payload.
+ipcMain.on('show-recap', (event, a) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents || !answerCard || isAppVisible) return;
+  if (!a || typeof a.text !== 'string' || !a.text.trim()) return;
+  const str = (v, n) => String(v || '').slice(0, n);
+  answerCard.answer({
+    id: str(a.id, 80) || `recap-${Date.now()}`,
+    question: str(a.question, 200), title: str(a.title, 160), text: str(a.text, 2000), place: str(a.place, 120), model: '', combat: false, picture: null,
+    steps: (Array.isArray(a.steps) ? a.steps : []).slice(0, 3).map((s) => ({ kind: 'step', label: str(s && s.label, 200), where: '' })),
+  });
+});
 // A question asked from the panel while a game runs (owner, Nov 18 2026): the panel slides away and the answer pops up
 // over the game (the full answer stays in the panel). From a shortcut with the panel away, the card already shows it.
 ipcMain.on('ask-over-game', (event, a = {}) => {

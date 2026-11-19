@@ -58,6 +58,7 @@ import {
   addEntries, editEntry, removeEntry, clearPlaythrough, mergePlaythrough, playthroughForRequest, readLocal, writeLocal,
   emptyPlaythrough, OPEN_PLAYTHROUGH_EVENT, type Playthrough, type PlayKind,
 } from './utils/playthrough';
+import { buildRecap, recapCard, RECAP_GAP_MS } from './utils/recap';
 import { readCloud, writeCloud } from './utils/playthroughCloud';
 import { PlaythroughPanel } from './components/PlaythroughPanel';
 import { appSource, isPhone } from './utils/source';
@@ -670,6 +671,44 @@ export default function App() {
     api.setDetectBeyondSteam(true);
     api.onProgramDetected?.((g: ProgramGame | null) => setProgramGame(g));
     api.getProgramGame?.().then((g: ProgramGame | null) => setProgramGame(g)).catch(() => {});
+  }, []);
+
+  // "Where was I?" (session companion step 1, owner Nov 18 2026; utils/recap.ts): a game that starts after a day or more
+  // away gets a recap on the pop-up card, a few seconds in (the game's own loading first). Read before the switch
+  // below marks the tab active again. Once per game start; Settings can turn it off. The quick menu's "Where was I?"
+  // shows it any time (qc-recap).
+  const recapNowRef = useRef<{ tab: GameTab | null | undefined; play: Playthrough }>({ tab: null, play: emptyPlaythrough() });
+  recapNowRef.current.tab = activeTab; // its playthrough is set below, where it's declared
+  const showRecap = (tab: GameTab | null | undefined, why: 'start' | 'asked') => {
+    const api = (window as any).electronAPI;
+    if (!api?.showRecap) return;
+    const r = buildRecap(tab, recapNowRef.current.play, Date.now(), tr, [tr('chat.defaultShotQ'), tr('chat.defaultQ'), tr('chat.voiceMessage')]);
+    if (!r) {
+      if (why === 'asked') api.showRecap({ id: `recap-${Date.now()}`, question: tr('recap.question'), title: displayGameName(tab?.name || ''), text: tr('recap.nothing'), steps: [] });
+      return;
+    }
+    api.showRecap(recapCard(r, tr, `recap-${Date.now()}`));
+  };
+  const recapStartRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!runId || recapStartRef.current === runId || settings.recapCard === false) return;
+    if (isInitializing || !tabs.length || !runningTab) return;
+    recapStartRef.current = runId;
+    const tabId = runningTab.id;
+    const away = Date.now() - (runningTab.lastActive || Date.now());
+    if (away < RECAP_GAP_MS || !runningTab.messages?.length) return;
+    // The tab as it was (its lastActive is what "last played" counts from), with the playthrough loaded by then.
+    const snapshot = runningTab;
+    const timer = setTimeout(() => {
+      const now = recapNowRef.current.tab;
+      showRecap(now && now.id === tabId ? { ...now, lastActive: snapshot.lastActive } : snapshot, 'start');
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [runId, runningTab?.id, isInitializing, tabs.length > 0]);
+  useEffect(() => {
+    const on = () => showRecap(recapNowRef.current.tab, 'asked');
+    window.addEventListener('qc-recap', on);
+    return () => window.removeEventListener('qc-recap', on);
   }, []);
 
   // Following the game that starts (utils/runningGame.ts followRunning): its compendium opens by itself ("Switched to
@@ -1913,6 +1952,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   const playOwner = user && !(user as any).isGuest ? String((user as any).uid) : 'guest';
   const playUid = user && !(user as any).isGuest ? String((user as any).uid) : '';
   const [play, setPlay] = useState<Playthrough>(emptyPlaythrough());
+  recapNowRef.current.play = play;
   const playRef = useRef(play);
   playRef.current = play;
   const playFor = useRef('');

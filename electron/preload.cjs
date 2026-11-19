@@ -79,6 +79,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   hideDrawnLayer: () => ipcRenderer.send('hide-drawn-layer'),
   // Step 3: lines joining the answer's markers in order, rings for rough areas (pointers.html qcSetPins).
   setPointerPins: (a) => ipcRenderer.send('pointers-pins', a),
+  // "Where was I?" (session companion step 1): a recap on the pop-up card over the game.
+  showRecap: (a) => ipcRenderer.send('show-recap', a && typeof a === 'object' ? a : null),
   // The quick menu over the game (wheel.cjs): its labels, what was picked there, and "an answer arrived".
   setQuickMenu: (items, strings) => ipcRenderer.send('quick-menu-items', { items, strings }),
   onQuickAction: (callback) => { ipcRenderer.removeAllListeners('quick-action'); ipcRenderer.on('quick-action', (event, key) => callback(String(key || ''))); },

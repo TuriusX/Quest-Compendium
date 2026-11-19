@@ -29,7 +29,7 @@ import { padQuestionList, quickLabelKey } from '../utils/quickQuestions';
 import { createRingPointer, nextStop, ringSpot, type Stop } from '../utils/padStops';
 import { glyph, styleFromId, type PadStyle } from '../utils/padGlyphs';
 import { applySuggestion, buildVocab, deleteWord, suggest, type Vocab } from '../utils/padWords';
-import { Camera, CircleHelp, EyeOff, Gamepad2, Keyboard, LocateFixed, Mic, Move, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
+import { Camera, CircleHelp, EyeOff, Gamepad2, History, Keyboard, LocateFixed, Mic, Move, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
 type PadEvent =
@@ -496,6 +496,8 @@ export function ControllerLayer({
   const desktop = !!electronAPI();
   const quickMenu: { key: string; label: string; Icon: React.ComponentType<{ className?: string }>; run: () => void }[] = [
     { key: 'help', label: t('set.locateKey'), Icon: LocateFixed, run: () => emit('qc-help-here') },
+    // "Where was I?" (session companion step 1): the recap on the card over the game (App.tsx qc-recap).
+    ...(desktop ? [{ key: 'recap', label: t('recap.question'), Icon: History, run: () => emit('qc-recap') }] : []),
     ...(desktop ? [{ key: 'shot', label: t('pad.shotAsk'), Icon: Camera, run: () => emit('trigger-auto-screenshot-submit') }] : []),
     { key: 'speak', label: t('pad.voice'), Icon: Mic, run: () => emit('trigger-voice-record') },
     { key: 'questions', label: t('pad.questions'), Icon: CircleHelp, run: () => { setQIndex(0); setPanel('questions'); } },

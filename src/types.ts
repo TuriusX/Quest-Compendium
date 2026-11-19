@@ -353,6 +353,8 @@ export interface AppSettings {
   popupCorner?: 'tr' | 'tl' | 'br' | 'bl';
   /** Asking from the panel while a game runs: the panel slides away and the answer pops up (default on). */
   popupHidePanel?: boolean;
+  /** "Where was I?" (session companion step 1): a recap card when a game starts after a day or more (default on). */
+  recapCard?: boolean;
   /** The open combo was moved off View + Menu to L3 + R3 (once, Nov 17 2026; App.tsx). */
   padComboMoved?: boolean;
   /** Hold to talk on the controller while the overlay is open (default 'y'; 'off' turns it off). */
