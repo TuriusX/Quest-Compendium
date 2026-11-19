@@ -117,7 +117,9 @@ function claimsOf(name: string, overview: string, q: Quest): { page: ClaimPage; 
   if (q.giver) { services.push(`"${name}" is given by ${q.giver}`); map.push((ok) => { if (!ok) q.giver = ''; }); }
   if (q.chapter) { services.push(`"${name}" takes place in ${q.chapter}`); map.push((ok) => { if (!ok) q.chapter = ''; }); }
   if (q.where) { services.push(`"${name}" starts ${q.where}`); map.push((ok) => { if (!ok) q.where = ''; }); }
-  q.rewards.forEach((r, i) => { services.push(`Completing "${name}" rewards: ${r}`); map.push(keep(q.rewards, i)); });
+  // "Gets the player", not "completing rewards": a page's rewards include what the mission hands over along the way
+  // (a map, a letter), which a strict reviewer otherwise marks wrong (gpt-6.2-sol, Nov 19 2026 reviewer test).
+  q.rewards.forEach((r, i) => { services.push(`Doing "${name}" gets the player: ${r}`); map.push(keep(q.rewards, i)); });
   q.missables.forEach((r, i) => { services.push(`In "${name}", this can be permanently missed: ${r}`); map.push(keep(q.missables, i)); });
   q.goldMedal.forEach((r, i) => { services.push(`A gold medal requirement for "${name}": ${r}`); map.push(keep(q.goldMedal, i)); });
   q.choices.forEach((c, i) => { services.push(`In "${name}", choosing "${c.choice}" leads to: ${c.outcome}`); map.push(keep(q.choices, i)); });

@@ -22,7 +22,7 @@ function claimsOf(name: string, overview: string, q: any): ClaimPage {
   if (q.giver) services.push(`"${name}" is given by ${q.giver}`);
   if (q.chapter) services.push(`"${name}" takes place in ${q.chapter}`);
   if (q.where) services.push(`"${name}" starts ${q.where}`);
-  (q.rewards || []).forEach((r: string) => services.push(`Completing "${name}" rewards: ${r}`));
+  (q.rewards || []).forEach((r: string) => services.push(`Doing "${name}" gets the player: ${r}`));
   (q.missables || []).forEach((r: string) => services.push(`In "${name}", this can be permanently missed: ${r}`));
   (q.goldMedal || []).forEach((r: string) => services.push(`A gold medal requirement for "${name}": ${r}`));
   (q.choices || []).forEach((c: any) => services.push(`In "${name}", choosing "${c.choice}" leads to: ${c.outcome}`));
@@ -127,7 +127,7 @@ if (process.argv[2] === 'direct') {
     cost += (Number(gu.promptTokenCount || 0) * PRICE.pro.in + (Number(gu.candidatesTokenCount || 0) + Number(gu.thoughtsTokenCount || 0)) * PRICE.pro.out) / 1e6;
     texts.pro.push(String(g.text || ''));
     t0 = Date.now();
-    const o: any = await oa.responses.create({ model: OAM, input: r.text, reasoning: { effort: 'low' }, max_output_tokens: 12000, store: false, text: { format: { type: 'json_object' } } } as any);
+    const o: any = await oa.responses.create({ model: OAM, input: r.text, reasoning: { effort: 'low' }, max_output_tokens: 12000, store: false } as any);
     ms.oa += Date.now() - t0;
     const ou = o.usage || {};
     cost += (Number(ou.input_tokens || 0) * PRICE.oa.in + Number(ou.output_tokens || 0) * PRICE.oa.out) / 1e6;
