@@ -72,8 +72,10 @@ import { getAuth } from 'firebase-admin/auth';
 import { deployToNetlify } from './netlify';
 import { steamCandidates } from './steam';
 import { promote } from '../guides/promote';
-import { SEARCH_DOLLARS } from '../../usage';
+import { SEARCH_DOLLARS, OPENAI_SEARCH_DOLLARS } from '../../usage';
 import { spotWeekLine } from '../../spot';
+/** What one of the pipeline's searches costs: OpenAI's $0.01 with PIPELINE_OPENAI=1 (Nov 19 2026), else Google's. */
+const SEARCH_PRICE = process.env.PIPELINE_OPENAI === '1' ? OPENAI_SEARCH_DOLLARS : SEARCH_DOLLARS;
 import { imagesWeekLine } from '../../guideImages';
 import { suggestNightly } from '../guides/suggestImages';
 import { isCorePage } from '../guides/core';
@@ -191,7 +193,7 @@ function runScript(args: string[]): { ok: boolean; searches: number; dollars: nu
   const tokenGuess = Number((out.match(/cost ≈ \$(\d+(?:\.\d+)?)/i) || [])[1] || 0);
   // A script without a Usage line (no AI calls, or an older one): its token estimate plus its searches, priced.
   const searches = usage ? Number(usage[1]) : reported;
-  const dollars = usage ? Number(usage[2]) : tokenGuess + reported * SEARCH_DOLLARS;
+  const dollars = usage ? Number(usage[2]) : tokenGuess + reported * SEARCH_PRICE;
   // The script's "Done" line, without the "Done." prefix and its "Next: …" hint.
   for (const m of out.matchAll(/Skipped \(locked\): ([^\n]*)/g)) LOCKED.add(m[1].replace(/\s*\(lock until[^)]*\)/, '').replace(/;\s*tried again next run\.?\s*$/, '').trim());
   const timedOut = (r.error as any)?.code === 'ETIMEDOUT';
@@ -390,7 +392,7 @@ async function main() {
    * Searches a step may run: its own cap, what's left of the money (80% of it, the rest for tokens), and what's left of
    * the pipeline's searches today (work that needs more waits for the next run).
    */
-  const affordable = (cap: number) => Math.max(0, Math.min(cap, searchDay, Math.floor((Math.max(0, room() - 0.3) * 0.8) / SEARCH_DOLLARS)));
+  const affordable = (cap: number) => Math.max(0, Math.min(cap, searchDay, Math.floor((Math.max(0, room() - 0.3) * 0.8) / SEARCH_PRICE)));
   /** This run's costs, step by step, for the summary. */
   const costs: { label: string; dollars: number; searches: number }[] = [];
   const charge = async (r: { searches: number; dollars: number }, label: string) => {
@@ -772,7 +774,7 @@ async function main() {
     const budgetLeft = item.approved ? approvedLeft() : Infinity;
     const cap = Math.min(
       affordable(big || ['fights', 'missables', 'queries', 'info'].includes(action) ? Math.min(QUEUE_CAREFUL_SEARCHES, queueRoom) : Math.min(200, queueRoom)),
-      Number.isFinite(budgetLeft) ? Math.floor((Math.max(0, budgetLeft - 0.3) * 0.8) / SEARCH_DOLLARS) : Infinity,
+      Number.isFinite(budgetLeft) ? Math.floor((Math.max(0, budgetLeft - 0.3) * 0.8) / SEARCH_PRICE) : Infinity,
     );
     console.log(`\n▶ queue ${action} ${item.game} (up to ${cap} searches${Number.isFinite(budgetLeft) ? `, $${budgetLeft.toFixed(2)} of the approved total left` : ''})`);
     const before = spendLeft;
@@ -1410,7 +1412,7 @@ async function main() {
   } catch (e: any) {
     console.warn(`Unpriced-model line skipped: ${e?.message}`);
   }
-  const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAY_CAP.toFixed(2)}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches, ${state.searches || 0} pipeline searches).${sm ? ` 🔎 Searches this month: pipeline ${sm.pipeline + sm.flagship} of its ${pipelineShare(month)} (flagship ${sm.flagship}); players ${sm.players} of their ${PLAYER_MONTHLY()}; ${sm.count} counted in all, ≈$${billedSearchDollars(sm.count).toFixed(2)} billed (from the first query, ×${SEARCH_BILL_FACTOR()} for missed queries).` : ''}`;
+  const totals = `This run $${runDollars.toFixed(2)}; today $${state.spend.dollars.toFixed(2)} of $${DAY_CAP.toFixed(2)}; this month $${(state.dollars || 0).toFixed(2)} of $${AI_CAP} (tokens and searches, ${state.searches || 0} pipeline searches).${sm ? ` 🔎 Searches this month: pipeline ${sm.pipeline + sm.flagship} of its ${pipelineShare(month)} (flagship ${sm.flagship}); players ${sm.players} of their ${PLAYER_MONTHLY()}; ${sm.count} counted in all${sm.openai ? ` (${sm.openai} by OpenAI)` : ''}, ≈$${billedSearchDollars(sm.count, sm.openai || 0).toFixed(2)} billed (Google's from the first query, ×${SEARCH_BILL_FACTOR()} for missed queries; OpenAI's $0.01 each).` : ''}`;
   const closing = RUN.stoppedBy ? `🛑 Run stopped early: ${RUN.stoppedBy}. ${totals}` : `🏁 Run finished. ${totals}`;
   state.lastRun = Date.now();
   state.lastReport = report;

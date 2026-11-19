@@ -3505,7 +3505,15 @@ async function main() {
   console.log(`Kept out of Google until verified (searchHold.ts): ${HELD.size} unchecked page(s) with under ${HOLD_IMPRESSIONS} impressions, noindex and out of the sitemap.`);
   if (!PREVIEW && HOLD) {
     // New pages' first-seen day, and (a full publish) tonight's count for Monday's summary.
-    await HOLD_DOC().set({ firstSeen: HOLD_NEW, ...(ONLY ? {} : { held: { count: HELD.size, at: Date.now() } }) }, { merge: true });
+    // Only tonight's new pages are added, each as its own field: writing the map itself with merge replaced the stored
+    // map, so a night with no new page wiped every first-seen day and nothing was ever held (found Nov 19 2026).
+    if (Object.keys(HOLD_NEW).length) {
+      const { FieldPath } = await import('firebase-admin/firestore');
+      const args: any[] = [];
+      for (const [k, v] of Object.entries(HOLD_NEW)) args.push(new FieldPath('firstSeen', k), v);
+      for (let i = 0; i < args.length; i += 800) await (HOLD_DOC() as any).update(...args.slice(i, i + 800));
+    }
+    if (!ONLY) await HOLD_DOC().set({ held: { count: HELD.size, at: Date.now() } }, { merge: true });
   }
   if (PREVIEW) {
     // A preview: the site's icons beside it, and its own stylesheet; the website files and the homepage are untouched.

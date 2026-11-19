@@ -62,7 +62,8 @@ export function upkeepRoom(u: { dayCap: number; monthCap: number; spentMonth: nu
  * it, so the rest aren't paid for. A page that errored before spending anything (a daily limit) doesn't count.
  */
 export function guideWalkCheck<T extends { status: string; dollars?: number; at: number }>(rows: T[]): { verdict: 'wait' | 'ok' | 'pause'; live: number; tried: number; through: number } {
-  const ten = rows.filter((x) => x.status !== 'error' || Number(x.dollars || 0) > 0).slice(0, 10);
+  // A page stopped by a search limit ('waiting', or an older 'error' from one) isn't a try.
+  const ten = rows.filter((x) => x.status !== 'waiting' && (x.status !== 'error' || Number(x.dollars || 0) > 0)).slice(0, 10);
   const live = ten.filter((x) => x.status === 'live').length;
   const verdict = ten.length - live >= 4 ? 'pause' : ten.length === 10 ? 'ok' : 'wait';
   return { verdict, live, tried: ten.length, through: ten[ten.length - 1]?.at || 0 };

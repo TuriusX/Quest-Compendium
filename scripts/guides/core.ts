@@ -344,7 +344,9 @@ export async function boostLine(): Promise<string | null> {
   const st: any = (await cref().get()).data() || {};
   const bo = st.boost;
   if (!bo || bo.month !== month()) return null;
-  const { SEARCH_DOLLARS } = await import('../../usage');
+  const usage = await import('../../usage');
+  // A search's price: OpenAI's $0.01 when the pipeline runs on it (Nov 19 2026), else Google's.
+  const SEARCH_DOLLARS = process.env.PIPELINE_OPENAI === '1' ? usage.OPENAI_SEARCH_DOLLARS : usage.SEARCH_DOLLARS;
   const day = ((bo.log || []) as any[]).filter((x) => Number(x.at) >= Date.now() - 24 * 3600_000);
   const ok = (x: any) => /^live|held by the rebuild guard/.test(String(x.status));
   const dayCost = day.reduce((a, x) => a + Number(x.dollars || 0), 0), daySearches = day.reduce((a, x) => a + Number(x.searches || 0), 0);

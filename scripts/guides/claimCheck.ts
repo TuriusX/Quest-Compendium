@@ -20,7 +20,8 @@
  *    claims it couldn't support are removed from the page in any case.
  */
 import { ThinkingLevel } from '@google/genai';
-import { OWN_SITE, db, gemini, MODEL, searchesIn } from './common';
+import { OWN_SITE, db, gemini, MODEL, searchesIn, pipelineOnOpenAI } from './common';
+import { openaiFor } from '../../openaiGemini';
 import { PRO_MODEL, takePro } from './reviewerQuota';
 
 export type Evidence = { id: string; text: string; sources: string[]; topic: string };
@@ -448,7 +449,8 @@ export type ReviewResult = { score: number; status: 'passed' | 'failed'; reason?
  */
 export async function claimReview(game: string, area: string, page: ClaimPage, ev: EvidencePack, opts: { model?: string } = {}): Promise<ReviewResult> {
   const model = opts.model || PRO_MODEL;
-  if (/pro/i.test(model)) await takePro('careful');
+  // Google's daily Pro requests are only counted when Google answers (on OpenAI, gpt-6.2-sol reviews).
+  if (/pro/i.test(model) && !(pipelineOnOpenAI() && openaiFor({ model }))) await takePro('careful');
   return scoreClaims(await claimCheck(game, area, claimSlots(page), ev, model));
 }
 

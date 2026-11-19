@@ -2254,7 +2254,7 @@ percentages:
       if (combatParsed.combat && guidePage && !site) {
         void saveMissingFight({ page: guidePage, combat: combatParsed, steps: stepsParsed.steps, uid: userId, isGuest, game: String(effectiveGame?.name || '') });
       }
-      if (searchesUsed > 0 && !site) recordSearches(searchCtx, searchesUsed);
+      if (searchesUsed > 0 && !site) recordSearches(searchCtx, searchesUsed, !!oaAnswered);
       if (chargedBucket && !site) recordPlayerCost({ uid: userId, premium: isPremium, guest: isGuest, dollars: costScope.dollars, searches: costScope.searches });
       // The same cost by day, for the weekly player report (free, Premium or guest).
       if (chargedBucket && !site) recordDailyCost(userId, isGuest ? 'guest' : isPremium ? 'premium' : 'free', costScope.dollars, (req as any).user?.email, { searched: searchesUsed > 0, shot: !!imageBase64 });

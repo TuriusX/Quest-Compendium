@@ -211,7 +211,9 @@ export async function doOne(w: Work): Promise<{ status: string; dollars: number;
       }
     });
   } catch (e: any) {
-    status = 'error';
+    // Stopped by a search limit (SearchDayWait): not a try; the item waits for the next run (Nov 19 2026: these were
+    // logged as errors, skipped for good and counted toward a guide's walkthrough pause).
+    status = /search day limit/i.test(String(e?.message || '')) ? 'waiting' : 'error';
     detail = String(e?.message || e).slice(0, 160);
   } finally {
     process.env.EVIDENCE_LEAN = '';
@@ -268,6 +270,15 @@ export async function runAuditWork(max: number, upkeepMax = max): Promise<{ line
   const one = async (w: Work, lane: 'upkeep' | 'main') => {
     const r = await doOne(w);
     if (r.status === 'busy') { stop = true; return 0; }
+    // A search limit: what it spent counts, the item stays next, and tonight's work stops.
+    if (r.status === 'waiting') {
+      spent += r.dollars; today += r.dollars; room -= r.dollars; searches += r.searches;
+      if (lane === 'upkeep') { upSpent += r.dollars; upToday += r.dollars; }
+      await ref().set({ spent, upkeepSpent: upSpent, day: day(), spentToday: today }, { merge: true });
+      lines.push(`${w.kind} ${w.key}/${w.ref}: waits for search room (${r.detail.slice(0, 80)})`);
+      stop = true;
+      return r.dollars;
+    }
     spent += r.dollars; today += r.dollars; room -= r.dollars; searches += r.searches;
     if (w.kind === 'reverify') reverifySpent += r.dollars;
     if (lane === 'upkeep') { upSpent += r.dollars; upToday += r.dollars; upNext++; } else next++;

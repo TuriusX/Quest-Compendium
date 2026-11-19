@@ -31,9 +31,10 @@ import fs from 'fs';
 import { ThinkingLevel } from '@google/genai';
 import {
   db, gemini, gameKey, arg, parseJson, searchesIn, guideRelease, releasedAfter, isLayout, isStageKey, liveKey,
-  LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, REVIEWER_CUTOFF, MISSABLE_STANDARD, missableGaps, type Layout,
+  LAYOUT_CHOICES, QUICK_MODEL_CUTOFF, REVIEWER_CUTOFF, MISSABLE_STANDARD, missableGaps, pipelineOnOpenAI, type Layout,
 } from './common';
 import { estimateCost } from '../../usage';
+import { openaiFor } from '../../openaiGemini';
 import { promote, archiveStage } from './promote';
 import { PRO_MODEL, FLASH_REVIEW_MODEL, takePro, proExhausted, isQuotaError, ProQuotaWait, type ReviewTier, type ProKind } from './reviewerQuota';
 
@@ -213,7 +214,9 @@ export type Reviewer = { tier: ReviewTier; model: string; kind: ProKind };
 export const reviewerFor = (tier: ReviewTier, kind: ProKind): Reviewer => ({ tier, kind, model: tier === 'pro' ? PRO_MODEL : FLASH_REVIEW_MODEL });
 /** A reviewer call. Pro requests are counted first (ProQuotaWait when today's are used up) and never retried elsewhere. */
 export async function call(rv: Reviewer, request: any): Promise<any> {
-  if (rv.tier === 'pro') await takePro(rv.kind);
+  // Google's daily Pro requests are only counted when Google answers (on OpenAI, gpt-6.2-sol reviews: no such limit).
+  const onOpenAI = pipelineOnOpenAI() && !!openaiFor({ ...request, model: rv.model });
+  if (rv.tier === 'pro' && !onOpenAI) await takePro(rv.kind);
   try {
     return await gemini().models.generateContent({ ...request, model: rv.model });
   } catch (e: any) {

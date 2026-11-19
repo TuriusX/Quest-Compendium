@@ -120,7 +120,8 @@ export function gemini(): GoogleGenAI {
     // Priced as the model that answered (an OpenAI model's tokens and $0.01 searches).
     const u = billedUsage(typeof res?.model === 'string' && /^gpt-/i.test(res.model) ? res.model : String(request?.model || ''), res);
     // Every search counts toward today's total and the month's (searchGuard.ts), here, once, and before the call returns.
-    if (u.searches) await Promise.all([recordSearchDay(u.searches, forPlayers ? 'players' : 'pipeline'), recordMonthly(u.searches, forPlayers ? 'players' : undefined)]);
+    const byOpenAI = typeof res?.model === 'string' && /^gpt-/i.test(res.model);
+    if (u.searches) await Promise.all([recordSearchDay(u.searches, forPlayers ? 'players' : 'pipeline'), recordMonthly(u.searches, forPlayers ? 'players' : undefined, byOpenAI)]);
     ledger.calls++; ledger.input += u.input; ledger.output += u.output; ledger.thinking += u.thinking; ledger.searches += u.searches;
     ledger.tokenDollars += u.tokenDollars; ledger.searchDollars += u.searchDollars;
     if (!u.priced) ledger.unpriced++;

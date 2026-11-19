@@ -44,7 +44,14 @@ export function pipelineShare(month = new Date().toISOString().slice(0, 7)): num
   return m && Number.isFinite(Number(m[1])) ? Number(m[1]) : num(process.env.PIPELINE_MONTHLY_SEARCHES, 4800);
 }
 export type SearchWho = 'pipeline' | 'players' | 'flagship' | 'tests';
-export type SearchMonth = { month: string; count: number; pipeline: number; players: number; flagship: number; tests?: number };
+/** openai: the month's searches run by OpenAI (Nov 19 2026 on), of them openaiPipeline the pipeline's and flagship's. */
+export type SearchMonth = { month: string; count: number; pipeline: number; players: number; flagship: number; tests?: number; openai?: number; openaiPipeline?: number };
+/**
+ * The pipeline on OpenAI (PIPELINE_OPENAI=1, owner Nov 19 2026): Google's search share no longer applies; its dollar
+ * caps decide, and this many OpenAI searches a month (OPENAI_PIPELINE_MONTHLY_SEARCHES) only stop a runaway.
+ */
+export const OPENAI_PIPELINE_MONTHLY = () => num(process.env.OPENAI_PIPELINE_MONTHLY_SEARCHES, 30000);
+export const OPENAI_SEARCH_PRICE = 10 / 1000;
 
 const today = () => new Date().toISOString().slice(0, 10);
 const thisMonth = () => new Date().toISOString().slice(0, 7);
@@ -57,10 +64,22 @@ const thisMonth = () => new Date().toISOString().slice(0, 7);
  */
 export const SEARCH_FREE_MONTHLY = 0;
 export const SEARCH_BILL_FACTOR = () => num(process.env.SEARCH_BILL_FACTOR, 1.4);
-export const billedSearchDollars = (counted: number) => (counted * SEARCH_BILL_FACTOR() * 14) / 1000;
-/** "6,832 search queries counted this month (…) · ≈9,565 billed, ≈$133.91" */
-export const searchBillLine = (s: SearchMonth) =>
-  `${s.count.toLocaleString('en-US')} search queries counted this month (pipeline ${s.pipeline.toLocaleString('en-US')}, flagship ${s.flagship.toLocaleString('en-US')}, players ${s.players.toLocaleString('en-US')}${s.tests ? `, tests ${s.tests.toLocaleString('en-US')}` : ''}) · ≈${Math.round(s.count * SEARCH_BILL_FACTOR()).toLocaleString('en-US')} billed, ≈$${billedSearchDollars(s.count).toFixed(2)} ($14 per 1,000 from the first; ×${SEARCH_BILL_FACTOR()} for queries the counter misses)`;
+/**
+ * What counted searches cost: Google's at $14 per 1,000 × SEARCH_BILL_FACTOR; OpenAI's (the `openai` part of the count)
+ * at $10 per 1,000, as counted (OpenAI reports every search).
+ */
+export const billedSearchDollars = (counted: number, openai = 0) => {
+  const oa = Math.min(Math.max(0, openai), counted);
+  return ((counted - oa) * SEARCH_BILL_FACTOR() * 14) / 1000 + oa * OPENAI_SEARCH_PRICE;
+};
+/** "6,832 search queries counted this month (…) · Google ≈9,565 billed, OpenAI 1,200 · ≈$145.91" */
+export const searchBillLine = (s: SearchMonth) => {
+  const oa = Math.min(s.openai || 0, s.count);
+  const google = s.count - oa;
+  return `${s.count.toLocaleString('en-US')} search queries counted this month (pipeline ${s.pipeline.toLocaleString('en-US')}, flagship ${s.flagship.toLocaleString('en-US')}, players ${s.players.toLocaleString('en-US')}${s.tests ? `, tests ${s.tests.toLocaleString('en-US')}` : ''}) · ` +
+    `Google ≈${Math.round(google * SEARCH_BILL_FACTOR()).toLocaleString('en-US')} billed ($14 per 1,000; ×${SEARCH_BILL_FACTOR()} for queries the counter misses)` +
+    `${oa ? `, OpenAI ${oa.toLocaleString('en-US')} ($10 per 1,000)` : ''} · ≈$${billedSearchDollars(s.count, oa).toFixed(2)}`;
+};
 
 /**
  * Count a response's searches when the client that made it doesn't count them itself (the server's own client; the
@@ -92,7 +111,8 @@ export function splitOf(d: any): SearchMonth {
   const players = Number(d?.players) || 0, flagship = Number(d?.flagship) || 0;
   const tests = Number(d?.tests) || 0;
   const pipeline = d?.pipeline === undefined ? Math.max(0, count - players - flagship - tests) : Number(d.pipeline) || 0;
-  return { month: String(d?.month || ''), count, pipeline, players, flagship, ...(tests ? { tests } : {}) };
+  const openai = Number(d?.openai) || 0, openaiPipeline = Number(d?.openaiPipeline) || 0;
+  return { month: String(d?.month || ''), count, pipeline, players, flagship, ...(tests ? { tests } : {}), ...(openai ? { openai } : {}), ...(openaiPipeline ? { openaiPipeline } : {}) };
 }
 
 /**
@@ -151,6 +171,8 @@ export async function searchMonth(fresh = false): Promise<SearchMonth> {
 /** Searches the pipeline and the flagship builds may still run this month (their share; never the players'). */
 export async function pipelineSearchRoom(fresh = false): Promise<number> {
   const s = await searchMonth(fresh);
+  // On OpenAI: the dollar caps decide; only a runaway count of OpenAI searches stops it.
+  if (process.env.PIPELINE_OPENAI === '1') return Math.max(0, OPENAI_PIPELINE_MONTHLY() - (s.openaiPipeline || 0));
   return Math.max(0, pipelineShare(s.month) - s.pipeline - s.flagship);
 }
 
@@ -176,12 +198,15 @@ export async function monthlyBudgetOk(): Promise<boolean> {
  * Until Oct 28 2026 the scripts counted at a dozen places of their own, fire-and-forget, and most of the core runs'
  * searches never reached the month (October: about 5,070 not counted).
  */
-export async function recordMonthly(n: number, who: SearchWho = process.env.SEARCH_BUDGET_EXEMPT === '1' ? 'flagship' : 'pipeline'): Promise<void> {
+export async function recordMonthly(n: number, who: SearchWho = process.env.SEARCH_BUDGET_EXEMPT === '1' ? 'flagship' : 'pipeline', openai = false): Promise<void> {
   if (!n) return;
   const m = thisMonth();
   if (monthly.month !== m) monthly = { ...zero(m), readAt: 0 };
   monthly.count += n;
   monthly[who] = (monthly[who] || 0) + n;
+  const oaPipe = openai && (who === 'pipeline' || who === 'flagship');
+  if (openai) monthly.openai = (monthly.openai || 0) + n;
+  if (oaPipe) monthly.openaiPipeline = (monthly.openaiPipeline || 0) + n;
   if (who === 'players' && monthly.players >= PLAYER_MONTHLY() * 0.8 && warned80 !== m) {
     warned80 = m;
     console.warn(`[search] ${monthly.players} of the players' ${PLAYER_MONTHLY()} monthly searches used (80%).`);
@@ -193,7 +218,7 @@ export async function recordMonthly(n: number, who: SearchWho = process.env.SEAR
     return; // no database access (e.g. local dev without credentials): the in-memory count still applies
   }
   try {
-    await db.collection('searchMonths').doc(m).set({ month: m, count: FieldValue.increment(n), [who]: FieldValue.increment(n), updatedAt: Date.now() }, { merge: true });
+    await db.collection('searchMonths').doc(m).set({ month: m, count: FieldValue.increment(n), [who]: FieldValue.increment(n), ...(openai ? { openai: FieldValue.increment(n) } : {}), ...(oaPipe ? { openaiPipeline: FieldValue.increment(n) } : {}), updatedAt: Date.now() }, { merge: true });
   } catch (e: any) {
     console.warn('[search] could not update the monthly count:', e?.message);
   }
@@ -236,16 +261,16 @@ export async function playerSearchesToday(): Promise<boolean> {
 }
 
 /** Searches players' features ran (chat, the Steam Deck's web search): the month's count and today's. */
-export function recordPlayerSearches(n: number): void {
+export function recordPlayerSearches(n: number, openai = false): void {
   if (!n) return;
-  void recordMonthly(n, 'players');
+  void recordMonthly(n, 'players', openai);
   void recordSearchDay(n, 'players');
 }
 
-/** Count the searches a question used, for the player and for the month. */
-export function recordSearches(opts: { uid: string; isGuest: boolean; userData: any }, n: number): void {
+/** Count the searches a question used, for the player and for the month (openai: OpenAI ran them). */
+export function recordSearches(opts: { uid: string; isGuest: boolean; userData: any }, n: number, openai = false): void {
   if (!n) return;
-  recordPlayerSearches(n);
+  recordPlayerSearches(n, openai);
   const day = today();
   if (opts.isGuest) {
     const g = guestUse.get(opts.uid);
