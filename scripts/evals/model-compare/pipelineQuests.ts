@@ -56,8 +56,9 @@ const info: any = (await db().collection('guides').doc(KEY).get()).data() || {};
 const game = String(info.game || KEY);
 const names = process.argv.slice(2);
 const rows: any[] = [];
+fs.mkdirSync('scratchpad/model-compare', { recursive: true });
 for (const name of names) {
-  for (const side of ['gemini', 'openai']) {
+  for (const side of (process.env.SIDES || 'gemini,openai').split(',')) {
     if (ledgerDollars() > STOP) { console.log(`hard stop: $${ledgerDollars().toFixed(3)}`); break; }
     process.env.PIPELINE_OPENAI = side === 'openai' ? '1' : '';
     const scope = { dollars: 0, searches: 0 };
