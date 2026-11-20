@@ -329,6 +329,13 @@
   .llab .src { margin-left: auto; letter-spacing: .02em; text-transform: none; font-weight: 600; font-size: 1.1em; }
   .llab .src.mine { color: var(--accent); }
   .llab.w { color: var(--warn); }
+  /* The Now box's X (idea #3): move on; the step goes to Earlier. */
+  .lnow { position: relative; padding-right: 1.8em !important; }
+  .lnow .lx { position: absolute; top: .25em; right: .3em; width: 1.35em; height: 1.35em; display: flex; align-items: center; justify-content: center;
+    border-radius: .25em; color: var(--dim); cursor: pointer; font-size: .85em; }
+  .lnow .lx:hover { color: #fff; background: rgba(255,255,255,.1); }
+  .learlier > div { padding: .15em .2em; font-size: .86em; color: #d4d4d8; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .learlier > div:hover { color: #fff; }
   .lnow { display: flex; gap: .55em; align-items: flex-start; padding: .45em .55em; border-radius: .35em;
     background: color-mix(in srgb, var(--accent) 16%, rgba(10,8,18,.55)); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
     box-shadow: inset 3px 0 0 var(--accent); text-shadow: 0 1px 2px rgba(0,0,0,.8); }
@@ -520,6 +527,7 @@
     logWhatsNext: "What's next?", logInvite: 'What are you trying to do?', logInviteSub: "Ask, and the answer's steps become your checklist here.",
     logAsk: 'Ask', logUndo: 'Undo', logTicked: 'Ticked: {step}', logHideWatch: 'Hide this warning for this save', putBack: 'Put back in the overlay',
     logProgress: '{n} of {total}', logTick: 'Tick', logTitle: 'Quest log',
+    logMoveOn: 'Move on to the next step (it stays under Earlier)', logMovedOn: 'Moved on from: {step}', logEarlier: 'Earlier', logBringBack: 'Make this Now again',
   };
   const L = (k, vars) => {
     const own = state.data && state.data.labels && state.data.labels[k];
@@ -647,10 +655,10 @@
       const mine = n.source === 'question';
       const prog = n.total ? `<div class="lprog">${Array.from({ length: Math.min(n.total, 12) }, (_, i) => `<i${i < n.doneCount ? ' class="d"' : ''}></i>`).join('')}${esc(L('logProgress', { n: n.doneCount, total: n.total }))}<span class="g">${esc(n.goal)}</span></div>` : '';
       h += `<div><div class="llab">${esc(L('logNow'))}${mine ? `<span class="src mine">${esc(L('logFromQuestion'))}</span>` : ''}</div>
-        <div class="lnow${mine ? '' : ' guide'}">${box(n)}<div><span class="lt">${esc(n.text)}</span>${sub(n)}${prog}${n.seen ? `<span class="lseen">⌖ ${esc(L('seenOnScreen').replace('{what}', n.seen))}</span>` : ''}${n.guide ? `<span class="lseen" title="${esc(n.guide.detail || '')}">📖 ${esc(L('fromGuideStep').replace('{step}', n.guide.title))}</span>` : ''}</div></div></div>`;
+        <div class="lnow${mine ? '' : ' guide'}"><span class="lx" data-act="move-on" data-id="${esc(n.id)}" data-text="${esc(n.text)}" data-msg="${esc(n.msgId || '')}" title="${esc(L('logMoveOn'))}">✕</span>${box(n)}<div><span class="lt">${esc(n.text)}</span>${sub(n)}${prog}${n.seen ? `<span class="lseen">⌖ ${esc(L('seenOnScreen').replace('{what}', n.seen))}</span>` : ''}${n.guide ? `<span class="lseen" title="${esc(n.guide.detail || '')}">📖 ${esc(L('fromGuideStep').replace('{step}', n.guide.title))}</span>` : ''}</div></div></div>`;
     }
     const cleared = state.cleared && state.cleared.until > Date.now() ? state.cleared : null;
-    if (cleared) h += `<div class="lcleared">✓ ${esc(L('logTicked', { step: cleared.text }))}<span class="u" data-act="undo">${esc(L('logUndo'))}</span></div>`;
+    if (cleared) h += `<div class="lcleared">${cleared.moved ? '›' : '✓'} ${esc(L(cleared.moved ? 'logMovedOn' : 'logTicked', { step: cleared.text }))}<span class="u" data-act="undo">${esc(L('logUndo'))}</span></div>`;
     if (lg.next && lg.next.length) h += `<div class="lnext"><div class="llab">${esc(L('logNext'))}</div>${lg.next.map((s) => `<div class="lst${lg.sel === s.id ? ' sel' : ''}">${box(s)}<div>${esc(s.text)}${sub(s)}</div></div>`).join('')}</div>`;
     // The place is known but not what the player is doing: what's here, from the guide, and no Now.
     if (lg.here && !lg.now) {
@@ -662,6 +670,10 @@
     }
     if (lg.watch) h += `<div class="lwatch"><div class="llab w">${esc(L('logWatch'))}${lg.watch.fromGuide ? `<span class="src">${esc(L('secMissable'))}</span>` : ''}</div><div class="wb"><span class="wi">⚠</span><div><b>${esc(lg.watch.text)}</b>${lg.watch.why && lg.watch.why !== lg.watch.text ? ` · ${esc(lg.watch.why)}` : ''}</div><span class="wx" data-hide="${esc(lg.watch.id)}" title="${esc(L('logHideWatch'))}">✕</span></div></div>`;
     if (lg.pins) h += `<div class="lrow lpins" data-act="pins">📌 ${esc(L('logPinned'))}<span class="c">${lg.pins}</span></div>`;
+    if (lg.earlier && lg.earlier.length) {
+      h += `<div class="lrow" data-act="earlier">↺ ${esc(L('logEarlier'))}<span class="c">${lg.earlier.length} ${state.earlierOpen ? '▾' : '▸'}</span></div>`;
+      if (state.earlierOpen) h += `<div class="learlier">${lg.earlier.map((e) => `<div data-act="bring-back" data-id="${esc(e.id)}" title="${esc(L('logBringBack'))}">${esc(e.text)}</div>`).join('')}</div>`;
+    }
     if (lg.more) h += `<div class="lrow lmore" data-act="more">${esc(state.showMore ? L('logShowLess') : L('logShowMore'))}<span class="c">${state.showMore ? '▾' : '▸'}</span></div>`;
     return h;
   }
@@ -1023,7 +1035,11 @@
     if (a === 'locate') { const lw = state.data && state.data.log && state.data.log.where; if (!lw || !lw.locating) send('locate', {}); return; }
     if (a === 'where-list') { state.whereOpen = !state.whereOpen; render(); return; }
     if (a === 'where-no') { state.noSuggestion = act.dataset.name || ''; state.whereOpen = true; render(); return; }
+    if (a === 'undo' && state.cleared && state.cleared.moved) { send('log-action', { action: 'unpass', id: state.cleared.id }); state.cleared = null; render(); return; }
     if (a === 'undo' && state.cleared) { send('tick', { item: state.cleared.id, done: false }); state.cleared = null; render(); return; }
+    if (a === 'move-on') { send('log-action', { action: 'move-on', id: act.dataset.id, text: act.dataset.text, msgId: act.dataset.msg || undefined }); state.cleared = { id: act.dataset.id, text: act.dataset.text, moved: true, until: Date.now() + 6000 }; setTimeout(render, 6100); render(); return; }
+    if (a === 'earlier') { state.earlierOpen = !state.earlierOpen; render(); return; }
+    if (a === 'bring-back') { send('log-action', { action: 'bring-back', id: act.dataset.id }); return; }
     if (a === 'more') { state.showMore = !state.showMore; render(); return; }
     if (a === 'ask' || a === 'whats-next' || a === 'pins') send('log-action', { action: a });
   });

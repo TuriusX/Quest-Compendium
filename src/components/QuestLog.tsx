@@ -18,7 +18,7 @@ export type QuestLogProps = {
   /** The step the tick key acts on (the tracker's next / prev keys move it): highlighted. */
   sel: string | null;
   /** The last tick, shown for a few seconds with Undo (from 'now': a question set its answer as Now by itself). */
-  cleared: { id?: string; text: string; from?: 'question' | 'now' } | null;
+  cleared: { id?: string; text: string; from?: 'question' | 'now' | 'moved'; msgId?: string } | null;
   keysLabel: string;
   onTick: (id: string, done: boolean) => void;
   onUndo: () => void;
@@ -35,6 +35,10 @@ export type QuestLogProps = {
   onOpenPin: (msgId: string) => void;
   onUnpin: (msgId: string) => void;
   onClearNow: () => void;
+  /** The Now box's X (idea #3): move on to the next step; the step goes to "Earlier", not done and not gone. */
+  onMoveOn?: (step: { id: string; text: string; msgId?: string }) => void;
+  /** A step from "Earlier" made Now again (or the Undo of moving on). */
+  onBringBack?: (id: string) => void;
   onLoadSteps?: () => void;
   onDismissOffer?: () => void;
   onGotoArea?: (name: string) => void;
@@ -66,6 +70,7 @@ export function QuestLog(p: QuestLogProps) {
   const t = useT();
   const v = p.view;
   const [showPins, setShowPins] = useState(false);
+  const [showEarlier, setShowEarlier] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -289,16 +294,22 @@ export function QuestLog(p: QuestLogProps) {
             {label(t('tracker.logNow'), (
               <span className={`ml-auto normal-case tracking-normal font-sans font-semibold text-[11px] ${mine ? 'text-[var(--accent-color)]' : 'text-zinc-400'}`}>
                 {/* Only a question's Now says where it came from; the guide's blends in (owner, Nov 15 2026). */}{mine ? t('tracker.logFromQuestion') : null}
-                {mine && <button type="button" onClick={p.onClearNow} title={t('tracker.logClearNow')} aria-label={t('tracker.logClearNow')} className="ml-1.5 align-[-2px] text-zinc-500 hover:text-white"><X className="inline w-3 h-3" /></button>}
               </span>
             ))}
             <div
-              className={`rounded-md p-3 border ${
+              className={`relative rounded-md p-3 ${p.onMoveOn ? 'pr-8' : ''} border ${
                 mine || n.source === 'loaded'
                   ? 'bg-gradient-to-b from-[rgba(168,127,251,.15)] to-[rgba(168,127,251,.07)] border-[var(--accent-border)] shadow-[inset_3px_0_0_var(--accent-color)]'
                   : 'bg-white/[0.03] border-white/[0.14] shadow-[inset_3px_0_0_#6d6880]'
               } ${p.sel === n.id ? 'ring-1 ring-white/30' : ''}`}
             >
+              {p.onMoveOn && (
+                <button type="button" data-qc-log-moveon="" onClick={() => p.onMoveOn!({ id: n.id, text: n.text, ...(n.msgId ? { msgId: n.msgId } : {}) })}
+                  title={t('tracker.logMoveOn')} aria-label={t('tracker.logMoveOn')}
+                  className="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded text-zinc-500 hover:text-white hover:bg-white/[0.08] outline-none focus-visible:ring-2 focus-visible:ring-white">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
               <div className="flex gap-2.5 items-start">
                 {tickBtn(n, true)}
                 <button type="button" onClick={() => setOpenId((o) => (o === n.id ? null : n.id))} className="text-left min-w-0 outline-none focus-visible:underline">
@@ -336,9 +347,12 @@ export function QuestLog(p: QuestLogProps) {
         {/* The last tick, for a few seconds: Undo. */}
         {p.cleared && (
           <div className="-mt-2 flex items-center gap-1.5 text-[12px] text-zinc-500" role="status">
-            <Check className="w-3 h-3 text-emerald-400" />
-            <span className="truncate" data-qc-log-undo={p.cleared.from || 'tick'}>{p.cleared.from === 'now' ? t('tracker.logNowFromQuestion', { goal: p.cleared.text }) : p.cleared.from === 'question' ? t('tracker.logTickedFromQuestion', { step: p.cleared.text }) : t('tracker.logTicked', { step: p.cleared.text })}</span>
+            {p.cleared.from === 'moved' ? <ChevronRight className="w-3 h-3 text-[var(--accent-color)]" /> : <Check className="w-3 h-3 text-emerald-400" />}
+            <span className="truncate" data-qc-log-undo={p.cleared.from || 'tick'}>{p.cleared.from === 'moved' ? t('tracker.logMovedOn', { step: p.cleared.text }) : p.cleared.from === 'now' ? t('tracker.logNowFromQuestion', { goal: p.cleared.text }) : p.cleared.from === 'question' ? t('tracker.logTickedFromQuestion', { step: p.cleared.text }) : t('tracker.logTicked', { step: p.cleared.text })}</span>
             <button type="button" onClick={p.onUndo} className="ml-1 font-bold text-[var(--accent-color)] hover:underline outline-none focus-visible:ring-2 focus-visible:ring-white rounded">{t('tracker.logUndo')}</button>
+            {p.cleared.from === 'moved' && p.cleared.msgId && n?.msgId === p.cleared.msgId && (
+              <><span className="text-zinc-600">·</span><button type="button" onClick={p.onClearNow} className="flex-shrink-0 font-semibold text-zinc-400 hover:text-white hover:underline outline-none focus-visible:ring-2 focus-visible:ring-white rounded">{t('tracker.logStopFollowing')}</button></>
+            )}
           </div>
         )}
 
@@ -428,6 +442,26 @@ export function QuestLog(p: QuestLogProps) {
 
         {/* Pins and the guide: folded until asked for. */}
         <div className="mt-auto flex flex-col">
+          {!!v.earlier?.length && p.onBringBack && (
+            <>
+              <button type="button" data-qc-log-earlier="" onClick={() => setShowEarlier((x) => !x)} aria-expanded={showEarlier}
+                className="flex items-center gap-2 py-2 border-t border-white/[0.07] text-[12.5px] font-semibold text-zinc-400 hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white">
+                <ChevronRight className="w-3.5 h-3.5 rotate-180 text-[var(--accent-color)]" />{t('tracker.logEarlier')}
+                <span className="ml-auto font-mono text-[11px] text-zinc-500">{v.earlier.length}</span>
+                {showEarlier ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              </button>
+              {showEarlier && (
+                <ul className="pb-2 flex flex-col gap-0.5">
+                  {v.earlier.map((e) => (
+                    <li key={e.id}>
+                      <button type="button" onClick={() => p.onBringBack!(e.id)} title={t('tracker.logBringBack')}
+                        className="w-full text-left truncate text-[12.5px] text-zinc-300 hover:text-white px-1 py-0.5 rounded outline-none focus-visible:ring-2 focus-visible:ring-white">↺ {e.text}</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
           {pinsN > 0 && (
             <>
               <button type="button" onClick={() => setShowPins((x) => !x)} aria-expanded={showPins}

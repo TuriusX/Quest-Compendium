@@ -209,6 +209,12 @@ export interface QuestLogState {
   pins?: string[];
   hidden?: string[];
   held?: { id: string; group?: string; at: number }[];
+  /**
+   * Steps the player moved on from with the Now box's X (owner, Nov 19 2026, idea #3): not done and not gone. Kept in
+   * "Earlier" (tap to make it Now again), and back by itself when the player returns to that place. msgId: a question's
+   * objective the step was part of.
+   */
+  passed?: { id: string; text: string; place?: string; msgId?: string; at: number }[];
 }
 
 /** What Locate me saw the player doing (locateMe.ts parseDoing). */

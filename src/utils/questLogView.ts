@@ -80,6 +80,8 @@ export type LogView = {
   done: { goal: string; msgId?: string } | null;
   /** "Load the guide's steps: <quest> (n)" (the guide covers the current quest). */
   offer?: TrackerData['offer'];
+  /** Steps moved on from with the Now box's X, newest first: tap one to make it Now again (idea #3). */
+  earlier?: { id: string; text: string }[];
   /** The number on the bookmark and the spine: steps left on Now's goal, else the guide's unticked entries here. */
   bookmark: number;
   labels?: Record<string, string>;
@@ -162,6 +164,8 @@ export function buildLogView(
   const msgs = tab?.messages || [];
   const state = tab?.questLog || {};
   const hidden = new Set([...(state.hidden || []), ...heldIds(state)]);
+  // Moved on from with the Now box's X (idea #3): left out of Now and Next, listed under "Earlier".
+  const passed = new Set((state.passed || []).map((x) => x.id));
   const byId = (id?: string) => (id ? msgs.find((m) => m.id === id && m.role === 'assistant') : undefined);
 
   let now: LogNow | null = null;
@@ -175,11 +179,13 @@ export function buildLogView(
   if (obj && objSteps.length) {
     const ticked = new Set(obj.doneSteps || []);
     const steps = objSteps.map(({ st, i }) => stepOf(obj, st, i, ticked));
-    const open = steps.filter((s) => !s.done);
+    const open = steps.filter((s) => !s.done && !passed.has(s.id));
     const goal = answerTitle(obj);
-    if (!open.length) done = { goal, msgId: obj.id };
+    // Every open step moved on from: the objective has ended (not done), and the guide fills in below.
+    if (!open.length && steps.some((s) => !s.done)) { /* nothing from this objective */ }
+    else if (!open.length) done = { goal, msgId: obj.id };
     else {
-      now = { ...open[0], source: 'question', goal, doneCount: steps.length - open.length, total: steps.length, msgId: obj.id };
+      now = { ...open[0], source: 'question', goal, doneCount: steps.filter((s) => s.done).length, total: steps.length, msgId: obj.id };
       next = open.slice(1, 1 + NEXT_MAX);
     }
     (obj.steps || []).forEach((st, i) => {
@@ -188,10 +194,11 @@ export function buildLogView(
   } else if (opts.loaded && opts.loaded.items.length) {
     // 2. The guide's steps for the player's quest, loaded on the log.
     const steps = opts.loaded.items.map(itemStep);
-    const open = steps.filter((s) => !s.done);
-    if (!open.length) done = { goal: opts.loaded.title };
+    const open = steps.filter((s) => !s.done && !passed.has(s.id));
+    if (!open.length && steps.some((s) => !s.done)) { /* every open step moved on from */ }
+    else if (!open.length) done = { goal: opts.loaded.title };
     else {
-      now = { ...open[0], source: 'loaded', goal: opts.loaded.title, doneCount: steps.length - open.length, total: steps.length };
+      now = { ...open[0], source: 'loaded', goal: opts.loaded.title, doneCount: steps.filter((s) => s.done).length, total: steps.length };
       next = open.slice(1, 1 + NEXT_MAX);
     }
     if (opts.loaded.warning) watch.push({ id: `w:loaded:${nameId(opts.loaded.title)}`, text: opts.loaded.warning });
@@ -243,7 +250,7 @@ export function buildLogView(
   let here: LogHere | undefined;
   if (!now && !done && (data || opts.walk)) {
     const walkSteps = (opts.walk?.steps || []).filter((st) => st.title);
-    const isOpen = (st: { id: string }) => !opts.walk!.done.has(`walk:${st.id}`);
+    const isOpen = (st: { id: string }) => !opts.walk!.done.has(`walk:${st.id}`) && !passed.has(`w:${opts.walk!.slug}:${st.id}`);
     const at = matchDoing(walkSteps, opts.doing, placeName, data?.areas?.names);
     const from = at ? walkSteps.slice(at.index).filter(isOpen) : [];
     if (at && from.length) {
@@ -286,8 +293,10 @@ export function buildLogView(
 
   // Nothing at all (an answered game with no place and nothing chosen): no log. A new game has its invitation; a game
   // whose place isn't known asks where the player is.
-  if (!now && !done && !pins.length && !data && !watch.length && !invite && !opts.where) return null;
+  const earlier = [...(state.passed || [])].reverse().slice(0, 5).map((x) => ({ id: x.id, text: x.text }));
+  if (!now && !done && !pins.length && !data && !watch.length && !invite && !opts.where && !earlier.length) return null;
   return {
+    ...(earlier.length ? { earlier } : {}),
     gameKey: opts.gameKey,
     accent: opts.accent,
     place: data?.place,
@@ -590,6 +599,8 @@ export function nextLogState(s: GameTab['questLog'], patch: Partial<NonNullable<
   if (!out.pins?.length) delete out.pins;
   if (!out.hidden?.length) delete out.hidden;
   else out.hidden = out.hidden.slice(-200);
+  if (!out.passed?.length) delete out.passed;
+  else out.passed = out.passed.slice(-30);
   if (!out.held?.length) delete out.held;
   else out.held = out.held.slice(-60);
   return Object.keys(out).length ? out : undefined;

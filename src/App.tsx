@@ -1429,7 +1429,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   logSelRef.current = logSel;
   // The last tick, shown for a few seconds with Undo (from the log, the tick key, or a question that said it was done).
   // from 'now': a question set its answer as Now by itself (owner, Oct 31 2026); Undo puts back what Now was (prev).
-  type LogCleared = { ids: string[]; text: string; from?: 'question' | 'now'; msgId?: string; prev?: string };
+  type LogCleared = { ids: string[]; text: string; from?: 'question' | 'now' | 'moved'; msgId?: string; prev?: string };
   const [logCleared, setLogCleared] = useState<LogCleared | null>(null);
   const logClearedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showCleared = (c: LogCleared | null) => {
@@ -1760,6 +1760,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     if (e.type === 'log-action') {
       const a = String(e.action || '');
       if (a === 'hide' && typeof e.id === 'string' && e.id) hideWatchRef.current(e.id);
+      // The popped-out log's Now X, its Undo, and a step brought back from "Earlier" (idea #3).
+      else if (a === 'move-on' && typeof e.id === 'string' && e.id) moveOnRef.current({ id: e.id, text: String(e.text || ''), ...(typeof e.msgId === 'string' && e.msgId ? { msgId: e.msgId } : {}) });
+      else if ((a === 'unpass' || a === 'bring-back') && typeof e.id === 'string' && e.id) bringBackRef.current(e.id);
       else if (a === 'whats-next') window.dispatchEvent(new CustomEvent('qc-ask', { detail: { text: tr('tracker.logWhatsNext') } }));
       else if (a === 'ask') setTimeout(() => document.querySelector<HTMLElement>('[data-qc-ask-input]')?.focus(), 250);
       return;
@@ -1873,6 +1876,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       showCleared(null);
       return;
     }
+    if (c.from === 'moved') {
+      patchLog((st) => ({ passed: (st.passed || []).filter((x) => !c.ids.includes(x.id)) }));
+      showCleared(null);
+      return;
+    }
     for (const id of c.ids) trackerEventRef.current({ type: 'tick', item: id, done: false });
     showCleared(null);
   };
@@ -1887,6 +1895,34 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   };
   const togglePin = (msgId: string) => patchLog((st) => ({ pins: (st.pins || []).includes(msgId) ? (st.pins || []).filter((x) => x !== msgId) : [msgId, ...(st.pins || [])].slice(0, 20) }));
   const hideWatch = (id: string) => patchLog((st) => ({ hidden: [...new Set([...(st.hidden || []), id])] }));
+  // The Now box's X (owner, Nov 19 2026, idea #3): move on. The step isn't done and isn't gone: it goes to "Earlier"
+  // (tap to make it Now again) and comes back by itself when the player returns to that place. Undo for a few seconds.
+  const moveOn = (step: { id: string; text: string; msgId?: string }) => {
+    patchLog((st) => ({ passed: [...(st.passed || []).filter((x) => x.id !== step.id), { id: step.id, text: step.text, ...(activeTab?.place?.name ? { place: activeTab.place.name } : {}), ...(step.msgId ? { msgId: step.msgId } : {}), at: Date.now() }] }));
+    showCleared({ ids: [step.id], text: step.text, from: 'moved', ...(step.msgId ? { msgId: step.msgId } : {}) });
+  };
+  const bringBack = (id: string) => {
+    patchLog((st) => {
+      const x = (st.passed || []).find((p) => p.id === id);
+      return { passed: (st.passed || []).filter((p) => p.id !== id), ...(x?.msgId && st.now !== x.msgId ? { now: x.msgId } : {}) };
+    });
+    if (logCleared?.from === 'moved' && logCleared.ids.includes(id)) showCleared(null);
+  };
+  const moveOnRef = useRef(moveOn);
+  moveOnRef.current = moveOn;
+  const bringBackRef = useRef(bringBack);
+  bringBackRef.current = bringBack;
+  // Back in a place the player moved on from steps in: those steps come back (they may want them now).
+  const passedPlaceRef = useRef<{ tab?: string; place?: string }>({});
+  useEffect(() => {
+    const tabId = activeTab?.id, place = activeTab?.place?.name;
+    const before = passedPlaceRef.current;
+    passedPlaceRef.current = { tab: tabId, place };
+    if (!tabId || !place || before.tab !== tabId || !before.place || samePlace(before.place, place)) return;
+    if ((activeTab?.questLog?.passed || []).some((x) => x.place && samePlace(x.place, place))) {
+      patchLog((st) => ({ passed: (st.passed || []).filter((x) => !(x.place && samePlace(x.place, place))) }));
+    }
+  }, [activeTab?.id, activeTab?.place?.name]);
   const hideWatchRef = useRef(hideWatch);
   hideWatchRef.current = hideWatch;
   /**
@@ -3738,7 +3774,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       }}
       onOpenPin={(id) => { if (popped) (window as any).electronAPI?.showPanel?.(); window.dispatchEvent(new CustomEvent('qc-scroll-to-msg', { detail: { id } })); }}
       onUnpin={togglePin}
-      onClearNow={() => patchLog(() => ({ now: undefined }))}
+      onClearNow={() => { patchLog(() => ({ now: undefined })); showCleared(null); }}
+      onMoveOn={moveOn}
+      onBringBack={bringBack}
       onLoadSteps={() => trackerEventRef.current({ type: 'load-steps' })}
       onDismissOffer={() => trackerEventRef.current({ type: 'dismiss-offer' })}
       onGotoArea={moveToArea}

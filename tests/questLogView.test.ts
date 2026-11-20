@@ -365,4 +365,20 @@ test("an entry an answer advised against is held back only for a while, never fo
   assert.equal(nextLogState({ held: [] } as any, {}), undefined, "an empty list isn't kept");
 });
 
+test("moving on (idea #3): the next step is Now, the step goes to Earlier, nothing is ticked", () => {
+  const t = tab({ questLog: { now: "a1", passed: [{ id: "s:a1:0", text: "Left half from Albus", at: 1 }] } });
+  const v = buildLogView(t, null, opts)!;
+  assert.equal(v.now?.id, "s:a1:1", "Castle Sol is Now");
+  assert.equal(v.now?.doneCount, 0, "moving on doesn't count as done");
+  assert.deepEqual(v.earlier, [{ id: "s:a1:0", text: "Left half from Albus" }]);
+  // Every open step moved on from: the objective ends (not "Done"), nothing from it is Now.
+  const all = tab({ questLog: { now: "a1", passed: ["s:a1:0", "s:a1:1", "s:a1:3", "s:a1:4"].map((id) => ({ id, text: id, at: 1 })) } });
+  const v2 = buildLogView(all, null, opts)!;
+  assert.equal(v2.now, null);
+  assert.equal(v2.done, null);
+  assert.equal(v2.earlier?.length, 4);
+  // Brought back: Now again.
+  assert.equal(buildLogView(tab({ questLog: { now: "a1", passed: [] } }), null, opts)!.now?.id, "s:a1:0");
+});
+
 console.log(`\n${passed} passed`);
