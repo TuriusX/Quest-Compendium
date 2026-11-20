@@ -214,9 +214,10 @@
     paint();
   }
   function paint() {
-    const label = listening ? (held ? strings.listening : mode === 'keys' ? strings.listeningKeys || strings.listeningTap : strings.listeningTap) || '' : (items[sel] && items[sel].label) || '';
+    // Voice picked here asks by itself once the player stops talking (owner, Nov 20 2026); A / Enter asks sooner.
+    const label = listening ? (held ? strings.listening : strings.listeningAuto || strings.listeningTap) || '' : (items[sel] && items[sel].label) || '';
     const k = keysHtml;
-    let keys = listening ? (held ? '' : k('a', strings.ask) + k('b', strings.cancel)) : k('a', strings.select) + k('b', strings.close);
+    let keys = listening ? (held ? '' : mode === 'mouse' ? k('b', strings.cancel) : k('a', strings.ask) + k('b', strings.cancel)) : k('a', strings.select) + k('b', strings.close);
     document.body.classList.toggle('listening', listening);
     if (fan) {
       // The fan's caption: the pointed item's name (or More's); nothing pointed yet, how to point.
@@ -233,7 +234,9 @@
       }
       document.getElementById('ftitle').textContent = strings.title || '';
       document.getElementById('flabel').textContent = moreHover && !listening ? moreLabel : label;
-      document.getElementById('fhint').textContent = listening || sel >= 0 || moreHover ? '' : mode === 'keys' ? strings.aim || '' : mode === 'mouse' ? strings.fanClick || '' : '';
+      // The mouse: how to pick, and (while the outer ring is hidden) that resting on the orb shows more.
+      const mouseHint = [strings.fanClick, L && L.outer && !outerOpen ? strings.fanRest : ''].filter(Boolean).join(' · ');
+      document.getElementById('fhint').textContent = listening || sel >= 0 || moreHover ? '' : mode === 'keys' ? strings.aim || '' : mode === 'mouse' ? mouseHint : '';
       document.getElementById('fkeys').innerHTML = keys;
       requestAnimationFrame(fanHits);
       return;
@@ -271,24 +274,16 @@
       const k = it.ring ? it.i - L.inner : it.i, of = it.ring ? L.outer : L.inner;
       el.style.setProperty('--dl', `${Math.round((90 * k) / Math.max(1, of - 1))}ms`);
       el.innerHTML = svg(items[it.i].key);
-      // A click is a pick (the mouse reaches the items only: wheel.cjs lets it in over them).
-      el.addEventListener('click', () => { sel = it.i; pick(); });
+      // A click is a pick (the mouse reaches the items only: wheel.cjs lets it in over them); while listening, it asks.
+      el.addEventListener('click', () => {
+        if (listening) return void window.qcWheel.talk('end');
+        sel = it.i;
+        pick();
+      });
       box.append(el);
     }
-    // More: opens the outer ring in place (and closes it again). Not an action: nothing is picked.
-    if (L.more) {
-      const m = document.createElement('div');
-      m.className = 'fmore';
-      m.id = 'fmore';
-      m.style.left = `${hx + L.more.x}px`;
-      m.style.top = `${hy + L.more.y}px`;
-      m.style.setProperty('--sz', `${L.more.size}px`);
-      m.style.setProperty('--bx', `${-L.more.x}px`);
-      m.style.setProperty('--by', `${-L.more.y}px`);
-      m.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>';
-      m.addEventListener('click', () => setRing(Fan.toggleOuter(L, { sel, open: outerOpen })));
-      box.append(m);
-    }
+    // (No More button since Nov 20 2026, owner: the mouse resting on the orb a bit longer opens the outer ring, wheel.cjs;
+    // RB on a controller and Tab on the keyboard still do.)
     const hub = document.getElementById('fhub');
     hub.style.left = `${hx}px`;
     hub.style.top = `${hy}px`;
@@ -334,7 +329,6 @@
     if (inList) r('list', document.getElementById('list').getBoundingClientRect(), -1);
     else {
       for (const it of Fan.visible(L, outerOpen)) list.push({ id: 'item', i: it.i, x: fan.hub.x + it.x - it.size / 2, y: fan.hub.y + it.y - it.size / 2, w: it.size, h: it.size });
-      if (L.more) list.push({ id: 'more', i: -1, x: fan.hub.x + L.more.x - L.more.size / 2, y: fan.hub.y + L.more.y - L.more.size / 2, w: L.more.size, h: L.more.size });
       r('caption', document.getElementById('fcap').getBoundingClientRect(), -1);
     }
     const key = JSON.stringify(list);
@@ -443,6 +437,11 @@
   window.qcWheel.onClose(() => { document.body.classList.remove('open'); listening = false; });
   window.qcWheel.onInput((e) => {
     if (e.type === 'listening') { listening = !!e.on; held = !!e.on; paint(); return; }
+    // The mouse rested on the orb a bit longer (wheel.cjs): the outer ring opens (nothing is picked).
+    if (e.type === 'outer') {
+      if (fan && L && L.outer && !outerOpen && !inList && !listening) setRing(Fan.toggleOuter(L, { sel, open: false }));
+      return;
+    }
     if (e.type === 'hover') {
       // The fan: the mouse over an item (wheel.cjs hit-tests it) points at it; off the items, nothing is pointed.
       hoverI = Number.isInteger(e.i) ? e.i : -1;

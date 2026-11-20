@@ -28,6 +28,9 @@ const fanMath = require('./fanLayout.cjs');
 
 const FAN_LEAVE_MS = 650; // the mouse away from the fan this long (opened by the mouse): it closes
 const FAN_MENU_GRACE_MS = 1500; // opened from the orb's menu: the mouse has this long to reach it first
+// The mouse still resting on the orb this long after the fan opened: its outer ring opens too (owner, Nov 20 2026:
+// "hovering a bit longer opens the second level", in place of the More button).
+const OUTER_REST_MS = 450;
 
 /**
  * @param {{ focusHelper: object, display: () => Electron.Display, whenReleased: () => Promise<void>,
@@ -112,6 +115,11 @@ function createWheel(opts) {
   let fanSeenAt = 0;
   let fanMouseIn = null;
   let escOn = false;
+  let restFrom = 0; // since when the mouse has rested on the orb with the fan up (0: not there)
+  let outerAsked = false; // the outer ring has been opened by resting (once per opening)
+  // Voice picked here (owner, Nov 20 2026): the menu stays up listening until the app says the player stopped talking
+  // (voiceDone) or it's ended (A / a click) or cancelled (B / Esc / closing it).
+  let talking = false;
 
   function fanMouse(on) {
     if (!win || win.isDestroyed() || fanMouseIn === on) return;
@@ -133,8 +141,18 @@ function createWheel(opts) {
         fanOver = i;
         send('wheel-input', { type: 'hover', i: i === -3 ? -1 : i, more: i === -3 });
       }
-      // Opened by the mouse: it goes once the mouse has left the fan (and the orb) for a moment.
-      if (fan.mode === 'mouse') {
+      // Resting on the orb (the fan's hub) a bit longer: the outer ring opens too, once.
+      const s = fan.L.scale;
+      if (!talking && !outerAsked && fan.L.outer && Math.hypot(x - fan.hub.x, y - fan.hub.y) <= 30 * s) {
+        if (!restFrom) restFrom = Date.now();
+        else if (Date.now() - restFrom >= OUTER_REST_MS) {
+          outerAsked = true;
+          send('wheel-input', { type: 'outer' });
+        }
+      } else restFrom = 0;
+      // Opened by the mouse: it goes once the mouse has left the fan (and the orb) for a moment (not while listening).
+      if (talking) fanSeenAt = Date.now();
+      else if (fan.mode === 'mouse') {
         if (hit || fanMath.inFan(x - fan.hub.x, y - fan.hub.y, fan.L)) fanSeenAt = Math.max(fanSeenAt, Date.now());
         else if (Date.now() - fanSeenAt > FAN_LEAVE_MS) close();
       }
@@ -177,6 +195,8 @@ function createWheel(opts) {
       fanOver = -2;
       fanSeenAt = Date.now() + (how.from === 'menu' ? FAN_MENU_GRACE_MS : 0);
       fanMouseIn = null;
+      restFrom = 0;
+      outerAsked = false;
       fanMouse(false);
       fanPage = { corner: L.corner, scale: L.scale, hub: r.hub, dot: !!f.dot, accent: f.accent || '' };
     } else {
@@ -212,6 +232,11 @@ function createWheel(opts) {
   function close(toPanel = false) {
     if (!open) return Promise.resolve();
     open = false;
+    // Closed while listening (Esc, B, the shortcut again): the recording stops and nothing is sent.
+    if (talking) {
+      talking = false;
+      opts.onTalk('cancel');
+    }
     stopAim();
     stopFanWatch();
     escape(false);
@@ -259,8 +284,10 @@ function createWheel(opts) {
   ipcMain.on('wheel-choose', (event, key) => {
     if (!win || event.sender !== win.webContents || !open) return;
     if (key === 'speak') {
-      // Speak keeps the ring up, listening: A asks, B cancels.
-      opts.onTalk('start');
+      // Voice keeps the menu up, listening, and asks by itself once the player stops talking (owner, Nov 20 2026; the
+      // app's voiceEnd.ts): A / Enter / a click asks sooner, B / Esc cancels.
+      talking = true;
+      opts.onTalk('auto');
       return;
     }
     opts.onChoose(String(key || ''));
@@ -268,6 +295,7 @@ function createWheel(opts) {
   ipcMain.on('wheel-talk', (event, state) => {
     if (!win || event.sender !== win.webContents || !open) return;
     if (state === 'end' || state === 'cancel') {
+      talking = false;
       opts.onTalk(state);
       close();
     }
@@ -304,12 +332,21 @@ function createWheel(opts) {
       if (!evt) return;
       if (evt.type === 'talk') {
         // The talk button: listen while held; letting go asks.
+        talking = false;
         opts.onTalk(evt.state);
         send('wheel-input', { type: 'listening', on: evt.state === 'start' });
         if (evt.state === 'end') close();
         return;
       }
       send('wheel-input', evt);
+    },
+    /** The app's recording ended by itself (the player stopped talking, or never started): true when this menu was
+     * listening (it closes; main.cjs shows the card's "asking" for 'end'). */
+    voiceDone() {
+      if (!open || !talking) return false;
+      talking = false;
+      close();
+      return true;
     },
   };
 }

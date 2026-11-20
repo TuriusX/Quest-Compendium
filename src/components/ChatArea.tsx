@@ -43,7 +43,6 @@ import {
 import { AnnotatedShot, MarkerBadge, withMarkerBadges, markerMentions, NotOnScreen } from './ScreenPointers';
 import { VisualCard, type VisualEvent } from './VisualCard';
 import { DrawnCard } from './DrawnCard';
-import { HintReveal } from './HintReveal';
 import { areaFindsFor, markersActiveFor } from './pointerStore';
 import { ChatMessage, GameTab, AiMode, SteamGameData } from '../types';
 import { getApiBaseUrl, DEFAULT_PREVIEW_URL } from '../utils/api';
@@ -67,6 +66,7 @@ import { showFirstRunHints } from '../utils/sessions';
 import { ENTRY_ICON_PATHS, ENTRY_COLORS, type EntryKind } from '../utils/entryKind';
 import { isGoalAnswer } from '../utils/questLogView';
 import { TtsPlayer } from '../utils/ttsPlayer';
+import { voiceEnd, rmsOf } from '../utils/voiceEnd';
 import type { Detection } from './DetectionLine';
 declare const __APP_BUILD__: { version: string } | undefined;
 const BUILD = typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : { version: 'dev' };
@@ -105,8 +105,6 @@ interface ChatAreaProps {
   /** Desktop: how long markers stay on screen, in seconds (0 = always). */
   markerLifetime?: number;
   onChangeMarkerLifetime?: (seconds: number) => void;
-  /** Hint mode (Settings): "Just a hint" among the quick questions. */
-  hintMode?: boolean;
   /** The microphone for voice questions (Settings; empty: Windows' default). */
   micDeviceId?: string;
   /** A free player out of questions: See Premium on the card under the limit message. */
@@ -279,7 +277,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onOpenTab,
   markerLifetime,
   onChangeMarkerLifetime,
-  hintMode = false,
   micDeviceId = '',
   onOpenPremium,
   logAttached = false,
@@ -591,9 +588,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const readAloudPendingRef = useRef(false);
   // Listening was cancelled (B in the controller's quick menu): the recording stops and nothing is sent.
   const cancelRecordingRef = useRef(false);
+  // Voice from the quick menu (owner, Nov 20 2026): it listens for the player to stop talking and sends by itself
+  // (utils/voiceEnd.ts); this stops that watch (any way the recording ends).
+  const autoEndRef = useRef<(() => void) | null>(null);
+  const voiceDone = (state: 'end' | 'cancel') => (window as any).electronAPI?.voiceDone?.(state);
 
-  const startVoiceRecording = async () => {
-    if (isRecording) return;
+  // (auto: only a real `true`: as an event listener this gets the Event.)
+  const startVoiceRecording = async (autoArg?: unknown) => {
+    const auto = autoArg === true;
+    if (isRecording) {
+      if (auto) voiceDone('cancel');
+      return;
+    }
     stopPendingRef.current = false;
     cancelRecordingRef.current = false;
 
@@ -614,6 +620,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       };
 
       mediaRecorder.onstop = async () => {
+        autoEndRef.current?.();
+        autoEndRef.current = null;
         if (cancelRecordingRef.current) {
           cancelRecordingRef.current = false;
           immersiveRef.current = false;
@@ -658,10 +666,33 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       if (stopPendingRef.current) {
         stopPendingRef.current = false;
         setTimeout(() => { if (mediaRecorder.state === 'recording') { playBlipSound(soundEnabled); mediaRecorder.stop(); setIsRecording(false); } }, 300);
+      } else if (auto) {
+        // From the quick menu: the microphone's loudness every 50 ms; quiet for a moment after speaking, it sends (and
+        // the menu closes); nothing said in time, it stops without sending.
+        const ctx = new AudioContext();
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 1024;
+        ctx.createMediaStreamSource(stream).connect(analyser);
+        const buf = new Float32Array(analyser.fftSize);
+        const decide = voiceEnd();
+        const t0 = performance.now();
+        const iv = setInterval(() => {
+          if (mediaRecorder.state !== 'recording') return;
+          analyser.getFloatTimeDomainData(buf);
+          const state = decide(rmsOf(buf), performance.now() - t0);
+          if (state === 'listen') return;
+          if (state === 'nothing') cancelRecordingRef.current = true;
+          playBlipSound(soundEnabled);
+          mediaRecorder.stop();
+          setIsRecording(false);
+          voiceDone(state === 'end' ? 'end' : 'cancel');
+        }, 50);
+        autoEndRef.current = () => { clearInterval(iv); void ctx.close().catch(() => {}); };
       }
     } catch (err: any) {
       console.warn('Microphone access warning:', err?.message || err);
       setIsRecording(false);
+      if (auto) voiceDone('cancel');
     }
   };
 
@@ -681,11 +712,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   /** Hold to talk: 'start' while held, 'end' when let go. */
   const handleTalk = (e: Event) => {
     const state = (e as CustomEvent).detail?.state;
-    if (state === 'start') {
-      if (isLoading) return;
+    // 'auto': Voice from the quick menu, which ends by itself once the player stops talking.
+    if (state === 'start' || state === 'auto') {
+      if (isLoading) {
+        if (state === 'auto') voiceDone('cancel');
+        return;
+      }
       if (mode === 'guide') setMode('ask');
       immersiveRef.current = true;
-      void startVoiceRecording();
+      void startVoiceRecording(state === 'auto');
     } else if (state === 'end') {
       if (isRecording && mediaRecorderRef.current) stopVoiceRecording();
       else stopPendingRef.current = true;
@@ -1332,8 +1367,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     // Its pop-up summary is still being made (a second or two): wait for it.
     if (last.summaryPending) return;
     readAloudPendingRef.current = false;
-    // An answer with a pop-up summary: the card reads the summary instead (or nothing, when it's muted).
-    if (last.summary) return;
+    // An answer with a pop-up summary: the card reads the summary instead (or nothing, when it's muted). On the desktop
+    // the card reads every new answer (owner, Nov 20 2026: its summary, else the answer's start), so not here too.
+    if (last.summary || (window as any).electronAPI?.answerArrived) return;
     void handlePlayTTS(last.id, last.text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, activeTab?.messages?.length, activeTab?.messages?.[activeTab.messages.length - 1]?.summaryPending]);
@@ -1394,7 +1430,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             for (let i = last - 1; i >= 0; i--) if (msgs[i].role === 'user') { shot = msgs[i].imageUrl; break; }
           }
           const lastAnswer = lastAssistantId ? msgs.find((m) => m.id === lastAssistantId) : undefined;
-          const { shown, extra } = quickChips({ asked: asked && !!lastAssistantId, combat: !!lastAnswer?.combat, canShowWhere: markersOn && !!shot, hintMode });
+          const { shown, extra } = quickChips({ asked: asked && !!lastAssistantId, combat: !!lastAnswer?.combat, canShowWhere: markersOn && !!shot });
           const ask = (id: QuickId) => {
             setShowMoreQuick(false);
             askQuick(id, id === 'where' && !isDesktopApp ? shot : undefined);
@@ -1954,16 +1990,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       text={!isUser && markersOn && msg.points?.length ? withMarkerBadges(msg.text, msg.points) : msg.text}
                     />
                   </div>
-                  {/* Hint levels (session companion step 2): the bigger hint, then the answer, one press at a time. */}
-                  {!isUser && msg.hints && (
-                    <HintReveal
-                      hints={msg.hints}
-                      shown={msg.hintShown ?? 1}
-                      onShow={(level) => onUpdateMessage?.(msg.id, { hintShown: level })}
-                      t={(k) => t(k)}
-                      renderText={(s) => <MessageMarkdown text={s} markerKey="" link={({ href, children, node, ...rest }: any) => <a href={href} {...rest}>{children}</a>} />}
-                    />
-                  )}
                   {/* Drawn answers (Nov 18 2026): the answer drawn on a picture, or an illustration, first. */}
                   {!isUser && msg.drawn && !msg.drawnHidden && (
                     <DrawnCard drawn={msg.drawn} compact={isDesktopApp} onWrong={() => {

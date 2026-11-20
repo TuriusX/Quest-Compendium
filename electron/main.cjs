@@ -757,7 +757,7 @@ app.whenReady().then(() => {
   logWindow.init({ app, screen, getPanelRect: () => panelRect(), tell: tellApp });
   logWindow.setVisibleInRecordings(markersInRecordings);
   // Updates for the direct-download app (electron/updater.cjs; the Store updates its own package).
-  initUpdater({ app, ipcMain, getMainWindow: () => mainWindow });
+  initUpdater({ app, ipcMain });
   tracker.setScale(currentUiScale);
   // The hidden panel's spine on the dock edge (electron/spine.cjs): a click opens the panel. Its look (the theme's accent
   // and its label) comes from the app (set-look), so it follows the theme even when no quest log has been shown.
@@ -817,8 +817,6 @@ app.whenReady().then(() => {
     },
     onAction: (what, a) => {
       if (what === 'open') openAnswerInPanel(a);
-      // The hint's next level (session companion step 2): the app opens it, and the card shows it.
-      if (what === 'hint' && a && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('quick-action', `hint:${a.id}`);
     },
     // The summary read aloud by the app (its voice setting), or stopped (null); the speaker button's choice is kept.
     onSpeak: (s) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('card-speak', s); },
@@ -873,17 +871,6 @@ app.whenReady().then(() => {
         answerCard.more();
         return void quickWheel.close();
       }
-      // The last card back on the card (the orb's left click, for pads).
-      if (key === 'last') {
-        answerCard.recall();
-        return void quickWheel.close();
-      }
-      // A hint's next level ("More of a hint", "Show the answer"), on the card.
-      if (key === 'hint') {
-        const a = answerCard.recent();
-        if (a) mainWindow.webContents.send('quick-action', `hint:${a.id}`);
-        return void quickWheel.close();
-      }
       // Back to the game (the wheel opened over the panel): the panel slides away and the game gets focus back.
       if (key === 'back') return void quickWheel.close(true).then(() => slideOut());
       // The answer on the card, in the panel.
@@ -917,6 +904,12 @@ app.whenReady().then(() => {
       if (state === 'end') askedQuietly((quickWheel.strings() || {}).spoken || '');
       mainWindow.webContents.send('quick-action', `talk-${state}`);
     },
+  });
+  // Voice from the quick menu ended by itself (the player stopped talking: it's sent; or it never got going): the menu
+  // closes, and a sent question shows on the card as asking.
+  ipcMain.on('voice-done', (event, state) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+    if (quickWheel.voiceDone() && state === 'end') askedQuietly((quickWheel.strings() || {}).spoken || '');
   });
 
   // Dev builds only: tests drive the quick menu and the controller through this (scratchpad harness).
@@ -999,13 +992,13 @@ app.whenReady().then(() => {
       else if (answerCard.recent() || (answerCard.orbOn() && answerCard.hasLast())) {
         // An answer on the card: More of it first (while there's more), then Open in the panel.
         const extra = [];
-        // A hint on the card: its next level first (it's what the player asked hints for).
-        if (answerCard.hintNext()) extra.push({ key: 'hint', label: answerCard.hintNext() });
         if (answerCard.canMore() && s.moreAnswer) extra.push({ key: 'more', label: s.moreAnswer });
-        // The orb on: the last card back over the game (owner, Nov 19 2026: pads have no right click or orb to click).
-        if (answerCard.orbOn() && answerCard.hasLast() && !answerCard.isShowing() && s.lastCard) extra.push({ key: 'last', label: s.lastCard });
-        if (s.openAnswer && answerCard.recent()) extra.push({ key: 'answer', label: s.openAnswer });
-        items = [...extra, ...items];
+        // (No "Last card" since Nov 20 2026, owner: clicking the orb does it. Voice and quick questions took its place,
+        // so they stay on the fan's first ring with a card's own items before them.)
+        const first = items.filter((i) => i.key === 'speak' || i.key === 'questions');
+        items = items.filter((i) => i.key !== 'speak' && i.key !== 'questions');
+        if (s.openAnswer && answerCard.recent()) items.unshift({ key: 'answer', label: s.openAnswer });
+        items = [...extra, ...first, ...items];
       }
       // The card stays where it is (it's in a corner); its time stops while the menu is open. With a card out, the
       // fan flares from the card's inner corner instead of folding it (its first items act on it).

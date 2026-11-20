@@ -29,7 +29,7 @@ import { padQuestionList, quickLabelKey } from '../utils/quickQuestions';
 import { createRingPointer, nextStop, ringSpot, type Stop } from '../utils/padStops';
 import { glyph, styleFromId, type PadStyle } from '../utils/padGlyphs';
 import { applySuggestion, buildVocab, deleteWord, suggest, type Vocab } from '../utils/padWords';
-import { Camera, CircleHelp, EyeOff, Gamepad2, History, Keyboard, LocateFixed, Mic, Move, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
+import { Camera, CircleHelp, EyeOff, Gamepad2, Keyboard, LocateFixed, Mic, Move, ScanSearch, ScrollText, Settings, Zap } from 'lucide-react';
 
 type Btn = 'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'x' | 'y' | 'lb' | 'rb' | 'start' | 'back' | 'ls' | 'rs';
 type PadEvent =
@@ -290,7 +290,6 @@ export function ControllerLayer({
   enabled,
   padStyle = 'auto',
   talkButton = 'y',
-  hintMode = false,
   logAttached = false,
   intro = true,
   comboLabel = '',
@@ -299,7 +298,6 @@ export function ControllerLayer({
   enabled: boolean;
   padStyle?: 'auto' | PadStyle;
   talkButton?: string;
-  hintMode?: boolean;
   logAttached?: boolean;
   intro?: boolean;
   /** The open combo as the player's controller names it ("Hold L3 + R3"), for the first-time guide. */
@@ -416,7 +414,7 @@ export function ControllerLayer({
   // with hint mode on).
   // The quick questions list, fitted to the moment (the quest log's Now goal, a fight, after an answer): the same list
   // in the panel and in the quick menu over the game.
-  const quickIds = padQuestionList({ goal: context?.goal, combat: context?.combat, asked: context?.asked, hintMode });
+  const quickIds = padQuestionList({ goal: context?.goal, combat: context?.combat, asked: context?.asked });
   const questionLabels = quickIds.map((id) => (id === 'goal' ? t('pad.askGoal', { goal: context?.goal || '' }) : t(quickLabelKey(id))));
   const askListed = (i: number) => {
     const id = quickIds[i];
@@ -506,11 +504,12 @@ export function ControllerLayer({
   const desktop = !!electronAPI();
   const quickMenu: { key: string; label: string; Icon: React.ComponentType<{ className?: string }>; run: () => void }[] = [
     { key: 'help', label: t('set.locateKey'), Icon: LocateFixed, run: () => emit('qc-help-here') },
-    // "Where was I?" (session companion step 1): the recap on the card over the game (App.tsx qc-recap).
-    ...(desktop ? [{ key: 'recap', label: t('recap.question'), Icon: History, run: () => emit('qc-recap') }] : []),
-    ...(desktop ? [{ key: 'shot', label: t('pad.shotAsk'), Icon: Camera, run: () => emit('trigger-auto-screenshot-submit') }] : []),
+    // Voice and quick questions on the fan's first ring (owner, Nov 20 2026: voice is what players with a mic use most
+    // without opening the app). "Where was I?" left the menu then: clicking the orb brings the last card back, and the
+    // recap still comes by itself after a day away (App.tsx qc-recap).
     { key: 'speak', label: t('pad.voice'), Icon: Mic, run: () => emit('trigger-voice-record') },
     { key: 'questions', label: t('pad.questions'), Icon: CircleHelp, run: () => { setQIndex(0); setPanel('questions'); } },
+    ...(desktop ? [{ key: 'shot', label: t('pad.shotAsk'), Icon: Camera, run: () => emit('trigger-auto-screenshot-submit') }] : []),
     ...(desktop ? [{ key: 'find', label: t('set.sc.findMarkers'), Icon: ScanSearch, run: () => emit('qc-find-markers') }] : []),
     { key: 'log', label: t('pad.questLog'), Icon: ScrollText, run: () => emit('qc-toggle-log') },
     { key: 'model', label: t('pad.model'), Icon: Zap, run: () => emit('qc-toggle-answer-model') },
@@ -610,9 +609,9 @@ export function ControllerLayer({
         title: t('pad.quickMenu'), listening: t('pad.listening'), listeningTap: t('pad.listeningTap'), select: t('pad.select'), close: t('common.close'),
         ask: t('pad.ask'), cancel: t('common.cancel'), back: t('pad.back'), accent, glyphs: { a: glyph('a', style), b: glyph('b', style), rb: glyph('rb', style), lb: glyph('lb', style) },
         // The fan from the orb (Nov 19 2026): how to pick with the mouse, and opening / closing its outer ring.
-        fanClick: t('orb.fanClick'), fanMore: t('orb.fanMore'), fanLess: t('orb.fanLess'),
+        fanClick: t('orb.fanClick'), fanMore: t('orb.fanMore'), fanLess: t('orb.fanLess'), fanRest: t('orb.fanRest'),
         // Opened from the keyboard (the quick menu shortcut): how to point, and listening with Enter.
-        aim: t('pad.wheelAim'), listeningKeys: t('pad.listeningKeys'),
+        aim: t('pad.wheelAim'), listeningKeys: t('pad.listeningKeys'), listeningAuto: t('pad.listeningAuto'),
         // The quick questions list (its own view in the ring), the answer card's words, and the items the desktop app
         // adds or swaps in (electron/main.cjs).
         questionsTitle: t('pad.questions'), questions: quickIds.map((key, i) => ({ key, label: questionLabels[i] })),
@@ -643,8 +642,6 @@ export function ControllerLayer({
         if (i >= 0) askListedRef.current(i);
         return;
       }
-      // "More of a hint" / "Show the answer" for the hint on the card (session companion step 2).
-      if (key.startsWith('hint:')) return emit('qc-hint-more', { id: key.slice(5) });
       // "Open this answer": the panel came in; the focus goes to that answer once it has settled.
       if (key.startsWith('answer:')) {
         const id = key.slice(7);

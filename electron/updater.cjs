@@ -12,13 +12,22 @@
  * app's settings: docs/RELEASING.md.
  *
  * Release routine and rollback: docs/RELEASING.md.
+ *
+ * Owner, Nov 20 2026 ("the update seems to take a while"): the first check comes a few seconds after launch (it runs
+ * in the background, startup never waits on it), and every window hears 'app-update' while a new version comes down
+ * ({ state: 'downloading', version, percent }), so Settings can show checking -> downloading -> Restart now in place.
  */
-const START_DELAY_MS = 30 * 1000;
+const START_DELAY_MS = 5 * 1000;
 const EVERY_MS = 6 * 60 * 60 * 1000;
 
-function initUpdater({ app, ipcMain, getMainWindow }) {
+function initUpdater({ app, ipcMain }) {
+  const { BrowserWindow } = require('electron');
   const feed = process.env.QC_UPDATE_FEED || '';
-  const state = { state: 'idle', version: '' };
+  const state = { state: 'idle', version: '', percent: 0 };
+  // Every window (the panel and Settings) hears where an update is.
+  const tell = () => {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('app-update', { ...state });
+  };
   ipcMain.handle('get-update-state', () => state);
   ipcMain.on('install-update', () => {});
   // Settings' "Check for updates": { state: 'current' | 'downloading' | 'ready' | 'failed' | 'store' | 'dev', version,
@@ -29,6 +38,7 @@ function initUpdater({ app, ipcMain, getMainWindow }) {
     if (process.windowsStore === true) return { state: 'store', current };
     if (!autoUpdater) return { state: 'dev', current };
     if (state.state === 'ready') return { state: 'ready', version: state.version, current };
+    if (state.state === 'downloading') return { state: 'downloading', version: state.version, percent: state.percent, current };
     try {
       const r = await autoUpdater.checkForUpdates();
       const v = String((r && r.updateInfo && r.updateInfo.version) || '');
@@ -62,16 +72,31 @@ function initUpdater({ app, ipcMain, getMainWindow }) {
     console.log(`[update] test feed: ${feed}`);
   }
 
-  const tell = () => {
-    const w = getMainWindow();
-    if (w && !w.isDestroyed()) w.webContents.send('app-update', state);
-  };
-  autoUpdater.on('update-available', (info) => console.log(`[update] ${info && info.version} available, downloading`));
+  autoUpdater.on('update-available', (info) => {
+    console.log(`[update] ${info && info.version} available, downloading`);
+    if (state.state === 'ready') return;
+    state.state = 'downloading';
+    state.version = String((info && info.version) || '');
+    state.percent = 0;
+    tell();
+  });
+  autoUpdater.on('download-progress', (p) => {
+    const pct = Math.max(0, Math.min(100, Math.floor(Number(p && p.percent) || 0)));
+    if (state.state !== 'downloading' || pct === state.percent) return;
+    if (Math.floor(pct / 25) !== Math.floor(state.percent / 25)) console.log(`[update] downloading: ${pct}%`);
+    state.percent = pct;
+    tell();
+  });
   autoUpdater.on('update-not-available', () => console.log('[update] up to date'));
-  autoUpdater.on('error', (err) => console.warn('[update] check failed:', err && (err.message || err)));
+  autoUpdater.on('error', (err) => {
+    console.warn('[update] check failed:', err && (err.message || err));
+    // A download that broke off: back to idle (the next check tries again); the windows stop showing progress.
+    if (state.state === 'downloading') { state.state = 'failed'; state.percent = 0; tell(); state.state = 'idle'; }
+  });
   autoUpdater.on('update-downloaded', (info) => {
     state.state = 'ready';
     state.version = String((info && info.version) || '');
+    state.percent = 100;
     console.log(`[update] ${state.version} downloaded: installs on quit, or now with Restart`);
     tell();
     // Tests only (QC_UPDATE_TEST_INSTALL=1, with a test feed): install straight away, as Restart to update would.
@@ -88,7 +113,7 @@ function initUpdater({ app, ipcMain, getMainWindow }) {
   });
 
   const check = () => {
-    if (state.state === 'ready') return; // downloaded already: it installs on quit
+    if (state.state === 'ready' || state.state === 'downloading') return; // downloaded already (installs on quit) or coming
     autoUpdater.checkForUpdates().catch((err) => console.warn('[update] check failed:', err && err.message));
   };
   setTimeout(check, Number(process.env.QC_UPDATE_DELAY_MS) || START_DELAY_MS);

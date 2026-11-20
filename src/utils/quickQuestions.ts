@@ -3,13 +3,11 @@
  * what shows in the conversation; the app also sends the id, and the server adds the instruction below to the AI's
  * prompt, so a two-word chip gets a well-aimed answer (in the player's language, like any other).
  */
-export type QuickId = 'next' | 'stuck' | 'missable' | 'fight' | 'gear' | 'choice' | 'leave' | 'keep' | 'hint' | 'after' | 'where' | 'hintInstead';
+export type QuickId = 'next' | 'stuck' | 'missable' | 'fight' | 'gear' | 'choice' | 'leave' | 'keep' | 'after' | 'where';
 
 /** Every question a player can start with (the controller's list, and the chips' "More"), in this order. */
 export const QUICK_MAIN: QuickId[] = ['next', 'missable', 'fight', 'gear', 'stuck'];
 export const QUICK_MORE: QuickId[] = ['choice', 'leave', 'keep'];
-/** The two hint questions: only with hint mode on (Settings). */
-export const QUICK_HINTS: QuickId[] = ['hint', 'hintInstead'];
 
 /** The label's i18n key: quick.{id}, except where the wording changed after it was translated. */
 const LABEL_KEYS: Partial<Record<QuickId, string>> = { missable: 'quick.canMiss', fight: 'quick.beat' };
@@ -18,28 +16,18 @@ export const quickLabelKey = (id: QuickId): string => LABEL_KEYS[id] ?? `quick.$
 /**
  * The chips that fit where the player is: before the first question three starters ("How do I beat this?" in a
  * fight, else "Best gear for where I am"); after an answer two follow-ups (in a fight: beat this, then what's after;
- * else what's after, then "Show me where on screen" when it can, else anything missable). The rest are behind "More",
- * and the hint questions only with hint mode on.
+ * else what's after, then "Show me where on screen" when it can, else anything missable). The rest are behind "More".
+ * (No hint questions since Nov 20 2026, owner: answers go straight to the full answer.)
  */
-export function quickChips(o: { asked: boolean; combat?: boolean; canShowWhere?: boolean; hintMode?: boolean }): { shown: QuickId[]; extra: QuickId[] } {
+export function quickChips(o: { asked: boolean; combat?: boolean; canShowWhere?: boolean }): { shown: QuickId[]; extra: QuickId[] } {
   const shown: QuickId[] = !o.asked
     ? ['next', 'missable', o.combat ? 'fight' : 'gear']
     : o.combat
       ? ['fight', 'after']
       : ['after', o.canShowWhere ? 'where' : 'missable'];
-  const hints: QuickId[] = o.hintMode ? (o.asked ? ['hintInstead', 'hint'] : ['hint']) : [];
-  const extra = [...hints, ...QUICK_MAIN, ...QUICK_MORE].filter((id) => !shown.includes(id));
+  const extra = [...QUICK_MAIN, ...QUICK_MORE].filter((id) => !shown.includes(id));
   return { shown, extra };
 }
-
-/** A gentle nudge, never the solution: shared by the two hint questions. */
-const HINT_RULES =
-  'Give only a hint: a gentle nudge in the right direction, never the solution. Point the player at what to pay ' +
-  'attention to (a place worth a closer look, an object, a mechanic they may have overlooked, something a character ' +
-  'said) instead of telling them what to do. Do not give step-by-step instructions, exact locations, the answer to a ' +
-  'puzzle, enemy weak points or story spoilers, and place no on-screen markers. Keep it to one to three short ' +
-  'sentences. If you list quest-log steps, keep them as vague as the hint (or leave them out). End by offering a ' +
-  'bigger hint or the full answer if they are still stuck.';
 
 /** What each quick question asks the AI to do (English; the answer follows the player's language setting). */
 export const QUICK_PROMPTS: Record<QuickId, string> = {
@@ -77,7 +65,6 @@ export const QUICK_PROMPTS: Record<QuickId, string> = {
     'The player asks whether the item, gear or resource on screen (or the one they mean) is worth keeping or using. ' +
     'Say what it is good for, whether it is needed later (quests, crafting, upgrades, gifts), and your recommendation ' +
     'now: keep, use, equip, sell or upgrade, in one clear line, then a short reason.',
-  hint: `The player asks for just a hint about what they are doing now, with no spoilers. ${HINT_RULES}`,
   after:
     'The player asks what comes after your last answer. Continue from it: the next step or objective once they have ' +
     'done what you said, in the same concrete style. Do not repeat what you already told them.',
@@ -86,7 +73,6 @@ export const QUICK_PROMPTS: Record<QuickId, string> = {
     'answer was about (where to go, what to use, what to pick up, which enemy to target). Keep the text short: one ' +
     'line per marker saying what it is. If something from your last answer is not visible in this screenshot, say ' +
     'which and where to look for it.',
-  hintInstead: `The player wants just a hint instead of the full answer to what they asked last. ${HINT_RULES}`,
 };
 
 export const isQuickId = (v: unknown): v is QuickId => typeof v === 'string' && Object.prototype.hasOwnProperty.call(QUICK_PROMPTS, v);
@@ -97,8 +83,8 @@ export const isQuickId = (v: unknown): v is QuickId => typeof v === 'string' && 
  * order they'd show (in a fight, beating it first; after an answer, what comes next), then the rest. "Show me where on
  * screen" needs the last screenshot, so it isn't in the list.
  */
-export function padQuestionList(o: { goal?: string; combat?: boolean; asked?: boolean; hintMode?: boolean }): ('goal' | QuickId)[] {
-  const { shown, extra } = quickChips({ asked: !!o.asked, combat: !!o.combat, canShowWhere: false, hintMode: !!o.hintMode });
+export function padQuestionList(o: { goal?: string; combat?: boolean; asked?: boolean }): ('goal' | QuickId)[] {
+  const { shown, extra } = quickChips({ asked: !!o.asked, combat: !!o.combat, canShowWhere: false });
   const ids = [...shown, ...extra].filter((id) => id !== 'where');
   return [...(o.goal && o.goal.trim() ? (['goal'] as const) : []), ...ids];
 }

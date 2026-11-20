@@ -12,15 +12,32 @@ export function newerVersion(a: string, b: string): boolean {
 }
 
 /**
- * Settings' "Check for updates" (desktop): asks now (electron/updater.cjs check-for-updates) and says what it found:
- * up to date, a newer version downloading ("Version X is ready" follows, with Restart to update), ready already,
- * couldn't check, or, installed from the Microsoft Store, that the Store keeps it up to date.
+ * Settings' "Check for updates" (desktop): asks now (electron/updater.cjs check-for-updates) and shows the whole flow
+ * in place (owner, Nov 20 2026: no going back to the main window to install): checking, a newer version downloading
+ * with its progress (live from 'app-update', also one that started before Settings opened), then "Version X is
+ * ready" with Restart to update right here. Also: up to date, couldn't check, or, installed from the Microsoft Store,
+ * that the Store keeps it up to date.
  */
 export const UpdateCheck: React.FC = () => {
   const t = useT();
   const api = typeof window !== 'undefined' ? (window as any).electronAPI : null;
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState('');
+  const [dl, setDl] = useState<{ v: string; p: number } | null>(null);
+  const [ready, setReady] = useState('');
+  // Where an update is, now and as it changes while Settings is open.
+  useEffect(() => {
+    if (!api) return;
+    const take = (s: any) => {
+      if (!s) return;
+      if (s.state === 'downloading') { setDl({ v: String(s.version || ''), p: Number(s.percent) || 0 }); setSaid(''); }
+      else if (s.state === 'ready' && s.version) { setDl(null); setReady(String(s.version)); setSaid(''); }
+      else if (s.state === 'failed') { setDl(null); setSaid(t('update.failed')); }
+    };
+    const off = api.onAppUpdate?.(take);
+    api.getUpdateState?.().then(take).catch(() => {});
+    return () => { if (typeof off === 'function') off(); };
+  }, []);
   if (!api) return null;
   const current = String(api.appVersion || '');
   const store = api.isStoreBuild === true;
@@ -31,30 +48,47 @@ export const UpdateCheck: React.FC = () => {
     try { r = await api.checkForUpdates?.(); } catch { r = null; }
     setBusy(false);
     const v = String(r?.version || '');
+    if (r?.state === 'downloading') return void setDl((d) => d || { v, p: Number(r.percent) || 0 });
+    if (r?.state === 'ready') return void setReady(v);
     setSaid(
       r?.state === 'current' ? t('update.current', { v: r.current || current })
-        : r?.state === 'downloading' ? t('update.found', { v })
-        : r?.state === 'ready' ? t('update.ready', { v })
         : r?.state === 'store' ? t('update.store')
         : r?.state === 'dev' ? t('update.dev')
         : t('update.failed'),
     );
   };
+  const line = ready ? t('update.ready', { v: ready }) : dl ? t('update.downloading', { v: dl.v, p: String(dl.p) }) : said || (store ? t('update.store') : '');
   return (
-    <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
-      <div className="min-w-0">
-        <div className="text-xs font-semibold text-white">{t('update.version', { v: current || '?' })}</div>
-        <div className="text-[11px] text-zinc-400" role="status">{said || (store ? t('update.store') : '')}</div>
+    <div className="p-3 rounded-xl bg-black/30 border border-white/[0.08] space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs font-semibold text-white">{t('update.version', { v: current || '?' })}</div>
+          <div className="text-[11px] text-zinc-400" role="status">{line}</div>
+        </div>
+        {!store && ready && (
+          <button
+            type="button"
+            onClick={() => api.installUpdate?.()}
+            className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-[var(--accent-color)] text-black text-[12px] font-bold hover:opacity-90 cursor-pointer"
+          >
+            {t('update.restart')}
+          </button>
+        )}
+        {!store && !ready && (
+          <button
+            type="button"
+            disabled={busy || !!dl}
+            onClick={() => void go()}
+            className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+          >
+            {busy ? t('update.checking') : t('update.check')}
+          </button>
+        )}
       </div>
-      {!store && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void go()}
-          className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
-        >
-          {busy ? t('update.checking') : t('update.check')}
-        </button>
+      {dl && !ready && (
+        <div className="h-1.5 rounded-full bg-white/10 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={dl.p}>
+          <div className="h-full bg-[var(--accent-color)] transition-[width] duration-300" style={{ width: `${Math.max(3, dl.p)}%` }} />
+        </div>
       )}
     </div>
   );
@@ -74,14 +108,21 @@ export const AppUpdates: React.FC<{ preview?: { ready?: string; whatsNew?: { v: 
   const api = typeof window !== 'undefined' ? (window as any).electronAPI : null;
   const [ready, setReady] = useState<string>(preview?.ready || '');
   const [later, setLater] = useState(false);
+  // A new version coming down (Nov 20 2026: so the wait doesn't feel stuck): its version and progress.
+  const [coming, setComing] = useState<{ v: string; p: number } | null>(null);
   const [whatsNew, setWhatsNew] = useState<{ v: string; text: string } | null>(preview?.whatsNew || null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   // A downloaded update (also one that finished before this page loaded).
   useEffect(() => {
     if (!api?.onAppUpdate) return;
-    api.onAppUpdate((s: any) => { if (s?.state === 'ready' && s.version) setReady(String(s.version)); });
-    api.getUpdateState?.().then((s: any) => { if (s?.state === 'ready' && s.version) setReady(String(s.version)); }).catch(() => {});
+    const take = (s: any) => {
+      if (s?.state === 'ready' && s.version) { setComing(null); setReady(String(s.version)); }
+      else if (s?.state === 'downloading') setComing({ v: String(s.version || ''), p: Number(s.percent) || 0 });
+      else if (s?.state === 'failed') setComing(null);
+    };
+    api.onAppUpdate(take);
+    api.getUpdateState?.().then(take).catch(() => {});
   }, []);
 
   // The first launch on a newer version than last time: its notes, once.
@@ -115,6 +156,17 @@ export const AppUpdates: React.FC<{ preview?: { ready?: string; whatsNew?: { v: 
   return (
     <>
       {/* In line under the header (it covers nothing). */}
+      {coming && !ready && !later && (
+        <div role="status" className="flex-shrink-0 mx-3 mt-2 px-3 py-2 rounded-xl bg-[#161620] border border-white/[0.08] text-[12px] text-zinc-400 space-y-1.5">
+          <div className="flex items-center gap-2.5">
+            <Download className="w-4 h-4 text-zinc-500 flex-shrink-0" aria-hidden="true" />
+            <span className="flex-1 min-w-0">{t('update.downloading', { v: coming.v, p: String(coming.p) })}</span>
+          </div>
+          <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-full bg-[var(--accent-color)] transition-[width] duration-300" style={{ width: `${Math.max(3, coming.p)}%` }} />
+          </div>
+        </div>
+      )}
       {ready && !later && (
         <div role="status" className="flex-shrink-0 mx-3 mt-2 flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[#161620] border border-[var(--accent-border)] text-[12.5px] text-zinc-200 animate-in fade-in slide-in-from-top-1 duration-200">
           <Download className="w-4 h-4 text-[var(--accent-color)] flex-shrink-0" aria-hidden="true" />

@@ -45,9 +45,31 @@ const THINKING_MS = 120000; // a question that never got an answer goes after th
 const HINT_MS = 7000; // the orb's how-to-ask line
 const FOLD_MS = 520; // the card folding back into the orb (the page's animation, and a little more)
 const MENU_LEAVE_MS = 1400; // the orb's menu closes once the mouse has been away from it this long
-const DWELL_MS = 480; // the mouse resting on the orb this long opens the quick menu's fan (owner, Nov 19 2026: about half a second)
+const DWELL_MS = 150; // the mouse resting on the orb this long opens the quick menu's fan (owner, Nov 20 2026: "near-instant"; was 480 ms; just enough that a cursor passing over doesn't)
 
 /** How long an answer stays: reading time for what's showing (20 s + 1 s per 15 words), at most 90 s; a warning, 30 s at least. */
+/**
+ * What a card reads aloud (owner, Nov 20 2026: every new card is read, whichever way it was asked): its summary, or,
+ * without one (no game detected, a short answer, the summary call failed), the answer's start: plain words (no
+ * markdown, links or tags), whole sentences up to about 600 characters.
+ */
+function spokenText(card) {
+  if (!card) return '';
+  if (card.summary) return card.summary;
+  const plain = String(card.text || '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/^#+\s*(.*?)[.:]?\s*$/gm, '$1.')
+    .replace(/^\s*[-•]\s+/gm, '')
+    .replace(/[*_`~>|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (plain.length <= 600) return plain;
+  const cut = plain.slice(0, 600);
+  const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+  return end > 120 ? cut.slice(0, end + 1) : `${cut.replace(/\s+\S*$/, '')}…`;
+}
+
 function readingMs(text, hasWarning) {
   const words = String(text || '').split(/\s+/).filter(Boolean).length;
   const ms = Math.min(90000, 20000 + Math.round(words / 15) * 1000);
@@ -342,7 +364,10 @@ function createAnswerCard(opts) {
 
   const look = () => ({ strings: opts.strings(), scale: scale(), bottom: prefs.corner === 'bl' || prefs.corner === 'br', right: prefs.corner === 'tr' || prefs.corner === 'br', maxHeight: maxHeight(), speak: prefs.speak, orb: orb.on });
 
-  const speak = () => { if (current && current.summary && prefs.speak && opts.onSpeak) opts.onSpeak({ id: current.id, text: current.summary }); };
+  const speak = () => {
+    const text = spokenText(current);
+    if (text && prefs.speak && opts.onSpeak) opts.onSpeak({ id: current.id, text });
+  };
   function stopSpeaking() {
     if (opts.onSpeak) opts.onSpeak(null);
     if (speakingNow) { speakingNow = false; resume(); }
@@ -407,7 +432,6 @@ function createAnswerCard(opts) {
     if (!fromCard(event)) return;
     if (what === 'close') return void api.hide();
     if (what === 'open') opts.onAction('open', current);
-    if (what === 'hint' && current && current.hintNext) opts.onAction('hint', current);
     // The speaker button: reading the summary aloud off (it stops now) or on again (it reads this one).
     if (what === 'speak') toggleSpeak(true);
     // Pin beside the game (pin.cjs): the video goes on in its own small window (the card's player has stopped).
@@ -492,8 +516,6 @@ function createAnswerCard(opts) {
         id: String(a.id || ''), question: asked || String(a.question || ''), title: String(a.title || ''), text: String(a.text || '').slice(0, 6000),
         steps, model: a.model === 'Pro' || a.model === 'Fast' ? a.model : '', place: String(a.place || ''), combat: !!a.combat,
         picture: pictureOf(a.picture),
-        // Hint levels: the next level's button ("More of a hint", "Show the answer"), or none.
-        hintNext: String(a.hintNext || '').slice(0, 60),
         // What to do now, shown instead of the answer's start and read aloud (Nov 19 2026).
         summary: String(a.summary || '').slice(0, 320),
         // Immersive mode (Nov 20 2026): the card's storybook look.
@@ -513,16 +535,16 @@ function createAnswerCard(opts) {
       const shown = steps.length ? `${current.text.split(/\s+/).slice(0, 60).join(' ')} ${steps.map((s) => `${s.label} ${s.where}`).join(' ')}` : current.text.split(/\s+/).slice(0, 180).join(' ');
       showFor(readingMs(`${current.title} ${shown}`, steps.some((s) => s.kind === 'warning')), 'answer');
       send('card-show', { ...current, ...look() });
+      speak();
     },
     /** The same answer, updated (its picture arrived later): the card redraws without restarting its time. */
     update(a) {
       if (!current || !a || String(a.id || '') !== current.id || !shownAt) return false;
-      // A hint level opened (session companion step 2): the card shows it (newest first), with time to read it.
+      // The same answer with new text (it changed in the app): the card shows it, with time to read it.
       const text = String(a.text || '').slice(0, 6000);
       if (text && text !== current.text) {
         current.text = text;
         current.summary = String(a.summary || '').slice(0, 320);
-        current.hintNext = String(a.hintNext || '').slice(0, 60);
         current.steps = (Array.isArray(a.steps) ? a.steps : []).slice(0, 8).map((s) => ({ kind: s.kind === 'warning' ? 'warning' : 'step', label: String(s.label || '').slice(0, 160), where: String(s.where || '').slice(0, 160) }));
         moreState = { more: false, part: 0, parts: 0 };
         last = current;
@@ -551,8 +573,6 @@ function createAnswerCard(opts) {
       send('card-more');
       startTimer(Math.min(90000, Math.max(25000, readingMs(current.text.split(/\s+/).slice(0, 140).join(' '), false))));
     },
-    /** The hint's next level, when there is one (the quick menu offers it first): its button's words. */
-    hintNext: () => (current && shownAt && current.hintNext) || '',
     /** Whether More has more to show (the quick menu then offers it first). */
     canMore: () => !!current && !!shownAt && moreState.more,
     pause,

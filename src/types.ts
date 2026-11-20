@@ -149,10 +149,6 @@ export interface ChatMessage {
   drawn?: import('./components/DrawnCard').DrawnData;
   /** The player marked the drawing "Not right". */
   drawnHidden?: boolean;
-  /** Hint levels (session companion step 2): a hint's bigger hint (the rule) and the full answer, hidden until asked. */
-  hints?: import('./utils/hintLevels').HintLevels;
-  /** How many hint levels are open (1 = only the hint; 2 = the rule too; 3 = the answer too). */
-  hintShown?: number;
   /** Pop-up summary (Nov 19 2026): what to do now, shown and read aloud on the card over the game (utils/cardSummary). */
   summary?: string;
   /** The pop-up summary is being made (its own call, after the answer): the card waits for it. */
@@ -423,8 +419,6 @@ export interface AppSettings {
   markersInRecordings?: boolean;
   /** Desktop: how long markers stay on screen, in seconds (0 = until hidden or the scene changes). */
   markerLifetime?: number;
-  /** Hint mode: "Just a hint" among the quick questions (off by default). */
-  hintMode?: boolean;
   /** Desktop: switch to the running game's tab when a game starts (on by default; utils/runningGame.ts followRunning). */
   autoSwitchGames?: boolean;
   /** Games (runningId) whose automatically opened tab the player undid: offered after that, never opened again (Nov 19 2026). */

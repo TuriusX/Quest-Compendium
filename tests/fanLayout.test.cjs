@@ -387,7 +387,7 @@ const HUB = { tr: { x: 1920 - 33, y: 33 }, tl: { x: 33, y: 33 }, br: { x: 1920 -
   const cwin = () => wins.filter((w) => !w.destroyed && w.b.width === 544).pop();
   const fromCard = (name, payload) => handlers[name]({ sender: cwin().webContents }, payload);
 
-  await test('the mouse resting on the orb for about half a second opens the fan once; passing over it does not', () => {
+  await test('the mouse resting on the orb briefly (~150 ms, owner Nov 20 2026: near-instant) opens the fan once; passing over it does not', () => {
     card.setPrefs({ size: 'm', corner: 'tr', speak: true });
     card.setAway(true);
     tick(1);
@@ -399,9 +399,9 @@ const HUB = { tr: { x: 1920 - 33, y: 33 }, tl: { x: 33, y: 33 }, br: { x: 1920 -
     cursor = { x: 10, y: 900 }; tick(80);
     assert.deepEqual(orbAsked, []);
     // Resting.
-    cursor = on; tick(400);
+    cursor = on; tick(120);
     assert.deepEqual(orbAsked, []);
-    tick(200);
+    tick(120);
     assert.deepEqual(orbAsked, ['fan']);
     tick(3000); // still resting: not again
     assert.deepEqual(orbAsked, ['fan']);

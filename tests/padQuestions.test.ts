@@ -10,8 +10,7 @@ assert.deepEqual(padQuestionList({ asked: true }).slice(0, 2), ["after", "missab
 assert.equal(padQuestionList({ goal: "Reach Stormveil Castle" })[0], "goal", "the quest log's Now goal first");
 assert.equal(padQuestionList({ goal: "  " })[0], "next", "no goal, no goal question");
 assert.ok(!padQuestionList({ asked: true }).includes("where"), "never 'show me where' (it needs the last screenshot)");
-assert.ok(padQuestionList({ hintMode: true }).includes("hint"));
-assert.ok(!padQuestionList({}).includes("hint"), "hints only with hint mode on");
+assert.ok(!(padQuestionList({}) as string[]).includes("hint"), "no hint questions (Nov 20 2026)");
 const all = padQuestionList({ asked: true, goal: "x" });
 assert.equal(new Set(all).size, all.length, "no question twice");
 console.log("padQuestions: all passed");

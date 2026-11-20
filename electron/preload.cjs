@@ -6,7 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The installed version, and updates (electron/updater.cjs): "Version X is ready" and Restart to update.
   appVersion: (() => { try { return String(ipcRenderer.sendSync('get-app-version') || ''); } catch { return ''; } })(),
   getUpdateState: () => ipcRenderer.invoke('get-update-state'),
-  onAppUpdate: (callback) => { ipcRenderer.removeAllListeners('app-update'); ipcRenderer.on('app-update', (event, s) => callback(s)); },
+  // (Several listeners in one window, e.g. Settings' Check for updates and the update bar: each gets its own; the
+  // returned function stops it.)
+  onAppUpdate: (callback) => { const h = (event, s) => callback(s); ipcRenderer.on('app-update', h); return () => ipcRenderer.removeListener('app-update', h); },
   installUpdate: () => ipcRenderer.send('install-update'),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   getActiveGame: () => ipcRenderer.invoke('get-active-game'),
@@ -84,13 +86,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The quick menu over the game (wheel.cjs): its labels, what was picked there, and "an answer arrived".
   setQuickMenu: (items, strings) => ipcRenderer.send('quick-menu-items', { items, strings }),
   onQuickAction: (callback) => { ipcRenderer.removeAllListeners('quick-action'); ipcRenderer.on('quick-action', (event, key) => callback(String(key || ''))); },
+  // Voice from the quick menu (owner, Nov 20 2026): the recording ended by itself ('end': the player stopped talking,
+  // it's sent) or never got going ('cancel': no microphone, nothing said, busy): the menu closes.
+  voiceDone: (state) => ipcRenderer.send('voice-done', state === 'end' ? 'end' : 'cancel'),
   // Every new answer, for the pop-up over the game (answerCard.cjs): its words, steps, model, place and one picture.
   // A question and answer the player deleted: the pop-up card forgets it.
   forgetAnswer: (id) => ipcRenderer.send('answer-forget', String(id || '')),
   answerArrived: (a) => ipcRenderer.send('answer-arrived', a && typeof a === 'object' ? {
     id: String(a.id || ''), question: String(a.question || ''), title: String(a.title || ''), text: String(a.text || ''),
     steps: Array.isArray(a.steps) ? a.steps.slice(0, 8).map((s) => ({ kind: String((s && s.kind) || 'step'), label: String((s && s.label) || ''), where: String((s && s.where) || '') })) : [],
-    model: String(a.model || ''), place: String(a.place || ''), combat: !!a.combat, hintNext: String(a.hintNext || ''), summary: String(a.summary || ''), immersive: !!a.immersive,
+    model: String(a.model || ''), place: String(a.place || ''), combat: !!a.combat, summary: String(a.summary || ''), immersive: !!a.immersive,
     picture: a.picture && typeof a.picture.url === 'string' ? { url: a.picture.url, credit: String(a.picture.credit || ''), video: !!a.picture.video, wide: !!a.picture.wide, tag: String(a.picture.tag || ''), videoId: String(a.picture.videoId || ''), start: Number(a.picture.start) || 0, seconds: Number(a.picture.seconds) || 0, title: String(a.picture.title || '') } : null,
   } : null),
   // Asked from the panel while a game runs: the panel slides away and the answer pops up over the game.

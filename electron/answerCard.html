@@ -351,13 +351,11 @@
   function paintFoot() {
     if (!cur) return;
     const pi = partInfo();
-    // A hint with a bigger level to open (session companion step 2): once its text is all showing, the button opens it.
-    const hintNext = !pi.more && cur.state === 'answer' && cur.hintNext ? cur.hintNext : '';
-    $('hint').textContent = cur.state === 'thinking' ? '' : cur.mode === 'pad' ? (hintNext && S.combo ? `${S.combo}: ${hintNext}` : fmt(pi.more ? S.padMore : S.padOpen, { combo: S.combo || '' })) : (S.keysOpen || '');
+    $('hint').textContent = cur.state === 'thinking' ? '' : cur.mode === 'pad' ? fmt(pi.more ? S.padMore : S.padOpen, { combo: S.combo || '' }) : (S.keysOpen || '');
     $('more').textContent = expanded && pi.parts > 1 ? fmt(S.part, { n: pi.part, total: pi.parts }) : (!expanded && pi.more ? S.moreBelow || '' : '');
-    $('bMore').textContent = hintNext || (pi.more ? S.more || 'More' : S.open || 'Open');
-    $('bMore').dataset.act = hintNext ? 'hint' : pi.more ? 'more' : 'open';
-    $('bOpen').hidden = !pi.more && !hintNext;
+    $('bMore').textContent = pi.more ? S.more || 'More' : S.open || 'Open';
+    $('bMore').dataset.act = pi.more ? 'more' : 'open';
+    $('bOpen').hidden = !pi.more;
     $('bOpen').textContent = S.open || 'Open';
     window.qcCard.state({ more: pi.more, part: pi.part, parts: pi.parts });
   }
@@ -903,7 +901,7 @@
   $('bMore').addEventListener('click', () => {
     const act = $('bMore').dataset.act;
     if (act === 'more') more();
-    else window.qcCard.action(act === 'hint' ? 'hint' : 'open');
+    else window.qcCard.action('open');
   });
   $('bOpen').addEventListener('click', () => window.qcCard.action('open'));
   $('bClose').addEventListener('click', () => window.qcCard.action('close'));

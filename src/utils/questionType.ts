@@ -15,7 +15,7 @@ export const QUESTION_TYPES: QuestionType[] = ['location', 'puzzle', 'fight', 'c
 
 const QUICK_TYPES: Record<QuickId, QuestionType> = {
   next: 'general', stuck: 'puzzle', missable: 'missable', fight: 'fight', gear: 'general', choice: 'choice', leave: 'missable',
-  keep: 'general', hint: 'puzzle', after: 'general', where: 'location', hintInstead: 'puzzle',
+  keep: 'general', after: 'general', where: 'location',
 };
 
 // Checked in this order: the more specific kinds first ("where is the missable chest" is about a missable).
