@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { SPOT_EVENT } from '../utils/spotIt';
-import { GUIDE_DONE_EVENT, readDone, writeDone } from '../utils/guideProgress';
 import { SITE, guideTarget, absolutize, type GuideTarget } from '../utils/guideSite';
 import { compIndex } from '../utils/compIndex';
 
@@ -14,8 +13,8 @@ export { SITE, type GuideTarget };
  * looks the same and the app's styles never mix with it; parts only the website needs carry qc-site-only and are hidden.
  *
  * The app's own behaviour on top: links to guide pages open here (onOpen), # links scroll, outside links open the
- * browser; the checkboxes are the app's ticks (synced to the account and the quest log through guideProgress); each
- * checklist row gets "Ask" and, in the desktop app, "Spot it". A page that can't be loaded shows `fallback`.
+ * browser; the pages are plain reference (no ticks, owner Nov 20 2026); each checklist row gets "Ask" and, in the
+ * desktop app, "Spot it". A page that can't be loaded shows `fallback`.
  */
 const cache = new Map<string, Promise<string | null>>();
 
@@ -47,7 +46,7 @@ const STYLE = `
   .qc-acts { display: inline-flex; gap: 2px; margin-left: auto; padding-left: 6px; flex-shrink: 0; align-self: flex-start; }
   .qc-acts button { width: 26px; height: 26px; border-radius: 8px; border: 0; background: transparent; color: #71717a; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; opacity: .6; }
   .qc-acts button:hover, .qc-acts button:focus-visible { opacity: 1; background: rgba(255,255,255,.06); color: #c4b0ff; outline: none; }
-  label:hover .qc-acts button { opacity: 1; }
+  .qc-check:hover .qc-acts button { opacity: 1; }
   .qc-flash { box-shadow: 0 0 0 2px #a87ffb; background: rgba(255,255,255,.06); border-radius: 8px; }
   /* A front page's section menu sticks to the top of the panel (the site's sits under its bar). */
   .qc-ix-menu { top: 0 !important; }
@@ -68,7 +67,7 @@ export function GuideFragment({
   /** The page's folder on the website (in the app's language first, then English), each ending in "/". */
   urls: string[];
   gameKey: string;
-  /** The page's slug (ticks are kept per page); none for a game's front page. */
+  /** The page's slug; none for a game's front page. */
   slug?: string;
   onOpen: (t: GuideTarget) => void;
   onAsk?: (question: string) => void;
@@ -96,7 +95,7 @@ export function GuideFragment({
     return () => { alive = false; };
   }, [urls.join('|')]);
 
-  // The page in its shadow root, with the app's ticks and buttons.
+  // The page in its shadow root, with the app's buttons.
   useEffect(() => {
     const el = host.current;
     if (!el || !html) return;
@@ -105,25 +104,7 @@ export function GuideFragment({
     const base = urls[0];
     const pageName = root.querySelector('h1')?.textContent?.trim() || '';
     const canSpot = typeof window !== 'undefined' && !!(window as any).electronAPI?.captureFresh;
-    const rows = [...root.querySelectorAll<HTMLLabelElement>('label.qc-check[data-check]')].filter((l) => !String(l.dataset.check).startsWith('ach:'));
-    // Ticks: the app's (per page), shown on the site's checkboxes; the fold counts follow.
-    const paint = () => {
-      if (!slug) return;
-      const done = readDone(gameKey, slug);
-      for (const l of rows) {
-        const ids = String(l.dataset.check).split('+');
-        const on = ids.every((id) => done.has(id));
-        const box = l.querySelector('input');
-        if (box) box.checked = on;
-        l.classList.toggle('is-done', on);
-        const spot = l.querySelector<HTMLElement>('[data-qc-spot]');
-        if (spot) spot.hidden = on;
-      }
-      for (const c of root.querySelectorAll<HTMLElement>('[data-count]')) {
-        const ids = String(c.dataset.count).split(',').filter(Boolean);
-        c.textContent = `${ids.filter((id) => done.has(id)).length}/${ids.length}`;
-      }
-    };
+    const rows = [...root.querySelectorAll<HTMLElement>('.qc-check[data-check]')].filter((l) => !String(l.dataset.check).startsWith('ach:'));
     // Each checklist row: Ask, and Spot it in the desktop app.
     for (const l of rows) {
       const name = (l.querySelector('strong')?.textContent || l.querySelector('span')?.textContent || '').split(/[.:;]/)[0].trim().slice(0, 80);
@@ -135,9 +116,8 @@ export function GuideFragment({
       (acts as any).qcName = name;
       if (acts.childElementCount) l.appendChild(acts);
     }
-    paint();
-    // A game's front page: its index (mission ticks under "_missions", chapter counts, the filter), as on the site.
-    const ixPaint = slug ? null : compIndex(root, (s) => [...readDone(gameKey, s)], (s, ids) => writeDone(gameKey, s, new Set(ids)));
+    // A game's front page: its index (the filter; the first chapter opens), as on the site.
+    if (!slug) compIndex(root, null);
 
     const onClick = (e: Event) => {
       const target = e.target as HTMLElement;
@@ -145,7 +125,7 @@ export function GuideFragment({
       if (btn) {
         e.preventDefault();
         e.stopPropagation();
-        const row = btn.closest<HTMLLabelElement>('label.qc-check');
+        const row = btn.closest<HTMLElement>('.qc-check[data-check]');
         const name = (btn.parentElement as any)?.qcName || '';
         if (btn.hasAttribute('data-qc-ask')) cb.current.onAsk?.(tRef.current('qcg.askItem', { item: name, area: pageName }));
         else if (row && slug) {
@@ -177,29 +157,9 @@ export function GuideFragment({
       }
       cb.current.onOpen(dest);
     };
-    const onChange = (e: Event) => {
-      const box = e.target as HTMLInputElement;
-      const row = box.closest<HTMLLabelElement>('label.qc-check[data-check]');
-      if (!row || !slug) return;
-      const ids = String(row.dataset.check).split('+');
-      const done = readDone(gameKey, slug);
-      for (const id of ids) box.checked ? done.add(id) : done.delete(id);
-      writeDone(gameKey, slug, done);
-      paint();
-    };
     root.addEventListener('click', onClick);
-    root.addEventListener('change', onChange);
-    // Ticks made elsewhere (the quest log, the tracker) show here too.
-    const onDone = (e: Event) => {
-      const d = (e as CustomEvent).detail;
-      if (d && ((d.key === gameKey && d.slug === slug) || d.key === '*')) paint(); // '*': the playthrough changed
-      if (ixPaint && d && (d.key === gameKey || d.key === '*')) ixPaint();
-    };
-    window.addEventListener(GUIDE_DONE_EVENT, onDone);
     return () => {
       root.removeEventListener('click', onClick);
-      root.removeEventListener('change', onChange);
-      window.removeEventListener(GUIDE_DONE_EVENT, onDone);
     };
   }, [html, gameKey, slug]);
 

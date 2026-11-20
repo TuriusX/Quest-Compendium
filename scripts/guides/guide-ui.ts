@@ -66,7 +66,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   watchFight: 'Watch the fight',
   interactiveMap: 'Interactive map',
   walkthrough: 'Walkthrough',
-  walkthroughIntro: 'The area in the order you play it. Tick things off as you go: they tick off in the checklists below too.',
+  walkthroughIntro: 'The area in the order you play it.',
   choicesHere: 'Choices here',
   choicesIntro: 'What you decide here and what it leads to.',
   shortVersion: 'The short version',
@@ -123,7 +123,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   achShort: 'Achievements',
   continue: 'Continue where you left off',
   // The guide front page: what the guide is, and keeping progress (owner, Nov 19 2026: invite signing in).
-  gameIntroShort: 'Every area in order, with checklists of items, secrets and missables.',
+  gameIntroShort: 'Every area in order, with its items, secrets and missables.',
   syncInvite: 'Tick things off as you play. Sign in to keep your progress on every device.',
   syncSignedIn: 'Signed in: your ticks follow you to every device.',
   yourProgress: 'Your progress',
@@ -136,7 +136,7 @@ export const GUIDE_UI_EN: Record<string, string> = {
   glanceRewards: 'Rewards',
   glanceRoute: 'Route',
   glanceSteps: '{n} steps',
-  glanceThings: '{n} things to tick',
+  glanceThings: '{n} things to find',
   // "Up next" at the end of an area page.
   upNext: 'Up next',
   upNextStarts: 'Starts with: {step}',

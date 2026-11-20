@@ -3,7 +3,6 @@ import { BookOpen, Check, ChevronDown, ChevronRight, ArrowLeft, Gem, Skull, Spar
 import { SPOT_EVENT } from '../utils/spotIt';
 import { guideApi } from '../utils/guideApi';
 import { orderGuides, readRecentGuides, rememberGuideOpened, useGuideIndex, type GuideIndexGame, type GuideSort } from '../utils/guideIndex';
-import { GUIDE_DONE_EVENT, readDone, writeDone } from '../utils/guideProgress';
 import { useLocale, useT } from '../i18n';
 import { tipMatches, useAchievementGuideByKey, type AchievementGuide } from '../utils/achievementGuide';
 import { samePlace } from '../utils/placeName';
@@ -18,9 +17,9 @@ import { GuideFragment, SITE, type GuideTarget } from './GuideFragment';
  * Built to be used while playing:
  *   - opens at the running game, at the area the player is in (or where they left off)
  *   - when the player moves somewhere else, a one-tap "You're in …" jump appears (it never yanks the page away)
- *   - each area shows its checklist progress; area pages lead with what can be missed, the rest folds away
+ *   - area pages lead with what can be missed, the rest folds away (plain reference: nothing is ticked)
  *   - "Ask" on any item or area hands a ready-made question to the Compendium
- * Ticks and the last page are saved on this computer. Every control is a button, so it works with a controller.
+ * The last page is saved on this computer. Every control is a button, so it works with a controller.
  */
 type Game = GuideIndexGame;
 type Area = { slug: string; name: string; story: string; group?: string; total?: number; search?: string };
@@ -504,12 +503,6 @@ function AreaList({
   const lastSlug = ls.get(`qc-guide-last:${gameKey}`);
   const cont = areas.find((a) => a.slug === lastSlug && a.slug !== here);
   const hereA = areas.find((a) => a.slug === here);
-  const progress = (a: Area) => {
-    if (!a.total) return null;
-    const d = readDone(gameKey, a.slug).size;
-    if (d >= a.total) return <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400"><Check className="w-3.5 h-3.5" /></span>;
-    return d ? <span className="text-[11px] font-semibold text-[var(--accent-color)]">{d}/{a.total}</span> : <span className="text-[11px] text-zinc-600">{a.total}</span>;
-  };
   const jump = (a: Area, icon: React.ReactNode, label: string) => (
     <button type="button" className={`${rowCls} border-l-2 !border-l-[var(--accent-color)]`} onClick={() => onPick(a, s.data!.game)}>
       {icon}
@@ -582,7 +575,6 @@ function AreaList({
               <span className="block text-sm font-semibold text-zinc-100">{a.name}</span>
               {a.story && <span className="block text-xs text-zinc-500 truncate">{a.story}</span>}
             </span>
-            {progress(a)}
             <ChevronRight className="w-4 h-4 text-zinc-500" />
           </button>
         </React.Fragment>
@@ -649,29 +641,12 @@ function AreaPage({
   const t = useT();
   const s = useApi<Page>(`/api/guides/${encodeURIComponent(gameKey)}/${encodeURIComponent(slug)}`);
   const order = useApi<{ areas: Area[]; entities?: Ent[] }>(`/api/guides/${encodeURIComponent(gameKey)}`);
-  const [done, setDone] = useState<Set<string>>(() => readDone(gameKey, slug));
   const [open, setOpen] = useState<Set<string>>(new Set());
   // Sections opened to show a focused entry (on top of the ones the player opened or closed).
   const [forced, setForced] = useState<Set<string>>(new Set());
   // The guide-wide search at the top of the page.
   const [q, setQ] = useState('');
   useEffect(() => ls.set(`qc-guide-last:${gameKey}`, slug), [gameKey, slug]);
-  // Ticks made on the objectives tracker show here too (and ours show there: writeDone tells everyone).
-  useEffect(() => {
-    const onDone = (e: Event) => {
-      const d = (e as CustomEvent).detail;
-      if (d && ((d.key === gameKey && d.slug === slug) || d.key === '*')) setDone(readDone(gameKey, slug)); // '*': the playthrough changed
-    };
-    window.addEventListener(GUIDE_DONE_EVENT, onDone);
-    return () => window.removeEventListener(GUIDE_DONE_EVENT, onDone);
-  }, [gameKey, slug]);
-  const toggle = (id: string) => {
-    const next = new Set(done);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setDone(next);
-    writeDone(gameKey, slug, next);
-  };
   const flip = (k: string) => {
     if (forced.has(k)) {
       // Opened for a focused entry: closing it is the player's call from now on.
@@ -721,24 +696,15 @@ function AreaPage({
   const at = areas.findIndex((a) => a.slug === slug);
   const prev = at > 0 ? areas[at - 1] : null;
   const next = at >= 0 && at < areas.length - 1 ? areas[at + 1] : null;
-  const n = (ids: string[]) => ids.filter((id) => done.has(id)).length;
   const ask = (q: string) => onAsk?.(q);
 
   // "Spot it" (desktop): look for this entry on a fresh screenshot of the game and mark it there.
   const canSpot = typeof window !== 'undefined' && !!(window as any).electronAPI?.captureFresh;
   const check = (id: string, label: React.ReactNode, askAbout?: string, spot?: { label: string; where?: string }) => (
     <div key={id} data-entry={id} className="group flex items-start gap-1">
-      <button
-        type="button"
-        onClick={() => toggle(id)}
-        aria-pressed={done.has(id)}
-        className={`flex-1 min-w-0 text-left flex items-start gap-3 px-2.5 py-2 rounded-lg hover:bg-white/[0.05] transition-colors cursor-pointer ${done.has(id) ? 'opacity-50' : ''}`}
-      >
-        <span className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded border flex items-center justify-center ${done.has(id) ? 'bg-[var(--accent-color)] border-[var(--accent-color)]' : 'border-white/30'}`}>
-          {done.has(id) && <Check className="w-3 h-3 text-black" />}
-        </span>
-        <span className={`text-sm leading-snug text-zinc-300 ${done.has(id) ? 'line-through' : ''}`}>{label}</span>
-      </button>
+      <div className="flex-1 min-w-0 px-2.5 py-2 rounded-lg hover:bg-white/[0.05] transition-colors">
+        <span className="text-sm leading-snug text-zinc-300">{label}</span>
+      </div>
       {onAsk && askAbout && (
         <button
           type="button"
@@ -750,7 +716,7 @@ function AreaPage({
           <MessageCircleQuestion className="w-4 h-4" />
         </button>
       )}
-      {canSpot && spot && !done.has(id) && (
+      {canSpot && spot && (
         <button
           type="button"
           onClick={() => window.dispatchEvent(new CustomEvent(SPOT_EVENT, { detail: { id: `g:${slug}:${id}`, label: spot.label, where: spot.where || '' } }))}
@@ -763,7 +729,7 @@ function AreaPage({
       )}
     </div>
   );
-  /** A folding section: the header shows its progress; it opens when you want it. */
+  /** A folding section: the header shows its size (or, for achievements, how many are unlocked); it opens when you want it. */
   const fold = (k: string, title: string, icon: React.ReactNode, body: React.ReactNode, count?: number, total?: number, startOpen = false) => {
     const isOpen = forced.has(k) || open.has(k) !== startOpen;
     return (
@@ -782,7 +748,7 @@ function AreaPage({
               <span title={t('qcg.incompleteHint')} className="ml-2 align-middle rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-amber-200">{t('qcg.incomplete')}</span>
             )}
           </span>
-          {total !== undefined && <span className="text-xs text-zinc-500">{count}/{total}</span>}
+          {total !== undefined && <span className="text-xs text-zinc-500">{count !== undefined ? `${count}/${total}` : total}</span>}
         </button>
         {isOpen && <div className="mt-1.5 pl-1">{body}</div>}
       </section>
@@ -856,7 +822,7 @@ function AreaPage({
             <TriangleAlert className="w-4 h-4" />
             {t('qcg.dontMiss')}
             <span className="text-xs font-normal text-amber-200/70">
-              {n(missIds)}/{missIds.length}
+              {missIds.length}
             </span>
           </h3>
           {missItems.map(itemRow)}
@@ -896,20 +862,20 @@ function AreaPage({
           x.title,
           <ListIcon />,
           x.check ? x.entries.map((e) => check(e.id, e.text)) : <ul className="list-disc pl-6 space-y-1 text-sm text-zinc-300">{x.entries.map((e) => <li key={e.id}>{e.text}</li>)}</ul>,
-          x.check ? n(x.entries.map((e) => e.id)) : undefined,
+          undefined,
           x.check ? x.entries.length : undefined,
           true,
         ),
       )}
       {otherItems.length > 0 &&
-        fold('items', t('qcg.items'), <Gem className="w-4 h-4 text-[var(--accent-color)]" />, otherItems.map(itemRow), n(otherItems.map((e) => e.id)), otherItems.length, !missIds.length)}
+        fold('items', t('qcg.items'), <Gem className="w-4 h-4 text-[var(--accent-color)]" />, otherItems.map(itemRow), undefined, otherItems.length, !missIds.length)}
       {pg.secrets.length > 0 &&
         fold(
           'secrets',
           t('qcg.secrets'),
           <Sparkles className="w-4 h-4 text-[var(--accent-color)]" />,
           pg.secrets.map((e) => check(e.id, e.text, t('qcg.askSecret', { secret: e.text || '', area: pg.name }))),
-          n(pg.secrets.map((e) => e.id)),
+          undefined,
           pg.secrets.length,
         )}
       {(pg.fights || []).length > 0 &&
