@@ -87,6 +87,7 @@ import { PopWindow } from './components/PopWindow';
 import { useWorthHere } from './hooks/useWorthHere';
 import { QuestLog } from './components/QuestLog';
 import { buildLogView, objectiveForRequest, nextLogState, answerTitle, placeIsCurrent, doSteps, isNowQuestion, isCuriosityQuestion, heldIds, HELD_DAYS, type LogView, type Foe } from './utils/questLogView';
+import type { EarlierSession } from './utils/earlierSessions';
 import { padComboLabel, padPreset } from './utils/padGlyphs';
 import { missablesThin } from './utils/missablesCheck';
 
@@ -1874,6 +1875,36 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   };
   const moveOnRef = useRef(moveOn);
   moveOnRef.current = moveOn;
+  // "Looks done" (owner, Nov 20 2026): the answer saw on the screenshot that the Now step is finished (the player didn't
+  // say so): the log offers Move on / Not yet. Never done by itself; the next question clears the offer.
+  const [looksDone, setLooksDone] = useState<string | null>(null);
+  const answerLooksDone = (yes: boolean) => {
+    const n = logView?.now;
+    if (yes && n && looksDone === n.id) moveOn({ id: n.id, text: n.text, ...(n.msgId ? { msgId: n.msgId } : {}) });
+    setLooksDone(null);
+  };
+  // Earlier's session notes (utils/earlierSessions.ts): asked for when Earlier is opened, kept on that game's log.
+  const notesAsked = useRef(new Set<string>());
+  const needNote = async (s: EarlierSession) => {
+    const tab = activeTab;
+    if (!tab) return;
+    const ask = `${tab.id}:${s.key}:${s.count}`;
+    if (notesAsked.current.has(ask)) return;
+    notesAsked.current.add(ask);
+    try {
+      const token = user && typeof (user as any).getIdToken === 'function' ? await (user as any).getIdToken().catch(() => null) : (user as any)?.isGuest ? String((user as any).uid) : null;
+      const res = await fetch(`${getApiBaseUrl()}/api/session-note`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ game: displayGameName(tab.name || ''), language: aiLanguageName(settings.language), places: s.places.map((p) => ({ place: p.place, items: p.items.map((i) => ({ text: i.text })) })), questions: s.questions }),
+      });
+      const note = String((await res.json().catch(() => null))?.note || '').trim();
+      if (!note) return;
+      setTabs((prev) => prev.map((x) => (x.id === tab.id ? { ...x, questLog: nextLogState(x.questLog, { notes: { ...(x.questLog?.notes || {}), [s.key]: { t: note, n: s.count } } }) } : x)));
+    } catch {
+      /* no note: Earlier shows the steps alone */
+    }
+  };
   const bringBackRef = useRef(bringBack);
   bringBackRef.current = bringBack;
   // Back in a place the player moved on from steps in: those steps come back (they may want them now).
@@ -3372,7 +3403,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
 
       const data = await res.json();
       // A side question changes nothing about this game: no markers, place, quest log, fight or memory from its answer.
-      if (aside && data && typeof data === 'object') for (const k of ['points', 'steps', 'place', 'placeRead', 'objectiveDone', 'combat', 'noFight', 'fight', 'nowGoal', 'nearby', 'guideConflicts', 'done', 'remember', 'worth']) delete (data as any)[k];
+      if (aside && data && typeof data === 'object') for (const k of ['points', 'steps', 'place', 'placeRead', 'objectiveDone', 'objectiveLooksDone', 'combat', 'noFight', 'fight', 'nowGoal', 'nearby', 'guideConflicts', 'done', 'remember', 'worth']) delete (data as any)[k];
       // The answer settled the player's area, which has no "Worth getting here" yet: its ticket.
       if (data.worth && typeof data.worth === 'object') setTimeout(() => redeemWorthRef.current(data.worth), 0);
 
@@ -3596,6 +3627,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
           showCleared({ ids: [], text: answerTitle(aiMessage), from: 'now', msgId: aiMessage.id, prev: nowBefore });
           setLogSel(null);
         }
+        // The screenshot showed a step finished that the player didn't mention: offered on the log (Move on / Not yet).
+        const looks: number[] = obj && !aside && Array.isArray(data.objectiveLooksDone) ? data.objectiveLooksDone.filter((n: unknown) => Number.isInteger(n) && !!obj.steps?.[n as number] && !ticked.includes(n as number)) : [];
+        setLooksDone(obj && looks.length && !autoNow ? `s:${obj.id}:${Math.min(...looks)}` : null);
       }
     } catch (err: any) {
       console.error('Chat error:', err);
@@ -3840,6 +3874,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       onClearNow={() => { patchLog(() => ({ now: undefined })); showCleared(null); }}
       onMoveOn={moveOn}
       onBringBack={bringBack}
+      looksDone={looksDone}
+      onLooksDone={answerLooksDone}
+      onNeedNote={(s) => void needNote(s)}
       onLoadSteps={() => trackerEventRef.current({ type: 'load-steps' })}
       onDismissOffer={() => trackerEventRef.current({ type: 'dismiss-offer' })}
       onGotoArea={moveToArea}

@@ -54,7 +54,7 @@ import { registerSiteAsk, SITE_ABANDONED_DOLLARS, type SiteAnswerOpts, type Site
 import { registerSiteAccount } from './siteAccount';
 import { registerSiteFix } from './siteFix';
 import { pingNewSignup } from './signupPing';
-import { STEPS_RULES, extractSteps, cleanObjective, objectiveRules, extractTicked } from './steps';
+import { STEPS_RULES, extractSteps, cleanObjective, objectiveRules, extractTicked, extractLooksDone } from './steps';
 import { WORTH_POINTING_OUT, PRECISE_ACTIONS, isTrivialMarker, sharpenAction, fixVagueLabel, combatRules, extractCombat, MARKER_LIMIT, COMBAT_MARKER_LIMIT, IDENTITY_RULES, ANSWER_IDENTITY, checkIdentity } from './answerBar';
 import { disagreeingEntries } from './src/utils/guideAgree';
 import { CORRECTION_RULES, extractCorrections, saveCorrectionCandidates, verifiedCorrectionsForPrompt, registerCorrections } from './corrections';
@@ -63,6 +63,7 @@ import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
 import { CARD_SUMMARY_PROMPT, CARD_SUMMARY_IMMERSIVE, summaryInput, cleanSummary } from './src/utils/cardSummary';
+import { SESSION_NOTE_PROMPT, sessionNoteInput, cleanSessionNote, cleanNoteRequest } from './src/utils/earlierSessions';
 import { decidePremium, stripeViewFor, cachedStripeView, forgetStripeView } from './premium';
 import { recordDailyCost, recordLimitHit, recordAnswerGame } from './searchGuard';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, playerSearchesToday, recordPlayerSearches, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
@@ -2220,6 +2221,10 @@ percentages:
       // Steps of the player's objective the question says are done (always removed from the text).
       const tickedParsed = extractTicked(responseText, objective);
       responseText = tickedParsed.text;
+      // Steps the screenshot shows finished (Nov 20 2026): the app offers to move on (always removed from the text).
+      const looksParsed = extractLooksDone(responseText, objective);
+      responseText = looksParsed.text;
+      const looksDone = looksParsed.done.filter((i) => !tickedParsed.done.includes(i));
       // Where the AI thinks the player is: pull the <qc-place> line out of the answer.
       const placeParsed = extractPlace(responseText);
       responseText = placeParsed.text;
@@ -2375,6 +2380,7 @@ percentages:
         ...(titleParsed.now !== undefined ? { nowGoal: titleParsed.now } : {}),
         ...(stepsParsed.steps.length ? { steps: stepsParsed.steps } : {}),
         ...(tickedParsed.done.length ? { objectiveDone: tickedParsed.done } : {}),
+        ...(looksDone.length ? { objectiveLooksDone: looksDone } : {}),
         ...(combatParsed.combat ? { combat: true } : {}),
         // A screenshot with no fight on it: a fight the player was in is over (the app clears its combat markers and plan).
         ...(imageBase64 && !combatParsed.combat ? { noFight: true } : {}),
@@ -2456,6 +2462,42 @@ percentages:
     } catch (err: any) {
       console.log('card summary failed:', err?.message);
       return res.json({ summary: '' });
+    }
+  });
+
+  /**
+   * Earlier's session note (owner, Nov 20 2026; src/utils/earlierSessions.ts): one sentence of what the player did in a
+   * play session, from the steps they moved on from and the questions they asked. Made only when the player opens
+   * Earlier, kept in the quest log, made again only once the session has grown. Flash, no searches: about $0.0003.
+   * Nothing comes back when it fails (Earlier shows the steps alone).
+   */
+  const sessionNoteCalls = new Map<string, number[]>();
+  app.post('/api/session-note', requireAuth, async (req, res) => {
+    try {
+      const input = cleanNoteRequest(req.body);
+      if (!input) return res.json({ note: '' });
+      const who = String((req as any).user?.uid || req.ip || 'anon');
+      const now = Date.now();
+      const recent = (sessionNoteCalls.get(who) || []).filter((t) => now - t < 60_000);
+      if (recent.length >= 10) return res.json({ note: '' });
+      recent.push(now);
+      sessionNoteCalls.set(who, recent);
+      if (sessionNoteCalls.size > 5000) sessionNoteCalls.clear();
+      const ai = getHelperClient();
+      const r: any = await withTimeout(
+        ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: [{ role: 'user', parts: [{ text: sessionNoteInput(input) }] }],
+          config: { systemInstruction: SESSION_NOTE_PROMPT, temperature: 0.2, maxOutputTokens: 200, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+        }),
+        12000,
+        'session note',
+      );
+      logUsage('session-note', 'gemini-3.8-flash', r);
+      return res.json({ note: cleanSessionNote(r?.text || '') });
+    } catch (err: any) {
+      console.log('session note failed:', err?.message);
+      return res.json({ note: '' });
     }
   });
 

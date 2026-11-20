@@ -395,12 +395,28 @@ function animateWindow(targetX, targetY, durationMs = 200) {
 async function slideIn(opts = {}) {
   if (!mainWindow) return;
   // The quest log (tracker.cjs) is independent: opening the panel never hides it; it steps off the panel instead.
+  let slid = false;
   if (!isAppVisible) {
     if (opts.snapshot) {
       openSnapshot = { image: opts.snapshot, session: overlaySession + 1, at: Date.now() };
     } else if (snapshotOnOpen && !openingInProgress) {
-      // Capture the game while it's still focused and running (a fraction of a second, capped at 700 ms).
+      // Capture the game while it's still focused and running (a fraction of a second, capped at 700 ms). The panel
+      // doesn't wait for it (owner, Nov 20 2026: opening took ~2 s; the capture alone is 0.5-0.65 s on an ultrawide):
+      // it slides in at once without taking focus, kept out of captures meanwhile, so the snapshot is still the game
+      // alone and a game that pauses on losing focus hasn't paused yet. Focus is taken once the capture is done.
       openingInProgress = true;
+      isAppVisible = true;
+      lastSlideInAt = Date.now();
+      try { mainWindow.setContentProtection(true); } catch {}
+      mainWindow.showInactive();
+      mainWindow.setAlwaysOnTop(true, 'screen-saver');
+      spine.hide();
+      if (answerCard) answerCard.setAway(false);
+      if (currentDockPosition !== 'undocked') {
+        const c0 = getDockCoords(false);
+        animateWindow(c0.x, c0.y, 150);
+        slid = true;
+      }
       try {
         const image = await Promise.race([
           captureScreenImage(),
@@ -411,8 +427,12 @@ async function slideIn(opts = {}) {
         openSnapshot = null;
       } finally {
         openingInProgress = false;
+        // (seen in recordings and the player's own screenshots again)
+        try { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setContentProtection(false); } catch {}
       }
       if (!mainWindow || mainWindow.isDestroyed()) return;
+      // Sent away again while the snapshot was being taken (slideOut cleared isAppVisible): it stays away.
+      if (!isAppVisible) { overlaySession++; return; }
     }
     overlaySession++;
   }
@@ -434,7 +454,7 @@ async function slideIn(opts = {}) {
   // macOS equivalent
   app.focus({ steal: true });
   
-  if (currentDockPosition !== 'undocked') {
+  if (currentDockPosition !== 'undocked' && !slid) {
     const coords = getDockCoords(false);
     animateWindow(coords.x, coords.y, 150).then(() => tracker.panelShown());
   } else {
@@ -830,6 +850,8 @@ app.whenReady().then(() => {
       if (what === 'log') return void tracker.toggle(null).then((r) => { if (r === 'empty' && !isAppVisible) slideIn(); }).catch(() => {});
       if (what === 'ask') return void openQuickMenu({ mode: 'mouse', from: 'menu' });
       if (what === 'fan') return void openQuickMenu({ mode: 'mouse', from: 'hover' });
+      // A click on the orb with no card to bring back: the fan (already open from resting on it: it stays).
+      if (what === 'fan-click') { if (!quickWheel.isOpen()) openQuickMenu({ mode: 'mouse', from: 'hover' }); return; }
       if (what === 'busy' && quickWheel && quickWheel.fanMode() === 'mouse') quickWheel.close();
     },
   });

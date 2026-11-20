@@ -211,6 +211,11 @@ export interface QuestLogState {
    * objective the step was part of.
    */
   passed?: { id: string; text: string; place?: string; msgId?: string; at: number }[];
+  /**
+   * Earlier's session notes (owner, Nov 20 2026; utils/earlierSessions.ts): one sentence per play session, by the
+   * session's start time; n: how many steps it had when the note was made (made again once it has grown).
+   */
+  notes?: Record<string, { t: string; n: number }>;
 }
 
 /** What Locate me saw the player doing (locateMe.ts parseDoing). */

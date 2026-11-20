@@ -109,7 +109,32 @@ Only when the player's question clearly says they have already done one or more 
 halves", "done with the castle, what now?"), add one line with those numbers:
 <qc-ticked>[${o.steps[0].i}]</qc-ticked>
 Never for steps they're only asking about, about to do, or might have done. Leave the line out otherwise, and never
-mention it in your answer text.`;
+mention it in your answer text.
+Separately, only when the player didn't say so but their screenshot clearly shows one of these steps already finished
+(the door already open, the item in their hands, the area already cleared, the next place already reached), add one
+line with those numbers; the app then offers to move on, it doesn't tick them:
+<qc-looks-done>[${o.steps[0].i}]</qc-looks-done>
+Never from a guess or from what usually happens next; never without a screenshot; never for a step already in a
+<qc-ticked> line. Leave it out otherwise, and never mention it.`;
+}
+
+/**
+ * "Looks done" (owner, Nov 20 2026): steps of the objective the screenshot shows finished, which the player didn't
+ * mention: the app offers to move on (Move on / Not yet), it never ticks them itself. Always removed from the text.
+ */
+export function extractLooksDone(text: string, o: ObjectiveForAnswer | null): { text: string; done: number[] } {
+  let done: number[] = [];
+  const cleaned = String(text || '').replace(/(?:```[a-z]*\s*)?<qc-looks-done>([\s\S]*?)<\/qc-looks-done>(?:\s*```)?/gi, (_m, body) => {
+    try {
+      const raw = JSON.parse(String(body).trim());
+      const allowed = new Set((o?.steps || []).map((s) => s.i));
+      done = [...new Set((Array.isArray(raw) ? raw : []).filter((n: unknown) => Number.isInteger(n) && allowed.has(n as number)))] as number[];
+    } catch {
+      /* a broken line is dropped */
+    }
+    return '';
+  });
+  return { text: cleaned.replace(/\n{3,}/g, '\n\n').trimEnd(), done };
 }
 
 /** Pull the <qc-ticked> line out of an answer (always removed): the indexes, only ones the app sent. */

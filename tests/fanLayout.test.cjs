@@ -329,15 +329,15 @@ const HUB = { tr: { x: 1920 - 33, y: 33 }, tl: { x: 33, y: 33 }, br: { x: 1920 -
     assert.deepEqual(taken, []);
     assert.equal(wheel.fanMode(), 'mouse');
     assert.ok(shortcuts.has('Escape'));
-    // Moving through the fan (between items) keeps it.
-    cursor = { x: HUB.tr.x - 150, y: HUB.tr.y + 150 };
+    // Moving through the fan (between items, within the inner ring showing) keeps it.
+    cursor = { x: HUB.tr.x - 90, y: HUB.tr.y + 90 };
     tick(2000);
     assert.equal(wheel.isOpen(), true);
-    // Away from it: gone after a moment, nothing picked.
+    // Away from it: gone quickly (owner, Nov 20 2026: ~250 ms, was 650), nothing picked.
     cursor = { x: 600, y: 700 };
-    tick(400);
+    tick(120);
     assert.equal(wheel.isOpen(), true);
-    tick(400);
+    tick(240);
     assert.equal(wheel.isOpen(), false);
     assert.equal(shortcuts.has('Escape'), false);
     assert.deepEqual(chosen, []);

@@ -823,7 +823,9 @@
     } else if (!b.contains('morphing')) {
       if (b.contains('orbshow')) box('orb', $('orb').getBoundingClientRect(), (O.geo ? O.geo.pad : 13) - 2);
       if (isOpen) box('card', $('card').getBoundingClientRect());
-      if (b.contains('menu')) box('menu', $('menu').getBoundingClientRect());
+      // The menu by its layout, not mid zoom-in (owner, Nov 20 2026: its outer part didn't take the mouse, measured
+      // at 90% while it opened).
+      if (b.contains('menu')) { const m = $('menu'); const pr = (m.offsetParent || document.body).getBoundingClientRect(); box('menu', { left: pr.left + m.offsetLeft - 4, top: pr.top + m.offsetTop - 4, width: m.offsetWidth + 8, height: m.offsetHeight + 8 }); }
     }
     const key = JSON.stringify(list);
     if (key === lastHits) return;
@@ -930,6 +932,7 @@
   });
   new ResizeObserver(() => hits()).observe($('card'));
   new ResizeObserver(() => hits()).observe($('menu'));
+  $('menu').addEventListener('animationend', () => hits());
 </script>
 </body>
 </html>

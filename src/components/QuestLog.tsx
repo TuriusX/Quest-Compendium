@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Bookmark, Check, AlertTriangle, ChevronRight, ChevronDown, ChevronLeft, ExternalLink, PanelRightClose, Crosshair, MapPin } from './icons';
-import { useT } from '../i18n';
+import { useT, useLocale } from '../i18n';
+import { sessionDay, noteStale, type EarlierSession } from '../utils/earlierSessions';
 import type { LogStep, LogView } from '../utils/questLogView';
 import { VisualCard, type VisualData, type VisualEvent } from './VisualCard';
 
@@ -66,6 +67,14 @@ export type QuestLogProps = {
    */
   visualFor?: (msgId: string) => VisualData | undefined;
   onVisualEvent?: (msgId: string, type: VisualEvent) => void;
+  /**
+   * "Looks done" (owner, Nov 20 2026): the Now step the last screenshot showed finished (its id), offered with Move on /
+   * Not yet; never ticked by itself.
+   */
+  looksDone?: string | null;
+  onLooksDone?: (moveOn: boolean) => void;
+  /** Earlier opened: a session without a note (or one that grew) asks for its one-sentence note (App, /api/session-note). */
+  onNeedNote?: (s: EarlierSession) => void;
 };
 
 const stepIds = (v: LogView) => [v.now, ...v.next].filter((s): s is LogStep => !!s && s.tick).map((s) => s.id);
@@ -75,6 +84,9 @@ export function QuestLog(p: QuestLogProps) {
   const v = p.view;
   const [showPins, setShowPins] = useState(false);
   const [showEarlier, setShowEarlier] = useState(false);
+  // Earlier's sessions: the newest open, older ones folded until tapped (by key).
+  const [openSession, setOpenSession] = useState<string | null>(null);
+  const locale = useLocale();
   const [showMore, setShowMore] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -300,7 +312,12 @@ export function QuestLog(p: QuestLogProps) {
           <div>
             {label(t('tracker.logNow'), (
               <span className={`ml-auto normal-case tracking-normal font-sans font-semibold text-[11px] ${mine ? 'text-[var(--accent-color)]' : 'text-zinc-400'}`}>
-                {/* Only a question's Now says where it came from; the guide's blends in (owner, Nov 15 2026). */}{mine ? t('tracker.logFromQuestion') : null}
+                {/* Only a question's Now says where it came from; the guide's blends in (owner, Nov 15 2026). A click opens that
+                    answer (Nov 20 2026: no extra line for it). */}
+                {mine && n.msgId ? (
+                  <button type="button" data-qc-log-source="" onClick={() => p.onOpenPin(n.msgId!)} title={t('tracker.logOpenSource')}
+                    className="hover:underline outline-none focus-visible:underline">{t('tracker.logFromQuestion')}</button>
+                ) : mine ? t('tracker.logFromQuestion') : null}
               </span>
             ))}
             <div
@@ -325,6 +342,19 @@ export function QuestLog(p: QuestLogProps) {
                 </button>
               </div>
               {visualOf(n)}
+              {/* Looks done: the screenshot showed this step finished. Offered, never done by itself. */}
+              {p.looksDone === n.id && p.onLooksDone && (
+                <div data-qc-log-looksdone="" role="status" className="mt-2 flex items-center gap-2 flex-wrap text-[12px]">
+                  <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                  <span className="text-zinc-300">{t('tracker.logLooksDone')}</span>
+                  <span className="flex items-center gap-1.5 ml-auto">
+                    <button type="button" onClick={() => p.onLooksDone!(true)}
+                      className="px-2 py-0.5 rounded bg-[var(--accent-color)] text-black font-bold hover:brightness-110 outline-none focus-visible:ring-2 focus-visible:ring-white">{t('tracker.logLooksDoneYes')}</button>
+                    <button type="button" onClick={() => p.onLooksDone!(false)}
+                      className="px-2 py-0.5 rounded border border-white/15 text-zinc-300 font-semibold hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white">{t('tracker.logLooksDoneNo')}</button>
+                  </span>
+                </div>
+              )}
               {n.seen && (
                 <div data-qc-log-seen="" className="mt-2 flex items-center gap-1.5 text-[11.5px] text-zinc-500 min-w-0">
                   <Crosshair className="w-3 h-3 flex-shrink-0 text-[var(--accent-color)]" />
@@ -445,23 +475,62 @@ export function QuestLog(p: QuestLogProps) {
 
         {/* Pins and the guide: folded until asked for. */}
         <div className="mt-auto flex flex-col">
+          {/* Earlier (owner, Nov 20 2026): folded to one line; opened, play sessions newest first, each with a one-sentence
+              note of what the player did and its steps by place. The newest session is open, older ones fold. A step
+              tapped is Now again. */}
           {!!v.earlier?.length && p.onBringBack && (
             <>
-              <button type="button" data-qc-log-earlier="" onClick={() => setShowEarlier((x) => !x)} aria-expanded={showEarlier}
+              <button type="button" data-qc-log-earlier="" onClick={() => {
+                const opening = !showEarlier;
+                setShowEarlier(opening);
+                const s0 = v.sessions?.[0];
+                if (opening && s0 && p.onNeedNote && noteStale(s0.note ? { n: s0.noteN || 0 } : undefined, s0.count)) p.onNeedNote(s0);
+              }} aria-expanded={showEarlier}
                 className="flex items-center gap-2 py-2 border-t border-white/[0.07] text-[12.5px] font-semibold text-zinc-400 hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white">
                 <ChevronRight className="w-3.5 h-3.5 rotate-180 text-[var(--accent-color)]" />{t('tracker.logEarlier')}
-                <span className="ml-auto font-mono text-[11px] text-zinc-500">{v.earlier.length}</span>
+                {v.sessions?.[0] && <span className="font-normal text-zinc-500 truncate">· {sessionDay(v.sessions[0].start, Date.now(), { today: t('tracker.sessionToday'), yesterday: t('tracker.sessionYesterday') }, locale)}</span>}
+                <span className="ml-auto font-mono text-[11px] text-zinc-500">{(v.sessions || []).reduce((sum, x) => sum + x.count, 0) || v.earlier.length}</span>
                 {showEarlier ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
               </button>
               {showEarlier && (
-                <ul className="pb-2 flex flex-col gap-0.5">
-                  {v.earlier.map((e) => (
-                    <li key={e.id}>
-                      <button type="button" onClick={() => p.onBringBack!(e.id)} title={t('tracker.logBringBack')}
-                        className="w-full text-left truncate text-[12.5px] text-zinc-300 hover:text-white px-1 py-0.5 rounded outline-none focus-visible:ring-2 focus-visible:ring-white">↺ {e.text}</button>
-                    </li>
-                  ))}
-                </ul>
+                <div data-qc-log-sessions="" className="pb-2 flex flex-col gap-2">
+                  {(v.sessions || []).map((ss, si) => {
+                    const open = openSession === null ? si === 0 : openSession === ss.key;
+                    const day = sessionDay(ss.start, Date.now(), { today: t('tracker.sessionToday'), yesterday: t('tracker.sessionYesterday') }, locale);
+                    return (
+                      <div key={ss.key} data-qc-log-session={ss.key}>
+                        <button type="button" aria-expanded={open}
+                          onClick={() => {
+                            setOpenSession(open ? '' : ss.key);
+                            if (!open && p.onNeedNote && noteStale(ss.note ? { n: ss.noteN || 0 } : undefined, ss.count)) p.onNeedNote(ss);
+                          }}
+                          className="w-full flex items-center gap-1.5 text-left text-[10.5px] font-extrabold uppercase tracking-[0.14em] font-mono text-zinc-500 hover:text-zinc-300 outline-none focus-visible:ring-2 focus-visible:ring-white rounded">
+                          {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                          {day}
+                          <span className="ml-auto normal-case tracking-normal font-sans font-semibold">{t('tracker.sessionSteps', { n: String(ss.count) })}</span>
+                        </button>
+                        {open && (
+                          <div className="mt-1 pl-4 flex flex-col gap-1.5">
+                            {ss.note && <p data-qc-log-note="" className="text-[12.5px] leading-snug text-zinc-300 italic">{ss.note}</p>}
+                            {ss.places.map((pl) => (
+                              <div key={pl.place || '-'}>
+                                <div className="flex items-center gap-1 text-[11.5px] font-semibold text-zinc-500"><MapPin className="w-3 h-3" />{pl.place || t('tracker.sessionNoPlace')}</div>
+                                <ul className="flex flex-col">
+                                  {pl.items.map((e) => (
+                                    <li key={e.id}>
+                                      <button type="button" onClick={() => p.onBringBack!(e.id)} title={t('tracker.logBringBack')}
+                                        className="w-full text-left truncate text-[12.5px] text-zinc-300 hover:text-white px-1 py-0.5 rounded outline-none focus-visible:ring-2 focus-visible:ring-white">↺ {e.text}</button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </>
           )}

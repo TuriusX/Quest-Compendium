@@ -704,9 +704,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
+  // The voice shortcut and the mic buttons (owner, Nov 20 2026): listening sends by itself once the player stops talking,
+  // as Voice in the quick menu does; pressing again sends sooner. The screenshot is taken as it's sent (onstop).
   const toggleVoiceRecording = () => {
     if (isRecording) stopVoiceRecording();
-    else startVoiceRecording();
+    else startVoiceRecording(true);
   };
 
   /** Hold to talk: 'start' while held, 'end' when let go. */

@@ -156,13 +156,11 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
     cursor = { x: 0, y: 0 }; tick(40);
   });
 
-  await test('no answer yet: a left click shows how to ask, which folds back by itself without a dot', () => {
+  await test('no answer yet: a left click opens the fan of the quick menu (owner, Nov 20 2026), no lingering hint card', () => {
     fromPage('orb-action', 'click');
-    const shown = [...win().sent].reverse().find(([c]) => c === 'card-show')[1];
-    assert.equal(shown.state, 'hint');
-    assert.equal(card.isShowing(), true);
-    tick(7001);
+    assert.equal(orbAsked[orbAsked.length - 1], 'fan-click');
     assert.equal(card.isShowing(), false);
+    tick(7001);
     assert.equal(lastOrb().orb, true);
     assert.equal(lastOrb().dot, false);
     assert.equal(win().visible, true); // the orb stays
@@ -202,7 +200,7 @@ const run = (s, ...evs) => evs.reduce(reduce, s);
     assert.equal(lastOrb().menu, true);
     fromPage('orb-action', 'ask');
     // (clicks and the menu opening tell the app a fan the mouse opened makes way: step 2, Nov 19 2026)
-    assert.deepEqual(orbAsked.filter((w) => w !== 'busy'), ['ask']);
+    assert.deepEqual(orbAsked.filter((w) => w !== 'busy' && w !== 'fan-click'), ['ask']);
     assert.deepEqual(orbAsked.slice(-2), ['busy', 'ask']);
     assert.equal(lastOrb().menu, false);
     fromPage('orb-action', 'mute'); // the menu is closed: nothing

@@ -26,7 +26,7 @@ const { BrowserWindow, ipcMain, screen, globalShortcut } = require('electron');
 const path = require('path');
 const fanMath = require('./fanLayout.cjs');
 
-const FAN_LEAVE_MS = 650; // the mouse away from the fan this long (opened by the mouse): it closes
+const FAN_LEAVE_MS = 250; // the mouse away from the fan this long (opened by the mouse): it closes (owner, Nov 20 2026: quickly; was 650)
 const FAN_MENU_GRACE_MS = 1500; // opened from the orb's menu: the mouse has this long to reach it first
 // The mouse still resting on the orb this long after the fan opened: its outer ring opens too (owner, Nov 20 2026:
 // "hovering a bit longer opens the second level", in place of the More button).
@@ -153,7 +153,7 @@ function createWheel(opts) {
       // Opened by the mouse: it goes once the mouse has left the fan (and the orb) for a moment (not while listening).
       if (talking) fanSeenAt = Date.now();
       else if (fan.mode === 'mouse') {
-        if (hit || fanMath.inFan(x - fan.hub.x, y - fan.hub.y, fan.L)) fanSeenAt = Math.max(fanSeenAt, Date.now());
+        if (hit || fanMath.inFan(x - fan.hub.x, y - fan.hub.y, fan.L, undefined, outerAsked)) fanSeenAt = Math.max(fanSeenAt, Date.now());
         else if (Date.now() - fanSeenAt > FAN_LEAVE_MS) close();
       }
     }, 40);

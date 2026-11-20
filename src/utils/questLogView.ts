@@ -14,6 +14,7 @@
 import type { ChatMessage, GameTab, PlaceDoing, QuestStep } from '../types';
 import type { TrackerData, TrackerItem, TrackerSection } from './trackerPayload';
 import { samePlace } from './placeName';
+import { earlierSessions, type EarlierSession } from './earlierSessions';
 
 export type LogStep = {
   id: string;
@@ -82,6 +83,8 @@ export type LogView = {
   offer?: TrackerData['offer'];
   /** Steps moved on from with the Now box's X, newest first: tap one to make it Now again (idea #3). */
   earlier?: { id: string; text: string }[];
+  /** Earlier in play sessions, newest first, each by place, with its note when one was made (Nov 20 2026). */
+  sessions?: (EarlierSession & { note?: string; noteN?: number })[];
   /** The number on the bookmark and the spine: steps left on Now's goal, else the guide's unticked entries here. */
   bookmark: number;
   labels?: Record<string, string>;
@@ -296,7 +299,8 @@ export function buildLogView(
   const earlier = [...(state.passed || [])].reverse().slice(0, 5).map((x) => ({ id: x.id, text: x.text }));
   if (!now && !done && !pins.length && !data && !watch.length && !invite && !opts.where && !earlier.length) return null;
   return {
-    ...(earlier.length ? { earlier } : {}),
+    ...(earlier.length ? { earlier, sessions: earlierSessions(state.passed, msgs.filter((m) => m.role === 'user').map((m) => ({ at: m.timestamp, text: m.text })))
+      .map((s) => ({ ...s, ...(state.notes?.[s.key] ? { note: state.notes[s.key].t, noteN: state.notes[s.key].n } : {}) })) } : {}),
     gameKey: opts.gameKey,
     accent: opts.accent,
     place: data?.place,
@@ -600,7 +604,13 @@ export function nextLogState(s: GameTab['questLog'], patch: Partial<NonNullable<
   if (!out.hidden?.length) delete out.hidden;
   else out.hidden = out.hidden.slice(-200);
   if (!out.passed?.length) delete out.passed;
-  else out.passed = out.passed.slice(-30);
+  else out.passed = out.passed.slice(-60);
+  // Session notes: the newest 12 sessions' (keys are their start times).
+  if (out.notes && typeof out.notes === 'object') {
+    const keys = Object.keys(out.notes).sort((a, b) => Number(b) - Number(a)).slice(0, 12);
+    out.notes = Object.fromEntries(keys.map((k) => [k, out.notes![k]]));
+    if (!keys.length) delete out.notes;
+  } else delete out.notes;
   if (!out.held?.length) delete out.held;
   else out.held = out.held.slice(-60);
   return Object.keys(out).length ? out : undefined;

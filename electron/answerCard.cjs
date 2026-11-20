@@ -464,6 +464,13 @@ function createAnswerCard(opts) {
   ipcMain.on('orb-action', (event, what) => {
     if (!fromCard(event) || !orb.on) return;
     const l = orbState.look(orb);
+    // A click on the orb with no card to bring back (owner, Nov 20 2026): the quick menu's fan opens (or stays), instead
+    // of the how-to-ask line that sat there until its time ran out.
+    if (what === 'click' && l.orb && orbState.clickAction(!!last) !== 'recall') {
+      dwellDone = true;
+      if (opts.onOrb) opts.onOrb('fan-click');
+      return;
+    }
     // A click or the menu on the orb: a fan the mouse opened makes way (main.cjs).
     if ((what === 'click' && l.orb) || (what === 'menu' && !orb.menu)) {
       dwellDone = true; // (not again until the mouse has left the orb)
