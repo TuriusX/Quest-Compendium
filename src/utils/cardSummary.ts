@@ -22,6 +22,16 @@ Write what the player should do now:
 - Reply with the summary only. When the answer has nothing to do (an error, a refusal, a question back to the player),
   reply with nothing.`;
 
+/**
+ * Immersive mode (owner, Nov 20 2026, idea #8): the answer is spoken by a narrator from the game's world, and the
+ * pop-up keeps that voice. The action itself stays plain and exact; only the turn of phrase is in character.
+ */
+export const CARD_SUMMARY_IMMERSIVE = `
+
+This player uses immersive mode: the answer is told by a narrator who lives in the game's world. Write the summary in
+that same narrator's voice (their manner and a turn of phrase or two, as they'd say it at the player's side), while the
+action, places, names and numbers stay exactly as plain and correct as the rules above require. Still at most 40 words.`;
+
 /** The summarizer's input: the question and the finished answer. */
 export function summaryInput(question: string, answer: string, hint = false): string {
   return `${hint ? 'This answer is a hint: the player asked not to be told the solution.\n\n' : ''}Question:\n${String(question || '').slice(0, 500)}\n\nAnswer:\n${String(answer || '').slice(0, 12000)}`;

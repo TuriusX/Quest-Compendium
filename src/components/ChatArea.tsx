@@ -1210,7 +1210,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           'Accept': 'application/x-ndjson, application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ text, voice: ttsVoice || 'puck', stream: true }),
+        // Immersive mode (Nov 20 2026): the same voice, read in character as a storyteller from the game's world.
+        body: JSON.stringify({ text, voice: ttsVoice || 'puck', stream: true, ...(aiMode === 'roleplay' ? { style: 'immersive', game: gameLabel || activeTab?.name || '' } : {}) }),
       });
 
       if (abortController.signal.aborted) return;

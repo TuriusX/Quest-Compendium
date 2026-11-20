@@ -7,6 +7,17 @@
  */
 export type Pcm = { pcm: Buffer; sampleRate: number; channels: number };
 
+/**
+ * Immersive mode's read-aloud (owner, Nov 20 2026, idea #8): director's notes put before the text for Google's speech
+ * models, ending in a "#### TRANSCRIPT" heading: only what follows it is read (tested Nov 20: a plain "Read this as…"
+ * line or "Say warmly…:" got read aloud too; this format didn't). The player's chosen voice stays; only the delivery
+ * changes: a storyteller from the game's world, unhurried, with feeling.
+ */
+export function ttsDirection(game: string): string {
+  const where = String(game || '').replace(/[\r\n"#]/g, ' ').trim().slice(0, 80);
+  return `# AUDIO PROFILE: A storyteller from ${where ? `the world of ${where}` : 'the game’s world'}\n## DIRECTOR'S NOTES\nStyle: warm, vivid and unhurried, with a little drama where it fits, like a seasoned guide talking by the fire. Read only the transcript.\n#### TRANSCRIPT`;
+}
+
 /** The samples in a TTS reply's audio (a WAV file or raw PCM), whole 16-bit samples only. */
 export function ttsPcm(bytes: Buffer, mimeType = ''): Pcm | null {
   if (!bytes || bytes.length < 2) return null;

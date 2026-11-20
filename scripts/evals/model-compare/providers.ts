@@ -39,7 +39,11 @@ if (process.env.REUSE && !fs.existsSync(OUT)) {
   fs.writeFileSync(OUT, keep.map((x) => JSON.stringify({ ...x, reused: true })).join('\n') + '\n');
 }
 
-const caps = fs.readFileSync(`${DIR}/captured.jsonl`, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((c) => /^[rcsd]\d+$/.test(c.id));
+// CAPTURED=<file> reads another capture file; MODE=roleplay takes the Immersive captures (ids "r1~roleplay") under their plain ids.
+const MODE = process.env.MODE || 'standard';
+const caps = fs.readFileSync(process.env.CAPTURED || `${DIR}/captured.jsonl`, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  .map((c) => (MODE === 'standard' ? c : { ...c, id: String(c.id).endsWith(`~${MODE}`) ? String(c.id).slice(0, -MODE.length - 1) : '' }))
+  .filter((c) => /^[rcsd]\d+$/.test(c.id));
 const done = new Set(fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((x) => !x.error).map((x) => `${x.id}|${x.model}`) : []);
 const reusedPro = new Map<string, any>();
 if (fs.existsSync(`${DIR}/results-hydrogen.jsonl`)) {

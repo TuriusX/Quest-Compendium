@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>Quest Compendium answer</title>
 <!-- The app's own faces (as the panel loads them); without the network, the system face stands in. -->
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Silkscreen&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Silkscreen&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,500;1,600&display=swap" rel="stylesheet">
 <style>
   /* Pop-up answers over the game (answerCard.cjs; owner, Nov 17-18 2026, docs "Pop-up answers"). Never focused; the
      mouse only reaches it over the card. Sizes are for a 1080p screen at Medium (--s scales Small / Large). */
@@ -104,6 +104,20 @@
   .timer i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; }
   .fight .t { color: #ffd0d0; }
   body.fight .card { border-color: #ff7a7a; }
+  /* Immersive mode (owner, Nov 20 2026, idea #8): a storybook card. The narrator's words in a book face between gold
+     quotes, the title as a chapter heading, a warm candle-lit glow in the theme colour; facts and warnings unchanged. */
+  body.immersive .card { --gold: #d8b36a; border-color: color-mix(in srgb, var(--accent) 55%, var(--gold));
+    background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--gold) 9%, transparent), transparent 60%), rgba(16, 13, 20, .95);
+    box-shadow: 0 10px 34px rgba(0, 0, 0, .6), inset 0 0 0 1px color-mix(in srgb, var(--gold) 14%, transparent), 0 0 calc(26px * var(--s)) color-mix(in srgb, var(--gold) 16%, transparent); }
+  body.immersive .t { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 700; font-size: calc(30px * var(--s)); letter-spacing: .005em; }
+  body.immersive .sum { position: relative; font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-weight: 500;
+    font-size: calc(24px * var(--s)); line-height: 1.32; color: #f4ecdc; padding: 0 calc(14px * var(--s)); }
+  body.immersive .sum::before, body.immersive .sum::after { position: absolute; font-style: normal; font-weight: 700; font-size: calc(34px * var(--s)); line-height: 1; color: var(--gold); opacity: .85; }
+  body.immersive .sum::before { content: '\201C'; left: calc(-4px * var(--s)); top: calc(-2px * var(--s)); }
+  body.immersive .sum::after { content: '\201D'; right: calc(-2px * var(--s)); bottom: calc(-14px * var(--s)); }
+  body.immersive .steps li { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: calc(21px * var(--s)); }
+  body.immersive .steps .n { background: var(--gold); font-family: 'Cormorant Garamond', Georgia, serif; }
+  body.immersive .chip { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 50%, transparent); }
   /* The orb's how-to-ask line (no answer yet). */
   .line { font-weight: 600; font-size: calc(17px * var(--s)); line-height: 1.4; padding-right: calc(4px * var(--s)); }
 
@@ -360,7 +374,7 @@
   function showThinking(d) {
     cur = d; expanded = false;
     cardParts(false);
-    document.body.classList.remove('expanded', 'fight', 'answer');
+    document.body.classList.remove('expanded', 'fight', 'answer', 'immersive');
     $('place').textContent = d.place || '';
     $('chip').textContent = d.model || '';
     $('chip').hidden = !d.model;
@@ -398,6 +412,7 @@
     document.body.classList.remove('expanded');
     document.body.classList.add('answer');
     document.body.classList.toggle('fight', !!d.combat);
+    document.body.classList.toggle('immersive', !!d.immersive);
     $('place').textContent = d.place || '';
     $('chip').textContent = d.model || '';
     $('chip').hidden = !d.model;
@@ -460,7 +475,7 @@
   function showHint(d) {
     cur = d; expanded = false;
     clearTimeout(proTimer);
-    document.body.classList.remove('expanded', 'fight', 'answer');
+    document.body.classList.remove('expanded', 'fight', 'answer', 'immersive');
     cardParts(true);
     for (const id of ['stages', 'sum', 'intro', 'warn', 'body', 'wide']) $(id).hidden = true;
     setMedia(null);

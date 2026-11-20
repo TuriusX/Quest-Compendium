@@ -59,13 +59,16 @@ export const QUESTIONS: { id: string; real: boolean; game: string; appId?: numbe
 ];
 
 if (/capture\.ts$/.test(process.argv[1] || '')) {
+  // AI_MODE=roleplay captures Immersive mode's request (evalId gets a "~roleplay" suffix so both modes can share one
+  // capture file; providers.ts strips it with MODE=roleplay).
+  const mode = process.env.AI_MODE || 'standard';
   const only = process.argv.slice(2);
   for (const x of QUESTIONS.filter((q) => !only.length || only.includes(q.id))) {
     await new Promise((r) => setTimeout(r, 9500));
     const body: any = {
-      question: x.q, history: [], aiMode: 'standard', isGameRunningLocally: true,
+      question: x.q, history: [], aiMode: mode, isGameRunningLocally: true,
       activeGame: { name: x.game, ...(x.appId ? { appId: x.appId } : {}) }, language: x.lang || 'English', markers: false,
-      model: 'pro', preferredModel: 'pro', evalId: x.id, ...(x.image ? { imageBase64: await img(x.image) } : {}),
+      model: 'pro', preferredModel: 'pro', evalId: mode === 'standard' ? x.id : `${x.id}~${mode}`, ...(x.image ? { imageBase64: await img(x.image) } : {}),
     };
     const r = await fetch('http://localhost:3000/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer guest_dev_local' }, body: JSON.stringify(body) });
     const j: any = await r.json().catch(() => ({}));

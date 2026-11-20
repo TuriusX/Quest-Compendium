@@ -496,6 +496,8 @@ function createAnswerCard(opts) {
         hintNext: String(a.hintNext || '').slice(0, 60),
         // What to do now, shown instead of the answer's start and read aloud (Nov 19 2026).
         summary: String(a.summary || '').slice(0, 320),
+        // Immersive mode (Nov 20 2026): the card's storybook look.
+        immersive: !!a.immersive,
         at: Date.now(),
       };
       last = current;

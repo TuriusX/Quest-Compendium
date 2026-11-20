@@ -42,7 +42,8 @@ import { currentOffer, currentTrial, trialEligible, trialStep } from './offers';
 import { questionType } from './src/utils/questionType';
 import { registerReviewQueue, isAdmin } from './reviewQueue';
 import { registerGuideImages } from './guideImages';
-import { ttsPcm, pcmToWav } from './ttsAudio';
+import { ttsPcm, pcmToWav, ttsDirection } from './ttsAudio';
+import { narratorFor, narratorLine, narratorNotes, parseNarrator, type Narrator } from './narrator';
 import { registerOwnerEditor, editorOrAuth } from './ownerEditor';
 import { registerContributions } from './contributions';
 import { registerAnswerReports } from './answerReports';
@@ -62,7 +63,7 @@ import { saveMissingFight } from './missingFights';
 import { samePlace, storyPhrase, singleArea } from './src/utils/placeName';
 import { QUICK_PROMPTS, isQuickId } from './src/utils/quickQuestions';
 import { HINT_LEVELS_RULES, extractHints } from './src/utils/hintLevels';
-import { CARD_SUMMARY_PROMPT, summaryInput, cleanSummary } from './src/utils/cardSummary';
+import { CARD_SUMMARY_PROMPT, CARD_SUMMARY_IMMERSIVE, summaryInput, cleanSummary } from './src/utils/cardSummary';
 import { decidePremium, stripeViewFor, cachedStripeView, forgetStripeView } from './premium';
 import { recordDailyCost, recordLimitHit, recordAnswerGame } from './searchGuard';
 import { searchAllowed, recordSearches, countSearches, getGameFacts, factsForPrompt, saveGameFacts, extractFacts, searchSources, monthlyBudgetOk, recordMonthly, playerSearchesToday, recordPlayerSearches, groundedText, factsBackedBySearch, recordGameDemand, recordDailyActivity } from './searchGuard';
@@ -1233,6 +1234,30 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
     ]);
   };
 
+  /**
+   * Immersive mode's narrator for a game (narrator.ts; owner, Nov 20 2026): one per game, the same for every player
+   * (Firestore narrators/{key}), made once by a small helper call (under $0.01). The answers speak as them and the
+   * read-aloud voice sounds like them. At most 5 s; without one, the general storyteller.
+   */
+  const narratorStore = {
+    get: async (key: string) => {
+      const d = await getFirestore().collection('narrators').doc(key).get();
+      return d.exists ? parseNarrator(JSON.stringify(d.data())) : null;
+    },
+    set: async (key: string, n: Narrator) => { await getFirestore().collection('narrators').doc(key).set({ ...n, at: Date.now() }); },
+  };
+  const writeNarrator = async (request: string) => {
+    const r: any = await withTimeout(getHelperClient().models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: [{ role: 'user', parts: [{ text: request }] }],
+      config: { temperature: 0.9, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    }), 15000, 'narrator');
+    logUsage('narrator', 'gemini-3.8-flash', r);
+    return String(r?.text || '');
+  };
+  const gameNarrator = (game: string): Promise<Narrator | null> =>
+    (withTimeout(narratorFor(game, narratorStore, writeNarrator), 5000, 'narrator') as Promise<Narrator | null>).catch(() => null);
+
   const chatHandler = async (req: express.Request, res: express.Response) => {
     logDebug(`[API Chat] Incoming request from uid: ${(req as any).user?.uid}`);
 
@@ -1360,7 +1385,9 @@ h1{font-size:22px;margin:0 0 10px}p{color:#a1a1aa;margin:0}</style></head>
 
       if (aiMode === 'roleplay') {
         const gameNameForRoleplay = effectiveGame ? effectiveGame.name : 'the game the player is asking about';
-        systemInstruction += ROLEPLAY_PERSONA(gameNameForRoleplay);
+        // This game's own narrator (the read-aloud voice is the same character), when there's a game.
+        const narrator = effectiveGame ? await gameNarrator(effectiveGame.name) : null;
+        systemInstruction += ROLEPLAY_PERSONA(gameNameForRoleplay, narrator ? narratorLine(narrator) : undefined);
       } else {
         systemInstruction += `You are a helpful and expert gaming guide.
 Your purpose is to give thorough, highly accurate, puzzle-solving, build-optimizing, and progression-guiding advice for video games.
@@ -2425,7 +2452,8 @@ percentages:
         ai.models.generateContent({
           model: 'gemini-3.8-flash',
           contents: [{ role: 'user', parts: [{ text: summaryInput(question, answer, req.body?.hint === true) }] }],
-          config: { systemInstruction: CARD_SUMMARY_PROMPT, temperature: 0.2, maxOutputTokens: 400, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+          // Immersive mode: the summary keeps the narrator's voice (the action stays plain and exact).
+          config: { systemInstruction: CARD_SUMMARY_PROMPT + (req.body?.immersive === true ? CARD_SUMMARY_IMMERSIVE : ''), temperature: req.body?.immersive === true ? 0.5 : 0.2, maxOutputTokens: 400, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
         }),
         12000,
         'card summary',
@@ -2658,6 +2686,12 @@ percentages:
   app.post('/api/tts', optionalAuth, async (req, res) => {
     try {
       const { text, voice = 'Puck', stream = true } = req.body;
+      // Immersive mode (owner, Nov 20 2026, idea #8): the same voice, read in character as the game's narrator, not flat.
+      const immersiveGame = req.body?.style === 'immersive' ? String(req.body?.game || '').replace(/[\r\n"]/g, ' ').trim().slice(0, 80) : '';
+      // The game's own narrator (narrator.ts): their voice and how they sound, the same character the answers speak as.
+      // Without one (no game, or it couldn't be made), the general storyteller in the player's chosen voice.
+      const narrator = req.body?.style === 'immersive' && immersiveGame ? await gameNarrator(immersiveGame) : null;
+      const direction = req.body?.style === 'immersive' ? (narrator ? narratorNotes(narrator) : ttsDirection(immersiveGame)) : '';
       if (!text) {
         return res.status(400).json({ error: 'Text is required for speech' });
       }
@@ -2699,8 +2733,9 @@ percentages:
         .trim();
 
       const normalizedVoiceKey = (voice || 'puck').toLowerCase();
-      const targetVoice = TTS_VOICE_MAP[normalizedVoiceKey] || 'Puck';
-      const cacheKey = `${targetVoice}::${cleanText.slice(0, 1000)}`;
+      // Immersive mode: the narrator's own voice (any of Google's 30) instead of the player's choice.
+      const targetVoice = narrator ? narrator.google : TTS_VOICE_MAP[normalizedVoiceKey] || 'Puck';
+      const cacheKey = `${targetVoice}::${direction ? `immersive:${immersiveGame}::` : ''}${cleanText.slice(0, 1000)}`;
 
       // Instant cache hit
       if (ttsServerCache.has(cacheKey)) {
@@ -2757,7 +2792,8 @@ percentages:
             const speak = (model: string) =>
               ai.models.generateContent({
                 model,
-                contents: chunkText,
+                // The director's notes go first (ttsDirection): only the transcript after them is read.
+                contents: direction ? `${direction}\n${chunkText}` : chunkText,
                 config: {
                   responseModalities: ['AUDIO'],
                   speechConfig: {
