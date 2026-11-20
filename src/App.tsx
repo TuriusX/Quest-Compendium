@@ -817,7 +817,8 @@ export default function App() {
         voiceInputShortcut: settings.voiceInputShortcut,
         autoScreenshotShortcut: settings.autoScreenshotShortcut,
         trackerTickShortcut: settings.trackerTickShortcut || 'CmdOrCtrl+Shift+Enter',
-        trackerNextShortcut: settings.trackerNextShortcut || 'CmdOrCtrl+Shift+Down',
+        // (The "highlight the next objective" key went with the tick boxes, Nov 20 2026.)
+        trackerNextShortcut: '',
         questLogShortcut: settings.questLogShortcut || 'CmdOrCtrl+Shift+L',
         locateShortcut: settings.locateShortcut || 'CmdOrCtrl+Shift+K',
         quickMenuShortcut: settings.quickMenuShortcut || 'Alt+Q',
@@ -856,7 +857,8 @@ export default function App() {
       custom: settings.controllerCustom,
       talk: settings.controllerTalk || 'off',
       trackerTick: settings.controllerTick || 'off',
-      trackerNext: settings.controllerNext || 'off',
+      // The controller's "highlight the next objective" chord went with the tick boxes (Nov 20 2026): its tick chord is now Next step.
+      trackerNext: 'off',
       trackerLocate: settings.controllerLocate || 'off',
     });
   }, [settings.controllerEnabled, settings.controllerToggle, settings.controllerCustom, settings.controllerTalk, settings.controllerTick, settings.controllerNext, settings.controllerLocate]);
@@ -1432,7 +1434,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   logSelRef.current = logSel;
   // The last tick, shown for a few seconds with Undo (from the log, the tick key, or a question that said it was done).
   // from 'now': a question set its answer as Now by itself (owner, Oct 31 2026); Undo puts back what Now was (prev).
-  type LogCleared = { ids: string[]; text: string; from?: 'question' | 'now' | 'moved'; msgId?: string; prev?: string };
+  type LogCleared = { ids: string[]; text: string; from?: 'question' | 'now' | 'moved' | 'removed'; msgId?: string; prev?: string };
   const [logCleared, setLogCleared] = useState<LogCleared | null>(null);
   const logClearedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showCleared = (c: LogCleared | null) => {
@@ -1528,46 +1530,9 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     api?.onOwnerCaptureContextRequest?.(() => ownerCaptureContext.current());
     api?.onOwnerCaptureSaved?.(() => showLocateNote('Saved to the review queue (/admin/images).'));
   }, []);
-  // Playthrough memory: an item ticked in the guide of the area the player is in (in the Guide, on the quest log, or with
-  // its marker) goes on "Found" in Your playthrough.
-  const guideTickPrev = useRef<{ id: string; set: Set<string> } | null>(null);
-  const areaPageLoaded = !!trackerGame.guideArea?.page;
-  useEffect(() => {
-    const area = trackerGame.guideArea;
-    const key = trackerGame.guideKey;
-    if (!area || !key || !area.page) return;
-    const id = `${key}:${area.slug}`;
-    guideTickPrev.current = { id, set: readDone(key, area.slug) };
-    const on = (e: Event) => {
-      const d = (e as CustomEvent).detail || {};
-      // Another playthrough's ticks (games-not-tabs): nothing was ticked, only what's shown changed.
-      if (d.key === '*') { guideTickPrev.current = { id, set: readDone(key, area.slug) }; return; }
-      if (d.key !== key || d.slug !== area.slug) return;
-      const now = readDone(key, area.slug);
-      const prev = guideTickPrev.current?.id === id ? guideTickPrev.current.set : new Set<string>();
-      guideTickPrev.current = { id, set: now };
-      const items = [...now]
-        .filter((x) => !prev.has(x))
-        .flatMap((x) => x.split('+'))
-        .map((x) => (area.page?.items || []).find((it: any) => it.id === x))
-        .filter(Boolean)
-        .map((it: any) => ({ kind: 'found' as PlayKind, text: String(it.name || it.text || ''), source: 'guide' as const }));
-      rememberPlayRef.current(items);
-    };
-    window.addEventListener(GUIDE_DONE_EVENT, on);
-    return () => window.removeEventListener(GUIDE_DONE_EVENT, on);
-  }, [trackerGame.guideKey, trackerGame.guideArea?.slug, areaPageLoaded]);
-  // A guide entry's marker ticked (on screen, in the answer's list or on the quest log): the entry is ticked in the
-  // guide too, so it leaves the quest log, the missables under answers and the next answers' guide markers.
-  const recentMessages = activeTab?.messages;
-  useEffect(() => {
-    for (const m of (recentMessages || []).slice(-6)) {
-      (m.points || []).forEach((p, i) => {
-        if (!p.guideId || !p.guideKey || !p.guideSlug || !(m.donePoints || []).includes(i)) return;
-        if (!readDone(p.guideKey, p.guideSlug).has(p.guideId)) setEntryDone(p.guideKey, p.guideSlug, p.guideId, true);
-      });
-    }
-  }, [recentMessages]);
+  // (No tick boxes, owner Nov 20 2026, idea #6: a guide item removed from the quest log is kept where ticks were, but
+  // removing isn't "found", so it no longer goes on Your playthrough's Found; and a marker hidden with its eye only hides
+  // the marker, it doesn't take the guide entry off the log.)
   const latestTrackedId = trackedMessage(activeTab)?.id;
   // A newer finished answer takes over from the one picked with "Track on screen".
   useEffect(() => {
@@ -1865,11 +1830,17 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
   useEffect(() => {
     (window as any).electronAPI?.onTrackerEvent?.((e: any) => trackerEventRef.current(e));
   }, []);
-  // The quest log's actions (the docked log, the popped-out window, the tick keys, the answers' Set as Now and Pin).
-  const tickLog = (id: string, done: boolean) => {
-    trackerEventRef.current({ type: 'tick', item: id, done });
-    const st = logSteps.find((x) => x.id === id);
-    if (done && st) showCleared({ ids: [id], text: st.text });
+  // The quest log's actions (the docked log, the popped-out window, the next-step keys, the answers' Set as Now and Save).
+  /**
+   * Remove on the quest log (owner, Nov 20 2026, idea #6: no tick boxes). A step of the objective (Now or Next) moves on,
+   * to Earlier, as the Now box's X; a guide item is taken off the log for this playthrough, kept where its tick was (so it
+   * syncs, and things ticked before stay off). Undo for a few seconds.
+   */
+  const removeLog = (s: { id: string; text: string; msgId?: string }) => {
+    const v = logViewRef.current;
+    if (v && [v.now, ...v.next].some((x) => x?.id === s.id)) return moveOn(s);
+    trackerEventRef.current({ type: 'tick', item: s.id, done: true });
+    showCleared({ ids: [s.id], text: s.text, from: 'removed' });
   };
   const undoLog = () => {
     const c = logCleared;
@@ -1939,14 +1910,19 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
     const sel = logSelRef.current;
     const api = (window as any).electronAPI;
     if (action === 'tick') {
-      const st = steps.find((x) => x.id === sel) || steps[0];
+      // The "next step" key (was the tick key): Now moves on; with the log out of sight, the new Now shows over the game.
+      const st = v.now && v.now.tick ? v.now : steps[0];
       if (!st) return;
-      tickLog(st.id, true);
+      moveOn({ id: st.id, text: st.text, ...(st === v.now && v.now.msgId ? { msgId: v.now.msgId } : {}) });
       setLogSel(null);
-      if (!onScreen) {
-        const rest = steps.filter((x) => x.id !== st.id);
-        api?.trackerHeads?.(rest[0]?.text || (v.now?.goal ? `✓ ${tr('tracker.logDone', { goal: v.now.goal })}` : ''));
-      }
+      if (!onScreen) api?.trackerHeads?.(steps.filter((x) => x.id !== st.id)[0]?.text || '');
+    } else if (action === 'remove') {
+      // The controller's X in the attached log: the highlighted item is removed (Undo for a few seconds).
+      const all = [v.now, ...v.next, ...(v.here?.items || [])].filter((x): x is NonNullable<typeof x> => !!x && x.tick);
+      const st = all.find((x) => x.id === sel) || all[0];
+      if (!st) return;
+      removeLog({ id: st.id, text: st.text, ...(st === v.now && v.now.msgId ? { msgId: v.now.msgId } : {}) });
+      setLogSel(null);
     } else if (action === 'next' || action === 'prev') {
       if (!steps.length) return;
       const i = Math.max(0, steps.findIndex((x) => x.id === sel));
@@ -3861,7 +3837,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
       sel={logSel}
       cleared={logCleared ? { id: logCleared.ids[0], text: logCleared.text, from: logCleared.from } : null}
       keysLabel={logKeys}
-      onTick={tickLog}
+      onRemove={removeLog}
       onUndo={undoLog}
       onSelect={setLogSel}
       onHideWatch={hideWatch}
@@ -3891,7 +3867,7 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
         // The area's database sections (item 30; any game, guide or not, from Nov 15 2026: hooks/useWorthHere), only
         // beside what the log already shows. Being found: one quiet line.
         const w = worthHere;
-        if (w.status === 'filling') return <LogFacts facts={{ slug: w.slug || '', worth: undefined, achievements: undefined } as any} game="" gameKey="" done={w.done} onTick={() => {}} finding />;
+        if (w.status === 'filling') return <LogFacts facts={{ slug: w.slug || '', worth: undefined, achievements: undefined } as any} game="" gameKey="" done={w.done} onRemove={() => {}} finding />;
         if (w.status !== 'ready' || !w.key || !w.slug) return null;
         return (
           <LogFacts
@@ -3899,10 +3875,11 @@ ${tr('spot.left', { n: Number(data.spotsLeft) })}` : ''}`,
             game={activeGame?.name || activeTab?.name || ''}
             gameKey={w.key}
             done={w.done}
-            onTick={(id, done) => {
-              // g:<area>:<item id>, saved with the game's other ticks (the guide page's, when it has one).
+            onRemove={(id, text) => {
+              // g:<area>:<item id>, kept where the guide's ticks are (Undo in the log puts it back).
               const rest = id.slice(2), cut = rest.indexOf(':');
-              if (cut > 0) for (const e of rest.slice(cut + 1).split('+')) setEntryDone(w.key!, rest.slice(0, cut), e, done);
+              if (cut > 0) for (const e of rest.slice(cut + 1).split('+')) setEntryDone(w.key!, rest.slice(0, cut), e, true);
+              showCleared({ ids: [id], text, from: 'removed' });
             }}
             steam={activeGame?.achievements?.length ? { list: activeGame.achievements, unlocked: activeGame.unlockedAchievements, total: activeGame.totalAchievements } : null}
           />

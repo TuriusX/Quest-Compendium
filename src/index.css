@@ -370,7 +370,7 @@ html[data-ui="lofi"] .qc-pt-dot, html[data-ui="lofi"] .qc-pt-num, html[data-ui="
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 .qc-inline-badge:hover { filter: brightness(1.15); }
-.qc-inline-badge-done { background: rgba(52, 211, 153, 0.9); }
+.qc-inline-badge-done { background: rgba(113, 113, 122, 0.55); color: rgba(255, 255, 255, 0.75); }
 html[data-ui="lofi"] .qc-inline-badge { border-radius: 0; font-family: 'Silkscreen', monospace; }
 
 /* The quest log's key caps (components/QuestLog.tsx). */

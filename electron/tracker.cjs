@@ -588,14 +588,15 @@ function sendVisibility() {
 function key(action) {
   // tick / next / prev; focus and blur: the controller is in the log (RB from the conversation, attached);
   // bookmark-focus / bookmark-blur: the panel's keyboard stop for the tucked-in log is focused (a ring on the bookmark).
-  if (!['tick', 'next', 'prev', 'focus', 'blur', 'bookmark-focus', 'bookmark-blur'].includes(action) || !alive()) return false;
+  // remove (Nov 20 2026, no tick boxes): the highlighted item off the log (the controller's X in the attached log).
+  if (!['tick', 'next', 'prev', 'remove', 'focus', 'blur', 'bookmark-focus', 'bookmark-blur'].includes(action) || !alive()) return false;
   if (action === 'blur') { js(`window.qcTrackerKey('blur')`); return true; }
   if (action === 'bookmark-focus' || action === 'bookmark-blur') {
     js(`window.qcTrackerSettings(${JSON.stringify({ bmFocus: action === 'bookmark-focus' })})`);
     return tuckedOnPanel();
   }
   // The tick and next keys: the app owns the log (it ticks Now, or the step picked with next / prev).
-  if ((action === 'tick' || action === 'next' || action === 'prev') && current && current.data.log) {
+  if ((action === 'tick' || action === 'next' || action === 'prev' || action === 'remove') && current && current.data.log) {
     tell({ type: 'log-key', action, onScreen: onScreenNow() });
     return true;
   }

@@ -18,9 +18,13 @@ export type QuestLogProps = {
   /** The step the tick key acts on (the tracker's next / prev keys move it): highlighted. */
   sel: string | null;
   /** The last tick, shown for a few seconds with Undo (from 'now': a question set its answer as Now by itself). */
-  cleared: { id?: string; text: string; from?: 'question' | 'now' | 'moved'; msgId?: string } | null;
+  cleared: { id?: string; text: string; from?: 'question' | 'now' | 'moved' | 'removed'; msgId?: string } | null;
   keysLabel: string;
-  onTick: (id: string, done: boolean) => void;
+  /**
+   * Remove (owner, Nov 20 2026, idea #6: no tick boxes): a step of the objective moves on (to Earlier, like the Now box's
+   * X); a guide item is taken off the log for this playthrough. Undo for a few seconds either way.
+   */
+  onRemove: (s: { id: string; text: string; msgId?: string }) => void;
   onUndo: () => void;
   onSelect: (id: string) => void;
   onHideWatch: (id: string) => void;
@@ -76,6 +80,8 @@ export function QuestLog(p: QuestLogProps) {
   const [picking, setPicking] = useState(false);
   const [noSuggestion, setNoSuggestion] = useState('');
   const [pickFilter, setPickFilter] = useState('');
+  // Right-click on an item: its small menu (Remove).
+  const [menu, setMenu] = useState<{ x: number; y: number; s: { id: string; text: string; msgId?: string } } | null>(null);
   const root = useRef<HTMLDivElement>(null);
 
   // A new place: the guide's lists and details fold again.
@@ -102,23 +108,24 @@ export function QuestLog(p: QuestLogProps) {
       return;
     }
     if (e.key === 'Enter' && step) { e.preventDefault(); setOpenId((o) => (o === step ? null : step)); }
+    // Delete removes the focused item (Undo for a few seconds).
+    if ((e.key === 'Delete' || e.key === 'Backspace') && step) {
+      const s = [v.now, ...v.next, ...(v.here?.items || [])].find((x) => x?.id === step);
+      if (s) { e.preventDefault(); remove(s); }
+    }
   };
+  const remove = (s: { id: string; text: string; msgId?: string }) => { setMenu(null); p.onRemove({ id: s.id, text: s.text, ...(s.msgId ? { msgId: s.msgId } : {}) }); };
+  const onMenu = (s: { id: string; text: string; msgId?: string }) => (e: React.MouseEvent) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, s }); };
 
-  const tickBtn = (s: LogStep, big = false) => (
-    <button
-      type="button"
-      data-qc-log-step={s.tick ? s.id : undefined}
-      data-qc-log-now={big ? '' : undefined}
-      disabled={!s.tick}
-      onClick={() => s.tick && p.onTick(s.id, true)}
-      onFocus={() => s.tick && p.onSelect(s.id)}
-      title={s.tick ? t('tracker.logTick') : undefined}
-      aria-label={`${t('tracker.logTick')}: ${s.text}`}
-      className={`flex-shrink-0 ${big ? 'w-[18px] h-[18px] mt-[3px] border-2' : 'w-[15px] h-[15px] mt-[2px] border'} rounded-[3px] flex items-center justify-center bg-black/30 outline-none focus-visible:ring-2 focus-visible:ring-white ${
-        s.tick ? (big && v.now?.source !== 'guide' ? 'border-[var(--accent-color)] hover:bg-[var(--accent-dim)]' : 'border-zinc-400/70 hover:bg-white/10') : 'invisible'
-      }`}
-    />
-  );
+  // An item's ✕ (shown on hover or focus): Remove.
+  const removeBtn = (s: LogStep) => s.tick ? (
+    <button type="button" data-qc-log-remove={s.id} onClick={() => remove(s)} title={t('tracker.logRemove')} aria-label={`${t('tracker.logRemove')}: ${s.text}`}
+      className="ml-auto flex-shrink-0 self-start w-5 h-5 flex items-center justify-center rounded text-zinc-500 hover:text-white hover:bg-white/[0.08] opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 outline-none focus-visible:ring-2 focus-visible:ring-white">
+      <X className="w-3 h-3" />
+    </button>
+  ) : null;
+  // An item's words: open its details; focus picks it (the keys act on it).
+  const stepAttrs = (s: LogStep) => (s.tick ? { 'data-qc-log-step': s.id, onFocus: () => p.onSelect(s.id) } : {});
   const details = (s: LogStep) =>
     openId === s.id && (s.detail || s.sub) ? <div className="mt-1 text-[12px] leading-snug text-zinc-400">{s.detail || s.sub}</div> : null;
   // The Now answer's video or picture, under whichever of its steps is open (they share one answer).
@@ -304,15 +311,14 @@ export function QuestLog(p: QuestLogProps) {
               } ${p.sel === n.id ? 'ring-1 ring-white/30' : ''}`}
             >
               {p.onMoveOn && (
-                <button type="button" data-qc-log-moveon="" onClick={() => p.onMoveOn!({ id: n.id, text: n.text, ...(n.msgId ? { msgId: n.msgId } : {}) })}
+                <button type="button" data-qc-log-moveon="" onClick={() => remove(n)}
                   title={t('tracker.logMoveOn')} aria-label={t('tracker.logMoveOn')}
                   className="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded text-zinc-500 hover:text-white hover:bg-white/[0.08] outline-none focus-visible:ring-2 focus-visible:ring-white">
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
-              <div className="flex gap-2.5 items-start">
-                {tickBtn(n, true)}
-                <button type="button" onClick={() => setOpenId((o) => (o === n.id ? null : n.id))} className="text-left min-w-0 outline-none focus-visible:underline">
+              <div className="flex gap-2.5 items-start" onContextMenu={n.tick ? onMenu(n) : undefined}>
+                <button type="button" data-qc-log-now="" {...stepAttrs(n)} onClick={() => setOpenId((o) => (o === n.id ? null : n.id))} className="text-left min-w-0 outline-none focus-visible:underline">
                   <div className="font-bold text-[16.5px] leading-tight tracking-[-0.005em] text-white">{n.text}</div>
                   {n.sub && <div className="mt-1 text-[12.5px] leading-snug text-zinc-400">{n.sub}</div>}
                   {details(n)}
@@ -331,14 +337,9 @@ export function QuestLog(p: QuestLogProps) {
                   {n.guide.detail && <p className="mt-1 text-zinc-400 leading-snug">{n.guide.detail}</p>}
                 </details>
               )}
-              {n.total > 0 && (
-                <div className="flex items-center gap-2 mt-2.5 text-[11px] font-mono font-bold text-zinc-400 whitespace-nowrap">
-                  <span className="flex gap-[3px]">
-                    {Array.from({ length: Math.min(n.total, 12) }, (_, i) => <i key={i} className={`block w-5 h-[5px] ${i < n.doneCount ? 'bg-[var(--accent-color)]' : 'bg-white/[0.12]'}`} />)}
-                  </span>
-                  {t('tracker.logProgress', { n: n.doneCount, total: n.total })}
-                  <span className="ml-auto font-sans font-semibold text-[11.5px] text-zinc-500 truncate">{n.goal}</span>
-                </div>
+              {/* The goal these steps are for (no "n of total": nothing is ticked any more, owner Nov 20 2026). */}
+              {n.total > 0 && n.goal && n.goal !== n.text && (
+                <div className="mt-2 text-[11.5px] font-semibold text-zinc-500 truncate">{n.goal}</div>
               )}
             </div>
           </div>
@@ -347,8 +348,8 @@ export function QuestLog(p: QuestLogProps) {
         {/* The last tick, for a few seconds: Undo. */}
         {p.cleared && (
           <div className="-mt-2 flex items-center gap-1.5 text-[12px] text-zinc-500" role="status">
-            {p.cleared.from === 'moved' ? <ChevronRight className="w-3 h-3 text-[var(--accent-color)]" /> : <Check className="w-3 h-3 text-emerald-400" />}
-            <span className="truncate" data-qc-log-undo={p.cleared.from || 'tick'}>{p.cleared.from === 'moved' ? t('tracker.logMovedOn', { step: p.cleared.text }) : p.cleared.from === 'now' ? t('tracker.logNowFromQuestion', { goal: p.cleared.text }) : p.cleared.from === 'question' ? t('tracker.logTickedFromQuestion', { step: p.cleared.text }) : t('tracker.logTicked', { step: p.cleared.text })}</span>
+            {p.cleared.from === 'moved' || p.cleared.from === 'removed' ? <ChevronRight className="w-3 h-3 text-[var(--accent-color)]" /> : <Check className="w-3 h-3 text-emerald-400" />}
+            <span className="truncate" data-qc-log-undo={p.cleared.from || 'removed'}>{p.cleared.from === 'moved' ? t('tracker.logMovedOn', { step: p.cleared.text }) : p.cleared.from === 'now' ? t('tracker.logNowFromQuestion', { goal: p.cleared.text }) : p.cleared.from === 'question' ? t('tracker.logTickedFromQuestion', { step: p.cleared.text }) : t('tracker.logRemoved', { step: p.cleared.text })}</span>
             <button type="button" onClick={p.onUndo} className="ml-1 font-bold text-[var(--accent-color)] hover:underline outline-none focus-visible:ring-2 focus-visible:ring-white rounded">{t('tracker.logUndo')}</button>
             {p.cleared.from === 'moved' && p.cleared.msgId && n?.msgId === p.cleared.msgId && (
               <><span className="text-zinc-600">·</span><button type="button" onClick={p.onClearNow} className="flex-shrink-0 font-semibold text-zinc-400 hover:text-white hover:underline outline-none focus-visible:ring-2 focus-visible:ring-white rounded">{t('tracker.logStopFollowing')}</button></>
@@ -362,13 +363,14 @@ export function QuestLog(p: QuestLogProps) {
             <div className="flex flex-col gap-0.5">
               {v.next.map((s) => (
                 <React.Fragment key={s.id}>
-                  <div className={`flex gap-2.5 items-start px-2 py-1.5 rounded ${p.sel === s.id ? 'bg-white/[0.04] outline outline-1 outline-white/[0.14]' : ''}`}>
-                    {tickBtn(s)}
-                    <button type="button" onClick={() => setOpenId((o) => (o === s.id ? null : s.id))} aria-expanded={openId === s.id} className="text-left min-w-0 outline-none focus-visible:underline">
+                  <div onContextMenu={s.tick ? onMenu(s) : undefined} className={`group/row flex gap-2 items-start px-2 py-1.5 rounded ${p.sel === s.id ? 'bg-white/[0.04] outline outline-1 outline-white/[0.14]' : ''}`}>
+                    <span className="flex-shrink-0 mt-[7px] w-1.5 h-1.5 rounded-full bg-zinc-500" aria-hidden="true" />
+                    <button type="button" {...stepAttrs(s)} onClick={() => setOpenId((o) => (o === s.id ? null : s.id))} aria-expanded={openId === s.id} className="text-left min-w-0 outline-none focus-visible:underline">
                       <div className="text-[13.5px] leading-snug text-zinc-200">{s.text}</div>
                       {s.sub && <div className="text-[12px] text-zinc-500 mt-px">{s.sub}</div>}
                       {details(s)}
                     </button>
+                    {removeBtn(s)}
                   </div>
                   {visualOf(s) && <div className="px-2 pb-1">{visualOf(s)}</div>}
                 </React.Fragment>
@@ -385,13 +387,14 @@ export function QuestLog(p: QuestLogProps) {
             {v.here.items.length > 0 && (
               <div className="flex flex-col gap-0.5">
                 {v.here.items.map((s) => (
-                  <div key={s.id} className={`flex gap-2.5 items-start px-2 py-1 rounded ${p.sel === s.id ? 'bg-white/[0.04] outline outline-1 outline-white/[0.14]' : ''}`}>
-                    {tickBtn(s)}
-                    <button type="button" onClick={() => setOpenId((o) => (o === s.id ? null : s.id))} className="text-left min-w-0 outline-none focus-visible:underline">
+                  <div key={s.id} onContextMenu={s.tick ? onMenu(s) : undefined} className={`group/row flex gap-2 items-start px-2 py-1 rounded ${p.sel === s.id ? 'bg-white/[0.04] outline outline-1 outline-white/[0.14]' : ''}`}>
+                    <span className="flex-shrink-0 mt-[7px] w-1.5 h-1.5 rounded-full bg-zinc-500" aria-hidden="true" />
+                    <button type="button" {...stepAttrs(s)} onClick={() => setOpenId((o) => (o === s.id ? null : s.id))} className="text-left min-w-0 outline-none focus-visible:underline">
                       <div className="text-[13.5px] leading-snug text-zinc-200">{s.text}</div>
                       {s.sub && <div className="text-[12px] text-zinc-500 mt-px">{s.sub}</div>}
                       {details(s)}
                     </button>
+                    {removeBtn(s)}
                   </div>
                 ))}
               </div>
@@ -495,20 +498,20 @@ export function QuestLog(p: QuestLogProps) {
                     <div key={sec.id}>
                       <div className={`text-[10.5px] font-mono font-extrabold uppercase tracking-[0.14em] mb-1 ${sec.tone === 'amber' ? 'text-amber-300/80' : 'text-zinc-500'}`}>{sec.title}</div>
                       <ul className="flex flex-col gap-0.5">
-                        {sec.items.slice(0, 40).map((it) => (
-                          <li key={it.id} className={`flex items-start gap-2 text-[12.5px] leading-snug ${it.done ? 'text-zinc-600 line-through' : 'text-zinc-300'}`}>
-                            {it.tick ? (
-                              <button type="button" onClick={() => p.onTick(it.id, !it.done)} aria-label={`${t('tracker.logTick')}: ${it.label}`}
-                                className={`flex-shrink-0 mt-[2px] w-[13px] h-[13px] rounded-[2px] border flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-white ${it.done ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-500 hover:bg-white/10'}`}>
-                                {it.done && <Check className="w-2.5 h-2.5 text-black" />}
-                              </button>
-                            ) : <span className="w-[13px] flex-shrink-0" />}
-                            <span className="min-w-0">
+                        {/* Removed items (and ones ticked before ticks went) stay off the list. */}
+                        {sec.items.filter((it) => !it.done).slice(0, 40).map((it) => (
+                          <li key={it.id} onContextMenu={it.tick ? onMenu({ id: it.id, text: it.label }) : undefined} className="group/row flex items-start gap-2 text-[12.5px] leading-snug text-zinc-300">
+                            <span className="flex-shrink-0 mt-[6px] w-1 h-1 rounded-full bg-zinc-500" aria-hidden="true" />
+                            <span className="min-w-0 flex-1">
                               {p.onOpenEntry && /^g:/.test(it.id) ? (
                                 <button type="button" onClick={() => p.onOpenEntry!(it.id)} className="text-left hover:text-white hover:underline outline-none focus-visible:underline">{it.label}</button>
                               ) : it.label}
-                              {it.where && !it.done && <span className="block text-[11.5px] text-zinc-500">{it.where}</span>}
+                              {it.where && <span className="block text-[11.5px] text-zinc-500">{it.where}</span>}
                             </span>
+                            {it.tick && (
+                              <button type="button" onClick={() => remove({ id: it.id, text: it.label })} title={t('tracker.logRemove')} aria-label={`${t('tracker.logRemove')}: ${it.label}`}
+                                className="flex-shrink-0 w-4 h-4 flex items-center justify-center rounded text-zinc-500 hover:text-white opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 outline-none focus-visible:ring-2 focus-visible:ring-white"><X className="w-3 h-3" /></button>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -523,10 +526,25 @@ export function QuestLog(p: QuestLogProps) {
 
       {/* The keys, one line. */}
       <div data-qc-keyhints="" className="flex flex-wrap gap-x-2.5 gap-y-1 px-3.5 py-2 border-t border-white/[0.07] bg-black/20 font-mono text-[10.5px] text-zinc-500">
-        <span><kbd className="qc-log-kbd">Space</kbd> {t('tracker.logKeyTick')}</span>
+        <span><kbd className="qc-log-kbd">Del</kbd> {t('tracker.logKeyRemove')}</span>
         <span><kbd className="qc-log-kbd">↑↓</kbd> {t('tracker.logKeyMove')}</span>
         <span><kbd className="qc-log-kbd">{p.keysLabel}</kbd> {t('tracker.logClose')}</span>
       </div>
+
+      {/* An item's right-click menu: Remove. */}
+      {menu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} aria-hidden="true" />
+          <div role="menu" data-qc-log-menu="" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setMenu(null); } }}
+            style={{ left: Math.min(menu.x, window.innerWidth - 180), top: Math.min(menu.y, window.innerHeight - 50) }}
+            className="fixed z-50 w-44 py-1 rounded-lg bg-[#161620] border border-white/15 shadow-2xl">
+            <button type="button" role="menuitem" autoFocus onClick={() => remove(menu.s)}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
+              <X className="w-3.5 h-3.5 text-zinc-400" />{t('tracker.logRemove')}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

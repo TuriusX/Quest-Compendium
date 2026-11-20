@@ -1054,8 +1054,9 @@ app.whenReady().then(() => {
     globalShortcut.unregisterAll();
     trackerKeysOn = [];
     trackerKeys = {
+      // tick: the "next step" key (Now moves on; Nov 20 2026, no tick boxes). The highlight key went with the ticks.
       tick: shortcuts.trackerTickShortcut || 'CommandOrControl+Shift+Enter',
-      next: shortcuts.trackerNextShortcut || 'CommandOrControl+Shift+Down',
+      next: '',
     };
     appKeys = [shortcuts.hideAppShortcut, shortcuts.voiceInputShortcut, shortcuts.autoScreenshotShortcut, shortcuts.questLogShortcut, shortcuts.locateShortcut || 'CommandOrControl+Shift+K', shortcuts.findMarkersShortcut || 'CommandOrControl+Shift+M'].filter(Boolean);
 
@@ -1193,7 +1194,7 @@ ipcMain.on('show-panel', () => { if (!isAppVisible) slideIn(); });
 // The quest log's tick / cycle shortcuts (Settings: trackerTickShortcut, trackerNextShortcut). They're global, so they
 // are registered only while the log is on screen (a log put away or no game: the keys stay free for other apps), and
 // never when they're the same as one of the app's other shortcuts.
-let trackerKeys = { tick: 'CommandOrControl+Shift+Enter', next: 'CommandOrControl+Shift+Down' };
+let trackerKeys = { tick: 'CommandOrControl+Shift+Enter', next: '' };
 let trackerKeysOn = [];
 let appKeys = [];
 const sameKeys = (a, b) => String(a || '').replace(/CmdOrCtrl|CommandOrControl/gi, 'Ctrl').toLowerCase() === String(b || '').replace(/CmdOrCtrl|CommandOrControl/gi, 'Ctrl').toLowerCase();

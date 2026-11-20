@@ -772,7 +772,8 @@ export function ControllerLayer({
       // In the attached quest log.
       if (logFocus) {
         if (b === 'up' || b === 'down') logKey(b === 'down' ? 'next' : 'prev');
-        else if (b === 'a') logKey('tick');
+        // X removes the highlighted item (Undo shows in the log); there are no tick boxes (Nov 20 2026).
+        else if (b === 'x') logKey('remove');
         else if (b === 'b' || b === 'rb') {
           setLogFocus(false);
           logKey('blur');
@@ -1291,7 +1292,7 @@ export function ControllerLayer({
         ) : logFocus ? (
           <>
             <Hint b="↕" label={t('pad.logMove')} />
-            <Hint b="a" label={t('pad.logTick')} />
+            <Hint b="x" label={t('tracker.logRemove')} />
             <Hint b="b" label={t('pad.back')} />
           </>
         ) : panel === 'quick' ? (

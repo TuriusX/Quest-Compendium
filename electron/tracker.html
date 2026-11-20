@@ -355,6 +355,11 @@
   .lst { display: flex; gap: .55em; align-items: flex-start; padding: .15em .3em; border-radius: 3px; font-size: .92em; line-height: 1.3; }
   .lst.sel { background: rgba(255,255,255,.08); outline: 1px solid rgba(255,255,255,.16); }
   .lst .lbox { border-width: 1px; border-color: rgba(243,238,252,.5); }
+  /* No tick boxes (Nov 20 2026): a dot before each item; its ✕ (Remove) shows on hover. */
+  .ldot { flex-shrink: 0; width: .38em; height: .38em; margin-top: .5em; border-radius: 50%; background: rgba(243,238,252,.45); }
+  .lrm { margin-left: auto; flex-shrink: 0; padding: 0 .3em; color: var(--dim); cursor: pointer; opacity: 0; font-size: .85em; }
+  .lst:hover .lrm { opacity: 1; } .lrm:hover { color: #fff; }
+  .box.dot { width: .4em; height: .4em; margin: .45em .3em 0; border: 0; border-radius: 50%; background: rgba(243,238,252,.45); box-shadow: none; }
   .lcleared { font-size: .78em; color: var(--dim); }
   .lcleared .u { color: var(--accent); font-weight: 700; cursor: pointer; margin-left: .3em; }
   .lwatch .wb { display: flex; gap: .5em; padding: .4em .55em; border-radius: .35em; background: rgba(40,28,6,.6); border: 1px solid rgba(255,193,77,.45);
@@ -524,8 +529,8 @@
     unloadSteps: "Back to your answer's objectives", dismissOffer: 'Not now', part: 'Part {n} of {total}',
     logNow: 'Now', logNext: 'Next', logWatch: 'Watch out', logFromGuide: 'From the guide', logFromQuestion: 'Your question',
     logShowMore: 'Show more', logShowLess: 'Show less', logPinned: 'Saved', logDone: 'Done: {goal}',
-    logWhatsNext: "What's next?", logInvite: 'What are you trying to do?', logInviteSub: "Ask, and the answer's steps become your checklist here.",
-    logAsk: 'Ask', logUndo: 'Undo', logTicked: 'Ticked: {step}', logHideWatch: 'Hide this warning for this save', putBack: 'Put back in the overlay',
+    logWhatsNext: "What's next?", logInvite: 'What are you trying to do?', logInviteSub: "Ask, and the answer's steps show up here.",
+    logAsk: 'Ask', logUndo: 'Undo', logTicked: 'Ticked: {step}', logRemove: 'Remove', logRemoved: 'Removed: {step}', logHideWatch: 'Hide this warning for this save', putBack: 'Put back in the overlay',
     logProgress: '{n} of {total}', logTick: 'Tick', logTitle: 'Quest log',
     logMoveOn: 'Move on to the next step (it stays under Earlier)', logMovedOn: 'Moved on from: {step}', logEarlier: 'Earlier', logBringBack: 'Make this Now again',
   };
@@ -598,11 +603,10 @@
   function itemHtml(o, sectionId, cur, icons, pics) {
     const open = state.openItem === o.id;
     const cls = [o.done ? 'done' : '', o.missable ? 'miss' : '', sectionId === 'noreturn' ? 'info' : '', !o.tick && sectionId !== 'noreturn' ? 'static' : '', open ? 'open' : '', cur ? 'cur' : '', icons ? 'ik' : ''].filter(Boolean).join(' ');
-    const tickTitle = o.tick ? ` title="${esc(o.done ? L('itemDone') : L('itemTodo'))}"` : '';
-    const tk = o.tick ? ' tk' : '';
-    const mark = o.badge ? `<span class="badge${tk}"${tickTitle}>${o.done ? '✓' : o.badge}</span>`
+    // No tick boxes (owner, Nov 20 2026): a number badge stays, the box is a plain dot; an entry goes with its ×.
+    const mark = o.badge ? `<span class="badge">${esc(o.badge)}</span>`
       : sectionId === 'noreturn' ? ''
-      : `<span class="box${tk}"${tickTitle}>${o.done ? '✓' : ''}</span>`;
+      : `<span class="box dot"></span>`;
     const d = o.detail || {};
     const warnTip = o.missable && sectionId !== 'noreturn' && !o.done ? (d.missable || (d.full && d.full !== o.label ? d.full : '') || L('missableTip')) : '';
     const mw = warnTip ? `<span class="mw">⚠</span>` : '';
@@ -631,7 +635,12 @@
    * more from the guide". Ticking a step shows it as ticked for a few seconds with Undo (state.cleared).
    */
   function logHtml(lg) {
-    const box = (s) => `<span class="lbox${s.tick ? '' : ' no'}" data-tick="${esc(s.id)}" title="${esc(L('logTick'))}"></span>`;
+    // No tick boxes (owner, Nov 20 2026): a dot before each item, and its ✕ (Remove) after it: a step moves on (to
+    // Earlier), a guide item leaves the log for this save. Undo for a few seconds.
+    const box = () => `<span class="ldot"></span>`;
+    const rm = (s, step) => (s.tick ? (step
+      ? `<span class="lrm" data-act="move-on" data-id="${esc(s.id)}" data-text="${esc(s.text)}" data-msg="" title="${esc(L('logRemove'))}">✕</span>`
+      : `<span class="lrm" data-tick="${esc(s.id)}" title="${esc(L('logRemove'))}">✕</span>`) : '');
     const sub = (s) => (s.sub ? `<span class="ls">${esc(s.sub)}</span>` : '');
     let h = '';
     // The place isn't known (owner, Nov 19 2026, idea #2): one slim line, the guess or last place with its buttons, and
@@ -653,18 +662,18 @@
     if (lg.now) {
       const n = lg.now;
       const mine = n.source === 'question';
-      const prog = n.total ? `<div class="lprog">${Array.from({ length: Math.min(n.total, 12) }, (_, i) => `<i${i < n.doneCount ? ' class="d"' : ''}></i>`).join('')}${esc(L('logProgress', { n: n.doneCount, total: n.total }))}<span class="g">${esc(n.goal)}</span></div>` : '';
+      const prog = n.total && n.goal && n.goal !== n.text ? `<div class="lprog"><span class="g">${esc(n.goal)}</span></div>` : '';
       h += `<div><div class="llab">${esc(L('logNow'))}${mine ? `<span class="src mine">${esc(L('logFromQuestion'))}</span>` : ''}</div>
-        <div class="lnow${mine ? '' : ' guide'}"><span class="lx" data-act="move-on" data-id="${esc(n.id)}" data-text="${esc(n.text)}" data-msg="${esc(n.msgId || '')}" title="${esc(L('logMoveOn'))}">✕</span>${box(n)}<div><span class="lt">${esc(n.text)}</span>${sub(n)}${prog}${n.seen ? `<span class="lseen">⌖ ${esc(L('seenOnScreen').replace('{what}', n.seen))}</span>` : ''}${n.guide ? `<span class="lseen" title="${esc(n.guide.detail || '')}">📖 ${esc(L('fromGuideStep').replace('{step}', n.guide.title))}</span>` : ''}</div></div></div>`;
+        <div class="lnow${mine ? '' : ' guide'}"><span class="lx" data-act="move-on" data-id="${esc(n.id)}" data-text="${esc(n.text)}" data-msg="${esc(n.msgId || '')}" title="${esc(L('logMoveOn'))}">✕</span><div><span class="lt">${esc(n.text)}</span>${sub(n)}${prog}${n.seen ? `<span class="lseen">⌖ ${esc(L('seenOnScreen').replace('{what}', n.seen))}</span>` : ''}${n.guide ? `<span class="lseen" title="${esc(n.guide.detail || '')}">📖 ${esc(L('fromGuideStep').replace('{step}', n.guide.title))}</span>` : ''}</div></div></div>`;
     }
     const cleared = state.cleared && state.cleared.until > Date.now() ? state.cleared : null;
-    if (cleared) h += `<div class="lcleared">${cleared.moved ? '›' : '✓'} ${esc(L(cleared.moved ? 'logMovedOn' : 'logTicked', { step: cleared.text }))}<span class="u" data-act="undo">${esc(L('logUndo'))}</span></div>`;
-    if (lg.next && lg.next.length) h += `<div class="lnext"><div class="llab">${esc(L('logNext'))}</div>${lg.next.map((s) => `<div class="lst${lg.sel === s.id ? ' sel' : ''}">${box(s)}<div>${esc(s.text)}${sub(s)}</div></div>`).join('')}</div>`;
+    if (cleared) h += `<div class="lcleared">› ${esc(L(cleared.moved ? 'logMovedOn' : 'logRemoved', { step: cleared.text }))}<span class="u" data-act="undo">${esc(L('logUndo'))}</span></div>`;
+    if (lg.next && lg.next.length) h += `<div class="lnext"><div class="llab">${esc(L('logNext'))}</div>${lg.next.map((s) => `<div class="lst${lg.sel === s.id ? ' sel' : ''}">${box(s)}<div>${esc(s.text)}${sub(s)}</div>${rm(s, true)}</div>`).join('')}</div>`;
     // The place is known but not what the player is doing: what's here, from the guide, and no Now.
     if (lg.here && !lg.now) {
       const hr = lg.here;
       h += `<div class="lhere"><div class="llab">${esc(L('inPlace').replace('{place}', hr.place))}</div><div class="ls">${esc(L('hereSub'))}</div>`;
-      h += hr.items.map((s) => `<div class="lst${lg.sel === s.id ? ' sel' : ''}">${box(s)}<div>${esc(s.text)}${sub(s)}</div></div>`).join('');
+      h += hr.items.map((s) => `<div class="lst${lg.sel === s.id ? ' sel' : ''}">${box(s)}<div>${esc(s.text)}${sub(s)}</div>${rm(s, false)}</div>`).join('');
       if (hr.missables.length) h += `<div class="lwatch"><div class="llab w">${esc(L('secMissable'))}</div>${hr.missables.map((m) => `<div class="wb"><span class="wi">⚠</span><div><b>${esc(m.text)}</b>${m.why && m.why !== m.text ? ` · ${esc(m.why)}` : ''}</div><span class="wx" data-hide="${esc(m.id)}" title="${esc(L('logHideWatch'))}">✕</span></div>`).join('')}</div>`;
       h += `<span class="lbtn" data-act="ask">${esc(L('logAsk'))}</span></div>`;
     }
@@ -691,7 +700,8 @@
     const hidden = new Set(state.hidden || []);
     const sections = (d.sections || []).map((x) => ({
       ...x,
-      items: x.items.filter((o) => !hidden.has(o.id)).map((o, i) => ({ o, i })).sort((a, b) => Number(!!a.o.done) - Number(!!b.o.done) || a.i - b.i).map((v) => v.o),
+      // Removed (and once-ticked) entries stay off, like hidden ones.
+      items: x.items.filter((o) => !hidden.has(o.id) && !o.done),
       hiddenIds: x.items.filter((o) => hidden.has(o.id)).map((o) => o.id),
     }));
     // What each section shows (its limit, "+N more"), and the highlighted objective among the unticked ones on show.
@@ -712,7 +722,8 @@
     const left = lg ? lg.bookmark : ticks.length - done;
     $('tabN').textContent = left > 0 ? `${left}` : '';
     $('tabN').style.display = left > 0 ? '' : 'none';
-    if (lg) $('count').textContent = lg.now && lg.now.total ? `${lg.now.doneCount}/${lg.now.total}` : '';
+    // (No "done/total" count: nothing is ticked any more.)
+    $('count').textContent = '';
     // The guide area is the closest match for the place (not one of its areas by name): say so under the place.
     $('source').textContent = d.source || '';
     $('approx').textContent = d.source ? '≈' : '';
@@ -993,15 +1004,8 @@
     const act = e.target.closest('.dbtn');
     if (act) { send(act.dataset.act, { item: o.id }); return; }
     if (e.target.closest('.det')) return;
-    // Ticking: the square box or the number badge only.
-    if (e.target.closest('.badge, .box')) {
-      if (!o.tick) return;
-      o.done = !o.done;
-      if (o.done && state.cur === o.id) state.cur = null;
-      render();
-      send('tick', { item: o.id, done: o.done });
-      return;
-    }
+    // (No ticking: the box and badge are only marks now; owner, Nov 20 2026.)
+    if (e.target.closest('.badge, .box')) return;
     // The text: open its details in place (one at a time), or close them.
     if (e.target.closest('.obj')) {
       state.openItem = state.openItem === o.id ? null : o.id;

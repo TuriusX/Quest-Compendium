@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ItemCard, type CardItem } from './ItemCard';
-import { ChevronDown, ChevronRight, Trophy } from './icons';
+import { ChevronDown, ChevronRight, Trophy, X } from './icons';
 import { useT } from '../i18n';
 import { achKey } from '../utils/achievementGuide';
 import type { Achievement } from '../types';
@@ -10,8 +10,9 @@ import type { Achievement } from '../types';
  * which they never replace: "Worth getting here" (the area's best gear and spells, best first, missables badged, then
  * its quests and people) and "Achievements here" (the Steam achievements still missing in this area, those a coming
  * point of no return ends first, and progress for the game). Every section folds and remembers it; long lists offer
- * "Show all"; empty sections don't show; facts not yet confirmed say so. The ticks are the guide's own (shared with the
- * site's "Worth it here").
+ * "Show all"; empty sections don't show; facts not yet confirmed say so. No tick boxes (owner, Nov 20 2026, idea #6): an
+ * item is removed (its ✕, or right-click, Remove) and stays off for this playthrough; it's kept where ticks were, so
+ * items ticked before stay off too.
  */
 export type AreaFacts = {
   slug: string;
@@ -38,7 +39,8 @@ export function LogFacts(p: {
   /** The guide's key, for the item cards' "Not right". */
   gameKey: string;
   done: Set<string>;
-  onTick: (id: string, done: boolean) => void;
+  /** Remove an item (g:<area>:<id>): off the list for this playthrough, with Undo in the log. */
+  onRemove: (id: string, text: string) => void;
   steam?: { list?: Achievement[]; unlocked?: number; total?: number } | null;
   /** The area's list is being found right now (worthOnDemand.ts): one quiet line in its place. */
   finding?: boolean;
@@ -48,6 +50,8 @@ export function LogFacts(p: {
   const [all, setAll] = useState<Record<string, boolean>>({});
   // The item card: hover shows it after a moment, click keeps it open (Esc or a click elsewhere closes it).
   const [card, setCard] = useState<{ item: CardItem; rect: DOMRect; kept: boolean; doc: Document } | null>(null);
+  // Right-click on an item: Remove.
+  const [menu, setMenu] = useState<{ x: number; y: number; id: string; text: string } | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearHover = () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); hoverTimer.current = null; };
   // The card opens beside the quest log (its whole column), level with the item, never over the list itself.
@@ -85,22 +89,21 @@ export function LogFacts(p: {
   // ---- Worth getting here ----
   const w = p.facts.worth;
   const gear = w?.gear || [];
+  // What's left: removed items (and ones ticked before) stay off.
+  const left = gear.filter((g) => !p.done.has(g.id));
   const extras = (w?.quests.length || 0) + (w?.people.length || 0) + (w?.todo.length || 0);
-  const worth = w && (gear.length || extras) ? (
+  const worth = w && (left.length || extras) ? (
     <div data-qc-log-worth="">
       {head('worth', t('logfacts.worth'), gear.length ? t('logfacts.bestFirst') : '')}
       {isOpen('worth') && (
         <div className="flex flex-col gap-1.5">
-          {(all.worth ? gear : gear.slice(0, SHOW)).map((g) => {
+          {(all.worth ? left : left.slice(0, SHOW)).map((g) => {
             const tid = `g:${p.facts.slug}:${g.id}`;
-            const on = p.done.has(g.id);
             return (
-              <div key={g.id} className="flex gap-2 items-start">
-                <button type="button" role="checkbox" aria-checked={on} onClick={() => p.onTick(tid, !on)} aria-label={g.name}
-                  className={`flex-shrink-0 w-[15px] h-[15px] mt-[2px] border rounded-[3px] flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-white ${on ? 'bg-[var(--accent-color)] border-[var(--accent-color)]' : 'border-zinc-400/70 bg-black/30 hover:bg-white/10'}`}>
-                  {on && <span className="text-black text-[10px] font-black leading-none">✓</span>}
-                </button>
-                <div className={`min-w-0 text-[13px] leading-snug ${on ? 'opacity-50' : ''}`}>
+              <div key={g.id} data-qc-worth-item={g.id} onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, id: tid, text: g.name }); }}
+                className="group/row flex gap-2 items-start">
+                <span className="flex-shrink-0 mt-[7px] w-1.5 h-1.5 rounded-full" style={{ background: g.rarity ? rarityColor(g.rarity) : '#71717a' }} aria-hidden="true" />
+                <div className="min-w-0 flex-1 text-[13px] leading-snug">
                   <button type="button" data-qc-item-name={g.id}
                     onMouseEnter={(e) => showSoon(g, e.currentTarget)} onMouseLeave={hideSoon}
                     onClick={(e) => { clearHover(); const r = anchorOf(e.currentTarget); const doc = e.currentTarget.ownerDocument; setCard((c) => (c?.kept && c.item.id === g.id ? null : { item: g, rect: r, kept: true, doc })); }}
@@ -110,10 +113,14 @@ export function LogFacts(p: {
                   {/* One line per item (owner, Nov 15 2026): what it does, where and how are in its card (hover or click the name). */}
                   {(g.lost || g.lockout) && <div className="text-[11.5px] text-amber-300/90">{g.lost ? t('logfacts.goneAt', { when: g.lost }) : g.lockout}</div>}
                 </div>
+                <button type="button" data-qc-log-remove={tid} onClick={() => p.onRemove(tid, g.name)} title={t('tracker.logRemove')} aria-label={`${t('tracker.logRemove')}: ${g.name}`}
+                  className="flex-shrink-0 self-start w-5 h-5 flex items-center justify-center rounded text-zinc-500 hover:text-white hover:bg-white/[0.08] opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 outline-none focus-visible:ring-2 focus-visible:ring-white">
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             );
           })}
-          {more('worth', gear.length)}
+          {more('worth', left.length)}
           {extras > 0 && (
             <>
               <button type="button" onClick={() => setAll((a) => ({ ...a, people: !a.people }))} aria-expanded={!!all.people}
@@ -188,6 +195,19 @@ export function LogFacts(p: {
       {finding}
       {worth}
       {ach}
+      {menu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} aria-hidden="true" />
+          <div role="menu" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setMenu(null); } }}
+            style={{ left: Math.min(menu.x, window.innerWidth - 180), top: Math.min(menu.y, window.innerHeight - 50) }}
+            className="fixed z-50 w-44 py-1 rounded-lg bg-[#161620] border border-white/15 shadow-2xl">
+            <button type="button" role="menuitem" autoFocus onClick={() => { p.onRemove(menu.id, menu.text); setMenu(null); }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-zinc-200 hover:bg-white/[0.07] focus:bg-white/[0.07] outline-none cursor-pointer">
+              <X className="w-3.5 h-3.5 text-zinc-400" />{t('tracker.logRemove')}
+            </button>
+          </div>
+        </>
+      )}
       {card && (
         <ItemCard item={card.item} anchor={card.rect} doc={card.doc} gameKey={p.gameKey} color={card.item.rarity ? rarityColor(card.item.rarity, '#ffffff') : '#ffffff'}
           onClose={() => setCard(null)} onEnter={clearHover} onLeave={() => { if (!card.kept) hideSoon(); }} />

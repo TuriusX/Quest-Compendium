@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Target, Plus, Check, Trash2, X, Sparkles, Circle, CheckCircle2 } from './icons';
+import { Target, Plus, X } from './icons';
 import { GameTab, PersonalQuest } from '../types';
 import { playBlipSound } from '../utils/audio';
 
@@ -11,6 +11,11 @@ interface PersonalQuestsModalProps {
   soundEnabled: boolean;
 }
 
+/**
+ * The player's own quests for a game. No tick boxes (owner, Nov 20 2026, idea #6): a quest is removed when it's done
+ * or no longer wanted (its ✕, with Undo for a few seconds); there's no "completed" list or progress bar. Quests marked
+ * completed before stay off the list.
+ */
 export const PersonalQuestsModal: React.FC<PersonalQuestsModalProps> = ({
   isOpen,
   onClose,
@@ -20,6 +25,8 @@ export const PersonalQuestsModal: React.FC<PersonalQuestsModalProps> = ({
 }) => {
   const [quests, setQuests] = useState<PersonalQuest[]>([]);
   const [newQuestTitle, setNewQuestTitle] = useState('');
+  const [removed, setRemoved] = useState<{ quest: PersonalQuest; at: number } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -34,53 +41,48 @@ export const PersonalQuestsModal: React.FC<PersonalQuestsModalProps> = ({
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
 
   if (!isOpen) return null;
 
   const gameName = activeTab?.name || 'Current Game';
-  
+  const save = (updated: PersonalQuest[]) => { setQuests(updated); onUpdateQuests(updated); };
+
   const handleAddQuest = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newQuestTitle.trim()) return;
-
     const newQuest: PersonalQuest = {
       id: `quest-${Date.now()}`,
       title: newQuestTitle.trim(),
       completed: false,
       createdAt: Date.now()
     };
-
-    const updated = [...quests, newQuest];
-    setQuests(updated);
-    onUpdateQuests(updated);
+    save([...quests, newQuest]);
     setNewQuestTitle('');
     playBlipSound(soundEnabled);
   };
 
-  const handleToggleQuest = (id: string) => {
-    const updated = quests.map(q => 
-      q.id === id ? { ...q, completed: !q.completed } : q
-    );
-    setQuests(updated);
-    onUpdateQuests(updated);
+  const handleRemoveQuest = (quest: PersonalQuest) => {
+    save(quests.filter(q => q.id !== quest.id));
     playBlipSound(soundEnabled);
+    setRemoved({ quest, at: quests.findIndex(q => q.id === quest.id) });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setRemoved(null), 6000);
+  };
+  const handleUndo = () => {
+    if (!removed) return;
+    const next = [...quests];
+    next.splice(Math.min(removed.at, next.length), 0, removed.quest);
+    save(next);
+    setRemoved(null);
   };
 
-  const handleDeleteQuest = (id: string) => {
-    const updated = quests.filter(q => q.id !== id);
-    setQuests(updated);
-    onUpdateQuests(updated);
-    playBlipSound(soundEnabled);
-  };
-
-  const activeQuests = quests.filter(q => !q.completed).sort((a, b) => b.createdAt - a.createdAt);
-  const completedQuests = quests.filter(q => q.completed).sort((a, b) => b.createdAt - a.createdAt);
-  const progress = quests.length > 0 ? (completedQuests.length / quests.length) * 100 : 0;
+  const shown = quests.filter(q => !q.completed).sort((a, b) => b.createdAt - a.createdAt);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="w-full max-w-xl bg-[#0c0d14] border border-white/15 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_var(--accent-glow)] flex flex-col h-[80vh] max-h-[700px] overflow-hidden relative">
-        
+
         {/* Header */}
         <div className="p-5 border-b border-white/[0.08] flex items-center justify-between bg-black/40">
           <div className="flex items-center gap-3">
@@ -88,104 +90,58 @@ export const PersonalQuestsModal: React.FC<PersonalQuestsModalProps> = ({
               <Target className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h3 className="font-fantasy font-bold text-lg tracking-wider text-white flex items-center gap-2">
-                PERSONAL QUESTS
-                {completedQuests.length === quests.length && quests.length > 0 && (
-                  <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
-                )}
-              </h3>
-              <p className="text-xs text-zinc-400 font-mono">
-                {gameName}
-              </p>
+              <h3 className="font-fantasy font-bold text-lg tracking-wider text-white">PERSONAL QUESTS</h3>
+              <p className="text-xs text-zinc-400 font-mono">{gameName}</p>
             </div>
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Progress Bar */}
-        {quests.length > 0 && (
-          <div className="px-5 py-3 bg-black/20 border-b border-white/[0.04]">
-            <div className="flex items-center justify-between text-xs text-zinc-400 mb-2 font-mono">
-              <span>Quest Progress</span>
-              <span>{completedQuests.length} / {quests.length} Completed</span>
+        {/* Quests */}
+        <div className="flex-1 overflow-y-auto p-5">
+          {shown.length === 0 ? (
+            <div className="text-center py-8 px-4 border border-dashed border-white/10 rounded-xl bg-white/[0.02]">
+              <Target className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+              <p className="text-sm text-zinc-400 font-medium">No quests yet.</p>
+              <p className="text-xs text-zinc-500 mt-1">Add a goal of your own. Remove it with its ✕ when it's done.</p>
             </div>
-            <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-amber-500 to-emerald-400 transition-all duration-500 rounded-full"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Quests Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-6">
-          
-          {/* Active Quests */}
-          <div>
-            <h4 className="text-xs font-bold text-zinc-500 tracking-widest uppercase mb-3 px-1">Active Objectives</h4>
-            {activeQuests.length === 0 ? (
-              <div className="text-center py-8 px-4 border border-dashed border-white/10 rounded-xl bg-white/[0.02]">
-                <Target className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
-                <p className="text-sm text-zinc-400 font-medium">No active quests.</p>
-                <p className="text-xs text-zinc-500 mt-1">Add a personal goal to start tracking your journey.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {activeQuests.map(quest => (
-                  <div 
-                    key={quest.id}
-                    className="group flex items-center gap-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] hover:border-white/20 transition-all cursor-pointer"
-                    onClick={() => handleToggleQuest(quest.id)}
+          ) : (
+            <div className="space-y-2">
+              {shown.map(quest => (
+                <div
+                  key={quest.id}
+                  data-qc-personal-quest={quest.id}
+                  className="group flex items-center gap-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-colors"
+                >
+                  <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400/80" aria-hidden="true" />
+                  <span className="flex-1 min-w-0 text-sm text-zinc-200 font-medium">{quest.title}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveQuest(quest)}
+                    title="Remove"
+                    aria-label={`Remove: ${quest.title}`}
+                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/10 transition-all cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-white"
                   >
-                    <button className="flex-shrink-0 text-zinc-500 hover:text-emerald-400 transition-colors">
-                      <Circle className="w-5 h-5" />
-                    </button>
-                    <span className="flex-1 text-sm text-zinc-200 font-medium select-none">{quest.title}</span>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDeleteQuest(quest.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Completed Quests */}
-          {completedQuests.length > 0 && (
-            <div>
-              <h4 className="text-xs font-bold text-zinc-500 tracking-widest uppercase mb-3 px-1">Completed</h4>
-              <div className="space-y-2">
-                {completedQuests.map(quest => (
-                  <div 
-                    key={quest.id}
-                    className="group flex items-center gap-3 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-all cursor-pointer"
-                    onClick={() => handleToggleQuest(quest.id)}
-                  >
-                    <button className="flex-shrink-0 text-emerald-500">
-                      <CheckCircle2 className="w-5 h-5" />
-                    </button>
-                    <span className="flex-1 text-sm text-zinc-500 font-medium line-through select-none">{quest.title}</span>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDeleteQuest(quest.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>
+
+        {removed && (
+          <div role="status" className="flex items-center gap-3 px-5 py-2 border-t border-white/[0.08] bg-[#14141c] text-[12.5px] text-zinc-300">
+            <span className="flex-1 min-w-0 truncate">Removed: {removed.quest.title}</span>
+            <button type="button" onClick={handleUndo} className="font-semibold text-[var(--accent-color)] hover:brightness-125 cursor-pointer">Undo</button>
+          </div>
+        )}
 
         {/* Add Quest Footer */}
         <div className="p-4 border-t border-white/[0.08] bg-black/60">
@@ -199,7 +155,7 @@ export const PersonalQuestsModal: React.FC<PersonalQuestsModalProps> = ({
                 type="text"
                 value={newQuestTitle}
                 onChange={e => setNewQuestTitle(e.target.value)}
-                placeholder="Add a new personal objective..."
+                placeholder="Add a quest of your own..."
                 className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-9 pr-4 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-[var(--accent-color)] focus:bg-white/10 transition-all"
               />
             </div>

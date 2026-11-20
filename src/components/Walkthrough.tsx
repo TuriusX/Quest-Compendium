@@ -48,12 +48,11 @@ export function Walkthrough({ isDesktop, screenshotKeys, hideKeys, tickKeys, nex
   const hide = hideKeys || 'Ctrl+Space';
   const shot = screenshotKeys || 'Ctrl+Shift+S';
   const tick = tickKeys || 'Ctrl+Shift+Enter';
-  const next = nextKeys || 'Ctrl+Shift+↓';
   const steps: { icon: string; title: string; body: string; keys?: string[] }[] = isDesktop
     ? [
         { icon: '🎮', title: t('tour2.hideT'), body: t('tour2.hideB', { keys: hide }), keys: [hide] },
         { icon: '📸', title: t('tour2.shotT'), body: t('tour2.shotB', { keys: shot }), keys: [shot] },
-        { icon: '📜', title: t('tour2.logT'), body: t('tour2.logB', { tick, next }), keys: [tick, next] },
+        { icon: '📜', title: t('tour2.logT'), body: t('tour2.logB', { tick }), keys: [tick] },
         { icon: '⚡', title: t('tour2.proT'), body: t('tour2.proB') },
       ]
     : [

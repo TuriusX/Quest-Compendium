@@ -4,7 +4,7 @@
  * for as you walk, and what's elsewhere nearby. Numbered checkboxes also appear inside the answer text.
  */
 import React, { useEffect, useState } from 'react';
-import { BookOpen, ChevronDown, FlaskConical, Gem, Hand, KeyRound, MapPin, ScrollText, Shield, Skull, Sparkles, Sword, TriangleAlert, User } from 'lucide-react';
+import { BookOpen, ChevronDown, Eye, EyeOff, FlaskConical, Gem, Hand, KeyRound, MapPin, ScrollText, Shield, Skull, Sparkles, Sword, TriangleAlert, User } from 'lucide-react';
 import type { NearbyItem, ScreenPoint } from '../types';
 import { useT } from '../i18n';
 import { useMarkersActive } from './pointerStore';
@@ -138,20 +138,23 @@ export function markerMentions(text: string, points: ScreenPoint[]): Set<number>
   return found;
 }
 
-/** A numbered checkbox inside the answer text, synced with the checklist. */
+/**
+ * A marker's number inside the answer text: a click hides that marker on screen, another shows it again (owner, Nov 20
+ * 2026: no tick boxes; it was a tick). Synced with the list's eye. `checked` = hidden.
+ */
 export function MarkerBadge({ n, label, checked, onToggle }: { n: number; label: string; checked: boolean; onToggle: () => void }) {
   const t = useT();
+  const tip = t(checked ? 'chat.markerShow' : 'chat.markerHide', { label });
   return (
     <button
       type="button"
-      role="checkbox"
-      aria-checked={checked}
-      aria-label={t('chat.markDone', { label })}
-      title={t('chat.markDone', { label })}
+      aria-pressed={checked}
+      aria-label={tip}
+      title={tip}
       onClick={onToggle}
       className={`qc-inline-badge ${checked ? 'qc-inline-badge-done' : ''}`}
     >
-      {checked ? '✓' : n}
+      {n}
     </button>
   );
 }
@@ -268,13 +271,17 @@ export function AnnotatedShot({
               className={`rounded-lg px-1.5 py-1 -mx-1.5 transition-colors ${hover === i ? 'bg-white/[0.05]' : ''}`}
             >
               <div className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => onToggle(i)}
-                  className="w-4 h-4 mt-0.5 accent-[var(--accent-color)] cursor-pointer flex-shrink-0"
-                  aria-label={t('chat.markDone', { label: p.label })}
-                />
+                {/* Hide this marker on screen (and show it again): an eye, not a tick box (owner, Nov 20 2026). */}
+                <button
+                  type="button"
+                  aria-pressed={checked}
+                  onClick={() => onToggle(i)}
+                  title={t(checked ? 'chat.markerShow' : 'chat.markerHide', { label: p.label })}
+                  aria-label={t(checked ? 'chat.markerShow' : 'chat.markerHide', { label: p.label })}
+                  className={`w-5 h-5 -ml-0.5 flex-shrink-0 flex items-center justify-center rounded cursor-pointer hover:bg-white/10 ${checked ? 'text-zinc-600' : 'text-zinc-400 hover:text-white'}`}
+                >
+                  {checked ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
                 <span className="qc-pt-num flex-shrink-0 mt-0.5">{i + 1}</span>
                 {imageUrl && !p.fromArea && <CloseUp src={imageUrl} x={p.x} y={p.y} label={p.label} />}
                 <button
@@ -283,7 +290,7 @@ export function AnnotatedShot({
                   aria-expanded={p.detail ? isOpen : undefined}
                   className="flex-1 min-w-0 text-left cursor-pointer"
                 >
-                  <span className={`flex items-center gap-1.5 text-[13px] ${checked ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
+                  <span className={`flex items-center gap-1.5 text-[13px] ${checked ? 'text-zinc-500' : 'text-zinc-100'}`}>
                     <Icon className="w-3.5 h-3.5 flex-shrink-0 text-[var(--accent-color)]" aria-hidden="true" />
                     <span className="font-medium">{p.label}</span>
                     {p.category && <span className="sr-only">({t(`chat.cat.${p.category}`)})</span>}
@@ -419,7 +426,7 @@ export function AnnotatedShot({
         <div className="flex items-baseline gap-2">
           <span className="font-fantasy font-bold text-sm text-white">{t('chat.markersTitle')}</span>
           <span className="text-[10px] font-mono uppercase text-zinc-400">
-            {t('chat.collected', { done: done.filter((i) => i < points.length).length, total: points.length })}
+            {/* How many are hidden on screen (no "collected" count: markers aren't ticked any more, Nov 20 2026). */}{done.some((i) => i < points.length) ? t('chat.markersHidden', { n: done.filter((i) => i < points.length).length }) : ''}
             {active && <span className="ml-2 text-emerald-400">● {t('chat.onScreen')}</span>}
           </span>
         </div>

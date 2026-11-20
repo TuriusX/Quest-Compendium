@@ -905,7 +905,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         { key: 'voiceInputShortcut', label: tr('set.sc.voice'), keys: settings.voiceInputShortcut || DEFAULT_SHORTCUTS.voiceInputShortcut },
                         { key: 'autoScreenshotShortcut', label: tr('set.sc.shot'), keys: settings.autoScreenshotShortcut || DEFAULT_SHORTCUTS.autoScreenshotShortcut },
                         { key: 'trackerTickShortcut', label: tr('set.sc.trackerTick'), keys: settings.trackerTickShortcut || DEFAULT_SHORTCUTS.trackerTickShortcut, hint: tr('set.sc.trackerHint') },
-                        { key: 'trackerNextShortcut', label: tr('set.sc.trackerNext'), keys: settings.trackerNextShortcut || DEFAULT_SHORTCUTS.trackerNextShortcut, hint: tr('set.sc.trackerHint') },
                         { key: 'questLogShortcut', label: tr('set.sc.questLog'), keys: settings.questLogShortcut || DEFAULT_SHORTCUTS.questLogShortcut },
                         { key: 'locateShortcut', label: tr('set.locateKey'), keys: settings.locateShortcut || DEFAULT_SHORTCUTS.locateShortcut, hint: tr('set.locateKeyDesc') },
                         { key: 'findMarkersShortcut', label: tr('set.sc.findMarkers'), keys: settings.findMarkersShortcut || DEFAULT_SHORTCUTS.findMarkersShortcut, hint: tr('set.sc.findMarkersHint') },
@@ -1221,7 +1220,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         };
                         const rows = [
                           { key: 'controllerTick', label: tr('set.pad.trackerTick'), value: String(settings.controllerTick || 'off').replace(/^view-/, ''), options: ['off', 'up', 'a'] },
-                          { key: 'controllerNext', label: tr('set.pad.trackerNext'), value: String(settings.controllerNext || 'off').replace(/^view-/, ''), options: ['off', 'right', 'rb'] },
                           { key: 'controllerLocate', label: tr('set.controllerLocate'), value: String(settings.controllerLocate || 'off'), options: ['off', 'down', 'x'] },
                         ] as const;
                         return (

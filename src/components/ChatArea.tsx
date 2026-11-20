@@ -1984,11 +1984,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     // offers to become it.
                     const steps = (msg.steps || []).map((st, i) => ({ st, i })).filter((x) => x.st.kind !== 'warning');
                     if (questLog?.now === msg.id && steps.length) {
-                      const done = steps.filter((x) => (msg.doneSteps || []).includes(x.i)).length;
                       return (
                         <div className="mt-2 flex items-center gap-1.5 text-[12px] font-mono text-zinc-500">
                           <span className="w-2 h-2 rounded-full border border-[var(--accent-color)] bg-[var(--accent-dim)]" />
-                          {t('tracker.logCurrent', { n: done, total: steps.length })}
+                          {t('tracker.logCurrentPlain')}
                           {nowUndo?.msgId === msg.id && (
                             <button type="button" data-qc-now-undo="" onClick={nowUndo.onUndo}
                               className="ml-1 font-bold text-[var(--accent-color)] hover:underline outline-none focus-visible:ring-2 focus-visible:ring-white rounded">

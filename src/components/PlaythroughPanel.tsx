@@ -128,7 +128,6 @@ export function PlaythroughPanel(p: Props) {
           {p.objective && section(<Target className="w-3.5 h-3.5 text-[var(--accent-color)]" />, t('play.objective'), t('play.objectiveHint'),
             <div className="flex items-center gap-2 text-[13px] text-zinc-200">
               <span className="flex-1 min-w-0 truncate">{p.objective.goal}</span>
-              <span className="font-mono text-[11px] text-zinc-500">{t('tracker.logProgress', { n: p.objective.done, total: p.objective.total })}</span>
               {p.onClearObjective && <button type="button" onClick={p.onClearObjective} aria-label={t('tracker.logClearNow')} title={t('tracker.logClearNow')} className="text-zinc-500 hover:text-white cursor-pointer"><X className="w-3.5 h-3.5" /></button>}
             </div>)}
           {section(<Flag className="w-3.5 h-3.5 text-[var(--accent-color)]" />, t('play.choices'), t('play.choicesHint'),
